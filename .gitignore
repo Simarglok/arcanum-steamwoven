@@ -1,0 +1,23 @@
+# Local research archives and original/copyrighted data
+/toolkit/
+/game-data/
+/local/
+/artifacts/
+/research-private/
+/tests/fixtures/real/
+
+# Credentials and machine-local settings
+.env
+.env.*
+!.env.example
+*.local.json
+*.local.yaml
+.DS_Store
+.idea/
+.vscode/
+
+# Future .NET / Godot generated output
+**/bin/
+**/obj/
+.godot/
+TestResults/
