@@ -28,3 +28,7 @@ Start with one bounded DAT research pilot when the user accepts its card. Do not
 ## Local references
 
 The repository checkout may contain ignored `toolkit/`. Isolated worktrees do not inherit ignored archives. A research card must provide the permitted local toolkit/data paths explicitly when needed. Keep those machine-specific paths in local Kanban context, not committed files. Do not copy the game or full vault into each worktree.
+
+## GitHub account
+
+The user requires `Simarglok` for this project. Follow the selection and verification steps in `AGENTS.md` before GitHub operations. Do not use `conductor-hermes-bot` or grant it access as a workaround. `gh auth switch` changes shared CLI state, so do not assume the account remains selected across concurrent work in other projects. Never expose tokens.

@@ -16,6 +16,10 @@
 - Validate offsets, sizes, decompression limits and untrusted archive paths. Do not infer gameplay/resource-precedence rules from a parser's convenience behavior.
 - Run checks appropriate to changed behavior and all checks required by the accepted task. This docs-only foundation has no build/test suite; do not claim runtime verification.
 
+## GitHub identity
+
+For this project, use the GitHub account `Simarglok`, not `conductor-hermes-bot`. Before GitHub operations, select it with `gh auth switch --hostname github.com --user Simarglok`, then verify `gh api user --jq .login` returns `Simarglok`. If an environment credential overrides the selected account, stop and resolve the mismatch without printing or copying secrets. This switch is shared CLI state, not repository-scoped; recheck identity before remote writes. It does not grant publication or merge authority.
+
 ## Delivery
 
 Use the installed universal profiles and `universal-development` skill described in `docs/workflow/hermes.md`. Independent review targets the exact candidate. Report Implemented, Not implemented, Remaining work, checks and material uncertainties.
