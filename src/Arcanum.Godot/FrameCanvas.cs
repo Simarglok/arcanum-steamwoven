@@ -20,6 +20,7 @@ public partial class FrameCanvas : Control
 
     public float Zoom => _zoom;
     public bool FitMode => _fit;
+    public bool HasTexture => _texture is not null;
 
     public void SetTexture(Texture2D texture)
     {
@@ -54,13 +55,13 @@ public partial class FrameCanvas : Control
             return;
         }
 
-        var source = _texture.GetSize();
-        if (source.X <= 0 || source.Y <= 0 || Size.X <= 0 || Size.Y <= 0)
+        var fitZoom = CalculateFitZoom(Size, _texture.GetSize());
+        if (fitZoom is null)
         {
             return;
         }
 
-        _zoom = Mathf.Max(0.01f, Mathf.Min(Size.X / source.X, Size.Y / source.Y));
+        _zoom = fitZoom.Value;
         _pan = Vector2.Zero;
         _fit = true;
         QueueRedraw();
@@ -139,6 +140,16 @@ public partial class FrameCanvas : Control
         var destinationSize = _texture.GetSize() * _zoom;
         var origin = ((Size - destinationSize) / 2f) + _pan;
         DrawTextureRect(_texture, new Rect2(origin, destinationSize), false);
+    }
+
+    internal static float? CalculateFitZoom(Vector2 canvasSize, Vector2 textureSize)
+    {
+        if (canvasSize.X <= 0 || canvasSize.Y <= 0 || textureSize.X <= 0 || textureSize.Y <= 0)
+        {
+            return null;
+        }
+
+        return Mathf.Max(0.01f, Mathf.Min(canvasSize.X / textureSize.X, canvasSize.Y / textureSize.Y));
     }
 
     private Vector2 ToTextureSpace(Vector2 screen)

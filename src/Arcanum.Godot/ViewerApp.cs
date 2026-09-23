@@ -27,7 +27,14 @@ public partial class ViewerApp : Control
 
     public override void _Ready()
     {
-        if (OS.GetCmdlineUserArgs().Contains("--self-test"))
+        var arguments = OS.GetCmdlineUserArgs();
+        if (arguments.Contains("--write-synthetic-dat"))
+        {
+            WriteSyntheticDat(arguments);
+            return;
+        }
+
+        if (arguments.Contains("--self-test"))
         {
             RunSelfTest();
             return;
@@ -173,10 +180,7 @@ public partial class ViewerApp : Control
         }
 
         _updatingSelectors = true;
-        _group.Value = 0;
-        _frame.Value = 0;
-        _palette.Value = 0;
-        _group.MaxValue = _frame.MaxValue = _palette.MaxValue = 0;
+        ViewerState.ResetEntrySelectors(_group, _frame, _palette);
         _updatingSelectors = false;
         await LoadFrameAsync(_entries[(int)sourceIndex].Entry, 0, 0, 0);
     }
@@ -235,7 +239,7 @@ public partial class ViewerApp : Control
                 _updatingSelectors = true;
                 _group.MaxValue = decoded.Header.PhysicalGroupCount - 1;
                 _frame.MaxValue = decoded.Header.FramesPerGroup - 1;
-                _palette.MaxValue = 3;
+                _palette.MaxValue = ViewerState.MaxRequestedPaletteSlot;
                 _group.Value = decoded.GroupIndex;
                 _frame.Value = decoded.FrameIndex;
                 _palette.Value = decoded.RequestedPaletteSlot;
@@ -321,6 +325,38 @@ public partial class ViewerApp : Control
         try
         {
             GD.Print(GodotSelfTest.Run());
+            GetTree().Quit(0);
+        }
+        catch (Exception exception)
+        {
+            GD.PushError(exception.Message);
+            GetTree().Quit(1);
+        }
+    }
+
+    private void WriteSyntheticDat(IReadOnlyList<string> arguments)
+    {
+        var index = -1;
+        for (var argumentIndex = 0; argumentIndex < arguments.Count; argumentIndex++)
+        {
+            if (arguments[argumentIndex] == "--write-synthetic-dat")
+            {
+                index = argumentIndex;
+                break;
+            }
+        }
+
+        if (index < 0 || index == arguments.Count - 1)
+        {
+            GD.PushError("--write-synthetic-dat requires an output path.");
+            GetTree().Quit(1);
+            return;
+        }
+
+        try
+        {
+            File.WriteAllBytes(arguments[index + 1], SyntheticFixture.CreateDat());
+            GD.Print("Wrote deterministic synthetic DAT fixture.");
             GetTree().Quit(0);
         }
         catch (Exception exception)

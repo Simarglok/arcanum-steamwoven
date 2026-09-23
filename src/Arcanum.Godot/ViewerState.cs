@@ -1,4 +1,5 @@
 using Arcanum.Data;
+using Godot;
 
 namespace Arcanum.Godot;
 
@@ -7,6 +8,7 @@ public sealed record ViewerEntry(DatEntry Entry, string DisplayName);
 public static class ViewerState
 {
     public const uint EntryCapBytes = 64u * 1024u * 1024u;
+    public const int MaxRequestedPaletteSlot = 3;
 
     public static DatReaderOptions ReaderOptions { get; } = new()
     {
@@ -57,6 +59,18 @@ public static class ViewerState
 
     public static IReadOnlyList<ViewerEntry> ArtEntries(DatArchive archive) =>
         archive.Entries.Where(IsArtEntry).Select(entry => new ViewerEntry(entry, DisplayName(entry))).ToArray();
+
+    public static void ResetEntrySelectors(SpinBox group, SpinBox frame, SpinBox palette)
+    {
+        group.MaxValue = 0;
+        frame.MaxValue = 0;
+        // Palette availability belongs to decoder metadata. The requested range stays
+        // available while the initial slot-0 decode fails so another slot can recover.
+        palette.MaxValue = MaxRequestedPaletteSlot;
+        group.Value = 0;
+        frame.Value = 0;
+        palette.Value = 0;
+    }
 
     private static bool IsAsciiIgnoreCase(byte value, byte expected) =>
         value == expected || (value | 0x20) == expected;

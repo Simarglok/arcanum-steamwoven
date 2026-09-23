@@ -19,6 +19,14 @@ dotnet build --no-restore
 "$GODOT" --headless --path src/Arcanum.Godot -- --self-test
 ```
 
+The editor build bridge must be run verbosely and must report SDK `8.0.425` from the canonical root before an export is accepted. A shell `dotnet build` alone is not evidence that the editor/export bridge selected the same SDK:
+
+```sh
+"$GODOT" --verbose --headless --path src/Arcanum.Godot --editor --build-solutions --quit
+```
+
+If that command reports another `dotnet` executable or SDK, stop before export; do not replace a retained SDK, alter global shell startup files, or weaken macOS security to work around it. The local Kanban-only toolchain registry records observed non-owned installations and the current resolution state.
+
 Godot C# prerequisites: https://docs.godotengine.org/en/stable/tutorials/scripting/c_sharp/c_sharp_basics.html
 
 Renderer selection: https://docs.godotengine.org/en/stable/tutorials/rendering/renderers.html
@@ -37,7 +45,13 @@ Archive reads and decoding are serialized behind one gate and run away from the 
 
 ## Automated and manual checks
 
-The `--self-test` path creates a deterministic in-memory ART sample with a 3×2 asymmetric RGBA grid, transparent index zero, opaque nonzero colors, palette slot 2 and a missing-slot fallback to 0. It verifies decoder bytes and the real Godot `Image` / `ImageTexture` RGBA8 round trip, dimensions and top-left row-major orientation. It does not substitute for interactive evidence.
+The `--self-test` path creates a deterministic in-memory DAT containing duplicate ART names with distinct ordinals, one static and one eight-physical-group ART, raw and RLE frames, palette gaps/fallback, a slot-0-absent ART, a malformed ART, and a generated over-cap DAT entry. It verifies valid → invalid → valid recovery, the slot-0-absent recovery through another requested palette, bounded entry rejection, decoder bytes, the real Godot `Image` / `ImageTexture` RGBA8 round trip, dimensions, top-left row-major orientation, and `FrameCanvas` nearest/zoom/fit calculation/reset state. It does not substitute for interactive graphical evidence.
+
+Generate the same synthetic DAT outside the checkout for the file-picker smoke without committing it:
+
+```sh
+"$GODOT" --headless --path src/Arcanum.Godot -- --write-synthetic-dat /path/to/synthetic-viewer.dat
+```
 
 For an opt-in local data check, keep the game data unchanged and supply `DAT_ROOT` only to the existing Data test command:
 
@@ -45,7 +59,7 @@ For an opt-in local data check, keep the game data unchanged and supply `DAT_ROO
 DAT_ROOT=/path/to/Arcanum dotnet test --no-build --filter "TestCategory=RealData"
 ```
 
-Never put the path, game assets, extracted bytes or screenshots in Git. Interactive smoke remains required: launch the exported app outside the editor, open a synthetic DAT, select duplicate ordinals, switch group/frame/palette including fallback, use 1:1/zoom/fit/pan, resize twice, enter/exit fullscreen, attempt invalid input and then reopen a valid sample. A headless build is not a UI smoke.
+Never put the path, game assets, extracted bytes or screenshots in Git. Interactive smoke remains required: launch the exported app outside the editor, open a synthetic DAT through the native picker, select duplicate ordinals, switch group/frame/palette including the slot-0-absent recovery, use 1:1/zoom/fit/pan, resize twice, enter/exit fullscreen, attempt malformed and over-cap input, then reopen a valid sample. A headless build is not a UI smoke.
 
 ## Local export
 
