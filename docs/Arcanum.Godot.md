@@ -6,26 +6,31 @@
 
 The checked-in project targets `net8.0`, uses `Godot.NET.Sdk` 4.7.2, and uses the Godot 4.7.2 .NET editor with matching 4.7.2 .NET export templates. The project uses the Compatibility (`gl_compatibility`) renderer because this bounded 2D viewer does not require Forward+ or Mobile features and Compatibility provides the broadest desktop coverage.
 
-The toolchain is resolved from the shared user tool roots described by the local registry, not from `local/` in a checkout. Set the process environment before shell builds or editor launches:
+The toolchain is resolved from the shared user tool roots described by the local registry, not from `local/` in a checkout. Use the canonical executable paths for direct .NET commands and this POSIX-shell function for every Godot editor, build, self-test, synthetic-fixture, and export invocation:
 
 ```sh
-export DOTNET_ROOT="$HOME/.local/share/dotnet"
-export PATH="$DOTNET_ROOT:$PATH"
+DOTNET_ROOT="$HOME/.local/share/dotnet"
+DOTNET="$DOTNET_ROOT/dotnet"
 GODOT="/Applications/Godot_mono.app/Contents/MacOS/Godot"
 
-dotnet restore --locked-mode
-dotnet build --no-restore
-"$GODOT" --headless --path src/Arcanum.Godot --build-solutions --quit
-"$GODOT" --headless --path src/Arcanum.Godot -- --self-test
+godot_canonical() {
+  env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT="$DOTNET_ROOT" \
+    PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin" "$GODOT" "$@"
+}
+
+"$DOTNET" restore --locked-mode
+"$DOTNET" build --no-restore
+godot_canonical --headless --path src/Arcanum.Godot --build-solutions --quit
+godot_canonical --headless --path src/Arcanum.Godot -- --self-test
 ```
 
-The editor build bridge must be run verbosely and must report SDK `8.0.425` from the canonical root before an export is accepted. A shell `dotnet build` alone is not evidence that the editor/export bridge selected the same SDK:
+The `__GODOT_SHELL_ENV_SET=1` sentinel prevents Godot 4.7.2 editor mode from importing shell startup files that can replace the launch `PATH`. The editor build bridge must be run verbosely and must report SDK `8.0.425` from `$HOME/.local/share/dotnet/sdk/8.0.425` before an export is accepted. Its `Running:` build line must use `$HOME/.local/share/dotnet/dotnet`, with no `/opt/homebrew` build or publish line. A direct `"$DOTNET" build` alone is not evidence that the editor/export bridge selected the same SDK:
 
 ```sh
-"$GODOT" --verbose --headless --path src/Arcanum.Godot --editor --build-solutions --quit
+godot_canonical --verbose --headless --path src/Arcanum.Godot --editor --build-solutions --quit
 ```
 
-If that command reports another `dotnet` executable or SDK, stop before export; do not replace a retained SDK, alter global shell startup files, or weaken macOS security to work around it. The local Kanban-only toolchain registry records observed non-owned installations and the current resolution state.
+If that command reports another `dotnet` executable or SDK, stop before export; do not replace a retained SDK, alter global shell startup files, use `TERM` as a workaround, or weaken macOS security to work around it. The local Kanban-only toolchain registry records observed non-owned installations and the current resolution state.
 
 Godot C# prerequisites: https://docs.godotengine.org/en/stable/tutorials/scripting/c_sharp/c_sharp_basics.html
 
@@ -50,13 +55,13 @@ The `--self-test` path creates a deterministic in-memory DAT containing duplicat
 Generate the same synthetic DAT outside the checkout for the file-picker smoke without committing it:
 
 ```sh
-"$GODOT" --headless --path src/Arcanum.Godot -- --write-synthetic-dat /path/to/synthetic-viewer.dat
+godot_canonical --headless --path src/Arcanum.Godot -- --write-synthetic-dat /path/to/synthetic-viewer.dat
 ```
 
 For an opt-in local data check, keep the game data unchanged and supply `DAT_ROOT` only to the existing Data test command:
 
 ```sh
-DAT_ROOT=/path/to/Arcanum dotnet test --no-build --filter "TestCategory=RealData"
+DAT_ROOT=/path/to/Arcanum "$DOTNET" test --no-build --filter "TestCategory=RealData"
 ```
 
 Never put the path, game assets, extracted bytes or screenshots in Git. Interactive smoke remains required: launch the exported app outside the editor, open a synthetic DAT through the native picker, select duplicate ordinals, switch group/frame/palette including the slot-0-absent recovery, use 1:1/zoom/fit/pan, resize twice, enter/exit fullscreen, attempt malformed and over-cap input, then reopen a valid sample. A headless build is not a UI smoke.
@@ -66,7 +71,7 @@ Never put the path, game assets, extracted bytes or screenshots in Git. Interact
 `src/Arcanum.Godot/export_presets.cfg` holds the macOS debug preset. Export only into an ignored configured build root (for example `${ARCANUM_BUILD_ROOT:-artifacts/builds/ARC-RENDER-001/<candidate-id>}`), never into source control:
 
 ```sh
-"$GODOT" --headless --path src/Arcanum.Godot --export-debug "macOS debug" "$ARCANUM_BUILD_ROOT/ArcanumSteamwovenViewer.app"
+godot_canonical --headless --path src/Arcanum.Godot --export-debug "macOS debug" "$ARCANUM_BUILD_ROOT/ArcanumSteamwovenViewer.app"
 ```
 
 Use only the matching templates. A local development export may be ad-hoc signed by Godot if the preset requires it; it is not notarized or publicly distributable. If Gatekeeper or macOS blocks launch, record the failure without weakening security.
