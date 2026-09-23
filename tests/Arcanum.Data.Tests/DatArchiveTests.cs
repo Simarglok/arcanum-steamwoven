@@ -34,6 +34,17 @@ public sealed class DatArchiveTests
         Assert.AreEqual(3, archive.Entries[3].Ordinal);
         CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("1TAD"), archive.Footer.MarkerBytes.ToArray());
         CollectionAssert.AreEqual(new byte[16], archive.Footer.OpaqueBytes.ToArray());
+        Assert.AreEqual(8u, archive.Footer.NameBytesHint);
+        Assert.AreEqual(136u, archive.Footer.TailRegionBytes);
+        Assert.AreEqual(4L, archive.Footer.IndexOffset);
+        for (var ordinal = 0; ordinal < archive.Entries.Count; ordinal++)
+        {
+            var entry = archive.Entries[ordinal];
+            Assert.AreEqual(1u, entry.Flags);
+            Assert.AreEqual(1u, entry.DeclaredOutputSize);
+            Assert.AreEqual(1u, entry.StoredSize);
+            Assert.AreEqual((uint)ordinal, entry.Offset);
+        }
     }
 
     [TestMethod]
@@ -176,7 +187,7 @@ public sealed class DatArchiveTests
     }
 
     [TestMethod]
-    public void Open_disposes_owned_stream_after_validation_failure()
+    public void Open_disposes_owned_stream_after_validation_and_parse_failure()
     {
         var owned = new TrackingStream(canRead: false, canSeek: true);
         Throws<ArgumentException>(() => DatArchive.Open(owned));
@@ -185,6 +196,16 @@ public sealed class DatArchiveTests
         var retained = new TrackingStream(canRead: true, canSeek: false);
         Throws<ArgumentException>(() => DatArchive.Open(retained, leaveOpen: true));
         Assert.IsFalse(retained.Disposed);
+
+        var valid = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
+        var malformed = Fixture.WithTail(valid, 27);
+        var parseFailureOwned = new TrackingStream(malformed, canRead: true, canSeek: true);
+        Throws<DatFormatException>(() => DatArchive.Open(parseFailureOwned));
+        Assert.IsTrue(parseFailureOwned.Disposed);
+
+        var parseFailureRetained = new TrackingStream(malformed, canRead: true, canSeek: true);
+        Throws<DatFormatException>(() => DatArchive.Open(parseFailureRetained, leaveOpen: true));
+        Assert.IsFalse(parseFailureRetained.Disposed);
     }
 
     [TestMethod]
@@ -291,12 +312,16 @@ public sealed class DatArchiveTests
         stream.ResetObservedReads();
         Throws<DatLimitExceededException>(() => archive.ReadEntry(archive.Entries[0]));
         Assert.AreEqual(0L, stream.ObservedReadBytes);
-        using var decodedArchive = DatArchive.Open(new MemoryStream(one), new DatReaderOptions { MaxDecodedEntryBytes = 1 }, leaveOpen: true);
+        using var decodedStream = new InstrumentedStream(one);
+        using var decodedArchive = DatArchive.Open(decodedStream, new DatReaderOptions { MaxDecodedEntryBytes = 1 }, leaveOpen: true);
+        decodedStream.SetObservedRanges((0, decodedArchive.Footer.IndexOffset));
+        decodedStream.ResetObservedReads();
         Throws<DatLimitExceededException>(() => decodedArchive.ReadEntry(decodedArchive.Entries[0]));
+        Assert.AreEqual(0L, decodedStream.ObservedReadBytes);
     }
 
     [TestMethod]
-    public void Open_preserves_io_errors_and_ReadEntry_reports_truncated_payload()
+    public void Open_and_ReadEntry_preserve_injected_io_errors_and_report_truncated_payload()
     {
         var bytes = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
         Throws<IOException>(() => DatArchive.Open(new ThrowingReadStream(bytes), leaveOpen: true));
@@ -306,6 +331,15 @@ public sealed class DatArchiveTests
         stream.PayloadStart = archive.Entries[0].Offset;
         stream.ReturnEofForPayload = true;
         Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[0]));
+
+        using var throwingStream = new PayloadThrowingStream(bytes);
+        using var throwingArchive = DatArchive.Open(throwingStream, leaveOpen: true);
+        throwingStream.PayloadStart = throwingArchive.Entries[0].Offset;
+        throwingStream.ThrowForPayload = true;
+        throwingStream.SetObservedRanges((0, throwingArchive.Footer.IndexOffset));
+        throwingStream.ResetObservedReads();
+        Throws<IOException>(() => throwingArchive.ReadEntry(throwingArchive.Entries[0]));
+        Assert.AreEqual(0L, throwingStream.ObservedReadBytes);
     }
 
     [TestMethod]
@@ -720,6 +754,23 @@ public sealed class DatArchiveTests
         public override int Read(Span<byte> buffer)
         {
             return ReturnEofForPayload && Position >= PayloadStart ? 0 : base.Read(buffer);
+        }
+    }
+
+    private sealed class PayloadThrowingStream : InstrumentedStream
+    {
+        public PayloadThrowingStream(byte[] bytes) : base(bytes) { }
+
+        public long PayloadStart { get; set; }
+        public bool ThrowForPayload { get; set; }
+
+        public override int Read(Span<byte> buffer)
+        {
+            if (ThrowForPayload && Position >= PayloadStart)
+            {
+                throw new IOException("Injected payload read failure.");
+            }
+            return base.Read(buffer);
         }
     }
 
