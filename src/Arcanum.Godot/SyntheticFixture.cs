@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Text;
 using Arcanum.Data;
 using Godot;
@@ -12,14 +13,17 @@ internal static class SyntheticFixture
     private const int FrameHeaderBytes = 28;
 
     internal static byte[] CreateDat() => CreateDat(
-        ("duplicate.art", CreateStaticArt()),
-        ("duplicate.art", CreateDirectionalArt()),
-        ("fallback.art", CreateStaticArt()),
-        ("missing-zero.art", CreateMissingZeroArt()),
-        ("malformed.art", CreateStaticArt()[..^1]));
+        new DatFixtureEntry("duplicate.art", CreateStaticArt()),
+        new DatFixtureEntry("duplicate.art", CreateDirectionalArt()),
+        new DatFixtureEntry("fallback.art", CreateStaticArt()),
+        new DatFixtureEntry("missing-zero.art", CreateMissingZeroArt()),
+        new DatFixtureEntry("malformed.art", CreateStaticArt()[..^1]),
+        new DatFixtureEntry("compressed.art", CreateStaticArt(), Zlib: true),
+        new DatFixtureEntry("unsupported.art", CreateUnsupportedArt()),
+        new DatFixtureEntry("not-art.txt", [1, 2, 3]));
 
     internal static byte[] CreateOversizeDat() => CreateDat(
-        ("oversize.art", new byte[checked((int)ViewerState.EntryCapBytes + 1)]));
+        new DatFixtureEntry("oversize.art", new byte[checked((int)ViewerState.EntryCapBytes + 1)]));
 
     internal static byte[] CreateStaticArt() => CreateArt(
         staticFlag: true,
@@ -35,6 +39,13 @@ internal static class SyntheticFixture
         staticFlag: true,
         palettes: new Dictionary<int, byte[]> { [2] = Palette((1, 33, 32, 31), (2, 36, 35, 34)) },
         new ArtFixtureFrame(2, 1, [1, 2]));
+
+    private static byte[] CreateUnsupportedArt()
+    {
+        var art = CreateStaticArt();
+        WriteI32(art, 8, 7);
+        return art;
+    }
 
     private static byte[] CreateDirectionalArt()
     {
@@ -103,14 +114,15 @@ internal static class SyntheticFixture
         return art;
     }
 
-    private static byte[] CreateDat(params (string Name, byte[] Payload)[] entries)
+    private static byte[] CreateDat(params DatFixtureEntry[] entries)
     {
+        var storedEntries = entries.Select(entry => new StoredDatFixtureEntry(entry, entry.Zlib ? Zlib(entry.Payload) : entry.Payload)).ToArray();
         using var output = new MemoryStream();
         var offsets = new uint[entries.Length];
         for (var index = 0; index < entries.Length; index++)
         {
             offsets[index] = checked((uint)output.Position);
-            output.Write(entries[index].Payload);
+            output.Write(storedEntries[index].StoredPayload);
         }
 
         using var indexStream = new MemoryStream();
@@ -121,9 +133,9 @@ internal static class SyntheticFixture
             WriteU32(indexStream, checked((uint)name.Length));
             indexStream.Write(name);
             indexStream.Write(new byte[4]);
-            WriteU32(indexStream, 1);
+            WriteU32(indexStream, entry.Zlib ? 2u : 1u);
             WriteU32(indexStream, checked((uint)entry.Payload.Length));
-            WriteU32(indexStream, checked((uint)entry.Payload.Length));
+            WriteU32(indexStream, checked((uint)storedEntries[ordinal].StoredPayload.Length));
             WriteU32(indexStream, offsets[ordinal]);
         }
 
@@ -133,6 +145,17 @@ internal static class SyntheticFixture
         output.Write("1TAD"u8);
         WriteU32(output, checked((uint)entries.Sum(entry => entry.Name.Length + 1)));
         WriteU32(output, checked((uint)(indexStream.Length + 28)));
+        return output.ToArray();
+    }
+
+    private static byte[] Zlib(byte[] payload)
+    {
+        using var output = new MemoryStream();
+        using (var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true))
+        {
+            zlib.Write(payload);
+        }
+
         return output.ToArray();
     }
 
@@ -160,6 +183,8 @@ internal static class SyntheticFixture
     }
 
     private sealed record ArtFixtureFrame(int Width, int Height, byte[] Payload);
+    private sealed record DatFixtureEntry(string Name, byte[] Payload, bool Zlib = false);
+    private sealed record StoredDatFixtureEntry(DatFixtureEntry Entry, byte[] StoredPayload);
 }
 
 internal static class GodotSelfTest
@@ -169,7 +194,7 @@ internal static class GodotSelfTest
         var dat = SyntheticFixture.CreateDat();
         using var archive = DatArchive.Open(new MemoryStream(dat), ViewerState.ReaderOptions, leaveOpen: true);
         var entries = ViewerState.ArtEntries(archive);
-        Require(entries.Count == 5, "synthetic ART entry count");
+        Require(entries.Count == 7 && archive.Entries.Count == 8, "synthetic DAT/ART entry count");
         Require(entries[0].DisplayName == "duplicate.art [ordinal 0]" && entries[1].DisplayName == "duplicate.art [ordinal 1]", "duplicate ordinal identity");
 
         var raw = ArtDecoder.Decode(archive.ReadEntry(entries[0].Entry), new ArtFrameSelection(0, 0, 2), ViewerState.DecoderOptions);
@@ -198,6 +223,8 @@ internal static class GodotSelfTest
         var recovered = ArtDecoder.Decode(archive.ReadEntry(entries[3].Entry), new ArtFrameSelection(0, 0, 2), ViewerState.DecoderOptions);
         Require(recovered.EffectivePaletteSlot == 2 && ViewerState.MaxRequestedPaletteSlot == 3, "palette zero absent recovery slots 0-3");
         RequireThrows<ArtFormatException>(() => ArtDecoder.Decode(archive.ReadEntry(entries[4].Entry), new ArtFrameSelection(0, 0, 0), ViewerState.DecoderOptions), "malformed synthetic ART");
+        Require(entries[5].Entry.Flags == 2 && ArtDecoder.Decode(archive.ReadEntry(entries[5].Entry), new ArtFrameSelection(0, 0, 2), ViewerState.DecoderOptions).Rgba.SequenceEqual(expected), "zlib DAT payload");
+        RequireThrows<ArtUnsupportedFormatException>(() => ArtDecoder.Decode(archive.ReadEntry(entries[6].Entry), new ArtFrameSelection(0, 0, 0), ViewerState.DecoderOptions), "unsupported synthetic ART");
         Require(ArtDecoder.Decode(archive.ReadEntry(entries[0].Entry), new ArtFrameSelection(0, 0, 2), ViewerState.DecoderOptions).Rgba.SequenceEqual(expected), "valid-invalid-valid recovery");
 
         using var oversize = DatArchive.Open(new MemoryStream(SyntheticFixture.CreateOversizeDat()), ViewerState.ReaderOptions, leaveOpen: true);

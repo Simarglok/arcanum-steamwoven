@@ -45,7 +45,7 @@ Archive reads and decoding are serialized behind one gate and run away from the 
 
 ## Automated and manual checks
 
-The `--self-test` path creates a deterministic in-memory DAT containing duplicate ART names with distinct ordinals, one static and one eight-physical-group ART, raw and RLE frames, palette gaps/fallback, a slot-0-absent ART, a malformed ART, and a generated over-cap DAT entry. It verifies valid → invalid → valid recovery, the slot-0-absent recovery through another requested palette, bounded entry rejection, decoder bytes, the real Godot `Image` / `ImageTexture` RGBA8 round trip, dimensions, top-left row-major orientation, and `FrameCanvas` nearest/zoom/fit calculation/reset state. It does not substitute for interactive graphical evidence.
+The `--self-test` path creates a deterministic in-memory DAT containing duplicate ART names with distinct ordinals, a non-ART entry, plain and zlib ART payloads, one static and one eight-physical-group ART, raw and RLE frames, palette gaps/fallback, a slot-0-absent ART, malformed and unsupported ARTs, and a generated over-cap DAT entry. It verifies valid → invalid → valid recovery, the slot-0-absent recovery through another requested palette, bounded entry rejection, decoder bytes, the real Godot `Image` / `ImageTexture` RGBA8 round trip, dimensions, top-left row-major orientation, and `FrameCanvas` nearest/zoom/fit calculation/reset state. It does not substitute for interactive graphical evidence.
 
 Generate the same synthetic DAT outside the checkout for the file-picker smoke without committing it:
 
