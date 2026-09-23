@@ -120,7 +120,8 @@ internal static class Program
                         continue;
                     }
 
-                    candidates.Add(new Candidate(archiveArgument.Label, entry.Ordinal, GetArtCategory(entry), result));
+                    var decoderCheck = VerifyProductionDecoder(bytes, result);
+                    candidates.Add(new Candidate(archiveArgument.Label, entry.Ordinal, GetArtCategory(entry), result, decoderCheck));
                 }
                 catch (ArtProbeException)
                 {
@@ -139,7 +140,7 @@ internal static class Program
         foreach (var sample in samples)
         {
             Console.WriteLine(
-                $"sample selector={sample.ArchiveLabel}#{sample.Ordinal} category={sample.Category} kind={(sample.Result.IsStatic ? "static" : "directional")} palettes={sample.Result.PaletteCount} frames={sample.Result.TotalFrames} raw_frames={sample.Result.RawFrames} rle_frames={sample.Result.RleFrames} decoded_pixels={sample.Result.DecodedPixels} header_group_match={sample.Result.HeaderGroupMatches}");
+                $"sample selector={sample.ArchiveLabel}#{sample.Ordinal} category={sample.Category} kind={(sample.Result.IsStatic ? "static" : "directional")} palettes={sample.Result.PaletteCount} frames={sample.Result.TotalFrames} raw_frames={sample.Result.RawFrames} rle_frames={sample.Result.RleFrames} decoded_pixels={sample.Result.DecodedPixels} decoder_sample_kinds={sample.DecoderCheck.SampleKinds} decoder_rgba_samples={sample.DecoderCheck.RgbaSamples} decoder_palette_slots={sample.DecoderCheck.PaletteSlots} header_group_match={sample.Result.HeaderGroupMatches}");
         }
 
         if (samples.Length < 6 || staticSamples.Length == 0 || directionalSamples.Length == 0)
@@ -148,7 +149,7 @@ internal static class Program
         }
 
         Console.WriteLine(
-            $"sample_totals selected={samples.Length} frames={samples.Sum(sample => sample.Result.TotalFrames)} raw_frames={samples.Sum(sample => sample.Result.RawFrames)} rle_frames={samples.Sum(sample => sample.Result.RleFrames)}");
+            $"sample_totals selected={samples.Length} frames={samples.Sum(sample => sample.Result.TotalFrames)} raw_frames={samples.Sum(sample => sample.Result.RawFrames)} rle_frames={samples.Sum(sample => sample.Result.RleFrames)} decoder_rgba_samples={samples.Sum(sample => sample.DecoderCheck.RgbaSamples)} decoder_palette_slots={samples.Sum(sample => sample.DecoderCheck.PaletteSlots)}");
     }
 
     private static bool IsArtEntry(DatEntry entry)
@@ -388,6 +389,183 @@ internal static class Program
     private static uint U32(ReadOnlySpan<byte> bytes, int offset) =>
         BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(offset, sizeof(uint)));
 
+    private static ProductionDecoderCheck VerifyProductionDecoder(byte[] bytes, ArtResult result)
+    {
+        var framesPerGroup = CheckedToInt(U32(bytes, 32), "per-group frame count");
+        var groups = result.IsStatic ? 1 : 8;
+        for (var group = 0; group < groups; group++)
+        {
+            for (var frameIndex = 0; frameIndex < framesPerGroup; frameIndex++)
+            {
+                var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frameIndex, 0));
+                if (frame.Header.BitsPerPixel != 8 || frame.Rgba.Count != checked(frame.Width * frame.Height * 4))
+                {
+                    throw new ArtProbeException("Production ART decoder returned inconsistent frame metadata.");
+                }
+            }
+        }
+
+        var samples = new List<DecoderSample> { new(0, 0, "first") };
+        if (framesPerGroup > 1)
+        {
+            samples.Add(new DecoderSample(0, framesPerGroup - 1, "nonfirst"));
+        }
+
+        if (groups > 1)
+        {
+            samples.Add(new DecoderSample(1, 0, "group"));
+        }
+
+        var presentSlots = Enumerable.Range(0, 4)
+            .Where(slot => U32(bytes, 12 + (slot * sizeof(uint))) != 0)
+            .ToArray();
+        var sampleCount = 0;
+        foreach (var paletteSlot in presentSlots)
+        {
+            var sawTransparent = false;
+            var sawOpaque = false;
+            foreach (var sample in samples)
+            {
+                var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(sample.Group, sample.Frame, paletteSlot));
+                var pixels = VerifySampleRgba(bytes, result.TotalFrames, framesPerGroup, paletteSlot, sample, frame);
+                sawTransparent |= pixels.SawTransparent;
+                sawOpaque |= pixels.SawOpaque;
+                sampleCount++;
+            }
+
+            if (!sawTransparent || !sawOpaque)
+            {
+                throw new ArtProbeException("Bounded production decoder samples did not exercise both transparent index 0 and nonzero BGRX palette output.");
+            }
+        }
+
+        return new ProductionDecoderCheck(result.TotalFrames, presentSlots.Length, sampleCount, string.Join(",", samples.Select(sample => sample.Kind)));
+    }
+
+    // This uses direct ART bytes only to cross-check the production API on a bounded
+    // sample. It is not a CE comparison or an independent pixel oracle.
+    private static PixelEvidence VerifySampleRgba(byte[] bytes, int totalFrames, int framesPerGroup, int paletteSlot, DecoderSample sample, ArtFrame frame)
+    {
+        var paletteOffset = HeaderBytes;
+        ReadOnlySpan<byte> palette = default;
+        for (var slot = 0; slot < 4; slot++)
+        {
+            if (U32(bytes, 12 + (slot * sizeof(uint))) == 0)
+            {
+                continue;
+            }
+
+            if (slot == paletteSlot)
+            {
+                palette = bytes.AsSpan(paletteOffset, PaletteBytes);
+            }
+
+            paletteOffset += PaletteBytes;
+        }
+
+        if (palette.IsEmpty)
+        {
+            throw new ArtProbeException("A declared palette slot was not readable for production sampling.");
+        }
+
+        var tableBytes = checked(totalFrames * FrameHeaderBytes);
+        var payloadOffset = checked(paletteOffset + tableBytes);
+        var linearIndex = checked((sample.Group * framesPerGroup) + sample.Frame);
+        for (var index = 0; index < linearIndex; index++)
+        {
+            payloadOffset = checked(payloadOffset + CheckedToInt(U32(bytes, paletteOffset + (index * FrameHeaderBytes) + 8), "sample frame payload length"));
+        }
+
+        var selectedHeader = checked(paletteOffset + (linearIndex * FrameHeaderBytes));
+        var width = CheckedToInt(U32(bytes, selectedHeader), "sample frame width");
+        var height = CheckedToInt(U32(bytes, selectedHeader + 4), "sample frame height");
+        var payloadLength = CheckedToInt(U32(bytes, selectedHeader + 8), "sample frame payload length");
+        var pixelCount = checked(width * height);
+        var indices = DecodeSampleIndices(bytes.AsSpan(payloadOffset, payloadLength), pixelCount);
+        if (frame.Width != width || frame.Height != height || frame.Rgba.Count != checked(pixelCount * 4))
+        {
+            throw new ArtProbeException("Production ART decoder sample metadata is inconsistent with its bounded input.");
+        }
+
+        var sawTransparent = false;
+        var sawOpaque = false;
+        for (var index = 0; index < indices.Length; index++)
+        {
+            var value = indices[index];
+            var destination = index * 4;
+            if (value == 0)
+            {
+                sawTransparent = true;
+                if (frame.Rgba[destination] != 0 || frame.Rgba[destination + 1] != 0 || frame.Rgba[destination + 2] != 0 || frame.Rgba[destination + 3] != 0)
+                {
+                    throw new ArtProbeException("Production ART decoder does not return transparent black for palette index 0.");
+                }
+
+                continue;
+            }
+
+            sawOpaque = true;
+            var source = value * 4;
+            if (frame.Rgba[destination] != palette[source + 2] || frame.Rgba[destination + 1] != palette[source + 1] ||
+                frame.Rgba[destination + 2] != palette[source] || frame.Rgba[destination + 3] != byte.MaxValue)
+            {
+                throw new ArtProbeException("Production ART decoder BGRX-to-RGBA sample does not match the bounded source bytes.");
+            }
+        }
+
+        return new PixelEvidence(sawTransparent, sawOpaque);
+    }
+
+    private static byte[] DecodeSampleIndices(ReadOnlySpan<byte> payload, int pixels)
+    {
+        if (payload.Length == pixels)
+        {
+            return payload.ToArray();
+        }
+
+        var indices = new byte[pixels];
+        var input = 0;
+        var output = 0;
+        while (input < payload.Length)
+        {
+            var control = payload[input++];
+            var count = control & 0x7f;
+            if (count == 0 || count > indices.Length - output)
+            {
+                throw new ArtProbeException("Bounded production sample RLE count is invalid.");
+            }
+
+            if ((control & 0x80) != 0)
+            {
+                if (count > payload.Length - input)
+                {
+                    throw new ArtProbeException("Bounded production sample literal RLE is truncated.");
+                }
+
+                payload.Slice(input, count).CopyTo(indices.AsSpan(output, count));
+                input += count;
+            }
+            else
+            {
+                if (input == payload.Length)
+                {
+                    throw new ArtProbeException("Bounded production sample repeated RLE is truncated.");
+                }
+
+                indices.AsSpan(output, count).Fill(payload[input++]);
+            }
+
+            output += count;
+        }
+
+        if (output != pixels)
+        {
+            throw new ArtProbeException("Bounded production sample RLE did not produce its declared pixels.");
+        }
+
+        return indices;
+    }
+
     private static int CheckedToInt(uint value, string label) =>
         value <= int.MaxValue ? (int)value : throw new ArtProbeException($"ART {label} exceeds Int32.");
 
@@ -522,7 +700,10 @@ internal static class Program
     }
 
     private sealed record ArchiveArgument(string Label, string Path);
-    private sealed record Candidate(string ArchiveLabel, int Ordinal, string Category, ArtResult Result);
+    private sealed record Candidate(string ArchiveLabel, int Ordinal, string Category, ArtResult Result, ProductionDecoderCheck DecoderCheck);
     private sealed record ArtResult(bool IsStatic, int PaletteCount, int TotalFrames, int RawFrames, int RleFrames, ulong DecodedPixels, bool HeaderGroupMatches);
+    private sealed record DecoderSample(int Group, int Frame, string Kind);
+    private sealed record PixelEvidence(bool SawTransparent, bool SawOpaque);
+    private sealed record ProductionDecoderCheck(int Frames, int PaletteSlots, int RgbaSamples, string SampleKinds);
     private sealed class ArtProbeException(string message) : Exception(message);
 }

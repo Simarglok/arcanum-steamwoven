@@ -155,6 +155,17 @@ index or an offset field, and intentionally assigns neither palette nor geometry
 semantics. The real-data run reports whether a candidate corpus is incomplete
 instead of treating a missing class as a pass.
 
+The production invocation also decodes all 294 selected frames through
+`Arcanum.Data.ArtDecoder` with slot 0 for structural metadata/output-size
+coverage. For every present palette slot it additionally cross-checks bounded
+first, nonfirst (where available), and second-physical-group (where available)
+samples. The harness independently expands the selected entry's raw/RLE index
+bytes, reads the selected raw B/G/R/X table bytes, and requires both index 0
+transparent black and nonzero `(R,G,B,255)` output in the bounded samples. The
+recorded 12-entry run exercised 74 RGBA samples across 30 present palette slots.
+This is a same-input local regression check for the adopted decoder contract;
+it is not a CE comparison, pixel-parity claim, or independent pixel oracle.
+
 ## Input immutability and observed result
 
 Before and after the real-data run, SHA-256 checks for all eight supplied DAT
@@ -185,9 +196,10 @@ input, output, or preview. It never writes next to a game archive.
 - No independent macOS-safe ART comparator with known non-CE, non-ArtConverter
   lineage was found or executed. Structural and synthetic tests are therefore
   additional safeguards, not an independent decoder comparison.
-- Palette channel order, transparency, direction order, row orientation,
-  anchors/offsets, action frame, and timing remain unknown. A visually plausible
-  local preview would not by itself settle those semantics.
-- A later C# decoder task must start from the admitted subset and this
-  contradiction ledger; it must not broaden the format or start renderer work
-  implicitly.
+- R2 did not independently establish palette channel order, transparency,
+  direction order, row orientation, anchors/offsets, action frame, or timing.
+  The implemented decoder's BGRX, index-0, and stored-row-order rules remain
+  separately CE-source-derived; a visually plausible local preview would not by
+  itself settle broader renderer semantics.
+- Future decoder changes must retain the admitted subset and this contradiction
+  ledger; they must not broaden the format or start renderer work implicitly.

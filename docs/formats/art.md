@@ -2,16 +2,18 @@
 
 ## Scope and status
 
-This is a research specification for a later, separately authorized C# decoder of
-**one indexed ART frame**. It is neither a production API nor a renderer,
-animator, writer, extractor, or viewer. Its evidence is the read-only run and
-source matrix in [the ART evidence record](../research/art-evidence.md).
+This document retains the R2 experimental record and now describes the bounded
+implemented C# decoder of **one physical 8-bpp ART frame** into RGBA. It is not a
+renderer, animator, writer, extractor, or viewer. Experimental observations remain
+in [the ART evidence record](../research/art-evidence.md); CE-source-derived API
+rules are separately attributed in [the CE specification record](../research/art-ce-spec.md).
 
 Status vocabulary follows [the research method](../research/method.md):
 reported, corroborated, experimentally verified, disputed, and unknown. The
-specification admits only the RLE observations below; it deliberately does not
-assign rendering behaviour to palette index 0, palette alpha, direction order,
-anchors, or timing.
+R2 observations below deliberately did not assign rendering behaviour to
+palette index 0, palette alpha, direction order, anchors, or timing. The later
+implemented BGRX-to-RGBA, index-0, and row-order normalization rules are
+CE-source-derived contract decisions, not retroactive claims about the R2 run.
 
 ## Observed layout
 
@@ -25,9 +27,9 @@ published.
 | --- | --- | --- | --- |
 | Header | 132 bytes, interpreted as 33 little-endian 32-bit words for the probe | experimentally verified for 12 samples | The probe reached the palette table, complete frame-header table, and exact payload end for every selected entry. The 132-byte size and word order are also reported by ArtConverter. |
 | Header word 0 | Preserve as raw `uint32`; bit 0 selected one frame-header group for the six `item` entries and eight groups for the six `critter` entries | experimentally verified for the corpus; semantics unknown | The probe's count derived from this bit made every frame table and payload boundary exact. The semantic label “static” comes from the source route and local category selection; it is not a runtime direction-order claim. |
-| Header words 1–2 | Preserve raw | unknown | ArcNET labels them rate and rotation count, but that is not independent evidence and was not used by the probe. |
+| Header words 1–2 | Preserve raw; the API exposes word 1 using the CE-source-derived `FramesPerSecond` label | unknown | The label is metadata only, not independent timing evidence and is not used to drive animation. |
 | Header words 3–6 | Four raw palette selectors; non-zero word count controls the number of following 1,024-byte tables in this subset | experimentally verified for the corpus; selector semantics unknown | All selected `item` entries had one table; all selected `critter` entries had four. A zero/non-zero condition was sufficient to locate the next table. IDs, palette choice, and meaning are not established. |
-| Header word 7 | Preserve raw | unknown | A source calls it an action/key frame. No original-runtime or independent observational proof exists. |
+| Header word 7 | Preserve raw; the API exposes it using the CE-source-derived `ActionFrame` label | unknown | The label is metadata only. No original-runtime or independent observational proof establishes an action/key-frame semantic. |
 | Header word 8 | Per-group frame count | experimentally verified for the corpus | Combined with the observed bit-0 rule, it located every 28-byte frame header. |
 | Header words 9–16 and 25–32 | Preserve raw | unknown | They were not needed to establish the frame boundaries. |
 | Header words 17–24 | Eight raw per-group values | disputed / unknown | They equal observed payload-byte totals for all six directional samples, but not for any of the six selected static samples. Do not name or rely on them as data-size totals for a decoder. |
@@ -59,26 +61,39 @@ variant. The source-reported raw alternative (`encoded_size == width × height`)
 is exercised only by synthetic negative/positive tests here; it was not seen in
 the 12 real samples and is not part of the proven real-data subset.
 
-Pixel order is retained as one-dimensional palette indices in file decoding
-order. ArtConverter's BMP path reverses rows for BMP output, but that does not
-establish a renderer coordinate origin. No ART palette index is assigned alpha
-or transparency in this specification.
+The R2 probe retained pixel order only as one-dimensional palette indices in
+file decoding order. ArtConverter's BMP path reverses rows for BMP output, but
+that did not establish a renderer coordinate origin or alpha policy for the R2
+observation. The implemented decoder contract below is separately
+CE-source-derived and deliberately does not retroactively promote those rules
+to R2 experiment facts.
 
-## Explicit later decoder contract
+## Implemented decoder contract
 
-A later C# task may implement **only after separate authorization** this input
-and output contract:
+`Arcanum.Data.ArtDecoder.Decode` accepts one already-bounded ART entry byte
+span and a zero-based physical group, frame-in-group, and palette slot. It
+supports exactly this input and output contract:
 
-- Input: one already-bounded ART entry byte span from `Arcanum.Data`, and a
-  local selector identifying one frame-table group and one frame index.
-- Output: raw 132-byte header (or all raw words), raw present palette tables,
-  the selected 28-byte frame header (including its four opaque geometry words),
-  and exactly `width × height` decoded palette-index bytes.
-- Admitted real-data subset: the observed 132-byte layout, zero/non-zero
-  palette-table presence, bit-0-derived one/eight group table sizing, selected
-  RLE frames, and checked byte boundaries. It must not claim timing, direction
-  orientation/order, palette selection/channel conversion, transparency, or
-  anchor semantics.
+- Input: a little-endian, signed-8-bpp ART entry with the observed 132-byte
+  layout; palette slots 0–3 are selected independently of any packed `art_id`.
+- Output: copied raw header and present palette tables, copied selected
+  28-byte frame header and signed geometry words, selected/requested/effective
+  group-frame-palette metadata, and tightly packed straight RGBA bytes.
+- Present palette tables follow in increasing slot order and retain gaps. A
+  requested absent slot falls back only to present slot 0; absence of both is a
+  format error. For this CE-source-derived normalization, file B/G/R/X maps to
+  `(R,G,B,255)` for indices 1–255, X remains in raw palette metadata, and
+  index 0 is `(0,0,0,0)` regardless of its palette bytes.
+- Pixels remain stored row-major: `x` increases first, then `y`, with byte
+  offset `4 * (y * width + x)`. The decoder does not reverse rows for BMP.
+- FPS and action-frame are preserved as signed metadata under CE-source-derived
+  labels only; they do not establish or drive animation, timing, placement, or
+  direction semantics.
+- Admitted real-data structural subset: the observed 132-byte layout,
+  zero/non-zero palette-table presence, bit-0-derived one/eight physical group
+  sizing, selected RLE frames, and checked byte boundaries. The RGBA policy is
+  synthetic-contract coverage plus bounded same-input local regression checks,
+  not CE pixel parity or an independent pixel oracle.
 - Required rejection conditions before allocation: entry shorter than 132
   bytes; non-positive or over-cap frame/group counts; absent palette/frame
   tables; dimension, multiplication, offset, or payload-size overflow; a
@@ -89,9 +104,9 @@ and output contract:
   at most 1,024 frame headers, width/height at most 4,096 each, and at most
   4 MiB decoded pixels per frame. These are safety policy, not format facts.
 
-A production decoder must retain checked arithmetic and configure its own
-reviewed caps. It must not use an unverified header word as FPS/action-frame,
-or silently accept a different layout.
+A production decoder retains checked arithmetic and configurable reviewed caps.
+It must not treat the exposed FPS/action labels as runtime semantics or silently
+accept a different layout.
 
 ## Unsupported and unresolved
 
@@ -101,10 +116,12 @@ The following remain outside the supported subset:
   patched variants, and any data entry above the probe cap;
 - mapping of local category names to runtime types; category names only guided
   a deterministic sample choice;
-- palette slot meaning, palette channel conversion, alpha and transparency
-  (including index 0);
-- row orientation, direction order, mirroring, frame timing, action/key frame,
-  and animation runtime behaviour;
+- palette effects beyond the selected original palette, per-entry alpha,
+  translucency, lighting, blending, or palette animation; the baseline BGRX
+  conversion and transparent-black index 0 rule above are supported;
+- renderer coordinate interpretation, direction order, mirroring, frame timing,
+  action/key-frame semantics, and animation runtime behaviour; stored row-major
+  RGBA order is supported but is not a renderer coordinate claim;
 - meaning and coordinate system of the four frame geometry words;
 - semantics of header words 1–2, 7, 9–16, and 25–32;
 - the static-sample contradiction for header words 17–24;
