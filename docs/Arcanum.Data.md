@@ -41,6 +41,26 @@ DAT_ROOT=/path/to/Arcanum dotnet test --no-build --filter "TestCategory=RealData
 
 Defaults are policy safeguards, not format facts: archive 4 GiB; index 64 MiB; entry count 1,000,000; each name 64 KiB; total names 64 MiB; stored entry 256 MiB; decoded entry 512 MiB. All must be positive and are checked before the corresponding allocation or payload read.
 
+### ART decoder limits
+
+`ArtDecoderOptions` exposes the following configurable safety policy defaults.
+They bound untrusted input, checked size arithmetic, and allocations; none
+describes a universal ART format maximum or a claim about the observed corpus.
+
+| Option | Default | Safety rationale |
+| --- | ---: | --- |
+| `MaxInputBytes` | 64 MiB | Reject an already-bounded entry that is too large to retain and structurally scan in this API. |
+| `MaxFrameCount` | 65,536 | Bound frame-header traversal and the internal metadata array before it is allocated. |
+| `MaxFrameTableBytes` | 16 MiB | Independently bound the checked `frameCount × 28` table extent. |
+| `MaxDimension` | 16,384 per axis | Reject extreme declared geometry before pixel-count multiplication. |
+| `MaxFramePixels` | 16 Mi pixels | Bound decoded indexed-pixel work and the subsequent output allocation. |
+| `MaxRgbaBytes` | 64 MiB | Bound checked `pixels × 4` straight-RGBA storage before allocation. |
+| `MaxEncodedFrameBytes` | 64 MiB | Bound a selected encoded payload before slicing or decoding it. |
+
+All values must be positive; invalid option values produce
+`ArgumentOutOfRangeException`. Format inconsistency, unsupported bpp, and a
+valid structure exceeding one of these policies remain distinct failure modes.
+
 The supported structure and evidence boundary are in [formats/dat.md](formats/dat.md). Local real data are opt-in only and are never committed. The R1 evidence covers eight user-owned candidates but does not establish canonical bytes, other variants, flag semantics beyond the admitted exact values, filename semantics, or archive precedence.
 
 ART layout and decoder boundary are in [formats/art.md](formats/art.md). The CE-source-derived rules used for the ART API are separately attributed in [research/art-ce-spec.md](research/art-ce-spec.md); they are not a CE dependency or a claim of pixel parity.

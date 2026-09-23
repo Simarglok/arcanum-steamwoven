@@ -52,14 +52,19 @@ public sealed class ArtDecoderTests
             frames.Add(new Frame(1, 1, [(byte)(index + 1)]));
         }
 
-        var bytes = Fixture.Create(staticFlag: false, framesPerGroup: 2, frames, new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
+        var bytes = Fixture.Create(staticFlag: false, framesPerGroup: 2, frames, new Dictionary<int, byte[]>
+        {
+            [0] = PaletteEntries(
+                (1, 1, 2, 3, 0),
+                (16, 90, 80, 70, 0)),
+        });
         var result = ArtDecoder.Decode(bytes, new ArtFrameSelection(7, 1, 3));
 
         Assert.AreEqual(7, result.GroupIndex);
         Assert.AreEqual(1, result.FrameIndex);
         Assert.AreEqual(3, result.RequestedPaletteSlot);
         Assert.AreEqual(0, result.EffectivePaletteSlot);
-        CollectionAssert.AreEqual(new byte[] { 0, 0, 0, 255 }, result.Rgba.ToArray());
+        CollectionAssert.AreEqual(new byte[] { 70, 80, 90, 255 }, result.Rgba.ToArray());
         Assert.AreEqual(8, result.Header.PhysicalGroupCount);
         Assert.AreEqual(2, result.Header.FramesPerGroup);
     }
@@ -70,13 +75,21 @@ public sealed class ArtDecoderTests
         var rawControls = new Frame(2, 2, [0x84, 1, 2, 3]);
         var literalRepeat = new Frame(2, 3, [0x82, 1, 2, 3, 3, 0x81, 4]);
         var bytes = Fixture.Create(staticFlag: true, framesPerGroup: 2, [rawControls, literalRepeat],
-            new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0), (4, 5, 6, 0)) });
+            new Dictionary<int, byte[]>
+            {
+                [0] = PaletteEntries(
+                    (1, 1, 2, 3, 0),
+                    (2, 4, 5, 6, 0),
+                    (3, 7, 8, 9, 0),
+                    (4, 10, 11, 12, 0),
+                    (132, 13, 14, 15, 0)),
+            });
 
         var raw = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, 0, 0));
         var rle = ArtDecoder.Decode(bytes, new ArtFrameSelection(0, 1, 0));
         CollectionAssert.AreEqual(new byte[]
         {
-            0, 0, 0, 255, 6, 5, 4, 255, 0, 0, 0, 255, 0, 0, 0, 255,
+            15, 14, 13, 255, 3, 2, 1, 255, 6, 5, 4, 255, 9, 8, 7, 255,
         }, raw.Rgba.ToArray());
         Assert.AreEqual(24, rle.Rgba.Count);
 
@@ -92,6 +105,7 @@ public sealed class ArtDecoderTests
         var valid = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(2, 2, [4, 1])], new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
         Throws<ArgumentOutOfRangeException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(-1, 0, 0)));
         Throws<ArgumentOutOfRangeException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(0, 1, 0)));
+        Throws<ArgumentOutOfRangeException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(0, 0, -1)));
         Throws<ArgumentOutOfRangeException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(0, 0, 4)));
         var noFallback = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(1, 1, [1])], new Dictionary<int, byte[]> { [2] = Palette((1, 2, 3, 0)) });
         Throws<ArtFormatException>(() => ArtDecoder.Decode(noFallback, new ArtFrameSelection(0, 0, 1)));
@@ -106,6 +120,26 @@ public sealed class ArtDecoderTests
     }
 
     [TestMethod]
+    public void Decode_handles_count_127_and_runs_crossing_row_boundaries()
+    {
+        var count127 = Fixture.Create(staticFlag: true, framesPerGroup: 1,
+            [new Frame(127, 1, [127, 1])],
+            new Dictionary<int, byte[]> { [0] = PaletteEntries((1, 2, 3, 4, 0)) });
+        var count127Result = ArtDecoder.Decode(count127, new ArtFrameSelection(0, 0, 0));
+        CollectionAssert.AreEqual(RepeatRgba(127, 4, 3, 2, 255), count127Result.Rgba.ToArray());
+
+        var crossingRows = Fixture.Create(staticFlag: true, framesPerGroup: 1,
+            [new Frame(3, 2, [4, 1, 2, 2])],
+            new Dictionary<int, byte[]> { [0] = PaletteEntries((1, 10, 20, 30, 0), (2, 40, 50, 60, 0)) });
+        var crossingResult = ArtDecoder.Decode(crossingRows, new ArtFrameSelection(0, 0, 0));
+        CollectionAssert.AreEqual(new byte[]
+        {
+            30, 20, 10, 255, 30, 20, 10, 255, 30, 20, 10, 255,
+            30, 20, 10, 255, 60, 50, 40, 255, 60, 50, 40, 255,
+        }, crossingResult.Rgba.ToArray());
+    }
+
+    [TestMethod]
     public void Decode_rejects_structure_unsupported_format_and_policy_limits()
     {
         var valid = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(1, 1, [1])], new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
@@ -113,7 +147,13 @@ public sealed class ArtDecoderTests
         Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithTrailingByte(valid), new ArtFrameSelection(0, 0, 0)));
         Throws<ArtUnsupportedFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 8, 7), new ArtFrameSelection(0, 0, 0)));
         Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 32, 0), new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 32, -1), new ArtFrameSelection(0, 0, 0)));
         Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 132 + 1024 + 8, 0), new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 132 + 1024, -1), new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 132 + 1024 + 4, -1), new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 132 + 1024 + 8, -1), new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(valid[..(132 + 1024 - 1)], new ArtFrameSelection(0, 0, 0)));
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(valid[..(132 + 1024 + 28 - 1)], new ArtFrameSelection(0, 0, 0)));
         Throws<ArtFormatException>(() => ArtDecoder.Decode(valid[..^1], new ArtFrameSelection(0, 0, 0)));
 
         var dimensions = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(2, 2, [4, 1])], new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
@@ -122,8 +162,11 @@ public sealed class ArtDecoderTests
         Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(dimensions, new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxRgbaBytes = 15 }));
         Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(dimensions, new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxEncodedFrameBytes = 1 }));
         Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxInputBytes = 1 }));
+        Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(Fixture.WithI32(valid, 32, 2), new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxFrameCount = 1 }));
         Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(Fixture.Create(staticFlag: false, framesPerGroup: 1, Enumerable.Repeat(new Frame(1, 1, [1]), 8).ToList(), new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) }), new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxFrameCount = 7 }));
         Throws<ArtLimitExceededException>(() => ArtDecoder.Decode(valid, new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxFrameTableBytes = 27 }));
+        var overflow = Fixture.WithI32(Fixture.WithI32(valid, 132 + 1024, int.MaxValue), 132 + 1024 + 4, 2);
+        Throws<ArtFormatException>(() => ArtDecoder.Decode(overflow, new ArtFrameSelection(0, 0, 0), new ArtDecoderOptions { MaxDimension = int.MaxValue, MaxFramePixels = int.MaxValue }));
 
         var optionProperties = typeof(ArtDecoderOptions).GetProperties().Where(property => property.PropertyType == typeof(int));
         foreach (var property in optionProperties)
@@ -143,6 +186,33 @@ public sealed class ArtDecoderTests
         }
 
         return table;
+    }
+
+    private static byte[] PaletteEntries(params (int Index, byte B, byte G, byte R, byte X)[] colors)
+    {
+        var table = new byte[1024];
+        foreach (var color in colors)
+        {
+            (table[color.Index * 4], table[(color.Index * 4) + 1], table[(color.Index * 4) + 2], table[(color.Index * 4) + 3]) =
+                (color.B, color.G, color.R, color.X);
+        }
+
+        return table;
+    }
+
+    private static byte[] RepeatRgba(int count, byte red, byte green, byte blue, byte alpha)
+    {
+        var rgba = new byte[count * 4];
+        for (var index = 0; index < count; index++)
+        {
+            var offset = index * 4;
+            rgba[offset] = red;
+            rgba[offset + 1] = green;
+            rgba[offset + 2] = blue;
+            rgba[offset + 3] = alpha;
+        }
+
+        return rgba;
     }
 
     private static void Throws<TException>(Action action) where TException : Exception
