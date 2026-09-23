@@ -120,6 +120,7 @@ internal static class Program
                         continue;
                     }
 
+                    VerifyProductionDecoder(bytes, result);
                     candidates.Add(new Candidate(archiveArgument.Label, entry.Ordinal, GetArtCategory(entry), result));
                 }
                 catch (ArtProbeException)
@@ -387,6 +388,23 @@ internal static class Program
 
     private static uint U32(ReadOnlySpan<byte> bytes, int offset) =>
         BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(offset, sizeof(uint)));
+
+    private static void VerifyProductionDecoder(byte[] bytes, ArtResult result)
+    {
+        var framesPerGroup = CheckedToInt(U32(bytes, 32), "per-group frame count");
+        var groups = result.IsStatic ? 1 : 8;
+        for (var group = 0; group < groups; group++)
+        {
+            for (var frameIndex = 0; frameIndex < framesPerGroup; frameIndex++)
+            {
+                var frame = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frameIndex, 0));
+                if (frame.Header.BitsPerPixel != 8 || frame.Rgba.Count != checked(frame.Width * frame.Height * 4))
+                {
+                    throw new ArtProbeException("Production ART decoder returned inconsistent frame metadata.");
+                }
+            }
+        }
+    }
 
     private static int CheckedToInt(uint value, string label) =>
         value <= int.MaxValue ? (int)value : throw new ArtProbeException($"ART {label} exceeds Int32.");

@@ -2,16 +2,18 @@
 
 ## Scope and status
 
-This is a research specification for a later, separately authorized C# decoder of
-**one indexed ART frame**. It is neither a production API nor a renderer,
-animator, writer, extractor, or viewer. Its evidence is the read-only run and
-source matrix in [the ART evidence record](../research/art-evidence.md).
+This document retains the R2 experimental record and now describes the bounded
+implemented C# decoder of **one physical 8-bpp ART frame** into RGBA. It is not a
+renderer, animator, writer, extractor, or viewer. Experimental observations remain
+in [the ART evidence record](../research/art-evidence.md); CE-source-derived API
+rules are separately attributed in [the CE specification record](../research/art-ce-spec.md).
 
 Status vocabulary follows [the research method](../research/method.md):
 reported, corroborated, experimentally verified, disputed, and unknown. The
-specification admits only the RLE observations below; it deliberately does not
-assign rendering behaviour to palette index 0, palette alpha, direction order,
-anchors, or timing.
+The R2 observations below deliberately did not assign rendering behaviour to
+palette index 0, palette alpha, direction order, anchors, or timing. The later
+implemented BGRX-to-RGBA, index-0, and row-order normalization rules are
+CE-source-derived contract decisions, not retroactive claims about the R2 run.
 
 ## Observed layout
 
