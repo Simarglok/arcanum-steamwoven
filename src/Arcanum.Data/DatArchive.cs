@@ -47,13 +47,12 @@ public sealed class DatArchive : IDisposable
     public static DatArchive Open(Stream stream, DatReaderOptions? options = null, bool leaveOpen = false)
     {
         ArgumentNullException.ThrowIfNull(stream);
-        if (!stream.CanRead || !stream.CanSeek)
-        {
-            throw new ArgumentException("The DAT stream must be readable and seekable.", nameof(stream));
-        }
-
         try
         {
+            if (!stream.CanRead || !stream.CanSeek)
+            {
+                throw new ArgumentException("The DAT stream must be readable and seekable.", nameof(stream));
+            }
             return OpenCore(stream, !leaveOpen, options ?? new DatReaderOptions());
         }
         catch
@@ -235,34 +234,17 @@ public sealed class DatArchive : IDisposable
             var output = new byte[declaredSize];
             var scratch = new byte[1];
             var writtenTotal = 0;
-            while (!inflater.IsFinished)
+            while (writtenTotal < output.Length)
             {
-                if (writtenTotal == output.Length)
-                {
-                    // A zero-length Inflate advances through the zlib trailer without
-                    // allocating declaredSize + 1 bytes (SharpZipLib's documented path).
-                    inflater.Inflate(scratch, 0, 0);
-                    if (inflater.IsFinished)
-                    {
-                        break;
-                    }
-                    if (inflater.Inflate(scratch, 0, 1) > 0)
-                    {
-                        throw new DatFormatException("Zlib output exceeds declared length.");
-                    }
-                    if (inflater.IsNeedingInput && inflater.RemainingInput == 0)
-                    {
-                        break;
-                    }
-                }
-                var target = output;
-                var offset = writtenTotal;
-                var length = output.Length - writtenTotal;
-                var written = inflater.Inflate(target, offset, length);
+                var written = inflater.Inflate(output, writtenTotal, output.Length - writtenTotal);
                 if (written > 0)
                 {
                     writtenTotal += written;
                     continue;
+                }
+                if (inflater.IsFinished)
+                {
+                    break;
                 }
                 if (inflater.IsNeedingDictionary)
                 {
@@ -274,7 +256,29 @@ public sealed class DatArchive : IDisposable
                 }
                 throw new DatFormatException("Zlib stream made no progress.");
             }
-            if (inflater.TotalOut != declaredSize || writtenTotal != declaredSize)
+
+            // A positive-capacity probe drains the trailer and detects output beyond the
+            // declared bound without allocating a declaredSize + 1 destination buffer.
+            if (writtenTotal == output.Length)
+            {
+                if (inflater.Inflate(scratch, 0, 1) > 0)
+                {
+                    throw new DatFormatException("Zlib output exceeds declared length.");
+                }
+                if (!inflater.IsFinished)
+                {
+                    if (inflater.IsNeedingDictionary)
+                    {
+                        throw new DatFormatException("Zlib stream requires an unsupported dictionary.");
+                    }
+                    if (inflater.IsNeedingInput)
+                    {
+                        throw new DatFormatException("Zlib stream is truncated.");
+                    }
+                    throw new DatFormatException("Zlib stream made no progress.");
+                }
+            }
+            if (!inflater.IsFinished || inflater.TotalOut != declaredSize || writtenTotal != declaredSize)
             {
                 throw new DatFormatException("Zlib output length differs from declared length.");
             }

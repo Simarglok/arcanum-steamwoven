@@ -15,6 +15,8 @@ dotnet restore --locked-mode
 dotnet build --no-restore
 dotnet test --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
+# Opt-in only; the test requires the eight documented local R1 candidates.
+DAT_ROOT=/path/to/Arcanum dotnet test --no-build --filter "TestCategory=RealData"
 ```
 
 ## API and ownership
@@ -32,3 +34,5 @@ python3 -B tools/research/dat_probe.py --self-test
 Defaults are policy safeguards, not format facts: archive 4 GiB; index 64 MiB; entry count 1,000,000; each name 64 KiB; total names 64 MiB; stored entry 256 MiB; decoded entry 512 MiB. All must be positive and are checked before the corresponding allocation or payload read.
 
 The supported structure and evidence boundary are in [formats/dat.md](formats/dat.md). Local real data are opt-in only and are never committed. The R1 evidence covers eight user-owned candidates but does not establish canonical bytes, other variants, flag semantics beyond the admitted exact values, filename semantics, or archive precedence.
+
+The opt-in check first and last verifies the documented size/SHA-256 manifest without writing inputs. It compares the parsed footer and all index metadata (including raw name and opaque fields) in memory with the existing Python R1 probe through a length-prefixed test adapter, then reads the five documented bounded payload ordinals. It publishes no source names, payload bytes, payload hashes, or local paths; a missing `DAT_ROOT` is an explicit failing/inconclusive invocation, not a pass.

@@ -1,6 +1,10 @@
+using System.Diagnostics;
 using System.IO.Compression;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Arcanum.Data;
+using ICSharpCode.SharpZipLib.Zip.Compression;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Data.Tests;
@@ -45,6 +49,61 @@ public sealed class DatArchiveTests
         Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[2]));
         Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[3]));
         Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[4]));
+    }
+
+    [TestMethod]
+    public void Zlib_valid_empty_and_nonempty_entries_finish_with_exact_output()
+    {
+        var bytes = Fixture.Create(
+            (Fixture.Name("empty"), 2u, 0u, Fixture.Zlib(string.Empty), new byte[4]),
+            (Fixture.Name("value"), 2u, 5u, Fixture.Zlib("value"), new byte[4]));
+        using var archive = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
+
+        CollectionAssert.AreEqual(Array.Empty<byte>(), archive.ReadEntry(archive.Entries[0]));
+        CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("value"), archive.ReadEntry(archive.Entries[1]));
+    }
+
+    [TestMethod]
+    public void Zlib_positive_probe_observes_finished_before_needing_input()
+    {
+        var stored = Fixture.Zlib("x");
+        var inflater = new Inflater(noHeader: false);
+        inflater.SetInput(stored);
+        var output = new byte[1];
+        var scratch = new byte[1];
+
+        Assert.AreEqual(1, inflater.Inflate(output, 0, output.Length));
+        Assert.AreEqual(0, inflater.Inflate(scratch, 0, scratch.Length));
+        Assert.IsTrue(inflater.IsFinished);
+        Assert.IsTrue(inflater.IsNeedingInput);
+        Assert.AreEqual(1L, inflater.TotalOut);
+        Assert.AreEqual(0, inflater.RemainingInput);
+    }
+
+    [TestMethod]
+    public void Zlib_rejects_malformed_truncated_trailing_and_length_errors()
+    {
+        var valid = Fixture.Zlib("xy");
+        var badHeader = valid.ToArray();
+        badHeader[0] = 0;
+        var badBody = valid.ToArray();
+        badBody[2] = 0xff;
+        var badTrailer = valid.ToArray();
+        badTrailer[^1] ^= 1;
+
+        AssertZlibFormatFailure(badHeader, 2);
+        AssertZlibFormatFailure(badBody, 2);
+        AssertZlibFormatFailure(badTrailer, 2);
+        for (var length = 0; length < valid.Length; length++)
+        {
+            AssertZlibFormatFailure(valid[..length], 2);
+        }
+        AssertZlibFormatFailure(valid.Concat(new byte[] { 1 }).ToArray(), 2);
+        AssertZlibFormatFailure(valid.Concat(new byte[] { 1, 2 }).ToArray(), 2);
+        AssertZlibFormatFailure(valid.Concat(Fixture.Zlib("z")).ToArray(), 2);
+        AssertZlibFormatFailure(valid, 1);
+        AssertZlibFormatFailure(valid, 3);
+        AssertZlibFormatFailure(Fixture.Zlib("x"), 0);
     }
 
     [TestMethod]
@@ -107,36 +166,60 @@ public sealed class DatArchiveTests
     }
 
     [TestMethod]
+    public void Open_disposes_owned_stream_after_validation_failure()
+    {
+        var owned = new TrackingStream(canRead: false, canSeek: true);
+        Throws<ArgumentException>(() => DatArchive.Open(owned));
+        Assert.IsTrue(owned.Disposed);
+
+        var retained = new TrackingStream(canRead: true, canSeek: false);
+        Throws<ArgumentException>(() => DatArchive.Open(retained, leaveOpen: true));
+        Assert.IsFalse(retained.Disposed);
+    }
+
+    [TestMethod]
     [TestCategory("RealData")]
-    public void R1_local_inventory_matches_the_documented_aggregate_and_selected_reads()
+    public void R1_local_inventory_matches_documented_integrity_and_probe_metadata()
     {
         var root = Environment.GetEnvironmentVariable("DAT_ROOT");
         if (string.IsNullOrWhiteSpace(root))
         {
             Assert.Fail("DAT_ROOT is required for the opt-in R1 real-data check; this is not a synthetic pass.");
         }
-        var paths = new[]
+        var expectations = new[]
         {
-            "arcanum1.dat", "arcanum2.dat", "arcanum3.dat", "Arcanum4.dat", "tig.dat",
-            "modules/Arcanum.dat", "modules/Vormantown.dat", "modules/Arcanum.PATCH0",
+            new R1Archive("arcanum1.dat", 447470816, "6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576"),
+            new R1Archive("arcanum2.dat", 147991122, "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d"),
+            new R1Archive("arcanum3.dat", 9605011, "cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499"),
+            new R1Archive("Arcanum4.dat", 447614, "975d43854fca8b7dd74e2b12ef2ff3fe6d3c0f99dc541151d33001469f89710c"),
+            new R1Archive("tig.dat", 57149, "c9b48eb6396c514eba3805fb4847df67db3c67ef9f13a79ea21bbf7dd329a09b"),
+            new R1Archive("modules/Arcanum.dat", 355938305, "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f"),
+            new R1Archive("modules/Vormantown.dat", 16060074, "163a9560ad7d684f486167bf91ad6da0fdef8bd7fd1082fc054084611da04345"),
+            new R1Archive("modules/Arcanum.PATCH0", 18804, "d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce"),
         };
+        var before = expectations.Select(expectation => InputFingerprint.Create(Path.Combine(root, expectation.RelativePath))).ToArray();
         var totalEntries = 0;
-        foreach (var relativePath in paths)
+        foreach (var expectation in expectations)
         {
-            using var archive = DatArchive.Open(Path.Combine(root, relativePath));
+            var path = Path.Combine(root, expectation.RelativePath);
+            Assert.AreEqual(expectation.Bytes, new FileInfo(path).Length, "R1 size mismatch.");
+            Assert.AreEqual(expectation.Sha256, InputFingerprint.Hash(path), "R1 SHA-256 mismatch.");
+            using var archive = DatArchive.Open(path);
             totalEntries += archive.Entries.Count;
+            CompareWithProbe(path, archive);
         }
         Assert.AreEqual(107_889, totalEntries);
 
-        using var arcanum1 = DatArchive.Open(Path.Combine(root, paths[0]));
-        using var arcanum2 = DatArchive.Open(Path.Combine(root, paths[1]));
-        using var module = DatArchive.Open(Path.Combine(root, paths[5]));
-        using var patch = DatArchive.Open(Path.Combine(root, paths[7]));
-        Assert.AreEqual(1_186, arcanum1.ReadEntry(arcanum1.Entries[0]).Length);
-        Assert.AreEqual(68, arcanum2.ReadEntry(arcanum2.Entries[4_247]).Length);
-        Assert.AreEqual(4, module.ReadEntry(module.Entries[8_022]).Length);
-        Assert.AreEqual(20_156, module.ReadEntry(module.Entries[3]).Length);
-        Assert.AreEqual(16_270, patch.ReadEntry(patch.Entries[1]).Length);
+        using var arcanum1 = DatArchive.Open(Path.Combine(root, expectations[0].RelativePath));
+        using var arcanum2 = DatArchive.Open(Path.Combine(root, expectations[1].RelativePath));
+        using var module = DatArchive.Open(Path.Combine(root, expectations[5].RelativePath));
+        using var patch = DatArchive.Open(Path.Combine(root, expectations[7].RelativePath));
+        AssertProbePayload(Path.Combine(root, expectations[0].RelativePath), arcanum1, 0, 1_186);
+        AssertProbePayload(Path.Combine(root, expectations[1].RelativePath), arcanum2, 4_247, 68);
+        AssertProbePayload(Path.Combine(root, expectations[5].RelativePath), module, 8_022, 4);
+        AssertProbePayload(Path.Combine(root, expectations[5].RelativePath), module, 3, 20_156);
+        AssertProbePayload(Path.Combine(root, expectations[7].RelativePath), patch, 1, 16_270);
+        CollectionAssert.AreEqual(before, expectations.Select(expectation => InputFingerprint.Create(Path.Combine(root, expectation.RelativePath))).ToArray());
     }
 
     private static void Throws<TException>(Action action) where TException : Exception
@@ -154,6 +237,127 @@ public sealed class DatArchiveTests
             Assert.Fail($"Expected {typeof(TException).Name}, got {exception.GetType().Name}.");
         }
         Assert.Fail($"Expected {typeof(TException).Name}.");
+    }
+
+    private static void AssertZlibFormatFailure(byte[] stored, uint declaredSize)
+    {
+        var bytes = Fixture.Create((Fixture.Name("zlib"), 2u, declaredSize, stored, new byte[4]));
+        using var archive = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
+        Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[0]));
+    }
+
+    private static void CompareWithProbe(string archivePath, DatArchive archive)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("python3")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        process.StartInfo.ArgumentList.Add("-B");
+        process.StartInfo.ArgumentList.Add(Path.Combine(FindRepositoryRoot(), "tests", "Arcanum.Data.Tests", "dat_probe_adapter.py"));
+        process.StartInfo.ArgumentList.Add(archivePath);
+        Assert.IsTrue(process.Start(), "Could not start the local Python probe adapter.");
+        using var reader = new BinaryReader(process.StandardOutput.BaseStream, Encoding.UTF8, leaveOpen: true);
+        using var footer = ReadProbeRecord(reader);
+        Assert.IsNotNull(footer);
+        Assert.AreEqual("f", footer.RootElement.GetProperty("k").GetString());
+        CollectionAssert.AreEqual(archive.Footer.OpaqueBytes.ToArray(), Convert.FromBase64String(footer.RootElement.GetProperty("opaque").GetString()!));
+        CollectionAssert.AreEqual(archive.Footer.MarkerBytes.ToArray(), Convert.FromBase64String(footer.RootElement.GetProperty("marker").GetString()!));
+        Assert.AreEqual(archive.Footer.NameBytesHint, footer.RootElement.GetProperty("hint").GetUInt32());
+        Assert.AreEqual(archive.Footer.TailRegionBytes, footer.RootElement.GetProperty("tail").GetUInt32());
+        Assert.AreEqual(archive.Footer.IndexOffset, footer.RootElement.GetProperty("index").GetInt64());
+        foreach (var entry in archive.Entries)
+        {
+            using var record = ReadProbeRecord(reader);
+            Assert.IsNotNull(record, "The Python probe ended before the C# index.");
+            var data = record.RootElement;
+            Assert.AreEqual("e", data.GetProperty("k").GetString());
+            Assert.AreEqual(entry.Ordinal, data.GetProperty("ord").GetInt32());
+            CollectionAssert.AreEqual(entry.RawNameBytes.ToArray(), Convert.FromBase64String(data.GetProperty("name").GetString()!));
+            CollectionAssert.AreEqual(entry.OpaqueBytes.ToArray(), Convert.FromBase64String(data.GetProperty("opaque").GetString()!));
+            Assert.AreEqual(entry.Flags, data.GetProperty("flags").GetUInt32());
+            Assert.AreEqual(entry.DeclaredOutputSize, data.GetProperty("declared").GetUInt32());
+            Assert.AreEqual(entry.StoredSize, data.GetProperty("stored").GetUInt32());
+            Assert.AreEqual(entry.Offset, data.GetProperty("offset").GetUInt32());
+        }
+        Assert.IsNull(ReadProbeRecord(reader), "The Python probe emitted excess index records.");
+        var error = process.StandardError.ReadToEnd();
+        Assert.IsTrue(process.WaitForExit(30_000), "The Python probe adapter timed out.");
+        Assert.AreEqual(0, process.ExitCode, $"The Python probe adapter failed: {error}");
+    }
+
+    private static JsonDocument? ReadProbeRecord(BinaryReader reader)
+    {
+        var lengthBytes = reader.ReadBytes(sizeof(uint));
+        if (lengthBytes.Length == 0)
+        {
+            return null;
+        }
+        Assert.AreEqual(sizeof(uint), lengthBytes.Length, "The Python probe record length is truncated.");
+        var length = BitConverter.ToUInt32(lengthBytes);
+        Assert.IsTrue(length > 0 && length <= 1024 * 1024, "The Python probe record size is invalid.");
+        var bytes = reader.ReadBytes(checked((int)length));
+        Assert.AreEqual((int)length, bytes.Length, "The Python probe record is truncated.");
+        return JsonDocument.Parse(bytes);
+    }
+
+    private static void AssertProbePayload(string archivePath, DatArchive archive, int ordinal, int expectedLength)
+    {
+        var payload = archive.ReadEntry(archive.Entries[ordinal]);
+        Assert.AreEqual(expectedLength, payload.Length);
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo("python3")
+            {
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+            },
+        };
+        process.StartInfo.ArgumentList.Add("-B");
+        process.StartInfo.ArgumentList.Add(Path.Combine(FindRepositoryRoot(), "tests", "Arcanum.Data.Tests", "dat_probe_adapter.py"));
+        process.StartInfo.ArgumentList.Add(archivePath);
+        process.StartInfo.ArgumentList.Add("--payload");
+        process.StartInfo.ArgumentList.Add(ordinal.ToString());
+        Assert.IsTrue(process.Start(), "Could not start the local Python payload adapter.");
+        using var record = ReadProbeRecord(new BinaryReader(process.StandardOutput.BaseStream, Encoding.UTF8, leaveOpen: true));
+        Assert.IsNotNull(record);
+        Assert.AreEqual("p", record.RootElement.GetProperty("k").GetString());
+        CollectionAssert.AreEqual(payload, Convert.FromBase64String(record.RootElement.GetProperty("payload").GetString()!));
+        var error = process.StandardError.ReadToEnd();
+        Assert.IsTrue(process.WaitForExit(30_000), "The Python payload adapter timed out.");
+        Assert.AreEqual(0, process.ExitCode, $"The Python payload adapter failed: {error}");
+    }
+
+    private static string FindRepositoryRoot()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            if (File.Exists(Path.Combine(directory.FullName, "tools", "research", "dat_probe.py")))
+            {
+                return directory.FullName;
+            }
+        }
+        Assert.Fail("Could not locate the repository's research probe.");
+        return string.Empty;
+    }
+
+    private sealed record R1Archive(string RelativePath, long Bytes, string Sha256);
+
+    private sealed record InputFingerprint(long Bytes, string Sha256)
+    {
+        public static InputFingerprint Create(string path) => new(new FileInfo(path).Length, Hash(path));
+
+        public static string Hash(string path)
+        {
+            using var stream = File.OpenRead(path);
+            using var sha256 = SHA256.Create();
+            return Convert.ToHexString(sha256.ComputeHash(stream)).ToLowerInvariant();
+        }
     }
 
     private static class Fixture
@@ -207,6 +411,36 @@ public sealed class DatArchiveTests
             stream.WriteByte((byte)(value >> 8));
             stream.WriteByte((byte)(value >> 16));
             stream.WriteByte((byte)(value >> 24));
+        }
+    }
+
+    private sealed class TrackingStream : Stream
+    {
+        private readonly bool _canRead;
+        private readonly bool _canSeek;
+
+        public TrackingStream(bool canRead, bool canSeek)
+        {
+            _canRead = canRead;
+            _canSeek = canSeek;
+        }
+
+        public bool Disposed { get; private set; }
+        public override bool CanRead => _canRead;
+        public override bool CanSeek => _canSeek;
+        public override bool CanWrite => false;
+        public override long Length => 0;
+        public override long Position { get; set; }
+        public override void Flush() => throw new NotSupportedException();
+        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected override void Dispose(bool disposing)
+        {
+            Disposed = true;
+            base.Dispose(disposing);
         }
     }
 }

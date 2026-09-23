@@ -27,6 +27,7 @@ FOOTER = struct.Struct("<16s4sII")
 FOOTER_SIZE = FOOTER.size
 U32 = struct.Struct("<I")
 ENTRY_FIXED = struct.Struct("<4xIIII")
+ENTRY_FIELDS = struct.Struct("<4sIIII")
 MARKER = b"1TAD"
 COMPRESSED = 0x002
 DIRECTORY = 0x400
@@ -54,6 +55,7 @@ class Footer:
 class Entry:
     ordinal: int
     raw_name: bytes
+    opaque: bytes
     flags: int
     unpacked_size: int
     stored_size: int
@@ -138,14 +140,14 @@ def parse_archive(path: Path) -> Archive:
                 raise DatProbeError("entry name: missing NUL terminator")
             if stream.tell() + ENTRY_FIXED.size > index_end:
                 raise DatProbeError("entry fields: outside index")
-            flags, unpacked_size, stored_size, offset = ENTRY_FIXED.unpack(
+            opaque, flags, unpacked_size, stored_size, offset = ENTRY_FIELDS.unpack(
                 read_exact(stream, ENTRY_FIXED.size, "entry fields")
             )
             if not flags & DIRECTORY:
                 payload_end = checked_add(offset, stored_size, index_start, "payload bounds")
                 if payload_end > index_start:
                     raise DatProbeError("payload bounds: intersects index")
-            entries.append(Entry(ordinal, raw_name, flags, unpacked_size, stored_size, offset))
+            entries.append(Entry(ordinal, raw_name, opaque, flags, unpacked_size, stored_size, offset))
         if stream.tell() != index_end:
             raise DatProbeError("index: unconsumed bytes")
 
