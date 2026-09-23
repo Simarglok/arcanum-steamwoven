@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
@@ -17,19 +18,22 @@ public sealed class DatArchiveTests
     {
         var archiveBytes = Fixture.Create(
             (new byte[] { (byte)'A', 0 }, 1u, 1u, new byte[] { 7 }, new byte[] { 1, 2, 3, 4 }),
-            (new byte[] { (byte)'A', 0 }, 0x400u, 0u, Array.Empty<byte>(), new byte[] { 5, 6, 7, 8 }));
+            (new byte[] { (byte)'a', 0 }, 1u, 1u, new byte[] { 8 }, new byte[] { 5, 6, 7, 8 }),
+            (new byte[] { 0xc1, 0 }, 1u, 1u, new byte[] { 9 }, new byte[] { 9, 8, 7, 6 }),
+            (new byte[] { (byte)'A', 0 }, 1u, 1u, new byte[] { 10 }, new byte[] { 4, 3, 2, 1 }));
         using var archive = DatArchive.Open(new MemoryStream(archiveBytes), leaveOpen: true);
 
-        Assert.AreEqual(2, archive.Entries.Count);
+        Assert.AreEqual(4, archive.Entries.Count);
         CollectionAssert.AreEqual(new byte[] { (byte)'A', 0 }, archive.Entries[0].RawNameBytes.ToArray());
         CollectionAssert.AreEqual(new byte[] { 1, 2, 3, 4 }, archive.Entries[0].OpaqueBytes.ToArray());
         CollectionAssert.AreEqual(new byte[] { 5, 6, 7, 8 }, archive.Entries[1].OpaqueBytes.ToArray());
+        CollectionAssert.AreEqual(new byte[] { (byte)'a', 0 }, archive.Entries[1].RawNameBytes.ToArray());
+        CollectionAssert.AreEqual(new byte[] { 0xc1, 0 }, archive.Entries[2].RawNameBytes.ToArray());
+        CollectionAssert.AreEqual(new byte[] { (byte)'A', 0 }, archive.Entries[3].RawNameBytes.ToArray());
         Assert.AreEqual(0, archive.Entries[0].Ordinal);
-        Assert.AreEqual(1, archive.Entries[1].Ordinal);
-        Assert.AreEqual(0x400u, archive.Entries[1].Flags);
+        Assert.AreEqual(3, archive.Entries[3].Ordinal);
         CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("1TAD"), archive.Footer.MarkerBytes.ToArray());
         CollectionAssert.AreEqual(new byte[16], archive.Footer.OpaqueBytes.ToArray());
-        Throws<DatUnsupportedEntryException>(() => archive.ReadEntry(archive.Entries[1]));
     }
 
     [TestMethod]
@@ -55,12 +59,14 @@ public sealed class DatArchiveTests
     public void Zlib_valid_empty_and_nonempty_entries_finish_with_exact_output()
     {
         var bytes = Fixture.Create(
+            (Fixture.Name("plain-empty"), 1u, 0u, Array.Empty<byte>(), new byte[4]),
             (Fixture.Name("empty"), 2u, 0u, Fixture.Zlib(string.Empty), new byte[4]),
             (Fixture.Name("value"), 2u, 5u, Fixture.Zlib("value"), new byte[4]));
         using var archive = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
 
         CollectionAssert.AreEqual(Array.Empty<byte>(), archive.ReadEntry(archive.Entries[0]));
-        CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("value"), archive.ReadEntry(archive.Entries[1]));
+        CollectionAssert.AreEqual(Array.Empty<byte>(), archive.ReadEntry(archive.Entries[1]));
+        CollectionAssert.AreEqual(Encoding.ASCII.GetBytes("value"), archive.ReadEntry(archive.Entries[2]));
     }
 
     [TestMethod]
@@ -112,10 +118,14 @@ public sealed class DatArchiveTests
         var bytes = Fixture.Create(
             (Fixture.Name("combo"), 3u, 1u, new byte[] { 1 }, new byte[4]),
             (Fixture.Name("plain"), 1u, 2u, new byte[] { 1 }, new byte[4]));
-        using var archive = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
+        using var stream = new InstrumentedStream(bytes);
+        using var archive = DatArchive.Open(stream, leaveOpen: true);
+        stream.SetObservedRanges((0, archive.Footer.IndexOffset));
+        stream.ResetObservedReads();
 
         Throws<DatUnsupportedEntryException>(() => archive.ReadEntry(archive.Entries[0]));
         Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[1]));
+        Assert.AreEqual(0L, stream.ObservedReadBytes);
     }
 
     [TestMethod]
@@ -178,6 +188,156 @@ public sealed class DatArchiveTests
     }
 
     [TestMethod]
+    public void ReadEntry_classifies_directory_and_every_supported_unsupported_flag_before_bounds_or_payload_reads()
+    {
+        var flags = new uint[] { 0u, 3u, 0x100u, 0x200u, 0x400u, 0x401u, 0x402u, 0x800u };
+        var bytes = Fixture.Create(flags.Select((flag, ordinal) =>
+            (Fixture.Name($"f{ordinal}"), flag, 1u, new byte[] { (byte)ordinal }, new byte[] { 1, 2, 3, (byte)ordinal })).ToArray());
+        Fixture.SetEntryOffset(bytes, 4, uint.MaxValue);
+        Fixture.SetEntryOffset(bytes, 6, uint.MaxValue);
+        using var stream = new InstrumentedStream(bytes);
+        using var archive = DatArchive.Open(stream, leaveOpen: true);
+        stream.SetObservedRanges((0, archive.Footer.IndexOffset));
+        stream.ResetObservedReads();
+
+        for (var ordinal = 0; ordinal < archive.Entries.Count; ordinal++)
+        {
+            Assert.AreEqual(flags[ordinal], archive.Entries[ordinal].Flags);
+            CollectionAssert.AreEqual(new byte[] { 1, 2, 3, (byte)ordinal }, archive.Entries[ordinal].OpaqueBytes.ToArray());
+            Throws<DatUnsupportedEntryException>(() => archive.ReadEntry(archive.Entries[ordinal]));
+        }
+
+        Assert.AreEqual(0L, stream.ObservedReadBytes, "Unsupported metadata must not read payload bytes.");
+    }
+
+    [TestMethod]
+    public void ReadEntry_reads_only_the_selected_payload_range()
+    {
+        var bytes = Fixture.Create(
+            (Fixture.Name("first"), 1u, 3u, new byte[] { 1, 2, 3 }, new byte[4]),
+            (Fixture.Name("second"), 1u, 4u, new byte[] { 4, 5, 6, 7 }, new byte[4]));
+        using var stream = new InstrumentedStream(bytes);
+        using var archive = DatArchive.Open(stream, leaveOpen: true);
+        stream.SetObservedRanges(archive.Entries.Select(entry => ((long)entry.Offset, (long)entry.Offset + entry.StoredSize)));
+        stream.ResetObservedReads();
+
+        CollectionAssert.AreEqual(new byte[] { 1, 2, 3 }, archive.ReadEntry(archive.Entries[0]));
+
+        Assert.AreEqual(3L, stream.ObservedReadsFor((long)archive.Entries[0].Offset, (long)archive.Entries[0].Offset + 3));
+        Assert.AreEqual(0L, stream.ObservedReadsFor((long)archive.Entries[1].Offset, (long)archive.Entries[1].Offset + 4));
+    }
+
+    [TestMethod]
+    public void Open_rejects_footer_count_index_name_fixed_tail_and_index_garbage_truncation()
+    {
+        var valid = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(valid[..27])));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(Fixture.CreateRaw(Array.Empty<byte>(), new byte[] { 1, 0, 0 }))));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(Fixture.CreateRaw(Array.Empty<byte>(), Fixture.U32(1).Concat(Fixture.U32(4)).Concat(new byte[] { (byte)'a', 0 }).ToArray()))));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(Fixture.CreateRaw(Array.Empty<byte>(), Fixture.U32(1).Concat(Fixture.U32(2)).Concat(Fixture.Name("a")).Concat(new byte[19]).ToArray()))));
+
+        var badName = valid.ToArray();
+        Fixture.SetNameTerminator(badName, 0, 1);
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(badName)));
+
+        var garbage = Fixture.InsertBeforeFooter(valid, 0xff);
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(garbage)));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(Fixture.WithTail(valid, 27))));
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(Fixture.WithTail(valid, checked((uint)valid.Length + 1)))));
+    }
+
+    [TestMethod]
+    public void Open_rejects_unreachable_counts_payload_ranges_and_bad_markers()
+    {
+        var valid = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
+        var unreachable = valid.ToArray();
+        Fixture.SetEntryCount(unreachable, 2);
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(unreachable)));
+
+        var outOfPayload = valid.ToArray();
+        Fixture.SetEntryOffset(outOfPayload, 0, uint.MaxValue);
+        Throws<DatFormatException>(() => DatArchive.Open(new MemoryStream(outOfPayload)));
+
+        var badMarker = valid.ToArray();
+        badMarker[^12] = (byte)'X';
+        Throws<DatUnsupportedFormatException>(() => DatArchive.Open(new MemoryStream(badMarker)));
+    }
+
+    [TestMethod]
+    public void Open_and_ReadEntry_enforce_all_configured_limits_before_payload_reads()
+    {
+        var one = Fixture.Create((Fixture.Name("one"), 1u, 2u, new byte[] { 1, 2 }, new byte[4]));
+        Throws<DatLimitExceededException>(() => DatArchive.Open(new MemoryStream(one), new DatReaderOptions { MaxArchiveBytes = checked((uint)one.Length - 1) }));
+        Throws<DatLimitExceededException>(() => DatArchive.Open(new MemoryStream(one), new DatReaderOptions { MaxIndexBytes = 1 }));
+        Throws<DatLimitExceededException>(() => DatArchive.Open(new MemoryStream(one), new DatReaderOptions { MaxNameBytes = 1 }));
+        var two = Fixture.Create((Fixture.Name("a"), 1u, 1u, new byte[] { 1 }, new byte[4]), (Fixture.Name("b"), 1u, 1u, new byte[] { 2 }, new byte[4]));
+        Throws<DatLimitExceededException>(() => DatArchive.Open(new MemoryStream(two), new DatReaderOptions { MaxEntryCount = 1 }));
+        Throws<DatLimitExceededException>(() => DatArchive.Open(new MemoryStream(two), new DatReaderOptions { MaxTotalNameBytes = 3 }));
+
+        foreach (var options in new[]
+        {
+            new DatReaderOptions { MaxArchiveBytes = 0 }, new DatReaderOptions { MaxIndexBytes = 0 },
+            new DatReaderOptions { MaxEntryCount = 0 }, new DatReaderOptions { MaxNameBytes = 0 },
+            new DatReaderOptions { MaxTotalNameBytes = 0 }, new DatReaderOptions { MaxStoredEntryBytes = 0 },
+            new DatReaderOptions { MaxDecodedEntryBytes = 0 },
+        })
+        {
+            Throws<ArgumentOutOfRangeException>(() => DatArchive.Open(new MemoryStream(one), options));
+        }
+
+        using var stream = new InstrumentedStream(one);
+        using var archive = DatArchive.Open(stream, new DatReaderOptions { MaxStoredEntryBytes = 1 }, leaveOpen: true);
+        stream.SetObservedRanges((0, archive.Footer.IndexOffset));
+        stream.ResetObservedReads();
+        Throws<DatLimitExceededException>(() => archive.ReadEntry(archive.Entries[0]));
+        Assert.AreEqual(0L, stream.ObservedReadBytes);
+        using var decodedArchive = DatArchive.Open(new MemoryStream(one), new DatReaderOptions { MaxDecodedEntryBytes = 1 }, leaveOpen: true);
+        Throws<DatLimitExceededException>(() => decodedArchive.ReadEntry(decodedArchive.Entries[0]));
+    }
+
+    [TestMethod]
+    public void Open_preserves_io_errors_and_ReadEntry_reports_truncated_payload()
+    {
+        var bytes = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
+        Throws<IOException>(() => DatArchive.Open(new ThrowingReadStream(bytes), leaveOpen: true));
+
+        using var stream = new PayloadEofStream(bytes);
+        using var archive = DatArchive.Open(stream, leaveOpen: true);
+        stream.PayloadStart = archive.Entries[0].Offset;
+        stream.ReturnEofForPayload = true;
+        Throws<DatFormatException>(() => archive.ReadEntry(archive.Entries[0]));
+    }
+
+    [TestMethod]
+    public void File_and_stream_ownership_leave_open_dispose_and_foreign_entry_are_exact()
+    {
+        var bytes = Fixture.Create((Fixture.Name("one"), 1u, 1u, new byte[] { 1 }, new byte[4]));
+        var path = Path.Combine(Path.GetTempPath(), $"arcanum-data-{Guid.NewGuid():N}.dat");
+        try
+        {
+            File.WriteAllBytes(path, bytes);
+            var fileArchive = DatArchive.Open(path);
+            fileArchive.Dispose();
+            fileArchive.Dispose();
+            Throws<ObjectDisposedException>(() => fileArchive.ReadEntry(fileArchive.Entries[0]));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+
+        var retained = new TrackingStream(bytes, canRead: true, canSeek: true);
+        using (var archive = DatArchive.Open(retained, leaveOpen: true)) { }
+        Assert.IsFalse(retained.Disposed);
+        var owned = new TrackingStream(bytes, canRead: true, canSeek: true);
+        using (var archive = DatArchive.Open(owned)) { }
+        Assert.IsTrue(owned.Disposed);
+        using var first = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
+        using var second = DatArchive.Open(new MemoryStream(bytes), leaveOpen: true);
+        Throws<ArgumentException>(() => first.ReadEntry(second.Entries[0]));
+    }
+
+    [TestMethod]
     [TestCategory("RealData")]
     public void R1_local_inventory_matches_documented_integrity_and_probe_metadata()
     {
@@ -228,7 +388,7 @@ public sealed class DatArchiveTests
         {
             action();
         }
-        catch (TException)
+        catch (Exception exception) when (exception.GetType() == typeof(TException))
         {
             return;
         }
@@ -405,6 +565,83 @@ public sealed class DatArchiveTests
             return output.ToArray();
         }
 
+        public static byte[] U32(uint value)
+        {
+            var bytes = new byte[sizeof(uint)];
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
+            return bytes;
+        }
+
+        public static byte[] CreateRaw(byte[] payload, byte[] index)
+        {
+            using var output = new MemoryStream();
+            output.Write(payload);
+            output.Write(index);
+            output.Write(new byte[16]);
+            output.Write(Encoding.ASCII.GetBytes("1TAD"));
+            WriteU32(output, 0);
+            WriteU32(output, checked((uint)(index.Length + 28)));
+            return output.ToArray();
+        }
+
+        public static byte[] WithTail(byte[] archive, uint tail)
+        {
+            var result = archive.ToArray();
+            BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(result.Length - sizeof(uint)), tail);
+            return result;
+        }
+
+        public static byte[] InsertBeforeFooter(byte[] archive, byte value)
+        {
+            var result = new byte[archive.Length + 1];
+            Array.Copy(archive, 0, result, 0, archive.Length - 28);
+            result[archive.Length - 28] = value;
+            Array.Copy(archive, archive.Length - 28, result, archive.Length - 27, 28);
+            var oldTail = BinaryPrimitives.ReadUInt32LittleEndian(archive.AsSpan(archive.Length - sizeof(uint)));
+            BinaryPrimitives.WriteUInt32LittleEndian(result.AsSpan(result.Length - sizeof(uint)), checked(oldTail + 1));
+            return result;
+        }
+
+        public static void SetEntryCount(byte[] archive, uint count)
+        {
+            BinaryPrimitives.WriteUInt32LittleEndian(archive.AsSpan(IndexStart(archive), sizeof(uint)), count);
+        }
+
+        public static void SetNameTerminator(byte[] archive, int ordinal, byte value)
+        {
+            var (_, nameStart, nameLength) = EntryPosition(archive, ordinal);
+            archive[nameStart + nameLength - 1] = value;
+        }
+
+        public static void SetEntryOffset(byte[] archive, int ordinal, uint offset)
+        {
+            var (fieldsStart, _, _) = EntryPosition(archive, ordinal);
+            BinaryPrimitives.WriteUInt32LittleEndian(archive.AsSpan(fieldsStart + 16, sizeof(uint)), offset);
+        }
+
+        private static int IndexStart(byte[] archive)
+        {
+            var tail = BinaryPrimitives.ReadUInt32LittleEndian(archive.AsSpan(archive.Length - sizeof(uint)));
+            return checked(archive.Length - (int)tail);
+        }
+
+        private static (int FieldsStart, int NameStart, int NameLength) EntryPosition(byte[] archive, int ordinal)
+        {
+            var cursor = IndexStart(archive) + sizeof(uint);
+            for (var i = 0; i <= ordinal; i++)
+            {
+                var nameLength = checked((int)BinaryPrimitives.ReadUInt32LittleEndian(archive.AsSpan(cursor, sizeof(uint))));
+                var nameStart = cursor + sizeof(uint);
+                var fieldsStart = nameStart + nameLength;
+                if (i == ordinal)
+                {
+                    return (fieldsStart, nameStart, nameLength);
+                }
+                cursor = fieldsStart + 20;
+            }
+            throw new ArgumentOutOfRangeException(nameof(ordinal));
+        }
+
         private static void WriteU32(Stream stream, uint value)
         {
             stream.WriteByte((byte)value);
@@ -414,32 +651,131 @@ public sealed class DatArchiveTests
         }
     }
 
+    private class InstrumentedStream : Stream
+    {
+        private readonly MemoryStream _inner;
+        private readonly Dictionary<(long Start, long End), long> _observed = new();
+
+        public InstrumentedStream(byte[] bytes)
+        {
+            _inner = new MemoryStream(bytes, writable: false);
+        }
+
+        public long ObservedReadBytes => _observed.Values.Sum();
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public void SetObservedRanges(params (long Start, long End)[] ranges) => SetObservedRanges((IEnumerable<(long Start, long End)>)ranges);
+        public void SetObservedRanges(IEnumerable<(long Start, long End)> ranges)
+        {
+            _observed.Clear();
+            foreach (var range in ranges)
+            {
+                _observed.Add(range, 0);
+            }
+        }
+
+        public void ResetObservedReads()
+        {
+            foreach (var range in _observed.Keys.ToArray())
+            {
+                _observed[range] = 0;
+            }
+        }
+
+        public long ObservedReadsFor(long start, long end) => _observed[(start, end)];
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => Read(buffer.AsSpan(offset, count));
+        public override int Read(Span<byte> buffer)
+        {
+            var start = _inner.Position;
+            var read = _inner.Read(buffer);
+            Track(start, read);
+            return read;
+        }
+
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+
+        protected void Track(long start, long length)
+        {
+            var end = start + length;
+            foreach (var range in _observed.Keys.ToArray())
+            {
+                var overlap = Math.Max(0, Math.Min(end, range.End) - Math.Max(start, range.Start));
+                _observed[range] += overlap;
+            }
+        }
+    }
+
+    private sealed class PayloadEofStream : InstrumentedStream
+    {
+        public PayloadEofStream(byte[] bytes) : base(bytes) { }
+        public long PayloadStart { get; set; }
+        public bool ReturnEofForPayload { get; set; }
+
+        public override int Read(Span<byte> buffer)
+        {
+            return ReturnEofForPayload && Position >= PayloadStart ? 0 : base.Read(buffer);
+        }
+    }
+
+    private sealed class ThrowingReadStream : Stream
+    {
+        private readonly MemoryStream _inner;
+
+        public ThrowingReadStream(byte[] bytes) => _inner = new MemoryStream(bytes, writable: false);
+        public override bool CanRead => true;
+        public override bool CanSeek => true;
+        public override bool CanWrite => false;
+        public override long Length => _inner.Length;
+        public override long Position { get => _inner.Position; set => _inner.Position = value; }
+        public override void Flush() => _inner.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => throw new IOException("Injected read failure.");
+        public override int Read(Span<byte> buffer) => throw new IOException("Injected read failure.");
+        public override long Seek(long offset, SeekOrigin origin) => _inner.Seek(offset, origin);
+        public override void SetLength(long value) => throw new NotSupportedException();
+        public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+    }
+
     private sealed class TrackingStream : Stream
     {
         private readonly bool _canRead;
         private readonly bool _canSeek;
+        private readonly MemoryStream? _inner;
 
-        public TrackingStream(bool canRead, bool canSeek)
+        public TrackingStream(bool canRead, bool canSeek) : this(Array.Empty<byte>(), canRead, canSeek) { }
+
+        public TrackingStream(byte[] bytes, bool canRead, bool canSeek)
         {
             _canRead = canRead;
             _canSeek = canSeek;
+            _inner = canRead && canSeek ? new MemoryStream(bytes, writable: false) : null;
         }
 
         public bool Disposed { get; private set; }
         public override bool CanRead => _canRead;
         public override bool CanSeek => _canSeek;
         public override bool CanWrite => false;
-        public override long Length => 0;
-        public override long Position { get; set; }
-        public override void Flush() => throw new NotSupportedException();
-        public override int Read(byte[] buffer, int offset, int count) => throw new NotSupportedException();
-        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+        public override long Length => _inner?.Length ?? 0;
+        public override long Position { get => _inner?.Position ?? 0; set { if (_inner is null) throw new NotSupportedException(); _inner.Position = value; } }
+        public override void Flush() => _inner?.Flush();
+        public override int Read(byte[] buffer, int offset, int count) => _inner?.Read(buffer, offset, count) ?? throw new NotSupportedException();
+        public override int Read(Span<byte> buffer) => _inner?.Read(buffer) ?? throw new NotSupportedException();
+        public override long Seek(long offset, SeekOrigin origin) => _inner?.Seek(offset, origin) ?? throw new NotSupportedException();
         public override void SetLength(long value) => throw new NotSupportedException();
         public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
         protected override void Dispose(bool disposing)
         {
             Disposed = true;
+            if (disposing)
+            {
+                _inner?.Dispose();
+            }
             base.Dispose(disposing);
         }
     }

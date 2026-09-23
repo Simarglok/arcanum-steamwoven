@@ -73,7 +73,6 @@ public sealed class DatArchive : IDisposable
         {
             throw new ArgumentException("The entry belongs to a different archive.", nameof(entry));
         }
-        ValidatePayloadBounds(entry);
         if (entry.Flags == DirectoryFlag)
         {
             throw new DatUnsupportedEntryException("Directory metadata records have no supported payload read.");
@@ -82,6 +81,7 @@ public sealed class DatArchive : IDisposable
         {
             throw new DatUnsupportedEntryException($"Unsupported DAT entry flags 0x{entry.Flags:x8}.");
         }
+        ValidatePayloadBounds(entry);
         CheckLimit(entry.StoredSize, _options.MaxStoredEntryBytes, "Stored entry size");
         CheckLimit(entry.DeclaredOutputSize, _options.MaxDecodedEntryBytes, "Decoded entry size");
         if (entry.StoredSize > int.MaxValue || entry.DeclaredOutputSize > int.MaxValue)
