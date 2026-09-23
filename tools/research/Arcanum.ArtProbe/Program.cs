@@ -146,6 +146,9 @@ internal static class Program
         {
             throw new ArtProbeException("The bounded selector did not produce the required 6–12 mixed static/directional sample corpus.");
         }
+
+        Console.WriteLine(
+            $"sample_totals selected={samples.Length} frames={samples.Sum(sample => sample.Result.TotalFrames)} raw_frames={samples.Sum(sample => sample.Result.RawFrames)} rle_frames={samples.Sum(sample => sample.Result.RleFrames)}");
     }
 
     private static bool IsArtEntry(DatEntry entry)

@@ -105,7 +105,9 @@ inventory result; it makes no claim about PATCH semantics or runtime precedence.
 | `base1#9` | critter / directional | 4 | 32 | 0 / 32 | 53,757 | yes |
 
 All selected entries had exact header/table/payload consumption. The 12
-samples contain 306 RLE frames and no real-data raw frames. The six item
+samples contain 294 RLE frames and no real-data raw frames: six static samples
+with one frame each plus directional samples with 80 + 8 + 40 + 72 + 56 + 32
+frames. The six item
 samples experimentally disprove treating header words 17–24 as universal
 per-group payload totals; the six selected directional samples alone happened
 to match. This is preserved as a contradiction, not normalized into a field

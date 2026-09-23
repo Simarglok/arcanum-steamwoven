@@ -43,7 +43,7 @@ fields have their reported engine semantics.
 ## Pixel encoding
 
 For all 12 selected real-data samples, every frame used the bounded custom RLE
-path: 306 frames in total, zero raw frames. The independently written probe
+path: 294 frames in total, zero raw frames. The independently written probe
 accepted a payload only when it produced exactly `width × height` indexed bytes
 and consumed the frame payload exactly:
 
