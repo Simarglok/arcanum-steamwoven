@@ -2,7 +2,7 @@
 
 Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
 
-**Status:** repository foundation only. No engine or data parser has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
+**Status:** an evidence-bounded `Arcanum.Data` reader now implements the observed R1 `1TAD` DAT subset. No engine, Godot integration, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
 
 ## Direction
 
@@ -19,6 +19,8 @@ Players provide their own legally acquired copy. Original game assets, third-par
 
 - [Architecture decisions](docs/architecture/decisions.md)
 - [Research method and R1 boundary](docs/research/method.md)
+- [DAT format boundary](docs/formats/dat.md)
+- [Arcanum.Data API, limits and commands](docs/Arcanum.Data.md)
 - [Hermes delivery workflow](docs/workflow/hermes.md)
 - [Contributor guidance](CONTRIBUTING.md)
 

@@ -1,0 +1,35 @@
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A2E58854-7483-4641-9C84-BA3AAE908136}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.Data", "src\Arcanum.Data\Arcanum.Data.csproj", "{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{66D6C45A-6764-42D8-8C7C-C10EEF849403}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.Data.Tests", "tests\Arcanum.Data.Tests\Arcanum.Data.Tests.csproj", "{75C09B83-CB2C-4E3B-959D-0E99548B28C2}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{75C09B83-CB2C-4E3B-959D-0E99548B28C2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{75C09B83-CB2C-4E3B-959D-0E99548B28C2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{75C09B83-CB2C-4E3B-959D-0E99548B28C2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{75C09B83-CB2C-4E3B-959D-0E99548B28C2}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD} = {A2E58854-7483-4641-9C84-BA3AAE908136}
+		{75C09B83-CB2C-4E3B-959D-0E99548B28C2} = {66D6C45A-6764-42D8-8C7C-C10EEF849403}
+	EndGlobalSection
+EndGlobal

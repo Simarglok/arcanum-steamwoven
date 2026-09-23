@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Data</AssemblyName>
+    <RootNamespace>Arcanum.Data</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SharpZipLib" />
+  </ItemGroup>
+</Project>

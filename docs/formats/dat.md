@@ -143,3 +143,25 @@ and an explicit rejection policy for unobserved flags and malformed bounds.
 It must not infer resource precedence from this container research. Writer,
 packer, extraction CLI, runtime integration, and precedence behaviour are
 not implemented by R1.
+
+## Implemented reader subset
+
+`src/Arcanum.Data` implements this observed `1TAD` layout as a read-only,
+incremental C# library. It retains the footer's opaque bytes and marker, the
+entry opaque bytes, ordinal, raw NUL-terminated name field, and raw flags.
+Entries are exposed in index order without decoded-name lookup or
+normalization, so duplicate and byte-colliding entries are retained.
+
+The parser checks footer/tail/index arithmetic, physically reachable count,
+name and aggregate metadata limits, exact index consumption, and payload
+ranges before reading. Reads are available only for exact flags `0x001` plain
+and `0x002` zlib. Exact `0x400` directory metadata and every other flag value
+remain enumerable raw metadata but are rejected for payload reads. The reader
+does not assign semantics to unobserved values or combine flag bits.
+
+Payload reads are bounded by configurable reader limits and operate only on
+the selected entry range. Plain data requires equal stored and declared sizes.
+Zlib input is passed once to SharpZipLib's low-level `Inflater`; malformed,
+truncated, declared-length-mismatched, excess-output, and trailing-input
+conditions are reported as format errors. See [Arcanum.Data.md](../Arcanum.Data.md)
+for ownership, limits, exceptions, and commands.
