@@ -22,7 +22,7 @@ copied into this repository.
 | Arkanum ART wiki | https://github.com/vleon1/Arkanum/wiki/art | wiki commit `8248418aef9fb5bcbb13d387ff318dfd4bd31249`; archived bundle SHA-256 `7370bf7058c107e1eb844be5edd8d3b857ddc58d76cc9ce48fe1590f8b8ded44` | Local mirror/bundle available in ignored `toolkit/` | No reuse license established for this route. It is a community observation note, not a binary-layout reference. | Category/type observations used only to choose local `item` and `critter` groups; it provides no header, codec, timing, or renderer proof. |
 | ArtView.Fixed documentation | https://terra-arcanum.com/downloads/arcanum/tools/ArtView.Fixed.zip | package SHA-256 `9acbffee54790144e2b8ced8dd6edce4728c1b76c37e3290a7342a3df2debb2b`; manifest records ZIP CRC pass | Preserved package/documentation in ignored toolkit; executable/source not run | Original by eml78; changes attributed to Drog Black Tooth. License not reviewed. | Publication history and an `-X`/`-Y` bug-fix statement only; not a format oracle. |
 | Terra-Arcanum / Arcanum Club ART-tool catalogues | https://terra-arcanum.com/downloads.handler/index.php?section=modding and https://arcanumclub.org/workshop/tools | URLs, acquisition times, hashes, and package availability in `toolkit/manifest.json` and `toolkit/SHA256SUMS` | Local preserved packages available, unexecuted | Individual package licenses not reviewed. | Historical availability of ART viewers/converters only; catalogue listings do not prove layout or runtime semantics. |
-| Local installation candidates | user-owned data, read-only, parameterized as `DAT_ROOT` | Seven supplied DAT files matched the prior R1 size/SHA-256 values before and after the ART run | Available locally during this run | User-owned 1.0.7.4 candidates; provenance remains bounded as explained in [DAT evidence](dat-evidence.md#installation-provenance-and-confidence-boundary) | Experimentally verified table/payload/RLE boundaries for the selected corpus. |
+| Local installation candidates | user-owned data, read-only, parameterized as `DAT_ROOT` | All eight supplied DAT candidates, including `modules/Arcanum.PATCH0`, matched the R1 size/SHA-256 manifest before and after the ART run | Available locally during this run | User-owned 1.0.7.4 candidates; provenance remains bounded as explained in [DAT evidence](dat-evidence.md#installation-provenance-and-confidence-boundary) | Experimentally verified table/payload/RLE boundaries for the selected corpus; PATCH0 was inventory-only because it had zero `.art` entries. |
 
 The ArtConverter and ArcNET implementations share a direct declared ART source
 route. They are therefore not counted as two independent confirmations.
@@ -60,7 +60,9 @@ entries retain DAT index order; it takes the lowest valid six `item` category
 entries and the lowest valid six `critter` category entries. It checks that the
 observed header-bit group count agrees with the local class expectation; a
 mismatch is not selected. The selector prints only `archive-label#index-ordinal`
-and aggregate category names, never an original entry name.
+and fixed safe aggregate category labels. A top-level `art\\<basename>.art`
+entry maps to `other`; no raw basename, original entry name, or unrecognized
+directory segment is decoded or emitted.
 
 ### Aggregate index inventory
 
@@ -73,15 +75,17 @@ and aggregate category names, never an original entry name.
 | tig | 28 | 17 | 17 |
 | module | 75,591 | 0 | 0 |
 | vormantown | 12,812 | 0 | 0 |
+| patch | 6 | 0 | 0 |
 
 The aggregate category inventory includes 1,279 `item`, 3,524 `critter`, 514
 `monster`, 563 `unique_npc`, 1,478 `scenery`, 1,255 `tile`, 3,104 `wall`, 815
-`interface`, and 605 `portal` entries. Other observed category aggregates are
-reported by the local harness but were not needed for the corpus. Category
-labels are local selector aids, not a runtime type mapping.
+`interface`, 605 `portal`, and 856 fixed-safe `other` entries. Category labels
+are local selector aids, not a runtime type mapping.
 
-The expected `modules/Arcanum.PATCH0` candidate was unavailable at this run, so
-it was not silently substituted and no PATCH ART coverage is claimed.
+`modules/Arcanum.PATCH0` was available and included in the same read-only
+inventory and immutability run. It had six DAT entries and zero `.art` entries,
+so it does not change the selected corpus. This observes only that bounded
+inventory result; it makes no claim about PATCH semantics or runtime precedence.
 
 ### Selected corpus
 
@@ -130,17 +134,28 @@ dotnet run --project tools/research/Arcanum.ArtProbe/Arcanum.ArtProbe.csproj --n
   --archive base4:"$DAT_ROOT/Arcanum4.dat" \
   --archive tig:"$DAT_ROOT/tig.dat" \
   --archive module:"$DAT_ROOT/modules/Arcanum.dat" \
-  --archive vormantown:"$DAT_ROOT/modules/Vormantown.dat"
+  --archive vormantown:"$DAT_ROOT/modules/Vormantown.dat" \
+  --archive patch:"$DAT_ROOT/modules/Arcanum.PATCH0"
 ```
 
-The synthetic self-test drives the same ART validation path with valid raw and
-RLE entries, then asserts rejection of a truncated header, an RLE output
-overrun, and oversized dimensions. The real-data run reports whether a
-candidate corpus is incomplete instead of treating a missing class as a pass.
+The synthetic self-test drives the same `ProbeArt`/RLE validation path as the
+real-data probe. It accepts valid raw and RLE fixtures and rejects truncated
+header, palette, frame-table, and payload regions; zero, over-cap, and
+directional-multiplication-overflow frame counts; zero and over-cap dimensions;
+zero and oversized payload declarations; trailing entry bytes; truncated RLE
+literal and repeat runs; zero RLE count; RLE output overrun; and RLE
+under-production. It also captures the production category-inventory output
+path with a synthetic top-level sentinel name and proves that only `other` is
+emitted. Palette-index value and offset cases are inapplicable to this admitted
+raw-index subset: the probe establishes only raw palette-table byte placement
+and contiguous frame-table/payload sequencing, does not dereference a palette
+index or an offset field, and intentionally assigns neither palette nor geometry
+semantics. The real-data run reports whether a candidate corpus is incomplete
+instead of treating a missing class as a pass.
 
 ## Input immutability and observed result
 
-Before and after the real-data run, SHA-256 checks for the seven supplied DAT
+Before and after the real-data run, SHA-256 checks for all eight supplied DAT
 files were identical to the R1 values recorded in
 [DAT evidence](dat-evidence.md#observed-inventory):
 
@@ -151,6 +166,7 @@ files were identical to the R1 values recorded in
 - `tig.dat`: `c9b48eb6396c514eba3805fb4847df67db3c67ef9f13a79ea21bbf7dd329a09b`;
 - `modules/Arcanum.dat`: `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`;
 - `modules/Vormantown.dat`: `163a9560ad7d684f486167bf91ad6da0fdef8bd7fd1082fc054084611da04345`.
+- `modules/Arcanum.PATCH0`: `d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce`.
 
 The probe opens sources through `Arcanum.Data` read-only streams and commits no
 input, output, or preview. It never writes next to a game archive.
@@ -160,7 +176,10 @@ input, output, or preview. It never writes next to a game archive.
 - The DAT candidates are user-owned 1.0.7.4 candidates, not proof of canonical
   retail bytes; see DAT evidence for the provenance boundary.
 - The selected categories and twelve entries do not establish every ART family,
-  raw-pixel ART, version, patch, or runtime resource resolution.
+  raw-pixel ART, version, patch semantics, or runtime resource resolution.
+- PATCH0 was available but has zero `.art` entries in this bounded inventory;
+  this is not evidence about patch precedence, replacement behavior, or other
+  ART-bearing patch variants.
 - No independent macOS-safe ART comparator with known non-CE, non-ArtConverter
   lineage was found or executed. Structural and synthetic tests are therefore
   additional safeguards, not an independent decoder comparison.

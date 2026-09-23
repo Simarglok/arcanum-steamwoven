@@ -21,7 +21,7 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (valid raw/RLE, truncated header, malformed RLE, and oversized dimensions)");
+                Console.WriteLine("self-test: PASS (privacy aggregation and full production-path structural/RLE rejection matrix)");
                 return 0;
             }
 
@@ -129,10 +129,7 @@ internal static class Program
             }
         }
 
-        foreach (var category in categoryCounts)
-        {
-            Console.WriteLine($"category name={category.Key} art_entries={category.Value}");
-        }
+        WriteCategoryInventory(categoryCounts);
 
         var staticSamples = candidates.Where(candidate => candidate.Result.IsStatic).Take(6).ToArray();
         var directionalSamples = candidates.Where(candidate => !candidate.Result.IsStatic).Take(6).ToArray();
@@ -167,22 +164,66 @@ internal static class Program
         entry.DeclaredOutputSize is > 0 and <= MaxDecodedEntryBytes &&
         entry.StoredSize is > 0 and <= MaxDecodedEntryBytes;
 
-    private static string GetArtCategory(DatEntry entry)
+    private static void WriteCategoryInventory(IEnumerable<KeyValuePair<string, int>> categoryCounts)
     {
-        var name = entry.RawNameBytes;
+        foreach (var category in categoryCounts)
+        {
+            Console.WriteLine($"category name={category.Key} art_entries={category.Value}");
+        }
+    }
+
+    private static string GetArtCategory(DatEntry entry) => GetArtCategory(entry.RawNameBytes);
+
+    private static string GetArtCategory(IReadOnlyList<byte> name)
+    {
         var prefix = "art\\"u8;
-        if (name.Count <= prefix.Length || !name.Take(prefix.Length).SequenceEqual(prefix.ToArray()))
+        if (name.Count <= prefix.Length || !SegmentEquals(name, 0, prefix.Length, prefix))
         {
             return "other";
         }
 
-        var end = prefix.Length;
-        while (end < name.Count && name[end] is not (byte)'\\' and not 0)
+        var categoryEnd = prefix.Length;
+        while (categoryEnd < name.Count && name[categoryEnd] is not (byte)'\\' and not 0)
         {
-            end++;
+            categoryEnd++;
         }
 
-        return System.Text.Encoding.ASCII.GetString(name.Skip(prefix.Length).Take(end - prefix.Length).ToArray()).ToLowerInvariant();
+        // A top-level ART entry has no category directory. Its basename is not an
+        // aggregate and must never be decoded or emitted by this research harness.
+        if (categoryEnd == prefix.Length || categoryEnd == name.Count || name[categoryEnd] == 0)
+        {
+            return "other";
+        }
+
+        var categoryLength = categoryEnd - prefix.Length;
+        if (SegmentEquals(name, prefix.Length, categoryLength, "item"u8)) return "item";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "critter"u8)) return "critter";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "monster"u8)) return "monster";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "unique_npc"u8)) return "unique_npc";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "scenery"u8)) return "scenery";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "tile"u8)) return "tile";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "wall"u8)) return "wall";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "interface"u8)) return "interface";
+        if (SegmentEquals(name, prefix.Length, categoryLength, "portal"u8)) return "portal";
+        return "other";
+    }
+
+    private static bool SegmentEquals(IReadOnlyList<byte> name, int start, int length, ReadOnlySpan<byte> expected)
+    {
+        if (length != expected.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < expected.Length; index++)
+        {
+            if (name[start + index] != expected[index])
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     private static bool? ClassifyCategory(string category) => category switch
@@ -193,6 +234,18 @@ internal static class Program
     };
 
     private static ArtResult ProbeArt(ReadOnlySpan<byte> bytes)
+    {
+        try
+        {
+            return ProbeArtCore(bytes);
+        }
+        catch (OverflowException exception)
+        {
+            throw new ArtProbeException($"ART arithmetic overflow: {exception.Message}");
+        }
+    }
+
+    private static ArtResult ProbeArtCore(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length < HeaderBytes)
         {
@@ -348,30 +401,96 @@ internal static class Program
         var parsedRle = ProbeArt(rle);
         Assert(!parsedRle.IsStatic && parsedRle.TotalFrames == 8 && parsedRle.DecodedPixels == 32, "RLE directional ART did not validate");
 
-        AssertThrows(() => ProbeArt(raw.AsSpan(0, HeaderBytes - 1)), "truncated header was accepted");
-        var badRle = BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [5, 9], declaredSize: 2);
-        AssertThrows(() => ProbeArt(badRle), "RLE overrun was accepted");
-        var oversized = BuildSynthetic(staticFlag: true, width: (uint)(MaxDimension + 1), height: 1, payload: [1], declaredSize: 1);
-        AssertThrows(() => ProbeArt(oversized), "oversized dimensions were accepted");
+        AssertRejected(() => ProbeArt(raw[..(HeaderBytes - 1)]), "truncated header was accepted");
+        var withPalette = BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [1, 2, 3, 4], declaredSize: 4, paletteCount: 1);
+        AssertRejected(() => ProbeArt(withPalette[..(HeaderBytes + PaletteBytes - 1)]), "truncated palette was accepted");
+        AssertRejected(() => ProbeArt(raw[..(HeaderBytes + FrameHeaderBytes - 1)]), "truncated frame table was accepted");
+        AssertRejected(() => ProbeArt(raw[..^1]), "truncated payload was accepted");
+
+        AssertRejected(() => ProbeArt(WithU32(raw, 32, 0)), "zero frame count was accepted");
+        AssertRejected(() => ProbeArt(WithU32(raw, 32, (uint)(MaxFrames + 1))), "over-cap frame count was accepted");
+        var directionalOverflow = BuildSynthetic(staticFlag: false, width: 2, height: 2, payload: [4, 9], declaredSize: 2);
+        AssertRejected(() => ProbeArt(WithU32(directionalOverflow, 32, uint.MaxValue)), "overflow frame count was accepted");
+
+        AssertRejected(() => ProbeArt(WithU32(raw, HeaderBytes, 0)), "zero width was accepted");
+        AssertRejected(() => ProbeArt(WithU32(raw, HeaderBytes + 4, 0)), "zero height was accepted");
+        var oversizedDimension = BuildSynthetic(staticFlag: true, width: (uint)(MaxDimension + 1), height: 1, payload: [1], declaredSize: 1);
+        AssertRejected(() => ProbeArt(oversizedDimension), "oversized dimensions were accepted");
+        AssertRejected(() => ProbeArt(WithU32(raw, HeaderBytes + 8, 0)), "zero payload was accepted");
+        AssertRejected(() => ProbeArt(WithU32(raw, HeaderBytes + 8, uint.MaxValue)), "oversized payload was accepted");
+        AssertRejected(() => ProbeArt(WithTrailingByte(raw, 0)), "trailing bytes were accepted");
+
+        AssertRejected(() => ProbeArt(BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [0x84], declaredSize: 1)), "truncated literal run was accepted");
+        AssertRejected(() => ProbeArt(BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [4], declaredSize: 1)), "truncated repeat run was accepted");
+        AssertRejected(() => ProbeArt(BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [0, 0], declaredSize: 2)), "zero RLE count was accepted");
+        AssertRejected(() => ProbeArt(BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [5, 9], declaredSize: 2)), "RLE overrun was accepted");
+        AssertRejected(() => ProbeArt(BuildSynthetic(staticFlag: true, width: 2, height: 2, payload: [3, 9], declaredSize: 2)), "under-produced RLE output was accepted");
+
+        AssertTopLevelNameIsNotEmitted();
     }
 
-    private static byte[] BuildSynthetic(bool staticFlag, uint width, uint height, byte[] payload, uint declaredSize)
+    private static void AssertTopLevelNameIsNotEmitted()
+    {
+        const string sentinel = "SYNTHETIC_TOP_LEVEL_ART_NAME_MUST_NOT_LEAK.art";
+        var category = GetArtCategory(System.Text.Encoding.ASCII.GetBytes($"art\\{sentinel}"));
+        Assert(category == "other", "top-level ART entry was not mapped to the safe aggregate");
+
+        var originalOut = Console.Out;
+        using var captured = new StringWriter();
+        try
+        {
+            Console.SetOut(captured);
+            WriteCategoryInventory(new SortedDictionary<string, int>(StringComparer.Ordinal) { [category] = 1 });
+        }
+        finally
+        {
+            Console.SetOut(originalOut);
+        }
+
+        var output = captured.ToString();
+        Assert(output.Contains("category name=other art_entries=1", StringComparison.Ordinal), "safe aggregate was not emitted");
+        Assert(!output.Contains(sentinel, StringComparison.Ordinal), "top-level ART name reached stdout");
+    }
+
+    private static byte[] BuildSynthetic(bool staticFlag, uint width, uint height, byte[] payload, uint declaredSize, int paletteCount = 0)
     {
         var rotations = staticFlag ? 1 : 8;
-        var bytes = new byte[HeaderBytes + (rotations * FrameHeaderBytes) + (rotations * payload.Length)];
+        var paletteBytes = checked(paletteCount * PaletteBytes);
+        var frameHeadersOffset = checked(HeaderBytes + paletteBytes);
+        var frameDataOffset = checked(frameHeadersOffset + (rotations * FrameHeaderBytes));
+        var bytes = new byte[checked(frameDataOffset + (rotations * payload.Length))];
         WriteU32(bytes, 0, staticFlag ? 1U : 0U);
         WriteU32(bytes, 32, 1);
+        for (var palette = 0; palette < paletteCount; palette++)
+        {
+            WriteU32(bytes, 12 + (palette * sizeof(uint)), 1);
+        }
         for (var direction = 0; direction < rotations; direction++)
         {
             WriteU32(bytes, 68 + (direction * 4), declaredSize);
-            var frame = HeaderBytes + (direction * FrameHeaderBytes);
+            var frame = frameHeadersOffset + (direction * FrameHeaderBytes);
             WriteU32(bytes, frame, width);
             WriteU32(bytes, frame + 4, height);
             WriteU32(bytes, frame + 8, declaredSize);
-            payload.CopyTo(bytes, HeaderBytes + (rotations * FrameHeaderBytes) + (direction * payload.Length));
+            payload.CopyTo(bytes, frameDataOffset + (direction * payload.Length));
         }
 
         return bytes;
+    }
+
+    private static byte[] WithU32(byte[] source, int offset, uint value)
+    {
+        var copy = source.ToArray();
+        WriteU32(copy, offset, value);
+        return copy;
+    }
+
+    private static byte[] WithTrailingByte(byte[] source, byte value)
+    {
+        var copy = new byte[source.Length + 1];
+        source.CopyTo(copy, 0);
+        copy[^1] = value;
+        return copy;
     }
 
     private static void WriteU32(byte[] bytes, int offset, uint value) =>
@@ -385,7 +504,7 @@ internal static class Program
         }
     }
 
-    private static void AssertThrows(Action action, string message)
+    private static void AssertRejected(Action action, string message)
     {
         try
         {
