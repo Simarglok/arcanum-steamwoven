@@ -7,7 +7,7 @@
 The repository pins SDK `8.0.425` (`net8.0`) in `global.json` and central package versions in `Directory.Packages.props`. The SDK is a temporary compatibility floor for future Godot 4.5 C# work and reaches .NET support end on 2026-11-10; future integration must revisit it.
 
 ```sh
-export DOTNET_ROOT="$PWD/local/dotnet"
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.local/share/dotnet}"
 export PATH="$DOTNET_ROOT:$PATH"
 dotnet --info
 dotnet restore

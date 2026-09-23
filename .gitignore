@@ -20,4 +20,5 @@
 **/bin/
 **/obj/
 .godot/
+.godot.before-self-test/
 TestResults/

@@ -120,7 +120,7 @@ They require the repository-local SDK selected by `global.json` and a lawful,
 unchanged local `DAT_ROOT`:
 
 ```sh
-export DOTNET_ROOT="$PWD/local/dotnet"
+export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.local/share/dotnet}"
 export PATH="$DOTNET_ROOT:$PATH"
 
 dotnet restore --locked-mode
