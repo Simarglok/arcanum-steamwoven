@@ -13,6 +13,7 @@ internal sealed class ViewerSelectionUi
     private readonly SpinBox _palette;
     private readonly Label _metadata;
     private readonly Label _rate;
+    private bool _selectionActive;
 
     internal ViewerSelectionUi(SpinBox group, SpinBox frame, SpinBox palette, Label metadata, Label rate)
     {
@@ -25,14 +26,16 @@ internal sealed class ViewerSelectionUi
 
     internal void Clear(AnimationTimeline timeline)
     {
+        _selectionActive = false;
         ViewerState.ResetEntrySelectors(_group, _frame, _palette);
         _metadata.Text = "No frame";
-        SyncTimeline(timeline, selectionActive: false);
+        SyncTimeline(timeline);
     }
 
     internal void Commit(SelectedArtSnapshot snapshot, AnimationTimeline timeline)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
+        _selectionActive = true;
         ViewerState.ConfigureEntrySelectors(_group, _frame, _palette, snapshot.Metadata);
         _metadata.Text = "No frame";
         SyncTimeline(timeline);
@@ -40,18 +43,15 @@ internal sealed class ViewerSelectionUi
 
     internal void PublishFrame(ArtFrame frame) => _metadata.Text = FrameMetadata(frame);
 
-    internal void SyncTimeline(AnimationTimeline timeline)
-        => SyncTimeline(timeline, selectionActive: true);
-
     // Timeline controls deliberately survive an entry/DAT replacement. They must
     // not make the no-selection presentation look playable, however: a retained
     // manual FPS is displayed as an override but cannot become an effective rate
     // until a selected asset has committed.
-    private void SyncTimeline(AnimationTimeline timeline, bool selectionActive)
+    internal void SyncTimeline(AnimationTimeline timeline)
     {
         ArgumentNullException.ThrowIfNull(timeline);
         var source = timeline.SourceFramesPerSecond.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var effective = selectionActive
+        var effective = _selectionActive
             ? timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked"
             : "blocked";
         var manual = timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";

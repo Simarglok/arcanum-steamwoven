@@ -658,8 +658,9 @@ internal static class GodotSelfTest
         session.OpenArchive("invalid.dat", sink);
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
+        sink.SyncTimeline();
         Require(sink.Failures == 1 && sink.ClearedEntryLists >= 3 && sink.HasNeutralSelection(session.Timeline) && !sink.HasCommittedCanvas,
-            "invalid DAT clears committed metadata, canvas, selectors, and its retained-override rate presentation");
+            "invalid DAT failure and per-frame resync keep committed metadata, canvas, selectors, and retained-override rate presentation neutral");
         session.OpenArchive("recovered.dat", sink);
         WaitForCoordinator(coordinator, 5);
         session.DrainCompletions(sink);
@@ -732,8 +733,9 @@ internal static class GodotSelfTest
         session.SelectEntry(invalidEntry, sink);
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
+        sink.SyncTimeline();
         Require(sink.Failures == 1 && sink.SelectionInvalidations >= 2 && sink.HasNeutralSelection(session.Timeline) && !sink.HasCommittedCanvas,
-            "invalid entry clears prior metadata, canvas, selectors, and its retained-override rate presentation");
+            "invalid entry failure and per-frame resync keep prior metadata, canvas, selectors, and retained-override rate presentation neutral");
         session.SelectEntry(validEntry, sink);
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
@@ -878,6 +880,7 @@ internal static class GodotSelfTest
         public void PublishFailure(Exception exception)
         {
             CheckThread();
+            _selectionUi.SyncTimeline(_timeline);
             Failures++;
             StatusUpdates++;
         }
