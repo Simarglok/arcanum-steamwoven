@@ -27,7 +27,7 @@ internal sealed class ViewerSession : IDisposable
     internal FrameTarget? DesiredTarget => _desiredTarget;
     internal ViewerWorkCoordinator WorkCoordinator => _work;
 
-    internal void OpenArchive(string path)
+    internal void OpenArchive(string path, IViewerPublicationSink? sink = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
         _archiveGeneration++;
@@ -35,20 +35,22 @@ internal sealed class ViewerSession : IDisposable
         _selected = null;
         _desiredTarget = null;
         _failedTarget = null;
-        Timeline.Stop();
+        ResetSelection();
         _work.Invalidate();
+        sink?.SelectionInvalidated(clearEntries: true);
         _work.Submit(new OpenArchiveViewerWorkRequest(_archiveGeneration, path));
     }
 
-    internal void SelectEntry(DatEntry entry)
+    internal void SelectEntry(DatEntry entry, IViewerPublicationSink? sink = null)
     {
         ArgumentNullException.ThrowIfNull(entry);
         _entryGeneration++;
         _selected = null;
         _desiredTarget = null;
         _failedTarget = null;
-        Timeline.Stop();
+        ResetSelection();
         _work.Invalidate();
+        sink?.SelectionInvalidated(clearEntries: false);
         _work.Submit(new LoadEntryViewerWorkRequest(new EntryIdentity(_archiveGeneration, _entryGeneration, entry.Ordinal), entry));
     }
 
@@ -87,7 +89,7 @@ internal sealed class ViewerSession : IDisposable
                     CommitEntry(loaded, sink);
                     break;
                 case ViewerFrameDecoded decoded when IsCurrent(decoded.DecodeRequest.Target):
-                    sink.PublishFrame(decoded.DecodeRequest.Snapshot, decoded.DecodeRequest.Target, decoded.Frame);
+                    PublishFrame(decoded, sink);
                     break;
                 case ViewerWorkFailure failure:
                     HandleFailure(failure, sink);
@@ -135,9 +137,13 @@ internal sealed class ViewerSession : IDisposable
         switch (failure.Request)
         {
             case OpenArchiveViewerWorkRequest open when open.ArchiveGeneration == _archiveGeneration && !_closed:
+                ResetSelection();
+                sink.SelectionInvalidated(clearEntries: true);
                 sink.PublishFailure(failure.Exception);
                 break;
             case LoadEntryViewerWorkRequest load when IsCurrent(load.Identity):
+                ResetSelection();
+                sink.SelectionInvalidated(clearEntries: false);
                 sink.PublishFailure(failure.Exception);
                 break;
             case DecodeFrameViewerWorkRequest decode when IsCurrent(decode.Target) && _failedTarget != decode.Target:
@@ -148,6 +154,26 @@ internal sealed class ViewerSession : IDisposable
                 break;
         }
     }
+
+    // Publication is worker-result processing too: a current target can still fail
+    // during UI-side geometry/resource validation. Treat that exactly like a decode
+    // failure so a tick cannot retry it indefinitely. ViewerApp prepares resources
+    // before mutating its canvas and disposes an uncommitted replacement on failure.
+    private void PublishFrame(ViewerFrameDecoded decoded, IViewerPublicationSink sink)
+    {
+        try
+        {
+            sink.PublishFrame(decoded.DecodeRequest.Snapshot, decoded.DecodeRequest.Target, decoded.Frame);
+        }
+        catch (Exception exception) when (IsCurrent(decoded.DecodeRequest.Target) && _failedTarget != decoded.DecodeRequest.Target)
+        {
+            _failedTarget = decoded.DecodeRequest.Target;
+            Timeline.Pause();
+            sink.PublishFailure(exception);
+        }
+    }
+
+    private void ResetSelection() => Timeline.ResetAsset(1, 0);
 
     private bool IsCurrent(EntryIdentity identity) => !_closed && _selected is null &&
         identity.ArchiveGeneration == _archiveGeneration && identity.EntryGeneration == _entryGeneration;
@@ -165,6 +191,7 @@ internal sealed record FrameTarget(EntryIdentity Entry, long TargetGeneration, i
 
 internal interface IViewerPublicationSink
 {
+    void SelectionInvalidated(bool clearEntries);
     void ArchiveOpened(IReadOnlyList<ViewerEntry> entries);
     void EntryCommitted(SelectedArtSnapshot snapshot);
     void PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame frame);

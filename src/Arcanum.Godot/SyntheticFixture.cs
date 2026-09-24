@@ -252,11 +252,10 @@ internal static class GodotSelfTest
         using var oversize = DatArchive.Open(new MemoryStream(SyntheticFixture.CreateOversizeDat()), ViewerState.ReaderOptions, leaveOpen: true);
         RequireThrows<DatLimitExceededException>(() => oversize.ReadEntry(oversize.Entries[0]), "oversize viewer entry limit");
 
-        VerifyLatestDecodeQueue();
         VerifyViewerSessionPublicationBoundary(archive, entries);
 
         using var image = Image.CreateFromData(raw.Width, raw.Height, false, Image.Format.Rgba8, raw.Rgba.ToArray());
-        using var texture = ImageTexture.CreateFromImage(image);
+        using var texture = ViewerApp.CreateFrameTexture(raw);
         using var textureImage = texture.GetImage();
         Require(image.GetData().SequenceEqual(expected) && textureImage.GetData().SequenceEqual(expected), "Godot Image/ImageTexture bytes");
         Require(texture.GetSize() == new Vector2I(3, 2), "texture aspect");
@@ -333,36 +332,6 @@ internal static class GodotSelfTest
         return "Godot synthetic DAT/ART self-test passed: duplicate ordinals, raw/RLE, unequal signed hotspots and common-anchor marker, queue stale suppression/recovery, palettes/fallback, limits, RGBA8 texture, and FrameCanvas raw signed-hotspot geometry.";
     }
 
-    private static void VerifyLatestDecodeQueue()
-    {
-        var queue = new LatestDecodeQueue<QueueRequest>();
-        var datOne = new QueueRequest(1, 1, 0, 0, 0, 0);
-        var entryOne = new QueueRequest(2, 2, 4, 0, 0, 0);
-        var group = entryOne with { SelectionGeneration = 3, Group = 1 };
-        var palette = group with { SelectionGeneration = 4, Palette = 2 };
-        var stop = palette with { SelectionGeneration = 5, Frame = 0 };
-        var reopened = new QueueRequest(3, 6, 4, 0, 0, 0);
-
-        Require(queue.TryStart(datOne) && queue.Active == datOne, "decode queue starts one active DAT request");
-        Require(!queue.TryStart(entryOne) && queue.Pending == entryOne, "decode queue holds entry replacement while active");
-        Require(!queue.TryStart(group) && !queue.TryStart(palette) && queue.Pending == palette, "decode queue coalesces group/palette to latest");
-        Require(queue.Complete(datOne, request => request.AssetGeneration == 2) == palette && queue.Active == palette,
-            "decode queue suppresses stale DAT completion and publishes latest current request");
-        queue.InvalidatePending();
-        Require(!queue.TryStart(stop) && queue.Pending == stop, "decode queue stop invalidates active result and requests frame zero");
-        Require(queue.Complete(palette, request => request.SelectionGeneration == 5) == stop && queue.Active == stop,
-            "decode queue suppresses stale palette completion after stop");
-        queue.InvalidatePending();
-        Require(queue.Complete(stop, _ => false) is null && queue.Active is null && queue.Pending is null,
-            "decode queue close clears pending work and prevents post-close publish");
-        queue.TryStart(reopened);
-        queue.MarkFailed(reopened);
-        Require(!queue.TryStart(reopened) && queue.Failed == reopened, "decode queue prevents a failed target retry storm");
-        Require(queue.Complete(reopened, request => request == reopened) is null && queue.Active is null, "decode queue completes failed target once");
-        queue.InvalidatePending();
-        Require(queue.TryStart(reopened) && queue.Complete(reopened, request => request == reopened) == null && queue.Active is null,
-            "decode queue reopens valid input after cancellation");
-    }
 
     private static void VerifyViewerSessionPublicationBoundary(DatArchive archive, IReadOnlyList<ViewerEntry> entries)
     {
@@ -371,6 +340,9 @@ internal static class GodotSelfTest
         var animatedMetadata = ArtDecoder.Inspect(animatedBytes, ViewerState.DecoderOptions);
         VerifySupersededCompletion(animatedEntry, animatedBytes, animatedMetadata, false);
         VerifySupersededCompletion(animatedEntry, animatedBytes, animatedMetadata, true);
+        VerifyManualGroupPaletteAndStop(animatedEntry, animatedBytes, animatedMetadata);
+        VerifyActiveLoadReplacementAndClose(entries[0].Entry, entries[1].Entry, animatedBytes, animatedMetadata);
+        VerifyArchiveFailureRecovery();
 
         var staticEntry = entries[0].Entry;
         var staticBytes = SyntheticFixture.CreateSingleFrameStaticArt();
@@ -395,6 +367,9 @@ internal static class GodotSelfTest
         session.DrainCompletions(sink);
         Require(sink.PublishedFrames == uploads && !session.Timeline.IsPlaying,
             "static and paused ticks submit zero additional uploads");
+
+        VerifyCurrentPublicationFailure(animatedEntry, animatedBytes, animatedMetadata);
+        VerifySelectionFailureRecovery(entries[0].Entry, entries[4].Entry, staticBytes, staticMetadata);
     }
 
     private static void VerifySupersededCompletion(DatEntry entry, byte[] bytes, ArtMetadata metadata, bool failFirstDecode)
@@ -420,10 +395,159 @@ internal static class GodotSelfTest
         release.Set();
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
-        Require(sink.EntryCommits == 1 && sink.PublishedFrames == 1 && sink.Failures == 0 && sink.AllCallbacksOnDrainThread,
+        Require(sink.EntryCommits == 1 && sink.PublishedFrames == 1 && sink.Failures == 0 && sink.AllCallbacksOnDrainThread &&
+                sink.PublishedTargets.Single() == session.DesiredTarget && sink.CreatedResources == 1 && sink.DisposedResources == 1,
             failFirstDecode ? "stale active decode error has no status or pause side effect" : "stale active decode creates no resources or status");
+        Require(!failFirstDecode || session.Timeline.IsPlaying,
+            "stale active decode error leaves the newer playback target running");
         Require(coordinator.MaximumObservedConcurrency == 1 && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0,
             "single read inspect decode coordinator concurrency bound");
+    }
+
+    private static void VerifyManualGroupPaletteAndStop(DatEntry entry, byte[] bytes, ArtMetadata metadata)
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var decodeCalls = 0;
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, bytes, metadata),
+            DecodeFrameViewerWorkRequest decode => ExecuteControlledDecode(decode, bytes, ref decodeCalls, started, release, failFirstDecode: false),
+            _ => throw new InvalidOperationException("Unexpected selection-control integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.SelectEntry(entry, sink);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        Require(started.Wait(TimeSpan.FromSeconds(2)), "production coordinator starts manual selection decode");
+        session.RequestTarget(1, 0);
+        session.RequestTarget(1, 1);
+        session.Timeline.Seek(1);
+        session.RequestTarget(1, 1);
+        session.Stop(1, 1);
+        release.Set();
+        WaitForCoordinator(coordinator, 3);
+        session.DrainCompletions(sink);
+        var published = sink.PublishedTargets.Single();
+        Require(published == session.DesiredTarget && published.Group == 1 && published.Frame == 0 && published.Palette == 1 &&
+                sink.EntryCommits == 1 && coordinator.MaximumObservedConcurrency == 1,
+            "manual frame group palette and Stop coalesce to one exact latest publication");
+    }
+
+    private static void VerifyActiveLoadReplacementAndClose(DatEntry first, DatEntry replacement, byte[] bytes, ArtMetadata metadata)
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => ExecuteControlledLoad(load, bytes, metadata, started, release),
+            _ => throw new InvalidOperationException("Unexpected active-load integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.SelectEntry(first, sink);
+        Require(started.Wait(TimeSpan.FromSeconds(2)), "production coordinator starts active Read Inspect");
+        session.SelectEntry(replacement, sink);
+        session.Close();
+        release.Set();
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        Require(sink.EntryCommits == 0 && sink.PublishedFrames == 0 && coordinator.MaximumObservedConcurrency == 1 &&
+                coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0 && sink.SelectionInvalidations == 2,
+            "entry replacement and close suppress active Read Inspect result with serialized cleanup");
+    }
+
+    private static void VerifyArchiveFailureRecovery()
+    {
+        var opens = 0;
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            OpenArchiveViewerWorkRequest open when Interlocked.Increment(ref opens) == 2 =>
+                throw new DatException("Synthetic invalid DAT."),
+            OpenArchiveViewerWorkRequest open => new ViewerArchiveOpened(open, Array.Empty<ViewerEntry>()),
+            _ => throw new InvalidOperationException("Unexpected archive-recovery integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.OpenArchive("valid.dat", sink);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        session.OpenArchive("invalid.dat", sink);
+        WaitForCoordinator(coordinator, 2);
+        session.DrainCompletions(sink);
+        Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
+                sink.ClearedEntryLists >= 3,
+            "invalid DAT clears prior entry metadata and disabled timeline state");
+        session.OpenArchive("recovered.dat", sink);
+        WaitForCoordinator(coordinator, 3);
+        session.DrainCompletions(sink);
+        Require(sink.Failures == 1 && sink.ClearedEntryLists >= 4 && sink.AllCallbacksOnDrainThread,
+            "valid invalid valid DAT recovery remains main-thread only");
+    }
+
+    private static void VerifyCurrentPublicationFailure(DatEntry entry, byte[] bytes, ArtMetadata metadata)
+    {
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, bytes, metadata),
+            DecodeFrameViewerWorkRequest decode => new ViewerFrameDecoded(decode, ArtDecoder.Decode(bytes,
+                new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions)),
+            _ => throw new InvalidOperationException("Unexpected publication-failure integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink(publishFailuresBeforeSuccess: 1);
+        session.SelectEntry(entry, sink);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        session.Timeline.Play();
+        WaitForCoordinator(coordinator, 2);
+        session.DrainCompletions(sink);
+        Require(sink.PublishedFrames == 0 && sink.Failures == 1 && sink.CreatedResources == 1 && sink.DisposedResources == 1 && !session.Timeline.IsPlaying,
+            "current main-thread publication failure pauses and reports once");
+        session.Advance(1, 0, 0);
+        session.DrainCompletions(sink);
+        Require(coordinator.CompletedOperations == 2 && sink.Failures == 1,
+            "failed current publication has no tick retry storm");
+        session.RequestTarget(0, 1);
+        WaitForCoordinator(coordinator, 3);
+        session.DrainCompletions(sink);
+        Require(sink.PublishedFrames == 1 && sink.PublishedTargets.Single().Palette == 1 && sink.CreatedResources == 2 && sink.DisposedResources == 2,
+            "new exact target recovers after main-thread publication failure");
+    }
+
+    private static void VerifySelectionFailureRecovery(DatEntry validEntry, DatEntry invalidEntry, byte[] bytes, ArtMetadata metadata)
+    {
+        var loads = 0;
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load when Interlocked.Increment(ref loads) == 2 =>
+                throw new ArtFormatException("Synthetic invalid entry."),
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, bytes, metadata),
+            DecodeFrameViewerWorkRequest decode => new ViewerFrameDecoded(decode, ArtDecoder.Decode(bytes,
+                new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions)),
+            _ => throw new InvalidOperationException("Unexpected selection-recovery integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.SelectEntry(validEntry, sink);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        WaitForCoordinator(coordinator, 2);
+        session.DrainCompletions(sink);
+        session.SelectEntry(invalidEntry, sink);
+        WaitForCoordinator(coordinator, 3);
+        session.DrainCompletions(sink);
+        Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
+                sink.SelectionInvalidations >= 2,
+            "invalid entry clears prior metadata/timeline selection before recovery");
+        session.SelectEntry(validEntry, sink);
+        WaitForCoordinator(coordinator, 4);
+        session.DrainCompletions(sink);
+        WaitForCoordinator(coordinator, 5);
+        session.DrainCompletions(sink);
+        Require(sink.EntryCommits == 2 && sink.PublishedFrames == 2 && sink.AllCallbacksOnDrainThread,
+            "valid invalid valid entry recovery republishes only the replacement asset");
     }
 
     private static ViewerWorkCompletion ExecuteControlledDecode(DecodeFrameViewerWorkRequest decode, byte[] bytes, ref int calls,
@@ -439,6 +563,14 @@ internal static class GodotSelfTest
             new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions));
     }
 
+    private static ViewerWorkCompletion ExecuteControlledLoad(LoadEntryViewerWorkRequest load, byte[] bytes, ArtMetadata metadata,
+        ManualResetEventSlim started, ManualResetEventSlim release)
+    {
+        started.Set();
+        if (!release.Wait(TimeSpan.FromSeconds(2))) throw new TimeoutException("Synthetic Read Inspect barrier timed out.");
+        return new ViewerEntryLoaded(load, bytes, metadata);
+    }
+
     private static void WaitForCoordinator(ViewerWorkCoordinator coordinator, int completedOperations)
     {
         Require(SpinWait.SpinUntil(() => coordinator.CompletedOperations >= completedOperations && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0, TimeSpan.FromSeconds(2)),
@@ -448,14 +580,54 @@ internal static class GodotSelfTest
     private sealed class RecordingPublicationSink : IViewerPublicationSink
     {
         private readonly int _drainThread = System.Environment.CurrentManagedThreadId;
+        private readonly int _publishFailuresBeforeSuccess;
+        private int _publishAttempts;
+
+        internal RecordingPublicationSink(int publishFailuresBeforeSuccess = 0)
+        {
+            _publishFailuresBeforeSuccess = publishFailuresBeforeSuccess;
+        }
+
         internal int EntryCommits { get; private set; }
         internal int PublishedFrames { get; private set; }
         internal int Failures { get; private set; }
+        internal int SelectionInvalidations { get; private set; }
+        internal int ClearedEntryLists { get; private set; }
+        internal int CreatedResources { get; private set; }
+        internal int DisposedResources { get; private set; }
+        internal IReadOnlyList<FrameTarget> PublishedTargets => _publishedTargets;
         internal bool AllCallbacksOnDrainThread { get; private set; } = true;
+        private readonly List<FrameTarget> _publishedTargets = [];
 
+        public void SelectionInvalidated(bool clearEntries)
+        {
+            CheckThread();
+            SelectionInvalidations++;
+            if (clearEntries) ClearedEntryLists++;
+        }
         public void ArchiveOpened(IReadOnlyList<ViewerEntry> entries) => CheckThread();
         public void EntryCommitted(SelectedArtSnapshot snapshot) { CheckThread(); EntryCommits++; }
-        public void PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame frame) { CheckThread(); PublishedFrames++; }
+        public void PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame frame)
+        {
+            CheckThread();
+            var texture = ViewerApp.CreateFrameTexture(frame);
+            CreatedResources++;
+            try
+            {
+                if (_publishAttempts++ < _publishFailuresBeforeSuccess)
+                {
+                    throw new FrameCanvasGeometryLimitException("Synthetic publication failure.");
+                }
+
+                _publishedTargets.Add(target);
+                PublishedFrames++;
+            }
+            finally
+            {
+                texture.Dispose();
+                DisposedResources++;
+            }
+        }
         public void PublishFailure(Exception exception) { CheckThread(); Failures++; }
         private void CheckThread() => AllCallbacksOnDrainThread &= System.Environment.CurrentManagedThreadId == _drainThread;
     }
@@ -482,5 +654,4 @@ internal static class GodotSelfTest
         }
     }
 
-    private sealed record QueueRequest(long AssetGeneration, long SelectionGeneration, int EntryOrdinal, int Group, int Frame, int Palette);
 }

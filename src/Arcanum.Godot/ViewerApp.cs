@@ -175,15 +175,9 @@ public partial class ViewerApp : Control, IViewerPublicationSink
 
     private void OpenArchive(string path)
     {
-        _selectedArt = null;
-        _entries = Array.Empty<ViewerEntry>();
-        _canvasArt = null;
-        _canvasGroup = null;
-        _canvas.ClearAsset();
-        DisposeTexture();
-        RebuildList();
+        ClearSelection(clearEntries: true);
         SetBusy("Opening DAT index…");
-        _session.OpenArchive(path);
+        _session.OpenArchive(path, this);
     }
 
     private void SelectEntry(long visibleIndex)
@@ -191,13 +185,9 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         if (visibleIndex < 0 || visibleIndex >= _items.ItemCount) return;
         var sourceIndex = _items.GetItemMetadata((int)visibleIndex).AsInt64();
         if (sourceIndex < 0 || sourceIndex >= _entries.Count) return;
-        _selectedArt = null;
-        _canvasArt = null;
-        _canvasGroup = null;
-        _canvas.ClearAsset();
-        DisposeTexture();
+        ClearSelection(clearEntries: false);
         SetBusy("Reading selected ART metadata…");
-        _session.SelectEntry(_entries[(int)sourceIndex].Entry);
+        _session.SelectEntry(_entries[(int)sourceIndex].Entry, this);
     }
 
     private void ReconfigureSelection(bool manualFrame)
@@ -210,6 +200,8 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     }
 
     private void RequestCurrentFrame() => _session.RequestTarget((int)_group.Value, (int)_palette.Value);
+
+    void IViewerPublicationSink.SelectionInvalidated(bool clearEntries) => ClearSelection(clearEntries);
 
     void IViewerPublicationSink.ArchiveOpened(IReadOnlyList<ViewerEntry> entries)
     {
@@ -237,14 +229,11 @@ public partial class ViewerApp : Control, IViewerPublicationSink
 
     void IViewerPublicationSink.PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
     {
-        if (decoded.Rgba.Count != checked(decoded.Width * decoded.Height * 4)) throw new ArtFormatException("Decoded frame has an invalid RGBA length.");
         var layout = GroupLayout(snapshot.Metadata, target.Group);
-        using var image = Image.CreateFromData(decoded.Width, decoded.Height, false, Image.Format.Rgba8, decoded.Rgba.ToArray());
         ImageTexture? replacement = null;
         try
         {
-            replacement = ImageTexture.CreateFromImage(image);
-            replacement.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
+            replacement = CreateFrameTexture(decoded);
             var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
             if (!ReferenceEquals(_canvasArt, snapshot))
             {
@@ -271,6 +260,26 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         }
         _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
         SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
+    }
+
+    // Shared by the production sink and deterministic resource/canvas self-test.
+    // It commits nothing to the canvas until all managed RGBA and Godot texture work succeeds.
+    internal static ImageTexture CreateFrameTexture(ArtFrame decoded)
+    {
+        if (decoded.Rgba.Count != checked(decoded.Width * decoded.Height * 4)) throw new ArtFormatException("Decoded frame has an invalid RGBA length.");
+        using var image = Image.CreateFromData(decoded.Width, decoded.Height, false, Image.Format.Rgba8, decoded.Rgba.ToArray());
+        ImageTexture? texture = null;
+        try
+        {
+            texture = ImageTexture.CreateFromImage(image);
+            texture.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
+            return texture;
+        }
+        catch
+        {
+            texture?.Dispose();
+            throw;
+        }
     }
 
     void IViewerPublicationSink.PublishFailure(Exception exception)
@@ -309,6 +318,24 @@ public partial class ViewerApp : Control, IViewerPublicationSink
             _items.AddItem(_entries[index].DisplayName);
             _items.SetItemMetadata(_items.ItemCount - 1, index);
         }
+    }
+
+    private void ClearSelection(bool clearEntries)
+    {
+        _selectedArt = null;
+        _canvasArt = null;
+        _canvasGroup = null;
+        if (clearEntries)
+        {
+            _entries = Array.Empty<ViewerEntry>();
+            RebuildList();
+        }
+
+        _canvas.ClearAsset();
+        DisposeTexture();
+        ViewerState.ResetEntrySelectors(_group, _frame, _palette);
+        _metadataLabel.Text = "No frame";
+        SyncTimelineUi();
     }
 
     private void DisposeTexture() { var previous = _texture; _texture = null; previous?.Dispose(); }
