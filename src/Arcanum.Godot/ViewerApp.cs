@@ -28,6 +28,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     private Label _status = null!;
     private FrameCanvas _canvas = null!;
     private FileDialog _dialog = null!;
+    private ViewerSelectionUi _selectionUi = null!;
 
     private AnimationTimeline Timeline => _session.Timeline;
 
@@ -137,6 +138,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         root.AddChild(_status);
         _dialog = new FileDialog { FileMode = FileDialog.FileModeEnum.OpenFile, Access = FileDialog.AccessEnum.Filesystem, Title = "Select one DAT file", Filters = new[] { "*.dat ; DAT archives", "* ; Any file" } };
         AddChild(_dialog);
+        _selectionUi = new ViewerSelectionUi(_group, _frame, _palette, _metadataLabel, _rate);
 
         _openButton.Pressed += () => _dialog.PopupCenteredRatio(0.75f);
         _dialog.FileSelected += OpenArchive;
@@ -214,19 +216,15 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         _selectedArt = snapshot;
         _publication.Clear(_canvas);
         _updatingSelectors = true;
-        _group.MaxValue = snapshot.Metadata.Header.PhysicalGroupCount - 1;
-        _frame.MaxValue = snapshot.Metadata.Header.FramesPerGroup - 1;
-        _palette.MaxValue = ViewerState.MaxRequestedPaletteSlot;
-        _group.Value = _frame.Value = _palette.Value = 0;
+        _selectionUi.Commit(snapshot, Timeline);
         _updatingSelectors = false;
-        SyncTimelineUi();
         SetStatus("Selected ART metadata loaded; decoding frame 0.");
     }
 
     void IViewerPublicationSink.PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
     {
         ViewerFramePublication.Commit(_canvas, _publication, snapshot, target, decoded);
-        _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
+        _selectionUi.PublishFrame(decoded);
         SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
     }
 
@@ -268,12 +266,8 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     private void SyncTimelineUi()
     {
         if (!IsInstanceValid(_rate)) return;
-        var source = Timeline.SourceFramesPerSecond.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var effective = Timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked";
-        var manual = Timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
-        _rate.Text = $"source {source} fps; effective {effective} fps; override {manual}";
         _updatingSelectors = true;
-        _frame.Value = Timeline.CurrentFrame;
+        _selectionUi.SyncTimeline(Timeline);
         _updatingSelectors = false;
     }
 
@@ -298,9 +292,9 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         }
 
         _publication.Clear(_canvas);
-        ViewerState.ResetEntrySelectors(_group, _frame, _palette);
-        _metadataLabel.Text = "No frame";
-        SyncTimelineUi();
+        _updatingSelectors = true;
+        _selectionUi.Clear(Timeline);
+        _updatingSelectors = false;
     }
 
     private void ToggleFullscreen() => DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);

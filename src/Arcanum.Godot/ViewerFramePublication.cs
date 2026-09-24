@@ -58,8 +58,8 @@ internal static class ViewerFramePublication
             replacement = ViewerApp.CreateFrameTexture(decoded);
             observer?.ReplacementCreated();
             var effect = canvas.CommitFramePublication(replacement, new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY), layout,
-                resetAsset: !ReferenceEquals(state.CanvasArt, snapshot), updateGroupLayout: state.CanvasGroup != target.Group);
-            afterCanvasMutation?.Invoke();
+                resetAsset: !ReferenceEquals(state.CanvasArt, snapshot), updateGroupLayout: state.CanvasGroup != target.Group,
+                afterCanvasMutation: afterCanvasMutation);
 
             // This is the ownership commit. No operation above can leave state
             // changed if it fails, and no cleanup below can roll back a committed

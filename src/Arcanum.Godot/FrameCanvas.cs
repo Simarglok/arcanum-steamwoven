@@ -26,6 +26,8 @@ public partial class FrameCanvas : Control
     public bool HasTexture => _texture is not null;
     public bool HasAsset => _groupLayout is not null;
     public FrameHotspot Hotspot => _hotspot;
+    internal Texture2D? PublishedTexture => _texture;
+    internal FrameCanvasGroupLayout? PublishedGroupLayout => _groupLayout;
     public FrameAlignment Alignment { get; private set; } = FrameAlignment.RawHotspot;
     public bool AnchorMarkerVisible { get; private set; } = true;
 
@@ -74,7 +76,7 @@ public partial class FrameCanvas : Control
     // Godot object, so a caller must never be left with a canvas pointing at an
     // uncommitted replacement texture or a new layout with an old frame.
     internal FrameCanvasPublicationEffect CommitFramePublication(Texture2D texture, FrameHotspot hotspot,
-        FrameCanvasGroupLayout groupLayout, bool resetAsset, bool updateGroupLayout)
+        FrameCanvasGroupLayout groupLayout, bool resetAsset, bool updateGroupLayout, Action? afterCanvasMutation = null)
     {
         ArgumentNullException.ThrowIfNull(texture);
         ArgumentNullException.ThrowIfNull(groupLayout);
@@ -110,6 +112,7 @@ public partial class FrameCanvas : Control
             }
 
             QueueRedraw();
+            afterCanvasMutation?.Invoke();
             return resetAsset
                 ? FrameCanvasPublicationEffect.ResetAsset
                 : updateGroupLayout

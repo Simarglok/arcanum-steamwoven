@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.IO.Compression;
 using System.Text;
 using Arcanum.Data;
+using Arcanum.Presentation.Animation;
 using Godot;
 
 namespace Arcanum.Godot;
@@ -238,7 +239,10 @@ internal static class GodotSelfTest
         var frameSelector = new SpinBox();
         var paletteSelector = new SpinBox();
         ViewerState.ResetEntrySelectors(groupSelector, frameSelector, paletteSelector);
-        Require(groupSelector.MaxValue == 0 && frameSelector.MaxValue == 0 && paletteSelector.MaxValue == ViewerState.MaxRequestedPaletteSlot, "viewer palette zero absent selector recovery");
+        Require(groupSelector.MaxValue == 0 && frameSelector.MaxValue == 0 && paletteSelector.MaxValue == 0, "no-selection selectors are neutral");
+        ViewerState.ConfigureEntrySelectors(groupSelector, frameSelector, paletteSelector,
+            ArtDecoder.Inspect(archive.ReadEntry(entries[3].Entry), ViewerState.DecoderOptions));
+        Require(paletteSelector.MaxValue == ViewerState.MaxRequestedPaletteSlot, "viewer palette zero absent selector recovery");
         groupSelector.Free();
         frameSelector.Free();
         paletteSelector.Free();
@@ -369,6 +373,8 @@ internal static class GodotSelfTest
         Require(sink.PublishedFrames == uploads && !session.Timeline.IsPlaying,
             "static and paused ticks submit zero additional uploads");
 
+        VerifyPausedAnimatedZeroWork(animatedEntry, animatedBytes, animatedMetadata);
+
         VerifyCurrentPublicationFailure(animatedEntry, animatedBytes, animatedMetadata);
         VerifySelectionFailureRecovery(entries[0].Entry, entries[4].Entry, staticBytes, staticMetadata);
     }
@@ -450,6 +456,38 @@ internal static class GodotSelfTest
             "Stop publishes paused frame zero through the production canvas transaction");
     }
 
+    private static void VerifyPausedAnimatedZeroWork(DatEntry entry, byte[] bytes, ArtMetadata metadata)
+    {
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, bytes, metadata),
+            DecodeFrameViewerWorkRequest decode => new ViewerFrameDecoded(decode, ArtDecoder.Decode(bytes,
+                new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions)),
+            _ => throw new InvalidOperationException("Unexpected paused animated integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        using var sink = new RecordingPublicationSink();
+        session.SelectEntry(entry, sink);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        WaitForCoordinator(coordinator, 2);
+        session.DrainCompletions(sink);
+        Require(session.Timeline.FrameCount > 1 && !session.Timeline.IsPlaying, "animated selection begins paused");
+        var submitted = coordinator.SubmittedOperations;
+        var completed = coordinator.CompletedOperations;
+        var resources = sink.CreatedResources;
+        var uploads = sink.PublishedFrames;
+        for (var index = 0; index < 8; index++)
+        {
+            session.Advance(1, 0, 0);
+            session.DrainCompletions(sink);
+        }
+
+        Require(coordinator.SubmittedOperations == submitted && coordinator.CompletedOperations == completed &&
+                sink.CreatedResources == resources && sink.PublishedFrames == uploads,
+            "paused multi-frame ticks submit no request, completion, resource, upload, or publication");
+    }
+
     private static void VerifyManualPublication(DatEntry entry, byte[] bytes, ArtMetadata metadata,
         Action<ViewerSession> changeTarget, int group, int frame, int palette, FrameCanvasPublicationEffect expectedEffect, string name)
     {
@@ -505,6 +543,12 @@ internal static class GodotSelfTest
 
     private static void VerifyRealArchiveReplacementAndClose(DatEntry entry)
     {
+        VerifyRealArchiveReplacement(entry);
+        VerifyRealArchiveClose(entry);
+    }
+
+    private static void VerifyRealArchiveReplacement(DatEntry entry)
+    {
         var path = Path.Combine(OS.GetUserDataDir(), $"arcanum-viewer-{Guid.NewGuid():N}.dat");
         File.WriteAllBytes(path, SyntheticFixture.CreateDat());
         try
@@ -528,13 +572,57 @@ internal static class GodotSelfTest
             Require(started.Wait(TimeSpan.FromSeconds(2)) && coordinator.ArchiveDisposals == 0,
                 "active real DAT Read Inspect retains its archive");
             session.OpenArchive(path, sink);
+            release.Set();
+            WaitForCoordinator(coordinator, 3);
+            session.DrainCompletions(sink);
+            session.SelectEntry(sink.LastArchiveEntries.Single(candidate => candidate.Entry.Ordinal == entry.Ordinal).Entry, sink);
+            WaitForCoordinator(coordinator, 4);
+            session.DrainCompletions(sink);
+            Require(session.Selected is not null && session.DesiredTarget is not null,
+                "replacement archive selection commits a usable target before decode");
+            WaitForCoordinator(coordinator, 5);
+            session.DrainCompletions(sink);
+            Require(sink.EntryCommits == 1 && sink.PublishedFrames == 1 && coordinator.MaximumObservedConcurrency == 1 &&
+                    coordinator.ArchiveDisposals == 1 && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0,
+                "real DAT replacement disposes A after active Read Inspect and B remains usable");
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static void VerifyRealArchiveClose(DatEntry entry)
+    {
+        var path = Path.Combine(OS.GetUserDataDir(), $"arcanum-viewer-{Guid.NewGuid():N}.dat");
+        File.WriteAllBytes(path, SyntheticFixture.CreateDat());
+        try
+        {
+            using var started = new ManualResetEventSlim();
+            using var release = new ManualResetEventSlim();
+            using var coordinator = new ViewerWorkCoordinator(beforeTestExecution: work =>
+            {
+                if (work is LoadEntryViewerWorkRequest)
+                {
+                    started.Set();
+                    if (!release.Wait(TimeSpan.FromSeconds(2))) throw new TimeoutException("Synthetic real archive close barrier timed out.");
+                }
+            });
+            using var session = new ViewerSession(coordinator);
+            using var sink = new RecordingPublicationSink();
+            session.OpenArchive(path, sink);
+            WaitForCoordinator(coordinator, 1);
+            session.DrainCompletions(sink);
+            session.SelectEntry(entry, sink);
+            Require(started.Wait(TimeSpan.FromSeconds(2)) && coordinator.ArchiveDisposals == 0,
+                "active real DAT Read Inspect retains archive before close");
             session.Close();
             release.Set();
             WaitForCoordinator(coordinator, 2);
             session.DrainCompletions(sink);
             Require(sink.EntryCommits == 0 && sink.PublishedFrames == 0 && coordinator.MaximumObservedConcurrency == 1 &&
                     coordinator.ArchiveDisposals == 1 && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0,
-                "DAT replacement and close defer real archive disposal until active Read Inspect completes");
+                "real DAT close defers archive disposal until active Read Inspect completes");
         }
         finally
         {
@@ -569,7 +657,7 @@ internal static class GodotSelfTest
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
         Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
-                sink.ClearedEntryLists >= 3 && !sink.MetadataVisible && !sink.HasCommittedCanvas,
+                sink.ClearedEntryLists >= 3 && sink.HasNeutralSelection && !sink.HasCommittedCanvas,
             "invalid DAT clears committed metadata, canvas, selectors and disabled timeline state");
         session.OpenArchive("recovered.dat", sink);
         WaitForCoordinator(coordinator, 5);
@@ -580,7 +668,7 @@ internal static class GodotSelfTest
         WaitForCoordinator(coordinator, 7);
         session.DrainCompletions(sink);
         Require(sink.Failures == 1 && sink.ClearedEntryLists >= 4 && sink.EntryCommits == 2 && sink.PublishedFrames == 2 &&
-                sink.MetadataVisible && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
+                sink.HasValidSelection && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
             "valid invalid valid DAT recovery republishes only the valid replacement asset on the main thread");
     }
 
@@ -605,7 +693,7 @@ internal static class GodotSelfTest
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
         Require(sink.PublishedFrames == 1 && sink.Failures == 1 && sink.CreatedResources == 2 && sink.DisposedResources == 1 &&
-                sink.HasCommittedCanvas && sink.AssetResets == 1 && sink.FrameUpdates == 0 && !session.Timeline.IsPlaying,
+                sink.HasRestoredPriorCanvas && sink.AssetResets == 1 && sink.FrameUpdates == 0 && !session.Timeline.IsPlaying,
             "post-canvas current publication failure rolls back to the coherent prior canvas and pauses once");
         session.Advance(1, 0, 0);
         session.DrainCompletions(sink);
@@ -642,14 +730,14 @@ internal static class GodotSelfTest
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
         Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
-                sink.SelectionInvalidations >= 2 && !sink.MetadataVisible && !sink.HasCommittedCanvas,
+                sink.SelectionInvalidations >= 2 && sink.HasNeutralSelection && !sink.HasCommittedCanvas,
             "invalid entry clears prior metadata, canvas and timeline selection before recovery");
         session.SelectEntry(validEntry, sink);
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
         WaitForCoordinator(coordinator, 5);
         session.DrainCompletions(sink);
-        Require(sink.EntryCommits == 2 && sink.PublishedFrames == 2 && sink.MetadataVisible && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
+        Require(sink.EntryCommits == 2 && sink.PublishedFrames == 2 && sink.HasValidSelection && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
             "valid invalid valid entry recovery republishes only the replacement asset and metadata");
     }
 
@@ -676,8 +764,10 @@ internal static class GodotSelfTest
 
     private static void WaitForCoordinator(ViewerWorkCoordinator coordinator, int completedOperations)
     {
-        Require(SpinWait.SpinUntil(() => coordinator.CompletedOperations >= completedOperations && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0, TimeSpan.FromSeconds(2)),
-            "bounded coordinator completion");
+        if (!SpinWait.SpinUntil(() => coordinator.CompletedOperations >= completedOperations && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0, TimeSpan.FromSeconds(2)))
+        {
+            throw new InvalidOperationException($"Self-test failed: bounded coordinator completion target {completedOperations}, actual {coordinator.CompletedOperations}, active {coordinator.ActiveOperations}, pending {coordinator.PendingCount}.");
+        }
     }
 
     // This sink intentionally executes the same texture/canvas ownership transaction
@@ -689,13 +779,22 @@ internal static class GodotSelfTest
         private readonly int? _failOnPublicationAttempt;
         private readonly FrameCanvas _canvas = new() { CustomMinimumSize = Vector2.Zero, Size = new Vector2(90, 50) };
         private readonly ViewerPublicationState _publication = new();
+        private readonly SpinBox _group = new();
+        private readonly SpinBox _frame = new();
+        private readonly SpinBox _palette = new();
+        private readonly Label _metadata = new();
+        private readonly Label _rate = new();
+        private readonly ViewerSelectionUi _selectionUi;
         private readonly List<FrameTarget> _publishedTargets = [];
         private readonly List<FrameCanvasPublicationEffect> _publicationEffects = [];
+        private CanvasSnapshot? _priorCanvas;
         private int _publishAttempts;
 
         internal RecordingPublicationSink(int? failOnPublicationAttempt = null)
         {
             _failOnPublicationAttempt = failOnPublicationAttempt;
+            _selectionUi = new ViewerSelectionUi(_group, _frame, _palette, _metadata, _rate);
+            _selectionUi.Clear(new AnimationTimeline(1, 0));
         }
 
         internal int EntryCommits { get; private set; }
@@ -712,15 +811,23 @@ internal static class GodotSelfTest
         internal int GroupUpdates => _publicationEffects.Count(effect => effect == FrameCanvasPublicationEffect.UpdateGroupLayoutAndFrame);
         internal IReadOnlyList<FrameTarget> PublishedTargets => _publishedTargets;
         internal IReadOnlyList<FrameCanvasPublicationEffect> PublicationEffects => _publicationEffects;
+        internal IReadOnlyList<ViewerEntry> LastArchiveEntries { get; private set; } = Array.Empty<ViewerEntry>();
         internal bool AllCallbacksOnDrainThread { get; private set; } = true;
-        internal bool HasCommittedCanvas => _canvas.HasAsset && _canvas.HasTexture && _publication.Texture is not null;
-        internal bool MetadataVisible { get; private set; }
+        internal bool HasCommittedCanvas => _canvas.HasAsset && _canvas.HasTexture && _publication.Texture is not null &&
+            ReferenceEquals(_canvas.PublishedTexture, _publication.Texture);
+        internal bool HasRestoredPriorCanvas => _priorCanvas is not null && _priorCanvas.Matches(_canvas) && HasCommittedCanvas;
+        internal bool HasNeutralSelection => _group.MaxValue == 0 && _group.Value == 0 &&
+            _frame.MaxValue == 0 && _frame.Value == 0 && _palette.MaxValue == 0 && _palette.Value == 0 &&
+            _metadata.Text == "No frame" && _rate.Text == "source 0 fps; effective blocked fps; override none";
+        internal bool HasValidSelection => _group.Value == 0 && _frame.Value == 0 && _palette.Value == 0 &&
+            _palette.MaxValue == ViewerState.MaxRequestedPaletteSlot && _metadata.Text != "No frame" &&
+            _rate.Text.StartsWith("source ", StringComparison.Ordinal) && _rate.Text.Contains("effective ", StringComparison.Ordinal);
 
         public void SelectionInvalidated(bool clearEntries)
         {
             CheckThread();
             _publication.Clear(_canvas);
-            MetadataVisible = false;
+            _selectionUi.Clear(new AnimationTimeline(1, 0));
             SelectionInvalidations++;
             if (clearEntries) ClearedEntryLists++;
         }
@@ -728,6 +835,7 @@ internal static class GodotSelfTest
         public void ArchiveOpened(IReadOnlyList<ViewerEntry> entries)
         {
             CheckThread();
+            LastArchiveEntries = entries;
             StatusUpdates++;
         }
 
@@ -735,7 +843,7 @@ internal static class GodotSelfTest
         {
             CheckThread();
             _publication.Clear(_canvas);
-            MetadataVisible = true;
+            _selectionUi.Commit(snapshot, new AnimationTimeline(snapshot.Metadata.Header.FramesPerGroup, snapshot.Metadata.Header.FramesPerSecond));
             EntryCommits++;
             StatusUpdates++;
         }
@@ -749,7 +857,8 @@ internal static class GodotSelfTest
             _publicationEffects.Add(effect);
             _publishedTargets.Add(target);
             PublishedFrames++;
-            MetadataVisible = true;
+            _selectionUi.PublishFrame(frame);
+            _priorCanvas ??= CanvasSnapshot.Capture(_canvas);
             MetadataUpdates++;
             StatusUpdates++;
         }
@@ -769,9 +878,25 @@ internal static class GodotSelfTest
         {
             _publication.Clear(_canvas);
             _canvas.Free();
+            _group.Free();
+            _frame.Free();
+            _palette.Free();
+            _metadata.Free();
+            _rate.Free();
         }
 
         private void CheckThread() => AllCallbacksOnDrainThread &= System.Environment.CurrentManagedThreadId == _drainThread;
+
+        private sealed record CanvasSnapshot(Texture2D? Texture, FrameCanvasGroupLayout? Layout, FrameHotspot Hotspot,
+            Vector2 Pan, float Zoom, bool Fit)
+        {
+            internal static CanvasSnapshot Capture(FrameCanvas canvas) => new(canvas.PublishedTexture, canvas.PublishedGroupLayout,
+                canvas.Hotspot, canvas.Pan, canvas.Zoom, canvas.FitMode);
+
+            internal bool Matches(FrameCanvas canvas) => ReferenceEquals(Texture, canvas.PublishedTexture) &&
+                ReferenceEquals(Layout, canvas.PublishedGroupLayout) && Hotspot == canvas.Hotspot && Pan == canvas.Pan &&
+                Mathf.IsEqualApprox(Zoom, canvas.Zoom) && Fit == canvas.FitMode;
+        }
     }
 
     private static void RequireThrows<TException>(Action action, string name) where TException : Exception

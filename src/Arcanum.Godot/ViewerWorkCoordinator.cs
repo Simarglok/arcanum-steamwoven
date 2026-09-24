@@ -18,6 +18,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
     private int _activeOperations;
     private int _maximumObservedConcurrency;
     private int _completedOperations;
+    private int _submittedOperations;
     private int _archiveDisposals;
 
     internal ViewerWorkCoordinator(Func<ViewerWorkRequest, ViewerWorkCompletion>? testExecutor = null,
@@ -31,6 +32,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
     internal int PendingCount { get { lock (_gate) return _pending is null ? 0 : 1; } }
     internal int MaximumObservedConcurrency { get { lock (_gate) return _maximumObservedConcurrency; } }
     internal int CompletedOperations { get { lock (_gate) return _completedOperations; } }
+    internal int SubmittedOperations { get { lock (_gate) return _submittedOperations; } }
     internal int ArchiveDisposals => Volatile.Read(ref _archiveDisposals);
 
     internal void Submit(ViewerWorkRequest request)
@@ -39,6 +41,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
         lock (_gate)
         {
             if (_closed || request is CloseViewerWorkRequest) return;
+            _submittedOperations++;
             if (_active is null)
             {
                 _active = request;
