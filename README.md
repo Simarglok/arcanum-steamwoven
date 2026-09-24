@@ -2,12 +2,12 @@
 
 Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
 
-**Status:** `Arcanum.Data` implements the observed R1 `1TAD` DAT subset and a bounded one-physical-frame 8-bpp ART-to-RGBA decoder with raw metadata. No engine, Godot integration, animation runtime, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
+**Status:** `Arcanum.Data` implements the observed R1 `1TAD` DAT subset and a bounded one-physical-frame 8-bpp ART-to-RGBA decoder with raw metadata. `Arcanum.Godot` is a bounded macOS developer viewer that opens one user-selected DAT and displays one selected original ART physical frame. No engine, animation runtime, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
 
 ## Direction
 
 - C# data/compatibility and simulation code independent of Godot.
-- Godot 4 for presentation, input, UI, audio and platform integration; exact Godot/.NET versions are not selected yet.
+- Godot 4.7.2 .NET for the bounded viewer presentation boundary; `Arcanum.Data` remains Godot-independent. See [Arcanum.Godot viewer](docs/Arcanum.Godot.md) for the shared-toolchain commands and known limits.
 - Preserve original gameplay; distinguish original behavior, bug fixes and optional mod profiles.
 - Modern resolutions, scalable UI and high-DPI from the early Legacy frontend.
 - Keyboard/mouse and first-class gamepad interaction.
@@ -22,6 +22,7 @@ Players provide their own legally acquired copy. Original game assets, third-par
 - [DAT format boundary](docs/formats/dat.md)
 - [ART format boundary](docs/formats/art.md)
 - [Arcanum.Data API, limits and commands](docs/Arcanum.Data.md)
+- [Arcanum.Godot viewer](docs/Arcanum.Godot.md)
 - [Hermes delivery workflow](docs/workflow/hermes.md)
 - [Contributor guidance](CONTRIBUTING.md)
 
