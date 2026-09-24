@@ -166,16 +166,31 @@ public partial class FrameCanvas : Control
 
     internal static float? CalculateFitZoom(Vector2 canvasSize, Vector2 textureSize)
     {
-        if (canvasSize.X <= 0 || canvasSize.Y <= 0 || textureSize.X <= 0 || textureSize.Y <= 0)
+        if (!float.IsFinite(canvasSize.X) || !float.IsFinite(canvasSize.Y) ||
+            !float.IsFinite(textureSize.X) || !float.IsFinite(textureSize.Y) ||
+            canvasSize.X <= 0 || canvasSize.Y <= 0 || textureSize.X <= 0 || textureSize.Y <= 0)
         {
             return null;
         }
 
-        return Mathf.Max(0.01f, Mathf.Min(canvasSize.X / textureSize.X, canvasSize.Y / textureSize.Y));
+        var zoom = MathF.Min(canvasSize.X / textureSize.X, canvasSize.Y / textureSize.Y);
+        return float.IsFinite(zoom) && zoom > 0f ? zoom : null;
     }
 
     internal static float? CalculateFitZoom(Vector2 canvasSize, FrameCanvasBounds bounds) =>
         CalculateFitZoom(canvasSize, new Vector2(bounds.Width, bounds.Height));
+
+    internal static float? CalculateFitZoom(Vector2 canvasSize, FrameCanvasWorldBounds bounds)
+    {
+        if (!float.IsFinite(canvasSize.X) || !float.IsFinite(canvasSize.Y) ||
+            canvasSize.X <= 0 || canvasSize.Y <= 0 || bounds.Width <= 0 || bounds.Height <= 0)
+        {
+            return null;
+        }
+
+        var zoom = Math.Min(canvasSize.X / bounds.Width, canvasSize.Y / bounds.Height);
+        return double.IsFinite(zoom) && zoom > 0d && zoom <= float.MaxValue ? (float)zoom : null;
+    }
 
     private void ApplyFit()
     {
@@ -187,7 +202,7 @@ public partial class FrameCanvas : Control
         }
 
         _zoom = fitZoom.Value;
-        var center = new Vector2(bounds.Left + (bounds.Width / 2f), bounds.Top + (bounds.Height / 2f));
+        var center = new Vector2((float)bounds.CenterX, (float)bounds.CenterY);
         _pan = -(center * _zoom);
         _fit = true;
         QueueRedraw();

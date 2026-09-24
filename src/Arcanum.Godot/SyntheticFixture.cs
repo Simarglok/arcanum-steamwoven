@@ -272,11 +272,34 @@ internal static class GodotSelfTest
         Require(!canvas.FitMode && Mathf.IsEqualApprox(canvas.Zoom, 2f) && canvas.Pan == manualPan, "FrameCanvas group update preserves manual viewport");
         canvas.SetAlignment(FrameAlignment.Centered);
         Require(canvas.GetFrameTopLeftWorld() == new Vector2(-1.5f, -1f), "FrameCanvas centered inspection mode");
+        using var centeredImage = Image.CreateFromData(3, 5, false, Image.Format.Rgba8, new byte[3 * 5 * 4]);
+        using var centeredTexture = ImageTexture.CreateFromImage(centeredImage);
+        var centeredLayout = new FrameCanvasGroupLayout([new FrameCanvasFrame(3, 5, FrameHotspot.Zero)]);
+        Require(centeredLayout.CenteredBounds == new FrameCanvasWorldBounds(-3, -5, 3, 5), "FrameCanvas exact centered odd-size bounds");
+        canvas.Size = new Vector2(90, 50);
+        canvas.ResetAsset(centeredTexture, FrameHotspot.Zero, centeredLayout);
+        canvas.SetFit();
+        var centeredTopLeft = canvas.GetScreenPositionForWorld(canvas.GetFrameTopLeftWorld());
+        var centeredBottomRight = centeredTopLeft + (centeredTexture.GetSize() * canvas.Zoom);
+        Require(centeredTopLeft == new Vector2(30, 0) && centeredBottomRight == new Vector2(60, 50) &&
+                (centeredTopLeft + centeredBottomRight) / 2f == new Vector2(45, 25),
+            "FrameCanvas centered odd-size fit matches rendered extents and canvas center");
+        var largeLayout = new FrameCanvasGroupLayout([
+            new FrameCanvasFrame(1, 1, 0, 0),
+            new FrameCanvasFrame(1, 1, -999_999, 0),
+        ]);
+        canvas.Size = new Vector2(320, 200);
+        canvas.ResetAsset(texture, FrameHotspot.Zero, largeLayout);
+        canvas.SetAlignment(FrameAlignment.RawHotspot);
+        canvas.SetFit();
+        Require(canvas.FitMode && Mathf.IsEqualApprox(canvas.Zoom, 0.00032f), "FrameCanvas large legal group fit has no arbitrary zoom floor");
+        var fittedZoom = canvas.Zoom;
+        var fittedPan = canvas.Pan;
         canvas.SetAnchorMarkerVisible(false);
         Require(!canvas.AnchorMarkerVisible, "FrameCanvas anchor marker toggle");
         Require(Mathf.IsEqualApprox(FrameCanvas.CalculateFitZoom(new Vector2(30, 20), new FrameCanvasBounds(-2, -4, 7, 1)) ?? 0f, 10f / 3f), "FrameCanvas bounds fit calculation");
         canvas.ClearFrame();
-        Require(!canvas.HasTexture && canvas.HasAsset && !canvas.FitMode && Mathf.IsEqualApprox(canvas.Zoom, 2f) && canvas.Pan == manualPan, "FrameCanvas clear-frame preserves viewport transform");
+        Require(!canvas.HasTexture && canvas.HasAsset && canvas.FitMode && Mathf.IsEqualApprox(canvas.Zoom, fittedZoom) && canvas.Pan == fittedPan, "FrameCanvas clear-frame preserves viewport transform");
         canvas.ClearAsset();
         Require(!canvas.HasTexture && !canvas.HasAsset && !canvas.FitMode && Mathf.IsEqualApprox(canvas.Zoom, 1f), "FrameCanvas clear-asset reset state");
         RequireThrows<FrameCanvasGeometryLimitException>(() => new FrameCanvasGroupLayout([new FrameCanvasFrame(1, 1, int.MinValue, 0)]), "FrameCanvas geometry precision limit");

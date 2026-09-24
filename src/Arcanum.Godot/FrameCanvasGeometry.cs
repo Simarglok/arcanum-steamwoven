@@ -33,6 +33,26 @@ public readonly record struct FrameCanvasBounds(long Left, long Top, long Right,
     public long Height => checked(Bottom - Top);
     public long CenterX => checked(Left + (Width / 2));
     public long CenterY => checked(Top + (Height / 2));
+
+    public FrameCanvasWorldBounds ToWorldBounds() => new(
+        checked(Left * 2),
+        checked(Top * 2),
+        checked(Right * 2),
+        checked(Bottom * 2));
+}
+
+// Coordinates are stored in exact half-world-unit increments so centered odd-sized frames
+// share the same bounds that FrameCanvas renders with texture-size / 2f.
+public readonly record struct FrameCanvasWorldBounds(long LeftTwice, long TopTwice, long RightTwice, long BottomTwice)
+{
+    public double Left => LeftTwice / 2d;
+    public double Top => TopTwice / 2d;
+    public double Right => RightTwice / 2d;
+    public double Bottom => BottomTwice / 2d;
+    public double Width => checked(RightTwice - LeftTwice) / 2d;
+    public double Height => checked(BottomTwice - TopTwice) / 2d;
+    public double CenterX => checked(LeftTwice + RightTwice) / 4d;
+    public double CenterY => checked(TopTwice + BottomTwice) / 4d;
 }
 
 public sealed class FrameCanvasGeometryLimitException : Exception
@@ -60,22 +80,22 @@ public sealed class FrameCanvasGroupLayout
             frame.Validate();
         }
 
-        RawHotspotBounds = CalculateBounds(Frames, FrameAlignment.RawHotspot);
-        CenteredBounds = CalculateBounds(Frames, FrameAlignment.Centered);
+        RawHotspotBounds = CalculateRawHotspotBounds(Frames);
+        CenteredBounds = CalculateCenteredBounds(Frames);
     }
 
     public IReadOnlyList<FrameCanvasFrame> Frames { get; }
     public FrameCanvasBounds RawHotspotBounds { get; }
-    public FrameCanvasBounds CenteredBounds { get; }
+    public FrameCanvasWorldBounds CenteredBounds { get; }
 
-    public FrameCanvasBounds GetBounds(FrameAlignment alignment) => alignment switch
+    public FrameCanvasWorldBounds GetBounds(FrameAlignment alignment) => alignment switch
     {
-        FrameAlignment.RawHotspot => RawHotspotBounds,
+        FrameAlignment.RawHotspot => RawHotspotBounds.ToWorldBounds(),
         FrameAlignment.Centered => CenteredBounds,
         _ => throw new ArgumentOutOfRangeException(nameof(alignment)),
     };
 
-    private static FrameCanvasBounds CalculateBounds(IReadOnlyList<FrameCanvasFrame> frames, FrameAlignment alignment)
+    private static FrameCanvasBounds CalculateRawHotspotBounds(IReadOnlyList<FrameCanvasFrame> frames)
     {
         long? left = null;
         long? top = null;
@@ -86,8 +106,8 @@ public sealed class FrameCanvasGroupLayout
         {
             foreach (var frame in frames)
             {
-                var frameLeft = alignment == FrameAlignment.RawHotspot ? -(long)frame.Hotspot.X : -((long)frame.Width / 2);
-                var frameTop = alignment == FrameAlignment.RawHotspot ? -(long)frame.Hotspot.Y : -((long)frame.Height / 2);
+                var frameLeft = -(long)frame.Hotspot.X;
+                var frameTop = -(long)frame.Hotspot.Y;
                 var frameRight = frameLeft + frame.Width;
                 var frameBottom = frameTop + frame.Height;
                 left = left is null ? frameLeft : Math.Min(left.Value, frameLeft);
@@ -102,11 +122,50 @@ public sealed class FrameCanvasGroupLayout
         return bounds;
     }
 
+    private static FrameCanvasWorldBounds CalculateCenteredBounds(IReadOnlyList<FrameCanvasFrame> frames)
+    {
+        long? leftTwice = null;
+        long? topTwice = null;
+        long? rightTwice = null;
+        long? bottomTwice = null;
+
+        checked
+        {
+            foreach (var frame in frames)
+            {
+                var frameLeftTwice = -(long)frame.Width;
+                var frameTopTwice = -(long)frame.Height;
+                var frameRightTwice = (long)frame.Width;
+                var frameBottomTwice = (long)frame.Height;
+                leftTwice = leftTwice is null ? frameLeftTwice : Math.Min(leftTwice.Value, frameLeftTwice);
+                topTwice = topTwice is null ? frameTopTwice : Math.Min(topTwice.Value, frameTopTwice);
+                rightTwice = rightTwice is null ? frameRightTwice : Math.Max(rightTwice.Value, frameRightTwice);
+                bottomTwice = bottomTwice is null ? frameBottomTwice : Math.Max(bottomTwice.Value, frameBottomTwice);
+            }
+        }
+
+        var bounds = new FrameCanvasWorldBounds(leftTwice!.Value, topTwice!.Value, rightTwice!.Value, bottomTwice!.Value);
+        ValidateViewerBounds(bounds);
+        return bounds;
+    }
+
     private static void ValidateViewerBounds(FrameCanvasBounds bounds)
     {
         if (Math.Abs(bounds.Left) > ViewerCoordinateLimit || Math.Abs(bounds.Top) > ViewerCoordinateLimit ||
             Math.Abs(bounds.Right) > ViewerCoordinateLimit || Math.Abs(bounds.Bottom) > ViewerCoordinateLimit ||
             bounds.Width > ViewerCoordinateLimit || bounds.Height > ViewerCoordinateLimit)
+        {
+            throw new FrameCanvasGeometryLimitException($"Frame group geometry exceeds the viewer precision limit of ±{ViewerCoordinateLimit}.");
+        }
+    }
+
+    private static void ValidateViewerBounds(FrameCanvasWorldBounds bounds)
+    {
+        var twiceViewerCoordinateLimit = checked(ViewerCoordinateLimit * 2);
+        if (bounds.LeftTwice < -twiceViewerCoordinateLimit || bounds.TopTwice < -twiceViewerCoordinateLimit ||
+            bounds.RightTwice > twiceViewerCoordinateLimit || bounds.BottomTwice > twiceViewerCoordinateLimit ||
+            bounds.RightTwice - bounds.LeftTwice > twiceViewerCoordinateLimit ||
+            bounds.BottomTwice - bounds.TopTwice > twiceViewerCoordinateLimit)
         {
             throw new FrameCanvasGeometryLimitException($"Frame group geometry exceeds the viewer precision limit of ±{ViewerCoordinateLimit}.");
         }
