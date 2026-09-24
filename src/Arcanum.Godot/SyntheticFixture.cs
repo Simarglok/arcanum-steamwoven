@@ -644,7 +644,7 @@ internal static class GodotSelfTest
             _ => throw new InvalidOperationException("Unexpected archive-recovery integration work."),
         });
         using var session = new ViewerSession(coordinator);
-        using var sink = new RecordingPublicationSink();
+        using var sink = new RecordingPublicationSink(session.Timeline);
         session.OpenArchive("valid.dat", sink);
         WaitForCoordinator(coordinator, 1);
         session.DrainCompletions(sink);
@@ -653,12 +653,13 @@ internal static class GodotSelfTest
         session.DrainCompletions(sink);
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
+        session.Timeline.SetManualFramesPerSecond(30);
+        sink.SyncTimeline();
         session.OpenArchive("invalid.dat", sink);
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
-        Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
-                sink.ClearedEntryLists >= 3 && sink.HasNeutralSelection && !sink.HasCommittedCanvas,
-            "invalid DAT clears committed metadata, canvas, selectors and disabled timeline state");
+        Require(sink.Failures == 1 && sink.ClearedEntryLists >= 3 && sink.HasNeutralSelection(session.Timeline) && !sink.HasCommittedCanvas,
+            "invalid DAT clears committed metadata, canvas, selectors, and its retained-override rate presentation");
         session.OpenArchive("recovered.dat", sink);
         WaitForCoordinator(coordinator, 5);
         session.DrainCompletions(sink);
@@ -668,8 +669,8 @@ internal static class GodotSelfTest
         WaitForCoordinator(coordinator, 7);
         session.DrainCompletions(sink);
         Require(sink.Failures == 1 && sink.ClearedEntryLists >= 4 && sink.EntryCommits == 2 && sink.PublishedFrames == 2 &&
-                sink.HasValidSelection && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
-            "valid invalid valid DAT recovery republishes only the valid replacement asset on the main thread");
+                sink.HasValidSelection(session.Timeline) && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
+            "valid invalid valid DAT recovery restores actual-session selectors, timeline and retained-override rate presentation");
     }
 
     private static void VerifyCurrentPublicationFailure(DatEntry entry, byte[] bytes, ArtMetadata metadata)
@@ -720,25 +721,26 @@ internal static class GodotSelfTest
             _ => throw new InvalidOperationException("Unexpected selection-recovery integration work."),
         });
         using var session = new ViewerSession(coordinator);
-        using var sink = new RecordingPublicationSink();
+        using var sink = new RecordingPublicationSink(session.Timeline);
         session.SelectEntry(validEntry, sink);
         WaitForCoordinator(coordinator, 1);
         session.DrainCompletions(sink);
         WaitForCoordinator(coordinator, 2);
         session.DrainCompletions(sink);
+        session.Timeline.SetManualFramesPerSecond(30);
+        sink.SyncTimeline();
         session.SelectEntry(invalidEntry, sink);
         WaitForCoordinator(coordinator, 3);
         session.DrainCompletions(sink);
-        Require(sink.Failures == 1 && session.Selected is null && session.Timeline.FrameCount == 1 && !session.Timeline.CanPlay &&
-                sink.SelectionInvalidations >= 2 && sink.HasNeutralSelection && !sink.HasCommittedCanvas,
-            "invalid entry clears prior metadata, canvas and timeline selection before recovery");
+        Require(sink.Failures == 1 && sink.SelectionInvalidations >= 2 && sink.HasNeutralSelection(session.Timeline) && !sink.HasCommittedCanvas,
+            "invalid entry clears prior metadata, canvas, selectors, and its retained-override rate presentation");
         session.SelectEntry(validEntry, sink);
         WaitForCoordinator(coordinator, 4);
         session.DrainCompletions(sink);
         WaitForCoordinator(coordinator, 5);
         session.DrainCompletions(sink);
-        Require(sink.EntryCommits == 2 && sink.PublishedFrames == 2 && sink.HasValidSelection && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
-            "valid invalid valid entry recovery republishes only the replacement asset and metadata");
+        Require(sink.EntryCommits == 2 && sink.PublishedFrames == 2 && sink.HasValidSelection(session.Timeline) && sink.HasCommittedCanvas && sink.AllCallbacksOnDrainThread,
+            "valid invalid valid entry recovery restores actual-session selectors, timeline and retained-override rate presentation");
     }
 
     private static ViewerWorkCompletion ExecuteControlledDecode(DecodeFrameViewerWorkRequest decode, byte[] bytes, ref int calls,
@@ -785,16 +787,19 @@ internal static class GodotSelfTest
         private readonly Label _metadata = new();
         private readonly Label _rate = new();
         private readonly ViewerSelectionUi _selectionUi;
+        private readonly AnimationTimeline _timeline;
         private readonly List<FrameTarget> _publishedTargets = [];
         private readonly List<FrameCanvasPublicationEffect> _publicationEffects = [];
         private CanvasSnapshot? _priorCanvas;
+        private SelectedArtSnapshot? _lastSnapshot;
         private int _publishAttempts;
 
-        internal RecordingPublicationSink(int? failOnPublicationAttempt = null)
+        internal RecordingPublicationSink(AnimationTimeline? timeline = null, int? failOnPublicationAttempt = null)
         {
             _failOnPublicationAttempt = failOnPublicationAttempt;
+            _timeline = timeline ?? new AnimationTimeline(1, 0);
             _selectionUi = new ViewerSelectionUi(_group, _frame, _palette, _metadata, _rate);
-            _selectionUi.Clear(new AnimationTimeline(1, 0));
+            _selectionUi.Clear(_timeline);
         }
 
         internal int EntryCommits { get; private set; }
@@ -816,18 +821,24 @@ internal static class GodotSelfTest
         internal bool HasCommittedCanvas => _canvas.HasAsset && _canvas.HasTexture && _publication.Texture is not null &&
             ReferenceEquals(_canvas.PublishedTexture, _publication.Texture);
         internal bool HasRestoredPriorCanvas => _priorCanvas is not null && _priorCanvas.Matches(_canvas) && HasCommittedCanvas;
-        internal bool HasNeutralSelection => _group.MaxValue == 0 && _group.Value == 0 &&
-            _frame.MaxValue == 0 && _frame.Value == 0 && _palette.MaxValue == 0 && _palette.Value == 0 &&
-            _metadata.Text == "No frame" && _rate.Text == "source 0 fps; effective blocked fps; override none";
-        internal bool HasValidSelection => _group.Value == 0 && _frame.Value == 0 && _palette.Value == 0 &&
-            _palette.MaxValue == ViewerState.MaxRequestedPaletteSlot && _metadata.Text != "No frame" &&
-            _rate.Text.StartsWith("source ", StringComparison.Ordinal) && _rate.Text.Contains("effective ", StringComparison.Ordinal);
+        internal bool HasNeutralSelection(AnimationTimeline timeline) => ReferenceEquals(_timeline, timeline) &&
+            timeline.FrameCount == 1 && timeline.CurrentFrame == 0 && !timeline.IsPlaying && !timeline.CanPlay &&
+            _group.MaxValue == 0 && _group.Value == 0 && _frame.MaxValue == 0 && _frame.Value == 0 &&
+            _palette.MaxValue == 0 && _palette.Value == 0 && _metadata.Text == "No frame" &&
+            _rate.Text == $"source 0 fps; effective blocked fps; override {ManualRate(timeline)}";
+        internal bool HasValidSelection(AnimationTimeline timeline) => ReferenceEquals(_timeline, timeline) && _lastSnapshot is not null &&
+            timeline.FrameCount == _lastSnapshot.Metadata.Header.FramesPerGroup && timeline.CurrentFrame == 0 && !timeline.IsPlaying &&
+            timeline.CanPlay == (_lastSnapshot.Metadata.Header.FramesPerGroup > 1) &&
+            _group.MaxValue == _lastSnapshot.Metadata.Header.PhysicalGroupCount - 1 && _group.Value == 0 &&
+            _frame.MaxValue == _lastSnapshot.Metadata.Header.FramesPerGroup - 1 && _frame.Value == 0 &&
+            _palette.MaxValue == ViewerState.MaxRequestedPaletteSlot && _palette.Value == 0 && _metadata.Text != "No frame" &&
+            _rate.Text == $"source {_lastSnapshot.Metadata.Header.FramesPerSecond} fps; effective {timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked"} fps; override {ManualRate(timeline)}";
 
         public void SelectionInvalidated(bool clearEntries)
         {
             CheckThread();
             _publication.Clear(_canvas);
-            _selectionUi.Clear(new AnimationTimeline(1, 0));
+            _selectionUi.Clear(_timeline);
             SelectionInvalidations++;
             if (clearEntries) ClearedEntryLists++;
         }
@@ -843,7 +854,8 @@ internal static class GodotSelfTest
         {
             CheckThread();
             _publication.Clear(_canvas);
-            _selectionUi.Commit(snapshot, new AnimationTimeline(snapshot.Metadata.Header.FramesPerGroup, snapshot.Metadata.Header.FramesPerSecond));
+            _lastSnapshot = snapshot;
+            _selectionUi.Commit(snapshot, _timeline);
             EntryCommits++;
             StatusUpdates++;
         }
@@ -870,6 +882,12 @@ internal static class GodotSelfTest
             StatusUpdates++;
         }
 
+        internal void SyncTimeline()
+        {
+            CheckThread();
+            _selectionUi.SyncTimeline(_timeline);
+        }
+
         public void ReplacementCreated() => CreatedResources++;
         public void ReplacementDiscarded() => DisposedResources++;
         public void PriorTextureDisposed() => DisposedResources++;
@@ -886,6 +904,8 @@ internal static class GodotSelfTest
         }
 
         private void CheckThread() => AllCallbacksOnDrainThread &= System.Environment.CurrentManagedThreadId == _drainThread;
+
+        private static string ManualRate(AnimationTimeline timeline) => timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
 
         private sealed record CanvasSnapshot(Texture2D? Texture, FrameCanvasGroupLayout? Layout, FrameHotspot Hotspot,
             Vector2 Pan, float Zoom, bool Fit)

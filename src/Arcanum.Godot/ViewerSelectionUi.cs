@@ -27,7 +27,7 @@ internal sealed class ViewerSelectionUi
     {
         ViewerState.ResetEntrySelectors(_group, _frame, _palette);
         _metadata.Text = "No frame";
-        SyncTimeline(timeline);
+        SyncTimeline(timeline, selectionActive: false);
     }
 
     internal void Commit(SelectedArtSnapshot snapshot, AnimationTimeline timeline)
@@ -41,10 +41,19 @@ internal sealed class ViewerSelectionUi
     internal void PublishFrame(ArtFrame frame) => _metadata.Text = FrameMetadata(frame);
 
     internal void SyncTimeline(AnimationTimeline timeline)
+        => SyncTimeline(timeline, selectionActive: true);
+
+    // Timeline controls deliberately survive an entry/DAT replacement. They must
+    // not make the no-selection presentation look playable, however: a retained
+    // manual FPS is displayed as an override but cannot become an effective rate
+    // until a selected asset has committed.
+    private void SyncTimeline(AnimationTimeline timeline, bool selectionActive)
     {
         ArgumentNullException.ThrowIfNull(timeline);
         var source = timeline.SourceFramesPerSecond.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var effective = timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked";
+        var effective = selectionActive
+            ? timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked"
+            : "blocked";
         var manual = timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
         _rate.Text = $"source {source} fps; effective {effective} fps; override {manual}";
         _frame.Value = timeline.CurrentFrame;
