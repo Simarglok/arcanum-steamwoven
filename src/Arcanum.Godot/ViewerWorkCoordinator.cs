@@ -10,6 +10,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
     private readonly object _gate = new();
     private readonly ConcurrentQueue<ViewerWorkCompletion> _completions = new();
     private readonly Func<ViewerWorkRequest, ViewerWorkCompletion>? _testExecutor;
+    private readonly Action<ViewerWorkRequest>? _beforeTestExecution;
     private ViewerWorkRequest? _active;
     private ViewerWorkRequest? _pending;
     private DatArchive? _archive;
@@ -17,16 +18,20 @@ internal sealed class ViewerWorkCoordinator : IDisposable
     private int _activeOperations;
     private int _maximumObservedConcurrency;
     private int _completedOperations;
+    private int _archiveDisposals;
 
-    internal ViewerWorkCoordinator(Func<ViewerWorkRequest, ViewerWorkCompletion>? testExecutor = null)
+    internal ViewerWorkCoordinator(Func<ViewerWorkRequest, ViewerWorkCompletion>? testExecutor = null,
+        Action<ViewerWorkRequest>? beforeTestExecution = null)
     {
         _testExecutor = testExecutor;
+        _beforeTestExecution = beforeTestExecution;
     }
 
     internal int ActiveOperations { get { lock (_gate) return _activeOperations; } }
     internal int PendingCount { get { lock (_gate) return _pending is null ? 0 : 1; } }
     internal int MaximumObservedConcurrency { get { lock (_gate) return _maximumObservedConcurrency; } }
     internal int CompletedOperations { get { lock (_gate) return _completedOperations; } }
+    internal int ArchiveDisposals => Volatile.Read(ref _archiveDisposals);
 
     internal void Submit(ViewerWorkRequest request)
     {
@@ -67,8 +72,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
             _pending = null;
             if (_active is null)
             {
-                _archive?.Dispose();
-                _archive = null;
+                DisposeArchiveLocked();
             }
         }
     }
@@ -90,7 +94,11 @@ internal sealed class ViewerWorkCoordinator : IDisposable
             ViewerWorkCompletion completion;
             try
             {
-                completion = await Task.Run(() => _testExecutor?.Invoke(work) ?? Execute(work));
+                completion = await Task.Run(() =>
+                {
+                    _beforeTestExecution?.Invoke(work);
+                    return _testExecutor?.Invoke(work) ?? Execute(work);
+                });
             }
             catch (Exception exception)
             {
@@ -108,8 +116,7 @@ internal sealed class ViewerWorkCoordinator : IDisposable
                 if (_closed)
                 {
                     _active = null;
-                    _archive?.Dispose();
-                    _archive = null;
+                    DisposeArchiveLocked();
                     return;
                 }
 
@@ -133,7 +140,11 @@ internal sealed class ViewerWorkCoordinator : IDisposable
         var opened = DatArchive.Open(request.Path, ViewerState.ReaderOptions);
         var previous = _archive;
         _archive = opened;
-        previous?.Dispose();
+        if (previous is not null)
+        {
+            previous.Dispose();
+            Interlocked.Increment(ref _archiveDisposals);
+        }
         return new ViewerArchiveOpened(request, ViewerState.ArtEntries(opened));
     }
 
@@ -147,6 +158,17 @@ internal sealed class ViewerWorkCoordinator : IDisposable
     private static ViewerWorkCompletion Decode(DecodeFrameViewerWorkRequest request) =>
         new ViewerFrameDecoded(request, ArtDecoder.Decode(request.Snapshot.Bytes,
             new ArtFrameSelection(request.Target.Group, request.Target.Frame, request.Target.Palette), ViewerState.DecoderOptions));
+
+    private void DisposeArchiveLocked()
+    {
+        var archive = _archive;
+        _archive = null;
+        if (archive is not null)
+        {
+            archive.Dispose();
+            Interlocked.Increment(ref _archiveDisposals);
+        }
+    }
 }
 
 internal abstract record ViewerWorkRequest;

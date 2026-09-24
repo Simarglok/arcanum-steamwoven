@@ -69,6 +69,66 @@ public partial class FrameCanvas : Control
         }
     }
 
+    // ViewerApp changes a texture and (sometimes) the group layout together. Keep
+    // that observable canvas state atomic: QueueRedraw can throw on a disposed
+    // Godot object, so a caller must never be left with a canvas pointing at an
+    // uncommitted replacement texture or a new layout with an old frame.
+    internal FrameCanvasPublicationEffect CommitFramePublication(Texture2D texture, FrameHotspot hotspot,
+        FrameCanvasGroupLayout groupLayout, bool resetAsset, bool updateGroupLayout)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        ArgumentNullException.ThrowIfNull(groupLayout);
+        if (!resetAsset && _groupLayout is null)
+        {
+            throw new InvalidOperationException("ResetAsset must establish a group layout before frames can be updated.");
+        }
+
+        var previousTexture = _texture;
+        var previousHotspot = _hotspot;
+        var previousLayout = _groupLayout;
+        var previousPan = _pan;
+        var previousZoom = _zoom;
+        var previousFit = _fit;
+        try
+        {
+            _texture = texture;
+            _hotspot = hotspot;
+            if (resetAsset)
+            {
+                _groupLayout = groupLayout;
+                _pan = Vector2.Zero;
+                _zoom = 1f;
+                _fit = false;
+            }
+            else if (updateGroupLayout)
+            {
+                _groupLayout = groupLayout;
+                if (_fit)
+                {
+                    ApplyFitState();
+                }
+            }
+
+            QueueRedraw();
+            return resetAsset
+                ? FrameCanvasPublicationEffect.ResetAsset
+                : updateGroupLayout
+                    ? FrameCanvasPublicationEffect.UpdateGroupLayoutAndFrame
+                    : FrameCanvasPublicationEffect.UpdateFrame;
+        }
+        catch
+        {
+            _texture = previousTexture;
+            _hotspot = previousHotspot;
+            _groupLayout = previousLayout;
+            _pan = previousPan;
+            _zoom = previousZoom;
+            _fit = previousFit;
+            try { QueueRedraw(); } catch { /* Preserve coherent state even if redraw is unavailable. */ }
+            throw;
+        }
+    }
+
     public void ClearFrame()
     {
         _texture = null;
@@ -194,18 +254,26 @@ public partial class FrameCanvas : Control
 
     private void ApplyFit()
     {
+        if (ApplyFitState())
+        {
+            QueueRedraw();
+        }
+    }
+
+    private bool ApplyFitState()
+    {
         var bounds = _groupLayout!.GetBounds(Alignment);
         var fitZoom = CalculateFitZoom(Size, bounds);
         if (fitZoom is null)
         {
-            return;
+            return false;
         }
 
         _zoom = fitZoom.Value;
         var center = new Vector2((float)bounds.CenterX, (float)bounds.CenterY);
         _pan = -(center * _zoom);
         _fit = true;
-        QueueRedraw();
+        return true;
     }
 
     private void OnResized()
@@ -275,4 +343,11 @@ public partial class FrameCanvas : Control
     }
 
     private Vector2 ToWorldSpace(Vector2 screen) => (screen - (Size / 2f) - _pan) / _zoom;
+}
+
+internal enum FrameCanvasPublicationEffect
+{
+    ResetAsset,
+    UpdateFrame,
+    UpdateGroupLayoutAndFrame,
 }

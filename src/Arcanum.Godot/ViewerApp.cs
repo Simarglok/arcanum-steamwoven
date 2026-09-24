@@ -7,11 +7,9 @@ namespace Arcanum.Godot;
 public partial class ViewerApp : Control, IViewerPublicationSink
 {
     private readonly ViewerSession _session = new();
-    private Texture2D? _texture;
+    private readonly ViewerPublicationState _publication = new();
     private IReadOnlyList<ViewerEntry> _entries = Array.Empty<ViewerEntry>();
     private SelectedArtSnapshot? _selectedArt;
-    private SelectedArtSnapshot? _canvasArt;
-    private int? _canvasGroup;
     private bool _updatingSelectors;
     private bool _closing;
 
@@ -45,9 +43,10 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     {
         _closing = true;
         _session.Close();
-        _canvasArt = null;
-        _canvasGroup = null;
-        DisposeTexture();
+        if (_canvas is not null)
+        {
+            _publication.Clear(_canvas);
+        }
     }
 
     public override void _Process(double delta)
@@ -213,10 +212,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     void IViewerPublicationSink.EntryCommitted(SelectedArtSnapshot snapshot)
     {
         _selectedArt = snapshot;
-        _canvasArt = null;
-        _canvasGroup = null;
-        _canvas.ClearAsset();
-        DisposeTexture();
+        _publication.Clear(_canvas);
         _updatingSelectors = true;
         _group.MaxValue = snapshot.Metadata.Header.PhysicalGroupCount - 1;
         _frame.MaxValue = snapshot.Metadata.Header.FramesPerGroup - 1;
@@ -229,35 +225,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
 
     void IViewerPublicationSink.PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
     {
-        var layout = GroupLayout(snapshot.Metadata, target.Group);
-        ImageTexture? replacement = null;
-        try
-        {
-            replacement = CreateFrameTexture(decoded);
-            var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
-            if (!ReferenceEquals(_canvasArt, snapshot))
-            {
-                _canvas.ResetAsset(replacement, hotspot, layout);
-                _canvasArt = snapshot;
-                _canvasGroup = target.Group;
-            }
-            else
-            {
-                if (_canvasGroup != target.Group)
-                {
-                    _canvas.UpdateGroupLayout(layout);
-                    _canvasGroup = target.Group;
-                }
-                _canvas.UpdateFrame(replacement, hotspot);
-            }
-            DisposeTexture();
-            _texture = replacement;
-            replacement = null;
-        }
-        finally
-        {
-            replacement?.Dispose();
-        }
+        ViewerFramePublication.Commit(_canvas, _publication, snapshot, target, decoded);
         _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
         SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
     }
@@ -288,7 +256,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         SetStatus(MapError(exception));
     }
 
-    private static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)
+    internal static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)
         .Select(frame => new FrameCanvasFrame(frame.Width, frame.Height, frame.HotX, frame.HotY)));
 
     private void ApplyOverride()
@@ -323,22 +291,18 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     private void ClearSelection(bool clearEntries)
     {
         _selectedArt = null;
-        _canvasArt = null;
-        _canvasGroup = null;
         if (clearEntries)
         {
             _entries = Array.Empty<ViewerEntry>();
             RebuildList();
         }
 
-        _canvas.ClearAsset();
-        DisposeTexture();
+        _publication.Clear(_canvas);
         ViewerState.ResetEntrySelectors(_group, _frame, _palette);
         _metadataLabel.Text = "No frame";
         SyncTimelineUi();
     }
 
-    private void DisposeTexture() { var previous = _texture; _texture = null; previous?.Dispose(); }
     private void ToggleFullscreen() => DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);
     private void SetBusy(string text) { _openButton.Disabled = true; SetStatus(text); }
     private void SetStatus(string text) { _status.Text = text; _openButton.Disabled = false; }

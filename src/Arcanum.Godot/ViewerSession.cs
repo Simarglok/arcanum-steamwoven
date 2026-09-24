@@ -165,11 +165,14 @@ internal sealed class ViewerSession : IDisposable
         {
             sink.PublishFrame(decoded.DecodeRequest.Snapshot, decoded.DecodeRequest.Target, decoded.Frame);
         }
-        catch (Exception exception) when (IsCurrent(decoded.DecodeRequest.Target) && _failedTarget != decoded.DecodeRequest.Target)
+        catch (Exception exception) when (IsCurrent(decoded.DecodeRequest.Target))
         {
-            _failedTarget = decoded.DecodeRequest.Target;
-            Timeline.Pause();
-            sink.PublishFailure(exception);
+            if (_failedTarget != decoded.DecodeRequest.Target)
+            {
+                _failedTarget = decoded.DecodeRequest.Target;
+                Timeline.Pause();
+                sink.PublishFailure(exception);
+            }
         }
     }
 
