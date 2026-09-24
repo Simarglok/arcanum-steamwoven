@@ -40,6 +40,11 @@ internal static class SyntheticFixture
         palettes: new Dictionary<int, byte[]> { [2] = Palette((1, 33, 32, 31), (2, 36, 35, 34)) },
         new ArtFixtureFrame(2, 1, [1, 2]));
 
+    internal static byte[] CreateSingleFrameStaticArt() => CreateArt(
+        staticFlag: true,
+        palettes: new Dictionary<int, byte[]> { [0] = Palette((1, 3, 2, 1), (2, 6, 5, 4)) },
+        new ArtFixtureFrame(2, 1, [1, 2]));
+
     private static byte[] CreateUnsupportedArt()
     {
         var art = CreateStaticArt();
@@ -248,6 +253,7 @@ internal static class GodotSelfTest
         RequireThrows<DatLimitExceededException>(() => oversize.ReadEntry(oversize.Entries[0]), "oversize viewer entry limit");
 
         VerifyLatestDecodeQueue();
+        VerifyViewerSessionPublicationBoundary(archive, entries);
 
         using var image = Image.CreateFromData(raw.Width, raw.Height, false, Image.Format.Rgba8, raw.Rgba.ToArray());
         using var texture = ImageTexture.CreateFromImage(image);
@@ -356,6 +362,102 @@ internal static class GodotSelfTest
         queue.InvalidatePending();
         Require(queue.TryStart(reopened) && queue.Complete(reopened, request => request == reopened) == null && queue.Active is null,
             "decode queue reopens valid input after cancellation");
+    }
+
+    private static void VerifyViewerSessionPublicationBoundary(DatArchive archive, IReadOnlyList<ViewerEntry> entries)
+    {
+        var animatedEntry = entries[1].Entry;
+        var animatedBytes = archive.ReadEntry(animatedEntry);
+        var animatedMetadata = ArtDecoder.Inspect(animatedBytes, ViewerState.DecoderOptions);
+        VerifySupersededCompletion(animatedEntry, animatedBytes, animatedMetadata, false);
+        VerifySupersededCompletion(animatedEntry, animatedBytes, animatedMetadata, true);
+
+        var staticEntry = entries[0].Entry;
+        var staticBytes = SyntheticFixture.CreateSingleFrameStaticArt();
+        var staticMetadata = ArtDecoder.Inspect(staticBytes, ViewerState.DecoderOptions);
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, staticBytes, staticMetadata),
+            DecodeFrameViewerWorkRequest decode => new ViewerFrameDecoded(decode, ArtDecoder.Decode(staticBytes,
+                new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions)),
+            _ => throw new InvalidOperationException("Unexpected static integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.SelectEntry(staticEntry);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        WaitForCoordinator(coordinator, 2);
+        session.DrainCompletions(sink);
+        var uploads = sink.PublishedFrames;
+        session.Timeline.Play();
+        session.Advance(10, 0, 0);
+        session.DrainCompletions(sink);
+        Require(sink.PublishedFrames == uploads && !session.Timeline.IsPlaying,
+            "static and paused ticks submit zero additional uploads");
+    }
+
+    private static void VerifySupersededCompletion(DatEntry entry, byte[] bytes, ArtMetadata metadata, bool failFirstDecode)
+    {
+        using var started = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var decodeCalls = 0;
+        using var coordinator = new ViewerWorkCoordinator(work => work switch
+        {
+            LoadEntryViewerWorkRequest load => new ViewerEntryLoaded(load, bytes, metadata),
+            DecodeFrameViewerWorkRequest decode => ExecuteControlledDecode(decode, bytes, ref decodeCalls, started, release, failFirstDecode),
+            _ => throw new InvalidOperationException("Unexpected animated integration work."),
+        });
+        using var session = new ViewerSession(coordinator);
+        var sink = new RecordingPublicationSink();
+        session.SelectEntry(entry);
+        WaitForCoordinator(coordinator, 1);
+        session.DrainCompletions(sink);
+        Require(started.Wait(TimeSpan.FromSeconds(2)), "production coordinator starts active decode");
+        session.Timeline.Play();
+        session.Advance(1d / metadata.Header.FramesPerSecond, 0, 0);
+        session.Advance(1d / metadata.Header.FramesPerSecond, 0, 0);
+        release.Set();
+        WaitForCoordinator(coordinator, 3);
+        session.DrainCompletions(sink);
+        Require(sink.EntryCommits == 1 && sink.PublishedFrames == 1 && sink.Failures == 0 && sink.AllCallbacksOnDrainThread,
+            failFirstDecode ? "stale active decode error has no status or pause side effect" : "stale active decode creates no resources or status");
+        Require(coordinator.MaximumObservedConcurrency == 1 && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0,
+            "single read inspect decode coordinator concurrency bound");
+    }
+
+    private static ViewerWorkCompletion ExecuteControlledDecode(DecodeFrameViewerWorkRequest decode, byte[] bytes, ref int calls,
+        ManualResetEventSlim started, ManualResetEventSlim release, bool failFirstDecode)
+    {
+        if (Interlocked.Increment(ref calls) == 1)
+        {
+            started.Set();
+            if (!release.Wait(TimeSpan.FromSeconds(2))) throw new TimeoutException("Synthetic decode barrier timed out.");
+            if (failFirstDecode) throw new ArtFormatException("Synthetic stale decode failure.");
+        }
+        return new ViewerFrameDecoded(decode, ArtDecoder.Decode(bytes,
+            new ArtFrameSelection(decode.Target.Group, decode.Target.Frame, decode.Target.Palette), ViewerState.DecoderOptions));
+    }
+
+    private static void WaitForCoordinator(ViewerWorkCoordinator coordinator, int completedOperations)
+    {
+        Require(SpinWait.SpinUntil(() => coordinator.CompletedOperations >= completedOperations && coordinator.ActiveOperations == 0 && coordinator.PendingCount == 0, TimeSpan.FromSeconds(2)),
+            "bounded coordinator completion");
+    }
+
+    private sealed class RecordingPublicationSink : IViewerPublicationSink
+    {
+        private readonly int _drainThread = System.Environment.CurrentManagedThreadId;
+        internal int EntryCommits { get; private set; }
+        internal int PublishedFrames { get; private set; }
+        internal int Failures { get; private set; }
+        internal bool AllCallbacksOnDrainThread { get; private set; } = true;
+
+        public void ArchiveOpened(IReadOnlyList<ViewerEntry> entries) => CheckThread();
+        public void EntryCommitted(SelectedArtSnapshot snapshot) { CheckThread(); EntryCommits++; }
+        public void PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame frame) { CheckThread(); PublishedFrames++; }
+        public void PublishFailure(Exception exception) { CheckThread(); Failures++; }
+        private void CheckThread() => AllCallbacksOnDrainThread &= System.Environment.CurrentManagedThreadId == _drainThread;
     }
 
     private static void RequireThrows<TException>(Action action, string name) where TException : Exception

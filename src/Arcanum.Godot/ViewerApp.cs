@@ -4,20 +4,14 @@ using Godot;
 
 namespace Arcanum.Godot;
 
-public partial class ViewerApp : Control
+public partial class ViewerApp : Control, IViewerPublicationSink
 {
-    private readonly SemaphoreSlim _archiveGate = new(1, 1);
-    private readonly AnimationTimeline _timeline = new(1, 0);
-    private DatArchive? _archive;
+    private readonly ViewerSession _session = new();
     private Texture2D? _texture;
     private IReadOnlyList<ViewerEntry> _entries = Array.Empty<ViewerEntry>();
-    private SelectedArt? _selectedArt;
-    private readonly LatestDecodeQueue<FrameRequest> _decodeQueue = new();
-    private FrameRequest? _displayedRequest;
-    private SelectedArt? _canvasArt;
+    private SelectedArtSnapshot? _selectedArt;
+    private SelectedArtSnapshot? _canvasArt;
     private int? _canvasGroup;
-    private long _assetGeneration;
-    private long _selectionGeneration;
     private bool _updatingSelectors;
     private bool _closing;
 
@@ -37,6 +31,8 @@ public partial class ViewerApp : Control
     private FrameCanvas _canvas = null!;
     private FileDialog _dialog = null!;
 
+    private AnimationTimeline Timeline => _session.Timeline;
+
     public override void _Ready()
     {
         var arguments = OS.GetCmdlineUserArgs();
@@ -48,30 +44,26 @@ public partial class ViewerApp : Control
     public override void _ExitTree()
     {
         _closing = true;
-        InvalidateRequests();
+        _session.Close();
         _canvasArt = null;
         _canvasGroup = null;
         DisposeTexture();
-        _archive?.Dispose();
-        _archive = null;
     }
 
     public override void _Process(double delta)
     {
-        var advance = _timeline.Advance(delta);
-        if (advance.Status is TimelineAdvanceStatus.FrameChanged or TimelineAdvanceStatus.Completed)
-        {
-            SyncTimelineUi();
-            RequestCurrentFrame();
-        }
+        if (_closing || _group is null || _palette is null) return;
+        _session.Advance(delta, (int)_group.Value, (int)_palette.Value);
+        _session.DrainCompletions(this);
+        SyncTimelineUi();
     }
 
     public override void _Notification(int what)
     {
         base._Notification(what);
-        if (what == NotificationWMWindowFocusOut && _timeline.IsPlaying)
+        if (what == NotificationWMWindowFocusOut && Timeline.IsPlaying)
         {
-            _timeline.Pause();
+            Timeline.Pause();
             SyncTimelineUi();
             SetStatus("Playback paused because the viewer lost focus.");
         }
@@ -148,19 +140,19 @@ public partial class ViewerApp : Control
         AddChild(_dialog);
 
         _openButton.Pressed += () => _dialog.PopupCenteredRatio(0.75f);
-        _dialog.FileSelected += path => _ = OpenArchiveAsync(path);
+        _dialog.FileSelected += OpenArchive;
         _filter.TextChanged += _ => RebuildList();
-        _items.ItemSelected += index => _ = SelectEntryAsync(index);
+        _items.ItemSelected += SelectEntry;
         _group.ValueChanged += _ => ReconfigureSelection(false);
         _frame.ValueChanged += _ => ReconfigureSelection(true);
         _palette.ValueChanged += _ => ReconfigureSelection(false);
-        play.Pressed += () => { _timeline.Play(); SyncTimelineUi(); RequestCurrentFrame(); };
-        pause.Pressed += () => { _timeline.Pause(); SyncTimelineUi(); };
-        stop.Pressed += () => { _timeline.Stop(); ++_selectionGeneration; InvalidateRequests(); SyncTimelineUi(); RequestCurrentFrame(); };
-        previous.Pressed += () => { _timeline.Step(-1); SyncTimelineUi(); RequestCurrentFrame(); };
-        next.Pressed += () => { _timeline.Step(1); SyncTimelineUi(); RequestCurrentFrame(); };
-        _mode.ItemSelected += _ => { _timeline.SetMode((PlaybackMode)_mode.GetSelectedId()); SyncTimelineUi(); };
-        _speed.ItemSelected += _ => { _timeline.SetSpeed((PlaybackSpeed)_speed.GetSelectedId()); SyncTimelineUi(); };
+        play.Pressed += () => { Timeline.Play(); RequestCurrentFrame(); SyncTimelineUi(); };
+        pause.Pressed += () => { Timeline.Pause(); SyncTimelineUi(); };
+        stop.Pressed += () => { _session.Stop((int)_group.Value, (int)_palette.Value); SyncTimelineUi(); };
+        previous.Pressed += () => { Timeline.Step(-1); RequestCurrentFrame(); SyncTimelineUi(); };
+        next.Pressed += () => { Timeline.Step(1); RequestCurrentFrame(); SyncTimelineUi(); };
+        _mode.ItemSelected += _ => { Timeline.SetMode((PlaybackMode)_mode.GetSelectedId()); SyncTimelineUi(); };
+        _speed.ItemSelected += _ => { Timeline.SetSpeed((PlaybackSpeed)_speed.GetSelectedId()); SyncTimelineUi(); };
         _overrideEnabled.Toggled += _ => ApplyOverride();
         _overrideFps.ValueChanged += _ => { if (_overrideEnabled.ButtonPressed) ApplyOverride(); };
         oneToOne.Pressed += _canvas.ResetOneToOne;
@@ -181,150 +173,110 @@ public partial class ViewerApp : Control
         return selector;
     }
 
-    private async Task OpenArchiveAsync(string path)
+    private void OpenArchive(string path)
     {
-        var generation = ++_assetGeneration;
-        ++_selectionGeneration;
-        ClearSelection();
+        _selectedArt = null;
         _entries = Array.Empty<ViewerEntry>();
+        _canvasArt = null;
+        _canvasGroup = null;
+        _canvas.ClearAsset();
+        DisposeTexture();
         RebuildList();
         SetBusy("Opening DAT index…");
-        DatArchive? opened = null;
-        try
-        {
-            await _archiveGate.WaitAsync();
-            try { opened = await Task.Run(() => DatArchive.Open(path, ViewerState.ReaderOptions)); }
-            finally { _archiveGate.Release(); }
-            if (!IsCurrentAsset(generation)) { opened.Dispose(); return; }
-            var previous = _archive;
-            _archive = opened;
-            opened = null;
-            previous?.Dispose();
-            _entries = ViewerState.ArtEntries(_archive);
-            RebuildList();
-            SetStatus($"Indexed {_entries.Count} ART entries. Select one entry to inspect metadata and frames.");
-        }
-        catch (Exception exception)
-        {
-            opened?.Dispose();
-            if (IsCurrentAsset(generation)) SetStatus(MapError(exception));
-        }
+        _session.OpenArchive(path);
     }
 
-    private async Task SelectEntryAsync(long visibleIndex)
+    private void SelectEntry(long visibleIndex)
     {
         if (visibleIndex < 0 || visibleIndex >= _items.ItemCount) return;
         var sourceIndex = _items.GetItemMetadata((int)visibleIndex).AsInt64();
-        if (sourceIndex < 0 || sourceIndex >= _entries.Count || _archive is null) return;
-        var assetGeneration = _assetGeneration;
-        var selectionGeneration = ++_selectionGeneration;
-        ClearSelection();
+        if (sourceIndex < 0 || sourceIndex >= _entries.Count) return;
+        _selectedArt = null;
+        _canvasArt = null;
+        _canvasGroup = null;
+        _canvas.ClearAsset();
+        DisposeTexture();
         SetBusy("Reading selected ART metadata…");
-        try
-        {
-            var entry = _entries[(int)sourceIndex].Entry;
-            await _archiveGate.WaitAsync();
-            (byte[] Bytes, ArtMetadata Metadata) loaded;
-            try { loaded = await Task.Run(() => { var bytes = _archive.ReadEntry(entry); return (bytes, ArtDecoder.Inspect(bytes, ViewerState.DecoderOptions)); }); }
-            finally { _archiveGate.Release(); }
-            if (!IsCurrent(assetGeneration, selectionGeneration)) return;
-            _selectedArt = new SelectedArt(assetGeneration, selectionGeneration, entry.Ordinal, loaded.Bytes, loaded.Metadata);
-            _updatingSelectors = true;
-            _group.MaxValue = _selectedArt.Metadata.Header.PhysicalGroupCount - 1;
-            _frame.MaxValue = _selectedArt.Metadata.Header.FramesPerGroup - 1;
-            _palette.MaxValue = ViewerState.MaxRequestedPaletteSlot;
-            _group.Value = _frame.Value = _palette.Value = 0;
-            _updatingSelectors = false;
-            _timeline.ResetAsset(_selectedArt.Metadata.Header.FramesPerGroup, _selectedArt.Metadata.Header.FramesPerSecond);
-            SyncTimelineUi();
-            RequestCurrentFrame();
-        }
-        catch (Exception exception)
-        {
-            if (IsCurrent(assetGeneration, selectionGeneration)) SetStatus(MapError(exception));
-        }
+        _session.SelectEntry(_entries[(int)sourceIndex].Entry);
     }
 
     private void ReconfigureSelection(bool manualFrame)
     {
         if (_updatingSelectors || _selectedArt is null) return;
-        ++_selectionGeneration;
-        InvalidateRequests();
-        if (manualFrame) _timeline.Seek((int)_frame.Value);
-        else _timeline.ReconfigureSequence(_selectedArt.Metadata.Header.FramesPerGroup);
-        SyncTimelineUi();
+        if (manualFrame) Timeline.Seek((int)_frame.Value);
+        else Timeline.ReconfigureSequence(_selectedArt.Metadata.Header.FramesPerGroup);
         RequestCurrentFrame();
+        SyncTimelineUi();
     }
 
-    private void RequestCurrentFrame()
+    private void RequestCurrentFrame() => _session.RequestTarget((int)_group.Value, (int)_palette.Value);
+
+    void IViewerPublicationSink.ArchiveOpened(IReadOnlyList<ViewerEntry> entries)
     {
-        var selected = _selectedArt;
-        if (selected is null || _closing) return;
-        var request = new FrameRequest(selected, _selectionGeneration, (int)_group.Value, _timeline.CurrentFrame, (int)_palette.Value);
-        if (_displayedRequest == request || !_decodeQueue.TryStart(request)) return;
-        _ = DecodeAsync(request);
+        _entries = entries;
+        RebuildList();
+        SetStatus($"Indexed {_entries.Count} ART entries. Select one entry to inspect metadata and frames.");
     }
 
-    private async Task DecodeAsync(FrameRequest request)
+    void IViewerPublicationSink.EntryCommitted(SelectedArtSnapshot snapshot)
     {
+        _selectedArt = snapshot;
+        _canvasArt = null;
+        _canvasGroup = null;
+        _canvas.ClearAsset();
+        DisposeTexture();
+        _updatingSelectors = true;
+        _group.MaxValue = snapshot.Metadata.Header.PhysicalGroupCount - 1;
+        _frame.MaxValue = snapshot.Metadata.Header.FramesPerGroup - 1;
+        _palette.MaxValue = ViewerState.MaxRequestedPaletteSlot;
+        _group.Value = _frame.Value = _palette.Value = 0;
+        _updatingSelectors = false;
+        SyncTimelineUi();
+        SetStatus("Selected ART metadata loaded; decoding frame 0.");
+    }
+
+    void IViewerPublicationSink.PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
+    {
+        if (decoded.Rgba.Count != checked(decoded.Width * decoded.Height * 4)) throw new ArtFormatException("Decoded frame has an invalid RGBA length.");
+        var layout = GroupLayout(snapshot.Metadata, target.Group);
+        using var image = Image.CreateFromData(decoded.Width, decoded.Height, false, Image.Format.Rgba8, decoded.Rgba.ToArray());
+        ImageTexture? replacement = null;
         try
         {
-            var bytes = request.Art.Bytes;
-            var decoded = await Task.Run(() => ArtDecoder.Decode(bytes, new ArtFrameSelection(request.Group, request.Frame, request.Palette), ViewerState.DecoderOptions));
-            if (!IsCurrent(request) || _closing) return;
-            if (decoded.Rgba.Count != checked(decoded.Width * decoded.Height * 4)) throw new ArtFormatException("Decoded frame has an invalid RGBA length.");
-            var layout = GroupLayout(request.Art.Metadata, request.Group);
-            using var image = Image.CreateFromData(decoded.Width, decoded.Height, false, Image.Format.Rgba8, decoded.Rgba.ToArray());
-            ImageTexture? replacement = null;
-            try
+            replacement = ImageTexture.CreateFromImage(image);
+            replacement.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
+            var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
+            if (!ReferenceEquals(_canvasArt, snapshot))
             {
-                replacement = ImageTexture.CreateFromImage(image);
-                replacement.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
-                var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
-                if (!ReferenceEquals(_canvasArt, request.Art))
+                _canvas.ResetAsset(replacement, hotspot, layout);
+                _canvasArt = snapshot;
+                _canvasGroup = target.Group;
+            }
+            else
+            {
+                if (_canvasGroup != target.Group)
                 {
-                    _canvas.ResetAsset(replacement, hotspot, layout);
-                    _canvasArt = request.Art;
-                    _canvasGroup = request.Group;
+                    _canvas.UpdateGroupLayout(layout);
+                    _canvasGroup = target.Group;
                 }
-                else
-                {
-                    if (_canvasGroup != request.Group)
-                    {
-                        _canvas.UpdateGroupLayout(layout);
-                        _canvasGroup = request.Group;
-                    }
-
-                    _canvas.UpdateFrame(replacement, hotspot);
-                }
-
-                DisposeTexture();
-                _texture = replacement;
-                replacement = null;
+                _canvas.UpdateFrame(replacement, hotspot);
             }
-            finally
-            {
-                replacement?.Dispose();
-            }
-            _displayedRequest = request;
-            _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
-            SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
-        }
-        catch (Exception exception)
-        {
-            if (IsCurrent(request))
-            {
-                _timeline.Pause();
-                _decodeQueue.MarkFailed(request);
-                SyncTimelineUi();
-                SetStatus(MapError(exception));
-            }
+            DisposeTexture();
+            _texture = replacement;
+            replacement = null;
         }
         finally
         {
-            var next = _decodeQueue.Complete(request, IsCurrent);
-            if (next is not null) _ = DecodeAsync(next);
+            replacement?.Dispose();
         }
+        _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
+        SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
+    }
+
+    void IViewerPublicationSink.PublishFailure(Exception exception)
+    {
+        SyncTimelineUi();
+        SetStatus(MapError(exception));
     }
 
     private static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)
@@ -332,19 +284,19 @@ public partial class ViewerApp : Control
 
     private void ApplyOverride()
     {
-        _timeline.SetManualFramesPerSecond(_overrideEnabled.ButtonPressed ? (int)_overrideFps.Value : null);
+        Timeline.SetManualFramesPerSecond(_overrideEnabled.ButtonPressed ? (int)_overrideFps.Value : null);
         SyncTimelineUi();
     }
 
     private void SyncTimelineUi()
     {
         if (!IsInstanceValid(_rate)) return;
-        var source = _timeline.SourceFramesPerSecond.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        var effective = _timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked";
-        var manual = _timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
+        var source = Timeline.SourceFramesPerSecond.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        var effective = Timeline.EffectiveFramesPerSecond?.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) ?? "blocked";
+        var manual = Timeline.ManualFramesPerSecond?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "none";
         _rate.Text = $"source {source} fps; effective {effective} fps; override {manual}";
         _updatingSelectors = true;
-        _frame.Value = _timeline.CurrentFrame;
+        _frame.Value = Timeline.CurrentFrame;
         _updatingSelectors = false;
     }
 
@@ -359,33 +311,6 @@ public partial class ViewerApp : Control
         }
     }
 
-    private void InvalidateRequests()
-    {
-        _decodeQueue.InvalidatePending();
-        _displayedRequest = null;
-    }
-
-    private void ClearSelection()
-    {
-        _selectedArt = null;
-        _canvasArt = null;
-        _canvasGroup = null;
-        InvalidateRequests();
-        _timeline.Stop();
-        _canvas.ClearAsset();
-        DisposeTexture();
-        if (IsInstanceValid(_metadataLabel)) _metadataLabel.Text = "No frame";
-        SyncTimelineUi();
-    }
-
-    private bool IsCurrent(long assetGeneration, long selectionGeneration) => !_closing &&
-        assetGeneration == _assetGeneration && selectionGeneration == _selectionGeneration;
-
-    private bool IsCurrent(FrameRequest request) => !_closing &&
-        request.Art.AssetGeneration == _assetGeneration &&
-        request.SelectionGeneration == _selectionGeneration &&
-        ReferenceEquals(request.Art, _selectedArt);
-    private bool IsCurrentAsset(long generation) => !_closing && generation == _assetGeneration;
     private void DisposeTexture() { var previous = _texture; _texture = null; previous?.Dispose(); }
     private void ToggleFullscreen() => DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);
     private void SetBusy(string text) { _openButton.Disabled = true; SetStatus(text); }
@@ -413,17 +338,10 @@ public partial class ViewerApp : Control
         var index = -1;
         for (var argumentIndex = 0; argumentIndex < arguments.Count; argumentIndex++)
         {
-            if (arguments[argumentIndex] == "--write-synthetic-dat")
-            {
-                index = argumentIndex;
-                break;
-            }
+            if (arguments[argumentIndex] == "--write-synthetic-dat") { index = argumentIndex; break; }
         }
         if (index < 0 || index == arguments.Count - 1) { GD.PushError("--write-synthetic-dat requires an output path."); GetTree().Quit(1); return; }
         try { File.WriteAllBytes(arguments[index + 1], SyntheticFixture.CreateDat()); GD.Print("Wrote deterministic synthetic DAT fixture."); GetTree().Quit(0); }
         catch (Exception exception) { GD.PushError(exception.Message); GetTree().Quit(1); }
     }
-
-    private sealed record SelectedArt(long AssetGeneration, long SelectionGeneration, int EntryOrdinal, byte[] Bytes, ArtMetadata Metadata);
-    private sealed record FrameRequest(SelectedArt Art, long SelectionGeneration, int Group, int Frame, int Palette);
 }
