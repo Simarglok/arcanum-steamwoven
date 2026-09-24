@@ -5,6 +5,8 @@ namespace Arcanum.Godot;
 public partial class FrameCanvas : Control
 {
     private Texture2D? _texture;
+    private FrameHotspot _hotspot;
+    private FrameCanvasGroupLayout? _groupLayout;
     private Vector2 _pan;
     private float _zoom = 1f;
     private bool _fit;
@@ -19,24 +21,100 @@ public partial class FrameCanvas : Control
     }
 
     public float Zoom => _zoom;
+    public Vector2 Pan => _pan;
     public bool FitMode => _fit;
     public bool HasTexture => _texture is not null;
+    public bool HasAsset => _groupLayout is not null;
+    public FrameHotspot Hotspot => _hotspot;
+    public FrameAlignment Alignment { get; private set; } = FrameAlignment.RawHotspot;
+    public bool AnchorMarkerVisible { get; private set; } = true;
 
-    public void SetTexture(Texture2D texture)
+    public void ResetAsset(Texture2D texture, FrameHotspot hotspot, FrameCanvasGroupLayout groupLayout)
     {
+        ArgumentNullException.ThrowIfNull(texture);
+        ArgumentNullException.ThrowIfNull(groupLayout);
         _texture = texture;
+        _hotspot = hotspot;
+        _groupLayout = groupLayout;
         _pan = Vector2.Zero;
         _zoom = 1f;
         _fit = false;
         QueueRedraw();
     }
 
+    public void UpdateFrame(Texture2D texture, FrameHotspot hotspot)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        if (_groupLayout is null)
+        {
+            throw new InvalidOperationException("ResetAsset must establish a group layout before frames can be updated.");
+        }
+
+        _texture = texture;
+        _hotspot = hotspot;
+        QueueRedraw();
+    }
+
+    public void UpdateGroupLayout(FrameCanvasGroupLayout groupLayout)
+    {
+        ArgumentNullException.ThrowIfNull(groupLayout);
+        _groupLayout = groupLayout;
+        if (_fit)
+        {
+            ApplyFit();
+        }
+        else
+        {
+            QueueRedraw();
+        }
+    }
+
     public void ClearFrame()
     {
         _texture = null;
+        QueueRedraw();
+    }
+
+    public void ClearAsset()
+    {
+        _texture = null;
+        _hotspot = FrameHotspot.Zero;
+        _groupLayout = null;
         _pan = Vector2.Zero;
         _zoom = 1f;
         _fit = false;
+        QueueRedraw();
+    }
+
+    // Temporary source-compatibility shim for the ARC-RENDER-001 viewer. New callers must choose ResetAsset or UpdateFrame.
+    internal void SetTexture(Texture2D texture)
+    {
+        ArgumentNullException.ThrowIfNull(texture);
+        var size = texture.GetSize();
+        ResetAsset(texture, FrameHotspot.Zero, new FrameCanvasGroupLayout([new FrameCanvasFrame((int)size.X, (int)size.Y, FrameHotspot.Zero)]));
+    }
+
+    public void SetAlignment(FrameAlignment alignment)
+    {
+        if (!Enum.IsDefined(alignment))
+        {
+            throw new ArgumentOutOfRangeException(nameof(alignment));
+        }
+
+        Alignment = alignment;
+        if (_fit && _groupLayout is not null)
+        {
+            ApplyFit();
+        }
+        else
+        {
+            QueueRedraw();
+        }
+    }
+
+    public void SetAnchorMarkerVisible(bool visible)
+    {
+        AnchorMarkerVisible = visible;
         QueueRedraw();
     }
 
@@ -50,43 +128,76 @@ public partial class FrameCanvas : Control
 
     public void SetFit()
     {
-        if (_texture is null)
+        if (_texture is null || _groupLayout is null)
         {
             return;
         }
 
-        var fitZoom = CalculateFitZoom(Size, _texture.GetSize());
+        ApplyFit();
+    }
+
+    public void AdjustZoom(float multiplier, Vector2 around)
+    {
+        if (_texture is null || !float.IsFinite(multiplier) || multiplier <= 0f)
+        {
+            return;
+        }
+
+        var before = ToWorldSpace(around);
+        _zoom = Mathf.Clamp(_zoom * multiplier, 0.0625f, 64f);
+        _fit = false;
+        _pan = around - (Size / 2f) - (before * _zoom);
+        QueueRedraw();
+    }
+
+    public Vector2 GetScreenPositionForWorld(Vector2 world) => (Size / 2f) + _pan + (world * _zoom);
+
+    public Vector2 GetFrameTopLeftWorld()
+    {
+        if (_texture is null)
+        {
+            return Vector2.Zero;
+        }
+
+        return Alignment == FrameAlignment.RawHotspot
+            ? new Vector2(-_hotspot.X, -_hotspot.Y)
+            : -(_texture.GetSize() / 2f);
+    }
+
+    internal static float? CalculateFitZoom(Vector2 canvasSize, Vector2 textureSize)
+    {
+        if (canvasSize.X <= 0 || canvasSize.Y <= 0 || textureSize.X <= 0 || textureSize.Y <= 0)
+        {
+            return null;
+        }
+
+        return Mathf.Max(0.01f, Mathf.Min(canvasSize.X / textureSize.X, canvasSize.Y / textureSize.Y));
+    }
+
+    internal static float? CalculateFitZoom(Vector2 canvasSize, FrameCanvasBounds bounds) =>
+        CalculateFitZoom(canvasSize, new Vector2(bounds.Width, bounds.Height));
+
+    private void ApplyFit()
+    {
+        var bounds = _groupLayout!.GetBounds(Alignment);
+        var fitZoom = CalculateFitZoom(Size, bounds);
         if (fitZoom is null)
         {
             return;
         }
 
         _zoom = fitZoom.Value;
-        _pan = Vector2.Zero;
+        var center = new Vector2(bounds.Left + (bounds.Width / 2f), bounds.Top + (bounds.Height / 2f));
+        _pan = -(center * _zoom);
         _fit = true;
-        QueueRedraw();
-    }
-
-    public void AdjustZoom(float multiplier, Vector2 around)
-    {
-        if (_texture is null)
-        {
-            return;
-        }
-
-        var before = ToTextureSpace(around);
-        _zoom = Mathf.Clamp(_zoom * multiplier, 0.0625f, 64f);
-        _fit = false;
-        var afterOrigin = (Size - (_texture.GetSize() * _zoom)) / 2f + _pan;
-        _pan = around - afterOrigin - (before * _zoom);
         QueueRedraw();
     }
 
     private void OnResized()
     {
-        if (_fit)
+        if (_fit && _groupLayout is not null)
         {
-            SetFit();
+            ApplyFit();
         }
     }
 
@@ -137,29 +248,16 @@ public partial class FrameCanvas : Control
             return;
         }
 
-        var destinationSize = _texture.GetSize() * _zoom;
-        var origin = ((Size - destinationSize) / 2f) + _pan;
-        DrawTextureRect(_texture, new Rect2(origin, destinationSize), false);
-    }
-
-    internal static float? CalculateFitZoom(Vector2 canvasSize, Vector2 textureSize)
-    {
-        if (canvasSize.X <= 0 || canvasSize.Y <= 0 || textureSize.X <= 0 || textureSize.Y <= 0)
+        var origin = GetScreenPositionForWorld(GetFrameTopLeftWorld());
+        DrawTextureRect(_texture, new Rect2(origin, _texture.GetSize() * _zoom), false);
+        if (AnchorMarkerVisible)
         {
-            return null;
+            var anchor = GetScreenPositionForWorld(Vector2.Zero);
+            var marker = new Color("ff4d4d");
+            DrawLine(anchor - new Vector2(6f, 0f), anchor + new Vector2(6f, 0f), marker, 1.5f);
+            DrawLine(anchor - new Vector2(0f, 6f), anchor + new Vector2(0f, 6f), marker, 1.5f);
         }
-
-        return Mathf.Max(0.01f, Mathf.Min(canvasSize.X / textureSize.X, canvasSize.Y / textureSize.Y));
     }
 
-    private Vector2 ToTextureSpace(Vector2 screen)
-    {
-        if (_texture is null)
-        {
-            return Vector2.Zero;
-        }
-
-        var origin = ((Size - (_texture.GetSize() * _zoom)) / 2f) + _pan;
-        return (screen - origin) / _zoom;
-    }
+    private Vector2 ToWorldSpace(Vector2 screen) => (screen - (Size / 2f) - _pan) / _zoom;
 }
