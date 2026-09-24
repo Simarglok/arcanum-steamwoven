@@ -8,10 +8,19 @@ public static class ArtDecoder
     private const int PaletteBytes = 256 * 4;
     private const int FrameHeaderBytes = 28;
 
+    public static ArtMetadata Inspect(ReadOnlySpan<byte> artBytes, ArtDecoderOptions? options = null)
+    {
+        var layout = ParseLayout(artBytes, options);
+        var frames = new ArtFrameMetadata[layout.Frames.Length];
+        for (var index = 0; index < layout.Frames.Length; index++)
+        {
+            frames[index] = layout.Frames[index].ToMetadata(artBytes);
+        }
+        return new ArtMetadata(layout.Header, frames);
+    }
+
     public static ArtFrame Decode(ReadOnlySpan<byte> artBytes, ArtFrameSelection selection, ArtDecoderOptions? options = null)
     {
-        options ??= new ArtDecoderOptions();
-        options.Validate();
         if (selection.PaletteSlot is < 0 or > 3)
         {
             throw new ArgumentOutOfRangeException(nameof(selection), "Palette slot must be from 0 through 3.");
@@ -22,63 +31,18 @@ public static class ArtDecoder
             throw new ArgumentOutOfRangeException(nameof(selection), "Group and frame indexes must be non-negative.");
         }
 
-        if (artBytes.Length > options.MaxInputBytes)
-        {
-            throw new ArtLimitExceededException("ART input exceeds the configured byte limit.");
-        }
-
-        if (artBytes.Length < HeaderBytes)
-        {
-            throw new ArtFormatException("ART header is truncated.");
-        }
-
-        var header = ParseHeader(artBytes, options, out var totalFrames);
-        if (selection.GroupIndex >= header.PhysicalGroupCount || selection.FrameIndex >= header.FramesPerGroup)
+        var layout = ParseLayout(artBytes, options);
+        if (selection.GroupIndex >= layout.Header.PhysicalGroupCount || selection.FrameIndex >= layout.Header.FramesPerGroup)
         {
             throw new ArgumentOutOfRangeException(nameof(selection), "Group or frame index is outside the ART physical frame table.");
         }
 
-        var paletteOffset = HeaderBytes;
-        var palettes = ReadPalettes(artBytes, header, ref paletteOffset);
-        var effectivePaletteSlot = palettes[selection.PaletteSlot] is not null ? selection.PaletteSlot : 0;
-        var palette = palettes[effectivePaletteSlot] ?? throw new ArtFormatException("The requested palette and fallback slot 0 are absent.");
-
-        var tableBytes = CheckedMultiply(totalFrames, FrameHeaderBytes, "frame-table byte count");
-        if (tableBytes > options.MaxFrameTableBytes)
-        {
-            throw new ArtLimitExceededException("ART frame table exceeds the configured byte limit.");
-        }
-
-        var tableOffset = paletteOffset;
-        var payloadStart = CheckedAdd(tableOffset, tableBytes, "frame-table end");
-        EnsureRange(artBytes, tableOffset, tableBytes, "ART palette or frame table is truncated.");
-
-        var frames = new ParsedFrame[totalFrames];
-        var payloadOffset = payloadStart;
-        for (var index = 0; index < totalFrames; index++)
-        {
-            var frameOffset = CheckedAdd(tableOffset, CheckedMultiply(index, FrameHeaderBytes, "frame header offset"), "frame header offset");
-            var frame = ParseFrame(artBytes, frameOffset, options);
-            frames[index] = frame;
-            payloadOffset = CheckedAdd(payloadOffset, frame.EncodedPayloadLength, "frame payload end");
-            EnsureRange(artBytes, payloadStart, payloadOffset - payloadStart, "ART frame payload is truncated.");
-        }
-
-        if (payloadOffset != artBytes.Length)
-        {
-            throw new ArtFormatException("ART frame payloads do not consume the input exactly.");
-        }
-
-        var linearIndex = CheckedAdd(CheckedMultiply(selection.GroupIndex, header.FramesPerGroup, "selected frame index"), selection.FrameIndex, "selected frame index");
-        var selected = frames[linearIndex];
-        var selectedPayloadOffset = payloadStart;
-        for (var index = 0; index < linearIndex; index++)
-        {
-            selectedPayloadOffset = CheckedAdd(selectedPayloadOffset, frames[index].EncodedPayloadLength, "selected payload offset");
-        }
-
+        var effectivePaletteSlot = layout.Palettes[selection.PaletteSlot] is not null ? selection.PaletteSlot : 0;
+        var palette = layout.Palettes[effectivePaletteSlot] ?? throw new ArtFormatException("The requested palette and fallback slot 0 are absent.");
+        var linearIndex = CheckedAdd(CheckedMultiply(selection.GroupIndex, layout.Header.FramesPerGroup, "selected frame index"), selection.FrameIndex, "selected frame index");
+        var selected = layout.Frames[linearIndex];
         var rgba = new byte[checked((int)selected.RgbaBytes)];
-        var payload = artBytes.Slice(selectedPayloadOffset, selected.EncodedPayloadLength);
+        var payload = artBytes.Slice(selected.PayloadOffset, selected.EncodedPayloadLength);
         if (selected.EncodedPayloadLength == selected.PixelCount)
         {
             for (var index = 0; index < selected.PixelCount; index++)
@@ -91,11 +55,52 @@ public static class ArtDecoder
             DecodeRle(payload, selected.PixelCount, palette.TableSpan, rgba);
         }
 
-        var rawFrameHeader = artBytes.Slice(selected.HeaderOffset, FrameHeaderBytes).ToArray();
-        var metadata = new ArtFrameMetadata(selected.Width, selected.Height, selected.EncodedPayloadLength,
-            selected.HotX, selected.HotY, selected.OffsetX, selected.OffsetY, rawFrameHeader);
-        return new ArtFrame(header, palettes, metadata, selection.GroupIndex, selection.FrameIndex,
+        return new ArtFrame(layout.Header, layout.Palettes, selected.ToMetadata(artBytes), selection.GroupIndex, selection.FrameIndex,
             selection.PaletteSlot, effectivePaletteSlot, rgba);
+    }
+
+    private static ParsedArt ParseLayout(ReadOnlySpan<byte> artBytes, ArtDecoderOptions? suppliedOptions)
+    {
+        var options = suppliedOptions ?? new ArtDecoderOptions();
+        options.Validate();
+        if (artBytes.Length > options.MaxInputBytes)
+        {
+            throw new ArtLimitExceededException("ART input exceeds the configured byte limit.");
+        }
+
+        if (artBytes.Length < HeaderBytes)
+        {
+            throw new ArtFormatException("ART header is truncated.");
+        }
+
+        var header = ParseHeader(artBytes, options, out var totalFrames);
+        var paletteOffset = HeaderBytes;
+        var palettes = ReadPalettes(artBytes, header, ref paletteOffset);
+        var tableBytes = CheckedMultiply(totalFrames, FrameHeaderBytes, "frame-table byte count");
+        if (tableBytes > options.MaxFrameTableBytes)
+        {
+            throw new ArtLimitExceededException("ART frame table exceeds the configured byte limit.");
+        }
+
+        var payloadStart = CheckedAdd(paletteOffset, tableBytes, "frame-table end");
+        EnsureRange(artBytes, paletteOffset, tableBytes, "ART palette or frame table is truncated.");
+        var frames = new ParsedFrame[totalFrames];
+        var payloadOffset = payloadStart;
+        for (var index = 0; index < totalFrames; index++)
+        {
+            var frameOffset = CheckedAdd(paletteOffset, CheckedMultiply(index, FrameHeaderBytes, "frame header offset"), "frame header offset");
+            var frame = ParseFrame(artBytes, frameOffset, options);
+            frames[index] = frame with { PayloadOffset = payloadOffset };
+            payloadOffset = CheckedAdd(payloadOffset, frame.EncodedPayloadLength, "frame payload end");
+            EnsureRange(artBytes, payloadStart, payloadOffset - payloadStart, "ART frame payload is truncated.");
+        }
+
+        if (payloadOffset != artBytes.Length)
+        {
+            throw new ArtFormatException("ART frame payloads do not consume the input exactly.");
+        }
+
+        return new ParsedArt(header, palettes, frames);
     }
 
     private static ArtHeader ParseHeader(ReadOnlySpan<byte> bytes, ArtDecoderOptions options, out int totalFrames)
@@ -122,8 +127,7 @@ public static class ArtDecoder
         }
 
         totalFrames = frameTotal;
-        return new ArtHeader(raw, flags, I32(raw, 4), bpp,
-            ReadWords(raw, 12, 4), I32(raw, 28), framesPerGroup,
+        return new ArtHeader(raw, flags, I32(raw, 4), bpp, ReadWords(raw, 12, 4), I32(raw, 28), framesPerGroup,
             ReadWords(raw, 36, 8), ReadWords(raw, 68, 8), ReadWords(raw, 100, 8), groupCount);
     }
 
@@ -178,7 +182,7 @@ public static class ArtDecoder
             throw new ArtLimitExceededException("ART encoded frame bytes exceed the configured limit.");
         }
 
-        return new ParsedFrame(offset, width, height, encodedPayloadLength, pixels, rgbaBytes,
+        return new ParsedFrame(offset, 0, width, height, encodedPayloadLength, pixels, rgbaBytes,
             I32(bytes, offset + 12), I32(bytes, offset + 16), I32(bytes, offset + 20), I32(bytes, offset + 24));
     }
 
@@ -202,10 +206,7 @@ public static class ArtDecoder
                     throw new ArtFormatException("ART RLE literal run is truncated.");
                 }
 
-                for (var index = 0; index < count; index++)
-                {
-                    WriteRgba(payload[input++], palette, rgba, output++);
-                }
+                for (var index = 0; index < count; index++) WriteRgba(payload[input++], palette, rgba, output++);
             }
             else
             {
@@ -215,10 +216,7 @@ public static class ArtDecoder
                 }
 
                 var value = payload[input++];
-                for (var index = 0; index < count; index++)
-                {
-                    WriteRgba(value, palette, rgba, output++);
-                }
+                for (var index = 0; index < count; index++) WriteRgba(value, palette, rgba, output++);
             }
         }
 
@@ -231,11 +229,7 @@ public static class ArtDecoder
     private static void WriteRgba(byte paletteIndex, ReadOnlySpan<byte> palette, byte[] rgba, int pixelOffset)
     {
         var destination = pixelOffset * 4;
-        if (paletteIndex == 0)
-        {
-            return;
-        }
-
+        if (paletteIndex == 0) return;
         var source = paletteIndex * 4;
         rgba[destination] = palette[source + 2];
         rgba[destination + 1] = palette[source + 1];
@@ -246,52 +240,35 @@ public static class ArtDecoder
     private static uint[] ReadWords(ReadOnlySpan<byte> bytes, int offset, int count)
     {
         var words = new uint[count];
-        for (var index = 0; index < count; index++)
-        {
-            words[index] = U32(bytes, offset + (index * sizeof(uint)));
-        }
-
+        for (var index = 0; index < count; index++) words[index] = U32(bytes, offset + (index * sizeof(uint)));
         return words;
     }
 
-    private static int I32(ReadOnlySpan<byte> bytes, int offset) =>
-        BinaryPrimitives.ReadInt32LittleEndian(bytes.Slice(offset, sizeof(int)));
-
-    private static uint U32(ReadOnlySpan<byte> bytes, int offset) =>
-        BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(offset, sizeof(uint)));
+    private static int I32(ReadOnlySpan<byte> bytes, int offset) => BinaryPrimitives.ReadInt32LittleEndian(bytes.Slice(offset, sizeof(int)));
+    private static uint U32(ReadOnlySpan<byte> bytes, int offset) => BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(offset, sizeof(uint)));
 
     private static int CheckedMultiply(int left, int right, string label)
     {
-        try
-        {
-            return checked(left * right);
-        }
-        catch (OverflowException exception)
-        {
-            throw new ArtFormatException($"ART {label} overflows.", exception);
-        }
+        try { return checked(left * right); }
+        catch (OverflowException exception) { throw new ArtFormatException($"ART {label} overflows.", exception); }
     }
 
     private static int CheckedAdd(int left, int right, string label)
     {
-        try
-        {
-            return checked(left + right);
-        }
-        catch (OverflowException exception)
-        {
-            throw new ArtFormatException($"ART {label} overflows.", exception);
-        }
+        try { return checked(left + right); }
+        catch (OverflowException exception) { throw new ArtFormatException($"ART {label} overflows.", exception); }
     }
 
     private static void EnsureRange(ReadOnlySpan<byte> bytes, int offset, int length, string message)
     {
-        if (offset < 0 || length < 0 || offset > bytes.Length - length)
-        {
-            throw new ArtFormatException(message);
-        }
+        if (offset < 0 || length < 0 || offset > bytes.Length - length) throw new ArtFormatException(message);
     }
 
-    private readonly record struct ParsedFrame(int HeaderOffset, int Width, int Height, int EncodedPayloadLength,
-        int PixelCount, int RgbaBytes, int HotX, int HotY, int OffsetX, int OffsetY);
+    private sealed record ParsedArt(ArtHeader Header, ArtPalette?[] Palettes, ParsedFrame[] Frames);
+    private readonly record struct ParsedFrame(int HeaderOffset, int PayloadOffset, int Width, int Height, int EncodedPayloadLength,
+        int PixelCount, int RgbaBytes, int HotX, int HotY, int OffsetX, int OffsetY)
+    {
+        public ArtFrameMetadata ToMetadata(ReadOnlySpan<byte> artBytes) => new(Width, Height, EncodedPayloadLength,
+            HotX, HotY, OffsetX, OffsetY, artBytes.Slice(HeaderOffset, FrameHeaderBytes).ToArray());
+    }
 }

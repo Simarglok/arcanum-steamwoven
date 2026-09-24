@@ -29,6 +29,9 @@
           "SharpZipLib": "[1.4.2, )"
         }
       },
+      "arcanum.presentation": {
+        "type": "Project"
+      },
       "SharpZipLib": {
         "type": "CentralTransitive",
         "requested": "[1.4.2, )",

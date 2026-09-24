@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Arcanum.Data/Arcanum.Data.csproj" />
+    <ProjectReference Include="../Arcanum.Presentation/Arcanum.Presentation.csproj" />
   </ItemGroup>
 </Project>

@@ -42,7 +42,17 @@ macOS export: https://docs.godotengine.org/en/stable/tutorials/export/exporting_
 
 Open one DAT through the native file dialog. The viewer indexes only that archive and lists ART candidates whose raw names end in ASCII case-insensitive `.art\0`. Display names remove only the terminal NUL, render printable ASCII literally and every other byte as `\xHH`, and always include the original decimal ordinal. This preserves duplicate identity without guessing a code page or implementing archive precedence.
 
-Only the selected `DatEntry` is read. DAT stored and decoded entry caps and ART input cap are all 64 MiB. The viewer sends the selected payload directly to `ArtDecoder.Decode` with physical group, frame-in-group and requested palette selectors. Physical groups are file group indices, not directions.
+Only the selected `DatEntry` is read (bounded to 64 MiB), inspected once with `ArtDecoder.Inspect`, and retained only while it remains selected. `Inspect` reads checked headers and all frame metadata without eager RLE/RGBA decode. Physical groups are file group indices, not directions. The current frame is decoded from that retained byte array only when selection changes; it does not reread the DAT on every playback tick.
+
+## Animation inspection
+
+The mouse-accessible toolbar provides Play/Pause, Stop, previous/next Step, a frame selector, Loop/Play once, and exactly four speed choices: 0.25×, 0.5×, 1×, and 2×. Source FPS is displayed raw from the ART header. Playback is enabled only for source FPS 1..120 unless the explicit Manual FPS control is enabled and set to 1..120; the displayed effective FPS always identifies the selected override. These are inspector limits, not ART properties or evidence of original runtime timing.
+
+The timeline consumes monotonic `_Process(delta)` elapsed time, not draw calls. Invalid deltas (negative, NaN, or infinity) do nothing; finite stalls use direct loop modulo or bounded play-once completion rather than sequential catch-up decoding. The final frame in play-once is visible for its entire interval. Focus loss pauses without autoresume. Resize and fullscreen preserve timeline state. Manual frame selection pauses; group/palette changes retain playing/paused state and an in-range frame while restarting the interval.
+
+At most one decode is active and one newer target is retained. Entry/group/palette/frame changes advance generation guards, replace the pending target, and prevent stale completions from publishing. A synchronous bounded decode may finish after logical cancellation, but stale results never create Godot resources. Images and textures are created, updated, and disposed only on the Godot main thread. A decode failure pauses and records a recoverable status; that same failed target is not retried every tick, while a new valid selection can recover.
+
+Raw hotspot alignment is a diagnostic projection: frame top-left is `(-HotX, -HotY)` around a common anchor. Signed hotspot values are supported; `OffsetX` and `OffsetY` remain displayed metadata and do not accumulate movement. Group bounds determine Fit so different frame dimensions do not pump zoom. This is not a claim of original game placement, semantic direction, mirroring, or action-frame behavior.
 
 Decoder output is uploaded as packed `Image.Format.Rgba8` bytes with no channel swap, premultiplication, row flip, lighting, tint, grading, placement or mirroring. The canvas draws an alpha checkerboard, preserves aspect ratio, defaults to nearest 1:1, and supports bounded zoom, fit/reset and drag pan. Resizing and fullscreen do not change a selected archive, entry or selector state.
 

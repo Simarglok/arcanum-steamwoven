@@ -78,6 +78,7 @@ internal static class SyntheticFixture
         var payloadOffset = tableOffset + (frames.Length * FrameHeaderBytes);
         var art = new byte[payloadOffset + payloadBytes];
         WriteI32(art, 0, staticFlag ? 1 : 0);
+        WriteI32(art, 4, 12);
         WriteI32(art, 8, 8);
         WriteI32(art, 32, framesPerGroup);
 
@@ -107,6 +108,10 @@ internal static class SyntheticFixture
             WriteI32(art, frameOffset, frame.Width);
             WriteI32(art, frameOffset + 4, frame.Height);
             WriteI32(art, frameOffset + 8, frame.Payload.Length);
+            WriteI32(art, frameOffset + 12, frame.HotX);
+            WriteI32(art, frameOffset + 16, frame.HotY);
+            WriteI32(art, frameOffset + 20, frame.OffsetX);
+            WriteI32(art, frameOffset + 24, frame.OffsetY);
             frame.Payload.CopyTo(art, payloadCursor);
             payloadCursor += frame.Payload.Length;
         }
@@ -182,7 +187,7 @@ internal static class SyntheticFixture
         stream.Write(bytes);
     }
 
-    private sealed record ArtFixtureFrame(int Width, int Height, byte[] Payload);
+    private sealed record ArtFixtureFrame(int Width, int Height, byte[] Payload, int HotX = 0, int HotY = 0, int OffsetX = 0, int OffsetY = 0);
     private sealed record DatFixtureEntry(string Name, byte[] Payload, bool Zlib = false);
     private sealed record StoredDatFixtureEntry(DatFixtureEntry Entry, byte[] StoredPayload);
 }
@@ -198,12 +203,14 @@ internal static class GodotSelfTest
         Require(entries[0].DisplayName == "duplicate.art [ordinal 0]" && entries[1].DisplayName == "duplicate.art [ordinal 1]", "duplicate ordinal identity");
 
         var raw = ArtDecoder.Decode(archive.ReadEntry(entries[0].Entry), new ArtFrameSelection(0, 0, 2), ViewerState.DecoderOptions);
+        var inspected = ArtDecoder.Inspect(archive.ReadEntry(entries[1].Entry), ViewerState.DecoderOptions);
         var expected = new byte[]
         {
             0, 0, 0, 0, 31, 32, 33, 255, 34, 35, 36, 255,
             37, 38, 39, 255, 40, 41, 42, 255, 43, 44, 45, 255,
         };
         Require(raw.Width == 3 && raw.Height == 2 && raw.Frame.EncodedPayloadLength == 6, "raw frame metadata");
+        Require(inspected.Header.FramesPerSecond == 12 && inspected.Frames.Count == 16 && inspected.GetFrame(7, 1).Width == 2, "read-only animation metadata inspection");
         Require(raw.Rgba.SequenceEqual(expected), "decoder raw RGBA byte order or orientation");
 
         var rle = ArtDecoder.Decode(archive.ReadEntry(entries[0].Entry), new ArtFrameSelection(0, 1, 2), ViewerState.DecoderOptions);
