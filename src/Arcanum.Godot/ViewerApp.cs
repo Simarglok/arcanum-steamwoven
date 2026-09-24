@@ -11,12 +11,11 @@ public partial class ViewerApp : Control
     private DatArchive? _archive;
     private Texture2D? _texture;
     private IReadOnlyList<ViewerEntry> _entries = Array.Empty<ViewerEntry>();
-    private byte[]? _artBytes;
-    private ArtMetadata? _metadata;
-    private FrameRequest? _activeRequest;
-    private FrameRequest? _pendingRequest;
+    private SelectedArt? _selectedArt;
+    private readonly LatestDecodeQueue<FrameRequest> _decodeQueue = new();
     private FrameRequest? _displayedRequest;
-    private FrameRequest? _failedRequest;
+    private SelectedArt? _canvasArt;
+    private int? _canvasGroup;
     private long _assetGeneration;
     private long _selectionGeneration;
     private bool _updatingSelectors;
@@ -50,6 +49,8 @@ public partial class ViewerApp : Control
     {
         _closing = true;
         InvalidateRequests();
+        _canvasArt = null;
+        _canvasGroup = null;
         DisposeTexture();
         _archive?.Dispose();
         _archive = null;
@@ -184,7 +185,9 @@ public partial class ViewerApp : Control
     {
         var generation = ++_assetGeneration;
         ++_selectionGeneration;
-        InvalidateRequests();
+        ClearSelection();
+        _entries = Array.Empty<ViewerEntry>();
+        RebuildList();
         SetBusy("Opening DAT index…");
         DatArchive? opened = null;
         try
@@ -198,10 +201,6 @@ public partial class ViewerApp : Control
             opened = null;
             previous?.Dispose();
             _entries = ViewerState.ArtEntries(_archive);
-            _artBytes = null;
-            _metadata = null;
-            _canvas.ClearAsset();
-            DisposeTexture();
             RebuildList();
             SetStatus($"Indexed {_entries.Count} ART entries. Select one entry to inspect metadata and frames.");
         }
@@ -219,7 +218,7 @@ public partial class ViewerApp : Control
         if (sourceIndex < 0 || sourceIndex >= _entries.Count || _archive is null) return;
         var assetGeneration = _assetGeneration;
         var selectionGeneration = ++_selectionGeneration;
-        InvalidateRequests();
+        ClearSelection();
         SetBusy("Reading selected ART metadata…");
         try
         {
@@ -229,15 +228,14 @@ public partial class ViewerApp : Control
             try { loaded = await Task.Run(() => { var bytes = _archive.ReadEntry(entry); return (bytes, ArtDecoder.Inspect(bytes, ViewerState.DecoderOptions)); }); }
             finally { _archiveGate.Release(); }
             if (!IsCurrent(assetGeneration, selectionGeneration)) return;
-            _artBytes = loaded.Bytes;
-            _metadata = loaded.Metadata;
+            _selectedArt = new SelectedArt(assetGeneration, selectionGeneration, entry.Ordinal, loaded.Bytes, loaded.Metadata);
             _updatingSelectors = true;
-            _group.MaxValue = _metadata.Header.PhysicalGroupCount - 1;
-            _frame.MaxValue = _metadata.Header.FramesPerGroup - 1;
+            _group.MaxValue = _selectedArt.Metadata.Header.PhysicalGroupCount - 1;
+            _frame.MaxValue = _selectedArt.Metadata.Header.FramesPerGroup - 1;
             _palette.MaxValue = ViewerState.MaxRequestedPaletteSlot;
             _group.Value = _frame.Value = _palette.Value = 0;
             _updatingSelectors = false;
-            _timeline.ResetAsset(_metadata.Header.FramesPerGroup, _metadata.Header.FramesPerSecond);
+            _timeline.ResetAsset(_selectedArt.Metadata.Header.FramesPerGroup, _selectedArt.Metadata.Header.FramesPerSecond);
             SyncTimelineUi();
             RequestCurrentFrame();
         }
@@ -249,67 +247,87 @@ public partial class ViewerApp : Control
 
     private void ReconfigureSelection(bool manualFrame)
     {
-        if (_updatingSelectors || _metadata is null || _artBytes is null) return;
+        if (_updatingSelectors || _selectedArt is null) return;
         ++_selectionGeneration;
         InvalidateRequests();
         if (manualFrame) _timeline.Seek((int)_frame.Value);
-        else _timeline.ReconfigureSequence(_metadata.Header.FramesPerGroup);
+        else _timeline.ReconfigureSequence(_selectedArt.Metadata.Header.FramesPerGroup);
         SyncTimelineUi();
         RequestCurrentFrame();
     }
 
     private void RequestCurrentFrame()
     {
-        if (_artBytes is null || _metadata is null || _closing) return;
-        var request = new FrameRequest(_assetGeneration, _selectionGeneration, (int)_group.Value, _timeline.CurrentFrame, (int)_palette.Value);
-        if (_displayedRequest == request || _failedRequest == request || _activeRequest == request || _pendingRequest == request) return;
-        if (_activeRequest is not null) { _pendingRequest = request; return; }
+        var selected = _selectedArt;
+        if (selected is null || _closing) return;
+        var request = new FrameRequest(selected, _selectionGeneration, (int)_group.Value, _timeline.CurrentFrame, (int)_palette.Value);
+        if (_displayedRequest == request || !_decodeQueue.TryStart(request)) return;
         _ = DecodeAsync(request);
     }
 
     private async Task DecodeAsync(FrameRequest request)
     {
-        _activeRequest = request;
         try
         {
-            var bytes = _artBytes!;
+            var bytes = request.Art.Bytes;
             var decoded = await Task.Run(() => ArtDecoder.Decode(bytes, new ArtFrameSelection(request.Group, request.Frame, request.Palette), ViewerState.DecoderOptions));
-            if (!IsCurrent(request.AssetGeneration, request.SelectionGeneration) || _closing) return;
+            if (!IsCurrent(request) || _closing) return;
             if (decoded.Rgba.Count != checked(decoded.Width * decoded.Height * 4)) throw new ArtFormatException("Decoded frame has an invalid RGBA length.");
+            var layout = GroupLayout(request.Art.Metadata, request.Group);
             using var image = Image.CreateFromData(decoded.Width, decoded.Height, false, Image.Format.Rgba8, decoded.Rgba.ToArray());
-            var replacement = ImageTexture.CreateFromImage(image);
-            replacement.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
-            var layout = GroupLayout(request.Group);
-            var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
-            if (!_canvas.HasAsset) _canvas.ResetAsset(replacement, hotspot, layout);
-            else { _canvas.UpdateGroupLayout(layout); _canvas.UpdateFrame(replacement, hotspot); }
-            DisposeTexture();
-            _texture = replacement;
+            ImageTexture? replacement = null;
+            try
+            {
+                replacement = ImageTexture.CreateFromImage(image);
+                replacement.SetSizeOverride(new Vector2I(decoded.Width, decoded.Height));
+                var hotspot = new FrameHotspot(decoded.Frame.HotX, decoded.Frame.HotY);
+                if (!ReferenceEquals(_canvasArt, request.Art))
+                {
+                    _canvas.ResetAsset(replacement, hotspot, layout);
+                    _canvasArt = request.Art;
+                    _canvasGroup = request.Group;
+                }
+                else
+                {
+                    if (_canvasGroup != request.Group)
+                    {
+                        _canvas.UpdateGroupLayout(layout);
+                        _canvasGroup = request.Group;
+                    }
+
+                    _canvas.UpdateFrame(replacement, hotspot);
+                }
+
+                DisposeTexture();
+                _texture = replacement;
+                replacement = null;
+            }
+            finally
+            {
+                replacement?.Dispose();
+            }
             _displayedRequest = request;
-            _failedRequest = null;
-            _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
+            _metadataLabel.Text = $"{decoded.Width} × {decoded.Height}; raw hotspot ({decoded.Frame.HotX}, {decoded.Frame.HotY}); offset ({decoded.Frame.OffsetX}, {decoded.Frame.OffsetY}); requested palette {decoded.RequestedPaletteSlot}; effective {decoded.EffectivePaletteSlot}";
             SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
         }
         catch (Exception exception)
         {
-            if (IsCurrent(request.AssetGeneration, request.SelectionGeneration))
+            if (IsCurrent(request))
             {
                 _timeline.Pause();
-                _failedRequest = request;
+                _decodeQueue.MarkFailed(request);
                 SyncTimelineUi();
                 SetStatus(MapError(exception));
             }
         }
         finally
         {
-            _activeRequest = null;
-            var next = _pendingRequest;
-            _pendingRequest = null;
-            if (next is not null && next != _failedRequest && IsCurrent(next.AssetGeneration, next.SelectionGeneration)) _ = DecodeAsync(next);
+            var next = _decodeQueue.Complete(request, IsCurrent);
+            if (next is not null) _ = DecodeAsync(next);
         }
     }
 
-    private FrameCanvasGroupLayout GroupLayout(int group) => new(_metadata!.Frames.Skip(group * _metadata.Header.FramesPerGroup).Take(_metadata.Header.FramesPerGroup)
+    private static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)
         .Select(frame => new FrameCanvasFrame(frame.Width, frame.Height, frame.HotX, frame.HotY)));
 
     private void ApplyOverride()
@@ -343,12 +361,30 @@ public partial class ViewerApp : Control
 
     private void InvalidateRequests()
     {
-        _pendingRequest = null;
+        _decodeQueue.InvalidatePending();
         _displayedRequest = null;
-        _failedRequest = null;
     }
 
-    private bool IsCurrent(long assetGeneration, long selectionGeneration) => !_closing && assetGeneration == _assetGeneration && selectionGeneration == _selectionGeneration;
+    private void ClearSelection()
+    {
+        _selectedArt = null;
+        _canvasArt = null;
+        _canvasGroup = null;
+        InvalidateRequests();
+        _timeline.Stop();
+        _canvas.ClearAsset();
+        DisposeTexture();
+        if (IsInstanceValid(_metadataLabel)) _metadataLabel.Text = "No frame";
+        SyncTimelineUi();
+    }
+
+    private bool IsCurrent(long assetGeneration, long selectionGeneration) => !_closing &&
+        assetGeneration == _assetGeneration && selectionGeneration == _selectionGeneration;
+
+    private bool IsCurrent(FrameRequest request) => !_closing &&
+        request.Art.AssetGeneration == _assetGeneration &&
+        request.SelectionGeneration == _selectionGeneration &&
+        ReferenceEquals(request.Art, _selectedArt);
     private bool IsCurrentAsset(long generation) => !_closing && generation == _assetGeneration;
     private void DisposeTexture() { var previous = _texture; _texture = null; previous?.Dispose(); }
     private void ToggleFullscreen() => DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);
@@ -388,5 +424,6 @@ public partial class ViewerApp : Control
         catch (Exception exception) { GD.PushError(exception.Message); GetTree().Quit(1); }
     }
 
-    private sealed record FrameRequest(long AssetGeneration, long SelectionGeneration, int Group, int Frame, int Palette);
+    private sealed record SelectedArt(long AssetGeneration, long SelectionGeneration, int EntryOrdinal, byte[] Bytes, ArtMetadata Metadata);
+    private sealed record FrameRequest(SelectedArt Art, long SelectionGeneration, int Group, int Frame, int Palette);
 }

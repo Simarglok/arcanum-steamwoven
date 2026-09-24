@@ -52,8 +52,12 @@ internal static class SyntheticFixture
         var frames = new List<ArtFixtureFrame>();
         for (var group = 0; group < 8; group++)
         {
-            frames.Add(new ArtFixtureFrame(1, 1, [(byte)((group % 4) + 1)]));
-            frames.Add(new ArtFixtureFrame(2, 1, [2, (byte)(((group + 1) % 4) + 1)]));
+            // The first frame has a fixture-authored colour marker at its raw-hotspot
+            // anchor. The second is deliberately unequal and has a negative hotspot.
+            frames.Add(new ArtFixtureFrame(3, 3,
+                [1, 2, 3, 2, 4, 3, 1, 2, 3], HotX: 1, HotY: 1, OffsetX: group - 4, OffsetY: 4 - group));
+            frames.Add(new ArtFixtureFrame(4, 2,
+                [4, 2, 3, 1, 2, 3, 1, 2], HotX: -1, HotY: 0, OffsetX: -group, OffsetY: group));
         }
 
         return CreateArt(staticFlag: false, new Dictionary<int, byte[]>
@@ -210,13 +214,19 @@ internal static class GodotSelfTest
             37, 38, 39, 255, 40, 41, 42, 255, 43, 44, 45, 255,
         };
         Require(raw.Width == 3 && raw.Height == 2 && raw.Frame.EncodedPayloadLength == 6, "raw frame metadata");
-        Require(inspected.Header.FramesPerSecond == 12 && inspected.Frames.Count == 16 && inspected.GetFrame(7, 1).Width == 2, "read-only animation metadata inspection");
+        Require(inspected.Header.FramesPerSecond == 12 && inspected.Frames.Count == 16 && inspected.GetFrame(7, 1).Width == 4, "read-only animation metadata inspection");
         Require(raw.Rgba.SequenceEqual(expected), "decoder raw RGBA byte order or orientation");
 
         var rle = ArtDecoder.Decode(archive.ReadEntry(entries[0].Entry), new ArtFrameSelection(0, 1, 2), ViewerState.DecoderOptions);
         var directional = ArtDecoder.Decode(archive.ReadEntry(entries[1].Entry), new ArtFrameSelection(7, 1, 1), ViewerState.DecoderOptions);
         Require(rle.Width == 2 && rle.Height == 2 && rle.Frame.EncodedPayloadLength == 5, "RLE frame selection");
         Require(directional.GroupIndex == 7 && directional.FrameIndex == 1 && directional.Header.PhysicalGroupCount == 8, "physical group selection");
+        var anchoredDirectional = ArtDecoder.Decode(archive.ReadEntry(entries[1].Entry), new ArtFrameSelection(0, 0, 0), ViewerState.DecoderOptions);
+        Require(anchoredDirectional.Width == 3 && anchoredDirectional.Height == 3 && anchoredDirectional.Frame.HotX == 1 && anchoredDirectional.Frame.HotY == 1 &&
+                directional.Width == 4 && directional.Height == 2 && directional.Frame.HotX == -1 && directional.Frame.HotY == 0,
+            "unequal positive and negative synthetic hotspots");
+        Require(anchoredDirectional.Rgba.Skip(checked(((1 * anchoredDirectional.Width) + 1) * 4)).Take(4).SequenceEqual(new byte[] { 10, 11, 12, 255 }),
+            "fixture-authored common-anchor colour marker");
 
         RequireThrows<ArtFormatException>(() => ArtDecoder.Decode(archive.ReadEntry(entries[3].Entry), new ArtFrameSelection(0, 0, 0), ViewerState.DecoderOptions), "missing slot zero");
         var groupSelector = new SpinBox();
@@ -236,6 +246,8 @@ internal static class GodotSelfTest
 
         using var oversize = DatArchive.Open(new MemoryStream(SyntheticFixture.CreateOversizeDat()), ViewerState.ReaderOptions, leaveOpen: true);
         RequireThrows<DatLimitExceededException>(() => oversize.ReadEntry(oversize.Entries[0]), "oversize viewer entry limit");
+
+        VerifyLatestDecodeQueue();
 
         using var image = Image.CreateFromData(raw.Width, raw.Height, false, Image.Format.Rgba8, raw.Rgba.ToArray());
         using var texture = ImageTexture.CreateFromImage(image);
@@ -312,7 +324,38 @@ internal static class GodotSelfTest
         RequireThrows<FrameCanvasGeometryLimitException>(() => new FrameCanvasGroupLayout([new FrameCanvasFrame(1, 1, int.MinValue, 0)]), "FrameCanvas geometry precision limit");
         canvas.Free();
 
-        return "Godot synthetic DAT/ART self-test passed: duplicate ordinals, raw/RLE, groups/frames, palettes/fallback, valid-invalid-valid recovery, limits, RGBA8 texture, and FrameCanvas raw signed-hotspot geometry.";
+        return "Godot synthetic DAT/ART self-test passed: duplicate ordinals, raw/RLE, unequal signed hotspots and common-anchor marker, queue stale suppression/recovery, palettes/fallback, limits, RGBA8 texture, and FrameCanvas raw signed-hotspot geometry.";
+    }
+
+    private static void VerifyLatestDecodeQueue()
+    {
+        var queue = new LatestDecodeQueue<QueueRequest>();
+        var datOne = new QueueRequest(1, 1, 0, 0, 0, 0);
+        var entryOne = new QueueRequest(2, 2, 4, 0, 0, 0);
+        var group = entryOne with { SelectionGeneration = 3, Group = 1 };
+        var palette = group with { SelectionGeneration = 4, Palette = 2 };
+        var stop = palette with { SelectionGeneration = 5, Frame = 0 };
+        var reopened = new QueueRequest(3, 6, 4, 0, 0, 0);
+
+        Require(queue.TryStart(datOne) && queue.Active == datOne, "decode queue starts one active DAT request");
+        Require(!queue.TryStart(entryOne) && queue.Pending == entryOne, "decode queue holds entry replacement while active");
+        Require(!queue.TryStart(group) && !queue.TryStart(palette) && queue.Pending == palette, "decode queue coalesces group/palette to latest");
+        Require(queue.Complete(datOne, request => request.AssetGeneration == 2) == palette && queue.Active == palette,
+            "decode queue suppresses stale DAT completion and publishes latest current request");
+        queue.InvalidatePending();
+        Require(!queue.TryStart(stop) && queue.Pending == stop, "decode queue stop invalidates active result and requests frame zero");
+        Require(queue.Complete(palette, request => request.SelectionGeneration == 5) == stop && queue.Active == stop,
+            "decode queue suppresses stale palette completion after stop");
+        queue.InvalidatePending();
+        Require(queue.Complete(stop, _ => false) is null && queue.Active is null && queue.Pending is null,
+            "decode queue close clears pending work and prevents post-close publish");
+        queue.TryStart(reopened);
+        queue.MarkFailed(reopened);
+        Require(!queue.TryStart(reopened) && queue.Failed == reopened, "decode queue prevents a failed target retry storm");
+        Require(queue.Complete(reopened, request => request == reopened) is null && queue.Active is null, "decode queue completes failed target once");
+        queue.InvalidatePending();
+        Require(queue.TryStart(reopened) && queue.Complete(reopened, request => request == reopened) == null && queue.Active is null,
+            "decode queue reopens valid input after cancellation");
     }
 
     private static void RequireThrows<TException>(Action action, string name) where TException : Exception
@@ -336,4 +379,6 @@ internal static class GodotSelfTest
             throw new InvalidOperationException($"Self-test failed: {name}.");
         }
     }
+
+    private sealed record QueueRequest(long AssetGeneration, long SelectionGeneration, int EntryOrdinal, int Group, int Frame, int Palette);
 }
