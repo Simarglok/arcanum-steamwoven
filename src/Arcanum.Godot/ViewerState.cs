@@ -64,8 +64,19 @@ public static class ViewerState
     {
         group.MaxValue = 0;
         frame.MaxValue = 0;
-        // Palette availability belongs to decoder metadata. The requested range stays
-        // available while the initial slot-0 decode fails so another slot can recover.
+        palette.MaxValue = 0;
+        group.Value = 0;
+        frame.Value = 0;
+        palette.Value = 0;
+    }
+
+    public static void ConfigureEntrySelectors(SpinBox group, SpinBox frame, SpinBox palette, ArtMetadata metadata)
+    {
+        ArgumentNullException.ThrowIfNull(metadata);
+        group.MaxValue = metadata.Header.PhysicalGroupCount - 1;
+        frame.MaxValue = metadata.Header.FramesPerGroup - 1;
+        // Once inspected metadata has committed, retain all requested slots so an
+        // absent slot zero can recover through an explicit palette selection.
         palette.MaxValue = MaxRequestedPaletteSlot;
         group.Value = 0;
         frame.Value = 0;

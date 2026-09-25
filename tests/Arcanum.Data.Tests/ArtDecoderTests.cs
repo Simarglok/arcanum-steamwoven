@@ -70,6 +70,28 @@ public sealed class ArtDecoderTests
     }
 
     [TestMethod]
+    public void Inspect_returns_group_major_signed_frame_metadata_without_decoding_rgba()
+    {
+        var frames = Enumerable.Range(0, 16)
+            .Select(index => new Frame(1, 1, [1], -index, index, index + 2, -index - 2))
+            .ToArray();
+        var bytes = Fixture.Create(staticFlag: false, framesPerGroup: 2, frames,
+            new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) }, fps: -7);
+        var original = bytes.ToArray();
+
+        var metadata = ArtDecoder.Inspect(bytes);
+        var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(7, 1, 0));
+
+        Assert.AreEqual(-7, metadata.Header.FramesPerSecond);
+        Assert.AreEqual(16, metadata.Frames.Count);
+        Assert.AreEqual(-15, metadata.GetFrame(7, 1).HotX);
+        Assert.AreEqual(15, metadata.GetFrame(7, 1).HotY);
+        Assert.AreEqual(decoded.Frame.Width, metadata.GetFrame(7, 1).Width);
+        CollectionAssert.AreEqual(original, bytes);
+        Throws<ArgumentOutOfRangeException>(() => metadata.GetFrame(8, 0));
+    }
+
+    [TestMethod]
     public void Decode_handles_raw_rle_and_selected_only_rle_validation()
     {
         var rawControls = new Frame(2, 2, [0x84, 1, 2, 3]);

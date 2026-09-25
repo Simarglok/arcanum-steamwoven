@@ -2,7 +2,7 @@
 
 Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
 
-**Status:** `Arcanum.Data` implements the observed R1 `1TAD` DAT subset and a bounded one-physical-frame 8-bpp ART-to-RGBA decoder with raw metadata. `Arcanum.Godot` is a bounded macOS developer viewer that opens one user-selected DAT and displays one selected original ART physical frame. No engine, animation runtime, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
+**Status:** `Arcanum.Data` implements the observed R1 `1TAD` DAT subset, bounded 8-bpp ART-to-RGBA decode, and read-only ART metadata inspection. `Arcanum.Godot` is a bounded macOS developer animation inspector with source/override FPS controls, one physical group timeline, and raw-hotspot diagnostic placement. It is not a game animation runtime: no gameplay events, action-frame behavior, simulation, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
 
 ## Direction
 

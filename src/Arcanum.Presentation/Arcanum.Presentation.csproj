@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Presentation</AssemblyName>
+    <RootNamespace>Arcanum.Presentation</RootNamespace>
+  </PropertyGroup>
+</Project>

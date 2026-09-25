@@ -120,6 +120,30 @@ public sealed class ArtFrameMetadata
     public IReadOnlyList<byte> RawHeader { get; }
 }
 
+public sealed class ArtMetadata
+{
+    internal ArtMetadata(ArtHeader header, ArtFrameMetadata[] frames)
+    {
+        Header = header;
+        Frames = Array.AsReadOnly(frames);
+    }
+
+    public ArtHeader Header { get; }
+    // Frames are group-major: group * FramesPerGroup + frame.
+    public IReadOnlyList<ArtFrameMetadata> Frames { get; }
+
+    public ArtFrameMetadata GetFrame(int groupIndex, int frameIndex)
+    {
+        if (groupIndex < 0 || groupIndex >= Header.PhysicalGroupCount ||
+            frameIndex < 0 || frameIndex >= Header.FramesPerGroup)
+        {
+            throw new ArgumentOutOfRangeException(nameof(groupIndex), "Group or frame index is outside the ART physical frame table.");
+        }
+
+        return Frames[checked((groupIndex * Header.FramesPerGroup) + frameIndex)];
+    }
+}
+
 public sealed class ArtFrame
 {
     internal ArtFrame(ArtHeader header, ArtPalette?[] palettesBySlot, ArtFrameMetadata frame, int groupIndex, int frameIndex,
