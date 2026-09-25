@@ -2,15 +2,17 @@
 
 ## Readiness verdict
 
-**Not ready for implementation.** The selected map and one sector are
-reproducible, and the coordinate/sector arithmetic plus a fixed tile-table
-boundary are supported. Route B provides a fail-closed versioned record
-delimiter and current-ART prototype inheritance check for the pinned CE v119
-form, but the selected retail window is rejected at record 0 because its first
-word is observed version 1. The remaining evidence includes that actual object
-form, a two-class tile ART-ID-to-resource lookup, actual resource/frame
-selection, baseline/offset semantics, and static draw ordering. A future loader
-or Godot scene must fail closed rather than invent fallbacks.
+**Not ready for a whole-sector loader or scene.** The selected map and one
+sector are reproducible. Corrected framing establishes all base-stream sections
+through object window `17140..47287`, whose bounded v119 delimiter reaches the
+terminal count 317; the word `1` at offset `16388` is the roof-empty
+discriminator, not a retail object version. The bounded terrain investigation
+also establishes tile/facade lookup to a selected one-source ART winner and
+physical frame for representatives, but leaves 457 tile cells unresolved.
+Remaining evidence includes an object field/scenery classification, an explicit
+multi-source policy, C# baseline geometry, terrain overlap order, and static
+draw ordering. A future loader or Godot scene must fail closed rather than
+inventing fallbacks.
 
 This is a contract proposal for a later, separate task. It is not a production
 loader, renderer, Godot scene, or gameplay model.
@@ -22,8 +24,9 @@ loader, renderer, Godot scene, or gameplay model.
 | Module archive | caller-supplied read-only file matching the recorded size/SHA-256 | supports one exact sector entry |
 | Start selector | sole module `START_MAP` record | `Arcanum1-024-fixed`, `(92958, 82592)` |
 | Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
-| Tile prefix | 4,096 words after bounded light section | aggregate only; no pathname claim |
-| Object suffix | terminal count `317` | CE-v119 delimiter specified; selected input rejected at record 0 for observed version 1 |
+| Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence; 457 tile lookup failures retained |
+| Intermediate sections | roof then placeholder-controlled script, metadata/sound, and block sections | selected roof `empty=1`, placeholder `0xAA0004`; checked framing only |
+| Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; no object semantics or scenery classification |
 
 No archive-overrides policy is implied. The caller must supply an explicitly
 chosen source set; this research does not select between module, PATCH, or
@@ -32,20 +35,19 @@ loose files.
 ## Exact evidence still required before a renderable record
 
 For this sector with zero light records, the fixed tile table ends at byte
-16,388 and the terminal count starts at byte 47,287, leaving a 30,899-byte
-window for 317 serialized objects. Pinned CE's object-list reader uses the
-terminal count to walk that window as versioned object records, and its object
-reader branches by object identifier, type, type-dependent field mask, and
-field payload descriptors. This makes the following a **minimum** bounded
-schema, not permission for a general object parser:
+16,388, but that following word is the roof `empty` discriminator. The enabled
+intermediate sections end at `17140`; the terminal count starts at `47287`,
+leaving a 30,147-byte framed window for 317 serialized objects. Pinned CE's
+object-list reader uses the terminal count to walk that window as versioned
+records. This establishes a **minimum boundary** only, not permission for a
+general object parser:
 
-1. validate a supported record version and identifier form;
-2. validate the object type and its mask length before walking fields;
-3. consume every set field, including later variable-width payloads, and
-   resolve non-overridden current ART ID through exactly one validated
-   prototype; and
-4. keep the resulting delimiter evidence separate from a static-scenery or
-   ordering claim.
+1. retain the already proven framing and terminal-count consistency;
+2. identify the selected-version object field envelope before interpreting a
+   record;
+3. classify any proposed scenery record and prove its current-ART/prototype
+   chain; and
+4. keep that future result separate from a baseline or ordering claim.
 
 The source paths establish why no constant byte offset is safe; the measured
 window/count establish the bounded impact on this sector. They do not prove an
@@ -53,13 +55,13 @@ ART path, frame, placement baseline, or visual result. A future loader must
 reject the selected subset if it cannot satisfy this envelope, rather than
 choosing plausible offsets.
 
-Terrain has a separate small blocker. The real tile table contains two
-CE-reported high-nibble classes, but no selected type-specific rule has been
-verified from raw ART ID to the exact resource path. The required rule consists
-of the type/number/variation decomposition and a verified pathname lookup for
-one selected terrain record from each observed class. Only after that path is
-proven may the existing `DatArchive` select the entry and `ArtDecoder.Inspect`
-report metadata. Frame selection remains a separate explicit choice.
+Terrain has a bounded but incomplete result. The real table contains the two
+CE-attributed tile/facade classes; their type-specific decomposition, MES
+callback lookup, exact one-source ART candidate, and selected physical frame
+are documented for representative records. The future loader must still reject
+all unsupported classes, missing/duplicate candidates, invalid frame selectors,
+and the known 457 unresolved tile cells. It cannot infer archive precedence or
+claim this partial one-source result is a complete terrain scene.
 
 ## Candidate data model
 
@@ -69,17 +71,23 @@ has earned:
 ```text
 FrozenSlice
   mapName, sectorX, sectorY, sectorId, localOrigin, width=64, height=64
-  tileWords[4096]                 // opaque until a bounded resolver is proven
-  trailingObjectCount             // count only, no records
+  tileWords[4096]                 // raw evidence retained separately from resolution
+  trailingObjectCount             // count only, no object semantics
+
+TerrainResolution
+  localX, localY, rawId, kind, lookupStatus
+  sourceIdentity, artEntry, group, frame, palette, frameMetadata
+  projectedAnchor                 // no C# draw rectangle or baseline yet
 
 ProjectedPoint
   localX, localY, relativeScreenX, relativeScreenY
 ```
 
 It must reject a source whose fingerprint, exact selected entry, compressed
-flag, decoded byte bound, light count, fixed tile region, or terminal count
-does not meet the recorded contract. It must not reinterpret opaque tile words
-as resource paths or `trailingObjectCount` as a number of scenery objects.
+flag, decoded byte bound, light count, fixed tile region, intermediate-section
+framing, object-window boundary, or terminal count does not meet the recorded
+contract. It must not reinterpret unresolved words as resource paths or
+`trailingObjectCount` as a number of scenery objects.
 
 ## Coordinates and projection
 
@@ -113,23 +121,27 @@ hotspots or a viewer canvas offset are world-placement offsets.
 
 ## Resource and placement gates
 
-Before emitting a renderable terrain or scenery record, a future task must
-prove this complete chain for each included record. The first unresolved links
-are the bounded tile lookup and object envelope described above:
+Before emitting a terrain diagnostic record, a future task must validate this
+complete chain for each included record; it must retain an explicit error record
+for every failed lookup. The one-source experiment proves the marked
+tile/facade steps only for its representatives, not the policy or completeness
+of a general source set. Scenery begins at the still-unresolved object envelope:
 
 ```text
 selected sector word/object record
-  -> bounded lookup or prototype rule
+  -> supported tile/facade resolver OR future validated object/prototype rule
   -> exact archive/loose winner under an explicit policy
   -> ART entry
   -> ArtDecoder.Inspect metadata
-  -> explicitly selected frame/palette and baseline transform
+  -> type-specific selected frame/palette
+  -> independently validated C# baseline transform and ordering
 ```
 
 `DatArchive` and `ArtDecoder` are mandatory reuse points. No alternative DAT
 or ART parser is authorized by this contract. The known ART decoder's validated
-limits and palette/frame metadata are useful only after an exact resource path
-is established.
+limits and palette/frame metadata are useful only after exact lookup succeeds;
+an unsupported type, duplicate/missing candidate, failed frame bound, or one of
+the 457 unresolved tile cells produces no substitute image.
 
 ## Ordering proposal, deliberately blocked
 
@@ -153,11 +165,16 @@ be reported as original scene parity.
 
 ### Bounded C# loader research
 
-Inputs: the frozen module input and an independently specified resource source
-set. Outputs: rejected-or-opaque `FrozenSlice`, plus a small set of fully
-proven terrain/scenery references. Acceptance: synthetic truncation/count/
-missing-reference tests, selected real-data chain to ART, before/after input
-fingerprint, and no game payload committed.
+Inputs: the frozen module input, an explicitly ordered immutable source set,
+and the selected sector/framing contract. It must validate the fingerprint,
+light/table/intermediate-section/object-window bounds, use x-major local
+ordinals, accept only tile/facade classes, apply the documented lookup/frame
+rules, and return either `TerrainResolution` or a specific failure. Outputs:
+`FrozenSlice`, diagnostics for resolved and failed terrain words, and projected
+anchors only—no renderer baseline, static scenery, or fallback image. Acceptance:
+synthetic truncation/count/lookup/frame failures, coordinate examples, selected
+read-only real-data chains, source fingerprints before/after, and no game
+payload committed.
 
 ### Static Godot scene research
 

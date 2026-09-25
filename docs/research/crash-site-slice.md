@@ -18,7 +18,7 @@ that record's start coordinate. No neighbouring sector is included.
 | Map selector | Raw DAT entry `Rules\MapList.mes` is ordinal 14,935, compressed with `0x00000002`, and decodes to 5,454 bytes. Record 5,000 is the observed module's sole `START_MAP`; it names `Arcanum1-024-fixed` and gives `(92958, 82592)`. | experimentally verified locally; high |
 | Map properties | Raw entry `maps\Arcanum1-024-fixed\map.prp` is ordinal 8,023; its 24 decoded bytes begin with observed words `2`, `1`, and a little-endian pair `(128000, 128000)`. No semantic labels are assigned. | experimentally verified byte observation; high |
 | Sector selector | Pinned CE's `sector_id_from_loc` shifts both location coordinates by six and packs the results. Applied to the start coordinate, that gives `(1452, 1290)` and `86570436012`. The matching sector entry is ordinal 463 and decodes to 47,291 bytes. | entry and size experimentally verified; coordinate interpretation CE-derived; medium |
-| Object lead | The final signed little-endian word in the selected decoded bytes is `317`. Pinned CE's `objlist_load` treats that terminal value as the object-list count. | bytes verified; CE-derived interpretation; medium |
+| Framed object window | The final signed little-endian word is `317`. The corrected CE-derived section order places the object window at `17140..47287`; the bounded v119 delimiter consumes 317 records to the terminal count. | byte experiment plus CE-derived order; medium |
 
 CE is a single source lineage, not independent corroboration. Its Sustainable
 Use License remains applicable to that source; this document does not change
@@ -50,52 +50,50 @@ It opens the archive through `Arcanum.Data.DatArchive`, raw-name matches exactly
 one selected `.sec` entry, limits both stored and decoded payloads to 1 MiB,
 and fingerprints the input before and after its in-memory read.
 
-It reads only this small CE-correlated prefix subset:
+It frames only this small CE-correlated sector subset:
 
 1. signed little-endian light count, capped at 1,024;
 2. `count * 48` bytes of opaque serialized lights, skipped only after checked
    arithmetic and bounds validation;
-3. 4,096 four-byte ART identifiers; and
-4. the final signed little-endian object count, capped at 4,096.
+3. 4,096 four-byte ART identifiers;
+4. the roof discriminator and the placeholder-controlled script,
+   metadata/sound, and block sections, with checked count/length bounds; and
+5. the terminal signed little-endian object count, capped at 4,096, plus the
+   bounded v119 delimiter over the derived object window.
 
 The selected real input had zero serialized lights. The 4,096 values contain
 1,041 distinct raw identifiers and a mix of high-nibble classes, so this probe
 does **not** claim that every word is a directly resolvable terrain ART ID.
 It records no raw IDs or game payloads in the repository.
 
-## Bounded record and unresolved resource schemas
+## Corrected framing and bounded resource status
 
-The selected sector contains a now-measured object window rather than an
-undifferentiated future work item. With its observed zero light records, the
-tile table ends at decoded offset 16,388, the final count begins at 47,287, and
-the 30,899-byte intervening window has 317 records according to the terminal
-count. The probe records only those aggregates.
+The selected sector contains a measured object window rather than an
+undifferentiated suffix. With zero lights, the tile table ends at decoded offset
+16,388; its LE word `1` is the CE-derived roof `empty` discriminator, not an
+object version. The subsequent placeholder `0xAA0004` enables tile scripts,
+sector script, metadata/sound, and block-mask sections. The object window is
+therefore `17140..47287` (30,147 bytes), followed by the terminal count `317`.
+The bounded v119 delimiter reaches that terminal word for 317 records.
 
-Pinned CE's object-list and object-reader paths state that the count controls a
-sequence of versioned object records; each record branches through an object
-identifier and a type-dependent property mask before field payloads. Route B
-implements the complete fail-closed delimiter for pinned CE version 119,
-including every later variable-width field, direct current-AID/selected-location
-retention, and non-overridden concrete current-ART prototype resolution. On
-the selected retail window, however, the first LE
-word at offset 16,388 is observed `1`, not that supported version. The probe
-therefore rejects before record 0 rather than guessing another form or fixed
-offset. The compact supported contract/caps and CE lineage are in
-`docs/formats/maps.md`; this is a precise form mismatch, not a claim that any
-record is static scenery.
+This does not identify any object as static scenery or prove its current ART,
+baseline, or order. The object envelope's semantics remain a separate bounded
+research gate; no full object parser is authorized by this correction.
 
-The tile table exposes two observed high-nibble classes. A terrain chain is
-blocked only at their type-specific ART-ID decomposition and resource-path
-lookup rule. It is not acceptable to promote a raw word to an ART filename;
-once a path is proven, the existing `DatArchive` and `ArtDecoder.Inspect`
-provide the prescribed bounded archive and metadata steps.
+The two observed terrain classes are no longer blocked at raw-ID decomposition:
+the companion investigation records their CE-attributed MES callback lookup,
+one-source exact ART selection, physical frame selection, coverage failures,
+and projected anchors in `crash-site-terrain-resolution.md`. It remains
+unacceptable to promote a raw word to a filename, invent multi-source
+precedence, or call the unresolved whole sector ready.
 
 ## Explicitly not established
 
-- an ART/resource interpretation or static-scenery subset: the delimiter reads
-  only enough to validate record boundaries and current-ART inheritance;
-- the two observed tile-class lookup rules, tile/scenery filename resolution,
-  or a selected ART frame for this sector;
+- a static-scenery subset, object current-ART/prototype chain, object baseline,
+  or occlusion rule;
+- a complete terrain scene or multi-source precedence policy; the one-source
+  terrain resolver has 457 unresolved tile cells despite resolving all facade
+  cells in that experiment;
 - patch, loose-file, or archive conflict precedence;
 - object baselines, visual offsets, mirroring, height, occlusion, or measured
   scene parity;

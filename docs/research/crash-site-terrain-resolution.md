@@ -265,9 +265,10 @@ scene.
 * Establish a renderer-independent mapping from the selected ART geometry and
   CE blit behavior to a C# destination rectangle/baseline; include adjacent
   tile/facade overlap examples and deterministic terrain layer/order evidence.
-* Resolve the selected retail object envelope (the first word in its object
-  window remains version `1`, while the bounded delimiter supports CE v119
-  only) before reading or classifying static scenery.
+* Determine the selected-version object field envelope and classify an actual
+  static-scenery subset. The object window is now framed and its bounded v119
+  delimiter reaches the terminal count, but that does not prove object
+  semantics, current ART/prototype selection, baseline, or occlusion.
 * Preserve the distinction between these CE-source-derived rules and any
   independent retail-byte evidence. A CE-derived implementation or catalogue
   does not create a second corroborating lineage.
