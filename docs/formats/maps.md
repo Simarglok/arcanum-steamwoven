@@ -123,16 +123,22 @@ words, and bitset population must equal element count. No allocation follows a
 serialized count; every skip remains inside the selected 1 MiB entry cap and
 the remaining record window.
 
-When common bit 0 is set its I32 is the direct current ART ID. Otherwise the
-probe resolves the first ObjectID against exactly one `proto\\*.pro` candidate
-in the same immutable module without printing its name or identifier. A
-prototype is independently validated as version 119, first blocked ObjectID
-marker, own ObjectID, concrete type, exact type mask count, then every valid
-common/base/subtype field (not merely marked fields). Its own ID and type must
-match the instance; missing, duplicate, malformed, or mismatched candidates
-fail closed. This follows CE `proto.c::proto_init`, `obj.c::obj_field_fetch`,
-`obj_get_prototype_handle`, and `obj_pool.c::obj_pool_perm_lookup`; no default
-ART ID or recursive inheritance is invented.
+When common bit 0 is set, the probe retains that I32 as the direct current ART
+ID; it also retains common bit 1's optional location only while validating the
+supported record. Otherwise it resolves the first ObjectID against exactly one
+referenced `proto\\*.pro` candidate in the same immutable module, without
+printing its name or identifier. Candidate selection is restricted to the
+referenced canonical A-form six-digit basename prefix; an
+unlocatable persisted form fails closed instead of causing a scan/decode of
+unrelated prototype entries. A prototype is independently validated as version
+119, first blocked ObjectID marker, own ObjectID, concrete type, exact type
+mask count, then every valid common/base/subtype field (not merely marked
+fields); its first common I32 is returned as the concrete inherited current ART
+ID. Its own ID and type must match the instance; missing, duplicate, malformed,
+or mismatched candidates fail closed. This follows CE `proto.c::proto_init`,
+`obj.c::obj_field_fetch`, `obj_get_prototype_handle`, and
+`obj_pool.c::obj_pool_perm_lookup`; no default ART ID or recursive inheritance
+is invented.
 
 ## Required follow-up before resource resolution
 

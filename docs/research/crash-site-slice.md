@@ -75,8 +75,9 @@ Pinned CE's object-list and object-reader paths state that the count controls a
 sequence of versioned object records; each record branches through an object
 identifier and a type-dependent property mask before field payloads. Route B
 implements the complete fail-closed delimiter for pinned CE version 119,
-including every later variable-width field and non-overridden current-ART
-prototype validation. On the selected retail window, however, the first LE
+including every later variable-width field, direct current-AID/selected-location
+retention, and non-overridden concrete current-ART prototype resolution. On
+the selected retail window, however, the first LE
 word at offset 16,388 is observed `1`, not that supported version. The probe
 therefore rejects before record 0 rather than guessing another form or fixed
 offset. The compact supported contract/caps and CE lineage are in

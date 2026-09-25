@@ -77,23 +77,9 @@ internal static class Program
         var instances = ObjectWire.ParseWindow(sectorBytes.AsSpan(ObjectWindowStart, ObjectWindowEnd - ObjectWindowStart), ExpectedObjectCount);
         var referenced = instances.Where(instance => !instance.CurrentAidOverridden).Select(instance => instance.PrototypeId).ToArray();
         var prototypes = ObjectWire.ReadReferencedPrototypes(archive, referenced);
-        var inherited = 0;
-        var direct = 0;
-        foreach (var instance in instances)
-        {
-            if (instance.CurrentAidOverridden)
-            {
-                direct++;
-                continue;
-            }
-
-            var matches = prototypes.Where(prototype => prototype.Id.Matches(instance.PrototypeId)).ToArray();
-            if (matches.Length != 1 || matches[0].Type != instance.Type)
-            {
-                throw new InvalidDataException("An inherited current ART ID did not resolve to one matching validated prototype.");
-            }
-            inherited++;
-        }
+        var resolved = ObjectWire.ResolveCurrentAids(instances, prototypes);
+        var direct = instances.Count(instance => instance.CurrentAidOverridden);
+        var inherited = resolved.Count - direct;
 
         var after = InputFingerprint.Create(path);
         if (after != before)
@@ -136,10 +122,7 @@ internal static class Program
     {
         var valid = CreateFixture(lightCount: 0, tileId: 0, trailingObjectCount: 2);
         var sector = SectorSlice.Parse(valid, rejectNonTileArtIds: true);
-        if (sector.TrailingObjectCount != 2 || sector.ObjectPayloadBytes != 0)
-        {
-            throw new InvalidOperationException("The valid synthetic sector was not parsed as expected.");
-        }
+        if (sector.TrailingObjectCount != 2 || sector.ObjectPayloadBytes != 0) throw new InvalidOperationException("The valid synthetic sector was not parsed as expected.");
         AssertRejected(() => SectorSlice.Parse(valid[..3], true), "truncated light count");
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, -1), true), "negative light count");
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, MaxLights + 1), true), "light count over cap");
@@ -147,35 +130,65 @@ internal static class Program
         AssertRejected(() => SectorSlice.Parse(valid[..(sizeof(int) + (SectorTileCount * sizeof(uint)))], true), "missing terminal object count after complete tile table");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(0, 0x10000000, 0), true), "non-tile art identifier");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(0, 0, -1), true), "negative object count");
+        AssertProjection(0, 0, 0, 0); AssertProjection(1, 0, -40, 20); AssertProjection(0, 1, 40, 20); AssertProjection(30, 32, 80, 1240);
 
         var prototypeId = ObjectId.A(7001);
+        if (!ObjectWire.MatchesReferencedPrototypeName(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - synthetic.pro\0"), [prototypeId]) || ObjectWire.MatchesReferencedPrototypeName(System.Text.Encoding.ASCII.GetBytes("proto\\007002 - unrelated.pro\0"), [prototypeId])) throw new InvalidOperationException("Prototype candidate lookup was not bounded to the referenced ID.");
+        foreach (var id in new[] { ObjectId.Null(), prototypeId, ObjectId.Guid(23), ObjectId.P(7, 8, 9) })
+        {
+            var form = ObjectWire.CreateSyntheticInstance(3, id, true, true, currentAid: 101);
+            if (ObjectWire.ParseWindow(form, 1)[0].DirectCurrentAid != 101) throw new InvalidOperationException("A persisted ObjectID form did not retain the direct AID.");
+        }
         foreach (var type in Enumerable.Range(0, 18))
         {
-            var instance = ObjectWire.CreateSyntheticInstance(type, prototypeId, currentAidOverridden: true, includeAllFields: true);
+            var instance = ObjectWire.CreateSyntheticInstance(type, prototypeId, true, true, currentAid: 1000 + type);
             var parsed = ObjectWire.ParseWindow(instance, 1);
-            if (parsed.Count != 1 || parsed[0].Type != type || !parsed[0].CurrentAidOverridden)
-            {
-                throw new InvalidOperationException("A supported type or wire kind was not delimited in the synthetic suite.");
-            }
+            if (parsed.Count != 1 || parsed[0].Type != type || parsed[0].DirectCurrentAid != 1000 + type) throw new InvalidOperationException("A supported type or wire kind was not delimited in the synthetic suite.");
         }
 
-        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, currentAidOverridden: false, includeAllFields: true);
-        var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, currentAidOverridden: true, includeAllFields: true);
-        var chain = inherited.Concat(direct).ToArray();
-        if (ObjectWire.ParseWindow(chain, 2).Count != 2)
-        {
-            throw new InvalidOperationException("Synthetic record chaining failed.");
-        }
-        var prototype = ObjectWire.CreateSyntheticPrototype(3, prototypeId);
-        var parsedPrototype = ObjectWire.ParsePrototype(prototype);
-        if (!parsedPrototype.Id.Matches(prototypeId) || parsedPrototype.Type != 3)
-        {
-            throw new InvalidOperationException("Synthetic prototype validation failed.");
-        }
+        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true);
+        var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41);
+        var chained = ObjectWire.ParseWindow(inherited.Concat(direct).ToArray(), 2);
+        if (chained.Count != 2 || chained[0].Location is null || chained[1].DirectCurrentAid != 41) throw new InvalidOperationException("Synthetic record chaining or early-field retention failed.");
+        var prototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73));
+        if (!prototype.Id.Matches(prototypeId) || prototype.Type != 3 || prototype.CurrentAid != 73) throw new InvalidOperationException("Synthetic prototype validation failed.");
+        if (!ObjectWire.ResolveCurrentAids(chained, [prototype]).SequenceEqual([73, 41])) throw new InvalidOperationException("Direct and inherited AID resolution did not return concrete values.");
+        AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, []), "missing prototype");
+        AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [prototype, prototype]), "duplicate prototype");
+        AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(4, prototypeId, 73))]), "type-mismatched prototype");
+        AssertRejected(() => ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, 73)[..^1]), "malformed prototype");
+
         AssertRejected(() => ObjectWire.ParseWindow(WithI32(direct, 0, 118), 1), "wrong object version");
         AssertRejected(() => ObjectWire.ParseWindow(direct[..^1], 1), "one-byte record truncation");
-        AssertRejected(() => ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(18, prototypeId, true, false), 1), "reserved object type");
+        AssertRejected(() => ObjectWire.ParseWindow(ObjectWire.CreateUncheckedInstance(18, prototypeId), 1), "type 18");
+        AssertRejected(() => ObjectWire.ParseWindow(ObjectWire.CreateUncheckedInstance(19, prototypeId), 1), "type 19");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI16(direct, 4, -2), 1), "runtime ObjectID form");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI16(direct, 4, -1), 1), "prototype ObjectID marker in sector");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI16(direct, 4, 4), 1), "invalid ObjectID form");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI16(direct, 56, 0), 1), "field-count mismatch");
+        AssertRejected(() => ObjectWire.ParseWindow(WithU32(direct, 62, 0x80000000), 1), "reserved mask bit");
         AssertRejected(() => ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, invalidPresence: true), 1), "invalid presence byte");
+
+        var stringFixture = ObjectWire.CreateSyntheticSingleField(15, WireKind.OptString, out var stringOffset);
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(stringFixture, stringOffset + 1, -1), 1), "negative string length");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(stringFixture, stringOffset + 1, MaxDecodedSectorBytes + 1), 1), "oversized string length");
+        AssertRejected(() => ObjectWire.ParseWindow(WithByte(stringFixture, stringOffset + 5, 1), 1), "missing string NUL");
+        AssertRejected(() => ObjectWire.ParseWindow(stringFixture[..^1], 1), "truncated string");
+
+        var arrayFixture = ObjectWire.CreateSyntheticSingleField(3, WireKind.ArrU32, out var arrayOffset);
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 1, 8), 1), "array element size mismatch");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 5, -1), 1), "negative array count");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 5, (MaxDecodedSectorBytes / 4) + 1), 1), "oversized array count");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 17, -1), 1), "negative bitset word count");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 17, (MaxDecodedSectorBytes / 4) + 1), 1), "oversized bitset word count");
+        AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 17, 1), 1), "bitset count mismatch");
+        AssertRejected(() => ObjectWire.ParseWindow(WithU32(arrayFixture, arrayOffset + 21, 0), 1), "bitset popcount mismatch");
+        AssertRejected(() => ObjectWire.ParseWindow(arrayFixture[..^1], 1), "truncated array or bitset");
+    }
+
+    private static void AssertProjection(int localX, int localY, int expectedX, int expectedY)
+    {
+        if (checked(40 * (localY - localX)) != expectedX || checked(20 * (localY + localX)) != expectedY) throw new InvalidOperationException("Synthetic numeric projection regression failed.");
     }
 
     private static byte[] CreateFixture(int lightCount, uint tileId, int trailingObjectCount)
@@ -192,6 +205,27 @@ internal static class Program
     {
         var copy = source.ToArray();
         BinaryPrimitives.WriteInt32LittleEndian(copy.AsSpan(offset), value);
+        return copy;
+    }
+
+    private static byte[] WithI16(byte[] source, int offset, short value)
+    {
+        var copy = source.ToArray();
+        BinaryPrimitives.WriteInt16LittleEndian(copy.AsSpan(offset), value);
+        return copy;
+    }
+
+    private static byte[] WithU32(byte[] source, int offset, uint value)
+    {
+        var copy = source.ToArray();
+        BinaryPrimitives.WriteUInt32LittleEndian(copy.AsSpan(offset), value);
+        return copy;
+    }
+
+    private static byte[] WithByte(byte[] source, int offset, byte value)
+    {
+        var copy = source.ToArray();
+        copy[offset] = value;
         return copy;
     }
 
@@ -233,6 +267,9 @@ internal static class Program
     private readonly record struct ObjectId(short Type, byte[] Payload)
     {
         public static ObjectId A(int value) { var payload = new byte[16]; BinaryPrimitives.WriteInt32LittleEndian(payload, value); return new ObjectId(1, payload); }
+        public static ObjectId Null() => new(0, new byte[16]);
+        public static ObjectId Guid(byte seed) { var payload = new byte[16]; payload[0] = seed; return new ObjectId(2, payload); }
+        public static ObjectId P(long location, int temporaryId, int mapId) { var payload = new byte[16]; BinaryPrimitives.WriteInt64LittleEndian(payload, location); BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(8), temporaryId); BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(12), mapId); return new ObjectId(3, payload); }
         public bool Matches(ObjectId other)
         {
             if (Type != other.Type) return false;
@@ -240,8 +277,11 @@ internal static class Program
         }
     }
 
-    private sealed record InstanceInfo(ObjectId PrototypeId, int Type, bool CurrentAidOverridden);
-    private sealed record PrototypeInfo(ObjectId Id, int Type);
+    private sealed record InstanceInfo(ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location)
+    {
+        public bool CurrentAidOverridden => DirectCurrentAid.HasValue;
+    }
+    private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid);
 
     private static class ObjectWire
     {
@@ -280,17 +320,36 @@ internal static class Program
             }).ToArray();
             if (wanted.Length == 0) return [];
             var found = new List<PrototypeInfo>();
-            foreach (var entry in archive.Entries.Where(IsPrototypeEntry))
+            foreach (var entry in archive.Entries.Where(entry => IsReferencedPrototypeEntry(entry, wanted)))
             {
                 if (entry.DeclaredOutputSize > MaxDecodedSectorBytes) throw new InvalidDataException("A candidate prototype exceeds the 1 MiB read cap.");
                 var prototype = ParsePrototype(archive.ReadEntry(entry));
-                if (wanted.Any(id => id.Matches(prototype.Id))) found.Add(prototype);
+                if (!wanted.Any(id => id.Matches(prototype.Id))) throw new InvalidDataException("A selected prototype candidate does not match its referenced ObjectID.");
+                found.Add(prototype);
             }
             foreach (var id in wanted)
             {
                 if (found.Count(prototype => prototype.Id.Matches(id)) != 1) throw new InvalidDataException("A referenced prototype is missing or duplicated in the immutable module.");
             }
             return found;
+        }
+
+        public static List<int> ResolveCurrentAids(IEnumerable<InstanceInfo> instances, IReadOnlyList<PrototypeInfo> prototypes)
+        {
+            var resolved = new List<int>();
+            foreach (var instance in instances)
+            {
+                if (instance.DirectCurrentAid is int direct)
+                {
+                    resolved.Add(direct);
+                    continue;
+                }
+
+                var matches = prototypes.Where(prototype => prototype.Id.Matches(instance.PrototypeId)).ToArray();
+                if (matches.Length != 1 || matches[0].Type != instance.Type) throw new InvalidDataException("An inherited current ART ID did not resolve to one matching validated prototype.");
+                resolved.Add(matches[0].CurrentAid);
+            }
+            return resolved;
         }
 
         public static PrototypeInfo ParsePrototype(ReadOnlySpan<byte> bytes)
@@ -302,9 +361,11 @@ internal static class Program
             var id = ReadObjectId(ref cursor, allowBlocked: false);
             var type = ReadType(ref cursor);
             ReadMasks(ref cursor, type, prototype: true, out _);
-            foreach (var kind in FieldsFor(type)) Skip(ref cursor, kind, requireNul: true);
+            var fields = FieldsFor(type);
+            var currentAid = cursor.I32();
+            for (var field = 1; field < fields.Count; field++) Skip(ref cursor, fields[field], requireNul: true);
             if (!cursor.AtEnd) throw new InvalidDataException("Prototype entry contains trailing bytes.");
-            return new PrototypeInfo(id, type);
+            return new PrototypeInfo(id, type, currentAid);
         }
 
         private static InstanceInfo ParseInstance(ref Cursor cursor)
@@ -319,14 +380,16 @@ internal static class Program
             if (numFields < 0) throw new InvalidDataException("Instance has a negative field count.");
             var set = ReadMasks(ref cursor, type, prototype: false, out var popcount);
             if (numFields != popcount || numFields > 94) throw new InvalidDataException("Instance field count does not match its valid override mask.");
-            var currentAid = false;
+            int? currentAid = null;
+            long? location = null;
             for (var field = 0; field < fields.Count; field++)
             {
                 if (!set[field]) continue;
-                if (field == 0) currentAid = true;
-                Skip(ref cursor, fields[field], requireNul: true);
+                if (field == 0) currentAid = cursor.I32();
+                else if (field == 1) location = cursor.Presence() ? cursor.I64() : null;
+                else Skip(ref cursor, fields[field], requireNul: true);
             }
-            return new InstanceInfo(prototype, type, currentAid);
+            return new InstanceInfo(prototype, type, currentAid, location);
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)
@@ -373,6 +436,26 @@ internal static class Program
         private static int ReadType(ref Cursor cursor) { var type = cursor.I32(); if (type is < 0 or > 17) throw new InvalidDataException("Object type is outside the supported concrete range."); return type; }
         private static void RequireVersion(ref Cursor cursor) { var version = cursor.I32(); if (version != ExpectedObjectVersion) throw new InvalidDataException($"Object version {version} is unsupported."); }
 
+        private static bool IsReferencedPrototypeEntry(DatEntry entry, IReadOnlyList<ObjectId> wanted)
+        {
+            if (!IsPrototypeEntry(entry)) return false;
+            return MatchesReferencedPrototypeName(entry.RawNameBytes.ToArray(), wanted);
+        }
+
+        public static bool MatchesReferencedPrototypeName(ReadOnlySpan<byte> rawName, IReadOnlyList<ObjectId> wanted)
+        {
+            if (rawName.Length == 0 || rawName[^1] != 0) return false;
+            var name = System.Text.Encoding.ASCII.GetString(rawName[..^1]);
+            foreach (var id in wanted)
+            {
+                if (id.Type != 1) continue;
+                var value = BinaryPrimitives.ReadInt32LittleEndian(id.Payload);
+                var prefix = $"proto\\{value.ToString("D6", System.Globalization.CultureInfo.InvariantCulture)} - ";
+                if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
+            }
+            return false;
+        }
+
         private static ObjectId ReadObjectId(ref Cursor cursor, bool allowBlocked)
         {
             var type = cursor.I16(); cursor.Skip(6); var payload = cursor.Bytes(16).ToArray();
@@ -418,27 +501,44 @@ internal static class Program
             return values.ToArray();
         }
 
-        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false)
+        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0)
         {
             var fields = FieldsFor(type); var masks = new uint[MaskWords(type)];
             for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == 0 && currentAidOverridden)) SetBit(type, masks, index);
             if (!currentAidOverridden) ClearBit(type, masks, 0);
             var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, prototype); AddObjectId(list, ObjectId.A(17)); AddI32(list, type); AddI16(list, checked((short)masks.Sum(mask => BitOperations.PopCount(mask)))); foreach (var mask in masks) AddU32(list, mask);
-            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == 1);
+            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == 1, index == 0 ? currentAid : 0);
             return list.ToArray();
         }
 
-        public static byte[] CreateSyntheticPrototype(int type, ObjectId id)
+        public static byte[] CreateSyntheticPrototype(int type, ObjectId id, int currentAid)
         {
             var fields = FieldsFor(type);
             var masks = new uint[MaskWords(type)];
             for (var index = 0; index < fields.Count; index++) SetBit(type, masks, index);
-            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); foreach (var kind in fields) AddWire(list, kind, false); return list.ToArray();
+            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); for (var index = 0; index < fields.Count; index++) AddWire(list, fields[index], false, index == 0 ? currentAid : 0); return list.ToArray();
         }
 
-        private static void AddWire(List<byte> list, WireKind kind, bool invalidPresence)
+        public static byte[] CreateUncheckedInstance(int encodedType, ObjectId prototype)
         {
-            if (kind == WireKind.I32) { AddI32(list, 0); return; }
+            var bytes = CreateSyntheticInstance(3, prototype, true, false);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), encodedType);
+            return bytes;
+        }
+
+        public static byte[] CreateSyntheticSingleField(int type, WireKind kind, out int payloadOffset)
+        {
+            var fields = FieldsFor(type);
+            var field = Array.IndexOf(fields.ToArray(), kind);
+            if (field < 0) throw new InvalidOperationException("The requested synthetic wire kind is absent from this type.");
+            var masks = new uint[MaskWords(type)]; SetBit(type, masks, field);
+            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, ObjectId.A(7001)); AddObjectId(list, ObjectId.A(17)); AddI32(list, type); AddI16(list, 1); foreach (var mask in masks) AddU32(list, mask);
+            payloadOffset = list.Count; AddWire(list, kind, false, 0); return list.ToArray();
+        }
+
+        private static void AddWire(List<byte> list, WireKind kind, bool invalidPresence, int i32Value)
+        {
+            if (kind == WireKind.I32) { AddI32(list, i32Value); return; }
             if (kind == WireKind.OptI64) { list.Add(invalidPresence ? (byte)2 : (byte)1); list.AddRange(new byte[8]); return; }
             if (kind == WireKind.OptString) { list.Add(1); AddI32(list, 0); list.Add(0); return; }
             if (kind == WireKind.OptObjectId) { list.Add(1); AddObjectId(list, ObjectId.A(1)); return; }
@@ -475,6 +575,7 @@ internal static class Program
         public int Remaining => _bytes.Length - _offset; public bool AtEnd => _offset == _bytes.Length;
         public short I16() { var value = BinaryPrimitives.ReadInt16LittleEndian(Bytes(2)); return value; }
         public int I32() { var value = BinaryPrimitives.ReadInt32LittleEndian(Bytes(4)); return value; }
+        public long I64() { var value = BinaryPrimitives.ReadInt64LittleEndian(Bytes(8)); return value; }
         public uint U32() { var value = BinaryPrimitives.ReadUInt32LittleEndian(Bytes(4)); return value; }
         public bool Presence() { var value = Bytes(1)[0]; if (value is not 0 and not 1) throw new InvalidDataException("Optional wire value has a non-canonical presence byte."); return value == 1; }
         public ReadOnlySpan<byte> Bytes(int count) { if (count < 0 || count > Remaining) throw new InvalidDataException("Object record is truncated."); var result = _bytes.Slice(_offset, count); _offset += count; return result; }

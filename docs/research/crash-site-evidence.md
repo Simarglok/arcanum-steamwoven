@@ -47,7 +47,7 @@ and must not be committed or reported.
 
 | Check | Result |
 | --- | --- |
-| Crash Site probe synthetic suite | PASS: preserved sector-boundary cases plus every supported wire kind/type layout, direct/inherited current ART ID, full prototype entry, record chaining, reserved type, bad optional presence, and one-byte record truncation are exercised |
+| Crash Site probe synthetic suite | PASS: preserved sector-boundary cases; ObjectID forms 0/1/2/3 and invalid/runtime/prototype forms; all supported type layouts plus rejected 18/19; masks/counts/presence; string/array/bitset bounds, sizes, NUL, population and truncation; full prototype lookup faults; direct/inherited concrete ART values; late variable fields; and numeric projection examples are exercised |
 | Read-only selected-sector run | FAIL CLOSED (expected): input size/SHA were unchanged before/after; sector aggregation still resolves ordinal 463, 47,291 decoded bytes, a 30,899-byte / 317-record window; its first LE word is unsupported version `1`, so no object bytes, IDs, names, or prototype candidates are emitted or interpreted |
 | Existing DAT synthetic tests | PASS: `Arcanum.Data.Tests` passed 25/25 in the available .NET 8 compatibility run; canonical locked-SDK reproduction remains separately recorded below |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test` |
@@ -57,11 +57,14 @@ They intentionally do not enumerate raw IDs or asset names.
 
 ## Probe boundary
 
-`Arcanum.CrashSiteProbe` reuses `DatArchive`; it adds only a narrowly bounded
-sector-prefix inspection. It caps the decoded sector at 1 MiB and validates
-all arithmetic before a count-dependent region is read. It does not parse
-light records, object records, MES, MOB, PRO, or ART data, and does not write
-or export decoded bytes.
+`Arcanum.CrashSiteProbe` reuses `DatArchive`; it adds a narrowly bounded
+sector-prefix inspection plus a supported-v119 synthetic object/prototype
+delimiter. It caps the decoded sector and each decoded selected prototype at
+1 MiB and validates all arithmetic before a count-dependent region is read.
+The selected real run rejects before record 0, so it does not parse its object
+records or any PRO entry. The supported synthetic path retains only direct or
+inherited current-AID values and the optional selected location needed to
+validate resolution; it writes or exports no decoded bytes, names, or IDs.
 
 The strict synthetic mode rejects an unexpected non-tile high-nibble class.
 The real probe records those classes rather than assuming the whole table has
@@ -95,11 +98,11 @@ bytes, bounded strings, and bounded sparse arrays with validated element size
 and bitset population. The probe would parse exactly 317 records from offsets `16388..47287` or
 reject the module without retaining field payloads.
 
-If current ART ID is not directly overridden, the probe scans only module
-`proto\\*.pro` candidates, validates each referenced prototype's complete
-versioned entry, and requires exactly one semantic ObjectID/type match. The
-inherited ART ID is its first common I32 field. Missing, duplicate, malformed,
-or mismatched candidates are a fail-closed result. The full wire contract and
+If current ART ID is not directly overridden, the probe selects only the
+referenced canonical-A six-digit-prefix `proto\\*.pro` candidate, validates that prototype's
+complete versioned entry, and requires exactly one semantic ObjectID/type
+match. The inherited ART ID is its first common I32 field. Missing, duplicate,
+malformed, unlocatable, or mismatched candidates are a fail-closed result. The full wire contract and
 pinned function-level lineage are in `docs/formats/maps.md`; the source list
 now includes `sector_object_list.c`, `obj.c`, `obj.h`, `obj_private.c`,
 `obj_id.h`, `sa.c`, `proto.c`, and `obj_pool.c` at the immutable CE revision.
