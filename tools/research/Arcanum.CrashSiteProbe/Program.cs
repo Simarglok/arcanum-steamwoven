@@ -15,9 +15,8 @@ internal static class Program
     private const int MaxLights = 1_024;
     private const int MaxDecodedSectorBytes = 1_024 * 1_024;
     private const int ExpectedObjectVersion = 119;
-    private const int ExpectedObjectCount = 317;
-    private const int ObjectWindowStart = 16_388;
-    private const int ObjectWindowEnd = 47_287;
+    private const int ExpectedTileEnd = 16_388;
+    private const int ExpectedTrailingInt32 = 317;
     private const long ExpectedModuleBytes = 355_938_305;
     private const string ExpectedModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
 
@@ -70,17 +69,12 @@ internal static class Program
 
         var sectorBytes = archive.ReadEntry(entry);
         var sector = SectorSlice.Parse(sectorBytes, rejectNonTileArtIds: false);
-        if (sector.TrailingObjectCount != ExpectedObjectCount || sector.ObjectPayloadBytes != ObjectWindowEnd - ObjectWindowStart)
+        var framing = SectorFraming.Parse(sectorBytes, sector.LightCount);
+        if (framing.TileEnd != ExpectedTileEnd || sector.TrailingInt32 != ExpectedTrailingInt32)
         {
-            throw new InvalidDataException("The selected sector no longer matches the frozen object-window boundary.");
+            throw new InvalidDataException("The selected sector no longer matches the frozen prefix and terminal framing measurements.");
         }
-
-        var instances = ObjectWire.ParseWindow(sectorBytes.AsSpan(ObjectWindowStart, ObjectWindowEnd - ObjectWindowStart), ExpectedObjectCount);
-        var referenced = instances.Where(instance => !instance.CurrentAidOverridden).Select(instance => instance.PrototypeId).ToArray();
-        var prototypes = ObjectWire.ReadReferencedPrototypes(archive, referenced);
-        var resolved = ObjectWire.ResolveCurrentAids(instances, prototypes);
-        var direct = instances.Count(instance => instance.CurrentAidOverridden);
-        var inherited = resolved.Count - direct;
+        var instances = ObjectWire.ParseWindow(sectorBytes.AsSpan(framing.ObjectStart, framing.ObjectBytes), sector.TrailingInt32);
 
         var after = InputFingerprint.Create(path);
         if (after != before)
@@ -90,9 +84,19 @@ internal static class Program
 
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
         Console.WriteLine($"sector ordinal={entry.Ordinal} flags=0x{entry.Flags:x8} decoded_bytes={entry.DeclaredOutputSize}");
-        Console.WriteLine($"sector lights={sector.LightCount} tiles={SectorTileCount} distinct_tile_art_ids={sector.DistinctTileArtIds} invalid_tile_art_ids={sector.InvalidTileArtIds} non_tile_art_ids={sector.NonTileArtIds} object_payload_bytes={sector.ObjectPayloadBytes} trailing_object_count={sector.TrailingObjectCount}");
+        Console.WriteLine($"sector lights={sector.LightCount} tiles={SectorTileCount} distinct_tile_art_ids={sector.DistinctTileArtIds} invalid_tile_art_ids={sector.InvalidTileArtIds} non_tile_art_ids={sector.NonTileArtIds}");
         Console.WriteLine($"sector art_type_counts={string.Join(',', sector.ArtTypeCounts.Select(count => count.ToString()))}");
-        Console.WriteLine($"objects records={instances.Count} consumed_bytes={ObjectWindowEnd - ObjectWindowStart} cursor={ObjectWindowEnd} direct_current_aid={direct} inherited_current_aid={inherited} validated_prototypes={prototypes.Count}");
+        Console.WriteLine($"framing light_count start=0 length=4 end=4 value={sector.LightCount}");
+        Console.WriteLine($"framing tile_words start={framing.TileStart} length={framing.TileBytes} end={framing.TileEnd} formula=4+(light_count*48),4096*4");
+        Console.WriteLine($"framing roof start={framing.RoofStart} length={framing.RoofBytes} end={framing.RoofEnd} empty={framing.RoofEmpty}");
+        Console.WriteLine($"framing placeholder start={framing.PlaceholderStart} length=4 end={framing.PlaceholderEnd} value=0x{framing.Placeholder:x6}");
+        Console.WriteLine($"framing tile_scripts start={framing.TileScriptsStart} length={framing.TileScriptsBytes} end={framing.TileScriptsEnd} count={framing.TileScriptCount}");
+        Console.WriteLine($"framing sector_script start={framing.SectorScriptStart} length={framing.SectorScriptBytes} end={framing.SectorScriptEnd}");
+        Console.WriteLine($"framing metadata_and_sound start={framing.MetadataAndSoundStart} length={framing.MetadataAndSoundBytes} end={framing.MetadataAndSoundEnd}");
+        Console.WriteLine($"framing block_mask start={framing.BlockMaskStart} length={framing.BlockMaskBytes} end={framing.BlockMaskEnd}");
+        Console.WriteLine($"framing objects start={framing.ObjectStart} length={framing.ObjectBytes} end={framing.ObjectEnd} count={sector.TrailingInt32} first_le_i32={framing.FirstObjectVersion}");
+        Console.WriteLine($"framing trailing_i32 start={framing.TrailingInt32Start} length=4 end={framing.TrailingInt32End} value={sector.TrailingInt32}");
+        Console.WriteLine($"objects records={instances.Count} consumed_bytes={framing.ObjectBytes} cursor={framing.ObjectEnd} current_aid_resolution=not_requested");
         Console.WriteLine("integrity before_after_match=true");
     }
 
@@ -111,9 +115,10 @@ internal static class Program
 
     private static void SelfTest()
     {
-        var valid = CreateFixture(lightCount: 0, tileId: 0, trailingObjectCount: 2);
+        var valid = CreateFramedFixture(trailingObjectCount: 2);
         var sector = SectorSlice.Parse(valid, rejectNonTileArtIds: true);
-        if (sector.TrailingObjectCount != 2 || sector.ObjectPayloadBytes != 0) throw new InvalidOperationException("The valid synthetic sector was not parsed as expected.");
+        var framing = SectorFraming.Parse(valid, sector.LightCount);
+        if (sector.TrailingInt32 != 2 || framing.TileEnd != 16_388 || framing.RoofEmpty != 1 || framing.Placeholder != 0xAA0001 || framing.TileScriptCount != 0 || framing.ObjectBytes != 0) throw new InvalidOperationException("The valid synthetic sector framing was not parsed as expected.");
         AssertRejected(() => SectorSlice.Parse(valid[..3], true), "truncated light count");
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, -1), true), "negative light count");
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, MaxLights + 1), true), "light count over cap");
@@ -121,6 +126,12 @@ internal static class Program
         AssertRejected(() => SectorSlice.Parse(valid[..(sizeof(int) + (SectorTileCount * sizeof(uint)))], true), "missing terminal object count after complete tile table");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(0, 0x10000000, 0), true), "non-tile art identifier");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(0, 0, -1), true), "negative object count");
+        AssertRejected(() => SectorFraming.Parse(valid[..(ExpectedTileEnd + 3)], 0), "truncated roof discriminator");
+        AssertRejected(() => SectorFraming.Parse(WithI32(valid, ExpectedTileEnd, 2), 0), "invalid roof discriminator");
+        AssertRejected(() => SectorFraming.Parse(WithI32(valid, ExpectedTileEnd + sizeof(int), 0xAA0005), 0), "invalid placeholder");
+        AssertRejected(() => SectorFraming.Parse(WithI32(valid, ExpectedTileEnd + (sizeof(int) * 2), SectorTileCount + 1), 0), "oversized tile-script count");
+        var completeFraming = SectorFraming.Parse(CreateFramedFixture(0, placeholder: 0xAA0004), 0);
+        if (completeFraming.SectorScriptBytes != 12 || completeFraming.MetadataAndSoundBytes != 24 || completeFraming.BlockMaskBytes != 512) throw new InvalidOperationException("The complete placeholder-controlled framing branches were not consumed as expected.");
         AssertProjection(0, 0, 0, 0); AssertProjection(1, 0, -40, 20); AssertProjection(0, 1, 40, 20); AssertProjection(30, 32, 80, 1240);
 
         var prototypeId = ObjectId.A(7001);
@@ -189,6 +200,19 @@ internal static class Program
         var bytes = new byte[checked(tileStart + (SectorTileCount * sizeof(uint)) + sizeof(int))];
         BinaryPrimitives.WriteInt32LittleEndian(bytes, lightCount);
         for (var index = 0; index < SectorTileCount; index++) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(tileStart + (index * sizeof(uint))), tileId);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(bytes.Length - sizeof(int)), trailingObjectCount);
+        return bytes;
+    }
+
+    private static byte[] CreateFramedFixture(int trailingObjectCount, int placeholder = 0xAA0001, int tileScriptCount = 0)
+    {
+        var tileEnd = sizeof(int) + (SectorTileCount * sizeof(uint));
+        var suffixBytes = checked((sizeof(int) * 2) + (placeholder == 0xAA0000 ? 0 : checked(sizeof(int) + (tileScriptCount * 24))) + (placeholder >= 0xAA0002 ? 12 : 0) + (placeholder >= 0xAA0003 ? 24 : 0) + (placeholder >= 0xAA0004 ? 128 * sizeof(uint) : 0) + sizeof(int));
+        var bytes = new byte[tileEnd + suffixBytes];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, 0);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(tileEnd), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(tileEnd + sizeof(int)), placeholder);
+        if (placeholder != 0xAA0000) BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(tileEnd + (sizeof(int) * 2)), tileScriptCount);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(bytes.Length - sizeof(int)), trailingObjectCount);
         return bytes;
     }
@@ -427,7 +451,7 @@ internal static class Program
         }
     }
 
-    private sealed record SectorSlice(int LightCount, int DistinctTileArtIds, int InvalidTileArtIds, int NonTileArtIds, int ObjectPayloadBytes, int TrailingObjectCount, int[] ArtTypeCounts)
+    private sealed record SectorSlice(int LightCount, int DistinctTileArtIds, int InvalidTileArtIds, int NonTileArtIds, int TrailingInt32, int[] ArtTypeCounts)
     {
         public static SectorSlice Parse(ReadOnlySpan<byte> bytes, bool rejectNonTileArtIds)
         {
@@ -449,7 +473,51 @@ internal static class Program
             if (bytes.Length - terminalOffset < TerminalObjectCountBytes) throw new InvalidDataException("Sector terminal object count is truncated after the tile table.");
             var count = BinaryPrimitives.ReadInt32LittleEndian(bytes[^TerminalObjectCountBytes..]);
             if (count < 0 || count > SectorTileCount) throw new InvalidDataException("Sector trailing object count is outside the supported bound.");
-            return new SectorSlice(lightCount, distinct.Count, invalid, nonTile, checked(bytes.Length - terminalOffset - TerminalObjectCountBytes), count, types);
+            return new SectorSlice(lightCount, distinct.Count, invalid, nonTile, count, types);
+        }
+    }
+
+    private sealed record SectorFraming(int TileStart, int TileBytes, int TileEnd, int RoofStart, int RoofBytes, int RoofEnd, int RoofEmpty, int PlaceholderStart, int PlaceholderEnd, int Placeholder, int TileScriptsStart, int TileScriptsBytes, int TileScriptsEnd, int TileScriptCount, int SectorScriptStart, int SectorScriptBytes, int SectorScriptEnd, int MetadataAndSoundStart, int MetadataAndSoundBytes, int MetadataAndSoundEnd, int BlockMaskStart, int BlockMaskBytes, int BlockMaskEnd, int ObjectStart, int ObjectBytes, int ObjectEnd, int FirstObjectVersion, int TrailingInt32Start, int TrailingInt32End)
+    {
+        public static SectorFraming Parse(ReadOnlySpan<byte> bytes, int lightCount)
+        {
+            var tileStart = checked(sizeof(int) + (lightCount * SerializedLightBytes));
+            var tileBytes = checked(SectorTileCount * sizeof(uint));
+            var tileEnd = checked(tileStart + tileBytes);
+            var trailingStart = checked(bytes.Length - TerminalObjectCountBytes);
+            if (trailingStart < tileEnd) throw new InvalidDataException("Sector framing overlaps the fixed tile table and trailing word.");
+            var cursor = new Cursor(bytes.Slice(tileEnd, trailingStart - tileEnd));
+            var roofStart = tileEnd;
+            var roofEmpty = cursor.I32();
+            if (roofEmpty is not 0 and not 1) throw new InvalidDataException("Roof empty discriminator is outside the bounded CE-derived form.");
+            if (roofEmpty == 0) cursor.Skip(256 * sizeof(uint));
+            var roofEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
+            var placeholderStart = roofEnd;
+            var placeholder = cursor.I32();
+            if (placeholder is < 0xAA0000 or > 0xAA0004) throw new InvalidDataException("Sector placeholder is outside the CE-derived discriminator range.");
+            var placeholderEnd = checked(placeholderStart + sizeof(int));
+            var tileScriptsStart = placeholderEnd;
+            var tileScriptCount = 0;
+            if (placeholder != 0xAA0000)
+            {
+                tileScriptCount = cursor.I32();
+                if (tileScriptCount is < 0 or > SectorTileCount) throw new InvalidDataException("Tile-script count is outside the bounded sector range.");
+                cursor.Skip(checked(tileScriptCount * 24));
+            }
+            var tileScriptsEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
+            var sectorScriptStart = tileScriptsEnd;
+            if (placeholder >= 0xAA0002) cursor.Skip(12);
+            var sectorScriptEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
+            var metadataAndSoundStart = sectorScriptEnd;
+            if (placeholder >= 0xAA0003) cursor.Skip(24);
+            var metadataAndSoundEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
+            var blockMaskStart = metadataAndSoundEnd;
+            if (placeholder >= 0xAA0004) cursor.Skip(128 * sizeof(uint));
+            var blockMaskEnd = checked(tileEnd + (trailingStart - tileEnd - cursor.Remaining));
+            var objectStart = blockMaskEnd;
+            var objectBytes = cursor.Remaining;
+            var firstObjectVersion = objectBytes >= sizeof(int) ? BinaryPrimitives.ReadInt32LittleEndian(bytes.Slice(objectStart, sizeof(int))) : 0;
+            return new SectorFraming(tileStart, tileBytes, tileEnd, roofStart, roofEnd - roofStart, roofEnd, roofEmpty, placeholderStart, placeholderEnd, placeholder, tileScriptsStart, tileScriptsEnd - tileScriptsStart, tileScriptsEnd, tileScriptCount, sectorScriptStart, sectorScriptEnd - sectorScriptStart, sectorScriptEnd, metadataAndSoundStart, metadataAndSoundEnd - metadataAndSoundStart, metadataAndSoundEnd, blockMaskStart, blockMaskEnd - blockMaskStart, blockMaskEnd, objectStart, objectBytes, trailingStart, firstObjectVersion, trailingStart, bytes.Length);
         }
     }
 
