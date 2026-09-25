@@ -89,30 +89,38 @@ The real chain is callback based, not a filename guess:
    `art\\tile\\tilename.mes` and counts entries in numeric ranges 0–99,
    100–199, 200–299, and 300–399 (`a_name.c:193-222`, `424-540`). The facade
    initializer loads `art\\facade\\facadename.mes`, requires fewer than 512
-   entries, and retains the MES entries in sorted order
-   (`a_name.c:1107-1183`).
+   entries, sorts the loaded MES entries, and appends their values sequentially
+   to `facade_names[index++]` (`a_name.c:1107-1183`).
 4. `name_resolve_path` normalizes first and dispatches tile and facade IDs to
    `a_name_tile_aid_to_fname` and `a_name_facade_aid_to_fname`
    (`name.c:856-881`, `973-977`). Tile lookup chooses the MES category from
    outdoor/type and flip bits, then `build_tile_file_name` applies the actual
    edge/variation and ordering rules (`a_name.c:256-385`). Facade lookup uses
-   its decoded number as the `facadename.mes` key and constructs its ART
-   pathname (`a_name.c:1129-1147`).
+   its decoded number as a zero-based ordinal into the sorted,
+   sequentially-populated `facade_names` array, then constructs its ART
+   pathname (`a_name.c:1129-1147`). It is not a MES-key lookup.
 
 The companion probe parses only brace-keyed MES entries needed by these two
-lookups, validates each exact resolved raw archive pathname has exactly one
-candidate in its supplied source archive, and never emits MES text, ART paths,
-raw IDs, or decoded pixels. This reproduces the named lookup source and rule;
-it does not turn a plausible concatenated filename into a lookup result.
+lookups. For facades it deliberately discards the numerical keys only after
+sorting, retaining values in ordinal order, matching the cited initialization
+path. Its synthetic regression uses non-zero, gapped keys (`9`, `25`, `100`,
+`333`) and proves packed ordinal `3` selects the fourth sorted value rather
+than looking for key `3`. It validates each exact resolved raw archive pathname
+has exactly one candidate in its supplied source archive. The bounded local
+run reports six representative chains below, but no MES text or decoded pixels.
 
 ### Selected frame and metadata
 
 For these types CE has no rotation branch:
 `tig_art_id_rotation_get` returns zero for both tile and facade
 (`art.c:761-778`). `tig_art_id_frame_get` selects frame zero for tiles and the
-facade's 10-bit frame field for facades (`art.c:903-921`). Palette selection
-uses the packed palette bits. For each bounded representative the probe uses
-that `(group=0, selected frame, selected palette)` selection with the existing
+facade's 10-bit frame field for facades (`art.c:903-921`).
+`tig_art_id_palette_get` (`art.c:1029-1036`) takes bits `4..5` only for a
+tile and returns palette `0` for a facade; facade bits `4..5` instead belong to
+its frame field. The synthetic regression gives a facade a frame whose bits
+`4..5` are nonzero and requires its selected palette to remain zero. For each
+bounded representative the probe uses that `(group=0, selected frame,
+type-specific selected palette)` selection with the existing
 `ArtDecoder.Inspect` and `ArtDecoder.Decode`; it rejects an out-of-range frame
 or entry above 1 MiB before decode.
 
@@ -136,23 +144,51 @@ dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.cs
 dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- --module <frozen-module.dat> --resource <explicit-resource.dat>
 ```
 
-The executed real-data run reported:
+The executed real-data run used the explicit base archive `arcanum2.dat` and
+reported:
 
 ```text
 lookup tables tile_categories=31,6,2,13 facade_entries=373
 module sector_ordinal=463 decoded_bytes=47291 tiles=4096
 resolution tile_cells=3033 facade_cells=1063 unique_tile_ids=284 unique_facade_ids=757 source_candidates=1 tile_unresolved_cells=457 facade_unresolved_cells=0
-frame_samples tile=3 facade=3 frame_bounds_ok=true
+branch kind=tile name=tile-outdoor-forward cells=1269 ids=253 resolved_cells=812 unresolved_cells=457 representative=true
+branch kind=tile name=tile-single-material cells=1764 ids=31 resolved_cells=1764 unresolved_cells=0 representative=true
+branch kind=facade name=facade-ordinal cells=1063 ids=757 resolved_cells=1063 unresolved_cells=0 representative=true
 placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240
 integrity before_after_match=true
 ```
 
 Accordingly, exact lookup in the selected source resolved 2,576 tile cells and
-all 1,063 facade cells. Three distinct raw identifiers per class reached a
-unique ART entry and selected frame. The resource input's fingerprint was
+all 1,063 facade cells. The observed resolver coverage is two tile branches
+and one facade branch; each has a bounded representative, and each kind has
+three distinct raw identifiers. The resource input's fingerprint was
 recomputed before and after and matched; the tool writes neither source input
 nor decoded payloads. The unresolved 457 tile cells are a hard completeness
 failure, not a fallback opportunity.
+
+### Reproducible representative chains
+
+The following is the complete bounded representative output from that run, not
+a corpus dump. `local` is `(x,y)` within the fixed 64×64 sector and `entry` is
+the unique raw-ASCII pathname winner's DAT ordinal in `arcanum2.dat`. The
+`anchor` is the projected cell anchor including the source-confirmed `+1` X
+tile/facade rectangle adjustment; it is a boundary, not a claim that these ART
+metadata fields have been reduced to a C# destination rectangle.
+
+| kind / branch | local / ordinal / raw identifier | packed interpretation and lookup | unique ART winner and physical selection | metadata / confirmed anchor |
+| --- | --- | --- | --- | --- |
+| tile / `tile-outdoor-forward` | `(8,6)` / `392` / `0x000111C0` | `num1=0,num2=1,edge=1,variation=0,outdoor=1,flip1=1,flip2=1,palette=0,low=0`; forward outdoor pairing | `art\\tile\\drtgrs6a.art`, entry `4587`; group `0`, frame `0`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(-79,280)` |
+| tile / `tile-outdoor-forward` | `(61,8)` / `573` / `0x000111C1` | `num1=0,num2=1,edge=1,variation=0,outdoor=1,flip1=1,flip2=1,palette=0,low=1`; forward outdoor pairing | `art\\tile\\drtgrs6a.art`, entry `4587`; group `0`, frame `0`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(-2119,1380)` |
+| tile / `tile-single-material` | `(18,0)` / `18` / `0x000001C0` | `num1=0,num2=0,edge=0,variation=0,outdoor=1,flip1=1,flip2=1,palette=0,low=0`; same-material rule | `art\\tile\\drtbse0a.art`, entry `4490`; group `0`, frame `0`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(-719,360)` |
+| facade / `facade-ordinal` | `(27,32)` / `2075` / `0xB6000801` | `number=0,tile=1,type=1,flip=1,frame=0,walkability=1,palette=0`; sorted facade-name ordinal | `art\\Facade\\BHull.art`, entry `90`; group `0`, frame `0`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(201,1180)` |
+| facade / `facade-ordinal` | `(27,31)` / `2011` / `0xB6000802` | `number=0,tile=1,type=1,flip=1,frame=1,walkability=0,palette=0`; sorted facade-name ordinal | `art\\Facade\\BHull.art`, entry `90`; group `0`, frame `1`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(161,1160)` |
+| facade / `facade-ordinal` | `(27,30)` / `1947` / `0xB6000804` | `number=0,tile=1,type=1,flip=1,frame=2,walkability=0,palette=0`; sorted facade-name ordinal | `art\\Facade\\BHull.art`, entry `90`; group `0`, frame `2`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(121,1140)` |
+
+The selected representatives cover every observed branch, while the branch
+counts retain the unresolved `tile-outdoor-forward` records instead of hiding
+them behind the successful examples. The output format makes another holder of
+the frozen input reproduce the same identifier → lookup → ART → frame/metadata
+chain without committing a MES table or decoded ART payload.
 
 The single resource archive was intentionally passed explicitly. The result
 proves no duplicate winner in that one source set; it does **not** establish

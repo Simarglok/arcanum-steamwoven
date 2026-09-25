@@ -24,7 +24,7 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (packed identifiers, MES lookup grammar, path selection, and placement arithmetic)");
+                Console.WriteLine("self-test: PASS (type-specific palettes, ordinal MES lookup, path branches, and placement arithmetic)");
                 return 0;
             }
 
@@ -63,7 +63,7 @@ internal static class Program
         var sectorBytes = module.ReadEntry(sector);
         var words = ReadTileWords(sectorBytes);
         var tileNames = TileNameTable.Parse(ParseMes(ReadUniquePayload(resources, TileNamesPath)));
-        var facadeNames = ParseMes(ReadUniquePayload(resources, FacadeNamesPath));
+        var facadeNames = FacadeNameTable.Parse(ParseMes(ReadUniquePayload(resources, FacadeNamesPath)));
         Console.WriteLine($"lookup tables tile_categories={tileNames.Counts} facade_entries={facadeNames.Count}");
         var resolver = new Resolver(resources, tileNames, facadeNames);
         var results = words.Select((word, ordinal) => resolver.Resolve(word, ordinal)).ToArray();
@@ -75,12 +75,11 @@ internal static class Program
             throw new InvalidDataException("The selected sector did not contain both supported terrain identifier classes.");
         }
 
-        var samples = new List<FrameSample>();
-        samples.AddRange(InspectRepresentatives(resources, tileResults.Where(result => result.Success), TerrainKind.Tile));
-        samples.AddRange(InspectRepresentatives(resources, facadeResults.Where(result => result.Success), TerrainKind.Facade));
-        if (samples.Count != 6)
+        var samples = InspectRepresentatives(resources, results).ToArray();
+        if (samples.Count(sample => sample.Kind == TerrainKind.Tile) < 3 ||
+            samples.Count(sample => sample.Kind == TerrainKind.Facade) < 3)
         {
-            throw new InvalidDataException("The bounded run did not obtain three verified representative frames per observed class.");
+            throw new InvalidDataException("The bounded run did not obtain three distinct verified representative identifiers per observed class.");
         }
 
         var moduleAfter = Fingerprint.Create(modulePath);
@@ -92,14 +91,36 @@ internal static class Program
 
         Console.WriteLine($"module sector_ordinal={sector.Ordinal} decoded_bytes={sector.DeclaredOutputSize} tiles={words.Length}");
         Console.WriteLine($"resolution tile_cells={tileResults.Length} facade_cells={facadeResults.Length} unique_tile_ids={tileResults.Select(item => item.RawId).Distinct().Count()} unique_facade_ids={facadeResults.Select(item => item.RawId).Distinct().Count()} source_candidates=1 tile_unresolved_cells={tileResults.Count(item => !item.Success)} facade_unresolved_cells={facadeResults.Count(item => !item.Success)}");
-        Console.WriteLine($"frame_samples tile={samples.Count(sample => sample.Kind == TerrainKind.Tile)} facade={samples.Count(sample => sample.Kind == TerrainKind.Facade)} frame_bounds_ok=true");
+        ReportBranchCoverage(results, samples);
+        foreach (var sample in samples)
+        {
+            Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) anchor_boundary=cell_top_left_plus_1_x");
+        }
         Console.WriteLine("placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240");
         Console.WriteLine("integrity before_after_match=true");
     }
 
-    private static IEnumerable<FrameSample> InspectRepresentatives(DatArchive resources, IEnumerable<Resolution> source, TerrainKind kind)
+    private static IEnumerable<FrameSample> InspectRepresentatives(DatArchive resources, IEnumerable<Resolution> source)
     {
-        foreach (var result in source.GroupBy(item => item.RawId).OrderBy(group => group.Key).Take(3).Select(group => group.First()))
+        var candidates = source.Where(result => result.Success)
+            .GroupBy(result => new { result.Kind, result.RawId })
+            .Select(group => group.First())
+            .OrderBy(result => result.Kind)
+            .ThenBy(result => result.Branch)
+            .ThenBy(result => result.RawId)
+            .ToArray();
+        var selected = new List<Resolution>();
+        foreach (var branch in candidates.GroupBy(result => new { result.Kind, result.Branch }))
+        {
+            selected.Add(branch.First());
+        }
+        foreach (var kind in Enum.GetValues<TerrainKind>())
+        {
+            selected.AddRange(candidates.Where(result => result.Kind == kind && selected.All(chosen => chosen.Kind != kind || chosen.RawId != result.RawId))
+                .Take(Math.Max(0, 3 - selected.Count(chosen => chosen.Kind == kind))));
+        }
+
+        foreach (var result in selected.OrderBy(result => result.Kind).ThenBy(result => result.Branch).ThenBy(result => result.RawId))
         {
             if (result.Entry is null || result.Entry.DeclaredOutputSize > MaxEntryBytes)
             {
@@ -113,8 +134,23 @@ internal static class Program
             {
                 throw new InvalidDataException("The packed terrain identifier selects a frame outside the bounded ART metadata.");
             }
-            _ = ArtDecoder.Decode(art, new ArtFrameSelection(0, frame, result.Palette), new ArtDecoderOptions { MaxInputBytes = MaxEntryBytes, MaxFrameCount = 4096, MaxFrameTableBytes = 256 * 1024, MaxDimension = 4096, MaxFramePixels = 4 * 1024 * 1024, MaxRgbaBytes = 16 * 1024 * 1024, MaxEncodedFrameBytes = MaxEntryBytes });
-            yield return new FrameSample(kind, result.Entry.Ordinal, frame);
+            var decoded = ArtDecoder.Decode(art, new ArtFrameSelection(0, frame, result.Palette), new ArtDecoderOptions { MaxInputBytes = MaxEntryBytes, MaxFrameCount = 4096, MaxFrameTableBytes = 256 * 1024, MaxDimension = 4096, MaxFramePixels = 4 * 1024 * 1024, MaxRgbaBytes = 16 * 1024 * 1024, MaxEncodedFrameBytes = MaxEntryBytes });
+            var metadataFrame = decoded.Frame;
+            var localX = result.Ordinal & 63;
+            var localY = (result.Ordinal >> 6) & 63;
+            yield return new FrameSample(result.Kind, result.Branch, result.Ordinal, localX, localY, result.RawId, result.Packed,
+                result.LookupRule, result.Path, result.Entry.Ordinal, frame, result.Palette, decoded.EffectivePaletteSlot,
+                decoded.Width, decoded.Height, metadataFrame.HotX, metadataFrame.HotY, metadataFrame.OffsetX, metadataFrame.OffsetY,
+                40 * (localY - localX) + 1, 20 * (localY + localX));
+        }
+    }
+
+    private static void ReportBranchCoverage(IEnumerable<Resolution> results, IEnumerable<FrameSample> samples)
+    {
+        foreach (var branch in results.GroupBy(result => new { result.Kind, result.Branch }).OrderBy(group => group.Key.Kind).ThenBy(group => group.Key.Branch))
+        {
+            var representative = samples.Any(sample => sample.Kind == branch.Key.Kind && sample.Branch == branch.Key.Branch);
+            Console.WriteLine($"branch kind={branch.Key.Kind.ToString().ToLowerInvariant()} name={branch.Key.Branch} cells={branch.Count()} ids={branch.Select(result => result.RawId).Distinct().Count()} resolved_cells={branch.Count(result => result.Success)} unresolved_cells={branch.Count(result => !result.Success)} representative={representative.ToString().ToLowerInvariant()}");
         }
     }
 
@@ -191,8 +227,13 @@ internal static class Program
         if (tiles.Name(0, true, 1) != "oak" || tiles.Name(0, false, 1) != "sto" || tiles.Name(0, true, 0) != "sla" || tiles.Name(0, false, 0) != "bri") throw new InvalidOperationException("MES tile-category selection regressed.");
         var path = Resolver.TilePath(tiles, (0u << 22) | (0u << 16) | (15u << 12) | (1u << 8) | (1u << 7) | (1u << 6));
         if (path != "art\\tile\\oakbse0a.art") throw new InvalidOperationException("Tile packed-ID lookup grammar regressed.");
-        var facade = Resolver.FacadePath(new SortedDictionary<int, string> { [3] = "f" }, (11u << 28) | (3u << 17) | (7u << 1));
-        if (facade != "art\\Facade\\f.art") throw new InvalidOperationException("Facade packed-ID lookup grammar regressed.");
+        var facades = FacadeNameTable.Parse(new SortedDictionary<int, string> { [9] = "zero", [25] = "one", [100] = "two", [333] = "three" });
+        var facade = Resolver.FacadePath(facades, (11u << 28) | (3u << 17) | (7u << 1));
+        if (facade != "art\\Facade\\three.art") throw new InvalidOperationException("Facade ordinal MES lookup regressed.");
+        var facadeSelection = Resolver.Selection((11u << 28) | (24u << 1), TerrainKind.Facade);
+        if (facadeSelection.Frame != 24 || facadeSelection.Palette != 0) throw new InvalidOperationException("Facade frame bits must not select an ART palette.");
+        var tileSelection = Resolver.Selection((3u << 4), TerrainKind.Tile);
+        if (tileSelection.Frame != 0 || tileSelection.Palette != 3) throw new InvalidOperationException("Tile packed palette selection regressed.");
         AssertPoint(0, 0, 0, 0); AssertPoint(1, 0, -40, 20); AssertPoint(0, 1, 40, 20); AssertPoint(30, 32, 80, 1240);
     }
 
@@ -201,20 +242,30 @@ internal static class Program
         if (40 * (y - x) != expectedX || 20 * (x + y) != expectedY) throw new InvalidOperationException("Placement arithmetic regressed.");
     }
 
-    private sealed class Resolver(DatArchive resources, TileNameTable tiles, SortedDictionary<int, string> facades)
+    private sealed class Resolver(DatArchive resources, TileNameTable tiles, FacadeNameTable facades)
     {
         public Resolution Resolve(uint rawId, int ordinal)
         {
             var kind = (rawId >> 28) switch { 0 => TerrainKind.Tile, 11 => TerrainKind.Facade, _ => throw new InvalidDataException("Selected sector contains a non-terrain high-nibble class.") };
-            var path = kind == TerrainKind.Tile ? TilePath(tiles, rawId) : FacadePath(facades, rawId);
+            var lookup = kind == TerrainKind.Tile ? TileLookup(tiles, rawId) : new Lookup(FacadePath(facades, rawId), "facade-ordinal");
+            var path = lookup.Path;
             var matches = resources.Entries.Where(entry => RawAsciiEqualsIgnoreCase(entry.RawNameBytes, System.Text.Encoding.ASCII.GetBytes(path))).ToArray();
-            if (matches.Length != 1) return new Resolution(rawId, ordinal, kind, path, 0, 0, null);
-            var frame = kind == TerrainKind.Tile ? 0 : checked((int)((rawId >> 1) & 1023));
-            var palette = checked((int)((rawId >> 4) & 3));
-            return new Resolution(rawId, ordinal, kind, path, frame, palette, matches[0]);
+            var selection = Selection(rawId, kind);
+            var packed = kind == TerrainKind.Tile ? TilePacked(rawId) : FacadePacked(rawId);
+            if (matches.Length != 1) return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: exact raw-ASCII archive pathname", path, selection.Frame, selection.Palette, null);
+            return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: exact raw-ASCII archive pathname", path, selection.Frame, selection.Palette, matches[0]);
         }
 
-        public static string TilePath(TileNameTable table, uint id)
+        public static FramePaletteSelection Selection(uint id, TerrainKind kind) => kind switch
+        {
+            TerrainKind.Tile => new(0, checked((int)((id >> 4) & 3))),
+            TerrainKind.Facade => new(checked((int)((id >> 1) & 1023)), 0),
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
+
+        public static string TilePath(TileNameTable table, uint id) => TileLookup(table, id).Path;
+
+        private static Lookup TileLookup(TileNameTable table, uint id)
         {
             var num1 = checked((int)((id >> 22) & 63));
             var num2 = checked((int)((id >> 16) & 63));
@@ -228,22 +279,29 @@ internal static class Program
             var name1 = table.Name(num1, flip1, outdoor ? 1 : 0);
             var name2 = table.Name(num2, flip2, outdoor ? 1 : 0);
             if (variation >= 8) variation -= 8;
-            if (edge == 15 || string.Equals(name1, name2, StringComparison.OrdinalIgnoreCase)) return $"art\\tile\\{name1}bse{EdgeCodes[edge]}{(char)('a' + variation)}.art";
-            if (edge == 0) return $"art\\tile\\{name2}bse0{(char)('a' + variation)}.art";
+            if (edge == 15 || string.Equals(name1, name2, StringComparison.OrdinalIgnoreCase)) return new($"art\\tile\\{name1}bse{EdgeCodes[edge]}{(char)('a' + variation)}.art", "tile-single-material");
+            if (edge == 0) return new($"art\\tile\\{name2}bse0{(char)('a' + variation)}.art", "tile-edge-zero");
             var index1 = table.OutdoorIndex(name1);
             var index2 = table.OutdoorIndex(name2);
-            if (index1 < 0) return $"art\\tile\\{name1}bse{EdgeCodes[edge]}{(char)('a' + variation)}.art";
-            if (index2 < 0) return $"art\\tile\\{name2}bse{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art";
-            return index1 < index2 ? $"art\\tile\\{name1}{name2}{EdgeCodes[edge]}{(char)('a' + variation)}.art" : $"art\\tile\\{name2}{name1}{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art";
+            if (index1 < 0) return new($"art\\tile\\{name1}bse{EdgeCodes[edge]}{(char)('a' + variation)}.art", "tile-first-not-outdoor");
+            if (index2 < 0) return new($"art\\tile\\{name2}bse{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art", "tile-second-not-outdoor");
+            return index1 < index2
+                ? new($"art\\tile\\{name1}{name2}{EdgeCodes[edge]}{(char)('a' + variation)}.art", "tile-outdoor-forward")
+                : new($"art\\tile\\{name2}{name1}{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art", "tile-outdoor-reversed");
         }
 
-        public static string FacadePath(SortedDictionary<int, string> names, uint id)
+        public static string FacadePath(FacadeNameTable names, uint id)
         {
             var number = checked((int)((id >> 17) & 0xFF));
             if ((id & (1u << 27)) != 0) number += 256;
-            if (!names.TryGetValue(number, out var name)) throw new InvalidDataException("Facade packed-ID number is not present in facadename.mes.");
-            return $"art\\Facade\\{name}.art";
+            return $"art\\Facade\\{names.Name(number)}.art";
         }
+
+        private static string TilePacked(uint id) => $"num1={(id >> 22) & 63},num2={(id >> 16) & 63},edge={(id >> 12) & 15},variation={(id >> 9) & 7},outdoor={(id >> 8) & 1},flip1={(id >> 7) & 1},flip2={(id >> 6) & 1},palette={(id >> 4) & 3},low={(id & 15)}";
+        private static string FacadePacked(uint id) => $"number={((id >> 17) & 0xFF) + ((id & (1u << 27)) == 0 ? 0 : 256)},tile={(id >> 11) & 63},type={(id >> 25) & 1},flip={(id >> 26) & 1},frame={(id >> 1) & 1023},walkability={id & 1},palette=0";
+
+        public readonly record struct FramePaletteSelection(int Frame, int Palette);
+        private readonly record struct Lookup(string Path, string Branch);
     }
 
     private sealed class TileNameTable(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
@@ -262,11 +320,22 @@ internal static class Program
         }
     }
 
-    private sealed record Resolution(uint RawId, int Ordinal, TerrainKind Kind, string Path, int Frame, int Palette, DatEntry? Entry)
+    private sealed class FacadeNameTable(string[] names)
+    {
+        public int Count => names.Length;
+        public static FacadeNameTable Parse(SortedDictionary<int, string> entries) => new(entries.Values.ToArray());
+        public string Name(int ordinal) => ordinal >= 0 && ordinal < names.Length
+            ? names[ordinal]
+            : throw new InvalidDataException($"Facade packed-ID ordinal {ordinal} exceeds the sorted facadename.mes entry count {names.Length}.");
+    }
+
+    private sealed record Resolution(uint RawId, int Ordinal, TerrainKind Kind, string Branch, string Packed, string LookupRule, string Path, int Frame, int Palette, DatEntry? Entry)
     {
         public bool Success => Entry is not null;
     }
-    private sealed record FrameSample(TerrainKind Kind, int Ordinal, int Frame);
+    private sealed record FrameSample(TerrainKind Kind, string Branch, int Ordinal, int LocalX, int LocalY, uint RawId, string Packed,
+        string LookupRule, string Path, int EntryOrdinal, int Frame, int RequestedPalette, int EffectivePalette, int Width, int Height,
+        int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY);
     private enum TerrainKind { Tile, Facade }
     private sealed record Fingerprint(long Bytes, string Sha256)
     {
