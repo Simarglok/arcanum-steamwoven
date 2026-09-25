@@ -4,12 +4,13 @@
 
 **Not ready for implementation.** The selected map and one sector are
 reproducible, and the coordinate/sector arithmetic plus a fixed tile-table
-boundary are supported. The exact remaining evidence is now bounded rather
-than deferred wholesale: a two-class tile ART-ID-to-resource lookup and the
-versioned object envelope/property subset needed to select scenery. Resource
-resolution for an actual terrain visual, sprite frame selection,
-baseline/offset semantics, and static draw ordering remain unsupported. A
-future loader or Godot scene must fail closed rather than invent fallbacks.
+boundary are supported. Route B provides a fail-closed versioned record
+delimiter and current-ART prototype inheritance check for the pinned CE v119
+form, but the selected retail window is rejected at record 0 because its first
+word is observed version 1. The remaining evidence includes that actual object
+form, a two-class tile ART-ID-to-resource lookup, actual resource/frame
+selection, baseline/offset semantics, and static draw ordering. A future loader
+or Godot scene must fail closed rather than invent fallbacks.
 
 This is a contract proposal for a later, separate task. It is not a production
 loader, renderer, Godot scene, or gameplay model.
@@ -22,7 +23,7 @@ loader, renderer, Godot scene, or gameplay model.
 | Start selector | sole module `START_MAP` record | `Arcanum1-024-fixed`, `(92958, 82592)` |
 | Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
 | Tile prefix | 4,096 words after bounded light section | aggregate only; no pathname claim |
-| Object suffix | terminal count `317` | record boundaries/types unknown |
+| Object suffix | terminal count `317` | CE-v119 delimiter specified; selected input rejected at record 0 for observed version 1 |
 
 No archive-overrides policy is implied. The caller must supply an explicitly
 chosen source set; this research does not select between module, PATCH, or
@@ -39,18 +40,18 @@ field payload descriptors. This makes the following a **minimum** bounded
 schema, not permission for a general object parser:
 
 1. validate a supported record version and identifier form;
-2. validate the object type and its mask length before allocating or walking
-   fields;
-3. decode every variable-size preceding field needed to reach only common
-   `location`, `current ART ID`, and `prototype ID`; and
-4. admit a record as static scenery only when its validated type says so, then
-   retain its source order as a deterministic tie key.
+2. validate the object type and its mask length before walking fields;
+3. consume every set field, including later variable-width payloads, and
+   resolve non-overridden current ART ID through exactly one validated
+   prototype; and
+4. keep the resulting delimiter evidence separate from a static-scenery or
+   ordering claim.
 
 The source paths establish why no constant byte offset is safe; the measured
 window/count establish the bounded impact on this sector. They do not prove an
-object type, property value, or visual result. A future loader must reject the
-whole selected subset if it cannot satisfy this envelope, rather than choosing
-plausible offsets.
+ART path, frame, placement baseline, or visual result. A future loader must
+reject the selected subset if it cannot satisfy this envelope, rather than
+choosing plausible offsets.
 
 Terrain has a separate small blocker. The real tile table contains two
 CE-reported high-nibble classes, but no selected type-specific rule has been

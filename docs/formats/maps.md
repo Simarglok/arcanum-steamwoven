@@ -72,6 +72,68 @@ Under the pinned CE enum, these are tile and facade classes respectively. The
 observed mixture still does not establish a universal direct `tile word -> ART
 path` shortcut or the required MES resolver. It is not an asset inventory.
 
+## Canonical bounded object delimiter (Route B)
+
+The fixed sector framing and the following **fail-closed, span-only** object
+delimiter are now specified for this one input. This is not an object model or
+a reusable game loader. It is independently authored from the pinned CE
+lineage, which establishes loader order and field categories at revision
+`a7ff41b300ef712f0e7d088183a3d08957110cdd` in
+`src/game/sector_object_list.c::objlist_load`, `src/game/obj.c::obj_read`,
+`obj_inst_read_file`, `object_inst_enumerate_overridden_fields`,
+`sub_40A8A0`, and `sub_40C030`, `src/game/obj.h::ObjectField,ObjectType`, and
+`src/game/obj_private.c::obj_data_read_file_fast,bitset_read_file`.
+
+For this exact sector, the object cursor starts at `16388`, reads exactly 317
+records, and must finish at `47287`, immediately before the terminal signed
+count. The probe rejects a cursor mismatch, any record version other than LE
+signed `119`, a first ObjectID with the prototype (`-1`) or runtime (`-2`)
+discriminator, and types outside concrete values `0..17` (including pseudo
+types 18 and 19). It accepts persisted ObjectID forms null (0), A (1), GUID
+(2), and P (3): each is 24 bytes, comprising its signed LE discriminator, six
+uninterpreted header bytes, and a 16-byte union. Equality uses only the form's
+meaningful union fields; the header bytes are neither interpreted nor emitted.
+
+An instance has two ObjectIDs, LE signed type, LE signed 16-bit field count,
+and then exactly this many LE `u32` mask words: wall, portal, container,
+scenery, projectile, and trap use 3; item-derived types 5..14 use 4; PC and
+NPC use 5. The common group is 36 fields in words 0..1; a direct group begins
+at word 2, item-derived types use item then subtype words, and critters use
+32+1 critter bits followed by their subtype word. Only valid bits may be set;
+the signed field count must equal their popcount and is capped at 94.
+
+Every set bit is consumed in group/ordinal order, including bits after current
+ART ID and location. The compact probe descriptor covers common (36), wall
+(5), portal (8), container (11), scenery (6), projectile (8), item (23),
+weapon (27), ammo (7), armor (12), gold (6), food/scroll/key/generic/trap (5
+each), key-ring (6), written (8), critter (33), PC (25), and NPC (25) fields.
+Its only wire kinds are fixed I32; optional I64; optional ObjectID; optional
+NUL-terminated string; and sparse arrays of I32/U32, I64/U64, 12-byte script,
+16-byte quest, or 24-byte ObjectID items. This descriptor deliberately stores
+no field model or game values.
+
+Optional values use only presence bytes 0 or 1. Present I64 values consume 8
+bytes; present ObjectIDs consume a canonical persisted ObjectID; present
+strings consume signed length plus exactly `length + 1` bytes and require the
+final NUL. Present arrays consume signed element size, count, and legacy slot,
+then `size * count` data bytes, followed by signed bitset-word count and that
+many `u32` words. Expected element sizes are 4, 8, 12, 16, and 24 respectively.
+Counts are non-negative, multiplication is checked, bitsets have at least two
+words, and bitset population must equal element count. No allocation follows a
+serialized count; every skip remains inside the selected 1 MiB entry cap and
+the remaining record window.
+
+When common bit 0 is set its I32 is the direct current ART ID. Otherwise the
+probe resolves the first ObjectID against exactly one `proto\\*.pro` candidate
+in the same immutable module without printing its name or identifier. A
+prototype is independently validated as version 119, first blocked ObjectID
+marker, own ObjectID, concrete type, exact type mask count, then every valid
+common/base/subtype field (not merely marked fields). Its own ID and type must
+match the instance; missing, duplicate, malformed, or mismatched candidates
+fail closed. This follows CE `proto.c::proto_init`, `obj.c::obj_field_fetch`,
+`obj_get_prototype_handle`, and `obj_pool.c::obj_pool_perm_lookup`; no default
+ART ID or recursive inheritance is invented.
+
 ## Required follow-up before resource resolution
 
 A future, separately authorized parser must bound and identify the relevant
@@ -86,8 +148,10 @@ unknown for this slice.
 - Project implementation: `src/Arcanum.Data/DatArchive.cs`.
 - Pinned CE revision `a7ff41b300ef712f0e7d088183a3d08957110cdd`:
   `src/game/sector.c`, `src/game/sector_light_list.c`,
-  `src/game/sector_tile_list.c`, `src/game/sector_object_list.c`, and
-  `first_party/tig/src/art.c`.
+  `src/game/sector_tile_list.c`, `src/game/sector_object_list.c`, `src/game/obj.c`,
+  `src/game/obj.h`, `src/game/obj_private.c`, `src/game/obj_id.h`, `src/game/sa.c`,
+  `src/game/sa.h`, `src/game/proto.c`, `src/game/obj_pool.c`, `src/game/script.h`,
+  `src/game/quest.h`, and `first_party/tig/src/art.c`.
 
 CE and CE-derived sources remain one lineage and are not independent
 confirmation. This independently authored note records constrained behavior;

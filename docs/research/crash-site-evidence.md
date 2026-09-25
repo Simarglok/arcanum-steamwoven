@@ -47,9 +47,9 @@ and must not be committed or reported.
 
 | Check | Result |
 | --- | --- |
-| Crash Site probe synthetic suite | PASS: truncation, negative/impossible count, exact tile-table boundary with no following terminal count, strict unexpected ART class, and negative terminal count are rejected; projection examples pass |
-| Read-only selected-sector run | PASS: input fingerprint matched before and after; entry ordinal 463, flags `0x00000002`, decoded bytes 47,291; zero serialized lights; 4,096 tile-table words; 1,041 distinct words; 30,899 opaque object-payload bytes; terminal object count 317 |
-| Existing DAT synthetic tests | PASS: `Arcanum.Data.Tests` exited 0 with the canonical SDK |
+| Crash Site probe synthetic suite | PASS: preserved sector-boundary cases plus every supported wire kind/type layout, direct/inherited current ART ID, full prototype entry, record chaining, reserved type, bad optional presence, and one-byte record truncation are exercised |
+| Read-only selected-sector run | FAIL CLOSED (expected): input size/SHA were unchanged before/after; sector aggregation still resolves ordinal 463, 47,291 decoded bytes, a 30,899-byte / 317-record window; its first LE word is unsupported version `1`, so no object bytes, IDs, names, or prototype candidates are emitted or interpreted |
+| Existing DAT synthetic tests | PASS: `Arcanum.Data.Tests` passed 25/25 in the available .NET 8 compatibility run; canonical locked-SDK reproduction remains separately recorded below |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test` |
 
 The real-data aggregate art-type counts are recorded in `docs/formats/maps.md`.
@@ -67,7 +67,7 @@ The strict synthetic mode rejects an unexpected non-tile high-nibble class.
 The real probe records those classes rather than assuming the whole table has
 one resource semantics; this is why it is evidence collection, not a loader.
 
-## Narrowed object and terrain blockers
+## Verified fail-closed object delimiter
 
 The real sector does establish the exact byte window that needs an object
 schema: with zero lights, the 4,096-word tile table occupies decoded offsets
@@ -85,14 +85,24 @@ a type-dependent override-bitset, and the payload for every set field. Some
 field payloads are not fixed-width. This is one CE lineage, not independent
 format confirmation.
 
-Consequently, the exact minimum safe decoder subset still missing is not a
-full object system: it is a bounded decoder for that record envelope plus only
-the common **type**, **location**, **current ART ID**, and **prototype ID**
-properties, including the type-dependent bitset and every preceding
-variable-width property required to reach them. Without that delimiter schema,
-a proposed offset could make any subsequent object's bytes appear to be a
-scenery record. The selected-sector count and byte window prove the impact is
-local to these 317 records; they do not classify any record as scenery.
+The bounded probe now implements the complete delimiter required by that
+loader order for the pinned CE version-119 form. It validates version 119, both persisted ObjectIDs, concrete
+type, exact mask-word count, valid mask bits and popcount, then skips a
+specified payload for **every** set field in order. This includes all later
+variable-width values after common current ART ID and location; those early
+fields are not record boundaries. It accepts only canonical optional presence
+bytes, bounded strings, and bounded sparse arrays with validated element size
+and bitset population. The probe would parse exactly 317 records from offsets `16388..47287` or
+reject the module without retaining field payloads.
+
+If current ART ID is not directly overridden, the probe scans only module
+`proto\\*.pro` candidates, validates each referenced prototype's complete
+versioned entry, and requires exactly one semantic ObjectID/type match. The
+inherited ART ID is its first common I32 field. Missing, duplicate, malformed,
+or mismatched candidates are a fail-closed result. The full wire contract and
+pinned function-level lineage are in `docs/formats/maps.md`; the source list
+now includes `sector_object_list.c`, `obj.c`, `obj.h`, `obj_private.c`,
+`obj_id.h`, `sa.c`, `proto.c`, and `obj_pool.c` at the immutable CE revision.
 
 Terrain is independently blocked at the equally small lookup boundary: the
 fixed table contains both the CE-reported tile and facade high-nibble classes,
@@ -103,18 +113,21 @@ either class. `DatArchive` can then locate a raw exact-name entry and
 missing resolver. No fallback path, archive winner, frame, baseline, or order
 is inferred.
 
-These two blockers mean neither a Godot-independent loader nor a Godot static
-scene is ready. The bounded next evidence is therefore precisely the object
-envelope/properties above and the two observed tile-class lookup rules—not a
-full MOB/PRO parser, full ART-ID resolver, renderer, or gameplay model.
+The selected read-only module fails this exact contract at the first window
+word: it is LE signed `1`, not version `119`. Therefore the probe does not
+weaken its supported form or attempt an offset heuristic, and no record or
+prototype claim is made for that input. This is a precise fail-closed blocker:
+the pinned CE form is sufficient as a delimiter design but does not establish
+the selected retail window's versioned object envelope. Terrain lookup and
+ART/frame/baseline/order evidence remain separate research gates.
 
 ## Known limitations and resulting readiness
 
 - The exact mapping from selected tile words to lookup table and ART path is
   unknown.
-- No object record is safely delimited or classified, so the count 317 is not
-  a scenery selection.
-- No prototype inheritance, source precedence, frame/palette selection,
+- The selected retail input is rejected before record 0 because its observed
+  first word is unsupported version 1; it has no delimiter/prototype claim.
+- No source precedence, frame/palette selection,
   baseline, occlusion, or scene comparison was measured.
 - The CE location formula is source-derived and numeric synthetic checks verify
   only its relative arithmetic, not visual parity.
