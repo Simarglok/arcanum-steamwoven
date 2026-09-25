@@ -11,6 +11,8 @@ internal static class Program
     private const string FacadeNamesPath = "art\\facade\\facadename.mes";
     private const long ExpectedModuleBytes = 355_938_305;
     private const string ExpectedModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
+    private const long ExpectedResourceBytes = 147_991_122;
+    private const string ExpectedResourceSha256 = "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d";
     private const int TileCount = 64 * 64;
     private const int MaxEntryBytes = 1024 * 1024;
     private static readonly char[] EdgeCodes = "06b489237ea5dc10".ToCharArray();
@@ -24,7 +26,7 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (type-specific palettes, ordinal MES lookup, path branches, and placement arithmetic)");
+                Console.WriteLine("self-test: PASS (fail-closed MES initialization, type-specific palettes, production-path resolver branches, and placement arithmetic)");
                 return 0;
             }
 
@@ -52,6 +54,11 @@ internal static class Program
         }
 
         var resourceBefore = Fingerprint.Create(resourcePath);
+        if (resourceBefore.Bytes != ExpectedResourceBytes || resourceBefore.Sha256 != ExpectedResourceSha256)
+        {
+            throw new InvalidDataException("Resource fingerprint does not match the frozen one-source Crash Site input.");
+        }
+        Console.WriteLine($"input module_bytes={moduleBefore.Bytes} module_sha256={moduleBefore.Sha256} resource_bytes={resourceBefore.Bytes} resource_sha256={resourceBefore.Sha256}");
         using var module = DatArchive.Open(modulePath, Options());
         using var resources = DatArchive.Open(resourcePath, Options());
         var sector = ReadUnique(module, SectorName, "selected sector");
@@ -62,8 +69,7 @@ internal static class Program
 
         var sectorBytes = module.ReadEntry(sector);
         var words = ReadTileWords(sectorBytes);
-        var tileNames = TileNameTable.Parse(ParseMes(ReadUniquePayload(resources, TileNamesPath)));
-        var facadeNames = FacadeNameTable.Parse(ParseMes(ReadUniquePayload(resources, FacadeNamesPath)));
+        var (tileNames, facadeNames) = InitializeNameTables(resources);
         Console.WriteLine($"lookup tables tile_categories={tileNames.Counts} facade_entries={facadeNames.Count}");
         var resolver = new Resolver(resources, tileNames, facadeNames);
         var results = words.Select((word, ordinal) => resolver.Resolve(word, ordinal)).ToArray();
@@ -97,7 +103,7 @@ internal static class Program
             Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) anchor_boundary=cell_top_left_plus_1_x");
         }
         Console.WriteLine("placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240");
-        Console.WriteLine("integrity before_after_match=true");
+        Console.WriteLine("integrity module_before_after_match=true resource_before_after_match=true");
     }
 
     private static IEnumerable<FrameSample> InspectRepresentatives(DatArchive resources, IEnumerable<Resolution> source)
@@ -174,6 +180,13 @@ internal static class Program
         return archive.ReadEntry(entry);
     }
 
+    private static (TileNameTable Tiles, FacadeNameTable Facades) InitializeNameTables(DatArchive resources)
+    {
+        var tiles = TileNameTable.Parse(ParseMes(ReadUniquePayload(resources, TileNamesPath)));
+        var facades = FacadeNameTable.Parse(ParseMes(ReadUniquePayload(resources, FacadeNamesPath)));
+        return (tiles, facades);
+    }
+
     private static DatEntry ReadUnique(DatArchive archive, string path, string label)
     {
         var expected = System.Text.Encoding.ASCII.GetBytes(path);
@@ -202,13 +215,32 @@ internal static class Program
         var result = new SortedDictionary<int, string>();
         for (var cursor = 0; cursor < text.Length;)
         {
-            var first = text.IndexOf('{', cursor);
-            if (first < 0) break;
+            while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
+            if (cursor == text.Length) break;
+            if (text[cursor] == '\0')
+            {
+                if (text[cursor..].Any(character => character != '\0' && !char.IsWhiteSpace(character))) throw new InvalidDataException("MES contains data after a terminal NUL.");
+                break;
+            }
+            if (text[cursor] == ';' || (cursor + 1 < text.Length && text[cursor] == '/' && text[cursor + 1] == '/'))
+            {
+                var lineEnd = text.IndexOf('\n', cursor + 2);
+                cursor = lineEnd < 0 ? text.Length : lineEnd + 1;
+                continue;
+            }
+            if (text[cursor] != '{')
+            {
+                var next = text.IndexOf('{', cursor + 1);
+                if (next < 0) break;
+                cursor = next;
+            }
+            var first = cursor;
             var firstEnd = text.IndexOf('}', first + 1);
-            if (firstEnd < 0 || !int.TryParse(text.AsSpan(first + 1, firstEnd - first - 1), out var key)) { cursor = first + 1; continue; }
+            if (firstEnd < 0) throw new InvalidDataException("MES key is unterminated.");
+            if (!int.TryParse(text.AsSpan(first + 1, firstEnd - first - 1), out var key)) throw new InvalidDataException("MES key is not an integer.");
             var second = firstEnd + 1;
             while (second < text.Length && char.IsWhiteSpace(text[second])) second++;
-            if (second >= text.Length || text[second] != '{') { cursor = firstEnd + 1; continue; }
+            if (second >= text.Length || text[second] != '{') throw new InvalidDataException("MES key has no braced value.");
             var secondEnd = text.IndexOf('}', second + 1);
             if (secondEnd < 0) throw new InvalidDataException("MES entry is unterminated.");
             if (!result.TryAdd(key, text[(second + 1)..secondEnd])) throw new InvalidDataException("MES contains a duplicate key.");
@@ -222,9 +254,11 @@ internal static class Program
 
     private static void SelfTest()
     {
-        var mes = ParseMes(System.Text.Encoding.ASCII.GetBytes("{0}{oak /b 2}\n{100}{stone 1}\n{200}{slate 1}\n{300}{brick 1}\n"));
+        var mes = ParseMes(System.Text.Encoding.ASCII.GetBytes("{0}{oak/b 2}\n{100}{stone 1}\n{200}{slate 1}\n{300}{brick 1}\n"));
         var tiles = TileNameTable.Parse(mes);
         if (tiles.Name(0, true, 1) != "oak" || tiles.Name(0, false, 1) != "sto" || tiles.Name(0, true, 0) != "sla" || tiles.Name(0, false, 0) != "bri") throw new InvalidOperationException("MES tile-category selection regressed.");
+        var untrimmed = TileNameTable.Parse(ParseMes(System.Text.Encoding.ASCII.GetBytes("{0}{oak /b 2}")));
+        if (untrimmed.Name(0, true, 1) != "oak ") throw new InvalidOperationException("MES tile names must not be trimmed without source evidence.");
         var path = Resolver.TilePath(tiles, (0u << 22) | (0u << 16) | (15u << 12) | (1u << 8) | (1u << 7) | (1u << 6));
         if (path != "art\\tile\\oakbse0a.art") throw new InvalidOperationException("Tile packed-ID lookup grammar regressed.");
         var facades = FacadeNameTable.Parse(new SortedDictionary<int, string> { [9] = "zero", [25] = "one", [100] = "two", [333] = "three" });
@@ -234,7 +268,131 @@ internal static class Program
         if (facadeSelection.Frame != 24 || facadeSelection.Palette != 0) throw new InvalidOperationException("Facade frame bits must not select an ART palette.");
         var tileSelection = Resolver.Selection((3u << 4), TerrainKind.Tile);
         if (tileSelection.Frame != 0 || tileSelection.Palette != 3) throw new InvalidOperationException("Tile packed palette selection regressed.");
+        AssertMesInitializationFailures();
+        AssertResolverProductionPaths();
         AssertPoint(0, 0, 0, 0); AssertPoint(1, 0, -40, 20); AssertPoint(0, 1, 40, 20); AssertPoint(30, 32, 80, 1240);
+    }
+
+    private static void AssertMesInitializationFailures()
+    {
+        var facade = Ascii("{9}{zero}");
+        AssertSyntheticInitializationRejected("missing tile lookup", CreateSyntheticDat(new SyntheticDatEntry(NameBytes(FacadeNamesPath), facade)), "required MES lookup");
+        AssertSyntheticInitializationRejected("duplicate tile lookup", CreateSyntheticDat(
+            new(NameBytes(TileNamesPath), Ascii("{0}{oak}")),
+            new(NameBytes("ART\\TILE\\TILENAME.MES"), Ascii("{0}{oak}")),
+            new(NameBytes(FacadeNamesPath), facade)), "did not resolve exactly once");
+        AssertSyntheticInitializationRejected("malformed tile MES", CreateSyntheticDat(
+            new(NameBytes(TileNamesPath), Ascii("{0}{oak")),
+            new(NameBytes(FacadeNamesPath), facade)), "unterminated");
+        WithSyntheticArchive(CreateSyntheticDat(
+            new(NameBytes(TileNamesPath), Ascii("{0}{oak}{400}{ignored}")),
+            new(NameBytes(FacadeNamesPath), facade)), archive =>
+        {
+            var (tiles, _) = InitializeNameTables(archive);
+            if (tiles.Counts != "1,0,0,0") throw new InvalidOperationException("Tile MES range counting did not ignore a key outside the four CE categories.");
+        });
+        var tooManyFacades = string.Concat(Enumerable.Range(0, 512).Select(index => $"{{{index}}}{{name{index}}}"));
+        AssertSyntheticInitializationRejected("over-cap facade MES", CreateSyntheticDat(
+            new(NameBytes(TileNamesPath), Ascii("{0}{oak}")),
+            new(NameBytes(FacadeNamesPath), Ascii(tooManyFacades))), "fewer than the CE 512-name capacity");
+    }
+
+    private static void AssertResolverProductionPaths()
+    {
+        var tileMes = Ascii("{0}{aaa/x}\n{1}{bbb/x}\n{100}{ccc/x}\n{101}{ddd/x}\n{200}{aaa/x}\n{201}{zzz/x}\n{300}{mmm/x}\n{301}{nnn/x}");
+        var facadeMes = Ascii("{9}{zero}");
+        var cases = new (uint Id, string Branch, string Path)[]
+        {
+            (TileId(0, 0, 0, true, true, true), "tile-single-material", "art\\tile\\aaabse0a.art"),
+            (TileId(0, 1, 0, true, true, true), "tile-edge-zero", "art\\tile\\bbbbse0a.art"),
+            (TileId(1, 0, 1, false, true, true), "tile-first-not-outdoor", "art\\tile\\zzzbse6a.art"),
+            (TileId(0, 1, 1, false, true, true), "tile-second-not-outdoor", "art\\tile\\zzzbse1a.art"),
+            (TileId(0, 1, 1, true, true, true), "tile-outdoor-forward", "art\\tile\\aaabbb6a.art"),
+            (TileId(1, 0, 1, true, true, true), "tile-outdoor-reversed", "art\\tile\\aaabbb1a.art"),
+            ((11u << 28) | (7u << 1), "facade-ordinal", "art\\Facade\\zero.art"),
+        };
+        var entries = new List<SyntheticDatEntry>
+        {
+            new(NameBytes(TileNamesPath), tileMes),
+            new(NameBytes(FacadeNamesPath), facadeMes),
+        };
+        entries.AddRange(cases.Select(item => new SyntheticDatEntry(NameBytes(item.Path), [1])));
+        WithSyntheticArchive(CreateSyntheticDat(entries.ToArray()), archive =>
+        {
+            var (tiles, facades) = InitializeNameTables(archive);
+            var resolver = new Resolver(archive, tiles, facades);
+            foreach (var item in cases)
+            {
+                var result = resolver.Resolve(item.Id, 0);
+                if (!result.Success || result.Branch != item.Branch || result.Path != item.Path) throw new InvalidOperationException($"Resolver branch {item.Branch} did not run through the archive lookup path.");
+            }
+            AssertRejected(() => resolver.Resolve(1u << 28, 0), "unsupported identifier class", "non-terrain high-nibble class");
+            AssertRejected(() => resolver.Resolve(TileId(2, 0, 0, true, true, true), 0), "invalid tile selector", "exceeds MES category");
+            AssertRejected(() => resolver.Resolve(11u << 28 | 1u << 17, 0), "invalid facade selector", "exceeds the sorted facadename");
+        });
+    }
+
+    private static uint TileId(int num1, int num2, int edge, bool outdoor, bool flip1, bool flip2) =>
+        ((uint)num1 << 22) | ((uint)num2 << 16) | ((uint)edge << 12) | (outdoor ? 1u << 8 : 0) | (flip1 ? 1u << 7 : 0) | (flip2 ? 1u << 6 : 0);
+
+    private static void AssertSyntheticInitializationRejected(string label, SyntheticDatFixture fixture, string message)
+    {
+        WithSyntheticArchive(fixture, archive => AssertRejected(() => InitializeNameTables(archive), label, message));
+    }
+
+    private static void AssertRejected(Action action, string label, string message)
+    {
+        try { action(); }
+        catch (InvalidDataException exception) when (exception.Message.Contains(message, StringComparison.Ordinal)) { return; }
+        throw new InvalidOperationException($"{label} was accepted or rejected at the wrong validation stage.");
+    }
+
+    private static void WithSyntheticArchive(SyntheticDatFixture fixture, Action<DatArchive> action)
+    {
+        using var stream = new MemoryStream(fixture.Bytes, writable: false);
+        using var archive = DatArchive.Open(stream, Options(), leaveOpen: true);
+        action(archive);
+    }
+
+    private static SyntheticDatFixture CreateSyntheticDat(params SyntheticDatEntry[] entries)
+    {
+        using var archive = new MemoryStream();
+        var offsets = new List<uint>(entries.Length);
+        foreach (var entry in entries)
+        {
+            offsets.Add(checked((uint)archive.Position));
+            archive.Write(entry.Payload);
+        }
+        using var index = new MemoryStream();
+        WriteU32(index, checked((uint)entries.Length));
+        for (var ordinal = 0; ordinal < entries.Length; ordinal++)
+        {
+            var entry = entries[ordinal];
+            WriteU32(index, checked((uint)entry.RawName.Length));
+            index.Write(entry.RawName);
+            index.Write(new byte[4]);
+            WriteU32(index, 1);
+            WriteU32(index, checked((uint)entry.Payload.Length));
+            WriteU32(index, checked((uint)entry.Payload.Length));
+            WriteU32(index, offsets[ordinal]);
+        }
+        index.Position = 0;
+        index.CopyTo(archive);
+        archive.Write(new byte[16]);
+        archive.Write("1TAD"u8);
+        WriteU32(archive, checked((uint)entries.Sum(entry => entry.RawName.Length)));
+        WriteU32(archive, checked((uint)(index.Length + 28)));
+        return new SyntheticDatFixture(archive.ToArray());
+    }
+
+    private static byte[] Ascii(string value) => System.Text.Encoding.ASCII.GetBytes(value);
+    private static byte[] NameBytes(string value) => Ascii(value + "\0");
+
+    private static void WriteU32(Stream stream, uint value)
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
+        stream.Write(bytes);
     }
 
     private static void AssertPoint(int x, int y, int expectedX, int expectedY)
@@ -314,7 +472,7 @@ internal static class Program
         private static string SplitName(string value)
         {
             var slash = value.IndexOf('/');
-            if (slash >= 0) return value[..slash].Trim();
+            if (slash >= 0) return value[..slash];
             if (value.Length < 3) throw new InvalidDataException("A tile-name MES value lacks the CE three-character fallback prefix.");
             return value[..3];
         }
@@ -323,7 +481,11 @@ internal static class Program
     private sealed class FacadeNameTable(string[] names)
     {
         public int Count => names.Length;
-        public static FacadeNameTable Parse(SortedDictionary<int, string> entries) => new(entries.Values.ToArray());
+        public static FacadeNameTable Parse(SortedDictionary<int, string> entries)
+        {
+            if (entries.Count >= 512) throw new InvalidDataException("Facade MES entry count must be fewer than the CE 512-name capacity.");
+            return new(entries.Values.ToArray());
+        }
         public string Name(int ordinal) => ordinal >= 0 && ordinal < names.Length
             ? names[ordinal]
             : throw new InvalidDataException($"Facade packed-ID ordinal {ordinal} exceeds the sorted facadename.mes entry count {names.Length}.");
@@ -336,6 +498,8 @@ internal static class Program
     private sealed record FrameSample(TerrainKind Kind, string Branch, int Ordinal, int LocalX, int LocalY, uint RawId, string Packed,
         string LookupRule, string Path, int EntryOrdinal, int Frame, int RequestedPalette, int EffectivePalette, int Width, int Height,
         int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY);
+    private sealed record SyntheticDatEntry(byte[] RawName, byte[] Payload);
+    private sealed record SyntheticDatFixture(byte[] Bytes);
     private enum TerrainKind { Tile, Facade }
     private sealed record Fingerprint(long Bytes, string Sha256)
     {

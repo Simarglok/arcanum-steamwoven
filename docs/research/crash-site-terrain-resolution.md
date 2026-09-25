@@ -33,6 +33,7 @@ The input remains the R3 module described in
 | local origin / extent | `(92928, 82560)` / `64 x 64` |
 | selected DAT entry | ordinal `463`, compressed, decoded length `47291` |
 | module fingerprint | `355938305` bytes; SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` |
+| explicit resource fingerprint | `147991122` bytes; SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` (`arcanum2.dat`) |
 
 The independent project probe's bounded prefix establishes zero lights and a
 4,096-word table at offsets `4..16387`; the table order is now also tied to
@@ -101,13 +102,19 @@ The real chain is callback based, not a filename guess:
    pathname (`a_name.c:1129-1147`). It is not a MES-key lookup.
 
 The companion probe parses only brace-keyed MES entries needed by these two
-lookups. For facades it deliberately discards the numerical keys only after
-sorting, retaining values in ordinal order, matching the cited initialization
-path. Its synthetic regression uses non-zero, gapped keys (`9`, `25`, `100`,
-`333`) and proves packed ordinal `3` selects the fourth sorted value rather
-than looking for key `3`. It validates each exact resolved raw archive pathname
-has exactly one candidate in its supplied source archive. The bounded local
-run reports six representative chains below, but no MES text or decoded pixels.
+lookups and fails closed on malformed syntax or duplicate keys. Tile keys are
+counted only in the four cited ranges; facade initialization rejects 512 or more
+entries before it forms the sorted ordinal table. For facades it deliberately
+discards the numerical keys only after sorting, retaining values in ordinal
+order, matching the cited initialization path. It preserves the source token
+before `/` exactly rather than applying an unsourced trim. Its synthetic
+regression uses non-zero, gapped keys (`9`, `25`, `100`, `333`) and proves
+packed ordinal `3` selects the fourth sorted value rather than looking for key
+`3`; it also drives malformed, missing and duplicate lookup, unsupported class,
+invalid selector, and every resolver branch through the production archive
+lookup path. It validates each exact resolved raw archive pathname has exactly
+one candidate in its supplied source archive. The bounded local run reports six
+representative chains below, but no MES text or decoded pixels.
 
 ### Selected frame and metadata
 
@@ -148,6 +155,7 @@ The executed real-data run used the explicit base archive `arcanum2.dat` and
 reported:
 
 ```text
+input module_bytes=355938305 module_sha256=8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f resource_bytes=147991122 resource_sha256=4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d
 lookup tables tile_categories=31,6,2,13 facade_entries=373
 module sector_ordinal=463 decoded_bytes=47291 tiles=4096
 resolution tile_cells=3033 facade_cells=1063 unique_tile_ids=284 unique_facade_ids=757 source_candidates=1 tile_unresolved_cells=457 facade_unresolved_cells=0
@@ -155,13 +163,13 @@ branch kind=tile name=tile-outdoor-forward cells=1269 ids=253 resolved_cells=812
 branch kind=tile name=tile-single-material cells=1764 ids=31 resolved_cells=1764 unresolved_cells=0 representative=true
 branch kind=facade name=facade-ordinal cells=1063 ids=757 resolved_cells=1063 unresolved_cells=0 representative=true
 placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240
-integrity before_after_match=true
+integrity module_before_after_match=true resource_before_after_match=true
 ```
 
 Accordingly, exact lookup in the selected source resolved 2,576 tile cells and
 all 1,063 facade cells. The observed resolver coverage is two tile branches
 and one facade branch; each has a bounded representative, and each kind has
-three distinct raw identifiers. The resource input's fingerprint was
+three distinct raw identifiers. Both immutable source fingerprints were
 recomputed before and after and matched; the tool writes neither source input
 nor decoded payloads. The unresolved 457 tile cells are a hard completeness
 failure, not a fallback opportunity.
