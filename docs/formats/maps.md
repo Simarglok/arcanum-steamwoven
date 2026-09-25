@@ -126,15 +126,22 @@ the remaining record window.
 When common bit 0 is set, the probe retains that I32 as the direct current ART
 ID; it also retains common bit 1's optional location only while validating the
 supported record. Otherwise it resolves the first ObjectID against exactly one
-referenced `proto\\*.pro` candidate in the same immutable module, without
-printing its name or identifier. Candidate selection is restricted to the
-referenced canonical A-form six-digit basename prefix; an
-unlocatable persisted form fails closed instead of causing a scan/decode of
-unrelated prototype entries. A prototype is independently validated as version
-119, first blocked ObjectID marker, own ObjectID, concrete type, exact type
-mask count, then every valid common/base/subtype field (not merely marked
-fields); its first common I32 is returned as the concrete inherited current ART
-ID. Its own ID and type must match the instance; missing, duplicate, malformed,
+referenced canonical prototype entry in the same immutable module, without
+printing its name or identifier. The raw-byte grammar is exactly
+`[Pp][Rr][Oo][Tt][Oo]\\DDDDDD - LABEL.[Pp][Rr][Oo]\\0`: ASCII letter folding
+applies only to `proto` and `pro`; the backslash, six ASCII digits, spaces,
+hyphen, period, and terminal NUL are literal. `LABEL` is non-empty opaque
+material with no NUL, `/`, or `\\`, and no bytes may follow the terminal NUL.
+The supported A range is `0..999999`; non-A or out-of-range referenced IDs
+fail before payload reads. The probe enumerates metadata, groups only wanted
+canonical candidates, and requires exactly one candidate per wanted A value
+before decoding any payload. Same-prefix malformed, non-`.pro`, and unrelated
+canonical names are ignored without reads. A decoded prototype is independently
+validated as version 119, first blocked ObjectID marker, own ObjectID, concrete
+type, exact type mask count, then every valid common/base/subtype field (not
+merely marked fields); its own A ID must equal both the filename and requested
+value. Its first common I32 is returned as the concrete inherited current ART
+ID, and type agreement remains a resolver check. Missing, duplicate, malformed,
 or mismatched candidates fail closed. This follows CE `proto.c::proto_init`,
 `obj.c::obj_field_fetch`, `obj_get_prototype_handle`, and
 `obj_pool.c::obj_pool_perm_lookup`; no default ART ID or recursive inheritance

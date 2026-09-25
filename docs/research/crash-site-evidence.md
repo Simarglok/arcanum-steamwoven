@@ -47,9 +47,9 @@ and must not be committed or reported.
 
 | Check | Result |
 | --- | --- |
-| Crash Site probe synthetic suite | PASS: preserved sector-boundary cases; ObjectID forms 0/1/2/3 and invalid/runtime/prototype forms; all supported type layouts plus rejected 18/19; masks/counts/presence; string/array/bitset bounds, sizes, NUL, population and truncation; full prototype lookup faults; direct/inherited concrete ART values; late variable fields; and numeric projection examples are exercised |
+| Crash Site probe synthetic suite | PASS: a synthetic in-memory DAT drives `DatArchive.Open`/metadata enumeration through referenced-prototype selection, `ReadEntry`/decompression, `ParsePrototype`, and `ResolveCurrentAids`; it preserves sector-boundary cases; ObjectID forms 0/1/2/3 and invalid/runtime/prototype forms; all supported type layouts plus rejected 18/19; masks/counts/presence; string/array/bitset bounds, sizes, NUL, population and truncation; canonical lookup grammar plus missing/duplicate/malformed/own-ID/type/non-A/range failures; direct/inherited concrete ART values; late variable fields; and numeric projection examples. The archive tracking fixtures prove unrelated and malformed-name payload ranges are not read. |
 | Read-only selected-sector run | FAIL CLOSED (expected): input size/SHA were unchanged before/after; sector aggregation still resolves ordinal 463, 47,291 decoded bytes, a 30,899-byte / 317-record window; its first LE word is unsupported version `1`, so no object bytes, IDs, names, or prototype candidates are emitted or interpreted |
-| Existing DAT synthetic tests | PASS: `Arcanum.Data.Tests` passed 25/25 in the available .NET 8 compatibility run; canonical locked-SDK reproduction remains separately recorded below |
+| Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run of Arcanum.Data.Tests with DAT_ROOT set to the user-owned inputs passed 25/25 (0 failed, 0 skipped). |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test` |
 
 The real-data aggregate art-type counts are recorded in `docs/formats/maps.md`.
@@ -98,11 +98,14 @@ bytes, bounded strings, and bounded sparse arrays with validated element size
 and bitset population. The probe would parse exactly 317 records from offsets `16388..47287` or
 reject the module without retaining field payloads.
 
-If current ART ID is not directly overridden, the probe selects only the
-referenced canonical-A six-digit-prefix `proto\\*.pro` candidate, validates that prototype's
-complete versioned entry, and requires exactly one semantic ObjectID/type
-match. The inherited ART ID is its first common I32 field. Missing, duplicate,
-malformed, unlocatable, or mismatched candidates are a fail-closed result. The full wire contract and
+If current ART ID is not directly overridden, the probe's synthetic in-memory
+DAT path opens the production archive and selects only a referenced exact
+canonical-A candidate before reading any candidate payload. It verifies the
+canonical raw-name grammar, uniqueness before decode, candidate own-A-ID
+equality, and complete versioned entry; tracking confirms same-prefix/non-`.pro`
+and unrelated entries have zero payload reads. The inherited ART ID is its
+first common I32 field. Missing, duplicate, malformed, unlocatable, or
+mismatched candidates are a fail-closed result. The full wire contract and
 pinned function-level lineage are in `docs/formats/maps.md`; the source list
 now includes `sector_object_list.c`, `obj.c`, `obj.h`, `obj_private.c`,
 `obj_id.h`, `sa.c`, `proto.c`, and `obj_pool.c` at the immutable CE revision.

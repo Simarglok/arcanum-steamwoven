@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 using Arcanum.Data;
@@ -108,16 +109,6 @@ internal static class Program
         return entry.RawNameBytes.Count == expectedBytes.Length + 1 && entry.RawNameBytes[^1] == 0 && entry.RawNameBytes.Take(expectedBytes.Length).SequenceEqual(expectedBytes);
     }
 
-    private static bool IsPrototypeEntry(DatEntry entry)
-    {
-        var name = entry.RawNameBytes;
-        return name.Count > 10 && name[^1] == 0 &&
-            IsAsciiIgnoreCase(name[0], (byte)'p') && IsAsciiIgnoreCase(name[1], (byte)'r') && IsAsciiIgnoreCase(name[2], (byte)'o') && IsAsciiIgnoreCase(name[3], (byte)'t') && IsAsciiIgnoreCase(name[4], (byte)'o') && name[5] == (byte)'\\' &&
-            IsAsciiIgnoreCase(name[^5], (byte)'.') && IsAsciiIgnoreCase(name[^4], (byte)'p') && IsAsciiIgnoreCase(name[^3], (byte)'r') && IsAsciiIgnoreCase(name[^2], (byte)'o');
-    }
-
-    private static bool IsAsciiIgnoreCase(byte actual, byte expected) => actual == expected || actual == expected - 32 || actual == expected + 32;
-
     private static void SelfTest()
     {
         var valid = CreateFixture(lightCount: 0, tileId: 0, trailingObjectCount: 2);
@@ -133,7 +124,6 @@ internal static class Program
         AssertProjection(0, 0, 0, 0); AssertProjection(1, 0, -40, 20); AssertProjection(0, 1, 40, 20); AssertProjection(30, 32, 80, 1240);
 
         var prototypeId = ObjectId.A(7001);
-        if (!ObjectWire.MatchesReferencedPrototypeName(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - synthetic.pro\0"), [prototypeId]) || ObjectWire.MatchesReferencedPrototypeName(System.Text.Encoding.ASCII.GetBytes("proto\\007002 - unrelated.pro\0"), [prototypeId])) throw new InvalidOperationException("Prototype candidate lookup was not bounded to the referenced ID.");
         foreach (var id in new[] { ObjectId.Null(), prototypeId, ObjectId.Guid(23), ObjectId.P(7, 8, 9) })
         {
             var form = ObjectWire.CreateSyntheticInstance(3, id, true, true, currentAid: 101);
@@ -184,6 +174,8 @@ internal static class Program
         AssertRejected(() => ObjectWire.ParseWindow(WithI32(arrayFixture, arrayOffset + 17, 1), 1), "bitset count mismatch");
         AssertRejected(() => ObjectWire.ParseWindow(WithU32(arrayFixture, arrayOffset + 21, 0), 1), "bitset popcount mismatch");
         AssertRejected(() => ObjectWire.ParseWindow(arrayFixture[..^1], 1), "truncated array or bitset");
+
+        AssertPrototypeArchivePath(inherited, prototypeId);
     }
 
     private static void AssertProjection(int localX, int localY, int expectedX, int expectedY)
@@ -229,11 +221,210 @@ internal static class Program
         return copy;
     }
 
-    private static void AssertRejected(Action action, string label)
+    private static void AssertRejected(Action action, string label, string? expectedMessageFragment = null)
     {
         try { action(); }
-        catch (InvalidDataException) { return; }
+        catch (InvalidDataException exception)
+        {
+            if (expectedMessageFragment is not null && !exception.Message.Contains(expectedMessageFragment, StringComparison.Ordinal))
+            {
+                throw new InvalidOperationException($"{label} rejected from the wrong validation stage.");
+            }
+            return;
+        }
         throw new InvalidOperationException($"{label} was accepted.");
+    }
+
+    private static void AssertPrototypeArchivePath(byte[] inheritedBytes, ObjectId prototypeId)
+    {
+        var validPrototype = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73);
+        var happy = CreateSyntheticDat(
+            new SyntheticDatEntry(NameBytes("PrOtO\\007001 - fixture.PrO"), validPrototype, Compressed: true),
+            new SyntheticDatEntry(NameBytes("proto\\007001 - fixtureNpro"), [1]),
+            new SyntheticDatEntry(NameBytes("proto\\007001 - fixture.txt"), [1]),
+            new SyntheticDatEntry(NameBytes("proto\\007002 - unrelated.pro"), [1]));
+        WithSyntheticArchive(happy, (archive, stream) =>
+        {
+            var instance = ObjectWire.ParseWindow(inheritedBytes, 1);
+            if (instance[0].CurrentAidOverridden) throw new InvalidOperationException("The inherited archive-path instance unexpectedly overrides its current AID.");
+            var prototypes = ObjectWire.ReadReferencedPrototypes(archive, [prototypeId, prototypeId]);
+            if (!ObjectWire.ResolveCurrentAids(instance, prototypes).SequenceEqual([73])) throw new InvalidOperationException("The archive-path prototype did not resolve inherited AID 73.");
+            AssertPayloadReadPattern(archive, stream, 0);
+        });
+
+        AssertArchiveRejected(CreateSyntheticDat(), [prototypeId], "missing canonical prototype", [], "missing or duplicated");
+        AssertArchiveRejected(CreateSyntheticDat(
+            new SyntheticDatEntry(NameBytes("proto\\007001 - first.pro"), validPrototype),
+            new SyntheticDatEntry(NameBytes("PROTO\\007001 - second.PRO"), validPrototype)), [prototypeId], "duplicate canonical prototype", [], "missing or duplicated");
+        AssertArchiveRejected(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("proto\\007001 - truncated.pro"), validPrototype[..^1])), [prototypeId], "malformed canonical prototype", [0], "Object record is truncated");
+        AssertArchiveRejected(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("proto\\007001 - wrong-id.pro"), ObjectWire.CreateSyntheticPrototype(3, ObjectId.A(7002), 73))), [prototypeId], "own-ID-mismatched canonical prototype", [0], "canonical requested A ID");
+
+        WithSyntheticArchive(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("proto\\007001 - type.pro"), ObjectWire.CreateSyntheticPrototype(4, prototypeId, 73))), (archive, stream) =>
+        {
+            var prototypes = ObjectWire.ReadReferencedPrototypes(archive, [prototypeId]);
+            AssertRejected(() => ObjectWire.ResolveCurrentAids(ObjectWire.ParseWindow(inheritedBytes, 1), prototypes), "type-mismatched archive prototype", "inherited current ART ID");
+            AssertPayloadReadPattern(archive, stream, 0);
+        });
+
+        foreach (var unlocatable in new[] { ObjectId.Null(), ObjectId.Guid(23), ObjectId.P(7, 8, 9), ObjectId.A(-1), ObjectId.A(1_000_000) })
+        {
+            var parsed = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, unlocatable, false, true), 1);
+            AssertArchiveRejected(happy, [parsed[0].PrototypeId], "unlocatable inherited prototype", [], "locatable");
+        }
+
+        AssertCanonicalArchiveAcceptance(0);
+        AssertCanonicalArchiveAcceptance(999999);
+        foreach (var invalid in new (string Label, byte[] Name)[]
+        {
+            ("five digits", NameBytes("proto\\07001 - fixture.pro")),
+            ("seven digits", NameBytes("proto\\0007001 - fixture.pro")),
+            ("altered backslash", NameBytes("proto/007001 - fixture.pro")),
+            ("altered space", NameBytes("proto\\007001_- fixture.pro")),
+            ("altered hyphen", NameBytes("proto\\007001 + fixture.pro")),
+            ("altered period", NameBytes("proto\\007001 - fixtureXpro")),
+            ("Npro suffix", NameBytes("proto\\007001 - fixtureNpro")),
+            ("non-pro extension", NameBytes("proto\\007001 - fixture.txt")),
+            ("embedded NUL", System.Text.Encoding.ASCII.GetBytes("proto\\007001 - fi\0xture.pro\0")),
+            ("empty label", NameBytes("proto\\007001 - .pro")),
+        })
+        {
+            AssertCanonicalNameRejected(invalid.Name, invalid.Label);
+            AssertArchiveRejected(CreateSyntheticDat(new SyntheticDatEntry(invalid.Name, [1])), [prototypeId], invalid.Label, [], "missing or duplicated");
+        }
+        AssertCanonicalNameRejected(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - fixture.pro"), "missing terminal NUL");
+        AssertCanonicalNameRejected(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - fixture.pro\0x"), "extra byte after terminal NUL");
+    }
+
+    private static void AssertCanonicalArchiveAcceptance(int aid)
+    {
+        var id = ObjectId.A(aid);
+        WithSyntheticArchive(CreateSyntheticDat(new SyntheticDatEntry(NameBytes($"pRoTo\\{aid:D6} - boundary.pRo"), ObjectWire.CreateSyntheticPrototype(3, id, 73), Compressed: true)), (archive, stream) =>
+        {
+            var prototypes = ObjectWire.ReadReferencedPrototypes(archive, [id]);
+            if (prototypes.Count != 1 || !prototypes[0].Id.Matches(id)) throw new InvalidOperationException("A canonical six-digit boundary candidate was not retained.");
+            AssertPayloadReadPattern(archive, stream, 0);
+        });
+    }
+
+    private static void AssertCanonicalNameRejected(byte[] rawName, string label)
+    {
+        if (ObjectWire.TryParseCanonicalPrototypeAid(rawName, out _)) throw new InvalidOperationException($"The {label} grammar was accepted.");
+    }
+
+    private static void AssertArchiveRejected(SyntheticDatFixture fixture, ObjectId[] referenced, string label, int[] expectedReadOrdinals, string? expectedMessageFragment = null)
+    {
+        WithSyntheticArchive(fixture, (archive, stream) =>
+        {
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypes(archive, referenced), label, expectedMessageFragment);
+            AssertPayloadReadPattern(archive, stream, expectedReadOrdinals);
+        });
+    }
+
+    private static void WithSyntheticArchive(SyntheticDatFixture fixture, Action<DatArchive, TrackingReadStream> action)
+    {
+        using var stream = new TrackingReadStream(fixture.Bytes);
+        using var archive = DatArchive.Open(stream, SyntheticOptions(), leaveOpen: true);
+        stream.ResetReadRanges();
+        action(archive, stream);
+    }
+
+    private static DatReaderOptions SyntheticOptions() => new()
+    {
+        MaxArchiveBytes = 128 * 1024,
+        MaxIndexBytes = 16 * 1024,
+        MaxEntryCount = 16,
+        MaxNameBytes = 256,
+        MaxTotalNameBytes = 2 * 1024,
+        MaxStoredEntryBytes = MaxDecodedSectorBytes,
+        MaxDecodedEntryBytes = MaxDecodedSectorBytes,
+    };
+
+    private static void AssertPayloadReadPattern(DatArchive archive, TrackingReadStream stream, params int[] expectedReadOrdinals)
+    {
+        foreach (var entry in archive.Entries)
+        {
+            var actual = stream.PayloadBytesRead(entry);
+            var expected = expectedReadOrdinals.Contains(entry.Ordinal) ? entry.StoredSize : 0;
+            if (actual != expected) throw new InvalidOperationException("The synthetic archive path read an unexpected payload range.");
+        }
+    }
+
+    private static SyntheticDatFixture CreateSyntheticDat(params SyntheticDatEntry[] entries)
+    {
+        using var archive = new MemoryStream();
+        var stored = new List<byte[]>(entries.Length);
+        var offsets = new List<uint>(entries.Length);
+        foreach (var entry in entries)
+        {
+            var payload = entry.Compressed ? Compress(entry.Payload) : entry.Payload;
+            offsets.Add(checked((uint)archive.Position));
+            stored.Add(payload);
+            archive.Write(payload);
+        }
+
+        using var index = new MemoryStream();
+        WriteU32(index, checked((uint)entries.Length));
+        for (var indexEntry = 0; indexEntry < entries.Length; indexEntry++)
+        {
+            var entry = entries[indexEntry];
+            WriteU32(index, checked((uint)entry.RawName.Length));
+            index.Write(entry.RawName);
+            index.Write(new byte[4]);
+            WriteU32(index, entry.Compressed ? 2u : 1u);
+            WriteU32(index, checked((uint)entry.Payload.Length));
+            WriteU32(index, checked((uint)stored[indexEntry].Length));
+            WriteU32(index, offsets[indexEntry]);
+        }
+        index.Position = 0;
+        index.CopyTo(archive);
+        archive.Write(new byte[16]);
+        archive.Write("1TAD"u8);
+        WriteU32(archive, checked((uint)entries.Sum(entry => entry.RawName.Length)));
+        WriteU32(archive, checked((uint)(index.Length + 28)));
+        return new SyntheticDatFixture(archive.ToArray());
+    }
+
+    private static byte[] NameBytes(string value) => System.Text.Encoding.ASCII.GetBytes(value + "\0");
+
+    private static byte[] Compress(byte[] input)
+    {
+        using var output = new MemoryStream();
+        using (var zlib = new ZLibStream(output, CompressionLevel.SmallestSize, leaveOpen: true)) zlib.Write(input);
+        return output.ToArray();
+    }
+
+    private static void WriteU32(Stream stream, uint value)
+    {
+        Span<byte> bytes = stackalloc byte[sizeof(uint)];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
+        stream.Write(bytes);
+    }
+
+    private sealed record SyntheticDatEntry(byte[] RawName, byte[] Payload, bool Compressed = false);
+    private sealed record SyntheticDatFixture(byte[] Bytes);
+
+    private sealed class TrackingReadStream : MemoryStream
+    {
+        private readonly List<(long Start, int Count)> _readRanges = [];
+
+        public TrackingReadStream(byte[] bytes) : base(bytes, writable: false) { }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var start = Position;
+            var count = base.Read(buffer);
+            if (count != 0) _readRanges.Add((start, count));
+            return count;
+        }
+
+        public void ResetReadRanges() => _readRanges.Clear();
+
+        public long PayloadBytesRead(DatEntry entry)
+        {
+            var entryStart = (long)entry.Offset;
+            var entryEnd = checked(entryStart + entry.StoredSize);
+            return _readRanges.Sum(range => Math.Max(0, Math.Min(checked(range.Start + range.Count), entryEnd) - Math.Max(range.Start, entryStart)));
+        }
     }
 
     private sealed record SectorSlice(int LightCount, int DistinctTileArtIds, int InvalidTileArtIds, int NonTileArtIds, int ObjectPayloadBytes, int TrailingObjectCount, int[] ArtTypeCounts)
@@ -313,23 +504,51 @@ internal static class Program
 
         public static List<PrototypeInfo> ReadReferencedPrototypes(DatArchive archive, ObjectId[] referenced)
         {
-            var wanted = referenced.Aggregate(new List<ObjectId>(), static (unique, candidate) =>
+            var wanted = new HashSet<int>();
+            foreach (var referencedId in referenced)
             {
-                if (!unique.Any(existing => existing.Matches(candidate))) unique.Add(candidate);
-                return unique;
-            }).ToArray();
-            if (wanted.Length == 0) return [];
-            var found = new List<PrototypeInfo>();
-            foreach (var entry in archive.Entries.Where(entry => IsReferencedPrototypeEntry(entry, wanted)))
+                if (referencedId.Type != 1)
+                {
+                    throw new InvalidDataException("A referenced prototype ObjectID is not a locatable A form.");
+                }
+
+                var aid = BinaryPrimitives.ReadInt32LittleEndian(referencedId.Payload);
+                if (aid is < 0 or > 999999)
+                {
+                    throw new InvalidDataException("A referenced prototype A ID is outside the locatable six-digit range.");
+                }
+                wanted.Add(aid);
+            }
+            if (wanted.Count == 0) return [];
+
+            var candidates = wanted.ToDictionary(aid => aid, _ => new List<DatEntry>());
+            foreach (var entry in archive.Entries)
             {
+                if (TryParseCanonicalPrototypeAid(entry.RawNameBytes.ToArray(), out var aid) && candidates.TryGetValue(aid, out var matches))
+                {
+                    matches.Add(entry);
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (candidate.Value.Count != 1)
+                {
+                    throw new InvalidDataException("A referenced prototype is missing or duplicated in the immutable module.");
+                }
+            }
+
+            var found = new List<PrototypeInfo>(wanted.Count);
+            foreach (var candidate in candidates.OrderBy(candidate => candidate.Key))
+            {
+                var entry = candidate.Value[0];
                 if (entry.DeclaredOutputSize > MaxDecodedSectorBytes) throw new InvalidDataException("A candidate prototype exceeds the 1 MiB read cap.");
                 var prototype = ParsePrototype(archive.ReadEntry(entry));
-                if (!wanted.Any(id => id.Matches(prototype.Id))) throw new InvalidDataException("A selected prototype candidate does not match its referenced ObjectID.");
+                if (prototype.Id.Type != 1 || BinaryPrimitives.ReadInt32LittleEndian(prototype.Id.Payload) != candidate.Key)
+                {
+                    throw new InvalidDataException("A selected prototype candidate does not match its canonical requested A ID.");
+                }
                 found.Add(prototype);
-            }
-            foreach (var id in wanted)
-            {
-                if (found.Count(prototype => prototype.Id.Matches(id)) != 1) throw new InvalidDataException("A referenced prototype is missing or duplicated in the immutable module.");
             }
             return found;
         }
@@ -436,24 +655,41 @@ internal static class Program
         private static int ReadType(ref Cursor cursor) { var type = cursor.I32(); if (type is < 0 or > 17) throw new InvalidDataException("Object type is outside the supported concrete range."); return type; }
         private static void RequireVersion(ref Cursor cursor) { var version = cursor.I32(); if (version != ExpectedObjectVersion) throw new InvalidDataException($"Object version {version} is unsupported."); }
 
-        private static bool IsReferencedPrototypeEntry(DatEntry entry, IReadOnlyList<ObjectId> wanted)
+        public static bool TryParseCanonicalPrototypeAid(ReadOnlySpan<byte> rawName, out int aid)
         {
-            if (!IsPrototypeEntry(entry)) return false;
-            return MatchesReferencedPrototypeName(entry.RawNameBytes.ToArray(), wanted);
+            aid = 0;
+            const int prefixLength = 5;
+            const int digitsStart = 6;
+            const int labelStart = 15;
+            if (rawName.Length < 21 || rawName[^1] != 0 ||
+                !AsciiLetterEquals(rawName[0], (byte)'p') || !AsciiLetterEquals(rawName[1], (byte)'r') || !AsciiLetterEquals(rawName[2], (byte)'o') || !AsciiLetterEquals(rawName[3], (byte)'t') || !AsciiLetterEquals(rawName[4], (byte)'o') ||
+                rawName[prefixLength] != (byte)'\\' || rawName[12] != (byte)' ' || rawName[13] != (byte)'-' || rawName[14] != (byte)' ' ||
+                rawName[^5] != (byte)'.' || !AsciiLetterEquals(rawName[^4], (byte)'p') || !AsciiLetterEquals(rawName[^3], (byte)'r') || !AsciiLetterEquals(rawName[^2], (byte)'o'))
+            {
+                return false;
+            }
+
+            var labelEnd = rawName.Length - 5;
+            if (labelEnd <= labelStart) return false;
+            var parsed = 0;
+            for (var index = 0; index < 6; index++)
+            {
+                var digit = rawName[digitsStart + index];
+                if (digit is < (byte)'0' or > (byte)'9') return false;
+                parsed = checked((parsed * 10) + (digit - (byte)'0'));
+            }
+            for (var index = labelStart; index < labelEnd; index++)
+            {
+                if (rawName[index] is 0 or (byte)'/' or (byte)'\\') return false;
+            }
+            aid = parsed;
+            return true;
         }
 
-        public static bool MatchesReferencedPrototypeName(ReadOnlySpan<byte> rawName, IReadOnlyList<ObjectId> wanted)
+        private static bool AsciiLetterEquals(byte actual, byte expected)
         {
-            if (rawName.Length == 0 || rawName[^1] != 0) return false;
-            var name = System.Text.Encoding.ASCII.GetString(rawName[..^1]);
-            foreach (var id in wanted)
-            {
-                if (id.Type != 1) continue;
-                var value = BinaryPrimitives.ReadInt32LittleEndian(id.Payload);
-                var prefix = $"proto\\{value.ToString("D6", System.Globalization.CultureInfo.InvariantCulture)} - ";
-                if (name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) return true;
-            }
-            return false;
+            if (actual is >= (byte)'A' and <= (byte)'Z') actual = checked((byte)(actual + ((byte)'a' - (byte)'A')));
+            return actual == expected;
         }
 
         private static ObjectId ReadObjectId(ref Cursor cursor, bool allowBlocked)
