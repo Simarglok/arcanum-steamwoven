@@ -9,6 +9,7 @@ internal static class Program
     private const string SectorEntryName = "maps\\Arcanum1-024-fixed\\86570436012.sec";
     private const int SectorTileCount = 64 * 64;
     private const int SerializedLightBytes = 48;
+    private const int TerminalObjectCountBytes = sizeof(int);
     private const int MaxLights = 1_024;
     private const int MaxDecodedSectorBytes = 1_024 * 1_024;
     private const long ExpectedModuleBytes = 355_938_305;
@@ -75,7 +76,7 @@ internal static class Program
 
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
         Console.WriteLine($"sector ordinal={entry.Ordinal} flags=0x{entry.Flags:x8} decoded_bytes={entry.DeclaredOutputSize}");
-        Console.WriteLine($"sector lights={sector.LightCount} tiles={SectorTileCount} distinct_tile_art_ids={sector.DistinctTileArtIds} invalid_tile_art_ids={sector.InvalidTileArtIds} non_tile_art_ids={sector.NonTileArtIds} trailing_object_count={sector.TrailingObjectCount}");
+        Console.WriteLine($"sector lights={sector.LightCount} tiles={SectorTileCount} distinct_tile_art_ids={sector.DistinctTileArtIds} invalid_tile_art_ids={sector.InvalidTileArtIds} non_tile_art_ids={sector.NonTileArtIds} object_payload_bytes={sector.ObjectPayloadBytes} trailing_object_count={sector.TrailingObjectCount}");
         Console.WriteLine($"sector art_type_counts={string.Join(',', sector.ArtTypeCounts.Select(count => count.ToString()))}");
         Console.WriteLine("integrity before_after_match=true");
     }
@@ -109,6 +110,7 @@ internal static class Program
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, -1), rejectNonTileArtIds: true), "negative light count");
         AssertRejected(() => SectorSlice.Parse(WithI32(valid, 0, MaxLights + 1), rejectNonTileArtIds: true), "light count over cap");
         AssertRejected(() => SectorSlice.Parse(valid[..(sizeof(int) + (SectorTileCount * sizeof(uint)) - 1)], rejectNonTileArtIds: true), "truncated tile table");
+        AssertRejected(() => SectorSlice.Parse(valid[..(sizeof(int) + (SectorTileCount * sizeof(uint)))], rejectNonTileArtIds: true), "missing terminal object count after complete tile table");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(lightCount: 0, tileId: 0x10000000, trailingObjectCount: 0), rejectNonTileArtIds: true), "non-tile art identifier");
         AssertRejected(() => SectorSlice.Parse(CreateFixture(lightCount: 0, tileId: 0, trailingObjectCount: -1), rejectNonTileArtIds: true), "negative object count");
     }
@@ -151,7 +153,7 @@ internal static class Program
     private static (int X, int Y) ProjectRelative(int localX, int localY) =>
         (checked(40 * (localY - localX)), checked(20 * (localY + localX)));
 
-    private sealed record SectorSlice(int LightCount, int DistinctTileArtIds, int InvalidTileArtIds, int NonTileArtIds, int TrailingObjectCount, int[] ArtTypeCounts)
+    private sealed record SectorSlice(int LightCount, int DistinctTileArtIds, int InvalidTileArtIds, int NonTileArtIds, int ObjectPayloadBytes, int TrailingObjectCount, int[] ArtTypeCounts)
     {
         public static SectorSlice Parse(ReadOnlySpan<byte> bytes, bool rejectNonTileArtIds)
         {
@@ -198,17 +200,19 @@ internal static class Program
                 throw new InvalidDataException("Sector tile table contains a non-tile ART identifier.");
             }
 
-            if (bytes.Length < sizeof(int))
+            var terminalCountOffset = checked(tileOffset + tileBytes);
+            if (bytes.Length - terminalCountOffset < TerminalObjectCountBytes)
             {
-                throw new InvalidDataException("Sector object count is truncated.");
+                throw new InvalidDataException("Sector terminal object count is truncated after the tile table.");
             }
-            var trailingObjectCount = BinaryPrimitives.ReadInt32LittleEndian(bytes[^sizeof(int)..]);
+            var trailingObjectCount = BinaryPrimitives.ReadInt32LittleEndian(bytes[^TerminalObjectCountBytes..]);
             if (trailingObjectCount < 0 || trailingObjectCount > SectorTileCount)
             {
                 throw new InvalidDataException("Sector trailing object count is outside the supported bound.");
             }
 
-            return new SectorSlice(lightCount, distinctArtIds.Count, invalidTileArtIds, nonTileArtIds, trailingObjectCount, artTypeCounts);
+            var objectPayloadBytes = checked(bytes.Length - terminalCountOffset - TerminalObjectCountBytes);
+            return new SectorSlice(lightCount, distinctArtIds.Count, invalidTileArtIds, nonTileArtIds, objectPayloadBytes, trailingObjectCount, artTypeCounts);
         }
     }
 

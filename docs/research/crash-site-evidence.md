@@ -26,13 +26,18 @@ Use the canonical project SDK and pass a local, user-owned input explicitly.
 The probe emits aggregate metadata only and does not write next to its input.
 
 ```text
-dotnet run \
-  --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj \
-  --no-restore -- --self-test
+dotnet restore --locked-mode
+dotnet build --no-restore
+dotnet restore tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --locked-mode
+dotnet build tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --no-restore
 
 dotnet run \
   --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj \
-  --no-restore -- --module <explicit-module-path>
+  --no-build -- --self-test
+
+dotnet run \
+  --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj \
+  --no-build -- --module <explicit-module-path>
 ```
 
 Use the project's configured .NET 8 SDK. The module path is supplied locally
@@ -42,8 +47,8 @@ and must not be committed or reported.
 
 | Check | Result |
 | --- | --- |
-| Crash Site probe synthetic suite | PASS: truncation, negative/impossible count, checked tile boundary, strict unexpected ART class, and negative terminal count are rejected; projection examples pass |
-| Read-only selected-sector run | PASS: input fingerprint matched before and after; entry ordinal 463, flags `0x00000002`, decoded bytes 47,291; zero serialized lights; 4,096 tile-table words; 1,041 distinct words; terminal object count 317 |
+| Crash Site probe synthetic suite | PASS: truncation, negative/impossible count, exact tile-table boundary with no following terminal count, strict unexpected ART class, and negative terminal count are rejected; projection examples pass |
+| Read-only selected-sector run | PASS: input fingerprint matched before and after; entry ordinal 463, flags `0x00000002`, decoded bytes 47,291; zero serialized lights; 4,096 tile-table words; 1,041 distinct words; 30,899 opaque object-payload bytes; terminal object count 317 |
 | Existing DAT synthetic tests | PASS: `Arcanum.Data.Tests` exited 0 with the canonical SDK |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test` |
 
@@ -61,6 +66,47 @@ or export decoded bytes.
 The strict synthetic mode rejects an unexpected non-tile high-nibble class.
 The real probe records those classes rather than assuming the whole table has
 one resource semantics; this is why it is evidence collection, not a loader.
+
+## Narrowed object and terrain blockers
+
+The real sector does establish the exact byte window that needs an object
+schema: with zero lights, the 4,096-word tile table occupies decoded offsets
+`4..16387`, the terminal count occupies `47287..47290`, and the intervening
+`30,899` bytes contain the 317 serialized objects. These values are aggregate
+measurements only; no object bytes, names, or identifiers are retained.
+
+Pinned CE's `objlist_load` is a source-derived explanation of this boundary:
+after the fixed tile list it first reads the final count, returns to the object
+window, calls its object reader that many times, then reads the final count
+again. Its `obj_read` first consumes a version and object identifier, selects
+prototype versus instance layout from that identifier, and the instance layout
+then consumes prototype/object identifiers, a validated type, a field-count,
+a type-dependent override-bitset, and the payload for every set field. Some
+field payloads are not fixed-width. This is one CE lineage, not independent
+format confirmation.
+
+Consequently, the exact minimum safe decoder subset still missing is not a
+full object system: it is a bounded decoder for that record envelope plus only
+the common **type**, **location**, **current ART ID**, and **prototype ID**
+properties, including the type-dependent bitset and every preceding
+variable-width property required to reach them. Without that delimiter schema,
+a proposed offset could make any subsequent object's bytes appear to be a
+scenery record. The selected-sector count and byte window prove the impact is
+local to these 317 records; they do not classify any record as scenery.
+
+Terrain is independently blocked at the equally small lookup boundary: the
+fixed table contains both the CE-reported tile and facade high-nibble classes,
+but this research has not established the type-specific ART-ID
+number/variation decomposition and `ART ID -> selected resource path` rule for
+either class. `DatArchive` can then locate a raw exact-name entry and
+`ArtDecoder.Inspect` can inspect a bounded entry, but neither can supply that
+missing resolver. No fallback path, archive winner, frame, baseline, or order
+is inferred.
+
+These two blockers mean neither a Godot-independent loader nor a Godot static
+scene is ready. The bounded next evidence is therefore precisely the object
+envelope/properties above and the two observed tile-class lookup rules—not a
+full MOB/PRO parser, full ART-ID resolver, renderer, or gameplay model.
 
 ## Known limitations and resulting readiness
 

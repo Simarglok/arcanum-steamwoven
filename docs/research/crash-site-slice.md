@@ -63,12 +63,38 @@ The selected real input had zero serialized lights. The 4,096 values contain
 does **not** claim that every word is a directly resolvable terrain ART ID.
 It records no raw IDs or game payloads in the repository.
 
+## Bounded unresolved resource schemas
+
+The selected sector contains a now-measured object window rather than an
+undifferentiated future work item. With its observed zero light records, the
+tile table ends at decoded offset 16,388, the final count begins at 47,287, and
+the 30,899-byte intervening window has 317 records according to the terminal
+count. The probe records only those aggregates.
+
+Pinned CE's object-list and object-reader paths state that the count controls a
+sequence of versioned object records; each record branches through an object
+identifier and a type-dependent property mask before field payloads. The
+minimum safe static-scenery investigation is therefore the record envelope and
+only these properties: type (to admit scenery only), location (for placement),
+current ART ID (visual candidate), and prototype ID (to establish whether a
+prototype rule overrides it). The variable-width property payloads and
+type-dependent mask that precede any selected field are the exact schema
+blocker: no fixed offset can be used safely. This is CE-derived schema evidence
+plus the local aggregate window, not independent confirmation or a claim that
+any of the 317 records is scenery.
+
+The tile table exposes two observed high-nibble classes. A terrain chain is
+blocked only at their type-specific ART-ID decomposition and resource-path
+lookup rule. It is not acceptable to promote a raw word to an ART filename;
+once a path is proven, the existing `DatArchive` and `ArtDecoder.Inspect`
+provide the prescribed bounded archive and metadata steps.
+
 ## Explicitly not established
 
-- object record boundaries, object type, prototype inheritance, or a safe
-  static-scenery subset;
-- tile-name/MES lookup, tile/scenery filename resolution, or a selected ART
-  frame for this sector;
+- object-record envelope/property decoding, object type, prototype inheritance,
+  or a safe static-scenery subset beyond the precise property schema above;
+- the two observed tile-class lookup rules, tile/scenery filename resolution,
+  or a selected ART frame for this sector;
 - patch, loose-file, or archive conflict precedence;
 - object baselines, visual offsets, mirroring, height, occlusion, or measured
   scene parity;

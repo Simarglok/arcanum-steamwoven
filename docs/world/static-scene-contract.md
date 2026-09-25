@@ -4,11 +4,12 @@
 
 **Not ready for implementation.** The selected map and one sector are
 reproducible, and the coordinate/sector arithmetic plus a fixed tile-table
-boundary are supported. Resource resolution for an actual terrain visual,
-static object decoding, sprite frame selection, baseline/offset semantics, and
-static draw ordering are not supported by evidence yet. A future loader or
-Godot scene must fail closed for those missing links rather than inventing
-fallbacks.
+boundary are supported. The exact remaining evidence is now bounded rather
+than deferred wholesale: a two-class tile ART-ID-to-resource lookup and the
+versioned object envelope/property subset needed to select scenery. Resource
+resolution for an actual terrain visual, sprite frame selection,
+baseline/offset semantics, and static draw ordering remain unsupported. A
+future loader or Godot scene must fail closed rather than invent fallbacks.
 
 This is a contract proposal for a later, separate task. It is not a production
 loader, renderer, Godot scene, or gameplay model.
@@ -26,6 +27,38 @@ loader, renderer, Godot scene, or gameplay model.
 No archive-overrides policy is implied. The caller must supply an explicitly
 chosen source set; this research does not select between module, PATCH, or
 loose files.
+
+## Exact evidence still required before a renderable record
+
+For this sector with zero light records, the fixed tile table ends at byte
+16,388 and the terminal count starts at byte 47,287, leaving a 30,899-byte
+window for 317 serialized objects. Pinned CE's object-list reader uses the
+terminal count to walk that window as versioned object records, and its object
+reader branches by object identifier, type, type-dependent field mask, and
+field payload descriptors. This makes the following a **minimum** bounded
+schema, not permission for a general object parser:
+
+1. validate a supported record version and identifier form;
+2. validate the object type and its mask length before allocating or walking
+   fields;
+3. decode every variable-size preceding field needed to reach only common
+   `location`, `current ART ID`, and `prototype ID`; and
+4. admit a record as static scenery only when its validated type says so, then
+   retain its source order as a deterministic tie key.
+
+The source paths establish why no constant byte offset is safe; the measured
+window/count establish the bounded impact on this sector. They do not prove an
+object type, property value, or visual result. A future loader must reject the
+whole selected subset if it cannot satisfy this envelope, rather than choosing
+plausible offsets.
+
+Terrain has a separate small blocker. The real tile table contains two
+CE-reported high-nibble classes, but no selected type-specific rule has been
+verified from raw ART ID to the exact resource path. The required rule consists
+of the type/number/variation decomposition and a verified pathname lookup for
+one selected terrain record from each observed class. Only after that path is
+proven may the existing `DatArchive` select the entry and `ArtDecoder.Inspect`
+report metadata. Frame selection remains a separate explicit choice.
 
 ## Candidate data model
 
@@ -80,7 +113,8 @@ hotspots or a viewer canvas offset are world-placement offsets.
 ## Resource and placement gates
 
 Before emitting a renderable terrain or scenery record, a future task must
-prove this complete chain for each included class:
+prove this complete chain for each included record. The first unresolved links
+are the bounded tile lookup and object envelope described above:
 
 ```text
 selected sector word/object record
@@ -107,9 +141,12 @@ for object fields and ART baselines exists:
 4. define walls/roofs only if they occur in the chosen slice and their resource
    and ordering rules are separately measured.
 
-There is no accepted overlap example from the original slice. Any ordering
-example before that point is synthetic and must not be reported as original
-scene parity.
+There is no accepted overlap example from the original slice because object
+boundaries/types are not yet safely available. The first decoder must retain
+the validated record sequence as a deterministic tie key, but that is only a
+reproducibility requirement—not an evidence-backed occlusion rule. Any
+ordering example before a selected, validated pair is synthetic and must not
+be reported as original scene parity.
 
 ## Follow-on outlines (not Kanban authorization)
 
