@@ -8,8 +8,8 @@ through object window `17140..47287`, whose bounded v119 delimiter reaches the
 terminal count 317; the word `1` at offset `16388` is the roof-empty
 discriminator, not a retail object version. The bounded terrain investigation
 also establishes tile/facade lookup to a selected one-source ART winner and
-physical frame for representatives, but leaves 457 tile cells unresolved.
-Remaining evidence includes an object field/scenery classification, an explicit
+physical frame for all 4,096 records under one explicit resource source.
+Remaining evidence includes an object field/scenery classification, a general
 multi-source policy, C# baseline geometry, terrain overlap order, and static
 draw ordering. A future loader or Godot scene must fail closed rather than
 inventing fallbacks.
@@ -24,7 +24,7 @@ loader, renderer, Godot scene, or gameplay model.
 | Module archive | caller-supplied read-only file matching the recorded size/SHA-256 | supports one exact sector entry |
 | Start selector | sole module `START_MAP` record | `Arcanum1-024-fixed`, `(92958, 82592)` |
 | Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
-| Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence; 457 tile lookup failures retained |
+| Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence for all 4,096 selected frames |
 | Intermediate sections | roof then placeholder-controlled script, metadata/sound, and block sections | selected roof `empty=1`, placeholder `0xAA0004`; checked framing only |
 | Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; no object semantics or scenery classification |
 
@@ -59,9 +59,9 @@ Terrain has a bounded but incomplete result. The real table contains the two
 CE-attributed tile/facade classes; their type-specific decomposition, MES
 callback lookup, exact one-source ART candidate, and selected physical frame
 are documented for representative records. The future loader must still reject
-all unsupported classes, missing/duplicate candidates, invalid frame selectors,
-and the known 457 unresolved tile cells. It cannot infer archive precedence or
-claim this partial one-source result is a complete terrain scene.
+all unsupported classes, missing/duplicate candidates, and invalid frame
+selectors. It cannot infer archive precedence or claim this one-source result
+is a complete terrain scene.
 
 ## Candidate data model
 
@@ -140,8 +140,8 @@ selected sector word/object record
 `DatArchive` and `ArtDecoder` are mandatory reuse points. No alternative DAT
 or ART parser is authorized by this contract. The known ART decoder's validated
 limits and palette/frame metadata are useful only after exact lookup succeeds;
-an unsupported type, duplicate/missing candidate, failed frame bound, or one of
-the 457 unresolved tile cells produces no substitute image.
+an unsupported type, duplicate/missing candidate, or failed frame bound
+produces no substitute image.
 
 ## Ordering proposal, deliberately blocked
 

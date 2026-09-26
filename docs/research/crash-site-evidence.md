@@ -12,6 +12,7 @@ copy.
 | --- | --- | --- | --- |
 | Observed module archive | `Arcanum.dat`, 355,938,305 bytes, SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` | exact map and sector selectors | experimentally verified local input; not a retail-canonical or precedence claim |
 | Observed resource archive | `arcanum2.dat`, 147,991,122 bytes, SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` | one explicit terrain lookup source | experimentally verified local input; not a retail-canonical or precedence claim |
+| Bounded installed-source inventory | `arcanum1.dat` `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576`; `arcanum3.dat` `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`; `Arcanum4.dat` `975d43854fca8b7dd74e2b12ef2ff3fe6d3c0f99dc541151d33001469f89710c`; `tig.dat` `c9b48eb6396c514eba3805fb4847df67db3c67ef9f13a79ea21bbf7dd329a09b`; `Vormantown.dat` `163a9560ad7d684f486167bf91ad6da0fdef8bd7fd1082fc054084611da04345`; `Arcanum.PATCH0` `d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce` | competing-source/duplicate check for the 220 normalized paths | each fingerprint matched before/after; zero candidate entries in each; no precedence policy inferred |
 | Project reader | `src/Arcanum.Data/DatArchive.cs` | bounded DAT opening and in-memory entry decode | independently authored project implementation |
 | Project ART decoder | `src/Arcanum.Data/ArtDecoder.cs` | bounded selected-frame metadata/decode for representative terrain paths | no scene-parity or general precedence claim |
 | Pinned CE source | `a7ff41b300ef712f0e7d088183a3d08957110cdd` | sector sequence, coordinate packing, isometric relation, ART-ID context | one external lineage, not independent corroboration |
@@ -45,7 +46,8 @@ dotnet restore tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj -
 dotnet build tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-restore
 dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- --self-test
 dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- \
-  --module <explicit-module-path> --resource <explicit-one-source-resource-archive>
+  --module <explicit-module-path> --resource <explicit-one-source-resource-archive> \
+  [--inventory <read-only-installed-archive> ...]
 ```
 
 Use the project's configured .NET 8 SDK. The module path is supplied locally
@@ -58,7 +60,7 @@ and must not be committed or reported.
 | Crash Site probe synthetic suite | PASS: framing branches, checked count/length bounds, roof and placeholder discriminators, and the bounded v119 delimiter are exercised without retaining real payloads. |
 | Read-only selected-sector framing run | PASS: size/SHA-256 matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 records reached the terminal count. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
 | Terrain probe synthetic suite | PASS: fail-closed MES initialization (malformed, missing, duplicate, non-zero facade start, each shifted/missing tile anchor, range/capacity cases), no name trimming, type-specific palette selection, unsupported-class/invalid-selector rejection, every resolver branch through exact raw-path archive lookup, and projection arithmetic. |
-| Read-only terrain run with explicit `arcanum2.dat` source | PASS with completeness failure retained: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; 3,033 tile and 1,063 facade cells; 2,576 tiles and all facades resolved; 457 tile cells unresolved; all observed branches reported, with six bounded identifier-to-ART/frame/metadata/anchor chains. |
+| Read-only terrain run with explicit `arcanum2.dat` source | PASS: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; all 3,033 tile and 1,063 facade cells resolved uniquely; zero missing/ambiguous/bad-selector/unsupported outcomes; all 4,096 selected frames inspected; seven bounded identifier-to-ART/frame/metadata/anchor chains include one normalization recovery. |
 | Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run with `DAT_ROOT` set to user-owned inputs: Arcanum.Data.Tests 25/25 and Arcanum.Presentation.Tests 14/14. |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test`. |
 
@@ -78,7 +80,9 @@ evidence, not a full object model or scenery classifier.
 `Arcanum.TerrainProbe` supports only the observed tile/facade classes and an
 explicit one-archive source set. It pins and reports both source fingerprints,
 then verifies the module and resource fingerprints again after the read-only
-run. It applies source-attributed MES callback rules, rejects malformed MES,
+run. It applies source-attributed MES callback rules, including the tile
+callback normalization that clears palette and low flag bits before filename
+construction; it rejects malformed MES,
 requires tile keys `0`, `100`, `200`, `300`, and `400`, rejects facade tables
 outside 1–511 entries or without exact key `0`, requires one exact raw-path
 candidate, and uses `DatArchive` plus
@@ -86,11 +90,16 @@ candidate, and uses `DatArchive` plus
 or duplicate candidates, invalid selectors, and unresolved lookups fail
 closed; no fallback path or generic archive precedence is inferred.
 
+The installed-source inventory used the same normalized candidate names against
+eight bounded DAT files, recomputing each fingerprint before and after. Only
+the selected `arcanum2.dat` contained the 220 candidate entries; no precedence
+rule was inferred from that observation.
+
 ## Known limitations and resulting readiness
 
-- The bounded one-source terrain resolver leaves 457 tile cells unresolved and
-  establishes neither a general resource-precedence policy nor a complete
-  sector.
+- The bounded one-source terrain resolver covers all 4,096 records only for
+  the recorded explicit source. It establishes neither a general
+  resource-precedence policy nor a complete rendered sector.
 - Framing and the v119 delimiter establish no selected-version object field
   semantics, static-scenery subset, current-ART/prototype chain, baseline, or
   occlusion rule. The word `1` at offset `16388` is not an object version.

@@ -30,12 +30,13 @@ internal static class Program
                 return 0;
             }
 
-            if (args.Length != 4 || args[0] != "--module" || args[2] != "--resource")
+            if (args.Length < 4 || args[0] != "--module" || args[2] != "--resource" ||
+                (args.Length > 4 && args[4] != "--inventory"))
             {
-                throw new ArgumentException("usage: --self-test | --module PATH --resource PATH");
+                throw new ArgumentException("usage: --self-test | --module PATH --resource PATH [--inventory ARCHIVE ...]");
             }
 
-            Probe(args[1], args[3]);
+            Probe(args[1], args[3], args.Skip(5).ToArray());
             return 0;
         }
         catch (Exception exception)
@@ -45,7 +46,7 @@ internal static class Program
         }
     }
 
-    private static void Probe(string modulePath, string resourcePath)
+    private static void Probe(string modulePath, string resourcePath, IReadOnlyList<string> inventoryPaths)
     {
         var moduleBefore = Fingerprint.Create(modulePath);
         if (moduleBefore.Bytes != ExpectedModuleBytes || moduleBefore.Sha256 != ExpectedModuleSha256)
@@ -72,7 +73,7 @@ internal static class Program
         var (tileNames, facadeNames) = InitializeNameTables(resources);
         Console.WriteLine($"lookup tables tile_categories={tileNames.Counts} facade_entries={facadeNames.Count}");
         var resolver = new Resolver(resources, tileNames, facadeNames);
-        var results = words.Select((word, ordinal) => resolver.Resolve(word, ordinal)).ToArray();
+        var results = ValidateSelections(resources, words.Select((word, ordinal) => resolver.Resolve(word, ordinal)).ToArray());
 
         var tileResults = results.Where(result => result.Kind == TerrainKind.Tile).ToArray();
         var facadeResults = results.Where(result => result.Kind == TerrainKind.Facade).ToArray();
@@ -81,7 +82,7 @@ internal static class Program
             throw new InvalidDataException("The selected sector did not contain both supported terrain identifier classes.");
         }
 
-        var samples = InspectRepresentatives(resources, results).ToArray();
+        var samples = InspectRepresentatives(resources, results, tileNames).ToArray();
         if (samples.Count(sample => sample.Kind == TerrainKind.Tile) < 3 ||
             samples.Count(sample => sample.Kind == TerrainKind.Facade) < 3)
         {
@@ -97,16 +98,19 @@ internal static class Program
 
         Console.WriteLine($"module sector_ordinal={sector.Ordinal} decoded_bytes={sector.DeclaredOutputSize} tiles={words.Length}");
         Console.WriteLine($"resolution tile_cells={tileResults.Length} facade_cells={facadeResults.Length} unique_tile_ids={tileResults.Select(item => item.RawId).Distinct().Count()} unique_facade_ids={facadeResults.Select(item => item.RawId).Distinct().Count()} source_candidates=1 tile_unresolved_cells={tileResults.Count(item => !item.Success)} facade_unresolved_cells={facadeResults.Count(item => !item.Success)}");
+        ReportFailureCoverage(results);
+        ReportTileNormalizationEffect(resources, tileNames, tileResults);
         ReportBranchCoverage(results, samples);
         foreach (var sample in samples)
         {
             Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) anchor_boundary=cell_top_left_plus_1_x");
         }
+        InventoryCandidates(results, inventoryPaths);
         Console.WriteLine("placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240");
         Console.WriteLine("integrity module_before_after_match=true resource_before_after_match=true");
     }
 
-    private static IEnumerable<FrameSample> InspectRepresentatives(DatArchive resources, IEnumerable<Resolution> source)
+    private static IEnumerable<FrameSample> InspectRepresentatives(DatArchive resources, IEnumerable<Resolution> source, TileNameTable tileNames)
     {
         var candidates = source.Where(result => result.Success)
             .GroupBy(result => new { result.Kind, result.RawId })
@@ -125,6 +129,10 @@ internal static class Program
             selected.AddRange(candidates.Where(result => result.Kind == kind && selected.All(chosen => chosen.Kind != kind || chosen.RawId != result.RawId))
                 .Take(Math.Max(0, 3 - selected.Count(chosen => chosen.Kind == kind))));
         }
+        selected.AddRange(candidates.Where(result => result.Kind == TerrainKind.Tile &&
+                Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId) != result.Path &&
+                selected.All(chosen => chosen.RawId != result.RawId))
+            .Take(1));
 
         foreach (var result in selected.OrderBy(result => result.Kind).ThenBy(result => result.Branch).ThenBy(result => result.RawId))
         {
@@ -134,13 +142,13 @@ internal static class Program
             }
 
             var art = resources.ReadEntry(result.Entry);
-            var metadata = ArtDecoder.Inspect(art, new ArtDecoderOptions { MaxInputBytes = MaxEntryBytes, MaxFrameCount = 4096, MaxFrameTableBytes = 256 * 1024, MaxDimension = 4096, MaxFramePixels = 4 * 1024 * 1024, MaxRgbaBytes = 16 * 1024 * 1024, MaxEncodedFrameBytes = MaxEntryBytes });
+            var metadata = ArtDecoder.Inspect(art, ArtOptions());
             var frame = result.Frame;
             if (frame < 0 || frame >= metadata.Header.FramesPerGroup)
             {
                 throw new InvalidDataException("The packed terrain identifier selects a frame outside the bounded ART metadata.");
             }
-            var decoded = ArtDecoder.Decode(art, new ArtFrameSelection(0, frame, result.Palette), new ArtDecoderOptions { MaxInputBytes = MaxEntryBytes, MaxFrameCount = 4096, MaxFrameTableBytes = 256 * 1024, MaxDimension = 4096, MaxFramePixels = 4 * 1024 * 1024, MaxRgbaBytes = 16 * 1024 * 1024, MaxEncodedFrameBytes = MaxEntryBytes });
+            var decoded = ArtDecoder.Decode(art, new ArtFrameSelection(0, frame, result.Palette), ArtOptions());
             var metadataFrame = decoded.Frame;
             var localX = result.Ordinal & 63;
             var localY = (result.Ordinal >> 6) & 63;
@@ -159,6 +167,106 @@ internal static class Program
             Console.WriteLine($"branch kind={branch.Key.Kind.ToString().ToLowerInvariant()} name={branch.Key.Branch} cells={branch.Count()} ids={branch.Select(result => result.RawId).Distinct().Count()} resolved_cells={branch.Count(result => result.Success)} unresolved_cells={branch.Count(result => !result.Success)} representative={representative.ToString().ToLowerInvariant()}");
         }
     }
+
+    private static Resolution[] ValidateSelections(DatArchive resources, IEnumerable<Resolution> source)
+    {
+        var metadata = new Dictionary<int, ArtMetadata>();
+        var unsupportedEntries = new HashSet<int>();
+        var results = new List<Resolution>();
+        foreach (var result in source)
+        {
+            if (!result.Success || result.Entry is null)
+            {
+                results.Add(result);
+                continue;
+            }
+
+            if (result.Entry.DeclaredOutputSize > MaxEntryBytes || unsupportedEntries.Contains(result.Entry.Ordinal))
+            {
+                unsupportedEntries.Add(result.Entry.Ordinal);
+                results.Add(result with { Status = ResolutionStatus.UnsupportedArt });
+                continue;
+            }
+
+            try
+            {
+                if (!metadata.TryGetValue(result.Entry.Ordinal, out var inspected))
+                {
+                    inspected = ArtDecoder.Inspect(resources.ReadEntry(result.Entry), ArtOptions());
+                    metadata.Add(result.Entry.Ordinal, inspected);
+                }
+                results.Add(result.Frame >= 0 && result.Frame < inspected.Header.FramesPerGroup
+                    ? result
+                    : result with { Status = ResolutionStatus.UnsupportedArt });
+            }
+            catch (Exception) when (result.Entry is not null)
+            {
+                unsupportedEntries.Add(result.Entry.Ordinal);
+                results.Add(result with { Status = ResolutionStatus.UnsupportedArt });
+            }
+        }
+        return results.ToArray();
+    }
+
+    private static void ReportFailureCoverage(IEnumerable<Resolution> results)
+    {
+        Console.WriteLine($"coverage zero_matches={results.Count(result => result.Status == ResolutionStatus.ZeroMatches)} ambiguous_candidates={results.Count(result => result.Status == ResolutionStatus.AmbiguousCandidates)} bad_selectors={results.Count(result => result.Status == ResolutionStatus.BadSelector)} unsupported_behavior={results.Count(result => result.Status is ResolutionStatus.UnsupportedKind or ResolutionStatus.UnsupportedArt)} selected_frame_validated={results.Count(result => result.Success)}");
+    }
+
+    private static void ReportTileNormalizationEffect(DatArchive resources, TileNameTable names, IEnumerable<Resolution> tiles)
+    {
+        var candidates = resources.Entries
+            .GroupBy(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        foreach (var branch in tiles.GroupBy(result => result.Branch).OrderBy(group => group.Key))
+        {
+            var changed = branch.Where(result => Resolver.TilePathWithoutNameNormalization(names, result.RawId) != result.Path).ToArray();
+            var rawZero = changed.Where(result => candidates.GetValueOrDefault(NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(names, result.RawId)), requireTerminalNul: false), 0) == 0).ToArray();
+            var restored = rawZero.Where(result => result.Success).ToArray();
+            Console.WriteLine($"normalization branch={branch.Key} changed_cells={changed.Length} changed_ids={changed.Select(result => result.RawId).Distinct().Count()} raw_zero_cells={rawZero.Length} raw_zero_ids={rawZero.Select(result => result.RawId).Distinct().Count()} recovered_cells={restored.Length} recovered_ids={restored.Select(result => result.RawId).Distinct().Count()}");
+        }
+    }
+
+    private static void InventoryCandidates(IEnumerable<Resolution> results, IReadOnlyList<string> inventoryPaths)
+    {
+        if (inventoryPaths.Count == 0)
+        {
+            return;
+        }
+
+        var candidatePaths = results.Where(result => !string.IsNullOrEmpty(result.Path))
+            .Select(result => NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(result.Path), requireTerminalNul: false))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var totalCandidateEntries = 0;
+        var sourcesWithCandidates = 0;
+        foreach (var inventoryPath in inventoryPaths)
+        {
+            var before = Fingerprint.Create(inventoryPath);
+            using var archive = DatArchive.Open(inventoryPath, Options());
+            var normalizedEntries = archive.Entries
+                .GroupBy(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+            var candidateEntries = candidatePaths.Sum(path => normalizedEntries.GetValueOrDefault(path, 0));
+            if (candidateEntries != 0) sourcesWithCandidates++;
+            totalCandidateEntries += candidateEntries;
+            var after = Fingerprint.Create(inventoryPath);
+            if (before != after) throw new InvalidDataException("An inventory archive changed during the read-only probe.");
+            Console.WriteLine($"inventory archive={Path.GetFileName(inventoryPath)} bytes={before.Bytes} sha256={before.Sha256} candidate_entries={candidateEntries}");
+        }
+        Console.WriteLine($"inventory candidate_paths={candidatePaths.Length} sources={inventoryPaths.Count} sources_with_candidates={sourcesWithCandidates} candidate_entries={totalCandidateEntries} precedence=not_inferred");
+    }
+
+    private static ArtDecoderOptions ArtOptions() => new()
+    {
+        MaxInputBytes = MaxEntryBytes,
+        MaxFrameCount = 4096,
+        MaxFrameTableBytes = 256 * 1024,
+        MaxDimension = 4096,
+        MaxFramePixels = 4 * 1024 * 1024,
+        MaxRgbaBytes = 16 * 1024 * 1024,
+        MaxEncodedFrameBytes = MaxEntryBytes,
+    };
 
     private static uint[] ReadTileWords(byte[] bytes)
     {
@@ -189,24 +297,28 @@ internal static class Program
 
     private static DatEntry ReadUnique(DatArchive archive, string path, string label)
     {
-        var expected = System.Text.Encoding.ASCII.GetBytes(path);
-        var entries = archive.Entries.Where(entry => RawAsciiEqualsIgnoreCase(entry.RawNameBytes, expected)).ToArray();
+        var expected = NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(path), requireTerminalNul: false);
+        var entries = archive.Entries.Where(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
         if (entries.Length != 1) throw new InvalidDataException($"The {label} did not resolve exactly once by raw ASCII path.");
         return entries[0];
     }
 
-    private static bool RawAsciiEqualsIgnoreCase(IReadOnlyList<byte> raw, byte[] expected)
+    private static string NormalizeDatabasePath(IReadOnlyList<byte> raw, bool requireTerminalNul)
     {
-        if (raw.Count != expected.Length + 1 || raw[^1] != 0) return false;
-        for (var index = 0; index < expected.Length; index++)
+        var length = requireTerminalNul ? raw.Count - 1 : raw.Count;
+        if (length < 0 || (requireTerminalNul && (raw.Count == 0 || raw[^1] != 0)))
+        {
+            throw new InvalidDataException("Archive pathname lacks the required terminal NUL.");
+        }
+        var normalized = new byte[length];
+        for (var index = 0; index < length; index++)
         {
             var value = raw[index];
+            if (value == (byte)'\\') value = (byte)'/';
             if (value is >= (byte)'A' and <= (byte)'Z') value = checked((byte)(value + 32));
-            var wanted = expected[index];
-            if (wanted is >= (byte)'A' and <= (byte)'Z') wanted = checked((byte)(wanted + 32));
-            if (value != wanted) return false;
+            normalized[index] = value;
         }
-        return true;
+        return System.Text.Encoding.ASCII.GetString(normalized);
     }
 
     private static SortedDictionary<int, string> ParseMes(byte[] bytes)
@@ -321,6 +433,7 @@ internal static class Program
             (TileId(0, 1, 1, false, true, true), "tile-second-not-outdoor", "art\\tile\\zzzbse1a.art"),
             (TileId(0, 1, 1, true, true, true), "tile-outdoor-forward", "art\\tile\\aaabbb6a.art"),
             (TileId(1, 0, 1, true, true, true), "tile-outdoor-reversed", "art\\tile\\aaabbb1a.art"),
+            (TileId(0, 1, 3, true, true, true) | 0x31u, "tile-outdoor-forward", "art\\tile\\aaabbb4a.art"),
             ((11u << 28) | (7u << 1), "facade-ordinal", "art\\Facade\\zero.art"),
         };
         var entries = new List<SyntheticDatEntry>
@@ -328,7 +441,7 @@ internal static class Program
             new(NameBytes(TileNamesPath), tileMes),
             new(NameBytes(FacadeNamesPath), facadeMes),
         };
-        entries.AddRange(cases.Select(item => new SyntheticDatEntry(NameBytes(item.Path), [1])));
+        entries.AddRange(cases.Select(item => new SyntheticDatEntry(NameBytes(item.Path == "art\\tile\\aaabbb6a.art" ? "ART/TILE/AAABBB6A.ART" : item.Path), [1])));
         WithSyntheticArchive(CreateSyntheticDat(entries.ToArray()), archive =>
         {
             var (tiles, facades) = InitializeNameTables(archive);
@@ -338,9 +451,18 @@ internal static class Program
                 var result = resolver.Resolve(item.Id, 0);
                 if (!result.Success || result.Branch != item.Branch || result.Path != item.Path) throw new InvalidOperationException($"Resolver branch {item.Branch} did not run through the archive lookup path.");
             }
-            AssertRejected(() => resolver.Resolve(1u << 28, 0), "unsupported identifier class", "non-terrain high-nibble class");
-            AssertRejected(() => resolver.Resolve(TileId(2, 0, 0, true, true, true), 0), "invalid tile selector", "exceeds MES category");
-            AssertRejected(() => resolver.Resolve(11u << 28 | 1u << 17, 0), "invalid facade selector", "exceeds the sorted facadename");
+            AssertResolutionStatus(resolver.Resolve(1u << 28, 0), ResolutionStatus.UnsupportedKind, "unsupported identifier class");
+            AssertResolutionStatus(resolver.Resolve(TileId(2, 0, 0, true, true, true), 0), ResolutionStatus.BadSelector, "invalid tile selector");
+            AssertResolutionStatus(resolver.Resolve(11u << 28 | 1u << 17, 0), ResolutionStatus.BadSelector, "invalid facade selector");
+        });
+        WithSyntheticArchive(CreateSyntheticDat(
+            new(NameBytes(TileNamesPath), tileMes),
+            new(NameBytes(FacadeNamesPath), facadeMes),
+            new(NameBytes("ART/TILE/AAABSE0A.ART"), [1]),
+            new(NameBytes("art\\tile\\aaabse0a.art"), [1])), archive =>
+        {
+            var (tiles, facades) = InitializeNameTables(archive);
+            AssertResolutionStatus(new Resolver(archive, tiles, facades).Resolve(TileId(0, 0, 0, true, true, true), 0), ResolutionStatus.AmbiguousCandidates, "normalized duplicate candidate");
         });
     }
 
@@ -357,6 +479,11 @@ internal static class Program
         try { action(); }
         catch (InvalidDataException exception) when (exception.Message.Contains(message, StringComparison.Ordinal)) { return; }
         throw new InvalidOperationException($"{label} was accepted or rejected at the wrong validation stage.");
+    }
+
+    private static void AssertResolutionStatus(Resolution result, ResolutionStatus expected, string label)
+    {
+        if (result.Status != expected) throw new InvalidOperationException($"{label} did not produce the expected fail-closed status.");
     }
 
     private static void WithSyntheticArchive(SyntheticDatFixture fixture, Action<DatArchive> action)
@@ -416,14 +543,32 @@ internal static class Program
     {
         public Resolution Resolve(uint rawId, int ordinal)
         {
-            var kind = (rawId >> 28) switch { 0 => TerrainKind.Tile, 11 => TerrainKind.Facade, _ => throw new InvalidDataException("Selected sector contains a non-terrain high-nibble class.") };
-            var lookup = kind == TerrainKind.Tile ? TileLookup(tiles, rawId) : new Lookup(FacadePath(facades, rawId), "facade-ordinal");
-            var path = lookup.Path;
-            var matches = resources.Entries.Where(entry => RawAsciiEqualsIgnoreCase(entry.RawNameBytes, System.Text.Encoding.ASCII.GetBytes(path))).ToArray();
+            var kind = (rawId >> 28) switch { 0 => TerrainKind.Tile, 11 => TerrainKind.Facade, _ => TerrainKind.Unsupported };
+            if (kind == TerrainKind.Unsupported)
+            {
+                return new Resolution(rawId, ordinal, kind, "unsupported-kind", "unsupported", "unsupported high-nibble class", "", rawId, 0, 0, null, ResolutionStatus.UnsupportedKind);
+            }
+
+            var pathId = NormalizeForPath(rawId, kind);
+            var packed = kind == TerrainKind.Tile ? TilePacked(rawId, pathId) : FacadePacked(rawId);
             var selection = Selection(rawId, kind);
-            var packed = kind == TerrainKind.Tile ? TilePacked(rawId) : FacadePacked(rawId);
-            if (matches.Length != 1) return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: exact raw-ASCII archive pathname", path, selection.Frame, selection.Palette, null);
-            return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: exact raw-ASCII archive pathname", path, selection.Frame, selection.Palette, matches[0]);
+            try
+            {
+                var lookup = kind == TerrainKind.Tile ? TileLookup(tiles, pathId) : new Lookup(FacadePath(facades, pathId), "facade-ordinal");
+                var expected = NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(lookup.Path), requireTerminalNul: false);
+                var matches = resources.Entries.Where(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
+                var status = matches.Length switch
+                {
+                    0 => ResolutionStatus.ZeroMatches,
+                    1 => ResolutionStatus.Resolved,
+                    _ => ResolutionStatus.AmbiguousCandidates,
+                };
+                return new Resolution(rawId, ordinal, kind, lookup.Branch, packed, $"{lookup.Branch}: CE database normalized ASCII pathname", lookup.Path, pathId, selection.Frame, selection.Palette, matches.Length == 1 ? matches[0] : null, status);
+            }
+            catch (InvalidDataException)
+            {
+                return new Resolution(rawId, ordinal, kind, "bad-selector", packed, "packed selector exceeds initialized MES table", "", pathId, selection.Frame, selection.Palette, null, ResolutionStatus.BadSelector);
+            }
         }
 
         public static FramePaletteSelection Selection(uint id, TerrainKind kind) => kind switch
@@ -433,7 +578,12 @@ internal static class Program
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
 
-        public static string TilePath(TileNameTable table, uint id) => TileLookup(table, id).Path;
+        public static string TilePath(TileNameTable table, uint id) => TileLookup(table, NormalizeForPath(id, TerrainKind.Tile)).Path;
+        public static string TilePathWithoutNameNormalization(TileNameTable table, uint id) => TileLookup(table, id).Path;
+
+        private static uint NormalizeForPath(uint id, TerrainKind kind) => kind == TerrainKind.Tile
+            ? id & ~0x3Fu
+            : id;
 
         private static Lookup TileLookup(TileNameTable table, uint id)
         {
@@ -467,7 +617,7 @@ internal static class Program
             return $"art\\Facade\\{names.Name(number)}.art";
         }
 
-        private static string TilePacked(uint id) => $"num1={(id >> 22) & 63},num2={(id >> 16) & 63},edge={(id >> 12) & 15},variation={(id >> 9) & 7},outdoor={(id >> 8) & 1},flip1={(id >> 7) & 1},flip2={(id >> 6) & 1},palette={(id >> 4) & 3},low={(id & 15)}";
+        private static string TilePacked(uint id, uint pathId) => $"num1={(id >> 22) & 63},num2={(id >> 16) & 63},edge={(id >> 12) & 15},variation={(id >> 9) & 7},outdoor={(id >> 8) & 1},flip1={(id >> 7) & 1},flip2={(id >> 6) & 1},palette={(id >> 4) & 3},low={(id & 15)},path_id=0x{pathId:X8}";
         private static string FacadePacked(uint id) => $"number={((id >> 17) & 0xFF) + ((id & (1u << 27)) == 0 ? 0 : 256)},tile={(id >> 11) & 63},type={(id >> 25) & 1},flip={(id >> 26) & 1},frame={(id >> 1) & 1023},walkability={id & 1},palette=0";
 
         public readonly record struct FramePaletteSelection(int Frame, int Palette);
@@ -511,16 +661,17 @@ internal static class Program
             : throw new InvalidDataException($"Facade packed-ID ordinal {ordinal} exceeds the sorted facadename.mes entry count {names.Length}.");
     }
 
-    private sealed record Resolution(uint RawId, int Ordinal, TerrainKind Kind, string Branch, string Packed, string LookupRule, string Path, int Frame, int Palette, DatEntry? Entry)
+    private sealed record Resolution(uint RawId, int Ordinal, TerrainKind Kind, string Branch, string Packed, string LookupRule, string Path, uint PathId, int Frame, int Palette, DatEntry? Entry, ResolutionStatus Status)
     {
-        public bool Success => Entry is not null;
+        public bool Success => Status == ResolutionStatus.Resolved && Entry is not null;
     }
     private sealed record FrameSample(TerrainKind Kind, string Branch, int Ordinal, int LocalX, int LocalY, uint RawId, string Packed,
         string LookupRule, string Path, int EntryOrdinal, int Frame, int RequestedPalette, int EffectivePalette, int Width, int Height,
         int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY);
     private sealed record SyntheticDatEntry(byte[] RawName, byte[] Payload);
     private sealed record SyntheticDatFixture(byte[] Bytes);
-    private enum TerrainKind { Tile, Facade }
+    private enum TerrainKind { Tile, Facade, Unsupported }
+    private enum ResolutionStatus { Resolved, ZeroMatches, AmbiguousCandidates, BadSelector, UnsupportedKind, UnsupportedArt }
     private sealed record Fingerprint(long Bytes, string Sha256)
     {
         public static Fingerprint Create(string path) { using var input = File.OpenRead(path); return new(input.Length, Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant()); }

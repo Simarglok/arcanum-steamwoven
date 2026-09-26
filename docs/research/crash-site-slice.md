@@ -92,7 +92,7 @@ precedence, or call the unresolved whole sector ready.
 - a static-scenery subset, object current-ART/prototype chain, object baseline,
   or occlusion rule;
 - a complete terrain scene or multi-source precedence policy; the one-source
-  terrain resolver has 457 unresolved tile cells despite resolving all facade
+  pre-normalization terrain resolver had 457 unresolved tile cells despite resolving all facade
   cells in that experiment;
 - patch, loose-file, or archive conflict precedence;
 - object baselines, visual offsets, mirroring, height, occlusion, or measured
