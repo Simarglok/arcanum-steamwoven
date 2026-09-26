@@ -288,8 +288,9 @@ geometry to `ArtDecoder` metadata alone. Therefore:
 
 * confirmed: relative projected cell anchors, `+1` X anchor adjustment,
   type-specific selected frame, and the metadata fields routed to the renderer;
-* not confirmed: a C# draw rectangle/baseline transform, crop rule, palette
-  lighting behavior, or facade-vs-tile overlap ordering;
+* historical R1 limitation, now superseded by the R2 diagnostic rule below:
+  a C# draw rectangle/baseline transform, crop rule, palette lighting behavior,
+  or facade-vs-tile overlap ordering was not then confirmed;
 * deliberately not claimed: static-scenery occlusion. It still depends on the
   unresolved selected-retail object envelope and object ART/baseline evidence.
 
