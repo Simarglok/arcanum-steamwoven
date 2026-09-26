@@ -52,6 +52,32 @@ internal static class Program
         var expectedName = ParseResourceSelector(rawResource);
         var before = InputFingerprint.Create(archivePath);
         using var archive = DatArchive.Open(archivePath, BoundedOptions());
+        var result = InspectArchive(archive, expectedName);
+        var after = InputFingerprint.Create(archivePath);
+        if (before != after)
+        {
+            throw new InvalidDataException("The archive changed during the read-only probe.");
+        }
+
+        var entry = result.Entry;
+        var document = result.Document;
+        var graph = result.Graph;
+        Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
+        Console.WriteLine($"resource ordinal={entry.Ordinal} raw_id_sha256={Sha256(expectedName)} flags=0x{entry.Flags:x8} stored_bytes={entry.StoredSize} decoded_bytes={entry.DeclaredOutputSize} payload_sha256={Sha256(result.Payload)}");
+        Console.WriteLine($"grammar records={document.Records.Count} npc_records={document.Records.Count(record => record.Role == Role.Npc)} player_records={document.Records.Count(record => record.Role == Role.Player)} empty_fields={document.EmptyFields} comment_lines={document.CommentLines} crlf={document.CrLf} lf={document.Lf} ascii_operational_fields=true");
+        Console.WriteLine($"lengths field0={document.FieldLengths[0]} field1={document.FieldLengths[1]} field2={document.FieldLengths[2]} field3={document.FieldLengths[3]} field4={document.FieldLengths[4]} field5={document.FieldLengths[5]} field6={document.FieldLengths[6]}");
+        Console.WriteLine($"operations conditions={FormatCounts(document.ConditionOpcodes)} actions={FormatCounts(document.ActionOpcodes)}");
+        Console.WriteLine($"edges direct={graph.Direct} exit={graph.Exit} special={graph.Special} dangling={graph.Dangling} ambiguous={graph.Ambiguous} unresolved={graph.Unresolved} callbacks={graph.Callbacks}");
+        Console.WriteLine($"research-selected-start node_id={graph.StartId?.ToString() ?? "none"} rationale={graph.StartRationale} included_nodes={graph.IncludedNodes} examined_references={graph.ExaminedReferences} frontier={graph.Frontier}");
+        foreach (var row in graph.Rows)
+        {
+            Console.WriteLine($"slice node_id={row.NodeId} role={row.Role.ToString().ToLowerInvariant()} edge_status={row.EdgeStatus} condition={row.ConditionClass} action={row.ActionClass} required_service={row.RequiredService} note={row.Note}");
+        }
+        Console.WriteLine("integrity before_after_match=true");
+    }
+
+    private static ProbeResult InspectArchive(DatArchive archive, byte[] expectedName)
+    {
         var matches = archive.Entries.Where(entry => RawNameEquals(entry.RawNameBytes, expectedName)).ToArray();
         if (matches.Length != 1)
         {
@@ -68,20 +94,7 @@ internal static class Program
         var payload = archive.ReadEntry(entry);
         var document = DlgDocument.Parse(payload);
         var graph = GraphSummary.Create(document);
-        var after = InputFingerprint.Create(archivePath);
-        if (before != after)
-        {
-            throw new InvalidDataException("The archive changed during the read-only probe.");
-        }
-
-        Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
-        Console.WriteLine($"resource ordinal={entry.Ordinal} raw_id_sha256={Sha256(expectedName)} flags=0x{entry.Flags:x8} stored_bytes={entry.StoredSize} decoded_bytes={entry.DeclaredOutputSize} payload_sha256={Sha256(payload)}");
-        Console.WriteLine($"grammar records={document.Records.Count} npc_records={document.Records.Count(record => record.Role == Role.Npc)} player_records={document.Records.Count(record => record.Role == Role.Player)} empty_fields={document.EmptyFields} comment_lines={document.CommentLines} crlf={document.CrLf} lf={document.Lf} ascii_operational_fields=true");
-        Console.WriteLine($"lengths field0={document.FieldLengths[0]} field1={document.FieldLengths[1]} field2={document.FieldLengths[2]} field3={document.FieldLengths[3]} field4={document.FieldLengths[4]} field5={document.FieldLengths[5]} field6={document.FieldLengths[6]}");
-        Console.WriteLine($"operations conditions={FormatCounts(document.ConditionOpcodes)} actions={FormatCounts(document.ActionOpcodes)}");
-        Console.WriteLine($"edges direct={graph.Direct} exit={graph.Exit} special={graph.Special} dangling={graph.Dangling} ambiguous={graph.Ambiguous} unresolved={graph.Unresolved} callbacks={graph.Callbacks}");
-        Console.WriteLine($"research-selected-start node_id={graph.StartId?.ToString() ?? "none"} rationale={graph.StartRationale} included_nodes={graph.IncludedNodes} examined_references={graph.ExaminedReferences} frontier={graph.Frontier}");
-        Console.WriteLine("integrity before_after_match=true");
+        return new ProbeResult(entry, payload, document, graph);
     }
 
     private static DatReaderOptions BoundedOptions() => new()
@@ -96,17 +109,15 @@ internal static class Program
     private static byte[] ParseResourceSelector(string value)
     {
         if (string.IsNullOrEmpty(value) || value.Length > 255 || !value.StartsWith(DlgPrefix, StringComparison.OrdinalIgnoreCase) ||
-            value.Contains('\0') || value.Contains('/') || value.Contains("..", StringComparison.Ordinal) || value.Contains(':') ||
-            value.EndsWith("\\", StringComparison.Ordinal) || value[DlgPrefix.Length..].Contains('\\'))
+            !value.EndsWith(".dlg", StringComparison.OrdinalIgnoreCase) || value.Length == DlgPrefix.Length + ".dlg".Length ||
+            value.Any(character => character is < ' ' or > '~') || value.Contains('\0') || value.Contains('/') ||
+            value.Contains("..", StringComparison.Ordinal) || value.Contains(':') || value.EndsWith("\\", StringComparison.Ordinal) ||
+            value[DlgPrefix.Length..].Contains('\\'))
         {
-            throw new ArgumentException("Resource must be one exact non-traversing raw dlg\\basename.dlg identifier.");
+            throw new ArgumentException("Resource must be one exact printable-ASCII non-traversing raw dlg\\basename.dlg identifier.");
         }
 
         var bytes = Encoding.ASCII.GetBytes(value);
-        if (bytes.Any(byteValue => byteValue is < 0x20 or > 0x7e))
-        {
-            throw new ArgumentException("Resource identifier must be printable ASCII.");
-        }
         return bytes;
     }
 
@@ -139,7 +150,7 @@ internal static class Program
         AssertRejected(() => DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{not-int}{}")), "invalid response");
         AssertRejected(() => DlgDocument.Parse(Bytes("// eof comment")), "EOF comment without record");
         AssertRejected(() => DlgDocument.Parse(Bytes("{" + new string('x', MaxFieldBytes + 1) + "}{}{}{1}{}{0}{}")), "field cap");
-        AssertRejected(() => DlgDocument.Parse(Enumerable.Repeat(Bytes("{1}{x}{}{1}{}{0}{}"), MaxRecords + 1).SelectMany(bytes => bytes).ToArray()), "record cap");
+        AssertRejected(() => DlgDocument.Parse(Enumerable.Range(1, MaxRecords + 1).SelectMany(id => Bytes($"{{{id}}}{{x}}{{}}{{1}}{{}}{{0}}{{}}")).ToArray()), "record cap");
         AssertRejected(() => DlgDocument.Parse(new byte[MaxDlgBytes + 1]), "payload cap");
 
         AssertRejected(() => DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{0}{} {1}{x}{}{1}{}{0}{}")), "duplicate id");
@@ -148,15 +159,28 @@ internal static class Program
         var special = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{-9}{} {2}{x}{}{}{}{0}{}"));
         Assert(GraphSummary.Create(special).Special == 1, "negative special transition was not classified");
         var cycle = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{2}{} {2}{x}{}{}{}{0}{} {3}{x}{}{1}{}{2}{}"));
-        Assert(!string.IsNullOrEmpty(GraphSummary.Create(cycle).Frontier), "frontier/cycle handling did not terminate");
+        Assert(GraphSummary.Create(cycle).Frontier == "second-decision-frontier", "cycle-shaped references did not terminate at the bounded second frontier");
         var unsupported = DlgDocument.Parse(Bytes("{1}{x}{}{1}{??}{2}{} {2}{x}{}{}{}{0}{}"));
         Assert(GraphSummary.Create(unsupported).Unresolved == 1, "unsupported condition opcode was not fail-closed");
+        var callback = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{2}{} {2}{x}{}{}{}{0}{SC}"));
+        Assert(GraphSummary.Create(callback).Callbacks == 0, "target callback fixture must not classify a player callback");
+        callback = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{2}{} {2}{x}{}{1}{}{0}{SC}"));
+        Assert(GraphSummary.Create(callback).Callbacks == 1 && GraphSummary.Create(callback).Unresolved >= 1, "callback action was not a distinct fail-closed frontier");
+
+        var opaqueText = DlgDocument.Parse([ (byte)'{', (byte)'1', (byte)'}', (byte)'{', 0xe9, (byte)'}', (byte)'{', (byte)'}', (byte)'{', (byte)'1', (byte)'}', (byte)'{', (byte)'}', (byte)'{', (byte)'0', (byte)'}', (byte)'{', (byte)'}' ]);
+        Assert(opaqueText.Records.Count == 1, "opaque non-ASCII text bytes were not preserved structurally");
+        var nodeCap = DlgDocument.Parse(Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{0}}{{}}"))));
+        var cappedGraph = GraphSummary.Create(nodeCap);
+        Assert(cappedGraph.IncludedNodes == MaxTraversalNodes && cappedGraph.Frontier == "traversal-node-cap", "node traversal cap was not enforced incrementally");
 
         AssertSelectorRejectsWithoutPayload("dlg\\..\\x.dlg");
         AssertSelectorRejectsWithoutPayload("dlg\\folder\\x.dlg");
         AssertSelectorRejectsWithoutPayload("dlg/x.dlg");
         AssertSelectorRejectsWithoutPayload("C:dlg\\x.dlg");
         AssertSelectorRejectsWithoutPayload("dlg\\x/../y.dlg");
+        AssertSelectorRejectsWithoutPayload("dlg\\x.txt");
+        AssertSelectorRejectsWithoutPayload("dlg\\.dlg");
+        AssertSelectorRejectsWithoutPayload("dlg\\é.dlg");
         AssertSyntheticArchiveSelection();
     }
 
@@ -164,19 +188,55 @@ internal static class Program
     {
         var payload = Bytes("{1}{x}{}{1}{}{0}{}");
         var validName = Name("dlg\\fixture.dlg");
+        var expectedName = ParseResourceSelector("dlg\\fixture.dlg");
         var duplicate = CreateSyntheticDat(new SyntheticDatEntry(validName, payload), new SyntheticDatEntry(validName, payload));
         WithSyntheticArchive(duplicate, (archive, stream) =>
         {
-            var matches = archive.Entries.Where(entry => RawNameEquals(entry.RawNameBytes, ParseResourceSelector("dlg\\fixture.dlg"))).ToArray();
-            Assert(matches.Length == 2, "duplicate selector fixture did not duplicate");
+            AssertRejected(() => InspectArchive(archive, expectedName), "duplicate archive selector");
             AssertPayloadReads(archive, stream);
         });
         var oversized = CreateSyntheticDat(new SyntheticDatEntry(validName, new byte[MaxDlgBytes + 1]));
         WithSyntheticArchive(oversized, (archive, stream) =>
         {
-            var entry = archive.Entries.Single();
-            Assert(entry.DeclaredOutputSize > MaxDlgBytes, "oversize fixture did not retain declared size");
+            AssertRejected(() => InspectArchive(archive, expectedName), "oversized selected DLG entry");
             AssertPayloadReads(archive, stream);
+        });
+        var malformed = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{x}")));
+        WithSyntheticArchive(malformed, (archive, stream) =>
+        {
+            AssertRejected(() => InspectArchive(archive, expectedName), "malformed DLG through archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "malformed DLG fixture did not exercise a production payload read");
+        });
+        var overflow = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{x}{}{1}{}{999999999999999999999}{}")));
+        WithSyntheticArchive(overflow, (archive, stream) =>
+        {
+            AssertRejected(() => InspectArchive(archive, expectedName), "response overflow through archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "response overflow fixture did not exercise a production payload read");
+        });
+        var callback = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{0}{SC}")));
+        WithSyntheticArchive(callback, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Callbacks == 1 && result.Graph.Rows.Any(row => row.EdgeStatus == "callback"), "callback was not classified by the production archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "callback classification fixture did not exercise a production payload read");
+        });
+        var unsupported = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{??}")));
+        WithSyntheticArchive(unsupported, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Frontier == "unsupported-operation", "unsupported start operation was not a production probe frontier");
+        });
+        var recordLimit = CreateSyntheticDat(new SyntheticDatEntry(validName, Enumerable.Range(1, MaxRecords + 1).SelectMany(id => Bytes($"{{{id}}}{{x}}{{}}{{1}}{{}}{{0}}{{}}")).ToArray()));
+        WithSyntheticArchive(recordLimit, (archive, stream) =>
+        {
+            AssertRejected(() => InspectArchive(archive, expectedName), "record limit through archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "record-limit fixture did not exercise a production payload read");
+        });
+        var traversalCap = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{0}}{{}}")))));
+        WithSyntheticArchive(traversalCap, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.IncludedNodes == MaxTraversalNodes && result.Graph.Frontier == "traversal-node-cap", "traversal cap was not enforced by the production archive probe path");
         });
     }
 
@@ -264,6 +324,8 @@ internal static class Program
 
     private sealed record SyntheticDatEntry(byte[] Name, byte[] Payload, bool Compressed = false);
 
+    private sealed record ProbeResult(DatEntry Entry, byte[] Payload, DlgDocument Document, GraphSummary Graph);
+
     private sealed class TrackingReadStream(byte[] bytes) : MemoryStream(bytes, writable: false)
     {
         private readonly List<(long Start, int Count)> _reads = [];
@@ -294,7 +356,7 @@ internal static class Program
 
     private enum Role { Npc, Player }
 
-    private sealed record DlgRecord(int Id, Role Role, int Response, bool Unsupported, string ConditionClass, string ActionClass);
+    private sealed record DlgRecord(int Id, Role Role, int Response, bool Unsupported, bool Callback, string ConditionClass, string ActionClass);
 
     private sealed class DlgDocument
     {
@@ -333,9 +395,9 @@ internal static class Program
                 if (fields[3].Length != 0 && iq == 0) throw new InvalidDataException("DLG IQ discriminator is zero but not blank.");
                 var response = ParseInteger(fields[5], "response value", allowEmpty: true);
                 var role = iq == 0 ? Role.Npc : Role.Player;
-                var conditionClass = ClassifyOperations(fields[4], conditions, out var unsupportedCondition);
-                var actionClass = ClassifyOperations(fields[6], actions, out var unsupportedAction);
-                records.Add(new DlgRecord(id, role, response, unsupportedCondition || unsupportedAction, conditionClass, actionClass));
+                var conditionClass = ClassifyOperations(fields[4], conditions, out var unsupportedCondition, out var callbackCondition);
+                var actionClass = ClassifyOperations(fields[6], actions, out var unsupportedAction, out var callbackAction);
+                records.Add(new DlgRecord(id, role, response, unsupportedCondition || unsupportedAction, callbackCondition || callbackAction, conditionClass, actionClass));
             }
             if (records.Count == 0) throw new InvalidDataException("DLG contains no complete records.");
             return new DlgDocument { Records = records, FieldLengths = lengths, EmptyFields = empty, CommentLines = cursor.CommentLines, CrLf = cursor.CrLf, Lf = cursor.Lf, ConditionOpcodes = conditions, ActionOpcodes = actions };
@@ -362,9 +424,10 @@ internal static class Program
             return checked(value * sign);
         }
 
-        private static string ClassifyOperations(Field field, SortedDictionary<string, int> counts, out bool unsupported)
+        private static string ClassifyOperations(Field field, SortedDictionary<string, int> counts, out bool unsupported, out bool callback)
         {
             unsupported = false;
+            callback = false;
             if (field.Length == 0) return "none";
             if (field.Bytes.Any(byteValue => byteValue is < 0x20 or > 0x7e)) throw new InvalidDataException("Operational DLG field is not printable ASCII.");
             var opcodes = new SortedSet<string>(StringComparer.Ordinal);
@@ -380,8 +443,12 @@ internal static class Program
                 counts[opcode] = counts.GetValueOrDefault(opcode) + 1;
                 index++;
             }
-            if (opcodes.Count == 0) { unsupported = true; return "unsupported"; }
-            return string.Join('+', opcodes);
+            callback = opcodes.Contains("SC");
+            // The physical probe intentionally does not interpret condition/action
+            // vocabulary. Any nonempty operation is a fail-closed unsupported
+            // boundary; SC is additionally named as a callback-shaped boundary.
+            unsupported = !callback;
+            return callback ? "callback" : "unsupported";
         }
 
         private static bool IsAsciiLetter(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
@@ -442,7 +509,9 @@ internal static class Program
                 if (value is (byte)'{' or 0) throw new InvalidDataException("DLG field contains nested brace or NUL.");
                 if (_offset - start > MaxFieldBytes) throw new InvalidDataException("DLG field exceeds the 4 KiB policy cap.");
                 if (value is (byte)'\r' or (byte)'\n') CountNewline(value);
-                else if (value is < 0x20 or > 0x7e) throw new InvalidDataException("DLG field contains non-ASCII bytes.");
+                // Fields 1, 2, and 3 may contain opaque text bytes. Their exact
+                // encoding is deliberately not inferred by this physical parser;
+                // field-specific operational validation happens after parsing.
             }
             throw new InvalidDataException("DLG field is missing its closing brace.");
         }
@@ -459,7 +528,9 @@ internal static class Program
         }
     }
 
-    private sealed record GraphSummary(int Direct, int Exit, int Special, int Dangling, int Ambiguous, int Unresolved, int Callbacks, int? StartId, string StartRationale, int IncludedNodes, int ExaminedReferences, string Frontier)
+    private sealed record SliceRow(int NodeId, Role Role, string EdgeStatus, string ConditionClass, string ActionClass, string RequiredService, string Note);
+
+    private sealed record GraphSummary(int Direct, int Exit, int Special, int Dangling, int Ambiguous, int Unresolved, int Callbacks, int? StartId, string StartRationale, int IncludedNodes, int ExaminedReferences, string Frontier, IReadOnlyList<SliceRow> Rows)
     {
         public static GraphSummary Create(DlgDocument document)
         {
@@ -467,54 +538,121 @@ internal static class Program
             var direct = 0; var exit = 0; var special = 0; var dangling = 0; var ambiguous = 0; var unresolved = 0; var callbacks = 0;
             foreach (var record in document.Records.Where(record => record.Role == Role.Player))
             {
+                if (record.Callback) { callbacks++; unresolved++; continue; }
+                if (record.Unsupported) { unresolved++; continue; }
                 if (record.Response == 0) { exit++; continue; }
                 if (record.Response < 0) { special++; continue; }
                 if (!byId.TryGetValue(record.Response, out var targets)) { dangling++; continue; }
                 if (targets.Length != 1) { ambiguous++; continue; }
-                if (targets[0].Role != Role.Npc || record.Unsupported) { unresolved++; continue; }
+                if (targets[0].Role != Role.Npc || targets[0].Unsupported || targets[0].Callback) { unresolved++; continue; }
                 direct++;
-                if (record.ActionClass.Contains("SC", StringComparison.Ordinal)) callbacks++;
             }
+
             var ordered = document.Records.OrderBy(record => record.Id).ToArray();
             var startIndex = Array.FindIndex(ordered, record => record.Role == Role.Npc);
             if (startIndex < 0)
             {
-                return new GraphSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, null, "none", 0, 0, "no-npc");
+                return new GraphSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, null, "none", 0, 0, "no-npc", []);
             }
+
+            var state = new TraversalState(ordered, byId);
             var start = ordered[startIndex];
-            var firstFrontier = ImmediateResponses(ordered, startIndex);
-            var chosen = firstFrontier.FirstOrDefault(record => !record.Unsupported && record.Response > 0 && byId.TryGetValue(record.Response, out var targets) && targets.Length == 1 && targets[0].Role == Role.Npc);
-            var includedIds = new HashSet<int> { start.Id };
-            foreach (var response in firstFrontier) includedIds.Add(response.Id);
-            var examined = firstFrontier.Count;
-            var frontier = "first-decision-frontier";
-            if (chosen is not null && byId.TryGetValue(chosen.Response, out var targetMatches))
+            if (!state.Include(start, "included-start"))
             {
-                var target = targetMatches[0];
-                includedIds.Add(target.Id);
-                var targetIndex = Array.FindIndex(ordered, record => record.Id == target.Id);
-                var secondFrontier = ImmediateResponses(ordered, targetIndex);
-                foreach (var response in secondFrontier) includedIds.Add(response.Id);
-                examined = checked(examined + secondFrontier.Count);
-                frontier = "second-decision-frontier";
+                return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", "traversal-node-cap");
             }
-            if (includedIds.Count > MaxTraversalNodes || examined > MaxExaminedReferences)
+            if (start.Callback || start.Unsupported)
             {
-                frontier = "traversal-cap";
+                state.ReplaceStatus(start.Id, start.Callback ? "callback" : "unsupported", "unsupported", "unsupported", "unsupported operation; no branch is selected");
+                return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", start.Callback ? "callback" : "unsupported-operation");
             }
-            var included = Math.Min(MaxTraversalNodes, includedIds.Count);
-            examined = Math.Min(MaxExaminedReferences, examined);
-            return new GraphSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", included, examined, frontier);
+
+            var candidates = state.InspectFrontier(startIndex, "first");
+            if (state.Capped) return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", state.NodeCapped ? "traversal-node-cap" : "traversal-reference-cap");
+            var chosen = candidates.OrderBy(candidate => candidate.Response).ThenBy(candidate => candidate.Id).FirstOrDefault();
+            if (chosen is null)
+            {
+                return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", "first-decision-frontier");
+            }
+
+            state.ReplaceStatus(chosen.Id, "direct-included", "none", "none", "transition", "positive serialized target; source-backed transition form, target structural role checked");
+            var target = byId[chosen.Response][0];
+            if (!state.Include(target, "included-target"))
+            {
+                return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", "traversal-node-cap");
+            }
+            var targetIndex = Array.FindIndex(ordered, record => record.Id == target.Id);
+            state.InspectFrontier(targetIndex, "second");
+            var frontier = state.Capped ? (state.NodeCapped ? "traversal-node-cap" : "traversal-reference-cap") : "second-decision-frontier";
+            return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", frontier);
         }
 
-        private static List<DlgRecord> ImmediateResponses(IReadOnlyList<DlgRecord> ordered, int npcIndex)
+        private sealed class TraversalState(IReadOnlyList<DlgRecord> ordered, IReadOnlyDictionary<int, DlgRecord[]> byId)
         {
-            var responses = new List<DlgRecord>();
-            for (var index = npcIndex + 1; index < ordered.Count && ordered[index].Role == Role.Player; index++)
+            private readonly HashSet<int> _included = [];
+            private readonly List<SliceRow> _rows = [];
+            public int Examined { get; private set; }
+            public bool NodeCapped { get; private set; }
+            public bool ReferenceCapped { get; private set; }
+            public bool Capped => NodeCapped || ReferenceCapped;
+
+            public bool Include(DlgRecord record, string status)
             {
-                responses.Add(ordered[index]);
+                if (!_included.Add(record.Id)) return true;
+                if (_included.Count > MaxTraversalNodes)
+                {
+                    _included.Remove(record.Id);
+                    NodeCapped = true;
+                    return false;
+                }
+                _rows.Add(new SliceRow(record.Id, record.Role, status, record.ConditionClass, record.ActionClass, "none", "no operation service admitted"));
+                return true;
             }
-            return responses;
+
+            public void ReplaceStatus(int id, string status, string condition, string action, string note)
+                => ReplaceStatus(id, status, condition, action, "unsupported", note);
+
+            public void ReplaceStatus(int id, string status, string condition, string action, string requiredService, string note)
+            {
+                var index = _rows.FindIndex(row => row.NodeId == id);
+                if (index >= 0) _rows[index] = _rows[index] with { EdgeStatus = status, ConditionClass = condition, ActionClass = action, RequiredService = requiredService, Note = note };
+            }
+
+            public List<DlgRecord> InspectFrontier(int npcIndex, string stage)
+            {
+                var candidates = new List<DlgRecord>();
+                for (var index = npcIndex + 1; index < ordered.Count && ordered[index].Role == Role.Player; index++)
+                {
+                    if (Examined == MaxExaminedReferences) { ReferenceCapped = true; break; }
+                    Examined++;
+                    var response = ordered[index];
+                    if (!Include(response, "frontier")) break;
+                    if (response.Callback)
+                    {
+                        ReplaceStatus(response.Id, "callback", "unsupported", "callback", "callback-shaped operation; requires an unimplemented SCR/event bridge");
+                        continue;
+                    }
+                    if (response.Unsupported)
+                    {
+                        ReplaceStatus(response.Id, "unsupported", "unsupported", "unsupported", "uninterpreted condition/action; no query or command service is admitted");
+                        continue;
+                    }
+                    if (response.Response == 0) { ReplaceStatus(response.Id, "exit", "none", "none", "zero serialized response is source-backed exit form"); continue; }
+                    if (response.Response < 0) { ReplaceStatus(response.Id, "special", "none", "none", "negative serialized response is source-backed special form; semantics unknown"); continue; }
+                    if (!byId.TryGetValue(response.Response, out var targets)) { ReplaceStatus(response.Id, "dangling", "none", "none", "positive target is absent"); continue; }
+                    if (targets.Length != 1) { ReplaceStatus(response.Id, "ambiguous", "none", "none", "positive target is non-unique"); continue; }
+                    if (targets[0].Role != Role.Npc || targets[0].Unsupported || targets[0].Callback)
+                    {
+                        ReplaceStatus(response.Id, "unresolved", "none", "none", "target is structurally invalid or stops at an unsupported operation");
+                        continue;
+                    }
+                    candidates.Add(response);
+                }
+                return candidates;
+            }
+
+            public GraphSummary ToSummary(int direct, int exit, int special, int dangling, int ambiguous, int unresolved, int callbacks, int startId, string rationale, string frontier) =>
+                new(direct, exit, special, dangling, ambiguous, unresolved, callbacks, startId, rationale, _included.Count, Examined, frontier, _rows);
         }
     }
 }

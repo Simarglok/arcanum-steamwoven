@@ -33,10 +33,10 @@ Services are admitted only through selected evidence and are classified as:
 
 | Service class | Proposed use | Current status |
 | --- | --- | --- |
-| `query` | read player/NPC state for an evidenced condition | proposal; no selected service is admitted yet |
-| `command` | execute an evidenced, bounded state effect | proposal; no selected service is admitted yet |
-| `transition` | direct DLG target, exit, special tag, or SCR bridge | positive/zero/negative serialized values are source facts; semantics remain bounded |
-| `unsupported` | generated menu, barter, UI, full SCR, or unrecognized operation | fail closed |
+| `query` | read player/NPC state for an evidenced condition | no selected query is admitted: every nonempty condition in the selected start is unsupported |
+| `command` | execute an evidenced, bounded state effect | no selected command is admitted: every nonempty action in the selected start is unsupported |
+| `transition` | direct DLG target, exit, or special tag | positive/zero/negative serialized values are source facts; only a structurally validated positive direct target could be admitted |
+| `unsupported` | generated menu, barter, UI, full SCR, callback-shaped `SC`, or unrecognized operation | fail closed; callback needs a later SCR/event bridge |
 
 ## Source-derived phase order
 
@@ -61,10 +61,15 @@ proof of original runtime ordering or a license to copy source code.
 
 ## Readiness split
 
-DLG-reader readiness may become Ready only for a named observed grammar subset
-when physical fields, comments/empties, ID/reference checks, caps, and the full
-synthetic rejection suite pass. Game-dialog-runtime readiness remains Blocked
-until an actual entry, archive winner, ordering, every admitted operation,
-transition semantics, and each service have separate evidence. Neither a
-reader self-test nor a structural research-selected start proves runtime
-behaviour.
+**DLG-reader readiness: Blocked.** The physical seven-field subset, policy
+caps, selector rejection, synthetic archive-path tests, and one read-only
+candidate run pass; however it is not Ready because the observed nonempty
+condition/action vocabulary is intentionally unsupported, original text
+encoding/localization is unknown, and no independently sourced DLG grammar or
+operation semantics has been established. This verdict is about a future
+bounded reader, not a rejection of the measured physical structure.
+
+**Game-dialog-runtime readiness: Blocked.** An actual entry, archive winner,
+ordering, every operation meaning, callback/SCR bridge, transition semantics,
+and each query/command service need separate evidence. Neither a reader
+self-test nor a structural research-selected start proves runtime behaviour.
