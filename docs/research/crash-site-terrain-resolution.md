@@ -244,9 +244,10 @@ in all eight archives, including `arcanum2.dat`.
 
 The same run also performed direct, bounded `File.Exists` checks only for those
 two generated path sets under the three relevant loose ART roots at the
-installation root, its `data` child, and its `modules` child. None of the three
-ART roots existed; therefore both sets had zero loose candidates. This is not a
-recursive scan and it does not define a loose-file policy. If a historical-path
+installation root, its `data` child, and its `modules` child. All three ART
+roots existed, but none of the generated corrected or historical candidate
+files existed below them; both sets therefore had zero loose candidates. This
+is not a recursive scan and it does not define a loose-file policy. If a historical-path
 candidate had existed, `name_resolve_path` would still call
 `name_normalize_aid` before `a_name_tile_aid_to_fname`, so that historical path
 could not be the callback-selected path for this macOS profile. No such
@@ -343,11 +344,30 @@ game-runtime facade layer or scenery/object/roof ordering.
 
 `Arcanum.TerrainProbe --self-test` independently exercises nonzero signed
 hotspots/offsets (non-use), raw tile flip, set facade flippable bit (non-flip),
-viewport crop, smaller-frame crop, and adjacent X/Y overlap. The real-data run
+viewport crop, smaller-frame crop, successful no-draw outcomes for empty
+footprint/viewport and source/frame intersections, and adjacent X/Y overlap.
+The real-data run
 uses the same calculation for every representative and reports footprint,
 source, destination, and raw-ID flip state.
 
-## Future terrain-only loader contract
+## Fixed-source terrain-only loader contract and future implementation
+
+**Fixed-source terrain-only loader contract: READY.** The frozen sector's
+caller-supplied immutable module and explicit one-source resource archive have
+complete 4,096-cell resolution, selected-frame validation, and diagnostic
+placement evidence. The accepted output is terrain-only and preserves the
+framed object suffix as opaque; it does not infer general archive or loose-file
+precedence.
+
+**Terrain scene: NOT READY.** Production/Godot scene and renderer integration,
+lighting/palette treatment, camera/dirty-rectangle policy, normal-runtime
+facade intent, and measured presentation comparison remain absent.
+
+**Static scenery: NOT READY.** Object/scenery semantics, current ART/prototype
+selection, baseline, occlusion, and static-scene ordering remain absent.
+
+A future implementation task may build the ready narrow contract; it is not
+authorized by this research result.
 
 A separate implementation task may accept only a caller-supplied, immutable
 module plus an explicitly ordered resource source set. It must:

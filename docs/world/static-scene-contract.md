@@ -1,22 +1,29 @@
 # Static-scene contract: bounded Crash Site candidate
 
-## Readiness verdict
+## Readiness verdicts
 
-**Not ready for a whole-sector loader or scene.** The selected map and one
-sector are reproducible. Corrected framing establishes all base-stream sections
-through object window `17140..47287`, whose bounded v119 delimiter reaches the
-terminal count 317; the word `1` at offset `16388` is the roof-empty
-discriminator, not a retail object version. The bounded terrain investigation
-also establishes tile/facade lookup to a selected one-source ART winner and
-physical frame for all 4,096 records under one explicit resource source.
-Remaining evidence includes an object field/scenery classification, a general
-multi-source policy, terrain lighting/camera/render parity, and static draw
-ordering. R2 supplies only a bounded diagnostic tile/editor-facade
-footprint/crop/flip/order rule; a future loader or Godot scene must fail closed
+The selected map and one sector are reproducible. Corrected framing establishes
+all base-stream sections through object window `17140..47287`, whose bounded
+v119 delimiter reaches terminal count 317; the word `1` at offset `16388` is
+the roof-empty discriminator, not a retail object version.
+
+- **Fixed-source terrain-only loader contract: READY.** The narrow contract
+  accepts the caller-supplied immutable module and explicit one-source resource
+  archive, resolves the tile/facade-only prefix for all 4,096 records, and
+  exposes selected-frame plus diagnostic placement evidence. The framed object
+  suffix is opaque; this verdict neither adds object semantics nor infers
+  general archive, PATCH, or loose-file precedence.
+- **Terrain scene: NOT READY.** No production/Godot scene or renderer
+  integration has been implemented. Lighting/palette treatment,
+  camera/dirty-rectangle policy, normal-runtime facade behavior, and a measured
+  presentation comparison remain unestablished.
+- **Static scenery: NOT READY.** The suffix does not establish object/scenery
+  classification, current ART/prototype selection, baseline, occlusion, or
+  static-scene ordering.
+
+This is a bounded research contract, not a production loader, renderer, Godot
+scene, or gameplay model. A future broader loader or scene must fail closed
 rather than inventing fallbacks.
-
-This is a contract proposal for a later, separate task. It is not a production
-loader, renderer, Godot scene, or gameplay model.
 
 ## Inputs already bounded
 

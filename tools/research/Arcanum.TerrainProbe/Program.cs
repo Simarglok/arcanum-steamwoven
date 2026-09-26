@@ -26,7 +26,7 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (fail-closed MES initialization, type-specific palettes, production-path resolver branches, separate historical candidate inventory, and placement arithmetic)");
+                Console.WriteLine("self-test: PASS (fail-closed MES initialization, type-specific palettes, production-path resolver branches, separate historical candidate inventory, placement arithmetic, and empty-intersection no-draw)");
                 return 0;
             }
 
@@ -186,7 +186,8 @@ internal static class Program
             var localY = (result.Ordinal >> 6) & 63;
             var placement = PlacementSpec.For(result.Kind, localX, localY, result.RawId,
                 new FrameGeometry(decoded.Width, decoded.Height, metadataFrame.HotX, metadataFrame.HotY, metadataFrame.OffsetX, metadataFrame.OffsetY),
-                PlacementSpec.UnboundedViewport);
+                PlacementSpec.UnboundedViewport)
+                ?? throw new InvalidDataException("The unbounded placement probe unexpectedly emitted no draw.");
             yield return new FrameSample(result.Kind, result.Branch, result.Ordinal, localX, localY, result.RawId, result.Packed,
                 result.LookupRule, result.Path, result.Entry.Ordinal, frame, result.Palette, decoded.EffectivePaletteSlot,
                 decoded.Width, decoded.Height, metadataFrame.HotX, metadataFrame.HotY, metadataFrame.OffsetX, metadataFrame.OffsetY,
@@ -608,6 +609,13 @@ internal static class Program
         throw new InvalidOperationException($"{label} was accepted or rejected at the wrong validation stage.");
     }
 
+    private static void AssertArgumentRejected(Action action, string label, string message)
+    {
+        try { action(); }
+        catch (ArgumentOutOfRangeException exception) when (exception.Message.Contains(message, StringComparison.Ordinal)) { return; }
+        throw new InvalidOperationException($"{label} was accepted or rejected at the wrong validation stage.");
+    }
+
     private static void AssertResolutionStatus(Resolution result, ResolutionStatus expected, string label)
     {
         if (result.Status != expected) throw new InvalidOperationException($"{label} did not produce the expected fail-closed status.");
@@ -681,18 +689,29 @@ internal static class Program
         var facade = PlacementSpec.For(TerrainKind.Facade, 1, 0, 0xB4000000, new FrameGeometry(78, 40, 5, 6, 7, 8), new ScreenRect(-20, 25, 50, 20));
         AssertPlacementResult(facade, new ScreenRect(-39, 20, 80, 40), new ScreenRect(19, 5, 50, 20), new ScreenRect(-20, 25, 50, 20), false, "facade crop and flippable-bit non-use");
 
-        var first = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
-        var nextX = PlacementSpec.For(TerrainKind.Tile, 1, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
-        var nextY = PlacementSpec.For(TerrainKind.Tile, 0, 1, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
+        var emptyViewport = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, new ScreenRect(80, 50, 1, 1));
+        if (emptyViewport is not null) throw new InvalidOperationException("An empty footprint/viewport intersection must emit no draw.");
+
+        var emptyFrame = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, new FrameGeometry(40, 30, 0, 0, 0, 0), new ScreenRect(50, 30, 10, 10));
+        if (emptyFrame is not null) throw new InvalidOperationException("An empty source/frame intersection must emit no draw.");
+
+        AssertArgumentRejected(() => PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, new ScreenRect(0, 0, -1, 1)), "invalid viewport", "non-negative");
+
+        var first = (PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport)
+            ?? throw new InvalidOperationException("Unbounded tile placement unexpectedly emitted no draw.")).Footprint;
+        var nextX = (PlacementSpec.For(TerrainKind.Tile, 1, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport)
+            ?? throw new InvalidOperationException("Unbounded tile placement unexpectedly emitted no draw.")).Footprint;
+        var nextY = (PlacementSpec.For(TerrainKind.Tile, 0, 1, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport)
+            ?? throw new InvalidOperationException("Unbounded tile placement unexpectedly emitted no draw.")).Footprint;
         if (PlacementSpec.Intersect(first, nextX) != new ScreenRect(1, 20, 38, 20) || PlacementSpec.Intersect(first, nextY) != new ScreenRect(41, 20, 38, 20))
         {
             throw new InvalidOperationException("Adjacent terrain footprint overlap regressed.");
         }
     }
 
-    private static void AssertPlacementResult(PlacementResult actual, ScreenRect footprint, ScreenRect source, ScreenRect destination, bool flipX, string label)
+    private static void AssertPlacementResult(PlacementResult? actual, ScreenRect footprint, ScreenRect source, ScreenRect destination, bool flipX, string label)
     {
-        if (actual.Footprint != footprint || actual.Source != source || actual.Destination != destination || actual.FlipX != flipX)
+        if (actual is not { } value || value.Footprint != footprint || value.Source != source || value.Destination != destination || value.FlipX != flipX)
         {
             throw new InvalidOperationException($"{label} regressed.");
         }
@@ -704,16 +723,16 @@ internal static class Program
         // It intentionally does not reuse the animation-viewer hotspot convention.
         public static readonly ScreenRect UnboundedViewport = new(-1_000_000, -1_000_000, 2_000_000, 2_000_000);
 
-        public static PlacementResult For(TerrainKind kind, int localX, int localY, uint rawId, FrameGeometry geometry, ScreenRect viewport)
+        public static PlacementResult? For(TerrainKind kind, int localX, int localY, uint rawId, FrameGeometry geometry, ScreenRect viewport)
         {
             if (geometry.Width <= 0 || geometry.Height <= 0) throw new ArgumentOutOfRangeException(nameof(geometry));
+            if (viewport.Width < 0 || viewport.Height < 0) throw new ArgumentOutOfRangeException(nameof(viewport), "Viewport dimensions must be non-negative.");
             var anchorX = checked(40 * (localY - localX) + 1);
             var anchorY = checked(20 * (localY + localX));
             var footprint = new ScreenRect(anchorX, anchorY, kind == TerrainKind.Tile ? 78 : 80, 40);
-            var visible = Intersect(footprint, viewport) ?? throw new InvalidOperationException("The supplied viewport excludes the terrain footprint.");
+            if (Intersect(footprint, viewport) is not { } visible) return null;
             var requestedSource = new ScreenRect(visible.X - footprint.X, visible.Y - footprint.Y, visible.Width, visible.Height);
-            var source = Intersect(requestedSource, new ScreenRect(0, 0, geometry.Width, geometry.Height))
-                ?? throw new InvalidOperationException("The selected ART frame does not cover the visible terrain footprint.");
+            if (Intersect(requestedSource, new ScreenRect(0, 0, geometry.Width, geometry.Height)) is not { } source) return null;
             var destination = new ScreenRect(footprint.X + source.X, footprint.Y + source.Y, source.Width, source.Height);
             var flipX = kind == TerrainKind.Tile && (rawId & 0xC1) == 0xC1;
             return new PlacementResult(footprint, source, destination, flipX);

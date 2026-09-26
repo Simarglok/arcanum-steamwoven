@@ -87,6 +87,21 @@ and projected anchors in `crash-site-terrain-resolution.md`. It remains
 unacceptable to promote a raw word to a filename, invent multi-source
 precedence, or call the unresolved whole sector ready.
 
+## Separate readiness verdicts
+
+- **Fixed-source terrain-only loader contract: READY.** The frozen sector's
+  caller-supplied immutable module and explicit one-source resource archive
+  have complete 4,096-cell tile/facade resolution and selected-frame plus
+  diagnostic placement evidence. This narrow contract retains the framed
+  object suffix as opaque and does not choose sources for callers.
+- **Terrain scene: NOT READY.** A production/Godot scene and renderer
+  integration do not exist; lighting/palette treatment, camera/dirty-rectangle
+  policy, normal-runtime facade behavior, and measured presentation comparison
+  remain unestablished.
+- **Static scenery: NOT READY.** No object/scenery classification, current
+  ART/prototype chain, baseline, occlusion, or static-scene ordering has been
+  established for the framed suffix.
+
 ## Explicitly not established
 
 - a static-scenery subset, object current-ART/prototype chain, object baseline,
@@ -99,9 +114,10 @@ precedence, or call the unresolved whole sector ready.
   scene parity;
 - lighting, walls, roofs, gameplay entities, or a playable scene.
 
-Those gaps prevent declaring either a Godot-independent loader or a static
-Godot scene ready. They are research requirements, not defaults a later
-implementation may silently guess.
+Those gaps prevent declaring a terrain scene or static Godot scene ready. They
+do not contradict the narrower fixed-source terrain-only loader contract above;
+they are research requirements, not defaults a later implementation may
+silently guess.
 
 ## Sources
 
