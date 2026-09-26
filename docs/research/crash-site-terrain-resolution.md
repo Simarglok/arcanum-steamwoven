@@ -11,9 +11,11 @@ repository.
 CE-defined packed identifier classes and, after applying the callback's tile
 name normalization, resolves all 4,096 cells to one candidate in the explicit
 `arcanum2.dat` source. Every selected frame was boundedly inspected before the
-representative decodes. This completes resource lookup only for that frozen,
-single-source experiment; it does not establish source precedence, geometry,
-ordering, lighting, renderer parity, or static scenery readiness.
+representative decodes. The pinned source also establishes a bounded,
+renderer-independent diagnostic footprint/crop/flip specification for the
+tile and editor-facade draw calls below. This does not establish source
+precedence, lighting/palette parity, a general runtime facade layer, or static
+scenery readiness.
 
 All CE statements below are source-derived from the single external lineage
 at commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`, not independent format
@@ -220,9 +222,14 @@ metadata fields have been reduced to a C# destination rectangle.
 | facade / `facade-ordinal` | `(27,30)` / `1947` / `0xB6000804` | `number=0,tile=1,type=1,flip=1,frame=2,walkability=0,palette=0`; sorted facade-name ordinal | `art\\Facade\\BHull.art`, entry `90`; group `0`, frame `2`, requested/effective palette `0/0` | `78×40`, hot `(39,39)`, offset `(0,0)`; anchor `(121,1140)` |
 
 The selected representatives cover every observed branch and include a bounded
-failure-to-resolution chain. The output format makes another holder of
-the frozen input reproduce the same identifier → lookup → ART → frame/metadata
-chain without committing a MES table or decoded ART payload.
+failure-to-resolution chain. R2 re-ran the same immutable inputs after adding
+the placement calculation: each listed tile produced an un-clipped
+`78×40` source/destination at its anchor; the two raw-low-flag tile samples
+reported `flip_x=true`; each listed facade produced an `80×40` footprint but
+a frame-bounded `78×40` source/destination with `flip_x=false`. The output
+format makes another holder of the frozen input reproduce the same identifier
+→ lookup → ART → frame/metadata → placement chain without committing a MES
+table or decoded ART payload.
 
 The single resource archive was intentionally passed explicitly. A bounded
 read-only inventory checked the installed `arcanum1.dat`, `arcanum2.dat`,
@@ -248,7 +255,7 @@ inspected DAT/PATCH, a discovered duplicate, or a discovered loose candidate as
 the cause of the historical 457 misses; they do **not** establish general
 module/PATCH/loose-file precedence.
 
-## Coordinates and placement boundary
+## Historical R1 anchor-only boundary (superseded by R2 below)
 
 CE `src/game/location.c::location_xy` maps a world cell in isometric view as:
 
@@ -286,6 +293,59 @@ geometry to `ArtDecoder` metadata alone. Therefore:
 * deliberately not claimed: static-scenery occlusion. It still depends on the
   unresolved selected-retail object envelope and object ART/baseline evidence.
 
+## R2 renderer-independent tile/facade placement specification
+
+This source-derived diagnostic specification is tied to pinned CE
+`a7ff41b300ef712f0e7d088183a3d08957110cdd`; it is not CE execution, a
+renderer, or a pixel/lighting-parity result. `location_xy` (`src/game/location.c:135-144`)
+gives the relative point `(40 * (localY - localX), 20 * (localY + localX))`.
+Both callers add one X pixel, therefore the diagnostic anchor is
+`A = (40 * (localY - localX) + 1, 20 * (localY + localX))`. Arithmetic is
+signed integer addition/subtraction with no rounding.
+
+| call / source | initial footprint at `A` | selected ART metadata effect |
+| --- | --- | --- |
+| `tile_draw_iso` (`src/game/tile.c:667-705`) | `(A.x,A.y,78,40)` | frame width/height bound the copy; `hot_x`, `hot_y`, `offset_x`, and `offset_y` are not read here |
+| `facade_draw` editor path (`src/game/facade.c:107-146`) | `(A.x,A.y,80,40)` | frame width/height bound the copy; the four geometry metadata values are not read here |
+
+For a visible/dirty rectangle `V` and selected frame bound
+`B=(0,0,frameWidth,frameHeight)`, let `F` be the table footprint. The exact
+unscaled crop used by both call chains is `D0=intersection(F,V)`,
+`S0=D0-F.origin`, `S=intersection(S0,B)`, and
+`D=(F.x+S.x,F.y+S.y,S.width,S.height)`. An empty intersection emits nothing.
+The input source/destination rectangle sizes are equal, so `art_blit` takes its
+integer non-stretch branch (`first_party/tig/src/art.c:3095-3126,3144-3180`).
+`TigArtBlitInfo` carries only rectangles/palette/blend state (`art.h:402-414`),
+and neither terrain caller invokes `tig_art_frame_data`: viewer hotspot
+alignment is explicitly inapplicable here.
+
+Path normalization does not replace the raw draw ID. A tile flips sampled X
+only when raw bits 7 and 6 and low flag bit 0 are all set:
+`tig_art_blit` toggles X (`art.c:540-552`, `1579-1618`) and `art_blit` reads
+the selected source X in descending order (`art.c:3221-3267`). Its footprint
+and destination do not move, and this path has no Y flip. A facade's bit 26 is
+flippable (`art.c:2473-2493`), but `facade_draw` supplies no flip flag and
+`tig_art_id_flags_get` returns zero for facades (`art.c:2627-2639`); this
+bounded call chain therefore establishes no facade mirror.
+
+Adjacent un-clipped examples are tile `(0,0)` `F=(1,0,78,40)`, tile `(1,0)`
+`F=(-39,20,78,40)` with overlap `(1,20,38,20)`, and tile `(0,1)`
+`F=(41,20,78,40)` with overlap `(41,20,38,20)`. A facade `(1,0)` has
+`F=(-39,20,80,40)` and overlaps tile `(0,0)` at `(1,20,40,20)`.
+For one sector, tile's outer/inner loops move by `(40,20)` then `(-40,20)`
+(`tile.c:689-695,823-836`); facade loops `y` then `x` (`facade.c:117-161`).
+Thus the bounded order is `(localY ascending, localX ascending)`. In editor,
+`gamelib_draw_editor` draws tiles then facades (`gamelib.c:1719-1745`), so the
+diagnostic/editor layer order is tiles then facades. `gamelib_draw_game` draws
+tiles but not facades (`gamelib.c:1703-1716`): this does not claim a normal
+game-runtime facade layer or scenery/object/roof ordering.
+
+`Arcanum.TerrainProbe --self-test` independently exercises nonzero signed
+hotspots/offsets (non-use), raw tile flip, set facade flippable bit (non-flip),
+viewport crop, smaller-frame crop, and adjacent X/Y overlap. The real-data run
+uses the same calculation for every representative and reports footprint,
+source, destination, and raw-ID flip state.
+
 ## Future terrain-only loader contract
 
 A separate implementation task may accept only a caller-supplied, immutable
@@ -301,23 +361,26 @@ module plus an explicitly ordered resource source set. It must:
 4. use `DatArchive` and `ArtDecoder` for any approved bounded ART entry,
    retaining the physical group/frame/palette selection separately from ART
    metadata; and
-5. expose projected cell anchors only until an independently tested renderer
-   baseline contract exists.
+5. expose the bounded diagnostic footprint/source/destination/flip record and
+   mode-qualified terrain order, retaining hotspot/offset metadata as evidence
+   rather than applying a viewer baseline.
 
 For the present R3 source set, resource lookup can expose all 4,096 records
-with explicit source identity and selected-frame validation. It still must not
-claim a complete terrain scene until geometry, ordering, lighting and renderer
-parity have separate evidence.
+with explicit source identity and selected-frame validation. The R2 rule permits
+a bounded diagnostic terrain record, but not a complete terrain scene: lighting,
+palette treatment, camera/dirty-rectangle policy, runtime facade intent, and
+renderer parity remain separate evidence.
 
 ## Remaining blockers
 
-* Establish a renderer-independent mapping from the selected ART geometry and
-  CE blit behavior to a C# destination rectangle/baseline; include adjacent
-  tile/facade overlap examples and deterministic terrain layer/order evidence.
 * Determine the selected-version object field envelope and classify an actual
   static-scenery subset. The object window is now framed and its bounded v119
   delimiter reaches the terminal count, but that does not prove object
   semantics, current ART/prototype selection, baseline, or occlusion.
+* Establish lighting/palette treatment, dirty-rectangle/camera policy, and a
+  measured renderer comparison before claiming terrain scene or CE visual
+  parity. The source shows editor-only facade layering, not a normal game
+  facade pass.
 * Preserve the distinction between these CE-source-derived rules and any
   independent retail-byte evidence. A CE-derived implementation or catalogue
   does not create a second corroborating lineage.

@@ -109,8 +109,10 @@ rule was inferred from these observations.
 - Framing and the v119 delimiter establish no selected-version object field
   semantics, static-scenery subset, current-ART/prototype chain, baseline, or
   occlusion rule. The word `1` at offset `16388` is not an object version.
-- No C# destination-rectangle/baseline transform, terrain overlap order,
-  lighting/palette behavior, or scene comparison was measured.
+- R2 source tracing establishes diagnostic tile/editor-facade destination
+  footprints, source/destination crop, raw-tile flip, and a mode-qualified
+  order. Lighting/palette behavior, camera/dirty-rectangle policy, normal-game
+  facade rendering, and scene comparison remain unmeasured.
 - The CE location formula is source-derived and numeric synthetic checks verify
   only its relative arithmetic, not visual parity.
 

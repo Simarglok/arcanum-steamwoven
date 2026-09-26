@@ -75,9 +75,10 @@ Under the pinned CE enum, these are tile and facade classes respectively. The
 type-specific MES callback lookup, exact one-source ART selection, frame
 selection, and coverage failures are recorded in
 [crash-site-terrain-resolution.md](../research/crash-site-terrain-resolution.md).
-That investigation resolves all 4,096 records in its explicit one-source run,
-but does not establish a universal shortcut, source precedence, geometry, or a
-complete terrain scene.
+that investigation resolves all 4,096 records in its explicit one-source run.
+Its R2 addition defines CE-derived diagnostic tile/editor-facade footprints,
+crop and raw-tile-flip behavior, but not source precedence, lighting, a normal
+game facade pass, or a complete terrain scene.
 
 ## Object-window status
 

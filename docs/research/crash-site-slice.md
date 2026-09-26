@@ -91,9 +91,9 @@ precedence, or call the unresolved whole sector ready.
 
 - a static-scenery subset, object current-ART/prototype chain, object baseline,
   or occlusion rule;
-- a complete terrain scene or multi-source precedence policy; the one-source
-  pre-normalization terrain resolver had 457 unresolved tile cells despite resolving all facade
-  cells in that experiment;
+- a complete terrain scene or multi-source precedence policy; R2 establishes
+  diagnostic tile/editor-facade footprint/crop/flip/order only, while lighting,
+  camera policy, normal-game facade rendering, and scene parity remain open;
 - patch, loose-file, or archive conflict precedence;
 - object baselines, visual offsets, mirroring, height, occlusion, or measured
   scene parity;

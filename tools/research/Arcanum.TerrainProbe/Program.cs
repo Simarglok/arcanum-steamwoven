@@ -135,7 +135,7 @@ internal static class Program
         ReportBranchCoverage(results, samples);
         foreach (var sample in samples)
         {
-            Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) anchor_boundary=cell_top_left_plus_1_x");
+            Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) footprint={sample.Placement.Footprint} source={sample.Placement.Source} destination={sample.Placement.Destination} flip_x={sample.Placement.FlipX.ToString().ToLowerInvariant()} metadata_placement=ignored_by_tile_facade_draw_calls");
         }
         InventoryCandidates(results, tileNames, inventoryPaths, looseRoots);
         Console.WriteLine("placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240");
@@ -184,10 +184,13 @@ internal static class Program
             var metadataFrame = decoded.Frame;
             var localX = result.Ordinal & 63;
             var localY = (result.Ordinal >> 6) & 63;
+            var placement = PlacementSpec.For(result.Kind, localX, localY, result.RawId,
+                new FrameGeometry(decoded.Width, decoded.Height, metadataFrame.HotX, metadataFrame.HotY, metadataFrame.OffsetX, metadataFrame.OffsetY),
+                PlacementSpec.UnboundedViewport);
             yield return new FrameSample(result.Kind, result.Branch, result.Ordinal, localX, localY, result.RawId, result.Packed,
                 result.LookupRule, result.Path, result.Entry.Ordinal, frame, result.Palette, decoded.EffectivePaletteSlot,
                 decoded.Width, decoded.Height, metadataFrame.HotX, metadataFrame.HotY, metadataFrame.OffsetX, metadataFrame.OffsetY,
-                40 * (localY - localX) + 1, 20 * (localY + localX));
+                40 * (localY - localX) + 1, 20 * (localY + localX), placement);
         }
     }
 
@@ -472,6 +475,7 @@ internal static class Program
         AssertHistoricalPathInventory();
         AssertSourceArgumentParsing();
         AssertPoint(0, 0, 0, 0); AssertPoint(1, 0, -40, 20); AssertPoint(0, 1, 40, 20); AssertPoint(30, 32, 80, 1240);
+        AssertPlacement();
     }
 
     private static void AssertHistoricalPathInventory()
@@ -662,6 +666,69 @@ internal static class Program
         if (40 * (y - x) != expectedX || 20 * (x + y) != expectedY) throw new InvalidOperationException("Placement arithmetic regressed.");
     }
 
+    private static void AssertPlacement()
+    {
+        var nonzeroMetadata = new FrameGeometry(78, 40, -17, 23, 9, -11);
+        var tile = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0x000000C1, nonzeroMetadata, PlacementSpec.UnboundedViewport);
+        AssertPlacementResult(tile, new ScreenRect(1, 0, 78, 40), new ScreenRect(0, 0, 78, 40), new ScreenRect(1, 0, 78, 40), true, "tile full footprint and raw-ID flip");
+
+        var clippedTile = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, new ScreenRect(20, 10, 30, 20));
+        AssertPlacementResult(clippedTile, new ScreenRect(1, 0, 78, 40), new ScreenRect(19, 10, 30, 20), new ScreenRect(20, 10, 30, 20), false, "tile viewport crop");
+
+        var boundedFrame = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, new FrameGeometry(40, 30, 99, -99, 8, -8), PlacementSpec.UnboundedViewport);
+        AssertPlacementResult(boundedFrame, new ScreenRect(1, 0, 78, 40), new ScreenRect(0, 0, 40, 30), new ScreenRect(1, 0, 40, 30), false, "selected frame bounds crop and metadata non-use");
+
+        var facade = PlacementSpec.For(TerrainKind.Facade, 1, 0, 0xB4000000, new FrameGeometry(78, 40, 5, 6, 7, 8), new ScreenRect(-20, 25, 50, 20));
+        AssertPlacementResult(facade, new ScreenRect(-39, 20, 80, 40), new ScreenRect(19, 5, 50, 20), new ScreenRect(-20, 25, 50, 20), false, "facade crop and flippable-bit non-use");
+
+        var first = PlacementSpec.For(TerrainKind.Tile, 0, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
+        var nextX = PlacementSpec.For(TerrainKind.Tile, 1, 0, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
+        var nextY = PlacementSpec.For(TerrainKind.Tile, 0, 1, 0, nonzeroMetadata, PlacementSpec.UnboundedViewport).Footprint;
+        if (PlacementSpec.Intersect(first, nextX) != new ScreenRect(1, 20, 38, 20) || PlacementSpec.Intersect(first, nextY) != new ScreenRect(41, 20, 38, 20))
+        {
+            throw new InvalidOperationException("Adjacent terrain footprint overlap regressed.");
+        }
+    }
+
+    private static void AssertPlacementResult(PlacementResult actual, ScreenRect footprint, ScreenRect source, ScreenRect destination, bool flipX, string label)
+    {
+        if (actual.Footprint != footprint || actual.Source != source || actual.Destination != destination || actual.FlipX != flipX)
+        {
+            throw new InvalidOperationException($"{label} regressed.");
+        }
+    }
+
+    private static class PlacementSpec
+    {
+        // This is a renderer-independent transcription of the bounded tile/facade draw-call geometry.
+        // It intentionally does not reuse the animation-viewer hotspot convention.
+        public static readonly ScreenRect UnboundedViewport = new(-1_000_000, -1_000_000, 2_000_000, 2_000_000);
+
+        public static PlacementResult For(TerrainKind kind, int localX, int localY, uint rawId, FrameGeometry geometry, ScreenRect viewport)
+        {
+            if (geometry.Width <= 0 || geometry.Height <= 0) throw new ArgumentOutOfRangeException(nameof(geometry));
+            var anchorX = checked(40 * (localY - localX) + 1);
+            var anchorY = checked(20 * (localY + localX));
+            var footprint = new ScreenRect(anchorX, anchorY, kind == TerrainKind.Tile ? 78 : 80, 40);
+            var visible = Intersect(footprint, viewport) ?? throw new InvalidOperationException("The supplied viewport excludes the terrain footprint.");
+            var requestedSource = new ScreenRect(visible.X - footprint.X, visible.Y - footprint.Y, visible.Width, visible.Height);
+            var source = Intersect(requestedSource, new ScreenRect(0, 0, geometry.Width, geometry.Height))
+                ?? throw new InvalidOperationException("The selected ART frame does not cover the visible terrain footprint.");
+            var destination = new ScreenRect(footprint.X + source.X, footprint.Y + source.Y, source.Width, source.Height);
+            var flipX = kind == TerrainKind.Tile && (rawId & 0xC1) == 0xC1;
+            return new PlacementResult(footprint, source, destination, flipX);
+        }
+
+        public static ScreenRect? Intersect(ScreenRect first, ScreenRect second)
+        {
+            var left = Math.Max(first.X, second.X);
+            var top = Math.Max(first.Y, second.Y);
+            var right = Math.Min(checked(first.X + first.Width), checked(second.X + second.Width));
+            var bottom = Math.Min(checked(first.Y + first.Height), checked(second.Y + second.Height));
+            return right > left && bottom > top ? new ScreenRect(left, top, right - left, bottom - top) : null;
+        }
+    }
+
     private sealed class Resolver(DatArchive resources, TileNameTable tiles, FacadeNameTable facades)
     {
         public Resolution Resolve(uint rawId, int ordinal)
@@ -788,9 +855,15 @@ internal static class Program
     {
         public bool Success => Status == ResolutionStatus.Resolved && Entry is not null;
     }
+    private readonly record struct ScreenRect(int X, int Y, int Width, int Height)
+    {
+        public override string ToString() => $"({X},{Y},{Width},{Height})";
+    }
+    private readonly record struct FrameGeometry(int Width, int Height, int HotX, int HotY, int OffsetX, int OffsetY);
+    private readonly record struct PlacementResult(ScreenRect Footprint, ScreenRect Source, ScreenRect Destination, bool FlipX);
     private sealed record FrameSample(TerrainKind Kind, string Branch, int Ordinal, int LocalX, int LocalY, uint RawId, string Packed,
         string LookupRule, string Path, int EntryOrdinal, int Frame, int RequestedPalette, int EffectivePalette, int Width, int Height,
-        int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY);
+        int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY, PlacementResult Placement);
     private sealed record SyntheticDatEntry(byte[] RawName, byte[] Payload);
     private sealed record SyntheticDatFixture(byte[] Bytes);
     private sealed record SourceArguments(IReadOnlyList<string> InventoryPaths, IReadOnlyList<string> LooseRoots);

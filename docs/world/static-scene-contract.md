@@ -10,9 +10,10 @@ discriminator, not a retail object version. The bounded terrain investigation
 also establishes tile/facade lookup to a selected one-source ART winner and
 physical frame for all 4,096 records under one explicit resource source.
 Remaining evidence includes an object field/scenery classification, a general
-multi-source policy, C# baseline geometry, terrain overlap order, and static
-draw ordering. A future loader or Godot scene must fail closed rather than
-inventing fallbacks.
+multi-source policy, terrain lighting/camera/render parity, and static draw
+ordering. R2 supplies only a bounded diagnostic tile/editor-facade
+footprint/crop/flip/order rule; a future loader or Godot scene must fail closed
+rather than inventing fallbacks.
 
 This is a contract proposal for a later, separate task. It is not a production
 loader, renderer, Godot scene, or gameplay model.
@@ -77,7 +78,7 @@ FrozenSlice
 TerrainResolution
   localX, localY, rawId, kind, lookupStatus
   sourceIdentity, artEntry, group, frame, palette, frameMetadata
-  projectedAnchor                 // no C# draw rectangle or baseline yet
+  projectedAnchor, diagnosticPlacement // CE-derived footprint/crop/flip only
 
 ProjectedPoint
   localX, localY, relativeScreenX, relativeScreenY
@@ -134,7 +135,7 @@ selected sector word/object record
   -> ART entry
   -> ArtDecoder.Inspect metadata
   -> type-specific selected frame/palette
-  -> independently validated C# baseline transform and ordering
+  -> bounded diagnostic terrain placement OR independently validated scene baseline/order
 ```
 
 `DatArchive` and `ArtDecoder` are mandatory reuse points. No alternative DAT
