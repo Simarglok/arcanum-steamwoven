@@ -119,15 +119,18 @@ source token before `/` exactly rather than applying an unsourced trim. Its
 positive ordinal regression uses gapped keys (`0`, `25`, `100`, `333`) and
 proves packed ordinal `3` selects the fourth sorted value rather than looking
 for key `3`; this valid gapped lookup does not relax the initialization key-0
-requirement. Synthetic DAT fixtures drive malformed, missing and duplicate
-lookup, a non-zero facade start, each shifted/missing tile anchor, unsupported
-class, invalid selector, normalized duplicate candidate, normalized
-case/separator pathname, and every resolver branch through the production
-archive lookup path. The probe mirrors CE's DAT-database comparison: lowercase
+requirement. Synthetic DAT fixtures drive malformed, missing and duplicate lookup, a
+non-zero facade start, each shifted/missing tile anchor, unsupported class,
+invalid selector, normalized duplicate candidate, normalized case/separator
+pathname, separated corrected versus historical candidate inventories, and
+every resolver branch through the production archive lookup path. The macOS
+probe explicitly models CE's **non-Windows** DAT-database comparison: lowercase
 ASCII plus `\\`→`/` conversion, with exactly one normalized candidate required
-in the selected source (`database.c:180-185,356-374`; `compat.c:9-22`). The
-bounded local run reports representative chains below, but no MES text or
-decoded pixels.
+in the selected source (`database.c:180-185,356-374`; `compat.c:9-22`). In the
+pinned `compat.c`, the slash conversion is a non-Windows conditional branch;
+Windows is a no-op before lowercasing. This experiment makes no Windows-path or
+cross-profile duplicate claim. The bounded local run reports representative
+chains below, but no MES text or decoded pixels.
 
 ### Selected frame and metadata
 
@@ -161,7 +164,7 @@ export PATH="$DOTNET_ROOT:$PATH"
 dotnet restore tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --locked-mode
 dotnet build tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-restore
 dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- --self-test
-dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- --module <frozen-module.dat> --resource <explicit-resource.dat> [--inventory <read-only-installed-archive> ...]
+dotnet run --project tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-build -- --module <frozen-module.dat> --resource <explicit-resource.dat> [--inventory <read-only-installed-archive> ...] [--loose-root <read-only-art-root> ...]
 ```
 
 The executed real-data run used the explicit base archive `arcanum2.dat` and
@@ -169,6 +172,7 @@ reported:
 
 ```text
 input module_bytes=355938305 module_sha256=8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f resource_bytes=147991122 resource_sha256=4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d
+database_path_profile=ce-non-windows-macos ascii_lowercase=true backslash_to_slash=true
 lookup tables tile_categories=31,6,2,13 facade_entries=373
 module sector_ordinal=463 decoded_bytes=47291 tiles=4096
 resolution tile_cells=3033 facade_cells=1063 unique_tile_ids=284 unique_facade_ids=757 source_candidates=1 tile_unresolved_cells=0 facade_unresolved_cells=0
@@ -178,7 +182,10 @@ normalization branch=tile-single-material changed_cells=0 changed_ids=0 raw_zero
 branch kind=tile name=tile-outdoor-forward cells=1269 ids=253 resolved_cells=1269 unresolved_cells=0 representative=true
 branch kind=tile name=tile-single-material cells=1764 ids=31 resolved_cells=1764 unresolved_cells=0 representative=true
 branch kind=facade name=facade-ordinal cells=1063 ids=757 resolved_cells=1063 unresolved_cells=0 representative=true
-inventory candidate_paths=220 sources=8 sources_with_candidates=1 candidate_entries=220 precedence=not_inferred
+inventory set=corrected candidate_paths=220 sources=8 sources_with_candidates=1 candidate_entries=220 precedence=not_inferred
+inventory set=historical_pre_normalization candidate_paths=86 sources=8 sources_with_candidates=0 candidate_entries=0 precedence=not_inferred
+loose_inventory set=corrected candidate_paths=220 roots=3 roots_with_candidates=0 candidate_entries=0 precedence=not_inferred
+loose_inventory set=historical_pre_normalization candidate_paths=86 roots=3 roots_with_candidates=0 candidate_entries=0 precedence=not_inferred
 placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240
 integrity module_before_after_match=true resource_before_after_match=true
 ```
@@ -218,14 +225,28 @@ the frozen input reproduce the same identifier → lookup → ART → frame/meta
 chain without committing a MES table or decoded ART payload.
 
 The single resource archive was intentionally passed explicitly. A bounded
-read-only inventory also checked the installed `arcanum1.dat`, `arcanum2.dat`,
-`arcanum3.dat`, `Arcanum4.dat`, `tig.dat`, selected `Arcanum.dat`, and
+read-only inventory checked the installed `arcanum1.dat`, `arcanum2.dat`,
+`arcanum3.dat`, `Arcanum4.dat`, `tig.dat`, selected `Arcanum.dat`,
 `Vormantown.dat`, and `Arcanum.PATCH0`, using their before/after SHA-256
-values. Of the 220 distinct normalized candidate paths, all 220 occurred once
-in `arcanum2.dat` and zero occurred in each other inspected source. This rules
-out another installed DAT/PATCH, duplicate candidate, and a source-order
-decision as causes for this fixed input; it does **not** establish a general
-module/PATCH/loose-file policy.
+values. It separately compared both generated sets: the 220 corrected
+non-Windows/macOS-normalized paths and the 86 distinct historical
+pre-`name_normalize_aid` paths responsible for the 457 prior misses. The
+corrected set occurred 220 times, all once in `arcanum2.dat`; it occurred zero
+times in every other inspected archive. The historical set occurred zero times
+in all eight archives, including `arcanum2.dat`.
+
+The same run also performed direct, bounded `File.Exists` checks only for those
+two generated path sets under the three relevant loose ART roots at the
+installation root, its `data` child, and its `modules` child. None of the three
+ART roots existed; therefore both sets had zero loose candidates. This is not a
+recursive scan and it does not define a loose-file policy. If a historical-path
+candidate had existed, `name_resolve_path` would still call
+`name_normalize_aid` before `a_name_tile_aid_to_fname`, so that historical path
+could not be the callback-selected path for this macOS profile. No such
+candidate was observed. Together these bounded results rule out another
+inspected DAT/PATCH, a discovered duplicate, or a discovered loose candidate as
+the cause of the historical 457 misses; they do **not** establish general
+module/PATCH/loose-file precedence.
 
 ## Coordinates and placement boundary
 

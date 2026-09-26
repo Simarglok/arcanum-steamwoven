@@ -26,17 +26,17 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (fail-closed MES initialization, type-specific palettes, production-path resolver branches, and placement arithmetic)");
+                Console.WriteLine("self-test: PASS (fail-closed MES initialization, type-specific palettes, production-path resolver branches, separate historical candidate inventory, and placement arithmetic)");
                 return 0;
             }
 
-            if (args.Length < 4 || args[0] != "--module" || args[2] != "--resource" ||
-                (args.Length > 4 && args[4] != "--inventory"))
+            if (args.Length < 4 || args[0] != "--module" || args[2] != "--resource")
             {
-                throw new ArgumentException("usage: --self-test | --module PATH --resource PATH [--inventory ARCHIVE ...]");
+                throw new ArgumentException("usage: --self-test | --module PATH --resource PATH [--inventory ARCHIVE ...] [--loose-root ART_ROOT ...]");
             }
 
-            Probe(args[1], args[3], args.Skip(5).ToArray());
+            var sources = ParseSourceArguments(args.Skip(4));
+            Probe(args[1], args[3], sources.InventoryPaths, sources.LooseRoots);
             return 0;
         }
         catch (Exception exception)
@@ -46,7 +46,38 @@ internal static class Program
         }
     }
 
-    private static void Probe(string modulePath, string resourcePath, IReadOnlyList<string> inventoryPaths)
+    private static SourceArguments ParseSourceArguments(IEnumerable<string> arguments)
+    {
+        var inventoryPaths = new List<string>();
+        var looseRoots = new List<string>();
+        List<string>? current = null;
+        var needsPath = false;
+        foreach (var argument in arguments)
+        {
+            switch (argument)
+            {
+                case "--inventory":
+                    if (needsPath) throw new ArgumentException("Each source option requires at least one path.");
+                    current = inventoryPaths;
+                    needsPath = true;
+                    break;
+                case "--loose-root":
+                    if (needsPath) throw new ArgumentException("Each source option requires at least one path.");
+                    current = looseRoots;
+                    needsPath = true;
+                    break;
+                default:
+                    if (current is null) throw new ArgumentException($"Unexpected source argument '{argument}'.");
+                    current.Add(argument);
+                    needsPath = false;
+                    break;
+            }
+        }
+        if (needsPath) throw new ArgumentException("Each source option requires at least one path.");
+        return new SourceArguments(inventoryPaths, looseRoots);
+    }
+
+    private static void Probe(string modulePath, string resourcePath, IReadOnlyList<string> inventoryPaths, IReadOnlyList<string> looseRoots)
     {
         var moduleBefore = Fingerprint.Create(modulePath);
         if (moduleBefore.Bytes != ExpectedModuleBytes || moduleBefore.Sha256 != ExpectedModuleSha256)
@@ -60,6 +91,7 @@ internal static class Program
             throw new InvalidDataException("Resource fingerprint does not match the frozen one-source Crash Site input.");
         }
         Console.WriteLine($"input module_bytes={moduleBefore.Bytes} module_sha256={moduleBefore.Sha256} resource_bytes={resourceBefore.Bytes} resource_sha256={resourceBefore.Sha256}");
+        Console.WriteLine("database_path_profile=ce-non-windows-macos ascii_lowercase=true backslash_to_slash=true");
         using var module = DatArchive.Open(modulePath, Options());
         using var resources = DatArchive.Open(resourcePath, Options());
         var sector = ReadUnique(module, SectorName, "selected sector");
@@ -105,7 +137,7 @@ internal static class Program
         {
             Console.WriteLine($"sample kind={sample.Kind.ToString().ToLowerInvariant()} branch={sample.Branch} local=({sample.LocalX},{sample.LocalY}) ordinal={sample.Ordinal} raw=0x{sample.RawId:X8} packed={sample.Packed} lookup_rule={sample.LookupRule} path={sample.Path} archive_entry_ordinal={sample.EntryOrdinal} art_selection=group:0,frame:{sample.Frame},requested_palette:{sample.RequestedPalette},effective_palette:{sample.EffectivePalette} dimensions={sample.Width}x{sample.Height} hot=({sample.HotX},{sample.HotY}) offset=({sample.OffsetX},{sample.OffsetY}) anchor_relative=({sample.AnchorX},{sample.AnchorY}) anchor_boundary=cell_top_left_plus_1_x");
         }
-        InventoryCandidates(results, inventoryPaths);
+        InventoryCandidates(results, tileNames, inventoryPaths, looseRoots);
         Console.WriteLine("placement relative(0,0)=0,0 relative(1,0)=-40,20 relative(0,1)=40,20 start(30,32)=80,1240");
         Console.WriteLine("integrity module_before_after_match=true resource_before_after_match=true");
     }
@@ -216,45 +248,99 @@ internal static class Program
     private static void ReportTileNormalizationEffect(DatArchive resources, TileNameTable names, IEnumerable<Resolution> tiles)
     {
         var candidates = resources.Entries
-            .GroupBy(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+            .GroupBy(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
             .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
         foreach (var branch in tiles.GroupBy(result => result.Branch).OrderBy(group => group.Key))
         {
             var changed = branch.Where(result => Resolver.TilePathWithoutNameNormalization(names, result.RawId) != result.Path).ToArray();
-            var rawZero = changed.Where(result => candidates.GetValueOrDefault(NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(names, result.RawId)), requireTerminalNul: false), 0) == 0).ToArray();
+            var rawZero = changed.Where(result => candidates.GetValueOrDefault(NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(names, result.RawId)), requireTerminalNul: false), 0) == 0).ToArray();
             var restored = rawZero.Where(result => result.Success).ToArray();
             Console.WriteLine($"normalization branch={branch.Key} changed_cells={changed.Length} changed_ids={changed.Select(result => result.RawId).Distinct().Count()} raw_zero_cells={rawZero.Length} raw_zero_ids={rawZero.Select(result => result.RawId).Distinct().Count()} recovered_cells={restored.Length} recovered_ids={restored.Select(result => result.RawId).Distinct().Count()}");
         }
     }
 
-    private static void InventoryCandidates(IEnumerable<Resolution> results, IReadOnlyList<string> inventoryPaths)
+    private static void InventoryCandidates(IEnumerable<Resolution> results, TileNameTable tileNames, IReadOnlyList<string> inventoryPaths, IReadOnlyList<string> looseRoots)
+    {
+        var correctedPaths = results.Where(result => !string.IsNullOrEmpty(result.Path))
+            .Select(result => NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(result.Path), requireTerminalNul: false))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        var historicalPaths = results.Where(result => result.Kind == TerrainKind.Tile &&
+                Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId) != result.Path)
+            .Select(result => NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(Resolver.TilePathWithoutNameNormalization(tileNames, result.RawId)), requireTerminalNul: false))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        InventoryArchiveCandidates("corrected", correctedPaths, inventoryPaths);
+        InventoryArchiveCandidates("historical_pre_normalization", historicalPaths, inventoryPaths);
+        InventoryLooseCandidates("corrected", correctedPaths, looseRoots);
+        InventoryLooseCandidates("historical_pre_normalization", historicalPaths, looseRoots);
+    }
+
+    private static void InventoryArchiveCandidates(string set, IReadOnlyList<string> candidatePaths, IReadOnlyList<string> inventoryPaths)
     {
         if (inventoryPaths.Count == 0)
         {
             return;
         }
 
-        var candidatePaths = results.Where(result => !string.IsNullOrEmpty(result.Path))
-            .Select(result => NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(result.Path), requireTerminalNul: false))
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
         var totalCandidateEntries = 0;
         var sourcesWithCandidates = 0;
         foreach (var inventoryPath in inventoryPaths)
         {
             var before = Fingerprint.Create(inventoryPath);
             using var archive = DatArchive.Open(inventoryPath, Options());
-            var normalizedEntries = archive.Entries
-                .GroupBy(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
-                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
-            var candidateEntries = candidatePaths.Sum(path => normalizedEntries.GetValueOrDefault(path, 0));
+            var candidateEntries = CountArchiveCandidateEntries(archive, candidatePaths);
             if (candidateEntries != 0) sourcesWithCandidates++;
             totalCandidateEntries += candidateEntries;
             var after = Fingerprint.Create(inventoryPath);
             if (before != after) throw new InvalidDataException("An inventory archive changed during the read-only probe.");
-            Console.WriteLine($"inventory archive={Path.GetFileName(inventoryPath)} bytes={before.Bytes} sha256={before.Sha256} candidate_entries={candidateEntries}");
+            Console.WriteLine($"inventory set={set} archive={Path.GetFileName(inventoryPath)} bytes={before.Bytes} sha256={before.Sha256} candidate_entries={candidateEntries}");
         }
-        Console.WriteLine($"inventory candidate_paths={candidatePaths.Length} sources={inventoryPaths.Count} sources_with_candidates={sourcesWithCandidates} candidate_entries={totalCandidateEntries} precedence=not_inferred");
+        Console.WriteLine($"inventory set={set} candidate_paths={candidatePaths.Count} sources={inventoryPaths.Count} sources_with_candidates={sourcesWithCandidates} candidate_entries={totalCandidateEntries} precedence=not_inferred");
+    }
+
+    private static int CountArchiveCandidateEntries(DatArchive archive, IReadOnlyList<string> candidatePaths)
+    {
+        var normalizedEntries = archive.Entries
+            .GroupBy(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true), StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Count(), StringComparer.Ordinal);
+        return candidatePaths.Sum(path => normalizedEntries.GetValueOrDefault(path, 0));
+    }
+
+    private static void InventoryLooseCandidates(string set, IReadOnlyList<string> candidatePaths, IReadOnlyList<string> looseRoots)
+    {
+        if (looseRoots.Count == 0)
+        {
+            return;
+        }
+
+        var totalCandidateEntries = 0;
+        var rootsWithCandidates = 0;
+        for (var rootIndex = 0; rootIndex < looseRoots.Count; rootIndex++)
+        {
+            var looseRoot = looseRoots[rootIndex];
+            var rootExists = Directory.Exists(looseRoot);
+            var candidateEntries = rootExists
+                ? candidatePaths.Count(path => LooseCandidateExists(looseRoot, path))
+                : 0;
+            if (candidateEntries != 0) rootsWithCandidates++;
+            totalCandidateEntries += candidateEntries;
+            Console.WriteLine($"loose_inventory set={set} root_index={rootIndex} root_exists={rootExists.ToString().ToLowerInvariant()} candidate_entries={candidateEntries}");
+        }
+        Console.WriteLine($"loose_inventory set={set} candidate_paths={candidatePaths.Count} roots={looseRoots.Count} roots_with_candidates={rootsWithCandidates} candidate_entries={totalCandidateEntries} precedence=not_inferred");
+    }
+
+    private static bool LooseCandidateExists(string root, string normalizedCandidatePath)
+    {
+        var rootFullPath = Path.GetFullPath(root);
+        var candidateFullPath = Path.GetFullPath(Path.Combine(rootFullPath, normalizedCandidatePath.Replace('/', Path.DirectorySeparatorChar)));
+        var relative = Path.GetRelativePath(rootFullPath, candidateFullPath);
+        if (relative == ".." || relative.StartsWith($"..{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
+        {
+            throw new InvalidDataException("A generated loose-resource candidate escaped the supplied ART root.");
+        }
+        return File.Exists(candidateFullPath);
     }
 
     private static ArtDecoderOptions ArtOptions() => new()
@@ -297,13 +383,14 @@ internal static class Program
 
     private static DatEntry ReadUnique(DatArchive archive, string path, string label)
     {
-        var expected = NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(path), requireTerminalNul: false);
-        var entries = archive.Entries.Where(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
+        var expected = NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(path), requireTerminalNul: false);
+        var entries = archive.Entries.Where(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
         if (entries.Length != 1) throw new InvalidDataException($"The {label} did not resolve exactly once by raw ASCII path.");
         return entries[0];
     }
 
-    private static string NormalizeDatabasePath(IReadOnlyList<byte> raw, bool requireTerminalNul)
+    // CE compat.c performs slash conversion only on its non-Windows branch; this macOS probe models that branch.
+    private static string NormalizeMacOsCeDatabasePath(IReadOnlyList<byte> raw, bool requireTerminalNul)
     {
         var length = requireTerminalNul ? raw.Count - 1 : raw.Count;
         if (length < 0 || (requireTerminalNul && (raw.Count == 0 || raw[^1] != 0)))
@@ -382,7 +469,43 @@ internal static class Program
         if (tileSelection.Frame != 0 || tileSelection.Palette != 3) throw new InvalidOperationException("Tile packed palette selection regressed.");
         AssertMesInitializationFailures();
         AssertResolverProductionPaths();
+        AssertHistoricalPathInventory();
+        AssertSourceArgumentParsing();
         AssertPoint(0, 0, 0, 0); AssertPoint(1, 0, -40, 20); AssertPoint(0, 1, 40, 20); AssertPoint(30, 32, 80, 1240);
+    }
+
+    private static void AssertHistoricalPathInventory()
+    {
+        var tiles = TileNameTable.Parse(ParseMes(Ascii("{0}{aaa/x}{1}{bbb/x}{100}{ccc/x}{101}{ddd/x}{200}{aaa/x}{201}{zzz/x}{300}{mmm/x}{301}{nnn/x}{400}{000000}")));
+        var rawId = TileId(0, 1, 3, true, true, true) | 0x31u;
+        var correctedPath = NormalizeMacOsCeDatabasePath(Ascii(Resolver.TilePath(tiles, rawId)), requireTerminalNul: false);
+        var historicalPath = NormalizeMacOsCeDatabasePath(Ascii(Resolver.TilePathWithoutNameNormalization(tiles, rawId)), requireTerminalNul: false);
+        if (correctedPath == historicalPath) throw new InvalidOperationException("Synthetic normalization recovery did not create distinct path sets.");
+        WithSyntheticArchive(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("ART/TILE/AAABBB4A.ART"), [1])), archive =>
+        {
+            if (CountArchiveCandidateEntries(archive, [correctedPath]) != 1 || CountArchiveCandidateEntries(archive, [historicalPath]) != 0)
+            {
+                throw new InvalidOperationException("Corrected and historical candidate path inventories were not kept separate.");
+            }
+        });
+    }
+
+    private static void AssertSourceArgumentParsing()
+    {
+        var parsed = ParseSourceArguments(["--inventory", "first.dat", "second.dat", "--loose-root", "art", "modules/art"]);
+        if (!parsed.InventoryPaths.SequenceEqual(["first.dat", "second.dat"]) || !parsed.LooseRoots.SequenceEqual(["art", "modules/art"]))
+        {
+            throw new InvalidOperationException("Source inventory arguments were not separated by kind.");
+        }
+        try
+        {
+            ParseSourceArguments(["--loose-root", "--inventory", "first.dat"]);
+        }
+        catch (ArgumentException)
+        {
+            return;
+        }
+        throw new InvalidOperationException("Empty source option was accepted.");
     }
 
     private static void AssertMesInitializationFailures()
@@ -555,8 +678,8 @@ internal static class Program
             try
             {
                 var lookup = kind == TerrainKind.Tile ? TileLookup(tiles, pathId) : new Lookup(FacadePath(facades, pathId), "facade-ordinal");
-                var expected = NormalizeDatabasePath(System.Text.Encoding.ASCII.GetBytes(lookup.Path), requireTerminalNul: false);
-                var matches = resources.Entries.Where(entry => NormalizeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
+                var expected = NormalizeMacOsCeDatabasePath(System.Text.Encoding.ASCII.GetBytes(lookup.Path), requireTerminalNul: false);
+                var matches = resources.Entries.Where(entry => NormalizeMacOsCeDatabasePath(entry.RawNameBytes, requireTerminalNul: true) == expected).ToArray();
                 var status = matches.Length switch
                 {
                     0 => ResolutionStatus.ZeroMatches,
@@ -670,6 +793,7 @@ internal static class Program
         int HotX, int HotY, int OffsetX, int OffsetY, int AnchorX, int AnchorY);
     private sealed record SyntheticDatEntry(byte[] RawName, byte[] Payload);
     private sealed record SyntheticDatFixture(byte[] Bytes);
+    private sealed record SourceArguments(IReadOnlyList<string> InventoryPaths, IReadOnlyList<string> LooseRoots);
     private enum TerrainKind { Tile, Facade, Unsupported }
     private enum ResolutionStatus { Resolved, ZeroMatches, AmbiguousCandidates, BadSelector, UnsupportedKind, UnsupportedArt }
     private sealed record Fingerprint(long Bytes, string Sha256)
