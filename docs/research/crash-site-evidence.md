@@ -57,9 +57,9 @@ and must not be committed or reported.
 | --- | --- |
 | Crash Site probe synthetic suite | PASS: framing branches, checked count/length bounds, roof and placeholder discriminators, and the bounded v119 delimiter are exercised without retaining real payloads. |
 | Read-only selected-sector framing run | PASS: size/SHA-256 matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 records reached the terminal count. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
-| Terrain probe synthetic suite | PASS: fail-closed MES initialization (malformed, missing, duplicate, range/capacity cases), no name trimming, type-specific palette selection, unsupported-class/invalid-selector rejection, every resolver branch through exact raw-path archive lookup, and projection arithmetic. |
+| Terrain probe synthetic suite | PASS: fail-closed MES initialization (malformed, missing, duplicate, non-zero facade start, each shifted/missing tile anchor, range/capacity cases), no name trimming, type-specific palette selection, unsupported-class/invalid-selector rejection, every resolver branch through exact raw-path archive lookup, and projection arithmetic. |
 | Read-only terrain run with explicit `arcanum2.dat` source | PASS with completeness failure retained: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; 3,033 tile and 1,063 facade cells; 2,576 tiles and all facades resolved; 457 tile cells unresolved; all observed branches reported, with six bounded identifier-to-ART/frame/metadata/anchor chains. |
-| Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run with `DAT_ROOT` set to user-owned inputs: Arcanum.Data.Tests 24/24 and Arcanum.Presentation.Tests 14/14. |
+| Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run with `DAT_ROOT` set to user-owned inputs: Arcanum.Data.Tests 25/25 and Arcanum.Presentation.Tests 14/14. |
 | Existing Python DAT probe synthetic suite | PASS: `python3 tools/research/dat_probe.py --self-test`. |
 
 The commands record aggregate facts and bounded representative chains only; no
@@ -79,8 +79,9 @@ evidence, not a full object model or scenery classifier.
 explicit one-archive source set. It pins and reports both source fingerprints,
 then verifies the module and resource fingerprints again after the read-only
 run. It applies source-attributed MES callback rules, rejects malformed MES,
-tile keys are counted only in the four CE ranges, and facade tables at the CE
-512-name capacity, requires one exact raw-path candidate, and uses `DatArchive` plus
+requires tile keys `0`, `100`, `200`, `300`, and `400`, rejects facade tables
+outside 1–511 entries or without exact key `0`, requires one exact raw-path
+candidate, and uses `DatArchive` plus
 `ArtDecoder` for a selected bounded entry/frame. Unsupported classes, missing
 or duplicate candidates, invalid selectors, and unresolved lookups fail
 closed; no fallback path or generic archive precedence is inferred.

@@ -86,12 +86,14 @@ The real chain is callback based, not a filename guess:
    (`art.c:465-477`).
 3. `src/game/name.c::name_init` loads the name-table subsystem. Its actual
    initialization sequence invokes `a_name_tile_init` then
-   `a_name_facade_init` (`name.c:236-379`). The tile initializer loads
-   `art\\tile\\tilename.mes` and counts entries in numeric ranges 0–99,
-   100–199, 200–299, and 300–399 (`a_name.c:193-222`, `424-540`). The facade
-   initializer loads `art\\facade\\facadename.mes`, requires fewer than 512
-   entries, sorts the loaded MES entries, and appends their values sequentially
-   to `facade_names[index++]` (`a_name.c:1107-1183`).
+   `a_name_facade_init` (`name.c:236-379`). The tile initializer requires exact
+   MES keys `0`, `100`, `200`, `300`, and `400`: range counting starts only
+   when each category's exact start exists, loading resets only at the first
+   four starts, and edge loading searches exact key `400`
+   (`a_name.c:193-222`, `424-540`, `543-575`; `mes.c:252-279`). The facade
+   initializer requires 1 through 511 entries and exact key `0`, sorts the
+   loaded MES entries, and appends their values sequentially to
+   `facade_names[index++]` (`a_name.c:1107-1183`).
 4. `name_resolve_path` normalizes first and dispatches tile and facade IDs to
    `a_name_tile_aid_to_fname` and `a_name_facade_aid_to_fname`
    (`name.c:856-881`, `973-977`). Tile lookup chooses the MES category from
@@ -102,19 +104,23 @@ The real chain is callback based, not a filename guess:
    pathname (`a_name.c:1129-1147`). It is not a MES-key lookup.
 
 The companion probe parses only brace-keyed MES entries needed by these two
-lookups and fails closed on malformed syntax or duplicate keys. Tile keys are
-counted only in the four cited ranges; facade initialization rejects 512 or more
-entries before it forms the sorted ordinal table. For facades it deliberately
-discards the numerical keys only after sorting, retaining values in ordinal
-order, matching the cited initialization path. It preserves the source token
-before `/` exactly rather than applying an unsourced trim. Its synthetic
-regression uses non-zero, gapped keys (`9`, `25`, `100`, `333`) and proves
-packed ordinal `3` selects the fourth sorted value rather than looking for key
-`3`; it also drives malformed, missing and duplicate lookup, unsupported class,
-invalid selector, and every resolver branch through the production archive
-lookup path. It validates each exact resolved raw archive pathname has exactly
-one candidate in its supplied source archive. The bounded local run reports six
-representative chains below, but no MES text or decoded pixels.
+lookups and fails closed on malformed syntax or duplicate keys. It requires the
+five exact tile initialization keys `0`, `100`, `200`, `300`, and `400` before
+forming the four tile categories; later keys within a category may remain
+gapped. Facade initialization rejects counts outside 1–511 and a table without
+exact key `0` before it forms the sorted ordinal table. For facades it
+deliberately discards the numerical keys only after sorting, retaining values
+in ordinal order, matching the cited initialization path. It preserves the
+source token before `/` exactly rather than applying an unsourced trim. Its
+positive ordinal regression uses gapped keys (`0`, `25`, `100`, `333`) and
+proves packed ordinal `3` selects the fourth sorted value rather than looking
+for key `3`; this valid gapped lookup does not relax the initialization key-0
+requirement. Synthetic DAT fixtures drive malformed, missing and duplicate
+lookup, a non-zero facade start, each shifted/missing tile anchor, unsupported
+class, invalid selector, and every resolver branch through the production
+archive lookup path. They validate each exact resolved raw archive pathname has
+exactly one candidate in its supplied source archive. The bounded local run
+reports six representative chains below, but no MES text or decoded pixels.
 
 ### Selected frame and metadata
 
