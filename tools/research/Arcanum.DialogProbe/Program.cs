@@ -159,7 +159,7 @@ internal static class Program
         var special = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{-9}{} {2}{x}{}{}{}{0}{}"));
         Assert(GraphSummary.Create(special).Special == 1, "negative special transition was not classified");
         var cycle = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{2}{} {2}{x}{}{}{}{0}{} {3}{x}{}{1}{}{2}{}"));
-        Assert(GraphSummary.Create(cycle).Frontier == "second-decision-frontier", "cycle-shaped references did not terminate at the bounded second frontier");
+        Assert(GraphSummary.Create(cycle).Frontier == "cycle", "cycle-shaped references did not stop before reselecting an included node");
         var unsupported = DlgDocument.Parse(Bytes("{1}{x}{}{1}{??}{2}{} {2}{x}{}{}{}{0}{}"));
         Assert(GraphSummary.Create(unsupported).Unresolved == 1, "unsupported condition opcode was not fail-closed");
         var callback = DlgDocument.Parse(Bytes("{1}{x}{}{1}{}{2}{} {2}{x}{}{}{}{0}{SC}"));
@@ -169,7 +169,7 @@ internal static class Program
 
         var opaqueText = DlgDocument.Parse([ (byte)'{', (byte)'1', (byte)'}', (byte)'{', 0xe9, (byte)'}', (byte)'{', (byte)'}', (byte)'{', (byte)'1', (byte)'}', (byte)'{', (byte)'}', (byte)'{', (byte)'0', (byte)'}', (byte)'{', (byte)'}' ]);
         Assert(opaqueText.Records.Count == 1, "opaque non-ASCII text bytes were not preserved structurally");
-        var nodeCap = DlgDocument.Parse(Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{0}}{{}}"))));
+        var nodeCap = DlgDocument.Parse(Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{{id + 10_000}}}{{}}")) + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id + 10_000}}}{{npc}}{{}}{{}}{{}}{{0}}{{}}"))));
         var cappedGraph = GraphSummary.Create(nodeCap);
         Assert(cappedGraph.IncludedNodes == MaxTraversalNodes && cappedGraph.Frontier == "traversal-node-cap", "node traversal cap was not enforced incrementally");
 
@@ -192,32 +192,58 @@ internal static class Program
         var duplicate = CreateSyntheticDat(new SyntheticDatEntry(validName, payload), new SyntheticDatEntry(validName, payload));
         WithSyntheticArchive(duplicate, (archive, stream) =>
         {
-            AssertRejected(() => InspectArchive(archive, expectedName), "duplicate archive selector");
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "duplicate archive selector", "The exact raw DLG identifier is missing or duplicated");
             AssertPayloadReads(archive, stream);
         });
         var oversized = CreateSyntheticDat(new SyntheticDatEntry(validName, new byte[MaxDlgBytes + 1]));
         WithSyntheticArchive(oversized, (archive, stream) =>
         {
-            AssertRejected(() => InspectArchive(archive, expectedName), "oversized selected DLG entry");
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "oversized selected DLG entry", "The selected DLG entry violates the bounded read policy");
             AssertPayloadReads(archive, stream);
         });
         var malformed = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{x}")));
         WithSyntheticArchive(malformed, (archive, stream) =>
         {
-            AssertRejected(() => InspectArchive(archive, expectedName), "malformed DLG through archive probe path");
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "malformed DLG through archive probe path", "DLG record is missing a field opening brace");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "malformed DLG fixture did not exercise a production payload read");
         });
         var overflow = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{x}{}{1}{}{999999999999999999999}{}")));
         WithSyntheticArchive(overflow, (archive, stream) =>
         {
-            AssertRejected(() => InspectArchive(archive, expectedName), "response overflow through archive probe path");
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "response overflow through archive probe path", "DLG response value exceeds signed 32-bit range");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "response overflow fixture did not exercise a production payload read");
+        });
+        var fieldLimit = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{" + new string('x', MaxFieldBytes + 1) + "}{}{}{1}{}{0}{}")));
+        WithSyntheticArchive(fieldLimit, (archive, stream) =>
+        {
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "field limit through archive probe path", "DLG field exceeds the 4 KiB policy cap");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "field-limit fixture did not exercise a production payload read");
+        });
+        var duplicateRecord = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{x}{}{1}{}{0}{} {1}{x}{}{1}{}{0}{}")));
+        WithSyntheticArchive(duplicateRecord, (archive, stream) =>
+        {
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "duplicate DLG record through archive probe path", "DLG record IDs must be unique");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "duplicate-record fixture did not exercise a production payload read");
+        });
+        var dangling = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{99}{}")));
+        WithSyntheticArchive(dangling, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Dangling == 1 && result.Graph.Frontier == "dangling" && result.Graph.Rows.Any(row => row.EdgeStatus == "dangling"), "dangling reference did not produce the distinct production-path dangling outcome");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "dangling fixture did not exercise a production payload read");
+        });
+        var unresolved = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{3}{} {3}{player}{}{1}{}{0}{}")));
+        WithSyntheticArchive(unresolved, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Unresolved == 1 && result.Graph.Frontier == "unresolved" && result.Graph.Rows.Any(row => row.EdgeStatus == "unresolved"), "wrong-role target did not produce the distinct production-path unresolved outcome");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "unresolved fixture did not exercise a production payload read");
         });
         var callback = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{0}{SC}")));
         WithSyntheticArchive(callback, (archive, stream) =>
         {
             var result = InspectArchive(archive, expectedName);
-            Assert(result.Graph.Callbacks == 1 && result.Graph.Rows.Any(row => row.EdgeStatus == "callback"), "callback was not classified by the production archive probe path");
+            Assert(result.Graph.Callbacks == 1 && result.Graph.Frontier == "callback" && result.Graph.Rows.Any(row => row.EdgeStatus == "callback"), "callback was not classified by the production archive probe path");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "callback classification fixture did not exercise a production payload read");
         });
         var unsupported = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{??}")));
@@ -225,18 +251,34 @@ internal static class Program
         {
             var result = InspectArchive(archive, expectedName);
             Assert(result.Graph.Frontier == "unsupported-operation", "unsupported start operation was not a production probe frontier");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "unsupported fixture did not exercise a production payload read");
         });
         var recordLimit = CreateSyntheticDat(new SyntheticDatEntry(validName, Enumerable.Range(1, MaxRecords + 1).SelectMany(id => Bytes($"{{{id}}}{{x}}{{}}{{1}}{{}}{{0}}{{}}")).ToArray()));
         WithSyntheticArchive(recordLimit, (archive, stream) =>
         {
-            AssertRejected(() => InspectArchive(archive, expectedName), "record limit through archive probe path");
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "record limit through archive probe path", "DLG record count exceeds the 10,000 policy cap");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "record-limit fixture did not exercise a production payload read");
         });
-        var traversalCap = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{0}}{{}}")))));
+        var traversalCap = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{}" + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id}}}{{player}}{{}}{{1}}{{}}{{{id + 10_000}}}{{}}")) + string.Concat(Enumerable.Range(2, MaxTraversalNodes + 2).Select(id => $"{{{id + 10_000}}}{{npc}}{{}}{{}}{{}}{{0}}{{}}")))));
         WithSyntheticArchive(traversalCap, (archive, stream) =>
         {
             var result = InspectArchive(archive, expectedName);
             Assert(result.Graph.IncludedNodes == MaxTraversalNodes && result.Graph.Frontier == "traversal-node-cap", "traversal cap was not enforced by the production archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "traversal-cap fixture did not exercise a production payload read");
+        });
+        var cycle = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{1}{}")));
+        WithSyntheticArchive(cycle, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Frontier == "cycle" && result.Graph.Rows.Any(row => row.EdgeStatus == "unresolved"), "cycle-shaped reference did not produce the distinct production-path cycle stop");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "cycle fixture did not exercise a production payload read");
+        });
+        var callbackBeforeDirect = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{1}{npc}{}{}{}{0}{} {2}{player}{}{1}{}{3}{SC} {3}{player}{}{1}{}{4}{} {4}{npc}{}{}{}{0}{}")));
+        WithSyntheticArchive(callbackBeforeDirect, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Graph.Frontier == "callback" && result.Graph.Rows.Count == 2 && result.Graph.Rows.All(row => row.NodeId != 3 && row.NodeId != 4) && result.Graph.Rows.All(row => row.EdgeStatus != "direct-included"), "a callback before a direct response allowed a later target to be selected");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "callback-before-direct fixture did not exercise a production payload read");
         });
     }
 
@@ -245,7 +287,11 @@ internal static class Program
         var fixture = CreateSyntheticDat(new SyntheticDatEntry(Name("dlg\\fixture.dlg"), Bytes("{1}{x}{}{1}{}{0}{}")));
         WithSyntheticArchive(fixture, (archive, stream) =>
         {
-            AssertRejected(() => ParseResourceSelector(selector), $"selector {selector}");
+            var rejected = false;
+            try { ParseResourceSelector(selector); }
+            catch (ArgumentException) { rejected = true; }
+            catch (Exception exception) { throw new InvalidOperationException($"selector {selector} produced {exception.GetType().Name}; expected ArgumentException."); }
+            if (!rejected) throw new InvalidOperationException($"selector {selector} was accepted.");
             AssertPayloadReads(archive, stream);
         });
     }
@@ -318,7 +364,19 @@ internal static class Program
     private static void AssertRejected(Action action, string label)
     {
         try { action(); }
-        catch (Exception) { return; }
+        catch (InvalidDataException) { return; }
+        catch (Exception exception) { throw new InvalidOperationException($"{label} produced {exception.GetType().Name}; expected InvalidDataException."); }
+        throw new InvalidOperationException($"{label} was accepted.");
+    }
+
+    private static void AssertRejectedWithReason(Action action, string label, string expectedReason)
+    {
+        try { action(); }
+        catch (InvalidDataException exception) when (exception.Message.StartsWith(expectedReason, StringComparison.Ordinal)) { return; }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"{label} produced {exception.GetType().Name}: {exception.Message}; expected InvalidDataException beginning '{expectedReason}'.");
+        }
         throw new InvalidOperationException($"{label} was accepted.");
     }
 
@@ -410,18 +468,25 @@ internal static class Program
                 if (allowEmpty) return 0;
                 throw new InvalidDataException($"DLG {label} is empty.");
             }
-            var value = 0;
-            var sign = 1;
-            var index = 0;
-            if (field.Bytes[0] == (byte)'-') { sign = -1; index++; }
-            if (index == field.Length) throw new InvalidDataException($"DLG {label} is not a decimal integer.");
-            for (; index < field.Length; index++)
+            try
             {
-                var valueByte = field.Bytes[index];
-                if (valueByte is < (byte)'0' or > (byte)'9') throw new InvalidDataException($"DLG {label} is not ASCII decimal.");
-                checked { value = (value * 10) + valueByte - (byte)'0'; }
+                var value = 0;
+                var sign = 1;
+                var index = 0;
+                if (field.Bytes[0] == (byte)'-') { sign = -1; index++; }
+                if (index == field.Length) throw new InvalidDataException($"DLG {label} is not a decimal integer.");
+                for (; index < field.Length; index++)
+                {
+                    var valueByte = field.Bytes[index];
+                    if (valueByte is < (byte)'0' or > (byte)'9') throw new InvalidDataException($"DLG {label} is not ASCII decimal.");
+                    checked { value = (value * 10) + valueByte - (byte)'0'; }
+                }
+                return checked(value * sign);
             }
-            return checked(value * sign);
+            catch (OverflowException exception)
+            {
+                throw new InvalidDataException($"DLG {label} exceeds signed 32-bit range.", exception);
+            }
         }
 
         private static string ClassifyOperations(Field field, SortedDictionary<string, int> counts, out bool unsupported, out bool callback)
@@ -569,6 +634,7 @@ internal static class Program
 
             var candidates = state.InspectFrontier(startIndex, "first");
             if (state.Capped) return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", state.NodeCapped ? "traversal-node-cap" : "traversal-reference-cap");
+            if (state.FixedStop is not null) return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", state.FixedStop);
             var chosen = candidates.OrderBy(candidate => candidate.Response).ThenBy(candidate => candidate.Id).FirstOrDefault();
             if (chosen is null)
             {
@@ -583,7 +649,7 @@ internal static class Program
             }
             var targetIndex = Array.FindIndex(ordered, record => record.Id == target.Id);
             state.InspectFrontier(targetIndex, "second");
-            var frontier = state.Capped ? (state.NodeCapped ? "traversal-node-cap" : "traversal-reference-cap") : "second-decision-frontier";
+            var frontier = state.Capped ? (state.NodeCapped ? "traversal-node-cap" : "traversal-reference-cap") : state.FixedStop ?? "second-decision-frontier";
             return state.ToSummary(direct, exit, special, dangling, ambiguous, unresolved, callbacks, start.Id, "lowest numeric NPC record; structural selection only, not runtime entry", frontier);
         }
 
@@ -595,6 +661,9 @@ internal static class Program
             public bool NodeCapped { get; private set; }
             public bool ReferenceCapped { get; private set; }
             public bool Capped => NodeCapped || ReferenceCapped;
+            public string? FixedStop { get; private set; }
+
+            public void StopAt(string classification) => FixedStop ??= classification;
 
             public bool Include(DlgRecord record, string status)
             {
@@ -630,21 +699,30 @@ internal static class Program
                     if (response.Callback)
                     {
                         ReplaceStatus(response.Id, "callback", "unsupported", "callback", "callback-shaped operation; requires an unimplemented SCR/event bridge");
-                        continue;
+                        StopAt("callback");
+                        break;
                     }
                     if (response.Unsupported)
                     {
                         ReplaceStatus(response.Id, "unsupported", "unsupported", "unsupported", "uninterpreted condition/action; no query or command service is admitted");
-                        continue;
+                        StopAt("unsupported-operation");
+                        break;
                     }
-                    if (response.Response == 0) { ReplaceStatus(response.Id, "exit", "none", "none", "zero serialized response is source-backed exit form"); continue; }
-                    if (response.Response < 0) { ReplaceStatus(response.Id, "special", "none", "none", "negative serialized response is source-backed special form; semantics unknown"); continue; }
-                    if (!byId.TryGetValue(response.Response, out var targets)) { ReplaceStatus(response.Id, "dangling", "none", "none", "positive target is absent"); continue; }
-                    if (targets.Length != 1) { ReplaceStatus(response.Id, "ambiguous", "none", "none", "positive target is non-unique"); continue; }
+                    if (response.Response == 0) { ReplaceStatus(response.Id, "exit", "none", "none", "zero serialized response is source-backed exit form"); StopAt("exit"); break; }
+                    if (response.Response < 0) { ReplaceStatus(response.Id, "special", "none", "none", "negative serialized response is source-backed special form; semantics unknown"); StopAt("special"); break; }
+                    if (!byId.TryGetValue(response.Response, out var targets)) { ReplaceStatus(response.Id, "dangling", "none", "none", "positive target is absent"); StopAt("dangling"); break; }
+                    if (targets.Length != 1) { ReplaceStatus(response.Id, "ambiguous", "none", "none", "positive target is non-unique"); StopAt("ambiguous"); break; }
                     if (targets[0].Role != Role.Npc || targets[0].Unsupported || targets[0].Callback)
                     {
                         ReplaceStatus(response.Id, "unresolved", "none", "none", "target is structurally invalid or stops at an unsupported operation");
-                        continue;
+                        StopAt("unresolved");
+                        break;
+                    }
+                    if (_included.Contains(response.Response))
+                    {
+                        ReplaceStatus(response.Id, "unresolved", "none", "none", "positive target revisits an included structural node (cycle)");
+                        StopAt("cycle");
+                        break;
                     }
                     candidates.Add(response);
                 }

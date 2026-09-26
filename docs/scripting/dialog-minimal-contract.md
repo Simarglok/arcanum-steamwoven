@@ -28,6 +28,9 @@ Only an operation observed and attributed in the selected evidence slice may be
 admitted. Every other token is `Unsupported`; malformed data is `Invalid`.
 Both evaluate fail-closed: an unsupported or invalid condition hides the branch,
 and an unsupported or invalid action prevents the transition/effect.
+For the bounded structural probe, the first callback, unsupported operation, or
+other fixed stop class ends frontier inspection after classifying that row; it
+must not select a later otherwise-direct response.
 
 Services are admitted only through selected evidence and are classified as:
 

@@ -64,14 +64,16 @@ numeric structurally NPC record. This deterministic convenience is explicitly
 not a claim that the record is the runtime dialogue entry. Traversal increments
 its node and reference counters before appending a row; it never materializes a
 frontier beyond 256 included nodes or 1,024 examined references. It stops at a
-second decision frontier, exit, special/generated transition, callback,
-uninterpreted condition/action, unresolved target, or either cap. Because this
-probe has no operation evaluator, every nonempty condition/action is an
-unsupported boundary (with `SC` additionally classified callback-shaped). It
-chooses a direct candidate deterministically by smallest positive target ID,
-then smallest response ID, among the only currently admissible service set:
-the source-backed serialized transition itself. First-record order is never
-entry evidence.
+second decision frontier or at the **first** exit, special/generated transition,
+callback, uninterpreted condition/action, dangling/ambiguous/unresolved target,
+cycle, or either cap. The stopped row is retained and classified, but no later
+response is inspected or selected after that fixed stop. Because this probe has
+no operation evaluator, every nonempty condition/action is an unsupported
+boundary (with `SC` additionally classified callback-shaped). Only if no fixed
+stop occurs does it choose a direct candidate deterministically by smallest
+positive target ID, then smallest response ID, among the only currently
+admissible service set: the source-backed serialized transition itself.
+First-record order is never entry evidence.
 
 ## Encoding and unknowns
 
