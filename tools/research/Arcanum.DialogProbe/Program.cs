@@ -131,7 +131,7 @@ internal static class Program
 
     private static void SelfTest()
     {
-        var valid = Bytes("// synthetic comment\r\n{100}{npc}{female}{}{qA1}{200}{aB2}\n{200}{player}{0}{5}{}{300}{}\n{300}{npc}{}{}{}{0}{}\n");
+        var valid = Bytes("// synthetic comment\r\n{100}{npc}{female}{}{}{200}{}\n{200}{player}{0}{5}{}{300}{}\n{300}{npc}{}{}{}{0}{}\n");
         var document = DlgDocument.Parse(valid);
         Assert(document.Records.Count == 3 && document.Records[0].Role == Role.Npc && document.Records[1].Role == Role.Player, "valid seven-field fixture did not parse");
         Assert(document.CommentLines == 1 && document.CrLf == 1 && document.Lf == 3, "comment/newline aggregates did not parse");
@@ -213,6 +213,25 @@ internal static class Program
             AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "response overflow through archive probe path", "DLG response value exceeds signed 32-bit range");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "response overflow fixture did not exercise a production payload read");
         });
+        var signedExtrema = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{-2147483648}{npc}{}{}{}{2147483647}{} {2147483647}{player}{}{1}{}{-2147483648}{}")));
+        WithSyntheticArchive(signedExtrema, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            Assert(result.Document.Records.Select(record => record.Id).OrderBy(id => id).SequenceEqual([int.MinValue, int.MaxValue]) && result.Document.Records.Select(record => record.Response).OrderBy(value => value).SequenceEqual([int.MinValue, int.MaxValue]), "signed 32-bit extrema were not accepted through the production archive probe path");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "signed-extrema fixture did not exercise a production payload read");
+        });
+        var belowMinimum = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{-2147483649}{x}{}{1}{}{0}{}")));
+        WithSyntheticArchive(belowMinimum, (archive, stream) =>
+        {
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "below signed minimum through archive probe path", "DLG record ID exceeds signed 32-bit range");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "below-minimum fixture did not exercise a production payload read");
+        });
+        var aboveMaximum = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{2147483648}{x}{}{1}{}{0}{}")));
+        WithSyntheticArchive(aboveMaximum, (archive, stream) =>
+        {
+            AssertRejectedWithReason(() => InspectArchive(archive, expectedName), "above signed maximum through archive probe path", "DLG record ID exceeds signed 32-bit range");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "above-maximum fixture did not exercise a production payload read");
+        });
         var fieldLimit = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{" + new string('x', MaxFieldBytes + 1) + "}{}{}{1}{}{0}{}")));
         WithSyntheticArchive(fieldLimit, (archive, stream) =>
         {
@@ -279,6 +298,14 @@ internal static class Program
             var result = InspectArchive(archive, expectedName);
             Assert(result.Graph.Frontier == "callback" && result.Graph.Rows.Count == 2 && result.Graph.Rows.All(row => row.NodeId != 3 && row.NodeId != 4) && result.Graph.Rows.All(row => row.EdgeStatus != "direct-included"), "a callback before a direct response allowed a later target to be selected");
             Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "callback-before-direct fixture did not exercise a production payload read");
+        });
+        var positiveTraversal = CreateSyntheticDat(new SyntheticDatEntry(validName, Bytes("{100}{npc}{}{}{}{0}{} {200}{player}{}{1}{}{300}{} {210}{player}{}{1}{}{250}{} {220}{player}{}{1}{}{250}{} {250}{npc}{}{}{}{0}{} {260}{player}{}{1}{}{400}{} {300}{npc}{}{}{}{0}{} {400}{npc}{}{}{}{0}{}")));
+        WithSyntheticArchive(positiveTraversal, (archive, stream) =>
+        {
+            var result = InspectArchive(archive, expectedName);
+            var chosen = result.Graph.Rows.Single(row => row.EdgeStatus == "direct-included");
+            Assert(result.Graph.StartId == 100 && chosen.NodeId == 210 && result.Graph.Rows.Any(row => row.NodeId == 250 && row.EdgeStatus == "included-target") && result.Graph.Frontier == "second-decision-frontier" && result.Graph.Rows.Any(row => row.NodeId == 260 && row.EdgeStatus == "frontier"), "positive production traversal did not select smallest target then response ID and reach its second frontier");
+            Assert(stream.PayloadBytesRead(archive.Entries.Single()) > 0, "positive traversal fixture did not exercise a production payload read");
         });
     }
 
@@ -470,18 +497,23 @@ internal static class Program
             }
             try
             {
-                var value = 0;
-                var sign = 1;
+                long magnitude = 0;
+                var negative = false;
                 var index = 0;
-                if (field.Bytes[0] == (byte)'-') { sign = -1; index++; }
+                if (field.Bytes[0] == (byte)'-') { negative = true; index++; }
                 if (index == field.Length) throw new InvalidDataException($"DLG {label} is not a decimal integer.");
                 for (; index < field.Length; index++)
                 {
                     var valueByte = field.Bytes[index];
                     if (valueByte is < (byte)'0' or > (byte)'9') throw new InvalidDataException($"DLG {label} is not ASCII decimal.");
-                    checked { value = (value * 10) + valueByte - (byte)'0'; }
+                    var digit = valueByte - (byte)'0';
+                    var limit = negative ? 2_147_483_648L : int.MaxValue;
+                    if (magnitude > (limit - digit) / 10) throw new OverflowException();
+                    magnitude = (magnitude * 10) + digit;
                 }
-                return checked(value * sign);
+                return negative
+                    ? magnitude == 2_147_483_648L ? int.MinValue : -(int)magnitude
+                    : (int)magnitude;
             }
             catch (OverflowException exception)
             {

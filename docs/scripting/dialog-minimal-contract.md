@@ -62,6 +62,53 @@ serialized response value to distinguish direct, exit, and negative/special
 forms (`2537-2549`). This is a **source fact** about that source revision, not
 proof of original runtime ordering or a license to copy source code.
 
+## Ordered synthetic-state walkthroughs
+
+The following examples use invented IDs, flags, and operation tags only; they
+contain no game dialogue or extracted operation text. They specify the proposed
+contract above. The phase ordering is source-derived from the cited CE revision;
+the stated fail-closed outcomes and the direct-candidate ordering are also
+structurally tested by synthetic `DialogProbe` fixtures. Neither kind of
+evidence is a claim that the original game runtime performed these transitions.
+
+### Admissible direct transition (synthetic structural case)
+
+Initial synthetic state: current NPC `N100`; readable flag `met=false`; no
+commands have executed. The fixture has three otherwise-admissible responses:
+`R200 -> N300`, `R210 -> N250`, and `R220 -> N250`; all conditions/actions are
+empty, so no query or command service is invoked.
+
+1. Proposed/source-derived order: enumerate the immediate responses, query no
+   state, and retain their response IDs and positive targets.
+2. Structurally tested ordering: choose `R210`, because target `N250` is the
+   smallest target ID and `R210` is the smallest response ID among the tied
+   `N250` candidates. `R200` is not selected merely because its response ID is
+   smaller.
+3. Selected response: `R210`; effect/state after selection: no command and no
+   synthetic-state mutation; selected ID is `210`.
+4. Transition: include direct target `N250`, then expose its next immediate
+   response frontier without selecting a second response. The structural probe
+   reports `second-decision-frontier`; it does not execute a runtime dialogue.
+
+### Unsupported or invalid condition (synthetic fail-closed case)
+
+Initial synthetic state: current NPC `N100`; response `R200 -> N250` has a
+nonempty condition tag that this bounded contract does not recognize. Query
+result: `Unsupported` (an invalid condition would yield `Invalid` instead).
+Selected response: none, because the branch is hidden. Effect/state after:
+no command runs and state is unchanged. Transition: `Unsupported`/`Invalid`,
+not `Direct(N250)`; later responses are not inspected after the fixed stop.
+
+### Unsupported or invalid action (synthetic fail-closed case)
+
+Initial synthetic state: current NPC `N100`; response `R200 -> N250` has an
+otherwise admissible condition but a nonempty unrecognized action tag. Query
+result: `True` for the synthetic eligibility check; command result:
+`Unsupported` (or `Invalid` for malformed action data). Selected response:
+`R200` is not admitted for a transition. Effect/state after: no command runs
+and state is unchanged. Transition: blocked as `Unsupported`/`Invalid`, never
+`Direct(N250)`; a later direct response is not selected past that fixed stop.
+
 ## Readiness split
 
 **DLG-reader readiness: Blocked.** The physical seven-field subset, policy

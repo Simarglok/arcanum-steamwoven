@@ -100,7 +100,12 @@ Every post-selection fixture asserts a positive payload read; pre-read selector,
 duplicate archive, and oversized-entry rejections assert zero payload reads.
 The matrix also covers valid seven-field NPC/player records, comments, CRLF/LF,
 empty fields, malformed/missing/nested braces, NUL, opaque non-ASCII text bytes,
-and required `.dlg` selector rejection. Duplicate DLG IDs are malformed rather
+required `.dlg` selector rejection, full signed `Int32` minimum/maximum values,
+and stable just-outside-range rejections through `InspectArchive`. Its positive
+archive-path traversal fixture proves smallest target ID then response ID
+selection, identifies the `direct-included` response and target, reaches the
+second-decision frontier, and performs a positive payload read. This is a
+synthetic structural result, not runtime ordering evidence. Duplicate DLG IDs are malformed rather
 than an admissible ambiguous graph; the graph retains an explicit ambiguous
 target outcome as a defensive classification. It does not claim a realizable
 >1,024-reference frontier because the stricter 256-node cap stops such a

@@ -27,12 +27,12 @@ It emits no original text or field content.
 
 | Field | Bounded role | Evidence category | Boundary |
 | --- | --- | --- | --- |
-| 0 | unique signed decimal record ID | source fact | duplicate, malformed, overflowed, or empty IDs reject |
+| 0 | unique signed decimal record ID | source fact | probe accepts full `Int32` range; duplicate, malformed, outside-range, or empty IDs reject |
 | 1 | primary text bytes, reported only as aggregate length | source fact | opaque bounded bytes; encoding is not established |
 | 2 | alternate/gender bytes, reported only as aggregate length | source fact | opaque bounded bytes; encoding is not established |
 | 3 | empty denotes NPC; nonzero denotes player response | source fact | a nonempty zero rejects; role is structural, not runtime selection |
 | 4 | condition opcode classes | source fact / local structural experiment | printable ASCII, emitted as two-letter class counts only |
-| 5 | signed decimal response value; empty parses as zero in the cited source | source fact | positive direct candidate, zero/empty exit candidate, negative special candidate |
+| 5 | signed decimal response value; empty parses as zero in the cited source | source fact | probe accepts full `Int32` range; positive direct candidate, zero/empty exit candidate, negative special candidate |
 | 6 | action opcode classes | source fact / local structural experiment | printable ASCII, emitted as two-letter class counts only |
 
 `//` comments outside fields, CRLF/LF accounting, empty fields, and fields
