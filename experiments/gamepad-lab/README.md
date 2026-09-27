@@ -15,7 +15,7 @@ The center reticle is the focus. The lab evaluates visible interaction anchors i
 | Context / settings | C / F1 | Y / Start |
 | Menu directions | arrows/WASD | D-pad / left stick |
 
-InputMap declares the keyboard and SDL semantic actions; the adapter maintains per-device event state and accepts joy events only from the deterministic active device. It samples held stick/keyboard pan every frame, so panning is continuous and frame-rate/zoom scaled. Controller connect/disconnect and focus transitions clear held/repeat state; reconnect/focus/reset require a complete neutral sampled frame and a following arm frame. Circular deadzone defaults to 0.20 (0.05–0.45); sensitivity defaults to 1.0 (0.5–2.0). The app labels engine delivery `LIVE OS EVENT (not physical usability proof)` and all injected automation `SIMULATION`.
+InputMap declares the keyboard and SDL semantic actions (including both left-stick directions); the adapter maintains per-device event state and accepts joy events only from the deterministic active device. With no active device, a frame collects meaningful controller candidates and selects the lowest ID; additional connected controllers remain diagnostic-only. It samples held stick/keyboard pan every frame, so panning is continuous and frame-rate/zoom scaled. `Camera2D` is intentionally outside the translated WorldRoot, so the rendered courtyard actually moves under the fixed reticle. Active-controller disconnect and focus transitions clear held/repeat state; reconnect/focus/reset require a complete neutral sampled frame and a following arm frame. Circular deadzone defaults to 0.20 (0.05–0.45); sensitivity defaults to 1.0 (0.5–2.0). The app labels engine delivery `LIVE OS EVENT (not physical usability proof)` and all injected automation `SIMULATION`.
 
 ## Build and checks
 
@@ -31,7 +31,7 @@ Use the canonical process-local SDK and Godot executable:
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --editor --path . --quit
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . -- --self-test
 
-The Core executable harness covers radial deadzone/no drift, normalization and delta/zoom scaling, device quarantine and method thresholds, every rising-edge pulse, focus/reset stale-edge suppression, modal world suppression, deterministic digital/analog menu repeat, epsilon ties/hysteresis, cycling/lock invalidation/removal/out-of-radius, offscreen/world-ground fallback, and projection fixtures at 1280×800 and 1920×1080. Godot self-test drives actual adapter key events through the scene, settings/menu activation, selection, focus and disconnect hooks with explicit **SIMULATION** provenance.
+The Core executable harness covers radial deadzone/no drift, normalization and delta/zoom scaling, same-frame lowest-device arbitration/quarantine and method thresholds, every rising-edge pulse, focus/reset stale-edge suppression, modal world suppression, deterministic digital/analog menu repeat, epsilon ties/exact hysteresis boundary, cycling/lock invalidation/removal/out-of-radius, offscreen/world-ground fallback, and projection fixtures at 1280×800 and 1920×1080. Godot self-test drives actual adapter key/mouse events through the scene, checks manual target-or-ground selection, rendered canvas displacement from continuous pan, settings/menu activation, focus and disconnect hooks with explicit **SIMULATION** provenance.
 
 ## Evidence limits and owner checklist
 

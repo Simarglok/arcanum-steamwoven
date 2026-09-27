@@ -79,7 +79,7 @@ public sealed class LabInputAdapter
     {
         foreach (var action in new[] { "lab_pan", "lab_confirm", "lab_cancel", "lab_inspect", "lab_previous", "lab_next", "lab_context", "lab_settings", "lab_menu_up", "lab_menu_down" })
             if (!InputMap.HasAction(action)) InputMap.AddAction(action);
-        Add("lab_pan", new InputEventKey { Keycode = Key.W }, new InputEventKey { Keycode = Key.A }, new InputEventKey { Keycode = Key.S }, new InputEventKey { Keycode = Key.D }, new InputEventKey { Keycode = Key.Up }, new InputEventKey { Keycode = Key.Down }, new InputEventKey { Keycode = Key.Left }, new InputEventKey { Keycode = Key.Right }, new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = 1 });
+        Add("lab_pan", new InputEventKey { Keycode = Key.W }, new InputEventKey { Keycode = Key.A }, new InputEventKey { Keycode = Key.S }, new InputEventKey { Keycode = Key.D }, new InputEventKey { Keycode = Key.Up }, new InputEventKey { Keycode = Key.Down }, new InputEventKey { Keycode = Key.Left }, new InputEventKey { Keycode = Key.Right }, new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = -1 }, new InputEventJoypadMotion { Axis = JoyAxis.LeftX, AxisValue = 1 }, new InputEventJoypadMotion { Axis = JoyAxis.LeftY, AxisValue = -1 }, new InputEventJoypadMotion { Axis = JoyAxis.LeftY, AxisValue = 1 });
         Add("lab_confirm", new InputEventKey { Keycode = Key.Enter }, new InputEventKey { Keycode = Key.Space }, new InputEventJoypadButton { ButtonIndex = JoyButton.A });
         Add("lab_cancel", new InputEventKey { Keycode = Key.Escape }, new InputEventKey { Keycode = Key.Backspace }, new InputEventJoypadButton { ButtonIndex = JoyButton.B });
         Add("lab_inspect", new InputEventKey { Keycode = Key.I }, new InputEventJoypadButton { ButtonIndex = JoyButton.X });
@@ -87,8 +87,8 @@ public sealed class LabInputAdapter
         Add("lab_next", new InputEventKey { Keycode = Key.E }, new InputEventJoypadButton { ButtonIndex = JoyButton.RightShoulder });
         Add("lab_context", new InputEventKey { Keycode = Key.C }, new InputEventJoypadButton { ButtonIndex = JoyButton.Y });
         Add("lab_settings", new InputEventKey { Keycode = Key.F1 }, new InputEventJoypadButton { ButtonIndex = JoyButton.Start });
-        Add("lab_menu_up", new InputEventKey { Keycode = Key.Up }, new InputEventKey { Keycode = Key.W }, new InputEventJoypadButton { ButtonIndex = JoyButton.DpadUp });
-        Add("lab_menu_down", new InputEventKey { Keycode = Key.Down }, new InputEventKey { Keycode = Key.S }, new InputEventJoypadButton { ButtonIndex = JoyButton.DpadDown });
+        Add("lab_menu_up", new InputEventKey { Keycode = Key.Up }, new InputEventKey { Keycode = Key.W }, new InputEventJoypadButton { ButtonIndex = JoyButton.DpadUp }, new InputEventJoypadMotion { Axis = JoyAxis.LeftY, AxisValue = -1 });
+        Add("lab_menu_down", new InputEventKey { Keycode = Key.Down }, new InputEventKey { Keycode = Key.S }, new InputEventJoypadButton { ButtonIndex = JoyButton.DpadDown }, new InputEventJoypadMotion { Axis = JoyAxis.LeftY, AxisValue = 1 });
     }
     private static void Add(string action, params InputEvent[] events) { if (InputMap.ActionGetEvents(action).Count == 0) foreach (var inputEvent in events) InputMap.ActionAddEvent(action, inputEvent); }
     private static Vec2 ToCore(Vector2 value) => new(value.X, value.Y);

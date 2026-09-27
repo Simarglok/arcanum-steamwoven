@@ -2,7 +2,7 @@ namespace GamepadLab.Core;
 
 public sealed record TargetCandidate(string Id, string Kind, Vec2 Anchor, int CycleOrder, bool Alive = true, bool ContextValid = true, bool Visible = true);
 public sealed record TargetingPolicy(double Radius = 180, double TieEpsilon = .001, double Hysteresis = 24);
-public sealed record SelectionState(string? SelectedId = null, bool ManualLock = false);
+public sealed record SelectionState(string? SelectedId = null, bool ManualLock = false, Vec2? ManualGroundPoint = null);
 public sealed record SelectionResult(string? Id, bool IsGround, Vec2 GroundPoint, double? Score, bool ManualLock, IReadOnlyList<TargetCandidate> Eligible);
 
 public sealed class TargetingEngine
@@ -13,6 +13,8 @@ public sealed class TargetingEngine
         var eligible = candidates.Where(c => c.Alive && c.ContextValid && c.Visible && viewport.Contains(c.Anchor) && Vec2.Distance(c.Anchor, focus) <= policy.Radius)
             .OrderBy(c => c.CycleOrder).ThenBy(c => c.Id, StringComparer.Ordinal).ToArray();
         var byId = eligible.ToDictionary(c => c.Id, StringComparer.Ordinal);
+        if (state.ManualGroundPoint is Vec2 clickedGround)
+            return new(null, true, clickedGround, null, true, eligible);
         var best = Best(eligible, focus, policy.TieEpsilon);
         TargetCandidate? selected = null;
         var manual = state.ManualLock;
@@ -44,5 +46,6 @@ public sealed class TargetingEngine
     }
 
     public SelectionState Pick(string? id) => new(id, id is not null);
+    public SelectionState PickGround(Vec2 point) => new(null, true, point);
     public SelectionState CancelLock() => new(null, false);
 }

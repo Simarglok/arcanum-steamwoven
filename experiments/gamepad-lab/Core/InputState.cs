@@ -17,6 +17,7 @@ public sealed class InputStateReducer
 {
     private readonly HashSet<string> _held = new(StringComparer.Ordinal);
     private int? _activeDevice;
+    private readonly HashSet<int> _activationCandidates = [];
     private bool _armed = true;
     private bool _neutralSeen;
     private double _gamepadMotionSeconds;
@@ -24,16 +25,29 @@ public sealed class InputStateReducer
     public int? ActiveDevice => _activeDevice;
     public InputMethod Method { get; private set; } = InputMethod.KeyboardMouse;
     public void SetStartupDevices(IEnumerable<int> ids) => _activeDevice = ids.DefaultIfEmpty(-1).Min() is var id && id >= 0 ? id : null;
-    public void Disconnect(int id) { if (_activeDevice == id) { _activeDevice = null; Quarantine(); } }
+    public void Disconnect(int id) { _activationCandidates.Remove(id); if (_activeDevice == id) { _activeDevice = null; Quarantine(); } }
     public void FocusChanged(bool focused) { Quarantine(); }
     public void Reset() => Quarantine();
     public void Quarantine() { _held.Clear(); _armed = false; _neutralSeen = false; _gamepadMotionSeconds = 0; }
+
+    /// <summary>Chooses exactly one controller after all events in the input frame have been observed.</summary>
+    public void EndFrame()
+    {
+        if (_activeDevice is not null || _activationCandidates.Count == 0) return;
+        _activeDevice = _activationCandidates.Min();
+        _activationCandidates.Clear();
+        Quarantine(); // The activation event is intentionally consumed; a neutral frame is required next.
+    }
 
     public IntentFrame Reduce(RawInputFrame raw, InputContext context, string provenance = "LIVE OS EVENT (not physical usability proof)")
     {
         if (!raw.Focused || !raw.Connected) { Quarantine(); return Empty(provenance); }
         var isJoy = raw.DeviceId >= 0;
-        if (isJoy && _activeDevice is null && Meaningful(raw, context)) { _activeDevice = raw.DeviceId; Quarantine(); return Empty(provenance); }
+        if (isJoy && _activeDevice is null)
+        {
+            if (Meaningful(raw, context)) _activationCandidates.Add(raw.DeviceId);
+            return Empty(provenance);
+        }
         if (isJoy && raw.DeviceId != _activeDevice) return Empty(provenance);
 
         var processed = Vec2.CircularDeadzone(raw.Stick, context.Deadzone);
