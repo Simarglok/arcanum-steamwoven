@@ -32,9 +32,14 @@ For the bounded structural probe, the first callback, unsupported operation, or
 other fixed stop class ends frontier inspection after classifying that row; it
 must not select a later otherwise-direct response.
 
-Services are admitted only through selected evidence and are classified as:
+### ARC-RES-005 historical service table
 
-| Service class | Proposed use | Current status |
+The following table records the older unsupported `01324Virgil` structural-start
+scope. It is superseded for the separately evidenced ARC-RES-006 N30 -> P31 ->
+Direct(N50) slice by the current proposal below; it is retained to preserve the
+earlier bounded conclusion rather than state the current service verdict.
+
+| Service class | Proposed use | ARC-RES-005 status |
 | --- | --- | --- |
 | `query` | read player/NPC state for an evidenced condition | no selected query is admitted: every nonempty condition in the selected start is unsupported |
 | `command` | execute an evidenced, bounded state effect | no selected command is admitted: every nonempty action in the selected start is unsupported |
@@ -164,9 +169,9 @@ The self-test also uses multiple invented QU actions to prove command order,
 asserts PC/NPC/dialog participant routing, and separately retains structural
 direct/exit/special classification. It never executes original game dialogue.
 
-## Readiness split
+## ARC-RES-005 historical readiness snapshot
 
-**DLG-reader readiness: Blocked.** The physical seven-field subset, policy
+**Historical ARC-RES-005 DLG-reader readiness: Blocked.** The physical seven-field subset, policy
 caps, selector rejection, synthetic archive-path tests, and one read-only
 candidate run pass; however it is not Ready because the observed nonempty
 condition/action vocabulary is intentionally unsupported, original text
@@ -174,7 +179,7 @@ encoding/localization is unknown, and no independently sourced DLG grammar or
 operation semantics has been established. This verdict is about a future
 bounded reader, not a rejection of the measured physical structure.
 
-**Game-dialog-runtime readiness: Blocked.** An actual entry, archive winner,
+**Historical ARC-RES-005 game-dialog-runtime readiness: Blocked.** An actual entry, archive winner,
 ordering, every operation meaning, callback/SCR bridge, transition semantics,
 and each query/command service need separate evidence. Neither a reader
 self-test nor a structural research-selected start proves runtime behaviour.
