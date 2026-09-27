@@ -54,6 +54,14 @@ internal static class InputStateTests
         reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Confirm: true), c).Confirm, "fresh selected-controller neutral frames rearm focus quarantine");
         var provenance = new InputStateReducer(); provenance.SetStartupDevices(new[] { 6 }); provenance.Reduce(new(6, default, Confirm: true), c); Assertions.Equal(provenance.Method, InputMethod.Gamepad, "controller digital source selects gamepad method");
         provenance.Reduce(new(-1, default, Keyboard: true, Confirm: true), c); Assertions.Equal(provenance.Method, InputMethod.KeyboardMouse, "keyboard source remains keyboard with controller active");
+        // A held controller button is a level for semantic routing, not another
+        // method-switch event after a fresh keyboard press changed the prompt.
+        provenance.Reduce(new(6, default, Confirm: true), c);
+        Assertions.Equal(provenance.Method, InputMethod.KeyboardMouse, "held controller level does not revert keyboard method");
+        var heldKeyboard = new InputStateReducer(); heldKeyboard.SetStartupDevices(new[] { 9 });
+        heldKeyboard.Reduce(new(-1, default, Keyboard: true, KeyboardPan: new(1, 0)), c);
+        for (var i = 0; i < 7; i++) heldKeyboard.Reduce(new(9, new(.6, 0)), processClock);
+        Assertions.Equal(heldKeyboard.Method, InputMethod.Gamepad, "held keyboard level does not override qualified gamepad stick method");
         reducer.Reset(); reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Settings: true), c).Settings, "reset clears held state");
         var modal = new InputStateReducer(); modal.SetStartupDevices(new[] { 1 }); var modalIntent = modal.Reduce(new(1, new(1, 0), Confirm: true), new InputContext(Modal: true)); Assertions.True(modalIntent.Pan == default && modalIntent.Confirm, "modal suppresses world pan but preserves UI confirmation");
 

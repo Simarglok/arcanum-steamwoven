@@ -91,6 +91,24 @@ public sealed class InputStateReducer
             return Empty(provenance);
         }
 
+        var pulses = new Dictionary<string, bool> {
+            ["confirm"] = raw.Confirm, ["cancel"] = raw.Cancel, ["inspect"] = raw.Inspect, ["previous"] = raw.Previous,
+            ["next"] = raw.Next, ["context"] = raw.Context, ["settings"] = raw.Settings
+        };
+        bool Edge(string name)
+        {
+            var sourceName = $"{raw.DeviceId}:{name}";
+            var down = pulses[name]; var edge = down && !_held.Contains(sourceName);
+            if (down) _held.Add(sourceName); else _held.Remove(sourceName);
+            return edge;
+        }
+
+        var confirm = Edge("confirm"); var cancel = Edge("cancel"); var inspect = Edge("inspect");
+        var previous = Edge("previous"); var next = Edge("next"); var contextPulse = Edge("context"); var settings = Edge("settings");
+        // A device method is an accepted fresh source event, never a sampled held
+        // level. This prevents a held button/key from oscillating prompts after a
+        // later meaningful input from the other device class.
+        var freshControllerPress = isJoy && (confirm || cancel || inspect || previous || next || contextPulse || settings || raw.MenuUp || raw.MenuDown);
         if (!raw.Echo && (raw.Keyboard || raw.MouseButton))
         {
             Method = InputMethod.KeyboardMouse;
@@ -105,25 +123,10 @@ public sealed class InputStateReducer
                 _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
             }
         }
-        if (isJoy && (Digital(raw) || processed.Length >= .25))
+        if (isJoy && (freshControllerPress || _gamepadMotionSeconds >= .1))
         {
-            if (Digital(raw) || _gamepadMotionSeconds >= .1)
-            {
-                Method = InputMethod.Gamepad;
-                _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
-            }
-        }
-
-        var pulses = new Dictionary<string, bool> {
-            ["confirm"] = raw.Confirm, ["cancel"] = raw.Cancel, ["inspect"] = raw.Inspect, ["previous"] = raw.Previous,
-            ["next"] = raw.Next, ["context"] = raw.Context, ["settings"] = raw.Settings
-        };
-        bool Edge(string name)
-        {
-            var sourceName = $"{raw.DeviceId}:{name}";
-            var down = pulses[name]; var edge = down && !_held.Contains(sourceName);
-            if (down) _held.Add(sourceName); else _held.Remove(sourceName);
-            return edge;
+            Method = InputMethod.Gamepad;
+            _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
         }
 
         var keyboardPan = raw.KeyboardPan.Length > 0 ? raw.KeyboardPan.Normalized() : default;
@@ -131,7 +134,7 @@ public sealed class InputStateReducer
         var menu = raw.MenuUp ? -1 : raw.MenuDown ? 1 : 0;
         // Menu hysteresis is a physical stick threshold (.65 engage/.45 release),
         // independent of the movement deadzone's radial rescale.
-        var result = new IntentFrame(pan, Edge("confirm"), Edge("cancel"), Edge("inspect"), Edge("previous"), Edge("next"), Edge("context"), Edge("settings"), menu, raw.Stick.Y, Method, true, provenance);
+        var result = new IntentFrame(pan, confirm, cancel, inspect, previous, next, contextPulse, settings, menu, raw.Stick.Y, Method, true, provenance);
         // The caller routes modal pulses to UI first; only world pan is suppressed here.
         return context.Modal ? result with { Pan = default } : result;
     }

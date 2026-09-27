@@ -54,7 +54,9 @@ public sealed class LabInputAdapter
     {
         return activeDevice is int device && _devices.ContainsKey(device) ? FromDevice(device, focused) : null;
     }
-    public RawInputFrame SampleKeyboard(bool focused) => KeyboardFrame(focused, false, false, includeHeldSource: true);
+    // Held keyboard levels are sampled for pan/menu routing, but they are not
+    // fresh keyboard input-method events. Only Map(InputEventKey) marks one.
+    public RawInputFrame SampleKeyboard(bool focused) => KeyboardFrame(focused, false, false);
     public void ForgetDevice(int device) => _devices.Remove(device);
     public void ClearKeyboard() => _keys.Clear();
     public void Clear() { _keys.Clear(); _devices.Clear(); }
@@ -68,16 +70,15 @@ public sealed class LabInputAdapter
             Previous: Has(JoyButton.LeftShoulder), Next: Has(JoyButton.RightShoulder), Settings: Has(JoyButton.Start),
             MenuUp: Has(JoyButton.DpadUp), MenuDown: Has(JoyButton.DpadDown), Focused: focused);
     }
-    private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo, bool includeHeldSource = false)
+    private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo)
     {
         bool Has(Key key) => _keys.Contains(key);
         var pan = new Vec2((Has(Key.D) || Has(Key.Right) ? 1 : 0) - (Has(Key.A) || Has(Key.Left) ? 1 : 0), (Has(Key.S) || Has(Key.Down) ? 1 : 0) - (Has(Key.W) || Has(Key.Up) ? 1 : 0));
-        var heldSource = includeHeldSource && _keys.Count > 0;
         return new RawInputFrame(-1, default,
             Confirm: Has(Key.Enter) || Has(Key.Space), Cancel: Has(Key.Escape) || Has(Key.Backspace), Inspect: Has(Key.I),
             Previous: Has(Key.Q), Next: Has(Key.E), Context: Has(Key.C), Settings: Has(Key.F1),
             MenuUp: Has(Key.Up) || Has(Key.W), MenuDown: Has(Key.Down) || Has(Key.S), Focused: focused,
-            Keyboard: keyboardEvent || heldSource, Echo: echo, KeyboardPan: pan);
+            Keyboard: keyboardEvent, Echo: echo, KeyboardPan: pan);
     }
     public static void EnsureInputMap()
     {

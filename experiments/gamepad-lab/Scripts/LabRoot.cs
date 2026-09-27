@@ -7,7 +7,7 @@ public partial class LabRoot : Node2D
 {
     private readonly TargetingEngine _targeting = new(); private readonly InputStateReducer _input = new(); private readonly LabInputAdapter _adapter = new(); private readonly MenuRepeat _menuRepeat = new(); private readonly List<string> _log = new();
     private Node2D _world = null!; private Camera2D _camera = null!; private SyntheticCourtyard _courtyard = null!; private LabHud _hud = null!; private SelectionState _selection = new(); private SelectionResult? _result;
-    private bool _focused = true; private double _deadzone = .2; private double _sensitivity = 1; private RawInputFrame _lastRaw = new(-1, default); private string _lastProvenance = "LIVE OS EVENT (not physical usability proof)"; private string _lastEvent = "startup";
+    private bool _focused = true; private double _deadzone = .2; private double _sensitivity = 1; private RawInputFrame _lastRaw = new(-1, default); private string _lastProvenance = "LIVE OS EVENT (not physical usability proof)"; private string _lastEvent = "startup"; private bool _lastAccepted;
 
     public override void _Ready()
     {
@@ -44,7 +44,7 @@ public partial class LabRoot : Node2D
         var active = _input.ActiveDevice; var name = active is int id ? Input.GetJoyName(id) : "none"; var guid = active is int guidId ? Input.GetJoyGuid(guidId) : "n/a";
         var viewport = GetViewport().GetVisibleRect(); var score = _result.Score?.ToString("F1") ?? "ground";
         var known = active is int knownId && Input.IsJoyKnown(knownId);
-        _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}\nActive: {active?.ToString() ?? "none"} / {name}\nGUID: {guid}; SDL mapping known: {known}\nConnected IDs: {string.Join(',', Input.GetConnectedJoypads().Order())}\nRaw stick: {_lastRaw.Stick.X:F2},{_lastRaw.Stick.Y:F2}; processed: {Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).X:F2},{Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).Y:F2}\nDeadzone: {_deadzone:F2}; sensitivity: {_sensitivity:F1}\nSelected: {_result.Id ?? "Ground"}; score: {score}; radius: 180px\nViewport: {viewport.Size}; zoom: {_camera.Zoom.X:F2}\nLast raw event: {_lastEvent}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
+        _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}\nActive: {active?.ToString() ?? "none"} / {name}\nGUID: {guid}; SDL mapping known: {known}\nConnected IDs: {string.Join(',', Input.GetConnectedJoypads().Order())}\nRaw stick: {_lastRaw.Stick.X:F2},{_lastRaw.Stick.Y:F2}; processed: {Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).X:F2},{Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).Y:F2}\nDeadzone: {_deadzone:F2}; sensitivity: {_sensitivity:F1}\nSelected: {_result.Id ?? "Ground"}; score: {score}; radius: 180px\nViewport: {viewport.Size}; zoom: {_camera.Zoom.X:F2}\nLast raw event: {_lastEvent}; Accepted: {_lastAccepted}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
         QueueRedraw();
     }
     public override void _Draw() { var center = GetViewportRect().GetCenter(); DrawCircle(center, 11, Colors.Transparent, false, 2); DrawLine(center - new Vector2(16, 0), center + new Vector2(16, 0), Colors.White); DrawLine(center - new Vector2(0, 16), center + new Vector2(0, 16), Colors.White); }
@@ -52,7 +52,7 @@ public partial class LabRoot : Node2D
     private void Handle(InputEvent @event, string provenance)
     {
         var raw = _adapter.Map(@event, _focused); _lastRaw = raw; _lastProvenance = provenance; _lastEvent = @event.GetClass();
-        var intent = _input.Reduce(raw, Context(GetProcessDeltaTime(), _hud.ModalVisible), provenance);
+        var intent = _input.Reduce(raw, Context(GetProcessDeltaTime(), _hud.ModalVisible), provenance); _lastAccepted = intent.Accepted;
         if (!intent.Accepted) return;
         if (_hud.ModalVisible)
         {
@@ -134,7 +134,20 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
             var canvasAfter = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
             VerificationMode.Require(_world.Position != beforeNonActive && canvasAfter != canvasBefore, "active controller hold did not displace canvas target");
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.PromptText.Contains("[A]", StringComparison.Ordinal) && !_hud.PromptText.Contains("[Enter]", StringComparison.Ordinal), "controller prompt did not follow active method");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            var controllerStart = _world.Position; var controllerCanvasStart = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.10);
+            var controllerOne = _world.Position.X - controllerStart.X; var controllerCanvasOne = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor.X - controllerCanvasStart.X;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            VerificationMode.Require(controllerOne > 0 && Math.Abs(controllerCanvasOne) > 0, "active controller did not create canvas displacement");
+            _world.Position = controllerStart; Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.04); _Process(.06);
+            var controllerSplit = _world.Position.X - controllerStart.X; Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            VerificationMode.Require(Math.Abs(controllerOne - controllerSplit) < .001, "controller pan is not delta-scaled");
+            _camera.Zoom = Vector2.One; _world.Position = controllerStart; Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var controllerZoomOne = _world.Position.X - controllerStart.X;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _camera.Zoom = new Vector2(2, 2); _world.Position = controllerStart;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var controllerZoomTwo = _world.Position.X - controllerStart.X;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); VerificationMode.Require(Math.Abs(controllerZoomOne / 2 - controllerZoomTwo) < .001, "controller pan does not scale by camera zoom"); _camera.Zoom = initialZoom;
             var stepStart = _world.Position; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var oneStep = _world.Position.X - stepStart.X;
             _world.Position = stepStart; PressKey(Key.D); _Process(.04); _Process(.06); ReleaseKey(Key.D); var splitStep = _world.Position.X - stepStart.X;
             VerificationMode.Require(Math.Abs(oneStep - splitStep) < .001, "keyboard pan is not delta-scaled");
@@ -142,6 +155,7 @@ public partial class LabRoot : Node2D
             _camera.Zoom = new Vector2(2, 2); _world.Position = stepStart; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var zoomTwoWorldStep = _world.Position.X - stepStart.X;
             VerificationMode.Require(Math.Abs(zoomOneWorldStep / 2 - zoomTwoWorldStep) < .001, "pan does not scale by camera zoom"); _camera.Zoom = initialZoom;
             VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "keyboard sample was misclassified as controller method");
+            VerificationMode.Require(_hud.PromptText.Contains("[Enter]", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Accepted:"), "keyboard prompt or accepted-event diagnostics missing");
 
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
             _Process(0); _Process(0); var selectedBefore = _hud.SelectedIndex; PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu did not move immediately in process");
@@ -166,11 +180,14 @@ public partial class LabRoot : Node2D
             VerificationMode.Require(_log.Count > beforeContextConfirm && _log.Last().Contains("Menu choice: Inspect") && _world.Position == contextWorld, "context confirmation was not routed through the adapter");
             PressKey(Key.Escape); ReleaseKey(Key.Escape); VerificationMode.Require(!_hud.ModalVisible, "context cancel did not close through adapter");
 
-            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var focusBefore = _world.Position; _Notification((int)NotificationApplicationFocusOut); _Process(.1); VerificationMode.Require(_world.Position == focusBefore && _input.ActiveDevice == 3, "focus loss retained stale action or forgot selected device");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var focusBefore = _world.Position; _Notification((int)NotificationApplicationFocusOut); var focusLog = _log.Count;
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_world.Position == focusBefore && _input.ActiveDevice == 3 && !_lastAccepted && _log.Count == focusLog, "focus loss retained stale pulse, log, or action");
             _Notification((int)NotificationApplicationFocusIn); _Process(.1); _Process(.1); VerificationMode.Require(_world.Position == focusBefore, "focus rearmed without neutral selected-controller sample");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            var rearmLog = _log.Count; Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation); VerificationMode.Require(_log.Count > rearmLog && _input.Method == InputMethod.Gamepad, "selected-controller neutral rearm did not restore fresh pulse or method");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_world.Position != focusBefore, "selected-controller neutral rearm did not resume input");
-            OnJoyConnectionChanged(3, false); var disconnectBefore = _world.Position; _Process(.1); VerificationMode.Require(_input.ActiveDevice is null && _world.Position == disconnectBefore, "active disconnect retained device or stale action");
+            OnJoyConnectionChanged(3, false); var disconnectBefore = _world.Position; var disconnectLog = _log.Count; _Process(.1); VerificationMode.Require(_input.ActiveDevice is null && _world.Position == disconnectBefore && _log.Count == disconnectLog, "active disconnect retained stale action, log, or device");
             AddLog("SIMULATION self-test passed: actual adapter arbitration, canvas projection, responsive bounds, modal repeat and lifecycle clearing."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
@@ -216,7 +233,9 @@ public partial class LabRoot : Node2D
     private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
     private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_deadzone, _sensitivity, delta, _camera.Zoom.X, modal, advanceTime);
     private string PrimaryAction() => _result?.Id is null ? "Choose destination" : _result.Id.StartsWith("npc") ? "Talk" : _result.Id.StartsWith("door") || _result.Id == "crate" ? "Open" : _result.Id.StartsWith("enemy") ? "Mark" : "Pick up";
-    private string Prompt() => $"[A / Enter] {PrimaryAction()}   [X / I] Inspect   [LB/RB / Q/E] Cycle   [Y / C] Context   [Start / F1] Settings";
+    private string Prompt() => _input.Method == InputMethod.Gamepad
+        ? $"[A] {PrimaryAction()}   [X] Inspect   [LB/RB] Cycle   [Y] Context   [Start] Settings"
+        : $"[Enter] {PrimaryAction()}   [I] Inspect   [Q/E] Cycle   [C] Context   [F1] Settings   Mouse: pick / right cancel";
     private void AddLog(string text) => _log.Add($"• {text}");
     private void RefreshSelection()
     {

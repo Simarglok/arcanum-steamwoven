@@ -15,6 +15,8 @@ public partial class LabHud : Control
     public bool ModalVisible => ModalKind != ModalKind.None;
     public int SelectedIndex => _selected;
     public string SelectedOption => ModalVisible ? _options[_selected] : "";
+    public string PromptText => _prompt.Text;
+    public string DiagnosticsText => _diagnostics.Text;
     public IReadOnlyDictionary<string, Rect2> LayoutBounds => new Dictionary<string, Rect2>
     {
         ["banner"] = _banner.GetGlobalRect(), ["diagnostics"] = _diagnostics.GetGlobalRect(),
