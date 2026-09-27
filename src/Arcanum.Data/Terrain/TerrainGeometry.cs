@@ -5,6 +5,7 @@ public static class TerrainGeometry
     public static TerrainDiagnosticPlacement? Place(TerrainKind kind, int localX, int localY, uint rawId,
         int frameWidth, int frameHeight, TerrainRect viewport)
     {
+        if (kind is not TerrainKind.Tile and not TerrainKind.Facade) throw new ArgumentOutOfRangeException(nameof(kind));
         if (frameWidth <= 0) throw new ArgumentOutOfRangeException(nameof(frameWidth));
         if (frameHeight <= 0) throw new ArgumentOutOfRangeException(nameof(frameHeight));
         var projected = Project(localX, localY);

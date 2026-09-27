@@ -266,14 +266,14 @@ public static class TerrainLoader
     private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
     {
         public static TileNames Parse(SortedDictionary<int, string> entries)
-        { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99), Read(entries, 100, 199), Read(entries, 200, 299), Read(entries, 300, 399)); }
+        { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99), Read(entries, 100, 199), Read(entries, 200, 299), Read(entries, 300, 399)); }
         public string Name(int number, bool flip, bool outdoor) { var values = (outdoor, flip) switch { (true, true) => outdoorFlip, (true, false) => outdoorFixed, (false, true) => indoorFlip, _ => indoorFixed }; return number >= 0 && number < values.Length ? values[number] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Tile selector exceeds initialized MES range."); }
         public int OutdoorIndex(string value) { var index = Array.FindIndex(outdoorFlip, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); if (index >= 0) return index; index = Array.FindIndex(outdoorFixed, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); return index < 0 ? -1 : outdoorFlip.Length + index; }
         private static string[] Read(SortedDictionary<int, string> entries, int first, int last) => entries.Where(x => x.Key >= first && x.Key <= last).Select(x => MesPathToken(x.Value)).ToArray();
     }
     private sealed class FacadeNames(string[] values)
     {
-        public static FacadeNames Parse(SortedDictionary<int, string> entries) { if (entries.Count is < 1 or > 511 || !entries.ContainsKey(0)) throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade MES must have exact key 0 and 1 through 511 entries."); return new(entries.Values.Select(MesPathToken).ToArray()); }
+        public static FacadeNames Parse(SortedDictionary<int, string> entries) { if (entries.Count is < 1 or > 511 || !entries.ContainsKey(0)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Facade MES must have exact key 0 and 1 through 511 entries."); return new(entries.Values.Select(MesPathToken).ToArray()); }
         public string Name(int ordinal) => ordinal >= 0 && ordinal < values.Length ? values[ordinal] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade selector exceeds initialized MES range.");
     }
     private ref struct Cursor

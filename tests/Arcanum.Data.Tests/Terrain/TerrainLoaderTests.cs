@@ -473,6 +473,101 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
+    public void Resolver_exercises_each_literal_tile_branch_without_an_expected_path_oracle()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        words[1] = 0x000101C0u;
+        words[2] = (1u << 22) | (1u << 12) | (1u << 7);
+        words[3] = (1u << 16) | (1u << 12) | (1u << 7);
+        words[4] = (1u << 16) | 0x000011C0u;
+        words[5] = (1u << 22) | 0x000011C1u;
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\branches.sec", Sector(words)))), leaveOpen: true);
+        using var resource = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii("{0}{aaa}{1}{bbb}{100}{aaa}{101}{bbb}{200}{aaa}{201}{zzz}{300}{ddd}{301}{yyy}{400}{sentinel}")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+            ("ART/TILE/AAABSE0A.ART", Art()), ("ART/TILE/BBBBSE0A.ART", Art()),
+            ("ART/TILE/ZZZBSE6A.ART", Art()), ("ART/TILE/YYYBSE1A.ART", Art()),
+            ("ART/TILE/AAABBB6A.ART", Art()), ("ART/TILE/AAABBB1A.ART", Art()))), leaveOpen: true);
+
+        var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\branches.sec"), Source(resource));
+
+        Assert.IsTrue(report.IsComplete);
+        CollectionAssert.AreEqual(
+            new[] { "tile-single-material", "tile-edge-zero", "tile-first-not-outdoor", "tile-second-not-outdoor", "tile-outdoor-forward", "tile-outdoor-reversed" },
+            report.ResolvedRecords.Take(6).Select(record => record.LookupBranch).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { "art/tile/aaabse0a.art", "art/tile/bbbbse0a.art", "art/tile/zzzbse6a.art", "art/tile/yyybse1a.art", "art/tile/aaabbb6a.art", "art/tile/aaabbb1a.art" },
+            report.ResolvedRecords.Take(6).Select(record => record.LogicalPath).ToArray());
+    }
+
+    [TestMethod]
+    public void Mes_initialization_errors_use_format_or_limit_types_and_reject_all_fixed_profile_limits()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\mes-limits.sec", Sector(words)))), leaveOpen: true);
+        var tile = "{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
+        foreach (var missingKey in new[] { 0, 100, 200, 300, 400 })
+        {
+            var missingAnchorText = string.Concat(new[] { 0, 100, 200, 300, 400 }.Where(key => key != missingKey).Select(key => $"{{{key}}}{{value{key}}}"));
+            using var missingAnchor = DatArchive.Open(new MemoryStream(Dat(("art\\tile\\tilename.mes", Ascii(missingAnchorText)), ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
+            AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(missingAnchor)));
+        }
+        using var missingFacadeKey = DatArchive.Open(new MemoryStream(Dat(("art\\tile\\tilename.mes", Ascii(tile)), ("art\\facade\\facadename.mes", Ascii("{1}{zero}")))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(missingFacadeKey)));
+        using var duplicateKey = DatArchive.Open(new MemoryStream(Dat(("art\\tile\\tilename.mes", Ascii("{0}{aaa}{0}{again}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")), ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(duplicateKey)));
+        using var capResource = DatArchive.Open(new MemoryStream(Dat(("art\\tile\\tilename.mes", Ascii(tile)), ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
+        AssertThrows<TerrainLimitExceededException>(() => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(capResource), new TerrainLoaderOptions { MaxMesEntries = 1 }));
+        AssertThrows<TerrainLimitExceededException>(() => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(capResource), new TerrainLoaderOptions { MaxMesValueBytes = 2 }));
+        AssertThrows<TerrainLimitExceededException>(() => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(capResource), new TerrainLoaderOptions { MaxMesDecodedEntryBytes = 1 }));
+        var overCapacityFacade = string.Concat(Enumerable.Range(0, 512).Select(key => $"{{{key}}}{{value{key}}}"));
+        using var facadeCapacity = DatArchive.Open(new MemoryStream(Dat(("art\\tile\\tilename.mes", Ascii(tile)), ("art\\facade\\facadename.mes", Ascii(overCapacityFacade)))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\mes-limits.sec"), Source(facadeCapacity)));
+        AssertThrows<TerrainUnsupportedException>(() => _ = new TerrainResourceSource(capResource, "source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", (TerrainPathProfile)99));
+        AssertThrows<TerrainUnsupportedException>(() => _ = new TerrainSectorSelector("maps\\fixture\\mes-limits.sec", "fixture", 0, 0, 1, 0, 0, 63, 64));
+    }
+
+    [TestMethod]
+    public void Framing_rejects_nonzero_script_and_terminal_limits_and_classifies_checked_count_overflow()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        using var resource = Resource(("ART/TILE/AAABSE0A.ART", Art()));
+        var scripted = Sector(words, placeholder: 0xAA0001, tileScripts: 1);
+        using var truncated = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\script-cut.sec", scripted[..^5]))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(truncated, Selector("maps\\fixture\\script-cut.sec"), Source(resource)));
+        var negativeScripts = Sector(words, placeholder: 0xAA0001); BinaryPrimitives.WriteInt32LittleEndian(negativeScripts.AsSpan(4 + (4096 * 4) + 4 + 4), -1);
+        var overScripts = Sector(words, placeholder: 0xAA0001); BinaryPrimitives.WriteInt32LittleEndian(overScripts.AsSpan(4 + (4096 * 4) + 4 + 4), 4097);
+        var scriptOverflow = Sector(words, placeholder: 0xAA0001); BinaryPrimitives.WriteInt32LittleEndian(scriptOverflow.AsSpan(4 + (4096 * 4) + 4 + 4), int.MaxValue);
+        var overTerminal = Sector(words, terminalCount: 4097);
+        var lightOverflow = Sector(words); BinaryPrimitives.WriteInt32LittleEndian(lightOverflow, int.MaxValue);
+        foreach (var pair in new[] { ("negative-script.sec", negativeScripts, new TerrainLoaderOptions()), ("script-limit.sec", overScripts, new TerrainLoaderOptions()), ("terminal-limit.sec", overTerminal, new TerrainLoaderOptions()), ("light-overflow.sec", lightOverflow, new TerrainLoaderOptions { MaxLights = int.MaxValue }), ("script-overflow.sec", scriptOverflow, new TerrainLoaderOptions { MaxTileScripts = int.MaxValue }) })
+        {
+            using var archive = DatArchive.Open(new MemoryStream(Dat(($"maps\\fixture\\{pair.Item1}", pair.Item2))), leaveOpen: true);
+            AssertTerrainCode(pair.Item1.EndsWith("overflow.sec", StringComparison.Ordinal) ? TerrainErrorCode.InvalidFraming : TerrainErrorCode.LimitExceeded,
+                () => TerrainLoader.Inspect(archive, Selector($"maps\\fixture\\{pair.Item1}"), Source(resource), pair.Item3));
+        }
+    }
+
+    [TestMethod]
+    public void Metadata_is_read_once_per_art_ordinal_during_one_inspection_and_diagnostic_order_is_total()
+    {
+        var words = Enumerable.Repeat(0xB0000000u, 4096).ToArray();
+        words[1] = 0x000001C0u; words[64] = 0x000001C0u;
+        var resourceBytes = Dat(("art\\tile\\tilename.mes", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")), ("ART/TILE/AAABSE0A.ART", Art()), ("ART/FACADE/ZERO.ART", Art()));
+        using var stream = new CountingStream(resourceBytes);
+        using var resource = DatArchive.Open(stream, leaveOpen: true);
+        var artEntry = resource.Entries.Single(entry => Encoding.ASCII.GetString(entry.RawNameBytes.ToArray()).StartsWith("ART/TILE", StringComparison.Ordinal));
+        stream.Observe((long)artEntry.Offset, artEntry.StoredSize); stream.ResetObservedReads();
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\cache.sec", Sector(words)))), leaveOpen: true);
+        var sector = TerrainLoader.Load(module, Selector("maps\\fixture\\cache.sec"), Source(resource));
+        Assert.AreEqual(artEntry.StoredSize, stream.ObservedReadBytes);
+        CollectionAssert.AreEqual(new[] { 1, 64, 0 }, sector.DiagnosticOrder.Take(3).Select(record => record.Ordinal).ToArray());
+        Assert.IsTrue(sector.DiagnosticOrder.Take(2).All(record => record.Kind == TerrainKind.Tile));
+        Assert.IsTrue(sector.DiagnosticOrder.Skip(2).All(record => record.Kind == TerrainKind.Facade));
+    }
+
+    [TestMethod]
     [TestCategory("RealData")]
     public void RealData_crash_site_is_immutable_and_complete_when_explicit_inputs_are_supplied()
     {
@@ -559,6 +654,11 @@ public sealed class TerrainLoaderTests
         try { action(); Assert.Fail($"Expected terrain code {code}."); }
         catch (TerrainException exception) { Assert.AreEqual(code, exception.Code); }
     }
+    private static void AssertTerrainFormat(TerrainErrorCode code, Action action)
+    {
+        try { action(); Assert.Fail($"Expected TerrainFormatException with code {code}."); }
+        catch (TerrainFormatException exception) { Assert.AreEqual(code, exception.Code); }
+    }
     private static byte[] Sector(uint[] words, int roofDiscriminator = 1, int placeholder = 0xAA0000, int lights = 0,
         int tileScripts = 0, byte[]? opaque = null, int terminalCount = 0)
     {
@@ -639,4 +739,30 @@ public sealed class TerrainLoaderTests
     private static byte[] Ascii(string value) => Encoding.ASCII.GetBytes(value);
     private static string Hash(string path) { using var input = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant(); }
     private static void WriteU32(Stream stream, uint value) { Span<byte> bytes = stackalloc byte[4]; BinaryPrimitives.WriteUInt32LittleEndian(bytes, value); stream.Write(bytes); }
+
+    private sealed class CountingStream(byte[] bytes) : MemoryStream(bytes, writable: false)
+    {
+        private long _observedStart;
+        private long _observedEnd;
+        public long ObservedReadBytes { get; private set; }
+
+        public void Observe(long start, long length)
+        {
+            _observedStart = start;
+            _observedEnd = checked(start + length);
+        }
+
+        public void ResetObservedReads() => ObservedReadBytes = 0;
+
+        public override int Read(Span<byte> buffer)
+        {
+            var start = Position;
+            var read = base.Read(buffer);
+            var end = checked(start + read);
+            var overlapStart = Math.Max(start, _observedStart);
+            var overlapEnd = Math.Min(end, _observedEnd);
+            if (overlapEnd > overlapStart) ObservedReadBytes += overlapEnd - overlapStart;
+            return read;
+        }
+    }
 }

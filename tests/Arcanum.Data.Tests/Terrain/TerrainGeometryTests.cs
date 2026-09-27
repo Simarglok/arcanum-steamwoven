@@ -45,6 +45,16 @@ public sealed class TerrainGeometryTests
         AssertThrows<ArgumentOutOfRangeException>(() => _ = new TerrainRect(0, 0, -1, 0));
         AssertThrows<OverflowException>(() => TerrainGeometry.Project(int.MinValue, int.MaxValue));
         AssertThrows<OverflowException>(() => TerrainGeometry.Place(TerrainKind.Tile, 0, 0, 0, 1, 1, new TerrainRect(int.MaxValue, 0, 1, 1)));
+        AssertThrows<ArgumentOutOfRangeException>(() => TerrainGeometry.Place((TerrainKind)99, 0, 0, 0, 1, 1, new TerrainRect(0, 0, 1, 1)));
+    }
+
+    [TestMethod]
+    public void Place_translates_partial_viewport_crops_into_source_coordinates()
+    {
+        var placement = TerrainGeometry.Place(TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainRect(20, 10, 20, 20))!.Value;
+        Assert.AreEqual(new TerrainRect(1, 0, 78, 40), placement.Footprint);
+        Assert.AreEqual(new TerrainRect(19, 10, 20, 20), placement.Source);
+        Assert.AreEqual(new TerrainRect(20, 10, 20, 20), placement.Destination);
     }
 
     [TestMethod]
