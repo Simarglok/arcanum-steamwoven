@@ -14,6 +14,8 @@ Use `TerrainLoader.Inspect(module, selector, source, options)` to receive exactl
 
 The loader uses checked arithmetic and defaults to 1 MiB decoded sector/MES/ART entries, 1,024 lights, exactly 4,096 cells, 256 roof words, 4,096 scripts/object count/distinct ART metadata entries, finite MES limits, and bounded ART inspection (1 MiB input/encoded frame, 4,096 frames/dimension, 256 KiB table, 4 Mi pixels, 16 MiB RGBA). ART metadata is cached by resource DAT ordinal during an inspection; decoded ART payloads are not retained after metadata inspection. The opaque object window is an owned immutable byte copy with its range and terminal count; it is never interpreted or emitted by the CLI.
 
+MES pathname values are fail-closed printable ASCII. For both tile and facade tables, a nonempty value contributes exactly its prefix before the first `/`; a value without `/` is preserved in full. The prefix is never trimmed, shortened, or case-folded before normal terrain pathname normalization.
+
 Fatal structural, selection, limit, unsupported-profile, and identity failures use `TerrainException` subclasses with stable `TerrainErrorCode`. Per-cell failures use stable `TerrainIssueCode` values including unsupported class, invalid selectors, resource zero/many match, unsupported ART, invalid frame, and unavailable palette.
 
 ## `terrain-inspect` CLI

@@ -167,13 +167,13 @@ public static class TerrainLoader
         var cursor = new Cursor(bytes, terminalStart);
         var lightStart = cursor.Offset; var lights = cursor.I32("light count");
         if (lights < 0 || lights > limits.MaxLights) throw new TerrainLimitExceededException("Sector light count is outside the configured limit.");
-        ranges[TerrainSection.LightCount] = new TerrainByteRange(lightStart, 4); var lightsStart = cursor.Offset; cursor.Skip(checked(lights * 48), "serialized lights"); ranges[TerrainSection.Lights] = new TerrainByteRange(lightsStart, checked(lights * 48));
+        ranges[TerrainSection.LightCount] = new TerrainByteRange(lightStart, 4); var lightsStart = cursor.Offset; var lightBytes = SectionBytes(lights, 48, "serialized lights"); cursor.Skip(lightBytes, "serialized lights"); ranges[TerrainSection.Lights] = new TerrainByteRange(lightsStart, lightBytes);
         var wordStart = cursor.Offset; var words = new uint[limits.ExactCellCount];
         for (var index = 0; index < words.Length; index++) words[index] = cursor.U32("tile words");
         ranges[TerrainSection.TileWords] = new TerrainByteRange(wordStart, checked(words.Length * 4));
-        var roofStart = cursor.Offset; var roof = cursor.I32("roof discriminator"); if (roof is not 0 and not 1) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The roof discriminator is unsupported."); if (roof == 0) cursor.Skip(checked(256 * 4), "roof words"); ranges[TerrainSection.Roof] = new TerrainByteRange(roofStart, checked(cursor.Offset - roofStart));
+        var roofStart = cursor.Offset; var roof = cursor.I32("roof discriminator"); if (roof is not 0 and not 1) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The roof discriminator is unsupported."); if (roof == 0) cursor.Skip(SectionBytes(256, 4, "roof words"), "roof words"); ranges[TerrainSection.Roof] = new TerrainByteRange(roofStart, checked(cursor.Offset - roofStart));
         var placeholderStart = cursor.Offset; var placeholder = cursor.I32("placeholder"); if (placeholder is < 0xAA0000 or > 0xAA0004) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The sector placeholder is unsupported."); ranges[TerrainSection.Placeholder] = new TerrainByteRange(placeholderStart, 4);
-        var scriptsStart = cursor.Offset; var scripts = 0; if (placeholder != 0xAA0000) { scripts = cursor.I32("tile script count"); if (scripts < 0 || scripts > limits.MaxTileScripts) throw new TerrainLimitExceededException("Tile script count is outside the configured limit."); cursor.Skip(checked(scripts * 24), "tile scripts"); }
+        var scriptsStart = cursor.Offset; var scripts = 0; if (placeholder != 0xAA0000) { scripts = cursor.I32("tile script count"); if (scripts < 0 || scripts > limits.MaxTileScripts) throw new TerrainLimitExceededException("Tile script count is outside the configured limit."); cursor.Skip(SectionBytes(scripts, 24, "tile scripts"), "tile scripts"); }
         ranges[TerrainSection.TileScripts] = new TerrainByteRange(scriptsStart, checked(cursor.Offset - scriptsStart));
         var sectorScriptStart = cursor.Offset; if (placeholder >= 0xAA0002) cursor.Skip(12, "sector script"); ranges[TerrainSection.SectorScript] = new TerrainByteRange(sectorScriptStart, checked(cursor.Offset - sectorScriptStart));
         var metadataStart = cursor.Offset; if (placeholder >= 0xAA0003) cursor.Skip(24, "metadata and sound"); ranges[TerrainSection.MetadataAndSound] = new TerrainByteRange(metadataStart, checked(cursor.Offset - metadataStart));
@@ -182,6 +182,18 @@ public static class TerrainLoader
         ranges[TerrainSection.ObjectWindow] = new TerrainByteRange(objectStart, objectLength); ranges[TerrainSection.TerminalObjectCount] = new TerrainByteRange(terminalStart, 4);
         var opaque = new TerrainOpaqueWindow(ranges[TerrainSection.ObjectWindow], terminal, bytes.AsSpan(objectStart, objectLength).ToArray());
         return new ParsedSector(words, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
+    }
+
+    private static int SectionBytes(int count, int width, string label)
+    {
+        try
+        {
+            return checked(count * width);
+        }
+        catch (OverflowException exception)
+        {
+            throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"Sector {label} byte count overflowed.", exception);
+        }
     }
 
     private static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits)
@@ -239,6 +251,18 @@ public static class TerrainLoader
         }
         return Encoding.ASCII.GetString(result);
     }
+
+    private static string MesPathToken(string value)
+    {
+        if (string.IsNullOrEmpty(value) || value.Any(character => character is < '!' or > '~'))
+            throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES pathname token is malformed.");
+        var slash = value.IndexOf('/');
+        var token = slash < 0 ? value : value[..slash];
+        if (token.Length == 0 || token.Any(character => character is < '!' or > '~'))
+            throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES pathname token is malformed.");
+        return token;
+    }
+
     private sealed record ParsedSector(uint[] Words, TerrainSectorFraming Framing);
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
     private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
@@ -247,11 +271,11 @@ public static class TerrainLoader
         { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99), Read(entries, 100, 199), Read(entries, 200, 299), Read(entries, 300, 399)); }
         public string Name(int number, bool flip, bool outdoor) { var values = (outdoor, flip) switch { (true, true) => outdoorFlip, (true, false) => outdoorFixed, (false, true) => indoorFlip, _ => indoorFixed }; return number >= 0 && number < values.Length ? values[number] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Tile selector exceeds initialized MES range."); }
         public int OutdoorIndex(string value) { var index = Array.FindIndex(outdoorFlip, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); if (index >= 0) return index; index = Array.FindIndex(outdoorFixed, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); return index < 0 ? -1 : outdoorFlip.Length + index; }
-        private static string[] Read(SortedDictionary<int, string> entries, int first, int last) => entries.Where(x => x.Key >= first && x.Key <= last).Select(x => { var slash = x.Value.IndexOf('/'); var value = slash >= 0 ? x.Value[..slash] : x.Value.Length >= 3 ? x.Value[..3] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Tile MES value is too short."); return value; }).ToArray();
+        private static string[] Read(SortedDictionary<int, string> entries, int first, int last) => entries.Where(x => x.Key >= first && x.Key <= last).Select(x => MesPathToken(x.Value)).ToArray();
     }
     private sealed class FacadeNames(string[] values)
     {
-        public static FacadeNames Parse(SortedDictionary<int, string> entries) { if (entries.Count is < 1 or > 511 || !entries.ContainsKey(0)) throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade MES must have exact key 0 and 1 through 511 entries."); return new(entries.Values.ToArray()); }
+        public static FacadeNames Parse(SortedDictionary<int, string> entries) { if (entries.Count is < 1 or > 511 || !entries.ContainsKey(0)) throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade MES must have exact key 0 and 1 through 511 entries."); return new(entries.Values.Select(MesPathToken).ToArray()); }
         public string Name(int ordinal) => ordinal >= 0 && ordinal < values.Length ? values[ordinal] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade selector exceeds initialized MES range.");
     }
     private ref struct Cursor
