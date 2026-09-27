@@ -32,10 +32,10 @@ public partial class NativeSmokeRunner : Node
             foreach (var size in new[] { new Vector2I(1100, 740), new Vector2I(1280, 800) })
             {
                 window.Size = size;
-                await Settle();
+                var settled = await WaitUntil(() => DisplayServer.WindowGetSize() == size);
                 var snapshot = surface.CaptureLayoutSnapshot();
                 var observed = DisplayServer.WindowGetSize();
-                var sizePassed = observed == size && snapshot.Viewport.X > 0 && snapshot.Viewport.Y > 0;
+                var sizePassed = settled && observed == size && snapshot.Viewport.X > 0 && snapshot.Viewport.Y > 0;
                 checks.Add(new { name = "programmatic-client-relayout", status = sizePassed ? "PASS" : "FAIL", requested = SizeEvidence.From(size), observed = SizeEvidence.From(observed), snapshot = SnapshotEvidence.From(snapshot, surface.CameraPosition) });
                 passed &= sizePassed;
             }
@@ -45,33 +45,57 @@ public partial class NativeSmokeRunner : Node
             var fullscreen = surface.ImportantControl("Fullscreen") as Button;
             fullscreen?.GrabFocus();
             PushKey(Key.Enter);
-            await Settle();
-            var entered = app.IsFullscreen;
+            var entered = await WaitUntil(() => app.IsFullscreen);
             PushKey(Key.Escape);
-            await Settle();
-            var escaped = !app.IsFullscreen && surface.State.PanelVisible;
+            var escaped = await WaitUntil(() => !app.IsFullscreen && window.Size == app.SavedWindowSize && window.Position == app.SavedWindowPosition) && surface.State.PanelVisible;
             PushKey(Key.F11);
-            await Settle();
-            var f11Entered = app.IsFullscreen;
+            var f11Entered = await WaitUntil(() => app.IsFullscreen);
             PushKey(Key.Escape);
-            await Settle();
-            var f11Escaped = !app.IsFullscreen && surface.State.PanelVisible;
-            checks.Add(new { name = "keyboard-ordinary-fullscreen-and-escape-precedence", status = entered && escaped && f11Entered && f11Escaped ? "PASS" : "FAIL", entered, escaped, f11Entered, f11Escaped });
-            passed &= entered && escaped && f11Entered && f11Escaped;
+            var f11Escaped = await WaitUntil(() => !app.IsFullscreen && window.Size == app.SavedWindowSize && window.Position == app.SavedWindowPosition) && surface.State.PanelVisible;
+            PushKey(Key.Escape);
+            var secondEscapeClosedPanel = await WaitUntil(() => !surface.State.PanelVisible);
+            var fullscreenPassed = entered && escaped && f11Entered && f11Escaped && secondEscapeClosedPanel;
+            checks.Add(new { name = "keyboard-ordinary-fullscreen-and-escape-precedence", status = fullscreenPassed ? "PASS" : "FAIL", entered, escaped, f11Entered, f11Escaped, secondEscapeClosedPanel });
+            passed &= fullscreenPassed;
 
+            surface.ShowPanel(LabPanel.Dialogue);
+            surface.ApplyUiScale(UiScalePreset.Scale200);
+            surface.SetCameraZoom(1.50f);
+            await Settle();
+            window.Size = new Vector2I(1100, 740);
+            await WaitUntil(() => DisplayServer.WindowGetSize() == new Vector2I(1100, 740));
+            var reset = surface.ImportantControl("Reset") as Button;
+            var resetSignals = 0;
+            if (reset != null)
+                reset.Pressed += () => resetSignals++;
+            reset?.GrabFocus();
+            PushKey(Key.Enter);
+            var screen = DisplayServer.WindowGetCurrentScreen();
+            var usable = DisplayServer.ScreenGetUsableRect(screen);
+            var expectedResetSize = new Vector2I(Mathf.Min(1280, usable.Size.X), Mathf.Min(800, usable.Size.Y));
+            var resetPassed = await WaitUntil(() => !app.IsFullscreen
+                && window.Size == expectedResetSize
+                && surface.State.UiScale == UiScalePreset.Scale100
+                && Mathf.IsEqualApprox(surface.State.CameraZoom, 1.0f)
+                && surface.State.PanelVisible);
+            checks.Add(new { name = "keyboard-reset-after-mutated-window-scale-and-zoom", status = resetPassed ? "PASS" : "FAIL", resetSignals, expectedLogicalWindow = SizeEvidence.From(expectedResetSize), observedLogicalWindow = SizeEvidence.From(window.Size), reportedClient = SizeEvidence.From(DisplayServer.WindowGetSize()), state = StateEvidence.From(surface.State) });
+            passed &= resetPassed;
+
+            surface.ShowPanel(LabPanel.Dialogue);
+            await Settle();
             var close = surface.ImportantControl("Close") as Button;
             var signals = 0;
             if (close != null)
                 close.Pressed += () => signals++;
             var point = close?.GetGlobalRect().GetCenter() ?? Vector2.Zero;
-            GetViewport().PushInput(new InputEventMouseMotion { Position = point }, true);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = point, GlobalPosition = point }, true);
             await Settle();
             var hovered = GetViewport().GuiGetHoveredControl();
-            GetViewport().PushInput(new InputEventMouseButton { Position = point, ButtonIndex = MouseButton.Left, Pressed = true }, true);
-            GetViewport().PushInput(new InputEventMouseButton { Position = point, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+            GetViewport().PushInput(new InputEventMouseButton { Position = point, GlobalPosition = point, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+            GetViewport().PushInput(new InputEventMouseButton { Position = point, GlobalPosition = point, ButtonIndex = MouseButton.Left, Pressed = false }, true);
             await Settle();
             var mousePassed = signals == 1 && !surface.State.PanelVisible && IsControlOrDescendant(hovered, close);
-            checks.Add(new { name = "root-viewport-mouse-close", status = mousePassed ? "PASS" : "FAIL", signals, hovered = hovered?.Name ?? "none", closeAncestry = IsControlOrDescendant(hovered, close), panelVisible = surface.State.PanelVisible });
+            checks.Add(new { name = "root-viewport-mouse-close", status = mousePassed ? "PASS" : "FAIL", signals, hovered = hovered?.Name.ToString() ?? "none", closeAncestry = IsControlOrDescendant(hovered, close), panelVisible = surface.State.PanelVisible });
             passed &= mousePassed;
         }
         catch (Exception exception)
@@ -84,9 +108,11 @@ public partial class NativeSmokeRunner : Node
             DisplayServer.WindowSetMode(DisplayServer.WindowMode.Windowed);
             window.Size = originalSize;
             window.Position = originalPosition;
-            await Settle();
+            var restored = await WaitUntil(() => window.Size == originalSize && window.Position == originalPosition);
+            checks.Add(new { name = "finally-restores-original-window-bounds", status = restored ? "PASS" : "FAIL", expectedSize = SizeEvidence.From(originalSize), expectedPosition = PointEvidence.From(originalPosition), observedSize = SizeEvidence.From(window.Size), observedPosition = PointEvidence.From(window.Position) });
+            passed &= restored;
             Directory.CreateDirectory(Path.GetDirectoryName(report)!);
-            File.WriteAllText(report, JsonSerializer.Serialize(new { schemaVersion = 1, task = "ARC-UI-001", candidate, classification = "actual-programmatic-native-window", status = passed ? "PASS" : "FAIL", checks, restoredWindow = new { size = SizeEvidence.From(window.Size), position = PointEvidence.From(window.Position) } }, new JsonSerializerOptions { WriteIndented = true }));
+            File.WriteAllText(report, JsonSerializer.Serialize(new { schemaVersion = 1, task = "ARC-UI-001", candidate, classification = "actual-programmatic-native-window", status = passed ? "PASS" : "FAIL", originalWindow = new { size = SizeEvidence.From(originalSize), position = PointEvidence.From(originalPosition) }, checks, restoredWindow = new { size = SizeEvidence.From(window.Size), position = PointEvidence.From(window.Position), matchesOriginal = restored } }, new JsonSerializerOptions { WriteIndented = true }));
             GetTree().Quit(passed ? 0 : 1);
         }
     }
@@ -102,6 +128,17 @@ public partial class NativeSmokeRunner : Node
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private async Task<bool> WaitUntil(Func<bool> condition, int maximumFrames = 180)
+    {
+        for (var frame = 0; frame < maximumFrames; frame++)
+        {
+            if (condition())
+                return true;
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        }
+        return condition();
     }
 
     private static string? ArgumentValue(string[] args, string flag)
