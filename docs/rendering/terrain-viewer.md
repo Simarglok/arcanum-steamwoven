@@ -60,20 +60,26 @@ controller behavior.
 
 `--self-test` creates a public in-memory asymmetric 8-bpp ART fixture, decodes
 it through `ArtDecoder`, uploads it through the production RGBA8 texture path,
-and draws a literal production-canvas plan. Its hand-authored landmarks cover
-transparent palette zero, row-major orientation, source crop, a one-pixel anchor
-destination, tile-only X flip, unflipped facade command, overlap winner, and
-border transparency. The independently stated geometry landmarks include all
-sector corners and local `(30,32) -> (80,1240)` before the separate X anchor.
+and constructs the canvas plan through the same `TerrainScenePlan` placement and
+ordering path used for loaded terrain records. Its hand-authored landmarks cover
+transparent palette zero, row-major orientation, source crop, the one-pixel
+anchor destination, 78x40 tile and 80x40 facade footprints, tile-only X flip,
+unflipped facade command, layer/Y/X/ordinal overlap winner, and border
+transparency. The independently stated geometry landmarks include all sector
+corners and local `(30,32) -> (80,1240)` before the separate X anchor.
 A non-headless Godot run reads the `SubViewport` pixels; the dummy headless
 renderer cannot read a `ViewportTexture`, so its output explicitly records
 `graphical readback NOT_VERIFIED` rather than claiming rendered pixels.
 
 `--native-smoke` uses explicit original inputs, drives the production scene at
 1280x800 and 1920x1080, injects keyboard/wheel/drag/reset/fit/F11/Escape events,
-checks camera state, command/cache count, HUD presence, fullscreen restoration,
-and 100 no-growth reset cycles. It reads each viewport image and fails on a
-transparent/blank image before writing an ignored screenshot. With
+checks camera state, command/cache count, fixed HUD coordinates, fullscreen
+restoration, manual-resize persistence, and 100 input-driven no-growth reset
+cycles. It requires each viewport readback to have exactly the requested
+dimensions and validates a terrain-texture landmark transformed through the
+active camera; an opaque clear colour or HUD alone cannot pass. A display clamp
+or unreadable terrain landmark is a failed automated smoke, not a size PASS.
+With
 `--native-smoke-screenshot PATH`, it writes `PATH` with `-1280x800` and
 `-1920x1080` inserted before the extension. These game-graphics screenshots
 remain local and ignored.

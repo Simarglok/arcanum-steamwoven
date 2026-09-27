@@ -39,7 +39,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
         }
     }
 
-    private static TerrainLoadResult LoadCore(long generation, TerrainViewerArguments arguments)
+    private TerrainLoadResult LoadCore(long generation, TerrainViewerArguments arguments)
     {
         var started = Environment.TickCount64;
         try
@@ -82,7 +82,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
                     tileCount, facadeCount, recoveredCount, lookupCount,
-                    moduleBefore, resourceBefore, Environment.TickCount64 - started, 1);
+                    moduleBefore, resourceBefore, Environment.TickCount64 - started, MaximumObservedConcurrency);
             }
         }
         catch (TerrainViewerException) { throw; }

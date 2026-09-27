@@ -15,6 +15,22 @@ public partial class TerrainCanvas : Node2D
 
     public int CommandCount => _plan?.Commands.Count ?? 0;
 
+    public bool TryGetOpaqueLandmark(out TerrainCanvasLandmark landmark)
+    {
+        landmark = default;
+        if (_plan is null || _textures is null) return false;
+        foreach (var command in _plan.Commands)
+        {
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, command.Source, out var pixel)) continue;
+            var offsetX = pixel.X - command.Source.X;
+            if (command.FlipX) offsetX = command.Source.Width - 1 - offsetX;
+            landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y - command.Source.Y,
+                pixel.R, pixel.G, pixel.B, pixel.A, command.Ordinal);
+            return true;
+        }
+        return false;
+    }
+
     public void Publish(TerrainScenePlan plan, TerrainTextureCache textures)
     {
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
@@ -49,3 +65,5 @@ public partial class TerrainCanvas : Node2D
         }
     }
 }
+
+public readonly record struct TerrainCanvasLandmark(int WorldX, int WorldY, byte R, byte G, byte B, byte A, int Ordinal);

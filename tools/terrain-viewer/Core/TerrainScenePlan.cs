@@ -5,6 +5,14 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed record TerrainDrawCommand(int Ordinal, TerrainTextureKey TextureKey, TerrainRect Source, TerrainRect Destination,
     bool FlipX, TerrainDiagnosticOrderKey Order);
 
+/// <summary>
+/// The minimum record information consumed by the scene planner.  Synthetic
+/// render tests use this public shape so they exercise the same placement and
+/// ordering path as loaded terrain rather than supplying precomputed commands.
+/// </summary>
+public sealed record TerrainPlanInput(int Ordinal, TerrainTextureKey TextureKey, TerrainKind Kind, int LocalX, int LocalY,
+    uint RawId, int FrameWidth, int FrameHeight, TerrainDiagnosticOrderKey Order);
+
 public sealed class TerrainScenePlan
 {
     private TerrainScenePlan(TerrainRect worldBounds, IReadOnlyList<TerrainDrawCommand> commands)
@@ -16,28 +24,33 @@ public sealed class TerrainScenePlan
     public TerrainRect WorldBounds { get; }
     public IReadOnlyList<TerrainDrawCommand> Commands { get; }
 
-    /// <summary>Creates a literal command plan for production-canvas render verification.</summary>
-    /// <remarks>The caller supplies already placed commands; this method performs no terrain geometry.</remarks>
-    public static TerrainScenePlan CreateLiteral(TerrainRect worldBounds, IReadOnlyList<TerrainDrawCommand> commands)
-    {
-        ArgumentNullException.ThrowIfNull(commands);
-        if (commands.Count == 0) throw new ArgumentException("A terrain scene needs commands.", nameof(commands));
-        return new TerrainScenePlan(worldBounds, commands.ToArray());
-    }
-
     public static TerrainScenePlan Create(TerrainSector sector)
     {
         ArgumentNullException.ThrowIfNull(sector);
         if (sector.DiagnosticOrder.Count != CrashSiteProfile.CellCount) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, sector.Records.Count));
         var bounds = Bounds(sector.DiagnosticOrder.Select(record => record.DiagnosticFootprint));
-        var commands = new List<TerrainDrawCommand>(sector.DiagnosticOrder.Count);
-        foreach (var record in sector.DiagnosticOrder.OrderBy(record => record.DiagnosticOrderKey.Layer).ThenBy(record => record.DiagnosticOrderKey.LocalY).ThenBy(record => record.DiagnosticOrderKey.LocalX).ThenBy(record => record.Ordinal))
+        return CreatePlaced(bounds, sector.DiagnosticOrder.Select(record => new TerrainPlanInput(record.Ordinal, TerrainTextureKey.FromRecord(record),
+            record.Kind, record.LocalX, record.LocalY, record.RawId, record.FrameMetadata.Width, record.FrameMetadata.Height,
+            record.DiagnosticOrderKey)));
+    }
+
+    /// <summary>Creates a synthetic plan through the production placement and ordering path.</summary>
+    public static TerrainScenePlan CreateSynthetic(TerrainRect worldBounds, IEnumerable<TerrainPlanInput> inputs) => CreatePlaced(worldBounds, inputs);
+
+    private static TerrainScenePlan CreatePlaced(TerrainRect bounds, IEnumerable<TerrainPlanInput> inputs)
+    {
+        ArgumentNullException.ThrowIfNull(inputs);
+        var ordered = inputs.OrderBy(input => input.Order.Layer).ThenBy(input => input.Order.LocalY)
+            .ThenBy(input => input.Order.LocalX).ThenBy(input => input.Ordinal).ToArray();
+        if (ordered.Length == 0) throw new ArgumentException("A terrain scene needs commands.", nameof(inputs));
+        var commands = new List<TerrainDrawCommand>(ordered.Length);
+        foreach (var input in ordered)
         {
-            var placement = TerrainGeometry.Place(record.Kind, record.LocalX, record.LocalY, record.RawId,
-                record.FrameMetadata.Width, record.FrameMetadata.Height, bounds);
-            if (placement is null) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, sector.Records.Count));
-            commands.Add(new TerrainDrawCommand(record.Ordinal, TerrainTextureKey.FromRecord(record), placement.Value.Source,
-                placement.Value.Destination, placement.Value.FlipX, record.DiagnosticOrderKey));
+            var placement = TerrainGeometry.Place(input.Kind, input.LocalX, input.LocalY, input.RawId,
+                input.FrameWidth, input.FrameHeight, bounds);
+            if (placement is null) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, ordered.Length));
+            commands.Add(new TerrainDrawCommand(input.Ordinal, input.TextureKey, placement.Value.Source,
+                placement.Value.Destination, placement.Value.FlipX, input.Order));
         }
         return new TerrainScenePlan(bounds, commands.AsReadOnly());
     }

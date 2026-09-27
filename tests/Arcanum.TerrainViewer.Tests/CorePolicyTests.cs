@@ -1,5 +1,6 @@
 using Arcanum.TerrainViewer.Core;
 using Arcanum.Data.Terrain;
+using Arcanum.Data;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -51,16 +52,36 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
-    public void Literal_plan_preserves_precomputed_crop_flip_and_order_without_geometry_recalculation()
+    public void Synthetic_plan_uses_production_placement_crop_flip_and_stable_order()
     {
         var key = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
-        var command = new TerrainDrawCommand(7, key, new TerrainRect(2, 3, 4, 5), new TerrainRect(81, 1240, 4, 5), true,
-            new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 30, 32));
-        var plan = TerrainScenePlan.CreateLiteral(new TerrainRect(-10, 0, 100, 50), [command]);
-        Assert.AreEqual(1, plan.Commands.Count);
-        Assert.AreEqual(command, plan.Commands[0]);
-        Assert.AreEqual(81, plan.Commands[0].Destination.X);
-        Assert.IsTrue(plan.Commands[0].FlipX);
+        var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(-100, 0, 300, 100),
+        [
+            new TerrainPlanInput(9, key, TerrainKind.Facade, 1, 1, 0xB00000C1, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 1, 1)),
+            new TerrainPlanInput(7, key, TerrainKind.Tile, 0, 1, 0xC1, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 1, 0)),
+            new TerrainPlanInput(8, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0)),
+        ]);
+        CollectionAssert.AreEqual(new[] { 8, 7, 9 }, plan.Commands.Select(command => command.Ordinal).ToArray());
+        var flip = plan.Commands.Single(command => command.Ordinal == 7);
+        var facade = plan.Commands.Single(command => command.Ordinal == 9);
+        Assert.AreEqual(new TerrainRect(41, 20, 78, 40), flip.Destination);
+        Assert.IsTrue(flip.FlipX);
+        Assert.AreEqual(new TerrainRect(1, 40, 78, 40), facade.Destination);
+        Assert.IsFalse(facade.FlipX);
+
+        var cropped = TerrainScenePlan.CreateSynthetic(new TerrainRect(2, 1, 10, 10),
+        [new TerrainPlanInput(10, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        Assert.AreEqual(new TerrainRect(1, 1, 10, 10), cropped.Commands[0].Source);
+        Assert.AreEqual(new TerrainRect(2, 1, 10, 10), cropped.Commands[0].Destination);
+        AssertThrows<TerrainViewerException>(() => TerrainScenePlan.CreateSynthetic(new TerrainRect(200, 200, 1, 1),
+        [new TerrainPlanInput(11, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]));
+    }
+
+    [TestMethod]
+    public void Malformed_art_and_invalid_frame_are_rejected_before_publication()
+    {
+        AssertThrows<ArtFormatException>(() => ArtDecoder.Decode(new byte[1], new ArtFrameSelection(0, 0, 0)));
+        AssertThrows<ArgumentOutOfRangeException>(() => ArtDecoder.Decode(new byte[132 + (256 * 4)], new ArtFrameSelection(-1, 0, 0)));
     }
 
     [TestMethod]

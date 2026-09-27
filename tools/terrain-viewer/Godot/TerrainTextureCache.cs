@@ -1,4 +1,5 @@
 using Godot;
+using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer;
@@ -35,6 +36,23 @@ public sealed class TerrainTextureCache : IDisposable
 
     public bool TryGet(TerrainTextureKey key, out ImageTexture texture) => _textures.TryGetValue(key, out texture!);
 
+    public bool TryFindOpaquePixel(TerrainTextureKey key, TerrainRect source, out TerrainTexturePixel pixel)
+    {
+        pixel = default;
+        if (!TryGet(key, out var texture)) return false;
+        using var image = texture.GetImage();
+        for (var y = source.Y; y < source.Y + source.Height; y++)
+        for (var x = source.X; x < source.X + source.Width; x++)
+        {
+            var color = image.GetPixel(x, y);
+            if (color.A <= 0) continue;
+            pixel = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
+                (byte)Math.Round(color.B * 255), (byte)Math.Round(color.A * 255));
+            return true;
+        }
+        return false;
+    }
+
     public void Clear()
     {
         foreach (var texture in _textures.Values) texture.Dispose();
@@ -43,3 +61,5 @@ public sealed class TerrainTextureCache : IDisposable
 
     public void Dispose() => Clear();
 }
+
+public readonly record struct TerrainTexturePixel(int X, int Y, byte R, byte G, byte B, byte A);

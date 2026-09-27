@@ -15,15 +15,19 @@ public static class TerrainViewerSelfTest
             var frame = ArtDecoder.Decode(SyntheticTerrainFixture.CreateArt(), new ArtFrameSelection(0, 0, 0));
             AssertFrameBytes(frame);
             var key = new TerrainTextureKey("synthetic", 1, 0, 30, "synthetic", 0, 0, 0);
+            var facadeKey = new TerrainTextureKey("synthetic", 2, 0, 30, "synthetic-facade", 0, 0, 0);
             using var cache = new TerrainTextureCache();
+            var facadeRgba = frame.Rgba.ToArray();
+            facadeRgba[0] = 0; facadeRgba[1] = 255; facadeRgba[2] = 0; facadeRgba[3] = 255;
             cache.Upload(new Dictionary<TerrainTextureKey, DecodedTerrainTexture>
             {
-                [key] = new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray())
+                [key] = new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()),
+                [facadeKey] = new DecodedTerrainTexture(facadeKey, frame.Width, frame.Height, facadeRgba)
             });
-            var plan = CreateOraclePlan(key);
+            var plan = CreateOraclePlan(key, facadeKey);
             var viewport = new SubViewport
             {
-                Size = new Vector2I(32, 24),
+                Size = new Vector2I(200, 100),
                 TransparentBg = true,
                 RenderTargetUpdateMode = SubViewport.UpdateMode.Always
             };
@@ -54,25 +58,42 @@ public static class TerrainViewerSelfTest
         }
     }
 
-    private static TerrainScenePlan CreateOraclePlan(TerrainTextureKey key) => TerrainScenePlan.CreateLiteral(new TerrainRect(0, 0, 32, 24),
-    [
-        // Source crop at a precomputed +1-anchor destination; the canvas must not recompute it.
-        new TerrainDrawCommand(0, key, new TerrainRect(1, 1, 3, 2), new TerrainRect(11, 10, 3, 2), false, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0)),
-        // Raw tile X flip reverses only the selected source interval while retaining its footprint.
-        new TerrainDrawCommand(1, key, new TerrainRect(0, 0, 3, 2), new TerrainRect(2, 2, 3, 2), true, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 1, 0)),
-        // Facade command remains unflipped even if an opaque packed bit would exist upstream.
-        new TerrainDrawCommand(2, key, new TerrainRect(0, 0, 1, 1), new TerrainRect(20, 2, 1, 1), false, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 0, 0)),
-        // Later facade wins overlap: explicit layer/Y/X/ordinal order is exercised by the production canvas.
-        new TerrainDrawCommand(3, key, new TerrainRect(3, 0, 1, 1), new TerrainRect(25, 5, 1, 1), false, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0)),
-        new TerrainDrawCommand(4, key, new TerrainRect(2, 0, 1, 1), new TerrainRect(25, 5, 1, 1), false, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 0, 0)),
-    ]);
+    private static TerrainScenePlan CreateOraclePlan(TerrainTextureKey key, TerrainTextureKey facadeKey)
+    {
+        // Every command is placed and ordered by TerrainScenePlan/CreateSynthetic,
+        // the same production path used by loaded TerrainRecord values.
+        var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(-100, 0, 300, 100),
+        [
+            new TerrainPlanInput(40, key, TerrainKind.Tile, 0, 0, 0, 6, 5, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0)),
+            new TerrainPlanInput(41, key, TerrainKind.Tile, 0, 1, 0xC1, 6, 5, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 1, 0)),
+            new TerrainPlanInput(42, key, TerrainKind.Facade, 0, 2, 0xB00000C1, 6, 5, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 2, 0)),
+            new TerrainPlanInput(80, key, TerrainKind.Tile, 1, 1, 0, 6, 5, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 1, 1)),
+            new TerrainPlanInput(78, facadeKey, TerrainKind.Facade, 1, 1, 0xB0000000, 6, 5, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 1, 1)),
+        ]);
+        var flip = plan.Commands.Single(command => command.Ordinal == 41);
+        var facade = plan.Commands.Single(command => command.Ordinal == 42);
+        if (flip.Destination != new TerrainRect(41, 20, 6, 5) || !flip.FlipX
+            || facade.Destination != new TerrainRect(81, 40, 6, 5) || facade.FlipX
+            || plan.Commands.Select(command => command.Ordinal).ToArray() is not [40, 41, 80, 78, 42])
+            throw new InvalidOperationException("Production placement/order does not match the independent oracle.");
+        return plan;
+    }
 
     private static void AssertIndependentGeometryConstants()
     {
-        // Hand-authored expectations from the documented diagnostic contract, not generated with TerrainGeometry.
-        var expected = new[] { (0, 0, 0, 0), (1, 0, -40, 20), (0, 1, 40, 20), (63, 0, -2520, 1260), (0, 63, 2520, 1260), (63, 63, 0, 2520), (30, 32, 80, 1240) };
-        if (expected.Any(point => (40 * (point.Item2 - point.Item1), 20 * (point.Item2 + point.Item1)) != (point.Item3, point.Item4))) throw new InvalidOperationException();
-        if (80 + 1 != 81 || 78 != 78 || 80 != 80) throw new InvalidOperationException();
+        // Hand-authored expectations are compared to production-plan output; no
+        // expectation is generated by TerrainGeometry in this oracle.
+        var key = new TerrainTextureKey("constants", 1, 0, 1, "constants", 0, 0, 0);
+        var inputs = new[] { (0, 0, 0, 0), (1, 0, -40, 20), (0, 1, 40, 20), (63, 0, -2520, 1260), (0, 63, 2520, 1260), (63, 63, 0, 2520), (30, 32, 80, 1240) }
+            .Select((point, ordinal) => new TerrainPlanInput(ordinal, key, TerrainKind.Tile, point.Item1, point.Item2, 0, 78, 40,
+                new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, point.Item2, point.Item1)));
+        var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(-2600, -1, 5200, 2600), inputs);
+        foreach (var point in new[] { (0, 0, 1, 0), (1, 0, -39, 20), (0, 1, 41, 20), (63, 0, -2519, 1260), (0, 63, 2521, 1260), (63, 63, 1, 2520), (30, 32, 81, 1240) })
+        {
+            var command = plan.Commands.Single(candidate => candidate.Order.LocalX == point.Item1 && candidate.Order.LocalY == point.Item2);
+            if (command.Destination.X != point.Item3 || command.Destination.Y != point.Item4 || command.Source.Width != 78 || command.Source.Height != 40)
+                throw new InvalidOperationException("Projection, anchor, footprint, or crop mismatch.");
+        }
     }
 
     private static void AssertFrameBytes(ArtFrame frame)
@@ -86,13 +107,14 @@ public static class TerrainViewerSelfTest
 
     private static void AssertRenderedOracle(Image image)
     {
-        AssertPixel(image, 2, 2, 0, 255, 0, 255); // flipped source's rightmost original green pixel
-        AssertPixel(image, 4, 2, 0, 0, 0, 0); // flipped transparent source index zero
-        AssertPixel(image, 11, 10, 0, 255, 0, 255); // crop (1,1) is green
-        AssertPixel(image, 12, 10, 0, 0, 255, 255); // crop preserves top-left orientation
-        AssertPixel(image, 20, 2, 0, 0, 0, 0); // unflipped facade source index zero remains transparent
-        AssertPixel(image, 25, 5, 0, 255, 0, 255); // later facade winner is green, not red
-        AssertPixel(image, 0, 0, 0, 0, 0, 0); // border clipping/no draw
+        AssertPixel(image, 1, 0, 0, 0, 0, 0); // palette-zero transparent at the +1 anchor
+        AssertPixel(image, 2, 0, 0, 0, 255, 255); // top-left row-major blue
+        AssertPixel(image, 3, 0, 0, 255, 0, 255); // asymmetric green neighbour
+        AssertPixel(image, 42, 20, 255, 255, 255, 255); // tile-only X flip reverses source interval
+        AssertPixel(image, 46, 20, 0, 0, 0, 0); // flipped transparent palette-zero endpoint
+        AssertPixel(image, 81, 40, 0, 0, 0, 0); // facade remains unflipped despite packed flip bits
+        AssertPixel(image, 1, 40, 0, 255, 0, 255); // facade later layer wins tile at same Y/X
+        AssertPixel(image, 0, 0, 0, 0, 0, 0); // one-pixel border/no draw
     }
 
     private static void AssertRgba(IReadOnlyList<byte> rgba, int x, int y, byte r, byte g, byte b, byte a)
@@ -104,6 +126,7 @@ public static class TerrainViewerSelfTest
     private static void AssertPixel(Image image, int x, int y, byte r, byte g, byte b, byte a)
     {
         var pixel = image.GetPixel(x, y);
-        if (Math.Round(pixel.R * 255) != r || Math.Round(pixel.G * 255) != g || Math.Round(pixel.B * 255) != b || Math.Round(pixel.A * 255) != a) throw new InvalidOperationException();
+        var actual = ((byte)Math.Round(pixel.R * 255), (byte)Math.Round(pixel.G * 255), (byte)Math.Round(pixel.B * 255), (byte)Math.Round(pixel.A * 255));
+        if (actual != (r, g, b, a)) throw new InvalidOperationException($"pixel ({x},{y}) expected ({r},{g},{b},{a}) actual {actual}");
     }
 }
