@@ -93,7 +93,10 @@ public sealed class InputStateReducer
 
         var pulses = new Dictionary<string, bool> {
             ["confirm"] = raw.Confirm, ["cancel"] = raw.Cancel, ["inspect"] = raw.Inspect, ["previous"] = raw.Previous,
-            ["next"] = raw.Next, ["context"] = raw.Context, ["settings"] = raw.Settings
+            ["next"] = raw.Next, ["context"] = raw.Context, ["settings"] = raw.Settings,
+            // D-pad levels drive modal repeat, but only their rising edges are
+            // meaningful method-selection events.
+            ["menuUp"] = raw.MenuUp, ["menuDown"] = raw.MenuDown
         };
         bool Edge(string name)
         {
@@ -105,10 +108,11 @@ public sealed class InputStateReducer
 
         var confirm = Edge("confirm"); var cancel = Edge("cancel"); var inspect = Edge("inspect");
         var previous = Edge("previous"); var next = Edge("next"); var contextPulse = Edge("context"); var settings = Edge("settings");
+        var menuUp = Edge("menuUp"); var menuDown = Edge("menuDown");
         // A device method is an accepted fresh source event, never a sampled held
         // level. This prevents a held button/key from oscillating prompts after a
         // later meaningful input from the other device class.
-        var freshControllerPress = isJoy && (confirm || cancel || inspect || previous || next || contextPulse || settings || raw.MenuUp || raw.MenuDown);
+        var freshControllerPress = isJoy && (confirm || cancel || inspect || previous || next || contextPulse || settings || menuUp || menuDown);
         if (!raw.Echo && (raw.Keyboard || raw.MouseButton))
         {
             Method = InputMethod.KeyboardMouse;

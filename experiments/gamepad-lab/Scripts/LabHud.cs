@@ -17,6 +17,8 @@ public partial class LabHud : Control
     public string SelectedOption => ModalVisible ? _options[_selected] : "";
     public string PromptText => _prompt.Text;
     public string DiagnosticsText => _diagnostics.Text;
+    /// <summary>The reticle is drawn in this CanvasLayer, not in world space.</summary>
+    public Vector2 ReticleCanvasCenter => GetGlobalTransformWithCanvas() * (Size * .5f);
     public IReadOnlyDictionary<string, Rect2> LayoutBounds => new Dictionary<string, Rect2>
     {
         ["banner"] = _banner.GetGlobalRect(), ["diagnostics"] = _diagnostics.GetGlobalRect(),
@@ -48,7 +50,7 @@ public partial class LabHud : Control
         _prompt = TextLabel("[A / Enter] Select a target", 18); _prompt.CustomMinimumSize = new Vector2(0, 28); column.AddChild(_prompt);
     }
 
-    public void UpdateView(string diagnostics, string prompt, IEnumerable<string> logs) { _diagnostics.Text = diagnostics; _prompt.Text = prompt; _log.Text = string.Join("\n", logs.TakeLast(8)); }
+    public void UpdateView(string diagnostics, string prompt, IEnumerable<string> logs) { _diagnostics.Text = diagnostics; _prompt.Text = prompt; _log.Text = string.Join("\n", logs.TakeLast(8)); QueueRedraw(); }
     public void ShowContext(string primary) { ModalKind = ModalKind.Context; _options = [primary, "Inspect", "Cancel"]; _selected = 0; RenderModal(); }
     public void ShowSettings() { ModalKind = ModalKind.Settings; _options = ["Deadzone −", "Deadzone +", "Sensitivity −", "Sensitivity +", "Reset defaults", "Close"]; _selected = 0; RenderModal(); }
     public void Navigate(int direction) { if (ModalVisible && direction != 0) { _selected = (_selected + Math.Sign(direction) + _options.Length) % _options.Length; RenderModal(); } }
@@ -66,6 +68,13 @@ public partial class LabHud : Control
         return bounds.Values.All(rect => rect.Size.X >= 20 && rect.Size.Y >= 20 && viewport.Encloses(rect))
             && (!ModalVisible || !bounds["diagnostics"].Intersects(bounds["modal"]))
             && bounds["log"].Position.Y < bounds["prompt"].Position.Y;
+    }
+    public override void _Draw()
+    {
+        var center = Size * .5f;
+        DrawCircle(center, 11, Colors.Transparent, false, 2);
+        DrawLine(center - new Vector2(16, 0), center + new Vector2(16, 0), Colors.White);
+        DrawLine(center - new Vector2(0, 16), center + new Vector2(0, 16), Colors.White);
     }
     private void RenderModal()
     {

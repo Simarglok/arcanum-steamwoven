@@ -45,13 +45,11 @@ public partial class LabRoot : Node2D
         var viewport = GetViewport().GetVisibleRect(); var score = _result.Score?.ToString("F1") ?? "ground";
         var known = active is int knownId && Input.IsJoyKnown(knownId);
         _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}\nActive: {active?.ToString() ?? "none"} / {name}\nGUID: {guid}; SDL mapping known: {known}\nConnected IDs: {string.Join(',', Input.GetConnectedJoypads().Order())}\nRaw stick: {_lastRaw.Stick.X:F2},{_lastRaw.Stick.Y:F2}; processed: {Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).X:F2},{Vec2.CircularDeadzone(_lastRaw.Stick, _deadzone).Y:F2}\nDeadzone: {_deadzone:F2}; sensitivity: {_sensitivity:F1}\nSelected: {_result.Id ?? "Ground"}; score: {score}; radius: 180px\nViewport: {viewport.Size}; zoom: {_camera.Zoom.X:F2}\nLast raw event: {_lastEvent}; Accepted: {_lastAccepted}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
-        QueueRedraw();
     }
-    public override void _Draw() { var center = GetViewportRect().GetCenter(); DrawCircle(center, 11, Colors.Transparent, false, 2); DrawLine(center - new Vector2(16, 0), center + new Vector2(16, 0), Colors.White); DrawLine(center - new Vector2(0, 16), center + new Vector2(0, 16), Colors.White); }
     public override void _Input(InputEvent @event) => Handle(@event, "LIVE OS EVENT (not physical usability proof)");
     private void Handle(InputEvent @event, string provenance)
     {
-        var raw = _adapter.Map(@event, _focused); _lastRaw = raw; _lastProvenance = provenance; _lastEvent = @event.GetClass();
+        var raw = _adapter.Map(@event, _focused); _lastRaw = raw; _lastProvenance = provenance; _lastEvent = DescribeEvent(@event);
         var intent = _input.Reduce(raw, Context(GetProcessDeltaTime(), _hud.ModalVisible), provenance); _lastAccepted = intent.Accepted;
         if (!intent.Accepted) return;
         if (_hud.ModalVisible)
@@ -106,10 +104,12 @@ public partial class LabRoot : Node2D
             {
                 GetWindow().Size = size; await LayoutFrames(); _hud.ShowSettings(); await LayoutFrames();
                 VerificationMode.Require(_hud.HasReadableLayout(GetViewport().GetVisibleRect()), $"responsive HUD bounds failed at {size}");
+                VerificationMode.Require(_hud.ReticleCanvasCenter.DistanceTo(GetViewport().GetVisibleRect().GetCenter()) < .1f, $"reticle is not at viewport center at {size}");
                 _hud.HideModal();
                 foreach (var zoom in new[] { .5f, 1f, 2f })
                 {
                     _camera.Zoom = new Vector2(zoom, zoom); await LayoutFrames();
+                    VerificationMode.Require(_hud.ReticleCanvasCenter.DistanceTo(GetViewport().GetVisibleRect().GetCenter()) < .1f, $"reticle moved with camera at {size} zoom {zoom}");
                     var crate = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate");
                     Handle(new InputEventMouseButton { Position = ToGodot(crate.Anchor), ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation);
                     VerificationMode.Require(_selection.ManualLock && _result!.Id == "crate", $"canvas target pick failed at {size} zoom {zoom}");
@@ -156,6 +156,13 @@ public partial class LabRoot : Node2D
             VerificationMode.Require(Math.Abs(zoomOneWorldStep / 2 - zoomTwoWorldStep) < .001, "pan does not scale by camera zoom"); _camera.Zoom = initialZoom;
             VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "keyboard sample was misclassified as controller method");
             VerificationMode.Require(_hud.PromptText.Contains("[Enter]", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Accepted:"), "keyboard prompt or accepted-event diagnostics missing");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = true }, VerificationMode.Simulation); _Process(0);
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.DiagnosticsText.Contains("JoyButton DpadDown pressed", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Accepted: True", StringComparison.Ordinal), "D-pad event diagnostics or gamepad method selection missing");
+            PressKey(Key.D); ReleaseKey(Key.D); _Process(0);
+            VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.PromptText.Contains("[Enter]", StringComparison.Ordinal), "keyboard event did not change method prompt after held D-pad");
+            _Process(0);
+            VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "held D-pad level reverted keyboard method");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = false }, VerificationMode.Simulation); _Process(0);
 
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
             _Process(0); _Process(0); var selectedBefore = _hud.SelectedIndex; PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu did not move immediately in process");
@@ -231,6 +238,15 @@ public partial class LabRoot : Node2D
     }
     private void PressKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = true }, VerificationMode.Simulation);
     private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
+    private static string DescribeEvent(InputEvent @event) => @event switch
+    {
+        InputEventJoypadButton button => $"JoyButton {button.ButtonIndex} {(button.Pressed ? "pressed" : "released")} device {button.Device}",
+        InputEventJoypadMotion motion => $"JoyAxis {motion.Axis} value {motion.AxisValue:F2} device {motion.Device}",
+        InputEventKey key => $"Key {key.Keycode} {(key.Pressed ? "pressed" : "released")}{(key.Echo ? " echo" : "")}",
+        InputEventMouseButton mouse => $"MouseButton {mouse.ButtonIndex} {(mouse.Pressed ? "pressed" : "released")}",
+        InputEventMouseMotion motion => $"MouseMotion relative {motion.Relative.X:F1},{motion.Relative.Y:F1}",
+        _ => @event.GetClass()
+    };
     private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_deadzone, _sensitivity, delta, _camera.Zoom.X, modal, advanceTime);
     private string PrimaryAction() => _result?.Id is null ? "Choose destination" : _result.Id.StartsWith("npc") ? "Talk" : _result.Id.StartsWith("door") || _result.Id == "crate" ? "Open" : _result.Id.StartsWith("enemy") ? "Mark" : "Pick up";
     private string Prompt() => _input.Method == InputMethod.Gamepad

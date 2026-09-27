@@ -58,6 +58,10 @@ internal static class InputStateTests
         // method-switch event after a fresh keyboard press changed the prompt.
         provenance.Reduce(new(6, default, Confirm: true), c);
         Assertions.Equal(provenance.Method, InputMethod.KeyboardMouse, "held controller level does not revert keyboard method");
+        var heldDpad = new InputStateReducer(); heldDpad.SetStartupDevices(new[] { 8 });
+        heldDpad.Reduce(new(8, default, MenuDown: true), c); Assertions.Equal(heldDpad.Method, InputMethod.Gamepad, "D-pad rising edge selects gamepad method");
+        heldDpad.Reduce(new(-1, default, Keyboard: true), c); Assertions.Equal(heldDpad.Method, InputMethod.KeyboardMouse, "fresh keyboard event selects keyboard method after D-pad press");
+        heldDpad.Reduce(new(8, default, MenuDown: true), c); Assertions.Equal(heldDpad.Method, InputMethod.KeyboardMouse, "held D-pad level does not revert keyboard method");
         var heldKeyboard = new InputStateReducer(); heldKeyboard.SetStartupDevices(new[] { 9 });
         heldKeyboard.Reduce(new(-1, default, Keyboard: true, KeyboardPan: new(1, 0)), c);
         for (var i = 0; i < 7; i++) heldKeyboard.Reduce(new(9, new(.6, 0)), processClock);
