@@ -106,11 +106,13 @@ public partial class TerrainViewerApp : Node
         var initial = _camera!.State;
         var initialCameraPosition = _camera.Camera.Position;
         var initialHudPosition = _status!.GlobalPosition;
+        GD.Print("ARC-RENDER-003 native-smoke stage=initial-readback");
         if (!await CaptureAndValidateSmokeFrameAsync(new Vector2I(1280, 800), commandCount, textureCount))
         {
             GetTree().Quit(0);
             return;
         }
+        GD.Print("ARC-RENDER-003 native-smoke stage=input");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
         await NextFrameAsync();
         var afterKeyboard = _camera.State;
@@ -228,9 +230,12 @@ public partial class TerrainViewerApp : Node
         await NextFrameAsync();
         using var screenshot = GetViewport().GetTexture().GetImage();
         var actualSize = new Vector2I(screenshot.GetWidth(), screenshot.GetHeight());
-        if (_canvas!.CommandCount != commandCount || _cache.Count != textureCount || string.IsNullOrWhiteSpace(_status?.Text)
-            || _status.GlobalPosition != new Vector2(16, 16) || !_canvas.TryGetOpaqueLandmark(out var landmark)
-            || !TryAssertLandmark(screenshot, landmark))
+        var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
+        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16);
+        var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
+        var landmarkMatches = landmarkFound && TryAssertLandmark(screenshot, landmark);
+        GD.Print($"ARC-RENDER-003 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={landmarkMatches}");
+        if (!stableCounts || !hudReadable || !landmarkMatches)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         if (_nativeSmokeScreenshot is not null)
         {
@@ -253,10 +258,11 @@ public partial class TerrainViewerApp : Node
 
     private bool TryAssertLandmark(Image screenshot, TerrainCanvasLandmark landmark)
     {
-        var state = _camera!.State;
-        var visible = GetViewport().GetVisibleRect().Size;
-        var x = (int)Math.Round((landmark.WorldX - state.X) * state.Zoom + (visible.X / 2d));
-        var y = (int)Math.Round((landmark.WorldY - state.Y) * state.Zoom + (visible.Y / 2d));
+        // Read TerrainCanvas's actual canvas transform rather than duplicating
+        // Camera2D zoom/centering arithmetic in the smoke oracle.
+        var point = _canvas!.GetGlobalTransformWithCanvas() * new Vector2(landmark.WorldX, landmark.WorldY);
+        var x = (int)Math.Round(point.X);
+        var y = (int)Math.Round(point.Y);
         if (x < 0 || y < 0 || x >= screenshot.GetWidth() || y >= screenshot.GetHeight()) return false;
         var actual = screenshot.GetPixel(x, y);
         return Math.Round(actual.R * 255) == landmark.R && Math.Round(actual.G * 255) == landmark.G

@@ -24,7 +24,9 @@ public partial class TerrainCanvas : Node2D
     {
         landmark = default;
         if (_plan is null || _textures is null) return false;
-        foreach (var command in _plan.Commands)
+        // Later commands paint over earlier ones, so choose the final command
+        // for a full-scene landmark that cannot be obscured by this canvas.
+        foreach (var command in _plan.Commands.Reverse())
         {
             if (!_textures.TryFindOpaquePixel(command.TextureKey, command.Source, out var pixel)) continue;
             var offsetX = pixel.X - command.Source.X;
