@@ -99,10 +99,13 @@ DAT_ROOT=/path/to/Arcanum dotnet test \
 It reads only the selected members and never extracts or writes original
 resources. Original dialogue bytes/text/expressions are kept local: logs and
 review evidence use only approved identifiers, hashes, sizes, counts, and
-status aggregates. Physical grammar evidence is attributed to repository
-research and CE revision `a7ff41b300ef712f0e7d088183a3d08957110cdd`; this
-implementation is independently authored and does not copy or execute that
-source or the research probe.
+status aggregates. Physical grammar evidence is attributed to [bounded DLG
+format research](dlg.md), the [dialogue evidence
+record](../research/dialog-evidence.md), and CE revision
+`a7ff41b300ef712f0e7d088183a3d08957110cdd`; this implementation is
+independently authored and does not copy or execute that source or the research
+probe. The [minimal dialog contract](../scripting/dialog-minimal-contract.md)
+is a separate proposal, not part of this physical reader.
 
 ## Explicit exclusions
 

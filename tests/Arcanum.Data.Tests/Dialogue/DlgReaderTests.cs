@@ -11,7 +11,7 @@ public sealed class DlgReaderTests
     public void Read_preserves_opaque_fields_serialized_order_and_owned_bytes()
     {
         var source = Bytes(" // synthetic\r\n" + Record("20", "a\x80\n", " alt ", "", "LF(unknown)", "", "ACT\x01")
-            + "\n// between records\n" + Record("2", "player", "", "-5", "QU(opaque)", "-9", "SC\x02"));
+            + "\n// between records\n" + Record("0002", "player", " alt player ", "-05", "RU(opaque)", "020", "ZZ\x02"));
         var document = DlgReader.Read(source);
 
         Assert.AreEqual(source.Length, document.PayloadLength);
@@ -19,12 +19,19 @@ public sealed class DlgReaderTests
         Assert.AreEqual(20, document.Records[0].Id);
         Assert.AreEqual(DlgRecordRole.Npc, document.Records[0].Role);
         Assert.IsNull(document.Records[0].IqValue);
-        Assert.AreEqual(-9, document.Records[1].ResponseValue);
-        Assert.AreEqual(DlgResponseKind.Special, document.Records[1].ResponseKind);
+        Assert.AreEqual(-5, document.Records[1].IqValue);
+        Assert.AreEqual(20, document.Records[1].ResponseValue);
+        Assert.AreEqual(DlgResponseKind.Direct, document.Records[1].ResponseKind);
         Assert.AreEqual(7, document.Records[0].Fields.Count);
         CollectionAssert.AreEqual(Bytes("a\x80\n"), document.Records[0].Text.Bytes.ToArray());
-        CollectionAssert.AreEqual(Bytes("LF(unknown)"), document.Records[0].Condition.Bytes.ToArray());
-        CollectionAssert.AreEqual(Bytes("SC\x02"), document.Records[1].Action.Bytes.ToArray());
+        var player = document.Records[1];
+        CollectionAssert.AreEqual(Bytes("0002"), player.IdField.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes("player"), player.Text.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes(" alt player "), player.AlternateText.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes("-05"), player.Iq.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes("RU(opaque)"), player.Condition.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes("020"), player.Response.Bytes.ToArray());
+        CollectionAssert.AreEqual(Bytes("ZZ\x02"), player.Action.Bytes.ToArray());
         Assert.IsFalse(document.Records is DlgRecord[]);
         Assert.IsFalse(document.Records[0].Text.Bytes is byte[]);
 
@@ -61,7 +68,8 @@ public sealed class DlgReaderTests
             Record("1", iq: "1", response: "") + Record("2", iq: "-1", response: "0")
             + Record("3", iq: "2", response: "4") + Record("4", iq: "3", response: "-2")
             + Record("0005", iq: "-2147483648", response: "2147483647")
-            + Record("-2147483648", iq: "2147483647", response: "-2147483648")));
+            + Record("-2147483648", iq: "2147483647", response: "-2147483648")
+            + Record("2147483647", iq: "1")));
 
         Assert.AreEqual(DlgResponseKind.Exit, document.Records[0].ResponseKind);
         Assert.IsNull(document.Records[0].ResponseValue);
@@ -77,6 +85,7 @@ public sealed class DlgReaderTests
         Assert.AreEqual(int.MinValue, document.Records[5].Id);
         Assert.AreEqual(int.MaxValue, document.Records[5].IqValue);
         Assert.AreEqual(int.MinValue, document.Records[5].ResponseValue);
+        Assert.AreEqual(int.MaxValue, document.Records[6].Id);
 
         foreach (var value in new[] { "+1", " 1", "-", "2147483648", "-2147483649" })
         {
@@ -123,10 +132,21 @@ public sealed class DlgReaderTests
         var fieldNul = Bytes(Record("1", text: "a\0b"));
         AssertDiagnostic(Throws<DlgFormatException>(() => DlgReader.Read(fieldNul)), Array.IndexOf(fieldNul, (byte)0), 0, DlgFieldKind.Text);
 
+        var sentinelInput = Bytes(Record("1", text: "sentinel-payload", iq: "0"));
+        var sentinelDiagnostic = Throws<DlgFormatException>(() => DlgReader.Read(sentinelInput));
+        AssertDiagnostic(sentinelDiagnostic, Array.IndexOf(sentinelInput, (byte)'0'), 0, DlgFieldKind.Iq);
+        Assert.IsFalse(sentinelDiagnostic.Message.Contains("sentinel-payload", StringComparison.Ordinal));
+
         var tab = Throws<DlgUnsupportedFormatException>(() => DlgReader.Read(Bytes(Record("1") + "\t")));
         AssertDiagnostic(tab, Record("1").Length, 1, null);
-        Assert.IsFalse(tab.Message.Contains("secret-payload", StringComparison.Ordinal));
         Throws<DlgUnsupportedFormatException>(() => DlgReader.Read(Bytes(Record("1") + "\r")));
+        var eofComment = DlgReader.Read(Bytes(Record("1") + "// ends at eof"));
+        Assert.AreEqual(1, eofComment.Records.Count);
+
+        var highBitOutside = Bytes(Record("1") + "\x80");
+        AssertDiagnostic(Throws<DlgUnsupportedFormatException>(() => DlgReader.Read(highBitOutside)), Record("1").Length, 1, null);
+        var controlOutside = Bytes(Record("1") + "\x01");
+        AssertDiagnostic(Throws<DlgUnsupportedFormatException>(() => DlgReader.Read(controlOutside)), Record("1").Length, 1, null);
         Throws<DlgFormatException>(() => DlgReader.Read(Array.Empty<byte>()));
     }
 
@@ -210,7 +230,11 @@ public sealed class DlgReaderTests
     private static TException Throws<TException>(Action action) where TException : Exception
     {
         try { action(); }
-        catch (TException exception) { return exception; }
+        catch (Exception exception)
+        {
+            Assert.AreEqual(typeof(TException), exception.GetType());
+            return (TException)exception;
+        }
         throw new AssertFailedException($"Expected {typeof(TException).Name}.");
     }
 

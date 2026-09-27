@@ -58,21 +58,21 @@ public sealed class DlgReferenceValidatorTests
     public void Validate_ignores_npc_responses_and_accepts_player_cycles_without_traversal()
     {
         var document = Read(
-            "{50}{}{}{}{}{99}{}" +
+            "{50}{}{}{}{}{2}{}" +
             "{1}{}{}{1}{}{50}{}" +
-            "{2}{}{}{1}{}{3}{}" +
-            "{3}{}{}{1}{}{2}{}");
+            "{60}{}{}{}{}{1}{}" +
+            "{2}{}{}{1}{}{60}{}");
 
         var result = DlgReferenceValidator.Validate(document);
 
-        Assert.AreEqual(99, document.Records[0].ResponseValue);
-        Assert.AreEqual(3, result.References.Count);
-        CollectionAssert.AreEqual(new[] { 1, 2, 3 }, result.References.Select(reference => reference.SourceRecordId).ToArray());
-        Assert.AreEqual(DlgReferenceStatus.Valid, result.References[0].Status);
-        CollectionAssert.AreEqual(
-            new[] { DlgReferenceStatus.WrongTargetRole, DlgReferenceStatus.WrongTargetRole },
-            result.References.Skip(1).Select(reference => reference.Status).ToArray());
-        Assert.IsFalse(result.IsValid);
+        Assert.AreEqual(2, document.Records[0].ResponseValue);
+        Assert.AreEqual(1, document.Records[2].ResponseValue);
+        Assert.AreEqual(2, result.References.Count);
+        CollectionAssert.AreEqual(new[] { 1, 2 }, result.References.Select(reference => reference.SourceRecordId).ToArray());
+        CollectionAssert.AreEqual(new[] { DlgResponseKind.Direct, DlgResponseKind.Direct }, result.References.Select(reference => reference.ResponseKind).ToArray());
+        CollectionAssert.AreEqual(new int?[] { 50, 60 }, result.References.Select(reference => reference.TargetId).ToArray());
+        CollectionAssert.AreEqual(new[] { DlgReferenceStatus.Valid, DlgReferenceStatus.Valid }, result.References.Select(reference => reference.Status).ToArray());
+        Assert.IsTrue(result.IsValid);
     }
 
     private static DlgDocument Read(string value) => DlgReader.Read(Encoding.Latin1.GetBytes(value));
