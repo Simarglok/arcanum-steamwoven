@@ -26,7 +26,7 @@ Use only the project registry's canonical tools:
     "$DOTNET_ROOT/dotnet" build Arcanum.Experiments.DisplayUiLab.csproj --no-restore
     /usr/bin/env __GODOT_SHELL_ENV_SET=1 DOTNET_ROOT="$DOTNET_ROOT" PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin" /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . -- --run-layout-matrix --report /absolute/artifact/layout-matrix.json
 
-After a clean committed candidate, run `tools/validate-macos.sh`. It exports to the ignored main-repository artifact root keyed by the complete candidate SHA and records a local-only manifest.
+After a clean committed candidate, run `tools/validate-macos.sh`. It uses the literal direct locked restore/build commands above (without property overrides), validates the installed registry/tool versions/templates, records named logs for source/export/root/hygiene gates, and exports to the ignored main-repository artifact root keyed by the complete candidate SHA. Only after all exact-head gates pass does it validate `manifest.json` and atomically replace the task-scoped `artifacts/builds/ARC-UI-001/current.json` pointer.
 
 ## Evidence boundaries
 

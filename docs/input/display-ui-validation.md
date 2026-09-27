@@ -29,11 +29,9 @@ The matrix invokes the actual `LabSurface.tscn` in sequential SubViewports for e
 
 The evidence capture index is: 1280×720@200 dialogue; 1920×1080@100 inventory; 3440×1440@150 dialogue; 3840×2160@200 settings/diagnostics. Files are ignored local artifacts, never documentation assets. The manifest and `current.json` point to the exact final candidate only after local export gates pass.
 
-### Recorded local result (before the rework commit)
+### Candidate-bound result records
 
-The earlier candidate `d789d19fde08a11a9d97a618034c8da338fd95bb` passed `tools/validate-macos.sh` with the canonical .NET SDK 8.0.425 and Godot 4.7.2 stable mono. This document does not treat that earlier run as evidence for a later commit. During rework, the rebuilt source matrix passed at the active uncommitted tree with substantive transition/input evidence; final export, artifact manifest/current-pointer update, and native smoke must be repeated after the rework commit.
-
-The unchanged merged root also passed locked restore/build and non-real-data tests: 14 Presentation tests and 24 Data tests passed with zero failures. Final candidate validation is rerun after this results documentation is committed; its ignored artifact directory and `current.json` identify the exact post-documentation head.
+This pipeline deliberately makes no tracked-file result claim for a moving candidate. A successful run records its exact full commit, base, ordinary-diff hash, observed toolchain/template data, named checks, app/evidence paths, classifications, and delivery state in the ignored candidate `manifest.json`; only then does it atomically replace `artifacts/builds/ARC-UI-001/current.json`. The later final-validation continuation will record the observed final-head outcome here after its documentation commit and rerun.
 
 ## Classification and manual checklist
 
