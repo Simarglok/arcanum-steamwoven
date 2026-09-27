@@ -120,10 +120,10 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
-    public void Mes_accepts_interstitial_ascii_only_before_a_later_brace_keyed_record()
+    public void Mes_accepts_only_observed_bounded_interstitial_text()
     {
         var sector = Sector(Enumerable.Repeat(0x000001C0u, 4096).ToArray());
-        var tileMes = "{0}{aaa}\ninterstitial ASCII\n{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
+        var tileMes = "{0}{aaa}\ninterstitial text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
         using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\interstitial.sec", sector))), leaveOpen: true);
         using var resource = DatArchive.Open(new MemoryStream(Dat(
             ("art\\tile\\tilename.mes", Ascii(tileMes)),
@@ -132,11 +132,37 @@ public sealed class TerrainLoaderTests
 
         Assert.IsTrue(TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(resource)).IsComplete);
 
-        using var trailing = DatArchive.Open(new MemoryStream(Dat(
-            ("art\\tile\\tilename.mes", Ascii(tileMes + " trailing")),
+        var crLfTileMes = "{0}{aaa}\r\ninterstitial text\r\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
+        using var crLfResource = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii(crLfTileMes)),
             ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
             ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
-        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(trailing)));
+        Assert.IsTrue(TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(crLfResource)).IsComplete);
+
+        foreach (var malformed in new[]
+        {
+            "leading text\n" + tileMes,
+            "{0}{aaa}\nunsupported text\n{50}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            "{0}{aaa}\ninterstitial\0text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            "{0}{aaa}\ninterstitial\x01text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            "{0}{aaa}\tinterstitial text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            "{0}{aaa}\ninterstitial\rtext\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            "{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}{2147483647}{unused}\ninterstitial text\n{-2147483648}{unused}",
+            tileMes + "trailing"
+        })
+        {
+            using var invalid = DatArchive.Open(new MemoryStream(Dat(
+                ("art\\tile\\tilename.mes", Ascii(malformed)),
+                ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+                ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+            AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(invalid)));
+        }
+
+        using var facadeInterstitial = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii(tileMes)),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}\ninterstitial text\n{1}{one}")),
+            ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(facadeInterstitial)));
     }
 
     [TestMethod]
