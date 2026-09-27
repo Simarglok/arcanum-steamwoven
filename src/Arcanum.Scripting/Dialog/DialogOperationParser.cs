@@ -23,7 +23,12 @@ internal sealed class DialogOperationParseException : Exception
 
 internal static class DialogOperationParser
 {
-    internal static ParsedField Parse(DlgRecord record, DlgField field, bool condition, DialogRuntimeOptions options)
+    internal static ParsedField Parse(
+        DlgRecord record,
+        DlgField field,
+        bool condition,
+        DialogRuntimeOptions options,
+        Action<DialogOperationSource>? operationAccepted = null)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -88,6 +93,7 @@ internal static class DialogOperationParser
             {
                 throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, source);
             }
+            operationAccepted?.Invoke(source);
             SkipSeparators(bytes, ref index);
         }
 

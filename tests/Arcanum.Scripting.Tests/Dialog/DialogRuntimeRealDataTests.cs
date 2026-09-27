@@ -57,6 +57,9 @@ public sealed class DialogRuntimeRealDataTests
                 Assert.AreEqual(DialogSessionPhase.AwaitingSelection, result.Session.Phase);
                 Assert.IsNull(result.Failure);
                 Assert.AreEqual(1, ports.QueryCount);
+                Assert.AreEqual(1, ports.Queries.Count);
+                Assert.AreEqual(new DialogId(1), ports.Queries[0].Dialog);
+                Assert.AreEqual(new DialogParticipantId(3), ports.Queries[0].Npc);
                 Assert.AreEqual(1, result.Session.CommandAttempts.Count);
                 Assert.IsInstanceOfType<QuestStateCommand>(result.Session.CommandAttempts[0].Command);
                 Assert.AreEqual(new DialogNodeId(30), result.Session.CommandAttempts[0].Source.RecordId);
@@ -82,6 +85,8 @@ public sealed class DialogRuntimeRealDataTests
             Assert.AreEqual(DialogSessionPhase.CompletedAtFrontier, visible.Result.Session.Phase);
             Assert.AreEqual(new DialogNodeId(50), visible.Result.Session.CurrentNodeId);
             Assert.AreEqual(2, visible.Ports.QueryCount);
+            Assert.AreEqual(2, visible.Ports.Queries.Count);
+            Assert.AreEqual(visible.Ports.Queries[0], visible.Ports.Queries[1]);
             CollectionAssert.AreEqual(
                 new[] { typeof(QuestStateCommand), typeof(LocalFlagWriteCommand), typeof(RumorLogCommand) },
                 visible.Result.Session.CommandAttempts.Select(attempt => attempt.Command.GetType()).ToArray());
@@ -122,8 +127,10 @@ public sealed class DialogRuntimeRealDataTests
     private sealed class RealDataPorts(int localFlag) : IDialogStateQueryPort, IDialogCommandPort
     {
         public int QueryCount { get; private set; }
+        public List<LocalFlagQuery> Queries { get; } = [];
         public LocalFlagReadResult Read(LocalFlagQuery query)
         {
+            Queries.Add(query);
             QueryCount++;
             return LocalFlagReadResult.Found(localFlag);
         }

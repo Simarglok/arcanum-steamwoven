@@ -32,10 +32,30 @@ public sealed class DialogTransitionRuntimeTests
             new[] { "QU:10:1:900", "QU:11:2:900", "LF:4:1:900", "LF:5:0:900", "RU:1000", "RU:1001" },
             ports.Commands);
         Assert.AreEqual(2, ports.QueryCount);
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                new LocalFlagQuery(new DialogId(700), new DialogParticipantId(900), 3),
+                new LocalFlagQuery(new DialogId(700), new DialogParticipantId(900), 3),
+            },
+            ports.Queries);
         Assert.IsTrue(start.Session.CommandAttempts.All(attempt => attempt.Outcome == DialogCommandAttemptOutcome.Applied));
         Assert.AreEqual(6, start.Session.CommandAttempts.Count);
-        Assert.AreEqual(DlgFieldKind.Action, start.Session.CommandAttempts[0].Source.FieldKind);
-        Assert.AreEqual(0, start.Session.CommandAttempts[0].Source.OperationOrdinal);
+        CollectionAssert.AreEqual(
+            new[] { 100, 100, 200, 200, 300, 300 },
+            start.Session.CommandAttempts.Select(attempt => attempt.Source.RecordId.Value).ToArray());
+        CollectionAssert.AreEqual(
+            new[] { 0, 1, 0, 1, 0, 1 },
+            start.Session.CommandAttempts.Select(attempt => attempt.Source.OperationOrdinal).ToArray());
+        Assert.IsTrue(start.Session.CommandAttempts.All(attempt => attempt.Source.FieldKind == DlgFieldKind.Action));
+        var quest = (QuestStateCommand)start.Session.CommandAttempts[0].Command;
+        Assert.AreEqual(new DialogParticipantId(800), quest.PlayerCharacter);
+        Assert.AreEqual(new DialogParticipantId(900), quest.NpcContext);
+        var local = (LocalFlagWriteCommand)start.Session.CommandAttempts[2].Command;
+        Assert.AreEqual(new DialogId(700), local.Dialog);
+        Assert.AreEqual(new DialogParticipantId(900), local.Npc);
+        var rumor = (RumorLogCommand)start.Session.CommandAttempts[4].Command;
+        Assert.AreEqual(new DialogParticipantId(800), rumor.PlayerCharacter);
     }
 
     [TestMethod]
@@ -315,7 +335,60 @@ public sealed class DialogTransitionRuntimeTests
             new DialogRuntimeOptions { MaxOperationsPerTransition = 1 });
         Assert.AreEqual(DialogFailureKind.OperationLimitExceeded, operationResult.Failure!.Kind);
         Assert.AreEqual(new DialogNodeId(200), operationResult.Failure.Source!.Value.RecordId);
+        Assert.AreEqual(0, operationResult.Failure.Source.Value.OperationOrdinal);
         Assert.AreEqual(0, operationPorts.Commands.Count);
+
+        var byteBeforeMalformed = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1")
+            + Record("200", iq: "1", response: "300", action: "RU 1000 SC")
+            + Record("300")));
+        var bytePorts = new Ports();
+        var byteResult = DialogTransitionRuntime.Start(
+            byteBeforeMalformed,
+            Request(100, 200),
+            bytePorts,
+            bytePorts,
+            new DialogRuntimeOptions { MaxSemanticInputBytes = 7 });
+        Assert.AreEqual(DialogFailureKind.SemanticInputLimitExceeded, byteResult.Failure!.Kind);
+        Assert.AreEqual(new DialogNodeId(200), byteResult.Failure.Source!.Value.RecordId);
+        Assert.AreEqual(DlgFieldKind.Action, byteResult.Failure.Source.Value.FieldKind);
+        Assert.AreEqual(10, byteResult.Failure.Source.Value.OperationLength);
+        Assert.AreEqual(0, bytePorts.QueryCount);
+        Assert.AreEqual(0, bytePorts.Commands.Count);
+
+        var operationBeforeMalformed = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1")
+            + Record("200", iq: "1", response: "300", action: "RU 1000 SC")
+            + Record("300")));
+        var malformedPorts = new Ports();
+        var malformedResult = DialogTransitionRuntime.Start(
+            operationBeforeMalformed,
+            Request(100, 200),
+            malformedPorts,
+            malformedPorts,
+            new DialogRuntimeOptions { MaxOperationsPerTransition = 1 });
+        Assert.AreEqual(DialogFailureKind.OperationLimitExceeded, malformedResult.Failure!.Kind);
+        Assert.AreEqual(new DialogNodeId(200), malformedResult.Failure.Source!.Value.RecordId);
+        Assert.AreEqual(0, malformedResult.Failure.Source.Value.OperationOrdinal);
+        Assert.AreEqual(0, malformedPorts.QueryCount);
+        Assert.AreEqual(0, malformedPorts.Commands.Count);
+
+        var multiOperation = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1")
+            + Record("200", iq: "1", response: "300", action: "LF 1 1; LF 2 0")
+            + Record("300")));
+        var multiPorts = new Ports();
+        var multiResult = DialogTransitionRuntime.Start(
+            multiOperation,
+            Request(100, 200),
+            multiPorts,
+            multiPorts,
+            new DialogRuntimeOptions { MaxOperationsPerTransition = 2 });
+        Assert.AreEqual(DialogFailureKind.OperationLimitExceeded, multiResult.Failure!.Kind);
+        Assert.AreEqual(new DialogNodeId(200), multiResult.Failure.Source!.Value.RecordId);
+        Assert.AreEqual(1, multiResult.Failure.Source.Value.OperationOrdinal);
+        Assert.AreEqual(0, multiPorts.QueryCount);
+        Assert.AreEqual(0, multiPorts.Commands.Count);
     }
 
     [TestMethod]
@@ -334,20 +407,32 @@ public sealed class DialogTransitionRuntimeTests
             }).Status);
         foreach (var options in new[]
         {
+            new DialogRuntimeOptions { MaxResponses = 0 },
+            new DialogRuntimeOptions { MaxOperationFieldBytes = 0 },
             new DialogRuntimeOptions { MaxOperationFieldBytes = 5 },
             new DialogRuntimeOptions { MaxOperationsPerField = 0 },
+            new DialogRuntimeOptions { MaxSemanticInputBytes = 0 },
             new DialogRuntimeOptions { MaxSemanticInputBytes = 5 },
             new DialogRuntimeOptions { MaxOperationsPerTransition = 0 },
         })
         {
-            if (options.MaxOperationsPerField == 0 || options.MaxOperationsPerTransition == 0)
+            var candidatePorts = new Ports();
+            if (options.MaxResponses == 0 ||
+                options.MaxOperationFieldBytes == 0 ||
+                options.MaxOperationsPerField == 0 ||
+                options.MaxSemanticInputBytes == 0 ||
+                options.MaxOperationsPerTransition == 0)
             {
-                Throws<ArgumentOutOfRangeException>(() => DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports, options));
+                Throws<ArgumentOutOfRangeException>(() => DialogTransitionRuntime.Start(document, Request(100, 200), candidatePorts, candidatePorts, options));
+                Assert.AreEqual(0, candidatePorts.QueryCount);
+                Assert.AreEqual(0, candidatePorts.Commands.Count);
             }
             else
             {
-                var result = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports, options);
+                var result = DialogTransitionRuntime.Start(document, Request(100, 200), candidatePorts, candidatePorts, options);
                 Assert.AreEqual(DialogFailureKind.SemanticInputLimitExceeded, result.Failure!.Kind);
+                Assert.AreEqual(0, candidatePorts.QueryCount);
+                Assert.AreEqual(0, candidatePorts.Commands.Count);
             }
         }
     }
@@ -357,9 +442,9 @@ public sealed class DialogTransitionRuntimeTests
     {
         var document = DlgReader.Read(Bytes(
             Record("100", action: "QU 1 1; QU 2 2; QU 3 3")
-            + Record("200", iq: "1", response: "300", action: "LF 1 1; LF 2 0")
+            + Record("200", iq: "1", response: "300", action: "LF 1 1; LF 2 0; LF 3 1")
             + Record("300", action: "RU 1000; RU 1001; RU 1002")));
-        for (var ordinal = 1; ordinal <= 8; ordinal++)
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
         {
             var ports = new Ports { RejectAt = ordinal };
             var start = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
@@ -400,7 +485,8 @@ public sealed class DialogTransitionRuntimeTests
         foreach (var action in new[]
         {
             "LF -1 0", "LF 32 0", "LF 1 2", "QU 1 -1", "QU 1 7", "RU 999",
-            "QU 2147483648 0", "RU 2147483648", "LF 1", "RU 1000 0", "LF 1 0\x01",
+            "QU 2147483648 0", "QU -2147483649 0", "RU 2147483648", "LF 1", "RU 1000 0",
+            "LF 1 0QU 2 2", "LF 1 0\x01", "LF 1 0\x80",
         })
         {
             var ports = new Ports();
@@ -409,6 +495,24 @@ public sealed class DialogTransitionRuntimeTests
             Assert.AreEqual(DialogFailureKind.InvalidOperation, start.Failure!.Kind, action);
             Assert.AreEqual(0, ports.Commands.Count, action);
         }
+
+        foreach (var action in new[] { "ZZ1 0", "SC1 0", "SCR1 0" })
+        {
+            var ports = new Ports();
+            var document = DlgReader.Read(Bytes(Record("100", action: action) + Record("200", iq: "1", response: "0")));
+            var start = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
+            Assert.AreEqual(DialogFailureKind.UnsupportedOperation, start.Failure!.Kind, action);
+            Assert.AreEqual(0, ports.QueryCount, action);
+            Assert.AreEqual(0, ports.Commands.Count, action);
+        }
+
+        var leadingZeroPorts = new Ports();
+        var leadingZeroDocument = DlgReader.Read(Bytes(
+            Record("100", action: "LF00 -0; QU-0 0; RU01000") + Record("200", iq: "1", response: "0")));
+        Assert.AreEqual(
+            DialogStartStatus.AwaitingSelection,
+            DialogTransitionRuntime.Start(leadingZeroDocument, Request(100, 200), leadingZeroPorts, leadingZeroPorts).Status);
+        CollectionAssert.AreEqual(new[] { "LF:0:0:900", "QU:0:0:900", "RU:1000" }, leadingZeroPorts.Commands);
     }
 
     [TestMethod]
@@ -627,6 +731,7 @@ public sealed class DialogTransitionRuntimeTests
     {
         public Dictionary<int, LocalFlagReadResult> Flags { get; } = [];
         public List<string> Commands { get; } = [];
+        public List<LocalFlagQuery> Queries { get; } = [];
         public int QueryCount { get; private set; }
         public int? RejectAt { get; init; }
         public int? ThrowAt { get; init; }
@@ -639,6 +744,7 @@ public sealed class DialogTransitionRuntimeTests
 
         public LocalFlagReadResult Read(LocalFlagQuery query)
         {
+            Queries.Add(query);
             QueryCount++;
             if (ThrowOnRead)
             {

@@ -167,16 +167,16 @@ public static class DialogTransitionRuntime
         {
             return parsed;
         }
+        budget.AdmitField(record, field);
         if (field.Length == 0)
         {
             parsed = new ParsedField(Array.Empty<DialogOperationPlan>(), 0);
         }
         else
         {
-            parsed = DialogOperationParser.Parse(record, field, condition, options);
+            parsed = DialogOperationParser.Parse(record, field, condition, options, budget.AdmitOperation);
         }
         cache.Add(key, parsed);
-        budget.Add(record, field, parsed);
         return parsed;
     }
 
@@ -194,20 +194,33 @@ public static class DialogTransitionRuntime
 
     private sealed class StepBudget(DialogRuntimeOptions options)
     {
-        private int _bytes;
-        private int _operations;
+        private long _bytes;
+        private long _operations;
 
-        internal void Add(DlgRecord record, DlgField field, ParsedField parsed)
+        internal void AdmitField(DlgRecord record, DlgField field)
         {
-            _bytes = checked(_bytes + parsed.SemanticBytes);
-            _operations = checked(_operations + parsed.Operations.Count);
+            _bytes += field.Length;
             if (_bytes > options.MaxSemanticInputBytes)
             {
-                throw StaticFailure(DialogFailureKind.SemanticInputLimitExceeded, record, field);
+                throw new DialogOperationParseException(
+                    DialogFailureKind.SemanticInputLimitExceeded,
+                    new DialogOperationSource(
+                        new DialogNodeId(record.Id),
+                        record.SerializedIndex,
+                        field.Kind,
+                        field.PayloadOffset,
+                        0,
+                        field.Length,
+                        0));
             }
+        }
+
+        internal void AdmitOperation(DialogOperationSource source)
+        {
+            _operations++;
             if (_operations > options.MaxOperationsPerTransition)
             {
-                throw StaticFailure(DialogFailureKind.OperationLimitExceeded, record, field);
+                throw new DialogOperationParseException(DialogFailureKind.OperationLimitExceeded, source);
             }
         }
     }
