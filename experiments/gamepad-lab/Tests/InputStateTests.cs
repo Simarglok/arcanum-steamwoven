@@ -34,6 +34,10 @@ internal static class InputStateTests
         var processClock = new InputContext(Delta: 1d / 60, AdvanceTime: true);
         for (var i = 0; i < 7; i++) method.Reduce(new(7, new(.6, 0)), processClock); Assertions.Equal(method.Method, InputMethod.Gamepad, "meaningful stick threshold after 100ms of frames");
         method.Reduce(new(-1, default, Keyboard: true), c); Assertions.Equal(method.Method, InputMethod.KeyboardMouse, "keyboard switches method");
+        method.Reduce(new(7, new(.6, 0)), processClock); Assertions.Equal(method.Method, InputMethod.KeyboardMouse, "held qualified stick does not revert a fresh keyboard method");
+        method.Reduce(new(7, default), processClock);
+        for (var i = 0; i < 7; i++) method.Reduce(new(7, new(.6, 0)), processClock);
+        Assertions.Equal(method.Method, InputMethod.Gamepad, "released then re-qualified stick can select gamepad method again");
 
         var mouse = new InputStateReducer(); mouse.SetStartupDevices(new[] { 1 }); mouse.Reduce(new(1, default, Confirm: true), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "digital press establishes gamepad method");
         mouse.Reduce(new(-1, default, MouseLogicalDistance: 2), c); mouse.Reduce(new(-1, default, MouseLogicalDistance: 2), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "sub-threshold mouse travel does not switch");

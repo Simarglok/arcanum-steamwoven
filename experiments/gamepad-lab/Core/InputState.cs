@@ -29,6 +29,11 @@ public sealed class InputStateReducer
     // itself. Keyboard/no-device frames cannot make a held controller safe.
     private bool _requiresActiveNeutral;
     private double _gamepadMotionSeconds;
+    // A stick excursion can select Gamepad once after it has been meaningful for
+    // 100ms. It must return below threshold before the same held excursion may
+    // select the method again, otherwise it would reclaim a later keyboard/mouse
+    // method switch every sampled frame.
+    private bool _gamepadStickQualified;
     private double _mouseMotionSeconds;
     private double _mouseLogicalDistance;
 
@@ -44,7 +49,7 @@ public sealed class InputStateReducer
     public void Reset() => Quarantine();
     public void Quarantine()
     {
-        _held.Clear(); _armed = false; _neutralSeen = false; _gamepadMotionSeconds = 0;
+        _held.Clear(); _armed = false; _neutralSeen = false; _gamepadMotionSeconds = 0; _gamepadStickQualified = false;
         _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
         _requiresActiveNeutral = _activeDevice is not null;
     }
@@ -70,9 +75,19 @@ public sealed class InputStateReducer
         if (isJoy && raw.DeviceId != _activeDevice) return Empty(provenance);
 
         var processed = Vec2.CircularDeadzone(raw.Stick, context.Deadzone);
+        var freshStickQualification = false;
         if (context.AdvanceTime)
         {
-            _gamepadMotionSeconds = isJoy && processed.Length >= .25 ? _gamepadMotionSeconds + context.Delta : 0;
+            if (isJoy && processed.Length >= .25)
+            {
+                _gamepadMotionSeconds += context.Delta;
+                if (!_gamepadStickQualified && _gamepadMotionSeconds >= .1)
+                {
+                    _gamepadStickQualified = true;
+                    freshStickQualification = true;
+                }
+            }
+            else { _gamepadMotionSeconds = 0; _gamepadStickQualified = false; }
             if (_mouseLogicalDistance > 0)
             {
                 _mouseMotionSeconds += context.Delta;
@@ -127,7 +142,7 @@ public sealed class InputStateReducer
                 _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
             }
         }
-        if (isJoy && (freshControllerPress || _gamepadMotionSeconds >= .1))
+        if (isJoy && (freshControllerPress || freshStickQualification))
         {
             Method = InputMethod.Gamepad;
             _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;

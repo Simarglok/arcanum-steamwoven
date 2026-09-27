@@ -163,6 +163,16 @@ public partial class LabRoot : Node2D
             _Process(0);
             VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "held D-pad level reverted keyboard method");
             Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = false }, VerificationMode.Simulation); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad, "qualified active stick did not select gamepad method");
+            PressKey(Key.D); ReleaseKey(Key.D); _Process(0);
+            VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.PromptText.Contains("[Enter]", StringComparison.Ordinal), "fresh keyboard event did not change the qualified-stick prompt");
+            _Process(.1);
+            VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "held qualified stick reverted keyboard method or prompt");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad, "released and re-qualified stick did not restore gamepad method");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
 
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
             _Process(0); _Process(0); var selectedBefore = _hud.SelectedIndex; PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu did not move immediately in process");
