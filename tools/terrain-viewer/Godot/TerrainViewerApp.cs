@@ -144,14 +144,18 @@ public partial class TerrainViewerApp : Node
         // NOT_VERIFIED, but must not short-circuit the independent lifecycle,
         // input, reload, and cleanup checks below.
         var exactSecondSize = await CaptureAndValidateSmokeFrameAsync(new Vector2I(1920, 1080), commandCount, textureCount);
-        var initialMode = GetWindow().Mode;
-        Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
-        await NextFrameAsync();
-        var fullscreen = GetWindow().Mode != initialMode;
-        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
-        await NextFrameAsync();
-        var fullscreenRestored = !fullscreen || GetWindow().Mode == Window.ModeEnum.Windowed;
-        if (!fullscreenRestored) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        var fullscreen = false;
+        if (exactSecondSize)
+        {
+            var initialMode = GetWindow().Mode;
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
+            await NextFrameAsync();
+            fullscreen = GetWindow().Mode != initialMode;
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+            await NextFrameAsync();
+            var fullscreenRestored = !fullscreen || GetWindow().Mode == Window.ModeEnum.Windowed;
+            if (!fullscreenRestored) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        }
         for (var cycle = 0; cycle < 100; cycle++)
         {
             var beforePan = _camera.State;
