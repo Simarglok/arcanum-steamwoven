@@ -131,7 +131,13 @@ editor-configured alternate SDK without changing global Godot or .NET settings:
       DOTNET_MULTILEVEL_LOOKUP=0 __GODOT_SHELL_ENV_SET=1 "$GODOT" --headless \
       --path tools/terrain-viewer/Godot --export-debug "macOS debug" "$BUILD_ROOT/ArcanumTerrainViewer.app"
     "$BUILD_ROOT/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer" --headless -- --self-test
+    "$BUILD_ROOT/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer" -- --self-test
+    "$BUILD_ROOT/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer" -- \
+      --native-smoke --native-smoke-screenshot "$BUILD_ROOT/evidence/export-native-smoke.png" \
+      --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
     codesign --verify --deep --strict --verbose=2 "$BUILD_ROOT/ArcanumTerrainViewer.app"
+    python3 -m json.tool "$BUILD_ROOT/manifest.json"
+    python3 -m json.tool artifacts/builds/ARC-RENDER-003/current.json
 
 Before treating an export as usable, inspect its Godot export log for canonical
 SDK `8.0.425` and no Homebrew SDK path, and verify `libhostfxr.dylib` exists in

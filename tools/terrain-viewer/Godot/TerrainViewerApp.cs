@@ -50,6 +50,7 @@ public partial class TerrainViewerApp : Node
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
     {
+        GD.Print($"ARC-RENDER-003 load stage=begin smoke={orchestrateSmoke}");
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
         _canvas!.ClearScene();
@@ -58,6 +59,7 @@ public partial class TerrainViewerApp : Node
         try
         {
             var result = await _coordinator.LoadAsync(requestGeneration, arguments);
+            GD.Print($"ARC-RENDER-003 load stage=decoded generation={requestGeneration}");
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     _cache.Upload(result.Textures);
@@ -66,6 +68,7 @@ public partial class TerrainViewerApp : Node
                 })) return;
             ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {arguments.SourceId} | decoded {result.Textures.Count} | {result.ElapsedMilliseconds}ms");
             if (_nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
+            GD.Print($"ARC-RENDER-003 load stage=complete generation={requestGeneration}");
         }
         catch (TerrainViewerException exception)
         {
@@ -116,11 +119,14 @@ public partial class TerrainViewerApp : Node
         GD.Print("ARC-RENDER-003 native-smoke stage=input");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
         await NextFrameAsync();
+        GD.Print("ARC-RENDER-003 native-smoke stage=input-keyboard-frame");
         var afterKeyboard = _camera.State;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
         await NextFrameAsync();
+        GD.Print("ARC-RENDER-003 native-smoke stage=input-keyboard-release-frame");
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
         await NextFrameAsync();
+        GD.Print("ARC-RENDER-003 native-smoke stage=input-wheel-frame");
         if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom || afterKeyboard.Y >= initial.Y
             || _camera.Camera.Position == initialCameraPosition || _camera.Camera.Zoom.X <= initial.Zoom
             || _status.GlobalPosition != initialHudPosition) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
@@ -129,9 +135,11 @@ public partial class TerrainViewerApp : Node
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
         await NextFrameAsync();
+        GD.Print("ARC-RENDER-003 native-smoke stage=input-drag-frame");
         var manual = _camera.State;
         if (_camera.State.FitMode || manual.X == beforeDrag.X || manual.Y == beforeDrag.Y) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         await SetSmokeWindowSizeAsync(new Vector2I(1440, 900));
+        GD.Print("ARC-RENDER-003 native-smoke stage=input-manual-resize");
         if (_camera.State != manual) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
         await NextFrameAsync();
@@ -147,6 +155,7 @@ public partial class TerrainViewerApp : Node
         var fullscreen = false;
         if (exactSecondSize)
         {
+            GD.Print("ARC-RENDER-003 native-smoke stage=fullscreen");
             var initialMode = GetWindow().Mode;
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
             await NextFrameAsync();
@@ -158,6 +167,7 @@ public partial class TerrainViewerApp : Node
         }
         for (var cycle = 0; cycle < 100; cycle++)
         {
+            if (cycle % 10 == 0) GD.Print($"ARC-RENDER-003 native-smoke stage=cycle-{cycle}");
             var beforePan = _camera.State;
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
             await NextFrameAsync();
@@ -184,9 +194,18 @@ public partial class TerrainViewerApp : Node
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
         var disposedBeforeReload = _cache.DisposedCount;
+        GD.Print("ARC-RENDER-003 native-smoke stage=reload-input");
+        var previousLoad = _lastLoad;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.L, Pressed = true });
+        // ParseInputEvent queues _Input. Yield before reading _lastLoad so we
+        // await the load started by the actual L route, rather than deadlocking
+        // on this still-running native-smoke task from the initial load.
+        await NextFrameAsync();
+        if (ReferenceEquals(previousLoad, _lastLoad)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        GD.Print("ARC-RENDER-003 native-smoke stage=reload-await");
         await (_lastLoad ?? Task.CompletedTask);
         await NextFrameAsync();
+        GD.Print("ARC-RENDER-003 native-smoke stage=reload-complete");
         if (_cache.DisposedCount != disposedBeforeReload + textureCount || commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount
             || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature || result.MaximumObservedConcurrency != 1
             || result.CheckedRgbaBytes <= 0 || result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter)
@@ -335,7 +354,11 @@ public partial class TerrainViewerApp : Node
             if (key.Keycode is Key.R or Key.F) _camera?.Reset(GetViewport().GetVisibleRect().Size);
             else if (key.Keycode == Key.Minus) _camera?.Zoom(0.8);
             else if (key.Keycode == Key.Plus) _camera?.Zoom(1.25);
-            else if (key.Keycode == Key.L && _arguments is not null) _lastLoad = StartLoadAsync(_arguments, false);
+            else if (key.Keycode == Key.L && _arguments is not null)
+            {
+                GD.Print("ARC-RENDER-003 input=L reload");
+                _lastLoad = StartLoadAsync(_arguments, false);
+            }
             else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
             else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
         }
