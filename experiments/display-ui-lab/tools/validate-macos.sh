@@ -2,6 +2,7 @@
 set -eu
 
 candidate_root=$(git rev-parse --show-toplevel)
+lab_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 if test -n "$(git status --porcelain)"; then
@@ -22,12 +23,12 @@ export PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin"
 export __GODOT_SHELL_ENV_SET=1
 
 mkdir -p "$build_root/evidence/screenshots"
-"$DOTNET" restore "$candidate_root/Arcanum.Experiments.DisplayUiLab.csproj" --locked-mode
-"$DOTNET" build "$candidate_root/Arcanum.Experiments.DisplayUiLab.csproj" --no-restore
-"$GODOT" --verbose --headless --path "$candidate_root" --editor --build-solutions --quit
-"$GODOT" --headless --path "$candidate_root" -- --run-layout-matrix --report "$build_root/evidence/layout-matrix.json"
-"$GODOT" --path "$candidate_root" -- --capture-evidence "$build_root/evidence/screenshots"
-"$GODOT" --headless --path "$candidate_root" --export-debug "macOS debug" "$build_root/DisplayUiLab.app"
+"$DOTNET" restore "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --locked-mode
+"$DOTNET" build "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --no-restore
+"$GODOT" --verbose --headless --path "$lab_root" --editor --build-solutions --quit
+"$GODOT" --headless --path "$lab_root" -- --run-layout-matrix --report "$build_root/evidence/layout-matrix.json"
+"$GODOT" --path "$lab_root" -- --capture-evidence "$build_root/evidence/screenshots"
+"$GODOT" --headless --path "$lab_root" --export-debug "macOS debug" "$build_root/DisplayUiLab.app"
 "$build_root/DisplayUiLab.app/Contents/MacOS/Display UI Lab" --headless -- --run-layout-matrix --report "$build_root/evidence/exported-layout-matrix.json"
 /usr/bin/plutil -lint "$build_root/DisplayUiLab.app/Contents/Info.plist"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/DisplayUiLab.app"
