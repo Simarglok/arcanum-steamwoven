@@ -19,7 +19,11 @@ public static class TerrainLoader
         var parsed = ParseSector(sectorBytes, limits);
         var tileNames = TileNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.TileMesEntryPath, "tile MES", limits.MaxMesDecodedEntryBytes), limits));
         var facadeNames = FacadeNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.FacadeMesEntryPath, "facade MES", limits.MaxMesDecodedEntryBytes), limits));
-        var resourceIndex = resourceSource.Archive.Entries.GroupBy(NormalizeEntry).ToDictionary(g => g.Key, g => g.ToArray(), StringComparer.Ordinal);
+        var resourceIndex = resourceSource.Archive.Entries
+            .Select(entry => (Entry: entry, Name: NormalizeEntry(entry)))
+            .Where(item => item.Name is not null)
+            .GroupBy(item => item.Name!, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.Select(item => item.Entry).ToArray(), StringComparer.Ordinal);
         var cache = new Dictionary<int, MetadataResult>();
         var outcomes = new TerrainCellOutcome[limits.ExactCellCount];
         for (var ordinal = 0; ordinal < parsed.Words.Length; ordinal++)
@@ -77,6 +81,19 @@ public static class TerrainLoader
         var normalizedPath = NormalizePath(Encoding.ASCII.GetBytes(logicalPath));
         if (!index.TryGetValue(normalizedPath, out var candidates) || candidates.Length == 0) return Issue(ordinal, TerrainIssueCode.MissingResource, "No selected resource entry matches the logical terrain path.", normalizedPath);
         if (candidates.Length != 1) return Issue(ordinal, TerrainIssueCode.AmbiguousResource, "Multiple selected resource entries match the logical terrain path.", normalizedPath);
+        var wasNormalizationRecovered = false;
+        if (kind == TerrainKind.Tile && rawId != lookupId)
+        {
+            try
+            {
+                var rawPath = NormalizePath(Encoding.ASCII.GetBytes(TilePath(tiles, rawId).Path));
+                wasNormalizationRecovered = rawPath != normalizedPath && !index.ContainsKey(rawPath);
+            }
+            catch (TerrainSelectionException)
+            {
+                // The normalized selector was already accepted; a raw-only selector cannot create a recovery claim.
+            }
+        }
         var entry = candidates[0];
         var metadataResult = GetMetadata(source.Archive, entry, limits, cache);
         if (metadataResult.Error is not null) return Issue(ordinal, TerrainIssueCode.UnsupportedArt, "The selected ART entry cannot be inspected within terrain limits.", normalizedPath);
@@ -95,7 +112,7 @@ public static class TerrainLoader
             var order = new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, kind == TerrainKind.Tile ? 0 : 1, localY, localX);
             var record = new TerrainRecord(ordinal, localX, localY, checked(selector.OriginX + localX), checked(selector.OriginY + localY), rawId, lookupId,
                 kind, branch, normalizedPath, identity, selection, effectivePalette, frame, projected, anchor, footprint,
-                kind == TerrainKind.Tile && (rawId & 0xC1) == 0xC1, order);
+                kind == TerrainKind.Tile && (rawId & 0xC1) == 0xC1, wasNormalizationRecovered, order);
             return new TerrainCellOutcome(ordinal, record, null);
         }
         catch (OverflowException exception) { throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Terrain coordinate arithmetic overflowed.", exception); }
@@ -154,7 +171,7 @@ public static class TerrainLoader
         var wordStart = cursor.Offset; var words = new uint[limits.ExactCellCount];
         for (var index = 0; index < words.Length; index++) words[index] = cursor.U32("tile words");
         ranges[TerrainSection.TileWords] = new TerrainByteRange(wordStart, checked(words.Length * 4));
-        var roofStart = cursor.Offset; var roof = cursor.I32("roof discriminator"); if (roof is not 0 and not 1) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The roof discriminator is unsupported."); if (roof == 0) cursor.Skip(checked(limits.MaxRoofWords * 4), "roof words"); ranges[TerrainSection.Roof] = new TerrainByteRange(roofStart, checked(cursor.Offset - roofStart));
+        var roofStart = cursor.Offset; var roof = cursor.I32("roof discriminator"); if (roof is not 0 and not 1) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The roof discriminator is unsupported."); if (roof == 0) cursor.Skip(checked(256 * 4), "roof words"); ranges[TerrainSection.Roof] = new TerrainByteRange(roofStart, checked(cursor.Offset - roofStart));
         var placeholderStart = cursor.Offset; var placeholder = cursor.I32("placeholder"); if (placeholder is < 0xAA0000 or > 0xAA0004) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "The sector placeholder is unsupported."); ranges[TerrainSection.Placeholder] = new TerrainByteRange(placeholderStart, 4);
         var scriptsStart = cursor.Offset; var scripts = 0; if (placeholder != 0xAA0000) { scripts = cursor.I32("tile script count"); if (scripts < 0 || scripts > limits.MaxTileScripts) throw new TerrainLimitExceededException("Tile script count is outside the configured limit."); cursor.Skip(checked(scripts * 24), "tile scripts"); }
         ranges[TerrainSection.TileScripts] = new TerrainByteRange(scriptsStart, checked(cursor.Offset - scriptsStart));
@@ -170,6 +187,7 @@ public static class TerrainLoader
     private static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits)
     {
         if (bytes.Length > limits.MaxMesDecodedEntryBytes) throw new TerrainLimitExceededException("MES input exceeds the decoded byte limit.");
+        if (bytes.Any(value => value > 0x7f)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains non-ASCII bytes.");
         var text = Encoding.ASCII.GetString(bytes); var result = new SortedDictionary<int, string>(); var cursor = 0;
         while (cursor < text.Length)
         {
@@ -202,9 +220,25 @@ public static class TerrainLoader
         return first < second ? ($"art\\tile\\{name1}{name2}{EdgeCodes[edge]}{(char)('a' + variation)}.art", "tile-outdoor-forward") : ($"art\\tile\\{name2}{name1}{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art", "tile-outdoor-reversed");
     }
     private static int FacadeNumber(uint id) => checked((int)((id >> 17) & 0xFF) + (((id & (1u << 27)) != 0) ? 256 : 0));
-    private static string NormalizeEntry(DatEntry entry) => NormalizePath(entry.RawNameBytes.Take(entry.RawNameBytes.Count - 1).ToArray());
+    private static string? NormalizeEntry(DatEntry entry)
+    {
+        var raw = entry.RawNameBytes;
+        if (raw.Count == 0 || raw[^1] != 0 || raw.Take(raw.Count - 1).Any(value => value > 0x7f)) return null;
+        return NormalizePath(raw.Take(raw.Count - 1).ToArray());
+    }
     private static string NormalizePath(IReadOnlyList<byte> bytes)
-    { var result = new byte[bytes.Count]; for (var i = 0; i < result.Length; i++) { var value = bytes[i]; if (value == (byte)'\\') value = (byte)'/'; if (value is >= (byte)'A' and <= (byte)'Z') value += 32; result[i] = value; } return Encoding.ASCII.GetString(result); }
+    {
+        var result = new byte[bytes.Count];
+        for (var i = 0; i < result.Length; i++)
+        {
+            var value = bytes[i];
+            if (value > 0x7f) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "A terrain pathname contains non-ASCII bytes.");
+            if (value == (byte)'\\') value = (byte)'/';
+            if (value is >= (byte)'A' and <= (byte)'Z') value += 32;
+            result[i] = value;
+        }
+        return Encoding.ASCII.GetString(result);
+    }
     private sealed record ParsedSector(uint[] Words, TerrainSectorFraming Framing);
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
     private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)

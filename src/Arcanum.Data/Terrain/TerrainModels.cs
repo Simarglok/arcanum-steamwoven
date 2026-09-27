@@ -1,3 +1,5 @@
+using System.Collections.ObjectModel;
+
 namespace Arcanum.Data.Terrain;
 
 public enum TerrainKind { Tile, Facade }
@@ -159,7 +161,15 @@ public sealed class TerrainSectorFraming
 {
     internal TerrainSectorFraming(IReadOnlyDictionary<TerrainSection, TerrainByteRange> ranges, int lightCount, int roofDiscriminator,
         int placeholder, int tileScriptCount, TerrainOpaqueWindow objectWindow)
-    { Ranges = ranges; LightCount = lightCount; RoofDiscriminator = roofDiscriminator; Placeholder = placeholder; TileScriptCount = tileScriptCount; ObjectWindow = objectWindow; }
+    {
+        ArgumentNullException.ThrowIfNull(ranges);
+        Ranges = new ReadOnlyDictionary<TerrainSection, TerrainByteRange>(new Dictionary<TerrainSection, TerrainByteRange>(ranges));
+        LightCount = lightCount;
+        RoofDiscriminator = roofDiscriminator;
+        Placeholder = placeholder;
+        TileScriptCount = tileScriptCount;
+        ObjectWindow = objectWindow;
+    }
     public IReadOnlyDictionary<TerrainSection, TerrainByteRange> Ranges { get; }
     public int LightCount { get; }
     public int RoofDiscriminator { get; }
@@ -176,8 +186,8 @@ public sealed class TerrainRecord
     internal TerrainRecord(int ordinal, int localX, int localY, int worldX, int worldY, uint rawId, uint lookupId, TerrainKind kind,
         string lookupBranch, string logicalPath, TerrainResourceEntryIdentity identity, ArtFrameSelection selection, int effectivePaletteSlot,
         ArtFrameMetadata frameMetadata, TerrainPoint projectedPoint, TerrainPoint diagnosticAnchor, TerrainRect diagnosticFootprint,
-        bool flipX, TerrainDiagnosticOrderKey orderKey)
-    { Ordinal = ordinal; LocalX = localX; LocalY = localY; WorldX = worldX; WorldY = worldY; RawId = rawId; LookupId = lookupId; Kind = kind; LookupBranch = lookupBranch; LogicalPath = logicalPath; ResourceIdentity = identity; Selection = selection; EffectivePaletteSlot = effectivePaletteSlot; FrameMetadata = frameMetadata; ProjectedPoint = projectedPoint; DiagnosticAnchor = diagnosticAnchor; DiagnosticFootprint = diagnosticFootprint; FlipX = flipX; DiagnosticOrderKey = orderKey; }
+        bool flipX, bool wasNormalizationRecovered, TerrainDiagnosticOrderKey orderKey)
+    { Ordinal = ordinal; LocalX = localX; LocalY = localY; WorldX = worldX; WorldY = worldY; RawId = rawId; LookupId = lookupId; Kind = kind; LookupBranch = lookupBranch; LogicalPath = logicalPath; ResourceIdentity = identity; Selection = selection; EffectivePaletteSlot = effectivePaletteSlot; FrameMetadata = frameMetadata; ProjectedPoint = projectedPoint; DiagnosticAnchor = diagnosticAnchor; DiagnosticFootprint = diagnosticFootprint; FlipX = flipX; WasNormalizationRecovered = wasNormalizationRecovered; DiagnosticOrderKey = orderKey; }
     public int Ordinal { get; }
     public int LocalX { get; }
     public int LocalY { get; }
@@ -196,6 +206,8 @@ public sealed class TerrainRecord
     public TerrainPoint DiagnosticAnchor { get; }
     public TerrainRect DiagnosticFootprint { get; }
     public bool FlipX { get; }
+    /// <summary>True only when the raw tile lookup path had no candidate and its normalized lookup path resolved uniquely.</summary>
+    public bool WasNormalizationRecovered { get; }
     public TerrainDiagnosticOrderKey DiagnosticOrderKey { get; }
 }
 public sealed class TerrainCellOutcome

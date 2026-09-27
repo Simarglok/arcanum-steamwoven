@@ -18,14 +18,14 @@ Fatal structural, selection, limit, unsupported-profile, and identity failures u
 
 ## `terrain-inspect` CLI
 
-The minimal aggregate-only CLI fixes the documented Crash Site selector and requires explicit inputs:
+The minimal aggregate-only CLI fixes the documented Crash Site selector, entry metadata, and full immutable module/resource SHA-256 values; it requires explicit inputs:
 
     dotnet run --project tools/terrain-inspect/terrain-inspect.csproj -- \
       --module <module.dat> --resource <arcanum2.dat> --source-id <label> \
       [--expect-module-sha256 <sha256>] [--expect-resource-sha256 <sha256>]
 
-`--help` exits 0. Invalid usage exits 2. A complete aggregate JSON report exits 0; a well-formed partial report exits 3; I/O, format, limit, integrity, and selection failures exit 1. Standard output is one deterministic aggregate JSON document containing schema version, fixed selector/framing, source ID, hashes, aggregate counts, issue totals, frame validation count, and normalization counts. It never emits input paths, object bytes, MES values, full ART-name corpora, original payloads, or stack traces. Standard error contains only a safe exception type and terrain code where available.
+`--help` exits 0. Invalid usage exits 2. A complete aggregate JSON report exits 0; a well-formed partial report exits 3; I/O, format, limit, integrity, and selection failures exit 1. Standard output is one deterministic aggregate JSON document containing schema version, fixed selector/framing, source ID, hashes, aggregate counts, issue totals, frame validation count, and normalization counts. A normalization recovery is counted only when the raw tile-derived path has zero candidates and the normalized lookup path resolves uniquely; it is not inferred merely because raw and lookup IDs differ. It never emits input paths, object bytes, MES values, full ART-name corpora, original payloads, or stack traces. Standard error contains only a safe exception type and terrain code where available.
 
 ## Evidence, provenance, and integration boundary
 
-The fixed profile is documented by `docs/research/crash-site-{slice,framing,terrain-resolution,evidence}.md`; its framing and resource rules are attributed to the pinned CE source lineage `a7ff41b300ef712f0e7d088183a3d08957110cdd`, not copied implementation or independent corroboration. The opt-in real-data boundary is caller-supplied data only. It should compare the documented full immutable module/resource fingerprints before and after and confirm the 4,096 aggregate (3,033 tile, 1,063 facade), zero issues, selected frames, and normalization aggregate without committing or logging original content.
+The fixed profile is documented by `docs/research/crash-site-{slice,framing,terrain-resolution,evidence}.md`; its framing and resource rules are attributed to the pinned CE source lineage `a7ff41b300ef712f0e7d088183a3d08957110cdd`, not copied implementation or independent corroboration. The opt-in real-data boundary is caller-supplied data only. It compares the documented full immutable module/resource fingerprints before and after and confirms the 4,096 aggregate (3,033 tile, 1,063 facade), zero issues, selected frames, and 457 recovered cells across 86 recovered lookup IDs without committing or logging original content.

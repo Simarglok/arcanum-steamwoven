@@ -10,6 +10,8 @@ internal static class Program
     private const string ModuleEntry = "maps\\Arcanum1-024-fixed\\86570436012.sec";
     private const string TileMes = "art\\tile\\tilename.mes";
     private const string FacadeMes = "art\\facade\\facadename.mes";
+    private const string CrashSiteModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
+    private const string CrashSiteResourceSha256 = "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d";
 
     private static int Main(string[] args)
     {
@@ -18,7 +20,10 @@ internal static class Program
         {
             var values = Parse(args);
             var moduleFingerprint = Fingerprint(values.Module!); var resourceFingerprint = Fingerprint(values.Resource!);
-            VerifyExpected(moduleFingerprint.Sha256, values.ModuleHash, "module"); VerifyExpected(resourceFingerprint.Sha256, values.ResourceHash, "resource");
+            VerifyExpected(moduleFingerprint.Sha256, CrashSiteModuleSha256, "module");
+            VerifyExpected(resourceFingerprint.Sha256, CrashSiteResourceSha256, "resource");
+            VerifyExpected(moduleFingerprint.Sha256, values.ModuleHash, "module");
+            VerifyExpected(resourceFingerprint.Sha256, values.ResourceHash, "resource");
             using var module = DatArchive.Open(values.Module!, BoundedDatOptions());
             using var resource = DatArchive.Open(values.Resource!, BoundedDatOptions());
             var selector = new TerrainSectorSelector(ModuleEntry, "Arcanum1-024-fixed", 1452, 1290, 86570436012, 92928, 82560, 64, 64, new TerrainEntryExpectation(463, 2, 47291));
@@ -37,7 +42,11 @@ internal static class Program
                 counts = new { cells = report.Outcomes.Count, resolved = report.ResolvedRecords.Count, issues = report.Issues.Count, tile = report.ResolvedRecords.Count(r => r.Kind == TerrainKind.Tile), facade = report.ResolvedRecords.Count(r => r.Kind == TerrainKind.Facade) },
                 issues = report.Issues.GroupBy(issue => issue.Code).OrderBy(group => group.Key).ToDictionary(group => group.Key.ToString(), group => group.Count()),
                 frameValidation = new { selected = report.ResolvedRecords.Count },
-                normalization = new { tileLookupIds = report.ResolvedRecords.Where(r => r.Kind == TerrainKind.Tile).Select(r => r.LookupId).Distinct().Count(), recoveredCells = report.ResolvedRecords.Count(r => r.Kind == TerrainKind.Tile && r.RawId != r.LookupId) }
+                normalization = new
+                {
+                    recoveredCells = report.ResolvedRecords.Count(record => record.WasNormalizationRecovered),
+                    recoveredLookupIds = report.ResolvedRecords.Where(record => record.WasNormalizationRecovered).Select(record => record.LookupId).Distinct().Count()
+                }
             };
             Console.WriteLine(JsonSerializer.Serialize(aggregate)); return report.IsComplete ? 0 : 3;
         }
