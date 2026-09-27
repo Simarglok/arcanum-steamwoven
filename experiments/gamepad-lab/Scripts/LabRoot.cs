@@ -21,12 +21,23 @@ public partial class LabRoot : Node2D
     {
         _input.EndFrame();
         RefreshSelection();
-        var sample = _adapter.Sample(_input.ActiveDevice, _focused);
-        var continuous = _input.Reduce(sample, Context(delta, _hud.ModalVisible, advanceTime: true));
-        if (!_hud.ModalVisible && continuous.Accepted && continuous.Pan != default) _world.Position += ToGodot(continuous.Pan);
-        if (_hud.ModalVisible && continuous.Accepted)
+        // Keep controller and keyboard samples separate. A held keyboard command
+        // remains keyboard provenance even while a controller is selected.
+        var controller = _adapter.SampleController(_input.ActiveDevice, _focused);
+        var intents = new List<IntentFrame>();
+        if (controller is RawInputFrame joy) intents.Add(_input.Reduce(joy, Context(delta, _hud.ModalVisible, advanceTime: true)));
+        var keyboard = _adapter.SampleKeyboard(_focused);
+        intents.Add(_input.Reduce(keyboard, Context(delta, _hud.ModalVisible, advanceTime: controller is null)));
+        foreach (var continuous in intents.Where(intent => intent.Accepted))
         {
-            var move = _menuRepeat.Update(continuous.MenuDirection, continuous.MenuAnalog, delta);
+            if (!_hud.ModalVisible && continuous.Pan != default) _world.Position += ToGodot(continuous.Pan);
+        }
+        if (_hud.ModalVisible)
+        {
+            // The repeat clock has one update per rendered frame; choosing the
+            // meaningful sampled source avoids a neutral companion sample reset.
+            var menu = intents.LastOrDefault(intent => intent.Accepted && (intent.MenuDirection != 0 || Math.Abs(intent.MenuAnalog) > .45));
+            var move = _menuRepeat.Update(menu?.MenuDirection ?? 0, menu?.MenuAnalog ?? 0, delta);
             if (move != 0) _hud.Navigate(move);
         }
         RefreshSelection(); _courtyard.SetSelected(_result!.Id);
@@ -82,7 +93,7 @@ public partial class LabRoot : Node2D
     public override void _Notification(int what)
     {
         base._Notification(what);
-        if (what == NotificationApplicationFocusOut) { _focused = false; _input.FocusChanged(false); _adapter.Clear(); _menuRepeat.Clear(); AddLog("Focus lost: levels cleared."); }
+        if (what == NotificationApplicationFocusOut) { _focused = false; _input.FocusChanged(false); _adapter.ClearKeyboard(); _menuRepeat.Clear(); AddLog("Focus lost: keyboard levels cleared; selected controller must report neutral."); }
         if (what == NotificationApplicationFocusIn) { _focused = true; _input.FocusChanged(true); AddLog("Focus regained: neutral frame required."); }
     }
     public async void RunSelfTest()
@@ -117,6 +128,8 @@ public partial class LabRoot : Node2D
             _Process(0); _Process(0); var beforeNonActive = _world.Position;
             Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = -.8f }, VerificationMode.Simulation); _Process(.1);
             VerificationMode.Require(_world.Position == beforeNonActive, "non-active controller moved world");
+            var nonActiveLog = _log.Count; Handle(new InputEventJoypadButton { Device = 5, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation);
+            VerificationMode.Require(_log.Count == nonActiveLog, "non-active controller confirmed a world action");
             var canvasBefore = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
             var canvasAfter = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
@@ -128,6 +141,7 @@ public partial class LabRoot : Node2D
             _camera.Zoom = Vector2.One; _world.Position = stepStart; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var zoomOneWorldStep = _world.Position.X - stepStart.X;
             _camera.Zoom = new Vector2(2, 2); _world.Position = stepStart; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var zoomTwoWorldStep = _world.Position.X - stepStart.X;
             VerificationMode.Require(Math.Abs(zoomOneWorldStep / 2 - zoomTwoWorldStep) < .001, "pan does not scale by camera zoom"); _camera.Zoom = initialZoom;
+            VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "keyboard sample was misclassified as controller method");
 
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
             _Process(0); _Process(0); var selectedBefore = _hud.SelectedIndex; PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu did not move immediately in process");
@@ -137,9 +151,26 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .45f }, VerificationMode.Simulation); _Process(0); var releasedSelection = _hud.SelectedIndex; _Process(.2); VerificationMode.Require(_hud.SelectedIndex == releasedSelection, "analog menu did not release at .45");
             PressKey(Key.Escape); ReleaseKey(Key.Escape); VerificationMode.Require(!_hud.ModalVisible, "modal cancel did not close exactly once");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
-            Handle(new InputEventKey { Keycode = Key.C, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.C, Pressed = false }, VerificationMode.Simulation); VerificationMode.Require(_hud.ModalKind == ModalKind.Context, "context menu did not open through adapter"); CloseModal();
+            Handle(new InputEventKey { Keycode = Key.C, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.C, Pressed = false }, VerificationMode.Simulation); VerificationMode.Require(_hud.ModalKind == ModalKind.Context, "context menu did not open through adapter"); _Process(0); _Process(0);
 
-            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var focusBefore = _world.Position; _Notification((int)NotificationApplicationFocusOut); _Process(.1); VerificationMode.Require(_world.Position == focusBefore, "focus loss retained held pan"); _Notification((int)NotificationApplicationFocusIn); _Process(0); _Process(0); OnJoyConnectionChanged(3, false); var disconnectBefore = _world.Position; _Process(.1); VerificationMode.Require(_world.Position == disconnectBefore, "active disconnect retained stale action");
+            var contextIndex = _hud.SelectedIndex; var contextWorld = _world.Position; var contextLog = _log.Count;
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = true }, VerificationMode.Simulation); _Process(0);
+            VerificationMode.Require(_hud.SelectedIndex == (contextIndex + 1) % 3 && _world.Position == contextWorld && _log.Count == contextLog, "context digital navigation leaked a world action");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = false }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .65f }, VerificationMode.Simulation); _Process(0); var contextAnalog = _hud.SelectedIndex; _Process(.35);
+            VerificationMode.Require(_hud.SelectedIndex != contextAnalog && _world.Position == contextWorld, "context analog repeat did not remain modal");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadUp, Pressed = true }, VerificationMode.Simulation); _Process(0); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadUp, Pressed = false }, VerificationMode.Simulation);
+            VerificationMode.Require(_hud.SelectedOption == "Inspect", "context adapter navigation did not select inspect");
+            var beforeContextConfirm = _log.Count; Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation);
+            VerificationMode.Require(_log.Count > beforeContextConfirm && _log.Last().Contains("Menu choice: Inspect") && _world.Position == contextWorld, "context confirmation was not routed through the adapter");
+            PressKey(Key.Escape); ReleaseKey(Key.Escape); VerificationMode.Require(!_hud.ModalVisible, "context cancel did not close through adapter");
+
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var focusBefore = _world.Position; _Notification((int)NotificationApplicationFocusOut); _Process(.1); VerificationMode.Require(_world.Position == focusBefore && _input.ActiveDevice == 3, "focus loss retained stale action or forgot selected device");
+            _Notification((int)NotificationApplicationFocusIn); _Process(.1); _Process(.1); VerificationMode.Require(_world.Position == focusBefore, "focus rearmed without neutral selected-controller sample");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_world.Position != focusBefore, "selected-controller neutral rearm did not resume input");
+            OnJoyConnectionChanged(3, false); var disconnectBefore = _world.Position; _Process(.1); VerificationMode.Require(_input.ActiveDevice is null && _world.Position == disconnectBefore, "active disconnect retained device or stale action");
             AddLog("SIMULATION self-test passed: actual adapter arbitration, canvas projection, responsive bounds, modal repeat and lifecycle clearing."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
@@ -155,7 +186,7 @@ public partial class LabRoot : Node2D
             for (var step = 0; step < 3; step++) { PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); }
             VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to reset"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
             VerificationMode.Require(confirmed && inspected && _deadzone == .2 && _sensitivity == 1 && _log.Any(line => line.Contains("Defaults reset")), "smoke did not prove confirm, inspect, and reset transitions");
-            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, selection = _result?.Id ?? "Ground", exercises = new[] { "scene", "selection", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = "Not verified" })); GetTree().Quit(0);
+            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, selection = _result?.Id ?? "Ground", exercises = new[] { "scene", "selection", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }

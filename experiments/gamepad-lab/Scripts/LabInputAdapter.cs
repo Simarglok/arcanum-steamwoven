@@ -48,25 +48,15 @@ public sealed class LabInputAdapter
         return KeyboardFrame(focused, false, false);
     }
 
-    public RawInputFrame Sample(int? activeDevice, bool focused)
+    /// <summary>Samples only the selected controller. Keyboard is deliberately
+    /// separate so its held levels never acquire controller provenance.</summary>
+    public RawInputFrame? SampleController(int? activeDevice, bool focused)
     {
-        var keyboard = KeyboardFrame(focused, false, false);
-        if (activeDevice is not int device || !_devices.ContainsKey(device)) return keyboard;
-        var joy = FromDevice(device, focused);
-        // Active-controller filtering applies to joypad state, not to keyboard
-        // accessibility. Merge semantic keyboard levels into the sampled frame so
-        // modal repeat and held keyboard pan continue to work with a controller on.
-        return joy with
-        {
-            KeyboardPan = keyboard.KeyboardPan,
-            Confirm = joy.Confirm || keyboard.Confirm, Cancel = joy.Cancel || keyboard.Cancel,
-            Inspect = joy.Inspect || keyboard.Inspect, Previous = joy.Previous || keyboard.Previous,
-            Next = joy.Next || keyboard.Next, Context = joy.Context || keyboard.Context,
-            Settings = joy.Settings || keyboard.Settings, MenuUp = joy.MenuUp || keyboard.MenuUp,
-            MenuDown = joy.MenuDown || keyboard.MenuDown
-        };
+        return activeDevice is int device && _devices.ContainsKey(device) ? FromDevice(device, focused) : null;
     }
+    public RawInputFrame SampleKeyboard(bool focused) => KeyboardFrame(focused, false, false, includeHeldSource: true);
     public void ForgetDevice(int device) => _devices.Remove(device);
+    public void ClearKeyboard() => _keys.Clear();
     public void Clear() { _keys.Clear(); _devices.Clear(); }
 
     private DeviceState State(int device) => _devices.TryGetValue(device, out var state) ? state : _devices[device] = new DeviceState();
@@ -78,15 +68,16 @@ public sealed class LabInputAdapter
             Previous: Has(JoyButton.LeftShoulder), Next: Has(JoyButton.RightShoulder), Settings: Has(JoyButton.Start),
             MenuUp: Has(JoyButton.DpadUp), MenuDown: Has(JoyButton.DpadDown), Focused: focused);
     }
-    private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo)
+    private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo, bool includeHeldSource = false)
     {
         bool Has(Key key) => _keys.Contains(key);
         var pan = new Vec2((Has(Key.D) || Has(Key.Right) ? 1 : 0) - (Has(Key.A) || Has(Key.Left) ? 1 : 0), (Has(Key.S) || Has(Key.Down) ? 1 : 0) - (Has(Key.W) || Has(Key.Up) ? 1 : 0));
+        var heldSource = includeHeldSource && _keys.Count > 0;
         return new RawInputFrame(-1, default,
             Confirm: Has(Key.Enter) || Has(Key.Space), Cancel: Has(Key.Escape) || Has(Key.Backspace), Inspect: Has(Key.I),
             Previous: Has(Key.Q), Next: Has(Key.E), Context: Has(Key.C), Settings: Has(Key.F1),
             MenuUp: Has(Key.Up) || Has(Key.W), MenuDown: Has(Key.Down) || Has(Key.S), Focused: focused,
-            Keyboard: keyboardEvent, Echo: echo, KeyboardPan: pan);
+            Keyboard: keyboardEvent || heldSource, Echo: echo, KeyboardPan: pan);
     }
     public static void EnsureInputMap()
     {

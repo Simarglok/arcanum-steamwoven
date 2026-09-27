@@ -25,13 +25,20 @@ public sealed class InputStateReducer
     private readonly HashSet<int> _activationCandidates = [];
     private bool _armed = true;
     private bool _neutralSeen;
+    // Focus/reset/menu quarantine must be discharged by the selected controller
+    // itself. Keyboard/no-device frames cannot make a held controller safe.
+    private bool _requiresActiveNeutral;
     private double _gamepadMotionSeconds;
     private double _mouseMotionSeconds;
     private double _mouseLogicalDistance;
 
     public int? ActiveDevice => _activeDevice;
     public InputMethod Method { get; private set; } = InputMethod.KeyboardMouse;
-    public void SetStartupDevices(IEnumerable<int> ids) => _activeDevice = ids.DefaultIfEmpty(-1).Min() is var id && id >= 0 ? id : null;
+    public void SetStartupDevices(IEnumerable<int> ids)
+    {
+        _activeDevice = ids.DefaultIfEmpty(-1).Min() is var id && id >= 0 ? id : null;
+        _requiresActiveNeutral = false;
+    }
     public void Disconnect(int id) { _activationCandidates.Remove(id); if (_activeDevice == id) { _activeDevice = null; Quarantine(); } }
     public void FocusChanged(bool focused) { Quarantine(); }
     public void Reset() => Quarantine();
@@ -39,6 +46,7 @@ public sealed class InputStateReducer
     {
         _held.Clear(); _armed = false; _neutralSeen = false; _gamepadMotionSeconds = 0;
         _mouseMotionSeconds = 0; _mouseLogicalDistance = 0;
+        _requiresActiveNeutral = _activeDevice is not null;
     }
 
     /// <summary>Chooses exactly one controller after all events in the input frame have been observed.</summary>
@@ -73,7 +81,12 @@ public sealed class InputStateReducer
         }
         if (!_armed)
         {
-            if (!AnyLevel(raw, processed)) { if (_neutralSeen) _armed = true; else _neutralSeen = true; }
+            if (_requiresActiveNeutral && (!isJoy || raw.DeviceId != _activeDevice)) return Empty(provenance);
+            if (!AnyLevel(raw, processed))
+            {
+                if (_neutralSeen) { _armed = true; _requiresActiveNeutral = false; }
+                else _neutralSeen = true;
+            }
             else _neutralSeen = false;
             return Empty(provenance);
         }
@@ -107,8 +120,9 @@ public sealed class InputStateReducer
         };
         bool Edge(string name)
         {
-            var down = pulses[name]; var edge = down && !_held.Contains(name);
-            if (down) _held.Add(name); else _held.Remove(name);
+            var sourceName = $"{raw.DeviceId}:{name}";
+            var down = pulses[name]; var edge = down && !_held.Contains(sourceName);
+            if (down) _held.Add(sourceName); else _held.Remove(sourceName);
             return edge;
         }
 

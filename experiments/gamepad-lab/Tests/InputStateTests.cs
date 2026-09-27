@@ -48,7 +48,12 @@ internal static class InputStateTests
         Assertions.True(!reducer.Reduce(new(8, new(1, 0)), c).Accepted && !reducer.Reduce(new(3, new(1, 0)), c).Accepted, "same-frame activation candidates are consumed");
         reducer.EndFrame(); Assertions.Equal(reducer.ActiveDevice!.Value, 3, "lowest meaningful same-frame device is selected");
         reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Confirm: true), c).Confirm, "neutral quarantine arms after complete frame");
-        reducer.FocusChanged(false); Assertions.True(!reducer.Reduce(new(3, default, Confirm: true, Focused: false), c).Accepted, "focus loss suppresses held intent"); reducer.FocusChanged(true); reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Confirm: true), c).Confirm, "focus neutral clearing prevents stale edge");
+        reducer.FocusChanged(false); Assertions.True(!reducer.Reduce(new(3, default, Confirm: true, Focused: false), c).Accepted, "focus loss suppresses held intent");
+        reducer.FocusChanged(true); reducer.Reduce(new(-1, default), c); reducer.Reduce(new(-1, default), c);
+        Assertions.True(!reducer.Reduce(new(3, default, Confirm: true), c).Accepted, "keyboard or no-device frames cannot rearm a selected controller after focus");
+        reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Confirm: true), c).Confirm, "fresh selected-controller neutral frames rearm focus quarantine");
+        var provenance = new InputStateReducer(); provenance.SetStartupDevices(new[] { 6 }); provenance.Reduce(new(6, default, Confirm: true), c); Assertions.Equal(provenance.Method, InputMethod.Gamepad, "controller digital source selects gamepad method");
+        provenance.Reduce(new(-1, default, Keyboard: true, Confirm: true), c); Assertions.Equal(provenance.Method, InputMethod.KeyboardMouse, "keyboard source remains keyboard with controller active");
         reducer.Reset(); reducer.Reduce(new(3, default), c); reducer.Reduce(new(3, default), c); Assertions.True(reducer.Reduce(new(3, default, Settings: true), c).Settings, "reset clears held state");
         var modal = new InputStateReducer(); modal.SetStartupDevices(new[] { 1 }); var modalIntent = modal.Reduce(new(1, new(1, 0), Confirm: true), new InputContext(Modal: true)); Assertions.True(modalIntent.Pan == default && modalIntent.Confirm, "modal suppresses world pan but preserves UI confirmation");
 
