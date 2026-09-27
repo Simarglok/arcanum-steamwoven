@@ -111,6 +111,12 @@
         "dependencies": {
           "SharpZipLib": "[1.4.2, )"
         }
+      },
+      "terrain-inspect": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )"
+        }
       }
     }
   }
