@@ -41,6 +41,40 @@ Services are admitted only through selected evidence and are classified as:
 | `transition` | direct DLG target, exit, or special tag | positive/zero/negative serialized values are source facts; only a structurally validated positive direct target could be admitted |
 | `unsupported` | generated menu, barter, UI, full SCR, callback-shaped `SC`, or unrecognized operation | fail closed; callback needs a later SCR/event bridge |
 
+## ARC-RES-006 selected service proposal
+
+This proposal extends the older unsupported `01324Virgil` structural-start
+record only for the separately evidenced N30 -> P31 -> Direct(N50) slice. It is
+not a runtime implementation and no original parameter values or expressions
+are represented here.
+
+```text
+LocalFlagQuery(DialogId, NpcParticipantId, localFlagIndex) -> 0 | 1 | missing
+LocalFlagWrite(DialogId, NpcParticipantId, localFlagIndex, newValue)
+QuestStateCommand(PcParticipantId, questId, questState, NpcParticipantId)
+RumorLogCommand(PcParticipantId, rumorId)
+DirectTransition(TargetNpcNodeId)
+```
+
+`DialogQueryPort` admits only `LocalFlagQuery` and cannot mutate state.
+`DialogCommandPort` admits the three typed commands above. The bounded proposal
+uses local-flag index `0..31` and boolean values `0..1`, quest-state range
+`0..6`, and rumor ID domain `>=1000`. It does not infer quest monotonicity,
+failure semantics outside the command result, rumor availability/quell/history,
+or any global/player-local flag behavior.
+
+For the selected slice, N30 `QU(int,int)` issues `QuestStateCommand` before
+response enumeration. P31 passes gender/IQ eligibility before its
+`LF(int,int)` condition queries N30's dialog-attached local state. Only a true
+condition exposes P31. After caller selection, P31 `LF(int,int)` issues
+`LocalFlagWrite`, then the positive serialized edge is structurally resolved as
+`Direct(N50)`, and N50 `RU(int)` issues `RumorLogCommand`. The walk stops at
+N50's next decision frontier. Failure of an invalid/unknown operation,
+malformed/out-of-policy parameters, missing/wrong-role target, missing query, or
+command returns a fail-closed no-effect/no-transition result. This is an
+independently authored project proposal tested with synthetic fixtures, not a
+claim about original runtime failure handling.
+
 ## Source-derived phase order
 
 For a future proven slice, the phase order is proposed from the pinned CE
@@ -109,6 +143,27 @@ result: `True` for the synthetic eligibility check; command result:
 and state is unchanged. Transition: blocked as `Unsupported`/`Invalid`, never
 `Direct(N250)`; a later direct response is not selected past that fixed stop.
 
+### Selected N30 -> P31 -> N50 proposal (synthetic fixture)
+
+The test fixture uses invented N100/P200/N300 identifiers and invented state
+values; these names only mirror the selected operation positions, not original
+dialogue content. Before the walk, the typed query port holds one NPC/dialog
+local flag and the command log is empty.
+
+1. N100 runs its ordered QU command list through the command port before any
+   response is exposed.
+2. P200 first passes the synthetic gender/IQ gate, then LF reads the typed
+   NPC/dialog local flag. A false or missing read hides P200; no P200 LF write,
+   RU command, or transition occurs.
+3. On P200 selection, its LF write runs before target resolution. A failed
+   write blocks the direct transition and prevents the target RU command.
+4. The direct target is checked as N300/NPC, then N300 runs RU through the PC
+   log command port and the walk stops at its next frontier.
+
+The self-test also uses multiple invented QU actions to prove command order,
+asserts PC/NPC/dialog participant routing, and separately retains structural
+direct/exit/special classification. It never executes original game dialogue.
+
 ## Readiness split
 
 **DLG-reader readiness: Blocked.** The physical seven-field subset, policy
@@ -123,3 +178,13 @@ bounded reader, not a rejection of the measured physical structure.
 ordering, every operation meaning, callback/SCR bridge, transition semantics,
 and each query/command service need separate evidence. Neither a reader
 self-test nor a structural research-selected start proves runtime behaviour.
+
+### ARC-RES-006 readiness update
+
+**Physical DLG reader: Ready** for its stated bounded byte-preserving subset.
+**Selected semantic subset: proposal/synthetic-ready** for only LF condition,
+QU/LF/RU commands, and a checked positive direct edge; the real hashed slice is
+structurally validated but its execution is not observed. **Actual in-game
+conversation: Blocked** by runtime entry/invocation, identity, precedence,
+generated dialogue, SCR bridge, nonselected operations, game services/UI and
+gameplay. These three verdicts are deliberately independent.

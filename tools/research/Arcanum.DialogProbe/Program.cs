@@ -28,16 +28,22 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (bounded seven-field DLG grammar, reference classification, and zero-read selector rejections)");
+                Console.WriteLine("self-test: PASS (bounded seven-field DLG grammar, selected LF/QU/RU/direct proposal, reference classification, and zero-read selector rejections)");
                 return 0;
             }
 
-            if (args.Length != 4 || args[0] != "--module" || args[2] != "--resource")
+            if (args.Length is not (4 or 8) || args[0] != "--module" || args[2] != "--resource" ||
+                (args.Length == 8 && args[4] != "--semantic-slice"))
             {
-                throw new ArgumentException("usage: --self-test | --module PATH --resource RAW_DLG_ID");
+                throw new ArgumentException("usage: --self-test | --module PATH --resource RAW_DLG_ID [--semantic-slice NPC_ID PLAYER_ID TARGET_NPC_ID]");
             }
 
-            Probe(args[1], args[3]);
+            SelectedSlice? selectedSlice = null;
+            if (args.Length == 8)
+            {
+                selectedSlice = SelectedSlice.Parse(args[5], args[6], args[7]);
+            }
+            Probe(args[1], args[3], selectedSlice);
             return 0;
         }
         catch (Exception exception)
@@ -47,7 +53,7 @@ internal static class Program
         }
     }
 
-    private static void Probe(string archivePath, string rawResource)
+    private static void Probe(string archivePath, string rawResource, SelectedSlice? selectedSlice)
     {
         var expectedName = ParseResourceSelector(rawResource);
         var before = InputFingerprint.Create(archivePath);
@@ -72,6 +78,11 @@ internal static class Program
         foreach (var row in graph.Rows)
         {
             Console.WriteLine($"slice node_id={row.NodeId} role={row.Role.ToString().ToLowerInvariant()} edge_status={row.EdgeStatus} condition={row.ConditionClass} action={row.ActionClass} required_service={row.RequiredService} note={row.Note}");
+        }
+        if (selectedSlice is not null)
+        {
+            var summary = SelectedSemanticSlice.Validate(document, selectedSlice);
+            Console.WriteLine($"semantic-slice npc_node={summary.NpcNodeId} player_node={summary.PlayerNodeId} target_node={summary.TargetNodeId} condition={summary.Condition} npc_actions={summary.NpcActions} player_actions={summary.PlayerActions} target_actions={summary.TargetActions} transition={summary.Transition} validation=pass");
         }
         Console.WriteLine("integrity before_after_match=true");
     }
@@ -182,6 +193,7 @@ internal static class Program
         AssertSelectorRejectsWithoutPayload("dlg\\.dlg");
         AssertSelectorRejectsWithoutPayload("dlg\\é.dlg");
         AssertSyntheticArchiveSelection();
+        AssertSelectedSemanticSlice();
     }
 
     private static void AssertSyntheticArchiveSelection()
@@ -323,6 +335,65 @@ internal static class Program
         });
     }
 
+    private static void AssertSelectedSemanticSlice()
+    {
+        var slice = new SelectedSlice(100, 200, 300);
+        var participants = new SliceParticipants(new DialogId(7), new ParticipantId(8), new ParticipantId(9));
+        var document = DlgDocument.Parse(Bytes("{100}{synthetic-npc}{}{}{}{0}{QU 10, 2; QU 11, 3}{200}{synthetic-player}{}{1}{LF 4, 1}{300}{LF 4, 0}{300}{synthetic-target}{}{}{}{0}{RU 1000}"));
+        var summary = SelectedSemanticSlice.Validate(document, slice);
+        Assert(summary.Condition == "LF(int,int)" && summary.Transition == "Direct(target NPC)", "selected semantic validation did not expose only type/arity categories");
+
+        var state = new SyntheticState();
+        state.Set(new LocalFlagQuery(participants.Dialog, participants.Npc, 4), 1);
+        var success = SelectedSemanticSlice.Execute(document, slice, participants, state, state, genderAndIqEligible: true, selectedResponseId: 200);
+        Assert(success is { Visible: true, Transitioned: true, Outcome: "direct-target-entered" }, "successful selected semantic walkthrough did not transition");
+        Assert(state.QuestCommands.Count == 2 && state.LocalWrites.Count == 1 && state.RumorCommands.Count == 1, "ordered QU/LF/RU commands were not all invoked");
+        Assert(state.QuestCommands.All(command => command.Pc == participants.Pc && command.NpcContext == participants.Npc) && state.LocalWrites.All(command => command.Dialog == participants.Dialog && command.Npc == participants.Npc) && state.RumorCommands.All(command => command.Pc == participants.Pc), "selected operation commands were routed to the wrong participant");
+        Assert(state.Read(new LocalFlagQuery(participants.Dialog, participants.Npc, 4)) == 0, "selected LF action did not update the NPC/dialog local state after selection");
+        Assert(state.Sequence.SequenceEqual(["QU", "QU", "LF", "RU"]), "selected command ordering was not QU before LF before RU");
+
+        var falseState = new SyntheticState();
+        falseState.Set(new LocalFlagQuery(participants.Dialog, participants.Npc, 4), 0);
+        var hidden = SelectedSemanticSlice.Execute(document, slice, participants, falseState, falseState, true, 200);
+        Assert(hidden is { Visible: false, Transitioned: false, Outcome: "lf-hidden" } && falseState.LocalWrites.Count == 0 && falseState.RumorCommands.Count == 0, "false LF condition did not hide P31 without LF write or transition");
+
+        var failedState = new SyntheticState { FailLocalWrite = true };
+        failedState.Set(new LocalFlagQuery(participants.Dialog, participants.Npc, 4), 1);
+        var failed = SelectedSemanticSlice.Execute(document, slice, participants, failedState, failedState, true, 200);
+        Assert(failed is { Visible: true, Transitioned: false, Outcome: "player-command-failed" } && failedState.RumorCommands.Count == 0, "P31 command failure did not block transition before N50 RU");
+
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{LF 1}{300}{LF 1, 0}{300}{t}{}{}{}{0}{RU 1000}")), slice), "malformed LF arity");
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{LF}{300}{LF 1, 0}{300}{t}{}{}{}{0}{RU 1000}")), slice), "missing LF parameters");
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{LF 32, 1}{300}{LF 1, 0}{300}{t}{}{}{}{0}{RU 1000}")), slice), "out-of-domain LF parameters");
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{XY 1, 1}{300}{LF 1, 0}{300}{t}{}{}{}{0}{RU 1000}")), slice), "unknown operation");
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{LF 1, 1}{999}{LF 1, 0}{300}{t}{}{}{}{0}{RU 1000}")), slice), "missing direct target");
+        AssertRejected(() => SelectedSemanticSlice.Validate(DlgDocument.Parse(Bytes("{100}{n}{}{}{}{0}{QU 1, 1}{200}{p}{}{1}{LF 1, 1}{300}{LF 1, 0}{300}{wrong-role}{}{1}{}{0}{RU 1000}")), slice), "wrong-role direct target");
+
+        var edgeClasses = DlgDocument.Parse(Bytes("{1}{n}{}{}{}{0}{}{2}{p}{}{1}{}{3}{}{3}{n}{}{}{}{0}{}{4}{p}{}{1}{}{0}{}{5}{p}{}{1}{}{-1}{}"));
+        var graph = GraphSummary.Create(edgeClasses);
+        Assert(graph.Direct == 1 && graph.Exit == 1 && graph.Special == 1, "direct, exit, and special classification are not scoped distinctly");
+    }
+
+    private sealed class SyntheticState : IDialogStateQueries, IDialogStateCommands
+    {
+        private readonly Dictionary<LocalFlagQuery, int> _flags = [];
+        public bool FailLocalWrite { get; init; }
+        public List<QuestStateCommand> QuestCommands { get; } = [];
+        public List<LocalFlagWrite> LocalWrites { get; } = [];
+        public List<RumorLogCommand> RumorCommands { get; } = [];
+        public List<string> Sequence { get; } = [];
+        public void Set(LocalFlagQuery query, int value) => _flags[query] = value;
+        public int Read(LocalFlagQuery query) => _flags[query];
+        public bool TryReadLocalFlag(LocalFlagQuery query, out int value) => _flags.TryGetValue(query, out value);
+        public bool TrySetQuestState(QuestStateCommand command) { QuestCommands.Add(command); Sequence.Add("QU"); return true; }
+        public bool TryWriteLocalFlag(LocalFlagWrite command)
+        {
+            if (FailLocalWrite) return false;
+            LocalWrites.Add(command); Sequence.Add("LF"); _flags[new LocalFlagQuery(command.Dialog, command.Npc, command.Index)] = command.Value; return true;
+        }
+        public bool TryAddRumorToPcLog(RumorLogCommand command) { RumorCommands.Add(command); Sequence.Add("RU"); return true; }
+    }
+
     private static void WithSyntheticArchive(byte[] bytes, Action<DatArchive, TrackingReadStream> action)
     {
         using var stream = new TrackingReadStream(bytes);
@@ -439,9 +510,209 @@ internal static class Program
         }
     }
 
+    // This deliberately small proposal validates and walks only the selected
+    // LF/QU/RU slice. It is not a general operation interpreter or game-state VM.
+    private sealed record SelectedSlice(int NpcNodeId, int PlayerNodeId, int TargetNodeId)
+    {
+        public static SelectedSlice Parse(string npc, string player, string target)
+        {
+            if (!int.TryParse(npc, out var npcId) || !int.TryParse(player, out var playerId) || !int.TryParse(target, out var targetId))
+            {
+                throw new ArgumentException("Semantic-slice node IDs must be signed decimal integers.");
+            }
+            return new SelectedSlice(npcId, playerId, targetId);
+        }
+    }
+
+    private readonly record struct DialogId(int Value);
+    private readonly record struct ParticipantId(int Value);
+    private readonly record struct LocalFlagQuery(DialogId Dialog, ParticipantId Npc, int Index);
+    private readonly record struct LocalFlagWrite(DialogId Dialog, ParticipantId Npc, int Index, int Value);
+    private readonly record struct QuestStateCommand(ParticipantId Pc, int QuestId, int State, ParticipantId NpcContext);
+    private readonly record struct RumorLogCommand(ParticipantId Pc, int RumorId);
+
+    private interface IDialogStateQueries
+    {
+        bool TryReadLocalFlag(LocalFlagQuery query, out int value);
+    }
+
+    private interface IDialogStateCommands
+    {
+        bool TrySetQuestState(QuestStateCommand command);
+        bool TryWriteLocalFlag(LocalFlagWrite command);
+        bool TryAddRumorToPcLog(RumorLogCommand command);
+    }
+
+    private sealed record SliceParticipants(DialogId Dialog, ParticipantId Pc, ParticipantId Npc);
+    private sealed record SemanticSummary(int NpcNodeId, int PlayerNodeId, int TargetNodeId, string Condition, string NpcActions, string PlayerActions, string TargetActions, string Transition);
+    private sealed record SliceExecution(bool Visible, bool Transitioned, string Outcome);
+
+    private enum OperationKind { LocalFlag, QuestState, RumorLog }
+    private sealed record ParsedOperation(OperationKind Kind, int[] Parameters);
+
+    private static class SelectedSemanticSlice
+    {
+        public static SemanticSummary Validate(DlgDocument document, SelectedSlice slice)
+        {
+            var (npc, player, target) = Resolve(document, slice);
+            var npcActions = Parse(npc.ActionField, OperationKind.QuestState, "NPC action");
+            var playerConditions = Parse(player.ConditionField, OperationKind.LocalFlag, "player condition");
+            var playerActions = Parse(player.ActionField, OperationKind.LocalFlag, "player action");
+            var targetActions = Parse(target.ActionField, OperationKind.RumorLog, "target action");
+            Require(playerConditions.Count == 1, "The selected player row must have exactly one LF condition.");
+            Require(playerActions.Count >= 1 && npcActions.Count >= 1 && targetActions.Count >= 1, "The selected slice requires QU, LF, and RU actions.");
+            return new SemanticSummary(slice.NpcNodeId, slice.PlayerNodeId, slice.TargetNodeId, "LF(int,int)", $"QU(int,int)x{npcActions.Count}", $"LF(int,int)x{playerActions.Count}", $"RU(int)x{targetActions.Count}", "Direct(target NPC)");
+        }
+
+        public static SliceExecution Execute(DlgDocument document, SelectedSlice slice, SliceParticipants participants, IDialogStateQueries queries, IDialogStateCommands commands, bool genderAndIqEligible, int selectedResponseId)
+        {
+            var (npc, player, target) = Resolve(document, slice);
+            var npcActions = Parse(npc.ActionField, OperationKind.QuestState, "NPC action");
+            var playerConditions = Parse(player.ConditionField, OperationKind.LocalFlag, "player condition");
+            var playerActions = Parse(player.ActionField, OperationKind.LocalFlag, "player action");
+            var targetActions = Parse(target.ActionField, OperationKind.RumorLog, "target action");
+            Require(playerConditions.Count == 1, "The selected player row must have exactly one LF condition.");
+
+            foreach (var operation in npcActions)
+            {
+                if (!commands.TrySetQuestState(new QuestStateCommand(participants.Pc, operation.Parameters[0], operation.Parameters[1], participants.Npc)))
+                {
+                    return new SliceExecution(false, false, "npc-command-failed");
+                }
+            }
+
+            if (!genderAndIqEligible)
+            {
+                return new SliceExecution(false, false, "gender-iq-hidden");
+            }
+
+            var condition = playerConditions[0];
+            if (!queries.TryReadLocalFlag(new LocalFlagQuery(participants.Dialog, participants.Npc, condition.Parameters[0]), out var value) || value != condition.Parameters[1])
+            {
+                return new SliceExecution(false, false, "lf-hidden");
+            }
+
+            if (selectedResponseId != slice.PlayerNodeId)
+            {
+                return new SliceExecution(true, false, "unselected-response");
+            }
+
+            foreach (var operation in playerActions)
+            {
+                if (!commands.TryWriteLocalFlag(new LocalFlagWrite(participants.Dialog, participants.Npc, operation.Parameters[0], operation.Parameters[1])))
+                {
+                    return new SliceExecution(true, false, "player-command-failed");
+                }
+            }
+            foreach (var operation in targetActions)
+            {
+                if (!commands.TryAddRumorToPcLog(new RumorLogCommand(participants.Pc, operation.Parameters[0])))
+                {
+                    return new SliceExecution(true, false, "target-command-failed");
+                }
+            }
+            return new SliceExecution(true, true, "direct-target-entered");
+        }
+
+        private static (DlgRecord Npc, DlgRecord Player, DlgRecord Target) Resolve(DlgDocument document, SelectedSlice slice)
+        {
+            var npcIndex = document.Records.FindIndex(record => record.Id == slice.NpcNodeId);
+            var playerIndex = document.Records.FindIndex(record => record.Id == slice.PlayerNodeId);
+            var targetIndex = document.Records.FindIndex(record => record.Id == slice.TargetNodeId);
+            if (npcIndex < 0 || playerIndex < 0 || targetIndex < 0) throw new InvalidDataException("The selected semantic slice is missing a required node.");
+            var npc = document.Records[npcIndex];
+            var player = document.Records[playerIndex];
+            var target = document.Records[targetIndex];
+            Require(npc.Role == Role.Npc && player.Role == Role.Player && target.Role == Role.Npc, "The selected semantic slice has a wrong node role.");
+            Require(playerIndex == npcIndex + 1, "The selected player row is not an immediate response of the selected NPC row.");
+            Require(player.Response > 0 && player.Response == target.Id, "The selected player response is not the requested positive direct target.");
+            return (npc, player, target);
+        }
+
+        private static List<ParsedOperation> Parse(Field field, OperationKind expected, string scope)
+        {
+            if (field.Length == 0) throw new InvalidDataException($"The selected {scope} is missing.");
+            var bytes = field.Bytes;
+            var result = new List<ParsedOperation>();
+            var index = 0;
+            while (true)
+            {
+                SkipSeparators(bytes, ref index);
+                if (index == bytes.Length) break;
+                if (index + 2 > bytes.Length || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1]))
+                {
+                    throw new InvalidDataException($"The selected {scope} has malformed or unknown operation syntax.");
+                }
+                var kind = KindFrom(bytes[index], bytes[index + 1], scope);
+                if (kind != expected) throw new InvalidDataException($"The selected {scope} uses an operation outside the bounded semantic slice.");
+                index += 2;
+                var arity = kind is OperationKind.RumorLog ? 1 : 2;
+                var parameters = new int[arity];
+                for (var parameter = 0; parameter < arity; parameter++)
+                {
+                    SkipSeparators(bytes, ref index);
+                    parameters[parameter] = ParseInteger(bytes, ref index, scope);
+                }
+                ValidateDomain(kind, parameters, scope);
+                result.Add(new ParsedOperation(kind, parameters));
+            }
+            return result;
+        }
+
+        private static OperationKind KindFrom(byte first, byte second, string scope)
+        {
+            first = ToUpper(first); second = ToUpper(second);
+            if (first == (byte)'L' && second == (byte)'F') return OperationKind.LocalFlag;
+            if (first == (byte)'Q' && second == (byte)'U') return OperationKind.QuestState;
+            if (first == (byte)'R' && second == (byte)'U') return OperationKind.RumorLog;
+            throw new InvalidDataException($"The selected {scope} uses an unknown operation.");
+        }
+
+        private static void SkipSeparators(byte[] bytes, ref int index)
+        {
+            while (index < bytes.Length && bytes[index] is (byte)' ' or (byte)'\t' or (byte)',' or (byte)';' or (byte)':' or (byte)'(' or (byte)')') index++;
+        }
+
+        private static int ParseInteger(byte[] bytes, ref int index, string scope)
+        {
+            var start = index;
+            if (index < bytes.Length && bytes[index] == (byte)'-') index++;
+            var digitStart = index;
+            while (index < bytes.Length && bytes[index] is >= (byte)'0' and <= (byte)'9') index++;
+            if (digitStart == index || !int.TryParse(Encoding.ASCII.GetString(bytes, start, index - start), out var value))
+            {
+                throw new InvalidDataException($"The selected {scope} has a malformed integer parameter.");
+            }
+            return value;
+        }
+
+        private static void ValidateDomain(OperationKind kind, int[] parameters, string scope)
+        {
+            if (kind == OperationKind.LocalFlag && (parameters[0] is < 0 or > 31 || parameters[1] is < 0 or > 1))
+            {
+                throw new InvalidDataException($"The selected {scope} LF parameters are outside the documented policy domain.");
+            }
+            if (kind == OperationKind.QuestState && parameters[1] is < 0 or > 6)
+            {
+                throw new InvalidDataException($"The selected {scope} QU state is outside the documented policy domain.");
+            }
+            if (kind == OperationKind.RumorLog && parameters[0] < 1000)
+            {
+                throw new InvalidDataException($"The selected {scope} RU identifier is outside the documented policy domain.");
+            }
+        }
+
+        private static bool IsAsciiLetter(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
+        private static byte ToUpper(byte value) => value is >= (byte)'a' and <= (byte)'z' ? (byte)(value - 32) : value;
+        private static void Require(bool value, string message)
+        {
+            if (!value) throw new InvalidDataException(message);
+        }
+    }
+
     private enum Role { Npc, Player }
 
-    private sealed record DlgRecord(int Id, Role Role, int Response, bool Unsupported, bool Callback, string ConditionClass, string ActionClass);
+    private sealed record DlgRecord(int Id, Role Role, int Response, Field ConditionField, Field ActionField, bool Unsupported, bool Callback, string ConditionClass, string ActionClass);
 
     private sealed class DlgDocument
     {
@@ -482,7 +753,7 @@ internal static class Program
                 var role = iq == 0 ? Role.Npc : Role.Player;
                 var conditionClass = ClassifyOperations(fields[4], conditions, out var unsupportedCondition, out var callbackCondition);
                 var actionClass = ClassifyOperations(fields[6], actions, out var unsupportedAction, out var callbackAction);
-                records.Add(new DlgRecord(id, role, response, unsupportedCondition || unsupportedAction, callbackCondition || callbackAction, conditionClass, actionClass));
+                records.Add(new DlgRecord(id, role, response, fields[4], fields[6], unsupportedCondition || unsupportedAction, callbackCondition || callbackAction, conditionClass, actionClass));
             }
             if (records.Count == 0) throw new InvalidDataException("DLG contains no complete records.");
             return new DlgDocument { Records = records, FieldLengths = lengths, EmptyFields = empty, CommentLines = cursor.CommentLines, CrLf = cursor.CrLf, Lf = cursor.Lf, ConditionOpcodes = conditions, ActionOpcodes = actions };

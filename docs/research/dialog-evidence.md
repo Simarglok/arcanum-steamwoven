@@ -118,3 +118,63 @@ Blocked.** Initial invocation, live archive precedence, runtime entry,
 operation semantics, generated/special transitions, SCR bridge, and query or
 command services remain unknown. No CE code, toolkit code, original content,
 or runtime claim is included here.
+
+## ARC-RES-006 selected-slice evidence
+
+This section supplements the ARC-RES-005 physical-reader record above. It
+records a separate, identifier-only semantic research boundary. It does not
+replace the older `01324Virgil` observation with a runtime identity or entry
+claim.
+
+### Immutable candidate ledger and local observation
+
+| Claim ID | Claim | Category | Method / disposition | Status and boundary |
+| --- | --- | --- | --- | --- |
+| DLG-016 | The selected local input is archive basename `arcanum3.dat`, SHA-256 `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`; member `dlg\01478Erland.dlg` is ordinal 220 with compressed flag `0x002`, stored/decoded sizes 1290/4346, and payload SHA-256 `0bdfb29d04cdc5702d8d6f0e0208077c3cec8e708d923162a1bb33dfc1d022cc`. | local structural experiment | explicit read-only member selection; archive fingerprint checked immediately before and after the opt-in probe | immutable locator only; not identity, invocation, winner, or precedence proof |
+| DLG-017 | The sample has 30 records, 31 CRLF, no LF-only newlines, 3523 opaque text-field bytes, and zero high-bit bytes in those text fields. | local structural experiment | byte-oriented aggregate inspection | ASCII-only observation for this one sample, not a codepage/localization claim |
+| DLG-018 | Structural NPC `N30` has selected QU action; immediate player `P31` has selected LF condition and LF action; its positive direct target is structural NPC `N50`, which has selected RU action. | local structural experiment plus source-backed grammar | explicit semantic-slice validation emits node IDs, opcode/arity classes, and `Direct(target NPC)` only | no display text, expression, or parameter value retained; structural slice is not runtime entry |
+| DLG-019 | The selected read-only probe left the archive fingerprint unchanged. | local structural experiment | before/after SHA-256 equality in the same opt-in command | no input copy, write, or extracted asset |
+
+### Claim-by-claim source and lineage matrix
+
+| Claim IDs / support | Source inspected substantively | Evidence role | Lineage and limitation |
+| --- | --- | --- | --- |
+| DLG-003, DLG-018 | pinned arcanum-ce revision `a7ff41b300ef712f0e7d088183a3d08957110cdd`, `src/game/dialog.c:2641-2802`, `2632-2637`, `1289-1357`, `1360-1859` (LF `1559-1563`), `1862-2243` (QU `1933-1960`, LF `2058-2060`, RU `2075-2077`), `2245-2257`, `2260-2339`, `509-547`, `2537-2549`, and `2968-2991` | seven fields; response enumeration and phase order; LF/QU/RU dispatch; direct/exit/special and role checks | Sustainable Use License 1.0 specification evidence only; no code copied, mechanically translated, or treated as independent corroboration |
+| DLG-018 | `editdocs.zip` / `Eventscripts.rtf` and `GeneratedDialog.rtf` | reports seven fields, ordered dialogue results, LF/QU/RU vocabulary; distinguishes generated-dialog forms excluded from this slice | community/editor source, archive SHA-256 retained in DLG-009; lineage/license unreviewed |
+| DLG-018 | `WorldEdManual.pdf` | NPC/player row relationship, direct/zero/negative form, local-flag index range, dialogue-only ordered results, and quest-state labels/range | community manual, DLG-010 provenance; not independent CE proof |
+| DLG-018 | DialogEditor 1.03 `ReadMe.txt` | supports separating numeric sequence from runtime identity/entry | community editor readme, DLG-011 provenance; no executable run |
+| DLG-018 | `dlgdebugbeta.zip` `SEMES/condition.mes` and `SEMES/action.mes` | supports operation vocabulary, participant placeholders, and numeric-slot categories | community debugger tables, DLG-013 provenance; does not establish runtime dispatch |
+| DLG-018 | `DLGCheck.zip` `src/Unit1.pas` | supports brace/numeric/role parsing, positive-target checks, and documented LF/QU ranges | community checker, DLG-014 provenance; not reused and not runtime-effect proof |
+| DLG-002 | `src/game/script_name.c:157-207` at the same CE revision | only numeric script-to-name derivation | explicitly not member identity, invocation, or entry proof |
+
+The archived community/editor materials were inspected read-only for this
+bounded research. Their licenses and lineage remain unreviewed where the prior
+record says so; they are supporting evidence, not a license for source reuse.
+Generated dialogue, SCR callbacks, and every nonselected operation retain an
+unsupported/out-of-scope disposition.
+
+### Selected grammar, proposal, and synthetic evidence
+
+The selected parser accepts only ordered integer `LF(int,int)`,
+`QU(int,int)`, and `RU(int)` forms at the selected structural positions. Its
+admission domains are LF index `0..31`, LF expected/new value `0..1`, QU state
+`0..6`, and RU ID `>=1000`. A positive player response must resolve to the
+specified NPC target. Malformed, missing, out-of-domain, unknown, missing-target
+or wrong-role data reject fail-closed.
+
+The synthetic self-test executes an invented N100/P200/N300 walk-through:
+NPC QU effects occur before player visibility; gender/IQ eligibility precedes
+the LF local-state query; a true LF permits selection; selected LF writes before
+direct N300 entry; N300 RU then runs. It covers false LF (no LF write or
+transition), command failure, ordered multiple QU actions, participant routing,
+and direct/exit/special classification. These are project-proposal and
+synthetic-fixture results, never asserted original-runtime execution.
+
+### Current readiness and remaining uncertainty
+
+Physical parsing is ready for the bounded byte-preserving reader; selected
+LF/QU/RU/direct semantics are synthetically verified proposal plus structural
+validation of the hashed slice; actual in-game conversation remains not ready.
+Unknown or excluded: runtime entry/invocation, member identity, archive
+precedence, nonselected operations, generated dialogue, SCR bridge, game
+services/UI/gameplay, and text encoding beyond the one ASCII-only observation.
