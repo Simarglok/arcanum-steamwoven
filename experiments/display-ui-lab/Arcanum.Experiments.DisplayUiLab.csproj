@@ -4,8 +4,7 @@
     <RootNamespace>Arcanum.Experiments.DisplayUiLab</RootNamespace>
     <TargetFramework>net8.0</TargetFramework>
     <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
-    <GodotTargetPlatform>macos</GodotTargetPlatform>
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RestorePackagesWithLockFile Condition="'$(GodotTargetPlatform)' == ''">true</RestorePackagesWithLockFile>
   </PropertyGroup>
 </Project>
