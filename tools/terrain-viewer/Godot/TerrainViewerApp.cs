@@ -153,18 +153,15 @@ public partial class TerrainViewerApp : Node
         // input, reload, and cleanup checks below.
         var exactSecondSize = await CaptureAndValidateSmokeFrameAsync(new Vector2I(1920, 1080), commandCount, textureCount);
         var fullscreen = false;
-        if (exactSecondSize)
-        {
-            GD.Print("ARC-RENDER-003 native-smoke stage=fullscreen");
-            var initialMode = GetWindow().Mode;
-            Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
-            await NextFrameAsync();
-            fullscreen = GetWindow().Mode != initialMode;
-            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
-            await NextFrameAsync();
-            var fullscreenRestored = !fullscreen || GetWindow().Mode == Window.ModeEnum.Windowed;
-            if (!fullscreenRestored) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        }
+        GD.Print("ARC-RENDER-003 native-smoke stage=fullscreen");
+        var initialMode = GetWindow().Mode;
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
+        await NextFrameAsync();
+        fullscreen = GetWindow().Mode != initialMode;
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+        await NextFrameAsync();
+        var fullscreenRestored = !fullscreen || GetWindow().Mode == Window.ModeEnum.Windowed;
+        if (!fullscreenRestored) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         for (var cycle = 0; cycle < 100; cycle++)
         {
             if (cycle % 10 == 0) GD.Print($"ARC-RENDER-003 native-smoke stage=cycle-{cycle}");
