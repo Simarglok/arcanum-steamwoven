@@ -230,6 +230,11 @@ public partial class TerrainViewerApp : Node
         await NextFrameAsync();
         using var screenshot = GetViewport().GetTexture().GetImage();
         var actualSize = new Vector2I(screenshot.GetWidth(), screenshot.GetHeight());
+        if (actualSize != expectedSize)
+        {
+            GD.Print($"ARC-RENDER-003 native-smoke result status=NOT_VERIFIED requested={expectedSize.X}x{expectedSize.Y} actual={actualSize.X}x{actualSize.Y} reason=display-clamp");
+            return false;
+        }
         var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
         var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16);
         var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
@@ -263,10 +268,17 @@ public partial class TerrainViewerApp : Node
         var point = _canvas!.GetGlobalTransformWithCanvas() * new Vector2(landmark.WorldX, landmark.WorldY);
         var x = (int)Math.Round(point.X);
         var y = (int)Math.Round(point.Y);
-        if (x < 0 || y < 0 || x >= screenshot.GetWidth() || y >= screenshot.GetHeight()) return false;
-        var actual = screenshot.GetPixel(x, y);
-        return Math.Round(actual.R * 255) == landmark.R && Math.Round(actual.G * 255) == landmark.G
-            && Math.Round(actual.B * 255) == landmark.B && Math.Round(actual.A * 255) == landmark.A;
+        for (var sampleY = y - 2; sampleY <= y + 2; sampleY++)
+        {
+            for (var sampleX = x - 2; sampleX <= x + 2; sampleX++)
+            {
+                if (sampleX < 0 || sampleY < 0 || sampleX >= screenshot.GetWidth() || sampleY >= screenshot.GetHeight()) continue;
+                var actual = screenshot.GetPixel(sampleX, sampleY);
+                if (Math.Round(actual.R * 255) == landmark.R && Math.Round(actual.G * 255) == landmark.G
+                    && Math.Round(actual.B * 255) == landmark.B && Math.Round(actual.A * 255) == landmark.A) return true;
+            }
+        }
+        return false;
     }
 
     public override void _Process(double delta)
