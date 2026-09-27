@@ -1,0 +1,9 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Experiments.DisplayUiLab</AssemblyName>
+    <RootNamespace>Arcanum.Experiments.DisplayUiLab</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+  </PropertyGroup>
+</Project>
