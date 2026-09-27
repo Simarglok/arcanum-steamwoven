@@ -3,10 +3,10 @@
     <AssemblyName>Arcanum.Experiments.DisplayUiLab</AssemblyName>
     <RootNamespace>Arcanum.Experiments.DisplayUiLab</RootNamespace>
     <TargetFramework>net8.0</TargetFramework>
-    <!-- Godot's editor bridge loads its managed project from Debug without a RID. -->
-    <RuntimeIdentifier Condition="'$(GodotTargetPlatform)' == ''">osx-arm64</RuntimeIdentifier>
+    <!-- The literal Debug restore is canonical and owns the committed project lock. -->
     <EnableDynamicLoading>true</EnableDynamicLoading>
-    <RestorePackagesWithLockFile Condition="'$(GodotTargetPlatform)' == ''">true</RestorePackagesWithLockFile>
-    <NuGetLockFilePath Condition="'$(GodotTargetPlatform)' != ''">$(BaseIntermediateOutputPath)godot.packages.lock.json</NuGetLockFilePath>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- Export configurations may update their own generated lock without touching Debug's committed lock. -->
+    <NuGetLockFilePath Condition="'$(Configuration)' == 'ExportDebug' Or '$(Configuration)' == 'ExportRelease'">$(BaseIntermediateOutputPath)locks/$(Configuration)/$(GodotTargetPlatform)/$(RuntimeIdentifier)/packages.lock.json</NuGetLockFilePath>
   </PropertyGroup>
 </Project>

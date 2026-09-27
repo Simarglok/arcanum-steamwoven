@@ -77,7 +77,7 @@ public partial class LayoutMatrixRunner : Node
         var assertions = LayoutAssertions.Verify(surface, snapshot, matrixCase.Viewport, matrixCase.Scale, matrixCase.Panel).ToArray();
         var passed = assertions.All(assertion => assertion.Passed);
         viewport.QueueFree();
-        return new MatrixCaseResult(new Vector2I((int)matrixCase.Viewport.X, (int)matrixCase.Viewport.Y), (int)matrixCase.Scale, matrixCase.Panel.ToString(), matrixCase.Smoke, passed, assertions);
+        return new MatrixCaseResult(SizeEvidence.From(matrixCase.Viewport), (int)matrixCase.Scale, matrixCase.Panel.ToString(), matrixCase.Smoke, passed, assertions);
     }
 
     private async Task<MatrixTransitionResult> RunTransitions()
@@ -87,35 +87,45 @@ public partial class LayoutMatrixRunner : Node
         surface.ShowPanel(LabPanel.Dialogue);
         await Settle();
         var resizeA = surface.CaptureLayoutSnapshot();
+        var resizeAPosition = surface.CameraPosition;
         viewport.Size = new Vector2I(1920, 1080);
         surface.SimulateViewport(viewport.Size);
         await Settle();
         var resizeB = surface.CaptureLayoutSnapshot();
+        var resizeBPosition = surface.CameraPosition;
         viewport.Size = new Vector2I(1280, 800);
         surface.SimulateViewport(viewport.Size);
         await Settle();
         var resizeAgain = surface.CaptureLayoutSnapshot();
+        var resizeAgainPosition = surface.CameraPosition;
 
         surface.ApplyUiScale(UiScalePreset.Scale100);
         await Settle();
         var scaleA = surface.CaptureLayoutSnapshot();
+        var scaleAPosition = surface.CameraPosition;
         surface.ApplyUiScale(UiScalePreset.Scale200);
         await Settle();
         var scaleB = surface.CaptureLayoutSnapshot();
+        var scaleBPosition = surface.CameraPosition;
         surface.ApplyUiScale(UiScalePreset.Scale100);
         await Settle();
         var scaleAgain = surface.CaptureLayoutSnapshot();
+        var scaleAgainPosition = surface.CameraPosition;
 
         var uiBeforeZoom = surface.CaptureLayoutSnapshot();
+        var uiBeforeZoomPosition = surface.CameraPosition;
         surface.SetCameraZoom(1.50f);
         await Settle();
         var uiAfterZoom = surface.CaptureLayoutSnapshot();
+        var uiAfterZoomPosition = surface.CameraPosition;
         surface.SetCameraZoom(1.00f);
         await Settle();
         var worldBeforeScale = surface.CaptureLayoutSnapshot();
+        var worldBeforeScalePosition = surface.CameraPosition;
         surface.ApplyUiScale(UiScalePreset.Scale200);
         await Settle();
         var worldAfterScale = surface.CaptureLayoutSnapshot();
+        var worldAfterScalePosition = surface.CameraPosition;
 
         var input = await VerifyInput(viewport, surface);
         var assertions = new[]
@@ -133,8 +143,9 @@ public partial class LayoutMatrixRunner : Node
         viewport.QueueFree();
         return new MatrixTransitionResult(assertions.All(item => item.Passed), assertions, new
         {
-            resize = new { initial = resizeA.Viewport, intermediate = resizeB.Viewport, final = resizeAgain.Viewport },
-            uiScale = new { initial = (int)scaleA.State.UiScale, intermediate = (int)scaleB.State.UiScale, final = (int)scaleAgain.State.UiScale },
+            resize = new { initial = SnapshotEvidence.From(resizeA, resizeAPosition), intermediate = SnapshotEvidence.From(resizeB, resizeBPosition), final = SnapshotEvidence.From(resizeAgain, resizeAgainPosition) },
+            uiScale = new { initial = SnapshotEvidence.From(scaleA, scaleAPosition), intermediate = SnapshotEvidence.From(scaleB, scaleBPosition), final = SnapshotEvidence.From(scaleAgain, scaleAgainPosition) },
+            independence = new { cameraBefore = SnapshotEvidence.From(uiBeforeZoom, uiBeforeZoomPosition), cameraAfter = SnapshotEvidence.From(uiAfterZoom, uiAfterZoomPosition), scaleBefore = SnapshotEvidence.From(worldBeforeScale, worldBeforeScalePosition), scaleAfter = SnapshotEvidence.From(worldAfterScale, worldAfterScalePosition) },
             input = new { input.MouseDetail, input.KeyboardDetail, input.CompactSelectorDetail },
         });
     }
@@ -198,6 +209,8 @@ public partial class LayoutMatrixRunner : Node
 
     private async Task<(bool MousePassed, string MouseDetail, bool KeyboardPassed, string KeyboardDetail, bool CompactSelectorPassed, string CompactSelectorDetail)> VerifyInput(SubViewport viewport, LabSurface surface)
     {
+        surface.ShowPanel(LabPanel.Dialogue);
+        await Settle();
         var close = surface.ImportantControl("Close") as Button;
         var closeSignals = 0;
         if (close != null)
@@ -209,26 +222,70 @@ public partial class LayoutMatrixRunner : Node
         viewport.PushInput(new InputEventMouseButton { Position = center, ButtonIndex = MouseButton.Left, Pressed = true }, true);
         viewport.PushInput(new InputEventMouseButton { Position = center, ButtonIndex = MouseButton.Left, Pressed = false }, true);
         await Settle();
-        var mousePassed = closeSignals == 1 && !surface.State.PanelVisible && hovered != null;
-        var mouseDetail = $"closeSignals={closeSignals}; hovered={hovered?.Name ?? "none"}; panelVisible={surface.State.PanelVisible}";
+        var mousePassed = closeSignals == 1 && !surface.State.PanelVisible && IsControlOrDescendant(hovered, close);
+        var mouseDetail = $"closeSignals={closeSignals}; hovered={hovered?.Name ?? "none"}; closeAncestry={IsControlOrDescendant(hovered, close)}; panelVisible={surface.State.PanelVisible}";
 
         surface.ShowPanel(LabPanel.Dialogue);
         await Settle();
-        var scale = surface.ImportantControl("Action100%");
-        scale?.GrabFocus();
-        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = true }, true);
-        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = false }, true);
+        var selector = surface.ImportantControl("PanelSelector") as Button;
+        selector?.GrabFocus();
+        var focusNames = new List<string>();
+        for (var index = 0; index < 24; index++)
+        {
+            viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = true }, true);
+            viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = false }, true);
+            await Settle();
+            focusNames.Add(viewport.GuiGetFocusOwner()?.Name ?? "none");
+        }
+        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, ShiftPressed = true, Pressed = true }, true);
+        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, ShiftPressed = true, Pressed = false }, true);
         await Settle();
-        var focus = viewport.GuiGetFocusOwner();
-        var keyboardPassed = scale != null && scale.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Fullscreen")?.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Close")?.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Reset")?.FocusMode == Control.FocusModeEnum.All;
-        var keyboardDetail = $"PushInput Tab sent from Action100; afterTab={focus?.Name ?? "none"}; fullscreen/close/reset support FocusMode.All; ResponseThree has intentional scroll ancestry";
+        var shiftedFocus = viewport.GuiGetFocusOwner()?.Name ?? "none";
+        var scale = surface.ImportantControl("Action150%") as Button;
+        scale?.GrabFocus();
+        viewport.PushInput(new InputEventKey { Keycode = Key.Enter, Pressed = true }, true);
+        viewport.PushInput(new InputEventKey { Keycode = Key.Enter, Pressed = false }, true);
+        await Settle();
+        var enterScale = surface.State.UiScale == UiScalePreset.Scale150;
+        var action200 = surface.ImportantControl("Action200%") as Button;
+        action200?.GrabFocus();
+        viewport.PushInput(new InputEventKey { Keycode = Key.Space, Pressed = true }, true);
+        viewport.PushInput(new InputEventKey { Keycode = Key.Space, Pressed = false }, true);
+        await Settle();
+        var spaceScale = surface.State.UiScale == UiScalePreset.Scale200;
+        var response = surface.ImportantControl("ResponseThree");
+        var scroll = response != null && surface.IsInsideIntentionalScroll(response);
+        var keyboardPassed = new[] { "Action100_", "Fullscreen", "Close", "Reset" }.All(focusNames.Contains) && shiftedFocus != "none" && enterScale && spaceScale && scroll;
+        var keyboardDetail = $"tabSequence={string.Join(",", focusNames)}; shiftTab={shiftedFocus}; enter150={enterScale}; space200={spaceScale}; responseScroll={scroll}";
 
         viewport.Size = new Vector2I(1280, 720);
-        surface.ApplyUiScale(UiScalePreset.Scale200);
+        surface.SimulateViewport(viewport.Size);
         await Settle();
-        var selector = surface.ImportantControl("PanelSelector") as OptionButton;
-        var compactPassed = surface.CaptureLayoutSnapshot().ResponsiveClass == ResponsiveClass.Compact && selector?.IsVisibleInTree() == true && selector.FocusMode == Control.FocusModeEnum.All;
-        var compactDetail = $"class={surface.CaptureLayoutSnapshot().ResponsiveClass}; selectorVisible={selector?.IsVisibleInTree()}; selectorFocus={selector?.FocusMode}";
+        var compactSelector = surface.ImportantControl("PanelSelector") as Button;
+        var selectorSignals = 0;
+        if (compactSelector != null)
+            compactSelector.Pressed += () => selectorSignals++;
+        var selectorCenter = compactSelector?.GetGlobalRect().GetCenter() ?? Vector2.Zero;
+        viewport.PushInput(new InputEventMouseMotion { Position = selectorCenter }, true);
+        viewport.PushInput(new InputEventMouseButton { Position = selectorCenter, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+        viewport.PushInput(new InputEventMouseButton { Position = selectorCenter, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+        await Settle();
+        var compactSnapshot = surface.CaptureLayoutSnapshot();
+        var compactClose = surface.ImportantControl("Close") as Button;
+        compactClose?.GrabFocus();
+        viewport.PushInput(new InputEventKey { Keycode = Key.Enter, Pressed = true }, true);
+        viewport.PushInput(new InputEventKey { Keycode = Key.Enter, Pressed = false }, true);
+        await Settle();
+        var compactPassed = compactSnapshot.ResponsiveClass == ResponsiveClass.Compact && compactSelector?.IsVisibleInTree() == true && selectorSignals == 1 && surface.State.ActivePanel != LabPanel.Dialogue && !surface.State.PanelVisible;
+        var compactDetail = $"class={compactSnapshot.ResponsiveClass}; selectorVisible={compactSelector?.IsVisibleInTree()}; pressedSignals={selectorSignals}; active={surface.State.ActivePanel}; closed={!surface.State.PanelVisible}";
         return (mousePassed, mouseDetail, keyboardPassed, keyboardDetail, compactPassed, compactDetail);
+    }
+
+    private static bool IsControlOrDescendant(Control? hovered, Control? expected)
+    {
+        for (Node? current = hovered; current != null; current = current.GetParent())
+            if (current == expected)
+                return true;
+        return false;
     }
 }

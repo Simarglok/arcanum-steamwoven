@@ -14,7 +14,7 @@ internal static class LayoutAssertions
         {
             var finite = float.IsFinite(rect.Position.X) && float.IsFinite(rect.Position.Y) && float.IsFinite(rect.Size.X) && float.IsFinite(rect.Size.Y);
             yield return new MatrixResult($"finite-{name}", finite && rect.Size.X >= 0 && rect.Size.Y >= 0, rect.ToString());
-            if (name is "Close" or "Reset" or "Fullscreen" or "PanelSelector")
+            if (name is "PanelTitle" or "Close" or "Reset" or "Fullscreen" or "PanelSelector")
             {
                 var visible = rect.Position.X >= -0.5f && rect.Position.Y >= -0.5f && rect.End.X <= expectedViewport.X + 0.5f && rect.End.Y <= expectedViewport.Y + 0.5f;
                 yield return new MatrixResult($"sticky-{name}", visible, rect.ToString());
@@ -50,7 +50,7 @@ internal static class LayoutAssertions
 
     internal static string? NearDifference(LayoutSnapshot left, LayoutSnapshot right, float tolerance = 0.5f)
     {
-        var stableRects = new[] { "hud", "actions", "panel", "Fullscreen", "Close", "Reset", "PanelSelector" };
+        var stableRects = new[] { "hud", "actions", "panel", "Fullscreen", "PanelTitle", "Close", "Reset", "PanelSelector" };
         foreach (var key in stableRects)
         {
             if (!left.Rects.TryGetValue(key, out var current) || !right.Rects.TryGetValue(key, out var other))

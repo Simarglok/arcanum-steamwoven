@@ -24,6 +24,7 @@ public partial class LabSurface : Node2D
     private bool _panning;
 
     public DisplayState State => _state;
+    internal Vector2 CameraPosition => _camera.Position;
 
     public override void _Ready()
     {
@@ -66,8 +67,8 @@ public partial class LabSurface : Node2D
     public void ApplyUiScale(UiScalePreset preset)
     {
         _state = _state with { UiScale = preset };
-        BuildUi();
-        Arrange();
+        // Do not free a button while its Pressed signal is still dispatching.
+        CallDeferred(nameof(RebuildUi));
     }
 
     public void SetCameraZoom(float zoom)
@@ -90,8 +91,7 @@ public partial class LabSurface : Node2D
         _state = new DisplayState(UiScalePreset.Scale100, 1.0f, LabPanel.Dialogue, false, true);
         _camera.Zoom = Vector2.One;
         _camera.Position = new Vector2(640, 400);
-        BuildUi();
-        Arrange();
+        CallDeferred(nameof(RebuildUi));
     }
 
     public LayoutSnapshot CaptureLayoutSnapshot()
@@ -188,14 +188,10 @@ public partial class LabSurface : Node2D
         _actions = new HBoxContainer { Name = "ActionRow" };
         UiScalePolicy.ApplyContainer(_actions, _state.UiScale);
         _actionScroll.AddChild(_actions);
-        var panelSelector = new OptionButton { Name = "PanelSelector", FocusMode = Control.FocusModeEnum.All, TooltipText = "Select active panel" };
+        var panelSelector = ButtonFor($"Panel: {_state.ActivePanel}", "PanelSelector");
+        panelSelector.TooltipText = "Cycle active panel";
         panelSelector.CustomMinimumSize = new Vector2(UiScalePolicy.Target(120, _state.UiScale), UiScalePolicy.Target(44, _state.UiScale));
-        UiScalePolicy.Apply(panelSelector, _state.UiScale);
-        foreach (var panel in Enum.GetValues<LabPanel>())
-            panelSelector.AddItem(panel.ToString(), (int)panel);
-        panelSelector.Selected = (int)_state.ActivePanel;
-        panelSelector.ItemSelected += index => ShowPanel((LabPanel)panelSelector.GetItemId((int)index));
-        _importantControls["PanelSelector"] = panelSelector;
+        panelSelector.Pressed += CyclePanel;
         _actions.AddChild(panelSelector);
         AddAction("100%", UiScalePreset.Scale100);
         AddAction("125%", UiScalePreset.Scale125);
@@ -217,7 +213,9 @@ public partial class LabSurface : Node2D
         UiScalePolicy.ApplyContainer(sticky, _state.UiScale);
         panelShell.AddChild(sticky);
         var panelTitle = LabelFor(_state.ActivePanel.ToString(), 20);
+        panelTitle.Name = "PanelTitle";
         panelTitle.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _importantControls["PanelTitle"] = panelTitle;
         sticky.AddChild(panelTitle);
         var close = ButtonFor("Close", "Close");
         close.Pressed += ClosePanel;
@@ -240,6 +238,13 @@ public partial class LabSurface : Node2D
         _diagnosticLabel = LabelFor(string.Empty, 12);
         _diagnosticLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
         _diagnostics.AddChild(_diagnosticLabel);
+        ConfigureFocusOrder();
+    }
+
+    private void RebuildUi()
+    {
+        BuildUi();
+        Arrange();
     }
 
     private void BuildPanelBody()
@@ -375,5 +380,25 @@ public partial class LabSurface : Node2D
     {
         _state = _state with { PanelVisible = false };
         Arrange();
+    }
+
+    private void CyclePanel()
+    {
+        var next = (LabPanel)(((int)_state.ActivePanel + 1) % Enum.GetValues<LabPanel>().Length);
+        ShowPanel(next);
+    }
+
+    private void ConfigureFocusOrder()
+    {
+        var ordered = _importantControls.Values
+            .OfType<Button>()
+            .Cast<Control>()
+            .Distinct()
+            .ToArray();
+        for (var index = 0; index < ordered.Length; index++)
+        {
+            ordered[index].FocusNext = ordered[(index + 1) % ordered.Length].GetPath();
+            ordered[index].FocusPrevious = ordered[(index - 1 + ordered.Length) % ordered.Length].GetPath();
+        }
     }
 }
