@@ -127,10 +127,13 @@ def hygiene(args: argparse.Namespace) -> None:
     diff_check = subprocess.run(["git", "diff", "--check", f"{base}..{head}"], cwd=root,
                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     tracked = [root / name for name in changed if (root / name).is_file()]
+    # Compose signatures so the checker does not flag its own documented
+    # detection rules while still scanning every changed candidate file for the
+    # complete values.
     patterns = {
-        "secret": ("ghp_", "github_pat_", "AKIA", "BEGIN PRIVATE KEY"),
-        "privateKey": ("BEGIN PRIVATE KEY", "BEGIN OPENSSH PRIVATE KEY"),
-        "originalData": ("arcanum1.dat", "arcanum2.dat", "arcanum3.dat", "vormantown.dat"),
+        "secret": ("gh" "p_", "github" "_pat_", "AK" "IA", "BEGIN " "PRIVATE KEY"),
+        "privateKey": ("BEGIN " "PRIVATE KEY", "BEGIN " "OPENSSH PRIVATE KEY"),
+        "originalData": ("arcanum" "1.dat", "arcanum" "2.dat", "arcanum" "3.dat", "vorman" "town.dat"),
     }
     hits = {name: [] for name in patterns}
     for file in tracked:
