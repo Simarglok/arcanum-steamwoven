@@ -32,8 +32,10 @@ succeed. The exact selected-frame identity is the source label, DAT ordinal,
 flags, declared size, logical entry name, group, frame, and requested palette.
 The cache preflights each distinct decoded frame against 4,096 keys and 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
-that cache. Reload, failure, and exit clear textures exactly once; failed partial
-uploads are rolled back.
+that cache. Reload, failure, and exit clear textures. The graphical self-test
+injects an upload failure to verify partial-upload rollback; archive/decode
+barrier instrumentation remains a focused-test requirement, not a missing-file
+test claim.
 
 `TerrainGeometry.Place` is the only owner of projection, the one-pixel X anchor,
 tile 78x40 / facade 80x40 footprint, crop, and raw tile flip. The adapter draws
@@ -51,37 +53,39 @@ The world canvas is viewport-independent under `Camera2D`; the status HUD is a
 separate `CanvasLayer`. The initial view fits the complete diagnostic bounds
 with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
-resets initial Fit and `F` recomputes Fit. Resize recomputes Fit only while in
+resets initial Fit, `F` recomputes Fit, and `L` reloads through the same
+generation-aware load route. Resize recomputes Fit only while in
 Fit mode; manual pan/zoom survives resize. F11 toggles normal fullscreen and
 Escape restores windowed mode. The resizable default is 1280x800. There is no
 controller behavior.
 
 ## Verification and evidence status
 
-`--self-test` creates a public in-memory asymmetric 8-bpp ART fixture, decodes
+`--self-test` creates a public in-memory 82x42 asymmetric 8-bpp ART fixture, decodes
 it through `ArtDecoder`, uploads it through the production RGBA8 texture path,
 and constructs the canvas plan through the same `TerrainScenePlan` placement and
-ordering path used for loaded terrain records. Its hand-authored landmarks cover
+ordering path used for loaded terrain records. Its hand-authored pixels cover
 transparent palette zero, row-major orientation, source crop, the one-pixel
 anchor destination, 78x40 tile and 80x40 facade footprints, tile-only X flip,
-unflipped facade command, layer/Y/X/ordinal overlap winner, and border
-transparency. The independently stated geometry landmarks include all sector
+unflipped facade command, borders, and separate layer/Y/X/ordinal winners. The independently stated geometry landmarks include all sector
 corners and local `(30,32) -> (80,1240)` before the separate X anchor.
 A non-headless Godot run reads the `SubViewport` pixels; the dummy headless
 renderer cannot read a `ViewportTexture`, so its output explicitly records
 `graphical readback NOT_VERIFIED` rather than claiming rendered pixels.
 
-`--native-smoke` uses explicit original inputs, drives the production scene at
+`--native-smoke` uses explicit original inputs, validates seven fixed
+representative ordinals through isolated production canvases, then drives the production scene at
 1280x800 and 1920x1080, injects keyboard/wheel/drag/reset/fit/F11/Escape events,
-checks camera state, command/cache count, fixed HUD coordinates, fullscreen
-restoration, manual-resize persistence, and 100 input-driven no-growth reset
-cycles. It requires each viewport readback to have exactly the requested
+checks Camera2D readback, command geometry/cache count, HUD global coordinates,
+fullscreen restoration where supported, manual-resize persistence, reload, and
+100 input-driven pan/zoom/reset/resize cycles. It requires each viewport readback to have exactly the requested
 dimensions and validates a terrain-texture landmark transformed through the
 active camera; an opaque clear colour or HUD alone cannot pass. A display clamp
-or unreadable terrain landmark is a failed automated smoke, not a size PASS.
+or unreadable terrain landmark is NOT_VERIFIED, never a size PASS. Fullscreen
+which cannot transition is also NOT_VERIFIED; failed restoration is a failure.
 With
-`--native-smoke-screenshot PATH`, it writes `PATH` with `-1280x800` and
-`-1920x1080` inserted before the extension. These game-graphics screenshots
+`--native-smoke-screenshot PATH`, it writes filenames containing both requested
+and actual dimensions. These game-graphics screenshots
 remain local and ignored.
 
 The previously retained blank source/export PNGs are failed historical evidence,
@@ -93,6 +97,28 @@ or attached. Evidence distinguishes synthetic checks, original automated checks,
 original visual inspection, and physical/readability. Only the first two are
 automatable here; local visual and physical/readability observations remain
 explicitly NOT_VERIFIED unless a human records them.
+
+## Reproducible local verification
+
+Set `DOTNET=/path/to/canonical/dotnet`, `GODOT=/path/to/Godot`, and provide the
+caller-selected `MODULE`, `RESOURCE`, and safe `SOURCE_ID` only in the local
+shell. Do not place those paths in a manifest, commit, or issue.
+
+    "$DOTNET" restore tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --locked-mode
+    "$DOTNET" build tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --no-restore
+    "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build
+    "$GODOT" --headless --path tools/terrain-viewer/Godot -- --self-test
+    "$GODOT" --path tools/terrain-viewer/Godot -- --self-test
+    "$GODOT" --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
+
+After committing the source candidate, export it to the ignored
+`artifacts/builds/ARC-RENDER-003/<commit>/ArcanumTerrainViewer.app`, run its
+`--self-test` and `--native-smoke` with the same local arguments, then run
+`codesign --verify --deep --strict --verbose=2` on that app. Record source and
+export results, requested/actual dimensions, measured load milliseconds,
+distinct texture count, checked RGBA bytes, maximum concurrency, and pre/post
+fingerprint equality in the ignored schema-v1 manifest. `current.json` may be
+updated only to that exact commit-bound directory.
 
 ## Provenance and limitations
 

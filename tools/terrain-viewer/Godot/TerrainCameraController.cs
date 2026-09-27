@@ -33,5 +33,6 @@ public sealed class TerrainCameraController
     public void Resize(Vector2 viewport) { if (_state.FitMode) Fit(viewport); }
     public void Reset(Vector2 viewport) => Fit(viewport);
     public CameraState State => _state;
+    public Camera2D Camera => _camera;
     private void Apply() { _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)_state.Zoom; }
 }

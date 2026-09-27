@@ -57,17 +57,18 @@ public sealed class CorePolicyTests
         var key = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
         var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(-100, 0, 300, 100),
         [
-            new TerrainPlanInput(9, key, TerrainKind.Facade, 1, 1, 0xB00000C1, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 1, 1)),
-            new TerrainPlanInput(7, key, TerrainKind.Tile, 0, 1, 0xC1, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 1, 0)),
-            new TerrainPlanInput(8, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0)),
+            new TerrainPlanInput(9, key, TerrainKind.Facade, 1, 1, 0xB00000C1, 80, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, -1, -1)),
+            new TerrainPlanInput(7, key, TerrainKind.Tile, 0, 1, 0xC1, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 99, 99)),
+            new TerrainPlanInput(8, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 1, 99, 99)),
         ]);
         CollectionAssert.AreEqual(new[] { 8, 7, 9 }, plan.Commands.Select(command => command.Ordinal).ToArray());
         var flip = plan.Commands.Single(command => command.Ordinal == 7);
         var facade = plan.Commands.Single(command => command.Ordinal == 9);
         Assert.AreEqual(new TerrainRect(41, 20, 78, 40), flip.Destination);
         Assert.IsTrue(flip.FlipX);
-        Assert.AreEqual(new TerrainRect(1, 40, 78, 40), facade.Destination);
+        Assert.AreEqual(new TerrainRect(1, 40, 80, 40), facade.Destination);
         Assert.IsFalse(facade.FlipX);
+        Assert.AreEqual(1, facade.Order.Layer, "Facade layer is derived from kind, not caller input.");
 
         var cropped = TerrainScenePlan.CreateSynthetic(new TerrainRect(2, 1, 10, 10),
         [new TerrainPlanInput(10, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
@@ -94,6 +95,32 @@ public sealed class CorePolicyTests
         await AssertThrowsAsync<TerrainViewerException>(first);
         await AssertThrowsAsync<TerrainViewerException>(second);
         Assert.AreEqual(1, coordinator.MaximumObservedConcurrency);
+    }
+
+    [TestMethod]
+    public void Scene_plan_sorts_y_x_then_ordinal_after_derived_layer()
+    {
+        var key = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(-100, 0, 300, 100),
+        [
+            new TerrainPlanInput(4, key, TerrainKind.Tile, 0, 1, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 99, 99, 99)),
+            new TerrainPlanInput(3, key, TerrainKind.Tile, 1, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 99, 99, 99)),
+            new TerrainPlanInput(2, key, TerrainKind.Tile, 0, 1, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 99, 99, 99)),
+            new TerrainPlanInput(1, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 99, 99, 99)),
+        ]);
+        CollectionAssert.AreEqual(new[] { 1, 3, 2, 4 }, plan.Commands.Select(command => command.Ordinal).ToArray());
+    }
+
+    [TestMethod]
+    public void Generation_gate_prevents_stale_publication_and_allows_current_generation_once()
+    {
+        using var coordinator = new TerrainLoadCoordinator();
+        var stale = coordinator.BeginGeneration();
+        var current = coordinator.BeginGeneration();
+        var publications = 0;
+        Assert.IsFalse(coordinator.TryPublish(stale, () => publications++));
+        Assert.IsTrue(coordinator.TryPublish(current, () => publications++));
+        Assert.AreEqual(1, publications);
     }
 
     private static void AssertThrows<T>(Action action) where T : Exception

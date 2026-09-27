@@ -8,7 +8,8 @@ public sealed record InputFingerprint(long Size, string Sha256);
 public sealed record DecodedTerrainTexture(TerrainTextureKey Key, int Width, int Height, byte[] Rgba);
 public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, IReadOnlyDictionary<TerrainTextureKey, DecodedTerrainTexture> Textures,
     int ResolvedCount, int TileCount, int FacadeCount, int NormalizationRecoveredCount, int NormalizationLookupCount,
-    InputFingerprint ModuleFingerprint, InputFingerprint ResourceFingerprint, long ElapsedMilliseconds, int MaximumObservedConcurrency);
+    InputFingerprint ModuleFingerprint, InputFingerprint ResourceFingerprint, InputFingerprint ModuleFingerprintAfter,
+    InputFingerprint ResourceFingerprintAfter, long CheckedRgbaBytes, long ElapsedMilliseconds, int MaximumObservedConcurrency);
 
 public sealed class TerrainLoadCoordinator : IDisposable
 {
@@ -20,6 +21,16 @@ public sealed class TerrainLoadCoordinator : IDisposable
 
     public long BeginGeneration() => Interlocked.Increment(ref _generation);
     public int MaximumObservedConcurrency => Volatile.Read(ref _maximumObservedConcurrency);
+    public bool IsCurrentGeneration(long generation) => Volatile.Read(ref _generation) == generation;
+
+    /// <summary>Runs a publication action only for the current monotonic generation.</summary>
+    public bool TryPublish(long generation, Action publish)
+    {
+        ArgumentNullException.ThrowIfNull(publish);
+        if (!IsCurrentGeneration(generation)) return false;
+        publish();
+        return true;
+    }
 
     public async Task<TerrainLoadResult> LoadAsync(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken = default)
     {
@@ -81,8 +92,8 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
-                    tileCount, facadeCount, recoveredCount, lookupCount,
-                    moduleBefore, resourceBefore, Environment.TickCount64 - started, MaximumObservedConcurrency);
+                    tileCount, facadeCount, recoveredCount, lookupCount, moduleBefore, resourceBefore, moduleAfter,
+                    resourceAfter, checkedBytes, Environment.TickCount64 - started, MaximumObservedConcurrency);
             }
         }
         catch (TerrainViewerException) { throw; }

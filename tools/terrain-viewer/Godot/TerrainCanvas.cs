@@ -15,6 +15,11 @@ public partial class TerrainCanvas : Node2D
 
     public int CommandCount => _plan?.Commands.Count ?? 0;
 
+    /// <summary>Stable, content-free geometry snapshot used by camera smoke checks.</summary>
+    public string GeometrySignature => _plan is null
+        ? string.Empty
+        : string.Join(';', _plan.Commands.Select(command => $"{command.Ordinal}:{command.Source.X},{command.Source.Y},{command.Source.Width},{command.Source.Height}:{command.Destination.X},{command.Destination.Y},{command.Destination.Width},{command.Destination.Height}:{command.FlipX}"));
+
     public bool TryGetOpaqueLandmark(out TerrainCanvasLandmark landmark)
     {
         landmark = default;
