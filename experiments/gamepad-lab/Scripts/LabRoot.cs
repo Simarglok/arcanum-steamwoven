@@ -191,7 +191,22 @@ public partial class LabRoot : Node2D
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
     public void RunCapture(string[] args) { var index = Array.IndexOf(args, "--capture"); if (index < 0 || index + 2 >= args.Length) { GetTree().Quit(1); return; } var parts = args[index + 1].Split('x'); GetWindow().Size = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1])); CallDeferred(nameof(SaveCaptureAfterLayout), args[index + 2]); }
-    public async void SaveCaptureAfterLayout(string path) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); RefreshSelection(); var error = GetViewport().GetTexture().GetImage().SavePng(path); GetTree().Quit(error == Error.Ok ? 0 : 1); }
+    public async void SaveCaptureAfterLayout(string path)
+    {
+        var exitCode = 1;
+        try
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); RefreshSelection();
+            var texture = GetViewport().GetTexture(); if (texture is null) throw new InvalidOperationException("capture viewport texture is unavailable");
+            var image = texture.GetImage(); if (image is null) throw new InvalidOperationException("capture image is unavailable");
+            exitCode = image.SavePng(path) == Error.Ok ? 0 : 1;
+        }
+        catch (Exception exception) { GD.PushError($"capture failed: {exception}"); }
+        // Defer shutdown out of the async continuation so a failed render path
+        // is a bounded nonzero result rather than an unobserved teardown crash.
+        CallDeferred(nameof(QuitVerification), exitCode);
+    }
+    public void QuitVerification(int exitCode) => GetTree().Quit(exitCode);
     private async Task LayoutFrames()
     {
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
