@@ -32,5 +32,6 @@ public sealed class TerrainCameraController
     public void Zoom(double factor) { _state = CameraPolicy.Zoom(_state, factor); Apply(); }
     public void Resize(Vector2 viewport) { if (_state.FitMode) Fit(viewport); }
     public void Reset(Vector2 viewport) => Fit(viewport);
+    public CameraState State => _state;
     private void Apply() { _camera.Position = new Vector2((float)_state.X, (float)_state.Y); _camera.Zoom = Vector2.One * (float)_state.Zoom; }
 }

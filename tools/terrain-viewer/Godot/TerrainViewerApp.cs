@@ -91,34 +91,74 @@ public partial class TerrainViewerApp : Node
         var commandCount = _canvas!.CommandCount;
         var textureCount = _cache.Count;
         DisplayServer.WindowSetSize(new Vector2I(1280, 800));
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await NextFrameAsync();
+        var initial = _camera!.State;
+        await CaptureAndValidateSmokeFrameAsync("1280x800", commandCount, textureCount);
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+        await NextFrameAsync();
+        if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        await NextFrameAsync();
+        if (_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
+        await NextFrameAsync();
+        if (!_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.F, Pressed = true });
         DisplayServer.WindowSetSize(new Vector2I(1920, 1080));
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await NextFrameAsync();
+        if (!_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        await CaptureAndValidateSmokeFrameAsync("1920x1080", commandCount, textureCount);
+        var initialMode = GetWindow().Mode;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await NextFrameAsync();
+        if (GetWindow().Mode == initialMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await NextFrameAsync();
+        if (GetWindow().Mode != Window.ModeEnum.Windowed) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        for (var cycle = 0; cycle < 100; cycle++)
+        {
+            _camera.Zoom(cycle % 2 == 0 ? 1.25 : 0.8);
+            _camera.Reset(GetViewport().GetVisibleRect().Size);
+        }
         if (commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount || _cache.Count != textureCount || result.MaximumObservedConcurrency != 1)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        if (_nativeSmokeScreenshot is not null)
-        {
-            var screenshotPath = Path.GetFullPath(_nativeSmokeScreenshot);
-            var screenshotDirectory = Path.GetDirectoryName(screenshotPath);
-            if (string.IsNullOrWhiteSpace(screenshotDirectory)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-            Directory.CreateDirectory(screenshotDirectory);
-            using var screenshot = GetViewport().GetTexture().GetImage();
-            if (screenshot.SavePng(screenshotPath) != Error.Ok) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        }
-        GD.Print("ARC-RENDER-003 native smoke PASS 1280x800 1920x1080 commands=4096 concurrency=1");
+        GD.Print("ARC-RENDER-003 native smoke PASS 1280x800 1920x1080 input/readback/fullscreen commands=4096 concurrency=1");
         GetTree().Quit(0);
+    }
+
+    private async Task NextFrameAsync()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private async Task CaptureAndValidateSmokeFrameAsync(string size, int commandCount, int textureCount)
+    {
+        await NextFrameAsync();
+        using var screenshot = GetViewport().GetTexture().GetImage();
+        var rgba = screenshot.GetData().ToArray();
+        if (screenshot.GetWidth() <= 0 || screenshot.GetHeight() <= 0 || !HasOpaquePixel(rgba)
+            || _canvas!.CommandCount != commandCount || _cache.Count != textureCount || string.IsNullOrWhiteSpace(_status?.Text))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        if (_nativeSmokeScreenshot is null) return;
+        var requested = Path.GetFullPath(_nativeSmokeScreenshot);
+        var directory = Path.GetDirectoryName(requested);
+        if (string.IsNullOrWhiteSpace(directory)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        Directory.CreateDirectory(directory);
+        var stem = Path.GetFileNameWithoutExtension(requested);
+        var extension = Path.GetExtension(requested);
+        var output = Path.Combine(directory, $"{stem}-{size}{extension}");
+        if (screenshot.SavePng(output) != Error.Ok) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+    }
+
+    private static bool HasOpaquePixel(byte[] rgba)
+    {
+        for (var offset = 3; offset < rgba.Length; offset += 4) if (rgba[offset] != 0) return true;
+        return false;
     }
 
     public override void _Process(double delta)
@@ -144,7 +184,7 @@ public partial class TerrainViewerApp : Node
             if (key.Keycode is Key.R or Key.F) _camera?.Reset(GetViewport().GetVisibleRect().Size);
             else if (key.Keycode == Key.Minus) _camera?.Zoom(0.8);
             else if (key.Keycode == Key.Plus) _camera?.Zoom(1.25);
-            else if (key.Keycode == Key.F11) GetWindow().Mode = Window.ModeEnum.Fullscreen;
+            else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
             else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
         }
     }

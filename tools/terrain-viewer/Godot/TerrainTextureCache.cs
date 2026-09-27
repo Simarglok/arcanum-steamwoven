@@ -11,11 +11,25 @@ public sealed class TerrainTextureCache : IDisposable
     public void Upload(IReadOnlyDictionary<TerrainTextureKey, DecodedTerrainTexture> decoded)
     {
         ArgumentNullException.ThrowIfNull(decoded);
-        foreach (var item in decoded)
+        var uploaded = new List<TerrainTextureKey>();
+        try
         {
-            if (_textures.ContainsKey(item.Key)) continue;
-            using var image = Image.CreateFromData(item.Value.Width, item.Value.Height, false, Image.Format.Rgba8, item.Value.Rgba);
-            _textures.Add(item.Key, ImageTexture.CreateFromImage(image));
+            foreach (var item in decoded)
+            {
+                if (_textures.ContainsKey(item.Key)) continue;
+                using var image = Image.CreateFromData(item.Value.Width, item.Value.Height, false, Image.Format.Rgba8, item.Value.Rgba);
+                _textures.Add(item.Key, ImageTexture.CreateFromImage(image));
+                uploaded.Add(item.Key);
+            }
+        }
+        catch
+        {
+            foreach (var key in uploaded)
+            {
+                _textures[key].Dispose();
+                _textures.Remove(key);
+            }
+            throw;
         }
     }
 

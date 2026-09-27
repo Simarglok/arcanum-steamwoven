@@ -14,6 +14,8 @@ public static class CrashSiteProfile
     public const int CellCount = 4096;
     public const int TileCount = 3033;
     public const int FacadeCount = 1063;
+    public const int NormalizationRecoveredCount = 457;
+    public const int NormalizationLookupCount = 86;
 
     public static TerrainSectorSelector CreateSelector() => new(ModuleEntry, "Arcanum1-024-fixed", 1452, 1290,
         86570436012, 92928, 82560, 64, 64, new TerrainEntryExpectation(463, 2, 47291));

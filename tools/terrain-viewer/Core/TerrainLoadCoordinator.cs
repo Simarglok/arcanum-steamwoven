@@ -58,23 +58,30 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 report = TerrainLoader.Inspect(module, CrashSiteProfile.CreateSelector(), source);
                 if (!report.IsComplete || report.Outcomes.Count != CrashSiteProfile.CellCount)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
+                var tileCount = report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Tile);
+                var facadeCount = report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Facade);
+                var recoveredCount = report.ResolvedRecords.Count(record => record.WasNormalizationRecovered);
+                var lookupCount = report.ResolvedRecords.Where(record => record.WasNormalizationRecovered).Select(record => record.LookupId).Distinct().Count();
+                if (tileCount != CrashSiteProfile.TileCount || facadeCount != CrashSiteProfile.FacadeCount
+                    || recoveredCount != CrashSiteProfile.NormalizationRecoveredCount || lookupCount != CrashSiteProfile.NormalizationLookupCount)
+                    throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
                 var sector = TerrainLoader.Load(module, CrashSiteProfile.CreateSelector(), source);
                 var plan = TerrainScenePlan.Create(sector);
                 textures = new Dictionary<TerrainTextureKey, DecodedTerrainTexture>();
+                var checkedBytes = 0L;
                 foreach (var record in sector.Records)
                 {
                     var key = TerrainTextureKey.FromRecord(record);
                     if (textures.ContainsKey(key)) continue;
                     var frame = TerrainLoader.DecodeSelectedFrame(resource, record, new TerrainLoaderOptions().ArtOptions);
+                    checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count, frame.Width, frame.Height);
                     textures.Add(key, new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()));
                 }
-                TerrainCachePolicy.Validate(textures.ToDictionary(pair => pair.Key, pair => (pair.Value.Width, pair.Value.Height)));
                 var moduleAfter = Fingerprint(arguments.ModulePath);
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
-                    report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Tile), report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Facade),
-                    report.ResolvedRecords.Count(record => record.WasNormalizationRecovered), report.ResolvedRecords.Where(record => record.WasNormalizationRecovered).Select(record => record.LookupId).Distinct().Count(),
+                    tileCount, facadeCount, recoveredCount, lookupCount,
                     moduleBefore, resourceBefore, Environment.TickCount64 - started, 1);
             }
         }

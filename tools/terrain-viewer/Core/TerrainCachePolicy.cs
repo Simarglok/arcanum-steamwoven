@@ -28,6 +28,16 @@ public static class TerrainCachePolicy
             if (total > MaxRgbaBytes) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
         }
     }
+
+    /// <summary>Checks a frame before its bytes are retained, preventing unbounded failed loads.</summary>
+    public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height)
+    {
+        if (currentCount >= MaxDistinctKeys) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
+        if (width <= 0 || height <= 0) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure));
+        var total = checked(currentBytes + CheckedRgbaBytes(width, height));
+        if (total > MaxRgbaBytes) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
+        return total;
+    }
 }
 
 public sealed class TerrainViewerException(TerrainViewerError error) : Exception(error.Code.ToString())
