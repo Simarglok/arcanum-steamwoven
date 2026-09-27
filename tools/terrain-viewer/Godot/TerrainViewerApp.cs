@@ -61,8 +61,17 @@ public partial class TerrainViewerApp : Node
             ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {arguments.SourceId} | decoded {result.Textures.Count} | {result.ElapsedMilliseconds}ms");
             if (_nativeSmoke) await RunNativeSmokeAsync(result);
         }
-        catch (TerrainViewerException exception) { if (requestGeneration == _generation) ShowStatus(exception.Error.ToString()); }
-        catch { ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString()); }
+        catch (TerrainViewerException exception)
+        {
+            if (requestGeneration != _generation) return;
+            ShowStatus(exception.Error.ToString());
+            if (_nativeSmoke) GetTree().Quit(1);
+        }
+        catch
+        {
+            ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
+            if (_nativeSmoke) GetTree().Quit(1);
+        }
     }
 
     private static (bool Enabled, string? ScreenshotPath) TakeNativeSmokeArguments(List<string> args)
@@ -101,8 +110,12 @@ public partial class TerrainViewerApp : Node
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         if (_nativeSmokeScreenshot is not null)
         {
+            var screenshotPath = Path.GetFullPath(_nativeSmokeScreenshot);
+            var screenshotDirectory = Path.GetDirectoryName(screenshotPath);
+            if (string.IsNullOrWhiteSpace(screenshotDirectory)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            Directory.CreateDirectory(screenshotDirectory);
             using var screenshot = GetViewport().GetTexture().GetImage();
-            if (screenshot.SavePng(_nativeSmokeScreenshot) != Error.Ok) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            if (screenshot.SavePng(screenshotPath) != Error.Ok) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
         GD.Print("ARC-RENDER-003 native smoke PASS 1280x800 1920x1080 commands=4096 concurrency=1");
         GetTree().Quit(0);
