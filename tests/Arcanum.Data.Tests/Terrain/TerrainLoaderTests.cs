@@ -120,6 +120,26 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
+    public void Mes_accepts_interstitial_ascii_only_before_a_later_brace_keyed_record()
+    {
+        var sector = Sector(Enumerable.Repeat(0x000001C0u, 4096).ToArray());
+        var tileMes = "{0}{aaa}\ninterstitial ASCII\n{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\interstitial.sec", sector))), leaveOpen: true);
+        using var resource = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii(tileMes)),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+            ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+
+        Assert.IsTrue(TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(resource)).IsComplete);
+
+        using var trailing = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii(tileMes + " trailing")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+            ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(trailing)));
+    }
+
+    [TestMethod]
     public void Non_ascii_archive_name_is_excluded_instead_of_collapsing_onto_ascii_question_mark()
     {
         var sector = Sector(Enumerable.Repeat(0x000001C0u, 4096).ToArray());

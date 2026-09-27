@@ -207,7 +207,12 @@ public static class TerrainLoader
             if (cursor == text.Length) break;
             if (text[cursor] == '\0') { if (text[cursor..].Any(c => c != '\0' && !char.IsWhiteSpace(c))) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has content after terminal NUL."); break; }
             if (text[cursor] == ';' || (cursor + 1 < text.Length && text[cursor] == '/' && text[cursor + 1] == '/')) { var end = text.IndexOf('\n', cursor); cursor = end < 0 ? text.Length : end + 1; continue; }
-            if (text[cursor] != '{') throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has unsupported syntax.");
+            if (text[cursor] != '{')
+            {
+                var nextRecord = text.IndexOf('{', cursor + 1);
+                if (nextRecord < 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has unsupported syntax.");
+                cursor = nextRecord;
+            }
             var keyEnd = text.IndexOf('}', cursor + 1); if (keyEnd < 0 || !int.TryParse(text.AsSpan(cursor + 1, keyEnd - cursor - 1), out var key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES key is malformed.");
             cursor = keyEnd + 1; while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
             if (cursor == text.Length || text[cursor] != '{') throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES value is missing.");
