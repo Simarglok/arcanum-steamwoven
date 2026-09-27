@@ -28,7 +28,7 @@ public partial class LayoutMatrixRunner : Node
     private async void RunMatrixDeferred(string[] args)
     {
         var report = ArgumentValue(args, "--report") ?? throw new ArgumentException("--report requires an absolute output path");
-        var results = new List<object>();
+        var results = new List<MatrixCaseResult>();
         var allPassed = true;
         foreach (var size in RequiredSizes)
         foreach (var scale in new[] { UiScalePreset.Scale100, UiScalePreset.Scale150, UiScalePreset.Scale200 })
@@ -36,17 +36,17 @@ public partial class LayoutMatrixRunner : Node
         {
             var caseResult = await RunCase(new MatrixCase(size, scale, panel));
             results.Add(caseResult);
-            allPassed &= (bool)caseResult.GetType().GetProperty("passed")!.GetValue(caseResult)!;
+            allPassed &= caseResult.Passed;
         }
         foreach (var scale in new[] { UiScalePreset.Scale125, UiScalePreset.Scale175 })
         {
             var caseResult = await RunCase(new MatrixCase(new Vector2I(1280, 800), scale, LabPanel.Dialogue, true));
             results.Add(caseResult);
-            allPassed &= (bool)caseResult.GetType().GetProperty("passed")!.GetValue(caseResult)!;
+            allPassed &= caseResult.Passed;
         }
         var transition = await RunTransitions();
-        allPassed &= transition.passed;
-        var payload = new
+        allPassed &= transition.Passed;
+        WriteJson(report, new
         {
             schemaVersion = 1,
             task = "ARC-UI-001",
@@ -55,38 +55,88 @@ public partial class LayoutMatrixRunner : Node
             status = allPassed ? "PASS" : "FAIL",
             cases = results,
             transitions = transition,
-            assertions = new[] { "finite/nonnegative actual Control global rects", "sticky controls", "reserved non-overlap", "responsive class", "A-B-A and UI-scale cycles" },
+            assertions = new[]
+            {
+                "finite/nonnegative actual Control global rects", "sticky controls and intentional-scroll accessibility",
+                "wrapped multiline/no visible-line clipping", "reserved non-overlap and responsive class",
+                "A-B-A and 100-200-100 snapshots within 0.5", "world/UI scale independence",
+                "PushInput mouse/click and keyboard focus traversal", "fallback Cyrillic glyph and configured contrast",
+            },
             limitations = new[] { "SubViewport logical layout is simulated; physical pixel mapping and readability are not verified." },
-        };
-        WriteJson(report, payload);
+        });
         GetTree().Quit(allPassed ? 0 : 1);
     }
 
-    private async Task<dynamic> RunCase(MatrixCase matrixCase)
+    private async Task<MatrixCaseResult> RunCase(MatrixCase matrixCase)
     {
-        var viewport = new SubViewport { Size = new Vector2I((int)matrixCase.Viewport.X, (int)matrixCase.Viewport.Y), RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-        AddChild(viewport);
-        var scene = ResourceLoader.Load<PackedScene>("res://scenes/LabSurface.tscn");
-        var surface = scene.Instantiate<LabSurface>();
-        viewport.AddChild(surface);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        var (viewport, surface) = await CreateSurface(new Vector2I((int)matrixCase.Viewport.X, (int)matrixCase.Viewport.Y));
         surface.ApplyUiScale(matrixCase.Scale);
         surface.ShowPanel(matrixCase.Panel);
-        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await Settle();
         var snapshot = surface.CaptureLayoutSnapshot();
-        var assertions = LayoutAssertions.Verify(snapshot, matrixCase.Viewport, matrixCase.Scale, matrixCase.Panel).ToArray();
+        var assertions = LayoutAssertions.Verify(surface, snapshot, matrixCase.Viewport, matrixCase.Scale, matrixCase.Panel).ToArray();
         var passed = assertions.All(assertion => assertion.Passed);
         viewport.QueueFree();
-        return new { viewport = new[] { (int)matrixCase.Viewport.X, (int)matrixCase.Viewport.Y }, uiScale = (int)matrixCase.Scale, panel = matrixCase.Panel.ToString(), smoke = matrixCase.Smoke, passed, assertions };
+        return new MatrixCaseResult(new Vector2I((int)matrixCase.Viewport.X, (int)matrixCase.Viewport.Y), (int)matrixCase.Scale, matrixCase.Panel.ToString(), matrixCase.Smoke, passed, assertions);
     }
 
-    private async Task<(bool passed, object detail)> RunTransitions()
+    private async Task<MatrixTransitionResult> RunTransitions()
     {
-        var a = await RunCase(new MatrixCase(new Vector2I(1280, 800), UiScalePreset.Scale100, LabPanel.Dialogue));
-        var b = await RunCase(new MatrixCase(new Vector2I(1920, 1080), UiScalePreset.Scale200, LabPanel.Settings));
-        var again = await RunCase(new MatrixCase(new Vector2I(1280, 800), UiScalePreset.Scale100, LabPanel.Dialogue));
-        return (a.passed && b.passed && again.passed, new { resize = "A-B-A executed", scale = "100-200-100 executed", input = "actual scene controls instantiated in SubViewports" });
+        var (viewport, surface) = await CreateSurface(new Vector2I(1280, 800));
+        surface.ApplyUiScale(UiScalePreset.Scale100);
+        surface.ShowPanel(LabPanel.Dialogue);
+        await Settle();
+        var resizeA = surface.CaptureLayoutSnapshot();
+        viewport.Size = new Vector2I(1920, 1080);
+        surface.SimulateViewport(viewport.Size);
+        await Settle();
+        var resizeB = surface.CaptureLayoutSnapshot();
+        viewport.Size = new Vector2I(1280, 800);
+        surface.SimulateViewport(viewport.Size);
+        await Settle();
+        var resizeAgain = surface.CaptureLayoutSnapshot();
+
+        surface.ApplyUiScale(UiScalePreset.Scale100);
+        await Settle();
+        var scaleA = surface.CaptureLayoutSnapshot();
+        surface.ApplyUiScale(UiScalePreset.Scale200);
+        await Settle();
+        var scaleB = surface.CaptureLayoutSnapshot();
+        surface.ApplyUiScale(UiScalePreset.Scale100);
+        await Settle();
+        var scaleAgain = surface.CaptureLayoutSnapshot();
+
+        var uiBeforeZoom = surface.CaptureLayoutSnapshot();
+        surface.SetCameraZoom(1.50f);
+        await Settle();
+        var uiAfterZoom = surface.CaptureLayoutSnapshot();
+        surface.SetCameraZoom(1.00f);
+        await Settle();
+        var worldBeforeScale = surface.CaptureLayoutSnapshot();
+        surface.ApplyUiScale(UiScalePreset.Scale200);
+        await Settle();
+        var worldAfterScale = surface.CaptureLayoutSnapshot();
+
+        var input = await VerifyInput(viewport, surface);
+        var assertions = new[]
+        {
+            new MatrixResult("resize-A-B-A-near", LayoutAssertions.Near(resizeA, resizeAgain), $"A={resizeA.Viewport}; B={resizeB.Viewport}; again={resizeAgain.Viewport}; diff={LayoutAssertions.NearDifference(resizeA, resizeAgain) ?? "none"}"),
+            new MatrixResult("scale-100-200-100-near", LayoutAssertions.Near(scaleA, scaleAgain), $"A={(int)scaleA.State.UiScale}; B={(int)scaleB.State.UiScale}; again={(int)scaleAgain.State.UiScale}"),
+            new MatrixResult("camera-moves-world-marker", uiBeforeZoom.WorldMarkerViewport.DistanceTo(uiAfterZoom.WorldMarkerViewport) > 0.5f, $"before={uiBeforeZoom.WorldMarkerViewport}; after={uiAfterZoom.WorldMarkerViewport}"),
+            new MatrixResult("camera-keeps-ui-rects", LayoutAssertions.Near(uiBeforeZoom, uiAfterZoom), "UI rects compared after camera zoom"),
+            new MatrixResult("ui-scale-changes-ui-geometry", !LayoutAssertions.Near(worldBeforeScale, worldAfterScale), "UI rects compared after 100 to 200"),
+            new MatrixResult("ui-scale-keeps-world-and-camera", worldBeforeScale.WorldMarkerViewport.DistanceTo(worldAfterScale.WorldMarkerViewport) <= 0.5f && worldBeforeScale.State.CameraZoom == worldAfterScale.State.CameraZoom, $"world={worldBeforeScale.WorldMarkerViewport}/{worldAfterScale.WorldMarkerViewport}; zoom={worldBeforeScale.State.CameraZoom}"),
+            new MatrixResult("pushinput-mouse-click", input.MousePassed, input.MouseDetail),
+            new MatrixResult("keyboard-focus-and-scroll-escape", input.KeyboardPassed, input.KeyboardDetail),
+            new MatrixResult("compact-panel-selector", input.CompactSelectorPassed, input.CompactSelectorDetail),
+        };
+        viewport.QueueFree();
+        return new MatrixTransitionResult(assertions.All(item => item.Passed), assertions, new
+        {
+            resize = new { initial = resizeA.Viewport, intermediate = resizeB.Viewport, final = resizeAgain.Viewport },
+            uiScale = new { initial = (int)scaleA.State.UiScale, intermediate = (int)scaleB.State.UiScale, final = (int)scaleAgain.State.UiScale },
+            input = new { input.MouseDetail, input.KeyboardDetail, input.CompactSelectorDetail },
+        });
     }
 
     private async void CaptureEvidenceDeferred(string[] args)
@@ -102,15 +152,16 @@ public partial class LayoutMatrixRunner : Node
         };
         foreach (var (size, scale, panel, name) in images)
         {
-            var viewport = new SubViewport { Size = size, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
-            AddChild(viewport);
-            var surface = ResourceLoader.Load<PackedScene>("res://scenes/LabSurface.tscn").Instantiate<LabSurface>();
-            viewport.AddChild(surface);
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            var (viewport, surface) = await CreateSurface(size);
             surface.ApplyUiScale(scale);
             surface.ShowPanel(panel);
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            viewport.GetTexture().GetImage().SavePng(Path.Combine(directory, name));
+            if (panel == LabPanel.Settings)
+                surface.SetDiagnosticsVisible(true);
+            await Settle();
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            var save = viewport.GetTexture().GetImage().SavePng(Path.Combine(directory, name));
+            if (save != Error.Ok)
+                throw new IOException($"SavePng failed for {name}: {save}");
             viewport.QueueFree();
         }
         GetTree().Quit(0);
@@ -126,5 +177,58 @@ public partial class LayoutMatrixRunner : Node
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllText(path, JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private async Task<(SubViewport viewport, LabSurface surface)> CreateSurface(Vector2I size)
+    {
+        var viewport = new SubViewport { Size = size, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        AddChild(viewport);
+        var surface = ResourceLoader.Load<PackedScene>("res://scenes/LabSurface.tscn").Instantiate<LabSurface>();
+        viewport.AddChild(surface);
+        await Settle();
+        return (viewport, surface);
+    }
+
+    private async Task Settle()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private async Task<(bool MousePassed, string MouseDetail, bool KeyboardPassed, string KeyboardDetail, bool CompactSelectorPassed, string CompactSelectorDetail)> VerifyInput(SubViewport viewport, LabSurface surface)
+    {
+        var close = surface.ImportantControl("Close") as Button;
+        var closeSignals = 0;
+        if (close != null)
+            close.Pressed += () => closeSignals++;
+        var center = close?.GetGlobalRect().GetCenter() ?? Vector2.Zero;
+        viewport.PushInput(new InputEventMouseMotion { Position = center }, true);
+        await Settle();
+        var hovered = viewport.GuiGetHoveredControl();
+        viewport.PushInput(new InputEventMouseButton { Position = center, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+        viewport.PushInput(new InputEventMouseButton { Position = center, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+        await Settle();
+        var mousePassed = closeSignals == 1 && !surface.State.PanelVisible && hovered != null;
+        var mouseDetail = $"closeSignals={closeSignals}; hovered={hovered?.Name ?? "none"}; panelVisible={surface.State.PanelVisible}";
+
+        surface.ShowPanel(LabPanel.Dialogue);
+        await Settle();
+        var scale = surface.ImportantControl("Action100%");
+        scale?.GrabFocus();
+        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = true }, true);
+        viewport.PushInput(new InputEventKey { Keycode = Key.Tab, Pressed = false }, true);
+        await Settle();
+        var focus = viewport.GuiGetFocusOwner();
+        var keyboardPassed = scale != null && scale.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Fullscreen")?.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Close")?.FocusMode == Control.FocusModeEnum.All && surface.ImportantControl("Reset")?.FocusMode == Control.FocusModeEnum.All;
+        var keyboardDetail = $"PushInput Tab sent from Action100; afterTab={focus?.Name ?? "none"}; fullscreen/close/reset support FocusMode.All; ResponseThree has intentional scroll ancestry";
+
+        viewport.Size = new Vector2I(1280, 720);
+        surface.ApplyUiScale(UiScalePreset.Scale200);
+        await Settle();
+        var selector = surface.ImportantControl("PanelSelector") as OptionButton;
+        var compactPassed = surface.CaptureLayoutSnapshot().ResponsiveClass == ResponsiveClass.Compact && selector?.IsVisibleInTree() == true && selector.FocusMode == Control.FocusModeEnum.All;
+        var compactDetail = $"class={surface.CaptureLayoutSnapshot().ResponsiveClass}; selectorVisible={selector?.IsVisibleInTree()}; selectorFocus={selector?.FocusMode}";
+        return (mousePassed, mouseDetail, keyboardPassed, keyboardDetail, compactPassed, compactDetail);
     }
 }

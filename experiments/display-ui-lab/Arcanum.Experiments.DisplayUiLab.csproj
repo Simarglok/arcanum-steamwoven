@@ -3,7 +3,8 @@
     <AssemblyName>Arcanum.Experiments.DisplayUiLab</AssemblyName>
     <RootNamespace>Arcanum.Experiments.DisplayUiLab</RootNamespace>
     <TargetFramework>net8.0</TargetFramework>
-    <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
+    <!-- Godot's editor bridge loads its managed project from Debug without a RID. -->
+    <RuntimeIdentifier Condition="'$(GodotTargetPlatform)' == ''">osx-arm64</RuntimeIdentifier>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RestorePackagesWithLockFile Condition="'$(GodotTargetPlatform)' == ''">true</RestorePackagesWithLockFile>
     <NuGetLockFilePath Condition="'$(GodotTargetPlatform)' != ''">$(BaseIntermediateOutputPath)godot.packages.lock.json</NuGetLockFilePath>

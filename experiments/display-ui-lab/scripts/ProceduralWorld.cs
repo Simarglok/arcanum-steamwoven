@@ -4,7 +4,9 @@ namespace Arcanum.Experiments.DisplayUiLab;
 
 public partial class ProceduralWorld : Node2D
 {
-    public static readonly Vector2 MarkerWorldPosition = new(640, 400);
+    // This is deliberately offset from the initial camera center so a zoom assertion
+    // can observe its viewport movement without conflating world and UI coordinates.
+    public static readonly Vector2 MarkerWorldPosition = new(950, 510);
 
     public override void _Draw()
     {

@@ -15,7 +15,7 @@ public enum UiScalePreset
 public enum LabPanel { Dialogue, Inventory, Settings }
 public enum ResponsiveClass { Wide, Medium, Compact }
 
-public sealed record DisplayState(UiScalePreset UiScale, float CameraZoom, LabPanel ActivePanel, bool DiagnosticsVisible);
+public sealed record DisplayState(UiScalePreset UiScale, float CameraZoom, LabPanel ActivePanel, bool DiagnosticsVisible, bool PanelVisible = true);
 public sealed record LayoutSnapshot(
     ResponsiveClass ResponsiveClass,
     Vector2 Viewport,
@@ -25,3 +25,5 @@ public sealed record LayoutSnapshot(
 
 internal sealed record MatrixCase(Vector2 Viewport, UiScalePreset Scale, LabPanel Panel, bool Smoke = false);
 internal sealed record MatrixResult(string Name, bool Passed, string Detail);
+internal sealed record MatrixCaseResult(Vector2I Viewport, int UiScale, string Panel, bool Smoke, bool Passed, IReadOnlyList<MatrixResult> Assertions);
+internal sealed record MatrixTransitionResult(bool Passed, IReadOnlyList<MatrixResult> Assertions, object Evidence);

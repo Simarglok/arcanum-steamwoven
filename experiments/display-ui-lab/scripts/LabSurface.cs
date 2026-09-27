@@ -17,9 +17,11 @@ public partial class LabSurface : Node2D
     private PanelContainer _diagnostics = null!;
     private Label _diagnosticLabel = null!;
     private Camera2D _camera = null!;
+    private ProceduralWorld _proceduralWorld = null!;
     private readonly Dictionary<string, Control> _importantControls = new();
     private DisplayState _state = new(UiScalePreset.Scale100, 1.0f, LabPanel.Dialogue, false);
     private ResponsiveClass _responsiveClass;
+    private bool _panning;
 
     public DisplayState State => _state;
 
@@ -27,7 +29,9 @@ public partial class LabSurface : Node2D
     {
         _hud = GetNode<Control>("UiLayer/Hud");
         _camera = GetNode<Camera2D>("WorldRoot/Camera2D");
+        _proceduralWorld = GetNode<ProceduralWorld>("WorldRoot/ProceduralWorld");
         _camera.Zoom = Vector2.One;
+        _camera.MakeCurrent();
         BuildUi();
         GetViewport().SizeChanged += Arrange;
         Arrange();
@@ -54,7 +58,7 @@ public partial class LabSurface : Node2D
             if (app.IsFullscreen)
                 app.LeaveFullscreen();
             else
-                ShowPanel(LabPanel.Dialogue);
+                ClosePanel();
             GetViewport().SetInputAsHandled();
         }
     }
@@ -76,15 +80,16 @@ public partial class LabSurface : Node2D
 
     public void ShowPanel(LabPanel panel)
     {
-        _state = _state with { ActivePanel = panel };
+        _state = _state with { ActivePanel = panel, PanelVisible = true };
         BuildPanelBody();
         Arrange();
     }
 
     public void ResetLab()
     {
-        _state = new DisplayState(UiScalePreset.Scale100, 1.0f, LabPanel.Dialogue, false);
+        _state = new DisplayState(UiScalePreset.Scale100, 1.0f, LabPanel.Dialogue, false, true);
         _camera.Zoom = Vector2.One;
+        _camera.Position = new Vector2(640, 400);
         BuildUi();
         Arrange();
     }
@@ -95,8 +100,54 @@ public partial class LabSurface : Node2D
         rects["hud"] = _topHud.GetGlobalRect();
         rects["actions"] = _actionScroll.GetGlobalRect();
         rects["panel"] = _activePanel.GetGlobalRect();
-        var worldMarker = GetGlobalTransformWithCanvas() * ProceduralWorld.MarkerWorldPosition;
+        var worldMarker = GetViewport().GetCanvasTransform() * _proceduralWorld.GetGlobalTransform() * ProceduralWorld.MarkerWorldPosition;
         return new LayoutSnapshot(_responsiveClass, GetViewport().GetVisibleRect().Size, _state, rects, worldMarker);
+    }
+
+    internal Control? ImportantControl(string id) => _importantControls.GetValueOrDefault(id);
+
+    internal void SetDiagnosticsVisible(bool visible)
+    {
+        _state = _state with { DiagnosticsVisible = visible };
+        Arrange();
+    }
+
+    internal bool IsInsideIntentionalScroll(Control control)
+    {
+        for (Node? node = control; node != null; node = node.GetParent())
+        {
+            if (node == _actionScroll || node == _panelScroll)
+                return true;
+        }
+        return false;
+    }
+
+    internal (bool wrapped, int lineCount, int visibleLineCount) TextMetrics(string id)
+    {
+        var label = _panelBody.GetNodeOrNull<Label>(id);
+        return label == null
+            ? (false, 0, 0)
+            : (label.AutowrapMode != TextServer.AutowrapMode.Off, label.GetLineCount(), label.GetVisibleLineCount());
+    }
+
+    internal bool FallbackFontHasCyrillic()
+    {
+        var font = ThemeDB.FallbackFont;
+        return font != null && font.HasChar('С') && font.HasChar('я');
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventMouseButton button && button.ButtonIndex == MouseButton.Middle)
+        {
+            _panning = button.Pressed;
+            GetViewport().SetInputAsHandled();
+        }
+        else if (_panning && @event is InputEventMouseMotion motion)
+        {
+            _camera.Position -= motion.Relative / _camera.Zoom;
+            GetViewport().SetInputAsHandled();
+        }
     }
 
     internal void SimulateViewport(Vector2 size)
@@ -117,6 +168,7 @@ public partial class LabSurface : Node2D
         _topHud.AddThemeStyleboxOverride("panel", UiScalePolicy.PanelStyle(new Color("122235dd"), _state.UiScale));
         _hud.AddChild(_topHud);
         var hudRow = new HBoxContainer { Name = "HudRow" };
+        UiScalePolicy.ApplyContainer(hudRow, _state.UiScale);
         _topHud.AddChild(hudRow);
         var title = LabelFor("Display UI laboratory — synthetic data only", 18);
         title.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
@@ -134,7 +186,17 @@ public partial class LabSurface : Node2D
         _actionScroll = new ScrollContainer { Name = "ActionScroll", HorizontalScrollMode = ScrollContainer.ScrollMode.Auto, VerticalScrollMode = ScrollContainer.ScrollMode.Disabled };
         _hud.AddChild(_actionScroll);
         _actions = new HBoxContainer { Name = "ActionRow" };
+        UiScalePolicy.ApplyContainer(_actions, _state.UiScale);
         _actionScroll.AddChild(_actions);
+        var panelSelector = new OptionButton { Name = "PanelSelector", FocusMode = Control.FocusModeEnum.All, TooltipText = "Select active panel" };
+        panelSelector.CustomMinimumSize = new Vector2(UiScalePolicy.Target(120, _state.UiScale), UiScalePolicy.Target(44, _state.UiScale));
+        UiScalePolicy.Apply(panelSelector, _state.UiScale);
+        foreach (var panel in Enum.GetValues<LabPanel>())
+            panelSelector.AddItem(panel.ToString(), (int)panel);
+        panelSelector.Selected = (int)_state.ActivePanel;
+        panelSelector.ItemSelected += index => ShowPanel((LabPanel)panelSelector.GetItemId((int)index));
+        _importantControls["PanelSelector"] = panelSelector;
+        _actions.AddChild(panelSelector);
         AddAction("100%", UiScalePreset.Scale100);
         AddAction("125%", UiScalePreset.Scale125);
         AddAction("150%", UiScalePreset.Scale150);
@@ -144,18 +206,21 @@ public partial class LabSurface : Node2D
         AddZoomAction("Zoom +", 0.25f);
 
         _activePanel = new Panel { Name = "ActivePanel", MouseFilter = Control.MouseFilterEnum.Stop, ClipContents = true };
+        _activePanel.Visible = _state.PanelVisible;
         _activePanel.AddThemeStyleboxOverride("panel", UiScalePolicy.PanelStyle(new Color("172c42f5"), _state.UiScale));
         _hud.AddChild(_activePanel);
         var panelShell = new VBoxContainer { Name = "PanelShell" };
+        UiScalePolicy.ApplyContainer(panelShell, _state.UiScale);
         panelShell.SetAnchorsAndOffsetsPreset(Control.LayoutPreset.FullRect);
         _activePanel.AddChild(panelShell);
         var sticky = new HBoxContainer { Name = "StickyHeader" };
+        UiScalePolicy.ApplyContainer(sticky, _state.UiScale);
         panelShell.AddChild(sticky);
         var panelTitle = LabelFor(_state.ActivePanel.ToString(), 20);
         panelTitle.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         sticky.AddChild(panelTitle);
         var close = ButtonFor("Close", "Close");
-        close.Pressed += () => ShowPanel(LabPanel.Dialogue);
+        close.Pressed += ClosePanel;
         sticky.AddChild(close);
         var reset = ButtonFor("Reset", "Reset");
         reset.Pressed += () => GetNode<DisplayUiLabApp>("/root/DisplayUiLabApp").ResetWindow();
@@ -164,6 +229,7 @@ public partial class LabSurface : Node2D
         _panelScroll.SizeFlagsVertical = Control.SizeFlags.ExpandFill;
         panelShell.AddChild(_panelScroll);
         _panelBody = new VBoxContainer { Name = "PanelBody" };
+        UiScalePolicy.ApplyContainer(_panelBody, _state.UiScale);
         _panelBody.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
         _panelScroll.AddChild(_panelBody);
         BuildPanelBody();
@@ -195,6 +261,7 @@ public partial class LabSurface : Node2D
             case LabPanel.Inventory:
                 AddLongText("Inventory", "Synthetic inventory with deliberately long labels. No original item names or assets are used.");
                 var grid = new GridContainer { Columns = 3, Name = "InventoryGrid" };
+                UiScalePolicy.ApplyContainer(grid, _state.UiScale);
                 for (var i = 1; i <= 12; i++)
                     grid.AddChild(ButtonFor($"Supply crate {i:00}", $"Item{i:00}"));
                 _panelBody.AddChild(grid);
@@ -224,9 +291,12 @@ public partial class LabSurface : Node2D
         _responsiveClass = UiScalePolicy.Classify(viewport, _state.UiScale);
         foreach (var panel in Enum.GetValues<LabPanel>())
             _importantControls[$"Panel{panel}"].Visible = _responsiveClass != ResponsiveClass.Compact;
+        _importantControls["PanelSelector"].Visible = true;
         var margin = UiScalePolicy.Target(12, _state.UiScale);
         var topHeight = UiScalePolicy.Target(52, _state.UiScale);
-        var actionHeight = UiScalePolicy.Target(48, _state.UiScale);
+        // The row contains a 44px base target plus deterministic container/theme space.
+        // Reserving that full metric prevents a first-layout minimum-size correction.
+        var actionHeight = UiScalePolicy.Target(52, _state.UiScale);
         ResponsiveLayout.SetRect(_topHud, new Rect2(margin, margin, Mathf.Max(0, viewport.X - margin * 2), topHeight));
         ResponsiveLayout.SetRect(_actionScroll, new Rect2(margin, viewport.Y - actionHeight - margin, Mathf.Max(0, viewport.X - margin * 2), actionHeight));
         var available = new Rect2(margin, topHeight + margin * 2, Mathf.Max(0, viewport.X - margin * 2), Mathf.Max(0, viewport.Y - topHeight - actionHeight - margin * 3));
@@ -236,7 +306,9 @@ public partial class LabSurface : Node2D
             ResponsiveClass.Medium => new Rect2(available.Position.X, available.End.Y - Mathf.Min(UiScalePolicy.Target(360, _state.UiScale), available.Size.Y), available.Size.X, Mathf.Min(UiScalePolicy.Target(360, _state.UiScale), available.Size.Y)),
             _ => available,
         };
-        ResponsiveLayout.SetRect(_activePanel, ResponsiveLayout.ClampToViewport(panelRect, viewport));
+        _activePanel.Visible = _state.PanelVisible;
+        if (_activePanel.Visible)
+            ResponsiveLayout.SetRect(_activePanel, ResponsiveLayout.ClampToViewport(panelRect, viewport));
         _diagnostics.Visible = _state.DiagnosticsVisible;
         if (_diagnostics.Visible)
         {
@@ -254,7 +326,7 @@ public partial class LabSurface : Node2D
 
     private Label LabelFor(string text, int baseFontSize)
     {
-        var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = false, Modulate = new Color("f2f7ff") };
+        var label = new Label { Text = text, AutowrapMode = TextServer.AutowrapMode.Off, ClipText = false };
         UiScalePolicy.Apply(label, _state.UiScale, baseFontSize);
         return label;
     }
@@ -297,5 +369,11 @@ public partial class LabSurface : Node2D
         if (action != null)
             button.Pressed += action;
         _panelBody.AddChild(button);
+    }
+
+    private void ClosePanel()
+    {
+        _state = _state with { PanelVisible = false };
+        Arrange();
     }
 }
