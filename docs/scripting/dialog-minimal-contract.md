@@ -7,6 +7,14 @@ runtime is implemented or verified. It preserves source identity while refusing
 to interpret unproven expressions, generated menus, resource precedence, UI,
 world simulation, or SCR bytecode.
 
+For the implemented bounded transition subset, see
+[`dialog-transition-runtime.md`](dialog-transition-runtime.md). That runtime
+supersedes this proposal's blanket no-effect wording only for dynamic service
+failures: static prevalidation is zero-command, while already Applied commands
+remain recorded and an exception attempt is indeterminate. This historical
+proposal remains the evidence boundary; neither document claims original-game
+runtime compatibility.
+
 ```text
 DialogId, NodeId, ResponseId, ParticipantId
 DialogQueryPort     // read-only state queries
