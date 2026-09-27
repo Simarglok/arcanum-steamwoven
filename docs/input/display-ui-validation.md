@@ -29,6 +29,12 @@ The matrix invokes the actual `LabSurface.tscn` in sequential SubViewports for e
 
 The evidence capture index is: 1280×720@200 dialogue; 1920×1080@100 inventory; 3440×1440@150 dialogue; 3840×2160@200 settings/diagnostics. Files are ignored local artifacts, never documentation assets. The manifest and `current.json` point to the exact final candidate only after local export gates pass.
 
+### Recorded local result (pre-documentation candidate)
+
+The pre-documentation candidate `d789d19fde08a11a9d97a618034c8da338fd95bb` passed `tools/validate-macos.sh` with the canonical .NET SDK 8.0.425 and Godot 4.7.2 stable mono. That run completed locked restore/build, the verbose Godot editor solution bridge, the source and exported simulated-layout matrices, four simulated screenshot captures, macOS debug export, exported-app matrix/launch, `plutil -lint`, and strict deep `codesign` verification. Both matrix reports recorded `PASS`.
+
+The unchanged merged root also passed locked restore/build and non-real-data tests: 14 Presentation tests and 24 Data tests passed with zero failures. Final candidate validation is rerun after this results documentation is committed; its ignored artifact directory and `current.json` identify the exact post-documentation head.
+
 ## Classification and manual checklist
 
 | Area | Classification | Meaning |
