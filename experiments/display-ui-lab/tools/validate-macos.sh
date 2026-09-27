@@ -23,8 +23,8 @@ export PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin"
 export __GODOT_SHELL_ENV_SET=1
 
 mkdir -p "$build_root/evidence/screenshots"
-"$DOTNET" restore "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --locked-mode
-"$DOTNET" build "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --no-restore
+"$DOTNET" restore "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --locked-mode -p:GodotTargetPlatform= -p:NuGetLockFilePath="$lab_root/packages.lock.json"
+"$DOTNET" build "$lab_root/Arcanum.Experiments.DisplayUiLab.csproj" --no-restore -p:GodotTargetPlatform= -p:NuGetLockFilePath="$lab_root/packages.lock.json"
 "$GODOT" --verbose --headless --path "$lab_root" --editor --build-solutions --quit
 "$GODOT" --headless --path "$lab_root" -- --run-layout-matrix --report "$build_root/evidence/layout-matrix.json"
 "$GODOT" --path "$lab_root" -- --capture-evidence "$build_root/evidence/screenshots"
