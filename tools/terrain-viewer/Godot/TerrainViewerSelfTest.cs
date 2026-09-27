@@ -98,7 +98,7 @@ public static class TerrainViewerSelfTest
         }
         using (var image = await RenderAsync(host, cache, LayerOverlap(keys.Red, keys.Green))) AssertPixel(image, 5, 5, 0, 255, 0, 255);
         using (var image = await RenderAsync(host, cache, YOverlap(keys.Red, keys.Green))) AssertPixel(image, 45, 25, 0, 255, 0, 255);
-        using (var image = await RenderAsync(host, cache, XOverlap(keys.Red, keys.Blue))) AssertPixel(image, 45, 25, 0, 0, 255, 255);
+        using (var image = await RenderAsync(host, cache, XOverlap(keys.Red, keys.Blue))) AssertPixel(image, 5, 25, 0, 0, 255, 255);
         using (var image = await RenderAsync(host, cache, OrdinalOverlap(keys.Red, keys.Green))) AssertPixel(image, 5, 5, 0, 255, 0, 255);
     }
 
@@ -117,12 +117,12 @@ public static class TerrainViewerSelfTest
     }
 
     private static TerrainScenePlan FullTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(10, key, TerrainKind.Tile, 0, 0, 0)]);
-    private static TerrainScenePlan FullFacade(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(11, key, TerrainKind.Facade, 0, 0, 0)]);
+    private static TerrainScenePlan FullFacade(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(11, key, TerrainKind.Facade, 0, 0, 0xB00000C1)]);
     private static TerrainScenePlan CroppedTile(TerrainTextureKey key) => Plan(new TerrainRect(3, 2, 74, 35), [Input(12, key, TerrainKind.Tile, 0, 0, 0)]);
     private static TerrainScenePlan FlippedTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 150, 80), [Input(13, key, TerrainKind.Tile, 0, 1, 0xC1)]);
     private static TerrainScenePlan LayerOverlap(TerrainTextureKey red, TerrainTextureKey green) => Plan(new TerrainRect(0, 0, 100, 60), [Input(14, red, TerrainKind.Tile, 0, 0, 0), Input(15, green, TerrainKind.Facade, 0, 0, 0)]);
     private static TerrainScenePlan YOverlap(TerrainTextureKey red, TerrainTextureKey green) => Plan(new TerrainRect(0, 0, 150, 80), [Input(16, red, TerrainKind.Tile, 0, 0, 0), Input(17, green, TerrainKind.Tile, 0, 1, 0)]);
-    private static TerrainScenePlan XOverlap(TerrainTextureKey red, TerrainTextureKey blue) => Plan(new TerrainRect(-50, 0, 200, 80), [Input(18, red, TerrainKind.Tile, 1, 0, 0), Input(19, blue, TerrainKind.Tile, 0, 1, 0)]);
+    private static TerrainScenePlan XOverlap(TerrainTextureKey red, TerrainTextureKey blue) => Plan(new TerrainRect(-50, 0, 200, 80), [Input(18, red, TerrainKind.Tile, 0, 0, 0), Input(19, blue, TerrainKind.Tile, 1, 0, 0)]);
     private static TerrainScenePlan OrdinalOverlap(TerrainTextureKey red, TerrainTextureKey green) => Plan(new TerrainRect(0, 0, 100, 60), [Input(20, red, TerrainKind.Tile, 0, 0, 0), Input(21, green, TerrainKind.Tile, 0, 0, 0)]);
 
     private static TerrainPlanInput Input(int ordinal, TerrainTextureKey key, TerrainKind kind, int x, int y, uint rawId)
@@ -145,12 +145,19 @@ public static class TerrainViewerSelfTest
     private static void AssertIndependentGeometryConstants()
     {
         var key = new TerrainTextureKey("constants", 1, 0, 1, "constants", 0, 0, 0);
-        var points = new[] { (0, 0, 1, 0), (1, 0, -39, 20), (0, 1, 41, 20), (63, 0, -2519, 1260), (0, 63, 2521, 1260), (63, 63, 1, 2520), (30, 32, 81, 1240) };
+        // The pre-anchor values are literal independent expectations. The
+        // production projection and production placement are checked in two
+        // separate assertions so an accidental anchor change cannot mask a
+        // projection error (especially the documented 30,32 -> 80,1240).
+        var points = new[] { (0, 0, 0, 0), (1, 0, -40, 20), (0, 1, 40, 20), (63, 0, -2520, 1260), (0, 63, 2520, 1260), (63, 63, 0, 2520), (30, 32, 80, 1240) };
         var plan = Plan(new TerrainRect(-2600, -1, 5200, 2600), points.Select((point, ordinal) => Input(ordinal, key, TerrainKind.Tile, point.Item1, point.Item2, 0)));
         foreach (var point in points)
         {
             var command = plan.Commands.Single(candidate => candidate.Order.LocalX == point.Item1 && candidate.Order.LocalY == point.Item2);
-            if (command.Destination.X != point.Item3 || command.Destination.Y != point.Item4 || command.Source.Width != 78 || command.Source.Height != 40)
+            var projected = TerrainGeometry.Project(point.Item1, point.Item2);
+            if (projected.X != point.Item3 || projected.Y != point.Item4
+                || command.Destination.X != point.Item3 + 1 || command.Destination.Y != point.Item4
+                || command.Source.Width != 78 || command.Source.Height != 40)
                 throw new InvalidOperationException("Projection, +1 anchor, or tile footprint mismatch.");
         }
     }

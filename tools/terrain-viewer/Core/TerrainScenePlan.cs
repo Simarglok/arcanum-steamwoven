@@ -2,8 +2,8 @@ using Arcanum.Data.Terrain;
 
 namespace Arcanum.TerrainViewer.Core;
 
-public sealed record TerrainDrawCommand(int Ordinal, TerrainTextureKey TextureKey, TerrainRect Source, TerrainRect Destination,
-    bool FlipX, TerrainDiagnosticOrderKey Order);
+public sealed record TerrainDrawCommand(int Ordinal, TerrainTextureKey TextureKey, TerrainRect Footprint, TerrainRect Source,
+    TerrainRect Destination, bool FlipX, TerrainDiagnosticOrderKey Order);
 
 /// <summary>
 /// The minimum record information consumed by the scene planner.  Synthetic
@@ -60,7 +60,7 @@ public sealed class TerrainScenePlan
                 input.FrameWidth, input.FrameHeight, bounds);
             if (placement is null) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, ordered.Length));
             var order = new TerrainDiagnosticOrderKey(input.Order.Mode, LayerFor(input.Kind), input.LocalY, input.LocalX);
-            commands.Add(new TerrainDrawCommand(input.Ordinal, input.TextureKey, placement.Value.Source,
+            commands.Add(new TerrainDrawCommand(input.Ordinal, input.TextureKey, placement.Value.Footprint, placement.Value.Source,
                 placement.Value.Destination, placement.Value.FlipX, order));
         }
         return new TerrainScenePlan(bounds, commands.AsReadOnly());

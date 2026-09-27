@@ -11,13 +11,27 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     InputFingerprint ModuleFingerprint, InputFingerprint ResourceFingerprint, InputFingerprint ModuleFingerprintAfter,
     InputFingerprint ResourceFingerprintAfter, long CheckedRgbaBytes, long ElapsedMilliseconds, int MaximumObservedConcurrency);
 
+/// <summary>
+/// Narrow operation boundary for the coordinator. Production uses the same
+/// caller-owned DAT/TerrainLoader flow below; focused tests use a barrier fake
+/// to prove that the coordinator, rather than an incidental file failure,
+/// serializes archive/decode work and suppresses stale publication.
+/// </summary>
+public interface ITerrainLoadOperation
+{
+    TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments);
+}
+
 public sealed class TerrainLoadCoordinator : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly ITerrainLoadOperation? _operation;
     private long _generation;
     private int _activeOperations;
     private int _maximumObservedConcurrency;
     private bool _disposed;
+
+    public TerrainLoadCoordinator(ITerrainLoadOperation? operation = null) => _operation = operation;
 
     public long BeginGeneration() => Interlocked.Increment(ref _generation);
     public int MaximumObservedConcurrency => Volatile.Read(ref _maximumObservedConcurrency);
@@ -41,7 +55,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
         UpdateMaximum(active);
         try
         {
-            return await Task.Run(() => LoadCore(generation, arguments), CancellationToken.None).ConfigureAwait(false);
+            return await Task.Run(() => _operation?.Execute(generation, arguments) ?? LoadCore(generation, arguments), CancellationToken.None).ConfigureAwait(false);
         }
         finally
         {
@@ -125,5 +139,11 @@ public sealed class TerrainLoadCoordinator : IDisposable
         int observed;
         while (active > (observed = Volatile.Read(ref _maximumObservedConcurrency)) && Interlocked.CompareExchange(ref _maximumObservedConcurrency, active, observed) != observed) { }
     }
-    public void Dispose() { if (_disposed) return; _disposed = true; _gate.Dispose(); }
+    public void Dispose()
+    {
+        if (_disposed) return;
+        _disposed = true;
+        if (_operation is IDisposable disposable) disposable.Dispose();
+        _gate.Dispose();
+    }
 }

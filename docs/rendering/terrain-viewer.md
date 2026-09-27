@@ -120,6 +120,25 @@ distinct texture count, checked RGBA bytes, maximum concurrency, and pre/post
 fingerprint equality in the ignored schema-v1 manifest. `current.json` may be
 updated only to that exact commit-bound directory.
 
+For the macOS export, keep the SDK selection process-local. This avoids an
+editor-configured alternate SDK without changing global Godot or .NET settings:
+
+    SOURCE_HEAD=$(git rev-parse HEAD)
+    BUILD_ROOT="artifacts/builds/ARC-RENDER-003/$SOURCE_HEAD"
+    env -i HOME="$HOME" USER="$USER" TMPDIR="$TMPDIR" LANG="${LANG:-en_US.UTF-8}" \
+      PATH="$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin" \
+      DOTNET_ROOT="$HOME/.local/share/dotnet" DOTNET_HOST_PATH="$HOME/.local/share/dotnet/dotnet" \
+      DOTNET_MULTILEVEL_LOOKUP=0 __GODOT_SHELL_ENV_SET=1 "$GODOT" --headless \
+      --path tools/terrain-viewer/Godot --export-debug "macOS debug" "$BUILD_ROOT/ArcanumTerrainViewer.app"
+    "$BUILD_ROOT/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer" --headless -- --self-test
+    codesign --verify --deep --strict --verbose=2 "$BUILD_ROOT/ArcanumTerrainViewer.app"
+
+Before treating an export as usable, inspect its Godot export log for canonical
+SDK `8.0.425` and no Homebrew SDK path, and verify `libhostfxr.dylib` exists in
+both exported architecture payloads. Run source and exported native smoke with
+separate ignored screenshot bases and record requested and actual readback
+dimensions. A clamped display remains `NOT_VERIFIED`, not a 1920x1080 pass.
+
 ## Provenance and limitations
 
 This uses the project's independently authored Data APIs (`DatArchive`,

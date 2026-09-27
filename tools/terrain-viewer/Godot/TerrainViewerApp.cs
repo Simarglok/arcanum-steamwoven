@@ -16,6 +16,7 @@ public partial class TerrainViewerApp : Node
     private bool _nativeSmoke;
     private string? _nativeSmokeScreenshot;
     private TerrainViewerArguments? _arguments;
+    private Task? _lastLoad;
 
     public override void _Ready()
     {
@@ -42,7 +43,7 @@ public partial class TerrainViewerApp : Node
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
             _arguments = TerrainViewerArguments.Parse(args);
-            _ = StartLoadAsync(_arguments);
+            _lastLoad = StartLoadAsync(_arguments);
         }
         catch (ArgumentException) { ShowStatus("Usage"); }
     }
@@ -158,19 +159,31 @@ public partial class TerrainViewerApp : Node
             await NextFrameAsync();
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
             if (beforePan == _camera.State) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = cycle % 2 == 0 ? MouseButton.WheelUp : MouseButton.WheelDown, Pressed = true });
-            Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
-            await SetSmokeWindowSizeAsync(cycle % 2 == 0 ? new Vector2I(1280, 800) : new Vector2I(1440, 900));
+            var afterPan = _camera.State;
+            var beforeZoom = _camera.Camera.Zoom;
+            Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
             await NextFrameAsync();
+            if (_camera.State.FitMode || _camera.Camera.Zoom.X <= beforeZoom.X || _camera.Camera.Position == new Vector2((float)beforePan.X, (float)beforePan.Y))
+                throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
+            await NextFrameAsync();
+            if (!_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            var requestedSize = cycle % 2 == 0 ? new Vector2I(1280, 800) : new Vector2I(1440, 900);
+            await SetSmokeWindowSizeAsync(requestedSize);
+            var actualViewport = GetViewport().GetVisibleRect().Size;
+            var expectedFit = CameraPolicy.Fit(result.Plan.WorldBounds.X, result.Plan.WorldBounds.Y, result.Plan.WorldBounds.Width,
+                result.Plan.WorldBounds.Height, actualViewport.X, actualViewport.Y);
             if (!_camera.State.FitMode || _camera.Camera.Position != new Vector2((float)_camera.State.X, (float)_camera.State.Y)
                 || _camera.Camera.Zoom != Vector2.One * (float)_camera.State.Zoom || _status!.GlobalPosition != initialHudPosition
-                || _canvas.CommandCount != commandCount || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature)
+                || _camera.State.Zoom != expectedFit.Zoom || _canvas.CommandCount != commandCount || _cache.Count != textureCount
+                || _canvas.GeometrySignature != geometrySignature || afterPan == _camera.State)
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
         var disposedBeforeReload = _cache.DisposedCount;
-        await StartLoadAsync(_arguments!, false);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.L, Pressed = true });
+        await (_lastLoad ?? Task.CompletedTask);
         await NextFrameAsync();
-        if (_cache.DisposedCount <= disposedBeforeReload || commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount
+        if (_cache.DisposedCount != disposedBeforeReload + textureCount || commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount
             || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature || result.MaximumObservedConcurrency != 1
             || result.CheckedRgbaBytes <= 0 || result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
@@ -182,20 +195,20 @@ public partial class TerrainViewerApp : Node
     {
         var expected = new[]
         {
-            (392, 4587, 0, new TerrainRect(0, 0, 78, 40), new TerrainRect(-79, 280, 78, 40), false),
-            (573, 4587, 0, new TerrainRect(0, 0, 78, 40), new TerrainRect(-2119, 1380, 78, 40), true),
-            (821, 4577, 0, new TerrainRect(0, 0, 78, 40), new TerrainRect(-1639, 1300, 78, 40), true),
-            (18, 4490, 0, new TerrainRect(0, 0, 78, 40), new TerrainRect(-719, 360, 78, 40), false),
-            (2075, 90, 0, new TerrainRect(0, 0, 78, 40), new TerrainRect(201, 1180, 78, 40), false),
-            (2011, 90, 1, new TerrainRect(0, 0, 78, 40), new TerrainRect(161, 1160, 78, 40), false),
-            (1947, 90, 2, new TerrainRect(0, 0, 78, 40), new TerrainRect(121, 1140, 78, 40), false),
+            (392, 4587, 0, new TerrainRect(-79, 280, 78, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(-79, 280, 78, 40), false),
+            (573, 4587, 0, new TerrainRect(-2119, 1380, 78, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(-2119, 1380, 78, 40), true),
+            (821, 4577, 0, new TerrainRect(-1639, 1300, 78, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(-1639, 1300, 78, 40), true),
+            (18, 4490, 0, new TerrainRect(-719, 360, 78, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(-719, 360, 78, 40), false),
+            (2075, 90, 0, new TerrainRect(201, 1180, 80, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(201, 1180, 78, 40), false),
+            (2011, 90, 1, new TerrainRect(161, 1160, 80, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(161, 1160, 78, 40), false),
+            (1947, 90, 2, new TerrainRect(121, 1140, 80, 40), new TerrainRect(0, 0, 78, 40), new TerrainRect(121, 1140, 78, 40), false),
         };
         foreach (var literal in expected)
         {
             var command = result.Plan.Commands.SingleOrDefault(candidate => candidate.Ordinal == literal.Item1);
             if (command is null || command.TextureKey.DatOrdinal != literal.Item2 || command.TextureKey.FrameIndex != literal.Item3
-                || command.Source != literal.Item4 || command.Destination != literal.Item5 || command.FlipX != literal.Item6
-                || !_cache.TryFindOpaquePixel(command.TextureKey, command.Source, out var sourcePixel))
+                || command.Footprint != literal.Item4 || command.Source != literal.Item5 || command.Destination != literal.Item6 || command.FlipX != literal.Item7
+                || !result.Textures.TryGetValue(command.TextureKey, out var decoded) || !TryFindOpaqueDecodedPixel(decoded, command.Source, out var sourcePixel))
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
             var viewport = new SubViewport { Size = new Vector2I(command.Destination.Width + 2, command.Destination.Height + 2), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
             var isolated = new TerrainCanvas { Position = new Vector2(1 - command.Destination.X, 1 - command.Destination.Y) };
@@ -209,10 +222,27 @@ public partial class TerrainViewerApp : Node
             var actual = image.GetPixel(1 + offsetX, 1 + sourcePixel.Y - command.Source.Y);
             viewport.QueueFree();
             if (Math.Round(actual.R * 255) != sourcePixel.R || Math.Round(actual.G * 255) != sourcePixel.G
-                || Math.Round(actual.B * 255) != sourcePixel.B || Math.Round(actual.A * 255) != sourcePixel.A)
+                || Math.Round(actual.B * 255) != sourcePixel.B || Math.Round(actual.A * 255) != sourcePixel.A
+                || Math.Round(image.GetPixel(0, 0).A * 255) != 0)
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
             GD.Print($"ARC-RENDER-003 representative ordinal={literal.Item1} status=PASS");
         }
+    }
+
+    private static bool TryFindOpaqueDecodedPixel(DecodedTerrainTexture texture, TerrainRect source, out TerrainTexturePixel pixel)
+    {
+        pixel = default;
+        for (var y = source.Y; y < source.Y + source.Height; y++)
+        {
+            for (var x = source.X; x < source.X + source.Width; x++)
+            {
+                var offset = ((y * texture.Width) + x) * 4;
+                if (texture.Rgba[offset + 3] == 0) continue;
+                pixel = new TerrainTexturePixel(x, y, texture.Rgba[offset], texture.Rgba[offset + 1], texture.Rgba[offset + 2], texture.Rgba[offset + 3]);
+                return true;
+            }
+        }
+        return false;
     }
 
     private async Task NextFrameAsync()
@@ -301,7 +331,7 @@ public partial class TerrainViewerApp : Node
             if (key.Keycode is Key.R or Key.F) _camera?.Reset(GetViewport().GetVisibleRect().Size);
             else if (key.Keycode == Key.Minus) _camera?.Zoom(0.8);
             else if (key.Keycode == Key.Plus) _camera?.Zoom(1.25);
-            else if (key.Keycode == Key.L && _arguments is not null) _ = StartLoadAsync(_arguments, false);
+            else if (key.Keycode == Key.L && _arguments is not null) _lastLoad = StartLoadAsync(_arguments, false);
             else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
             else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
         }

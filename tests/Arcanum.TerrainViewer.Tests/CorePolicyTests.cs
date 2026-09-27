@@ -86,15 +86,24 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
-    public async Task Coordinator_serializes_concurrent_invalid_loads_and_disposes_safely()
+    public async Task Coordinator_serializes_barrier_backed_archive_decode_work_and_disposes_operation()
     {
-        using var coordinator = new TerrainLoadCoordinator();
-        var arguments = TerrainViewerArguments.Parse(["--module", "missing-module", "--resource", "missing-resource", "--source-id", "fixture"]);
+        var operation = new BarrierArchiveDecodeOperation();
+        var coordinator = new TerrainLoadCoordinator(operation);
+        var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
         var first = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
+        await operation.Entered.Task;
         var second = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
-        await AssertThrowsAsync<TerrainViewerException>(first);
-        await AssertThrowsAsync<TerrainViewerException>(second);
+        await Task.Delay(20);
+        Assert.AreEqual(1, operation.ExecuteCount, "Second request must remain outside the archive/decode operation.");
+        operation.Release.TrySetResult();
+        await Task.WhenAll(first, second);
         Assert.AreEqual(1, coordinator.MaximumObservedConcurrency);
+        Assert.AreEqual(1, operation.MaximumActive);
+        coordinator.Dispose();
+        Assert.AreEqual(1, operation.DisposeCount, "Coordinator owns operation/archive cleanup exactly once.");
+        coordinator.Dispose();
+        Assert.AreEqual(1, operation.DisposeCount);
     }
 
     [TestMethod]
@@ -121,6 +130,58 @@ public sealed class CorePolicyTests
         Assert.IsFalse(coordinator.TryPublish(stale, () => publications++));
         Assert.IsTrue(coordinator.TryPublish(current, () => publications++));
         Assert.AreEqual(1, publications);
+    }
+
+    [TestMethod]
+    public async Task Coordinator_propagates_safe_operation_failure_and_disposes_failure_path()
+    {
+        var operation = new ThrowingArchiveOperation();
+        using (var coordinator = new TerrainLoadCoordinator(operation))
+        {
+            var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+            await AssertThrowsAsync<TerrainViewerException>(coordinator.LoadAsync(coordinator.BeginGeneration(), arguments));
+        }
+        Assert.AreEqual(1, operation.DisposeCount);
+    }
+
+    private sealed class BarrierArchiveDecodeOperation : ITerrainLoadOperation, IDisposable
+    {
+        private int _active;
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int ExecuteCount { get; private set; }
+        public int MaximumActive { get; private set; }
+        public int DisposeCount { get; private set; }
+
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        {
+            ExecuteCount++;
+            MaximumActive = Math.Max(MaximumActive, Interlocked.Increment(ref _active));
+            Entered.TrySetResult();
+            Release.Task.GetAwaiter().GetResult();
+            Interlocked.Decrement(ref _active);
+            return Result(generation);
+        }
+
+        public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class ThrowingArchiveOperation : ITerrainLoadOperation, IDisposable
+    {
+        public int DisposeCount { get; private set; }
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+            => throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable));
+        public void Dispose() => DisposeCount++;
+    }
+
+    private static TerrainLoadResult Result(long generation)
+    {
+        var key = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var plan = TerrainScenePlan.CreateSynthetic(new TerrainRect(0, 0, 100, 60),
+            [new TerrainPlanInput(0, key, TerrainKind.Tile, 0, 0, 0, 78, 40, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        var fingerprint = new InputFingerprint(1, "fixture");
+        return new TerrainLoadResult(generation, plan, new Dictionary<TerrainTextureKey, DecodedTerrainTexture>(), 1, 1, 0, 0, 0,
+            fingerprint, fingerprint, fingerprint, fingerprint, 0, 0, 1);
     }
 
     private static void AssertThrows<T>(Action action) where T : Exception
