@@ -7,7 +7,7 @@ original visual parity.
 
 Run it only with explicit inputs:
 
-    /Users/simarglok/.local/share/dotnet/dotnet run --project tools/terrain-viewer/Godot -- --module PATH --resource PATH --source-id LABEL
+    "$HOME/.local/share/dotnet/dotnet" run --project tools/terrain-viewer/Godot -- --module PATH --resource PATH --source-id LABEL
 
 The viewer always requires the documented fixed sizes and SHA-256 fingerprints;
 the optional expected hashes are additional equality checks.  `source-id` is a
