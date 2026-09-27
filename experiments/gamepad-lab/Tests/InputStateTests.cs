@@ -31,8 +31,18 @@ internal static class InputStateTests
         var keyPan = new InputStateReducer().Reduce(new(-1, default, Keyboard: true, KeyboardPan: new(1, 1)), c); Assertions.Near(keyPan.Pan.Length, 520d / 60, .001, "normalized keyboard pan");
 
         var method = new InputStateReducer(); method.SetStartupDevices(new[] { 7 }); method.Reduce(new(7, new(.21, 0)), c); Assertions.Equal(method.Method, InputMethod.KeyboardMouse, "analog drift ignored");
-        for (var i = 0; i < 7; i++) method.Reduce(new(7, new(.6, 0)), c); Assertions.Equal(method.Method, InputMethod.Gamepad, "meaningful stick threshold after 100ms");
+        var processClock = new InputContext(Delta: 1d / 60, AdvanceTime: true);
+        for (var i = 0; i < 7; i++) method.Reduce(new(7, new(.6, 0)), processClock); Assertions.Equal(method.Method, InputMethod.Gamepad, "meaningful stick threshold after 100ms of frames");
         method.Reduce(new(-1, default, Keyboard: true), c); Assertions.Equal(method.Method, InputMethod.KeyboardMouse, "keyboard switches method");
+
+        var mouse = new InputStateReducer(); mouse.SetStartupDevices(new[] { 1 }); mouse.Reduce(new(1, default, Confirm: true), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "digital press establishes gamepad method");
+        mouse.Reduce(new(-1, default, MouseLogicalDistance: 2), c); mouse.Reduce(new(-1, default, MouseLogicalDistance: 2), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "sub-threshold mouse travel does not switch");
+        mouse.Reduce(new(-1, default, MouseLogicalDistance: 2), c); Assertions.Equal(mouse.Method, InputMethod.KeyboardMouse, "2 plus 2 plus 2 px within one window switches exactly at 6");
+        mouse.Reduce(new(1, default, Confirm: false), c); mouse.Reduce(new(1, default, Confirm: true), c);
+        mouse.Reduce(new(-1, default, MouseLogicalDistance: 3), c); mouse.Reduce(new(-1, default), new InputContext(Delta: .151, AdvanceTime: true)); mouse.Reduce(new(-1, default, MouseLogicalDistance: 3), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "mouse window expires outside 150ms"); mouse.Reduce(new(-1, default), new InputContext(Delta: .151, AdvanceTime: true));
+        for (var i = 0; i < 5; i++) { mouse.Reduce(new(-1, default, MouseLogicalDistance: 1), c); mouse.Reduce(new(-1, default), new InputContext(Delta: .04, AdvanceTime: true)); }
+        Assertions.Equal(mouse.Method, InputMethod.Gamepad, "jitter below rolling window threshold is rejected");
+        mouse.Reduce(new(-1, default), new InputContext(Delta: .151, AdvanceTime: true)); mouse.Reduce(new(-1, default, MouseLogicalDistance: 5), c); mouse.Quarantine(); mouse.Reduce(new(-1, default), c); mouse.Reduce(new(-1, default), c); mouse.Reduce(new(-1, default, MouseLogicalDistance: 1), c); Assertions.Equal(mouse.Method, InputMethod.Gamepad, "quarantine clears pending mouse distance");
 
         reducer.Disconnect(2); Assertions.True(reducer.ActiveDevice is null, "disconnect clears active");
         Assertions.True(!reducer.Reduce(new(8, new(1, 0)), c).Accepted && !reducer.Reduce(new(3, new(1, 0)), c).Accepted, "same-frame activation candidates are consumed");

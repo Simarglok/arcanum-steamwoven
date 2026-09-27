@@ -21,6 +21,16 @@ internal static class TargetingTests
         var clickedGround = engine.Update(candidates, viewport, engine.PickGround(new(123, 456)), new(), new(640, 400)); Assertions.True(clickedGround.IsGround && clickedGround.GroundPoint == new Vec2(123, 456) && clickedGround.ManualLock, "mouse ground pick persists its canvas-converted world coordinate");
         var radius = engine.Update(new[] { new TargetCandidate("edge", "item", focus + new Vec2(180, 0), 1) }, viewport, new(), new()); Assertions.Equal(radius.Id!, "edge", "radius inclusive");
         foreach (var size in new[] { new Rect(0, 0, 1280, 800), new Rect(0, 0, 1920, 1080) })
-            foreach (var zoom in new[] { .5, 1d, 2d }) { var ground = new Vec2(size.Center.X / zoom, size.Center.Y / zoom); var projection = engine.Update(new[] { new TargetCandidate("center", "item", size.Center, 1) }, size, new(), new(), ground); Assertions.Equal(projection.Id!, "center", $"viewport projection {size.Width} zoom {zoom}"); Assertions.Equal(engine.Update([], size, new(), new(), ground).GroundPoint, ground, $"ground conversion fixture {size.Width} zoom {zoom}"); }
+        {
+            var cameraWorld = new Vec2(640, 400); var worldAnchor = new Vec2(900, 500);
+            foreach (var zoom in new[] { .5, 1d, 2d })
+            {
+                var projected = size.Center + (worldAnchor - cameraWorld) * zoom;
+                var ground = cameraWorld + (new Vec2(32, -24) * (1d / zoom));
+                var projection = engine.Update(new[] { new TargetCandidate("projected", "item", projected, 1) }, size, new(), new(), ground);
+                Assertions.True(zoom == .5 ? projection.Id == "projected" : projection.Id is null, $"noncenter projection changes radius eligibility at {size.Width} zoom {zoom}");
+                Assertions.Equal(engine.Update([], size, new(), new(), ground).GroundPoint, ground, $"noncenter ground conversion fixture {size.Width} zoom {zoom}");
+            }
+        }
     }
 }

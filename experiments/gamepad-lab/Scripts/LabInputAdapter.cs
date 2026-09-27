@@ -10,7 +10,7 @@ public sealed class LabInputAdapter
     private readonly Dictionary<int, DeviceState> _devices = new();
     private readonly HashSet<Key> _keys = new();
     private Vector2 _mouse;
-    private Vector2 _lastMouse;
+
 
     public Vector2 LastMousePosition => _mouse;
     public RawInputFrame Map(InputEvent input, bool focused)
@@ -35,8 +35,10 @@ public sealed class LabInputAdapter
         }
         if (input is InputEventMouseMotion mouseMotion)
         {
-            _lastMouse = _mouse; _mouse = mouseMotion.Position;
-            return KeyboardFrame(focused, false, false) with { MouseLogicalDistance = _mouse.DistanceTo(_lastMouse) };
+            // Relative is already logical travel and avoids treating the first absolute
+            // pointer report as a giant method-switching movement.
+            _mouse = mouseMotion.Position;
+            return KeyboardFrame(focused, false, false) with { MouseLogicalDistance = mouseMotion.Relative.Length() };
         }
         if (input is InputEventMouseButton mouse)
         {
@@ -51,7 +53,18 @@ public sealed class LabInputAdapter
         var keyboard = KeyboardFrame(focused, false, false);
         if (activeDevice is not int device || !_devices.ContainsKey(device)) return keyboard;
         var joy = FromDevice(device, focused);
-        return joy with { KeyboardPan = keyboard.KeyboardPan };
+        // Active-controller filtering applies to joypad state, not to keyboard
+        // accessibility. Merge semantic keyboard levels into the sampled frame so
+        // modal repeat and held keyboard pan continue to work with a controller on.
+        return joy with
+        {
+            KeyboardPan = keyboard.KeyboardPan,
+            Confirm = joy.Confirm || keyboard.Confirm, Cancel = joy.Cancel || keyboard.Cancel,
+            Inspect = joy.Inspect || keyboard.Inspect, Previous = joy.Previous || keyboard.Previous,
+            Next = joy.Next || keyboard.Next, Context = joy.Context || keyboard.Context,
+            Settings = joy.Settings || keyboard.Settings, MenuUp = joy.MenuUp || keyboard.MenuUp,
+            MenuDown = joy.MenuDown || keyboard.MenuDown
+        };
     }
     public void ForgetDevice(int device) => _devices.Remove(device);
     public void Clear() { _keys.Clear(); _devices.Clear(); }

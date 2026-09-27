@@ -22,7 +22,7 @@ public partial class LabRoot : Node2D
         _input.EndFrame();
         RefreshSelection();
         var sample = _adapter.Sample(_input.ActiveDevice, _focused);
-        var continuous = _input.Reduce(sample, Context(delta, _hud.ModalVisible));
+        var continuous = _input.Reduce(sample, Context(delta, _hud.ModalVisible, advanceTime: true));
         if (!_hud.ModalVisible && continuous.Accepted && continuous.Pan != default) _world.Position += ToGodot(continuous.Pan);
         if (_hud.ModalVisible && continuous.Accepted)
         {
@@ -46,7 +46,6 @@ public partial class LabRoot : Node2D
         if (_hud.ModalVisible)
         {
             if (@event is InputEventMouseButton mouse && mouse.Pressed && mouse.ButtonIndex == MouseButton.Left) _hud.SelectAt(mouse.Position);
-            var move = _menuRepeat.Update(intent.MenuDirection, intent.MenuAnalog, GetProcessDeltaTime()); if (move != 0) _hud.Navigate(move);
             if (intent.Cancel) CloseModal(); else if (intent.Confirm) ActivateModal();
             GetViewport().SetInputAsHandled(); return;
         }
@@ -86,33 +85,90 @@ public partial class LabRoot : Node2D
         if (what == NotificationApplicationFocusOut) { _focused = false; _input.FocusChanged(false); _adapter.Clear(); _menuRepeat.Clear(); AddLog("Focus lost: levels cleared."); }
         if (what == NotificationApplicationFocusIn) { _focused = true; _input.FocusChanged(true); AddLog("Focus regained: neutral frame required."); }
     }
-    public void RunSelfTest()
+    public async void RunSelfTest()
     {
         try
         {
             RefreshSelection(); foreach (var action in new[] { "lab_pan", "lab_confirm", "lab_cancel", "lab_inspect", "lab_previous", "lab_next", "lab_context", "lab_settings", "lab_menu_up", "lab_menu_down" }) VerificationMode.Require(InputMap.HasAction(action) && InputMap.ActionGetEvents(action).Count > 0, $"missing mapping {action}");
-            Handle(new InputEventMouseButton { Position = new Vector2(620, 480), ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation); VerificationMode.Require(_selection.ManualLock, "mouse pick did not create lock");
-            Handle(new InputEventMouseButton { Position = new Vector2(20, 20), ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation); VerificationMode.Require(_result!.IsGround && _result.GroundPoint != new Vec2(GetViewport().GetVisibleRect().GetCenter().X, GetViewport().GetVisibleRect().GetCenter().Y), "mouse ground did not retain canvas coordinate");
-            var crateBeforePan = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor; var worldBeforePan = _world.Position;
-            Handle(new InputEventKey { Keycode = Key.D, Pressed = true }, VerificationMode.Simulation); _Process(.1); Handle(new InputEventKey { Keycode = Key.D, Pressed = false }, VerificationMode.Simulation); _Process(.1);
-            var crateAfterPan = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor; VerificationMode.Require(_world.Position != worldBeforePan && crateAfterPan != crateBeforePan, "continuous pan did not displace rendered canvas target");
-            var joy = new LabInputAdapter(); VerificationMode.Require(joy.Map(new InputEventJoypadButton { Device = 12, ButtonIndex = JoyButton.A, Pressed = true }, true).Confirm, "joy adapter injection failed");
-            Handle(new InputEventKey { Keycode = Key.F1, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.F1, Pressed = false }, VerificationMode.Simulation);
-            VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter"); _Process(.01); _Process(.01); Handle(new InputEventKey { Keycode = Key.Down, Pressed = true }, VerificationMode.Simulation); _Process(.35); Handle(new InputEventKey { Keycode = Key.Down, Pressed = false }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.Enter, Pressed = true }, VerificationMode.Simulation);
-            VerificationMode.Require(_log.Any(line => line.Contains("Menu choice")), "menu activation failed"); OnJoyConnectionChanged(9, false); _input.FocusChanged(false); _input.FocusChanged(true);
-            AddLog("SIMULATION self-test passed: mappings, keyboard adapter, menu, selection, focus and disconnect hooks."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); GetTree().Quit(0);
+            var initialSize = GetWindow().Size; var initialZoom = _camera.Zoom; var initialWorld = _world.Position;
+            foreach (var size in new[] { new Vector2I(1280, 800), new Vector2I(1920, 1080) })
+            {
+                GetWindow().Size = size; await LayoutFrames(); _hud.ShowSettings(); await LayoutFrames();
+                VerificationMode.Require(_hud.HasReadableLayout(GetViewport().GetVisibleRect()), $"responsive HUD bounds failed at {size}");
+                _hud.HideModal();
+                foreach (var zoom in new[] { .5f, 1f, 2f })
+                {
+                    _camera.Zoom = new Vector2(zoom, zoom); await LayoutFrames();
+                    var crate = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate");
+                    Handle(new InputEventMouseButton { Position = ToGodot(crate.Anchor), ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation);
+                    VerificationMode.Require(_selection.ManualLock && _result!.Id == "crate", $"canvas target pick failed at {size} zoom {zoom}");
+                    var miss = new Vector2(24, 24); var expectedGround = _world.MakeCanvasPositionLocal(miss);
+                    Handle(new InputEventMouseButton { Position = miss, ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation);
+                    VerificationMode.Require(_result!.IsGround && _result.GroundPoint == new Vec2(expectedGround.X, expectedGround.Y), $"canvas ground conversion failed at {size} zoom {zoom}");
+                }
+            }
+            _camera.Zoom = initialZoom; GetWindow().Size = initialSize; _world.Position = initialWorld; await LayoutFrames();
+
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation);
+            _Process(0); VerificationMode.Require(_input.ActiveDevice == 3, "same-frame controller arbitration did not select lowest id");
+            _Process(0); _Process(0); var beforeNonActive = _world.Position;
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = -.8f }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_world.Position == beforeNonActive, "non-active controller moved world");
+            var canvasBefore = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+            var canvasAfter = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate").Anchor;
+            VerificationMode.Require(_world.Position != beforeNonActive && canvasAfter != canvasBefore, "active controller hold did not displace canvas target");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            var stepStart = _world.Position; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var oneStep = _world.Position.X - stepStart.X;
+            _world.Position = stepStart; PressKey(Key.D); _Process(.04); _Process(.06); ReleaseKey(Key.D); var splitStep = _world.Position.X - stepStart.X;
+            VerificationMode.Require(Math.Abs(oneStep - splitStep) < .001, "keyboard pan is not delta-scaled");
+            _camera.Zoom = Vector2.One; _world.Position = stepStart; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var zoomOneWorldStep = _world.Position.X - stepStart.X;
+            _camera.Zoom = new Vector2(2, 2); _world.Position = stepStart; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); var zoomTwoWorldStep = _world.Position.X - stepStart.X;
+            VerificationMode.Require(Math.Abs(zoomOneWorldStep / 2 - zoomTwoWorldStep) < .001, "pan does not scale by camera zoom"); _camera.Zoom = initialZoom;
+
+            PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
+            _Process(0); _Process(0); var selectedBefore = _hud.SelectedIndex; PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu did not move immediately in process");
+            _Process(.34); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 1) % 6, "digital menu repeated before .35s"); _Process(.01); VerificationMode.Require(_hud.SelectedIndex == (selectedBefore + 2) % 6, "digital menu did not repeat at .35s"); ReleaseKey(Key.Down); _Process(0);
+            var modalWorld = _world.Position; PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); VerificationMode.Require(_world.Position == modalWorld, "modal leaked held world pan");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .65f }, VerificationMode.Simulation); _Process(0); var analogSelection = _hud.SelectedIndex; _Process(.35); VerificationMode.Require(_hud.SelectedIndex != analogSelection, "analog menu repeat did not advance");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .45f }, VerificationMode.Simulation); _Process(0); var releasedSelection = _hud.SelectedIndex; _Process(.2); VerificationMode.Require(_hud.SelectedIndex == releasedSelection, "analog menu did not release at .45");
+            PressKey(Key.Escape); ReleaseKey(Key.Escape); VerificationMode.Require(!_hud.ModalVisible, "modal cancel did not close exactly once");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            Handle(new InputEventKey { Keycode = Key.C, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.C, Pressed = false }, VerificationMode.Simulation); VerificationMode.Require(_hud.ModalKind == ModalKind.Context, "context menu did not open through adapter"); CloseModal();
+
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var focusBefore = _world.Position; _Notification((int)NotificationApplicationFocusOut); _Process(.1); VerificationMode.Require(_world.Position == focusBefore, "focus loss retained held pan"); _Notification((int)NotificationApplicationFocusIn); _Process(0); _Process(0); OnJoyConnectionChanged(3, false); var disconnectBefore = _world.Position; _Process(.1); VerificationMode.Require(_world.Position == disconnectBefore, "active disconnect retained stale action");
+            AddLog("SIMULATION self-test passed: actual adapter arbitration, canvas projection, responsive bounds, modal repeat and lifecycle clearing."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
     public void RunSmoke(string[] args)
     {
         var index = Array.IndexOf(args, "--smoke"); if (index < 0 || index == args.Length - 1) { GetTree().Quit(1); return; }
-        try { RefreshSelection(); Handle(new InputEventKey { Keycode = Key.Enter, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.Enter, Pressed = false }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.I, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventKey { Keycode = Key.I, Pressed = false }, VerificationMode.Simulation); VerificationMode.Require(_log.Any(line => line.Contains("synthetic")), "smoke did not produce interaction feedback"); _hud.ShowSettings(); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "smoke did not create settings state"); for (var step = 0; step < 4; step++) _hud.Navigate(1); VerificationMode.Require(_hud.Activate() == "Reset defaults", "smoke did not navigate to reset"); ActivateModal(); VerificationMode.Require(_log.Any(line => line.Contains("Defaults reset")), "smoke did not reset settings"); System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, selection = _result?.Id ?? "Ground", exercises = new[] { "scene", "selection", "confirm", "inspect", "settings-reset" }, physicalDeviceEvidence = "Not verified" })); GetTree().Quit(0); }
+        try
+        {
+            RefreshSelection(); PressKey(Key.Enter); ReleaseKey(Key.Enter); var confirmed = _log.Any(line => line.Contains("(synthetic)")); PressKey(Key.I); ReleaseKey(Key.I); var inspected = _log.Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase));
+            PressKey(Key.F1); ReleaseKey(Key.F1); _Process(0); _Process(0); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "smoke did not open settings through adapter");
+            PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); PressKey(Key.Enter); ReleaseKey(Key.Enter); VerificationMode.Require(_deadzone != .2, "smoke did not apply nondefault setting");
+            for (var step = 0; step < 3; step++) { PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); }
+            VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to reset"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
+            VerificationMode.Require(confirmed && inspected && _deadzone == .2 && _sensitivity == 1 && _log.Any(line => line.Contains("Defaults reset")), "smoke did not prove confirm, inspect, and reset transitions");
+            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, selection = _result?.Id ?? "Ground", exercises = new[] { "scene", "selection", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = "Not verified" })); GetTree().Quit(0);
+        }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
     public void RunCapture(string[] args) { var index = Array.IndexOf(args, "--capture"); if (index < 0 || index + 2 >= args.Length) { GetTree().Quit(1); return; } var parts = args[index + 1].Split('x'); GetWindow().Size = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1])); CallDeferred(nameof(SaveCaptureAfterLayout), args[index + 2]); }
     public async void SaveCaptureAfterLayout(string path) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); RefreshSelection(); var error = GetViewport().GetTexture().GetImage().SavePng(path); GetTree().Quit(error == Error.Ok ? 0 : 1); }
-    private InputContext Context(double delta, bool modal) => new(_deadzone, _sensitivity, delta, _camera.Zoom.X, modal);
+    private async Task LayoutFrames()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+    private void PressKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = true }, VerificationMode.Simulation);
+    private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
+    private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_deadzone, _sensitivity, delta, _camera.Zoom.X, modal, advanceTime);
     private string PrimaryAction() => _result?.Id is null ? "Choose destination" : _result.Id.StartsWith("npc") ? "Talk" : _result.Id.StartsWith("door") || _result.Id == "crate" ? "Open" : _result.Id.StartsWith("enemy") ? "Mark" : "Pick up";
     private string Prompt() => $"[A / Enter] {PrimaryAction()}   [X / I] Inspect   [LB/RB / Q/E] Cycle   [Y / C] Context   [Start / F1] Settings";
     private void AddLog(string text) => _log.Add($"• {text}");
