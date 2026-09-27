@@ -33,6 +33,10 @@ internal static class DialogOperationParser
         var bytes = field.Bytes;
         var index = 0;
         SkipSeparators(bytes, ref index);
+        if (index == bytes.Count)
+        {
+            throw Failure(DialogFailureKind.InvalidOperation, record, field, 0, field.Length, 0);
+        }
         var operations = new List<DialogOperationPlan>();
         while (index < bytes.Count)
         {
@@ -52,7 +56,11 @@ internal static class DialogOperationParser
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, operationStart, 2, operations.Count);
             }
-            RequireSeparators(bytes, ref index, record, field, operationStart, operations.Count);
+            // The first argument may be attached to an admitted opcode. This is a
+            // deliberately bounded project policy for LF/QU/RU, not a general
+            // expression grammar; later argument and operation boundaries remain
+            // separator-required.
+            SkipSeparators(bytes, ref index);
             var first = ParseInteger(bytes, ref index, record, field, operationStart, operations.Count);
             var secondRequired = opcode is "LF" or "QU";
             int second = 0;

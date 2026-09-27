@@ -448,6 +448,158 @@ public sealed class DialogTransitionRuntimeTests
         Assert.AreEqual(DialogSelectionStatus.WrongPhase, start.Session.Select(forged).Status);
     }
 
+    [TestMethod]
+    public void Attached_first_arguments_execute_only_the_bounded_LF_QU_RU_forms()
+    {
+        var document = DlgReader.Read(Bytes(
+            Record("100", action: "QU10 1")
+            + Record("200", iq: "1", condition: "LF3 1", response: "300", action: "LF4 0")
+            + Record("300", action: "RU1000")));
+        var ports = new Ports { Flags = { [3] = LocalFlagReadResult.Found(1) } };
+
+        var start = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
+        var selected = start.Session.Select(start.Session.Offers.Single().Token);
+
+        Assert.AreEqual(DialogStartStatus.AwaitingSelection, start.Status);
+        Assert.AreEqual(DialogSelectionStatus.Completed, selected.Status);
+        CollectionAssert.AreEqual(new[] { "QU:10:1:900", "LF:4:0:900", "RU:1000" }, ports.Commands);
+        CollectionAssert.AreEqual(new[] { 100, 200, 300 }, start.Session.CommandAttempts.Select(attempt => attempt.Source.RecordId.Value).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 0, 0 }, start.Session.CommandAttempts.Select(attempt => attempt.Source.OperationOrdinal).ToArray());
+        Assert.AreEqual(new DialogNodeId(300), start.Session.CurrentNodeId);
+    }
+
+    [TestMethod]
+    public void Separator_only_actions_and_missing_or_player_entries_are_static_and_port_free()
+    {
+        foreach (var action in new[] { " ", "();" })
+        {
+            var ports = new Ports();
+            var document = DlgReader.Read(Bytes(Record("100", action: action) + Record("200", iq: "1", response: "0")));
+            var result = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
+            Assert.AreEqual(DialogFailureKind.InvalidOperation, result.Failure!.Kind, action);
+            Assert.AreEqual(DlgFieldKind.Action, result.Failure.Source!.Value.FieldKind, action);
+            Assert.AreEqual(0, ports.QueryCount, action);
+            Assert.AreEqual(0, ports.Commands.Count, action);
+        }
+
+        var missingPorts = new Ports();
+        var missingDocument = DlgReader.Read(Bytes(Record("100") + Record("200", iq: "1", response: "0")));
+        var missing = DialogTransitionRuntime.Start(missingDocument, Request(999), missingPorts, missingPorts);
+        Assert.AreEqual(DialogFailureKind.InvalidEntry, missing.Failure!.Kind);
+        Assert.AreEqual(0, missingPorts.QueryCount);
+        Assert.AreEqual(0, missingPorts.Commands.Count);
+
+        var playerPorts = new Ports();
+        var playerDocument = DlgReader.Read(Bytes(Record("100", iq: "1", response: "0")));
+        var player = DialogTransitionRuntime.Start(playerDocument, Request(100), playerPorts, playerPorts);
+        Assert.AreEqual(DialogFailureKind.WrongEntryRole, player.Failure!.Kind);
+        Assert.AreEqual(0, playerPorts.QueryCount);
+        Assert.AreEqual(0, playerPorts.Commands.Count);
+    }
+
+    [TestMethod]
+    public void Eligibility_rows_are_exact_and_missing_flags_only_hide_their_response()
+    {
+        var document = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1")
+            + Record("200", iq: "1", condition: "LF 3 1", response: "300", action: "LF 4 1")
+            + Record("300", action: "RU 1000")));
+        foreach (var eligibility in new IReadOnlyList<DialogResponseEligibility>[]
+        {
+            Array.Empty<DialogResponseEligibility>(),
+            new[] { new DialogResponseEligibility(new DialogResponseId(200), true, true), new DialogResponseEligibility(new DialogResponseId(200), true, true) },
+            new[] { new DialogResponseEligibility(new DialogResponseId(200), true, true), new DialogResponseEligibility(new DialogResponseId(201), true, true) },
+        })
+        {
+            var ports = new Ports();
+            var result = DialogTransitionRuntime.Start(document, new DialogStartRequest(new DialogNodeId(100), new DialogParticipants(new DialogId(700), new DialogParticipantId(800), new DialogParticipantId(900)), eligibility), ports, ports);
+            Assert.AreEqual(DialogFailureKind.InvalidEligibility, result.Failure!.Kind);
+            Assert.AreEqual(0, ports.QueryCount);
+            Assert.AreEqual(0, ports.Commands.Count);
+        }
+
+        var missingPorts = new Ports();
+        var missing = DialogTransitionRuntime.Start(document, Request(100, 200), missingPorts, missingPorts);
+        Assert.AreEqual(DialogStartStatus.AwaitingSelection, missing.Status);
+        Assert.AreEqual(1, missingPorts.QueryCount);
+        Assert.AreEqual(0, missing.Session.Offers.Count);
+        CollectionAssert.AreEqual(new[] { "QU:1:1:900" }, missingPorts.Commands);
+        Assert.AreEqual(1, missing.Session.CommandAttempts.Count);
+    }
+
+    [TestMethod]
+    public void Five_responses_and_per_field_operation_caps_fail_closed_at_exact_boundaries()
+    {
+        var fiveDocument = DlgReader.Read(Bytes(Record("100") + string.Concat(Enumerable.Range(200, 5).Select(id => Record(id.ToString(), iq: "1", response: "0")))));
+        var five = DialogTransitionRuntime.Start(fiveDocument, Request(100, 200, 201, 202, 203, 204), new Ports(), new Ports());
+        Assert.AreEqual(DialogStartStatus.AwaitingSelection, five.Status);
+        CollectionAssert.AreEqual(new[] { 200, 201, 202, 203, 204 }, five.Session.Offers.Select(offer => offer.ResponseId.Value).ToArray());
+
+        var operationDocument = DlgReader.Read(Bytes(Record("100", action: "QU 1 1; QU 2 2") + Record("200", iq: "1", response: "0")));
+        var exactPorts = new Ports();
+        Assert.AreEqual(DialogStartStatus.AwaitingSelection, DialogTransitionRuntime.Start(
+            operationDocument, Request(100, 200), exactPorts, exactPorts, new DialogRuntimeOptions { MaxOperationsPerField = 2 }).Status);
+        var overflowPorts = new Ports();
+        var overflow = DialogTransitionRuntime.Start(
+            operationDocument, Request(100, 200), overflowPorts, overflowPorts, new DialogRuntimeOptions { MaxOperationsPerField = 1 });
+        Assert.AreEqual(DialogFailureKind.OperationLimitExceeded, overflow.Failure!.Kind);
+        Assert.AreEqual(new DialogNodeId(100), overflow.Failure.Source!.Value.RecordId);
+        Assert.AreEqual(1, overflow.Failure.Source.Value.OperationOrdinal);
+        Assert.AreEqual(0, overflowPorts.QueryCount);
+        Assert.AreEqual(0, overflowPorts.Commands.Count);
+    }
+
+    [TestMethod]
+    public void Self_edge_executes_the_entry_only_as_initial_and_explicit_destination()
+    {
+        var document = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1")
+            + Record("200", iq: "1", response: "100", action: "LF 2 0")));
+        var ports = new Ports();
+        var start = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
+
+        Assert.AreEqual(DialogSelectionStatus.Completed, start.Session.Select(start.Session.Offers.Single().Token).Status);
+        Assert.AreEqual(DialogSessionPhase.CompletedAtFrontier, start.Session.Phase);
+        Assert.AreEqual(new DialogNodeId(100), start.Session.CurrentNodeId);
+        CollectionAssert.AreEqual(new[] { "QU:1:1:900", "LF:2:0:900", "QU:1:1:900" }, ports.Commands);
+        var commandCount = ports.Commands.Count;
+        Assert.AreEqual(DialogOfferRefreshStatus.WrongPhase, start.Session.RefreshOffers().Status);
+        Assert.AreEqual(DialogSelectionStatus.WrongPhase, start.Session.Select(new DialogOfferToken(new DialogResponseId(200), 0)).Status);
+        Assert.AreEqual(commandCount, ports.Commands.Count);
+    }
+
+    [TestMethod]
+    public void Command_exceptions_at_each_phase_position_preserve_the_supplied_instance()
+    {
+        var document = DlgReader.Read(Bytes(
+            Record("100", action: "QU 1 1; QU 2 2; QU 3 3")
+            + Record("200", iq: "1", response: "300", action: "LF 1 1; LF 2 0; LF 3 1")
+            + Record("300", action: "RU 1000; RU 1001; RU 1002")));
+        for (var ordinal = 1; ordinal <= 9; ordinal++)
+        {
+            var sentinel = new InvalidOperationException($"sentinel-{ordinal}");
+            var ports = new Ports { ThrowAt = ordinal, CommandException = sentinel };
+            var start = DialogTransitionRuntime.Start(document, Request(100, 200), ports, ports);
+            var result = start.Status == DialogStartStatus.Failed
+                ? new DialogSelectionResult(DialogSelectionStatus.Failed, start.Failure)
+                : start.Session.Select(start.Session.Offers.Single().Token);
+
+            Assert.AreEqual(DialogSelectionStatus.Failed, result.Status, $"ordinal {ordinal}");
+            Assert.AreEqual(DialogFailureKind.CommandException, result.Failure!.Kind, $"ordinal {ordinal}");
+            Assert.AreSame(sentinel, result.Failure.Exception, $"ordinal {ordinal}");
+            Assert.AreEqual(ordinal, start.Session.CommandAttempts.Count, $"ordinal {ordinal}");
+            Assert.AreEqual(DialogCommandAttemptOutcome.Indeterminate, start.Session.CommandAttempts[^1].Outcome, $"ordinal {ordinal}");
+            Assert.IsTrue(start.Session.CommandAttempts.Take(ordinal - 1).All(attempt => attempt.Outcome == DialogCommandAttemptOutcome.Applied), $"ordinal {ordinal}");
+            Assert.AreEqual(ordinal <= 3 ? 100 : ordinal <= 6 ? 200 : 300, start.Session.CommandAttempts[^1].Source.RecordId.Value, $"ordinal {ordinal}");
+            Assert.AreEqual((ordinal - 1) % 3, start.Session.CommandAttempts[^1].Source.OperationOrdinal, $"ordinal {ordinal}");
+            Assert.AreEqual(ordinal - 1, ports.Commands.Count, $"ordinal {ordinal}");
+            Assert.AreEqual(new DialogNodeId(100), start.Session.CurrentNodeId, $"ordinal {ordinal}");
+            var calls = ports.Commands.Count;
+            Assert.AreEqual(DialogSelectionStatus.WrongPhase, start.Session.Select(new DialogOfferToken(new DialogResponseId(200), 0)).Status);
+            Assert.AreEqual(calls, ports.Commands.Count, $"ordinal {ordinal}");
+        }
+    }
+
     private static DialogStartRequest Request(int entry, params int[] responses) => new(
         new DialogNodeId(entry),
         new DialogParticipants(new DialogId(700), new DialogParticipantId(800), new DialogParticipantId(900)),
@@ -483,6 +635,7 @@ public sealed class DialogTransitionRuntimeTests
         public int? ThrowReadAt { get; init; }
         public int? InvalidReadAt { get; init; }
         public Exception? QueryException { get; init; }
+        public Exception? CommandException { get; init; }
 
         public LocalFlagReadResult Read(LocalFlagQuery query)
         {
@@ -519,7 +672,7 @@ public sealed class DialogTransitionRuntimeTests
             }
             if (ThrowAt == ordinal)
             {
-                throw new InvalidOperationException("Synthetic command failure.");
+                throw CommandException ?? new InvalidOperationException("Synthetic command failure.");
             }
             Commands.Add(value);
             return DialogCommandResult.Applied;

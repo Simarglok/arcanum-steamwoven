@@ -78,13 +78,18 @@ nonempty action is ordered `LF`, `QU`, and `RU` commands.
 
 ```text
 separator = SP | HTAB | ',' | ';' | ':' | '(' | ')'
+A = separator*
 S = separator+
-field = S? operation (S operation)* S?
-operation = LF S int S int | QU S int S int | RU S int
+field = A operation (S operation)* A
+operation = LF A int S int | QU A int S int | RU A int
 int = '-'? ASCII_DIGIT+
 ```
 
-Opcodes are exactly two ASCII letters and case-insensitive. `+` is rejected;
+Opcodes are exactly two ASCII letters and case-insensitive. The first integer
+may be attached directly to one of these already admitted opcodes; the second
+integer of `LF`/`QU` and every operation boundary still require `S`. This is a
+narrow project safety-policy admission informed by the selected versioned slice,
+not a claim about universal DLG or original-runtime grammar. `+` is rejected;
 leading zeros and `-0` are admitted. LF index is `0..31`, LF expected/write
 value is `0..1`, QU quest ID is signed Int32 and state is `0..6`, and RU ID is
 `1000..Int32.MaxValue`. Unknown opcodes, combinators, callbacks, SC/generated
@@ -127,13 +132,14 @@ The opt-in `DlgRuntimeRealData` category only reads existing
 `arcanum3.dat` member `dlg\01478Erland.dlg`, checks the versioned archive
 SHA-256 `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`
 before and after, checks the observed structural 31-to-50 Direct classification,
-and uses manual research IDs 30/31/50 with isolated in-memory typed ports. The
-current strict safety grammar rejects the selected source action statically as
-`InvalidOperation`; the test asserts that typed, zero-port/no-receipt result for
-both allowed local-flag values rather than pretending the edge executed. It logs
-neither extracted text nor operation bytes or parameters. It must be run with
-`DAT_ROOT` pointing to the user-owned installation; an absent or mismatched input
-fails safely as inconclusive operational evidence and is never a pass.
+and uses manual research IDs 30/31/50 with isolated in-memory typed ports. It
+runs separate Found(0) and Found(1) sessions, proves one hidden and one visible
+P31 gate without identifying the original expected value, and selects the
+visible Direct edge to prove the N30 quest, P31 local-flag, and N50 rumor typed
+receipt order. It logs neither extracted text nor operation bytes or parameters.
+It must be run with `DAT_ROOT` pointing to the user-owned installation; an
+absent or mismatched input fails safely as inconclusive operational evidence and
+is never a pass.
 
 ## Provenance and exclusions
 

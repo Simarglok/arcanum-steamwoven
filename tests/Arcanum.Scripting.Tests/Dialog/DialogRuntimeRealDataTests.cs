@@ -47,20 +47,54 @@ public sealed class DialogRuntimeRealDataTests
                 .ToArray();
             CollectionAssert.AreEqual(new[] { 31 }, eligibility.Select(item => item.Response.Value).ToArray());
 
+            var sessions = new List<(DialogStartResult Result, RealDataPorts Ports)>();
             foreach (var localFlag in new[] { 0, 1 })
             {
                 var ports = new RealDataPorts(localFlag);
                 var result = Start(document, eligibility, ports);
 
-                Assert.AreEqual(DialogStartStatus.Failed, result.Status);
-                Assert.AreEqual(DialogSessionPhase.Failed, result.Session.Phase);
-                Assert.AreEqual(DialogFailureKind.InvalidOperation, result.Failure!.Kind);
-                Assert.AreEqual(new DialogNodeId(30), result.Failure.Source!.Value.RecordId);
-                Assert.AreEqual(DlgFieldKind.Action, result.Failure.Source.Value.FieldKind);
-                Assert.AreEqual(0, result.Session.Offers.Count);
-                Assert.AreEqual(0, result.Session.CommandAttempts.Count);
-                Assert.AreEqual(0, ports.QueryCount);
+                Assert.AreEqual(DialogStartStatus.AwaitingSelection, result.Status);
+                Assert.AreEqual(DialogSessionPhase.AwaitingSelection, result.Session.Phase);
+                Assert.IsNull(result.Failure);
+                Assert.AreEqual(1, ports.QueryCount);
+                Assert.AreEqual(1, result.Session.CommandAttempts.Count);
+                Assert.IsInstanceOfType<QuestStateCommand>(result.Session.CommandAttempts[0].Command);
+                Assert.AreEqual(new DialogNodeId(30), result.Session.CommandAttempts[0].Source.RecordId);
+                Assert.AreEqual(DlgFieldKind.Action, result.Session.CommandAttempts[0].Source.FieldKind);
+                Assert.AreEqual(0, result.Session.CommandAttempts[0].Source.OperationOrdinal);
+                var quest = (QuestStateCommand)result.Session.CommandAttempts[0].Command;
+                Assert.AreEqual(new DialogParticipantId(2), quest.PlayerCharacter);
+                Assert.AreEqual(new DialogParticipantId(3), quest.NpcContext);
+                sessions.Add((result, ports));
             }
+
+            CollectionAssert.AreEquivalent(new[] { 0, 1 }, sessions.Select(session => session.Result.Session.Offers.Count).ToArray());
+            var hidden = sessions.Single(session => session.Result.Session.Offers.Count == 0);
+            Assert.AreEqual(new DialogNodeId(30), hidden.Result.Session.CurrentNodeId);
+            Assert.AreEqual(1, hidden.Result.Session.CommandAttempts.Count);
+
+            var visible = sessions.Single(session => session.Result.Session.Offers.Count == 1);
+            var offer = visible.Result.Session.Offers.Single();
+            Assert.AreEqual(new DialogResponseId(31), offer.ResponseId);
+            Assert.AreEqual(DialogTransitionKind.Direct, offer.TransitionKind);
+            Assert.AreEqual(new DialogNodeId(50), offer.DirectTarget);
+            Assert.AreEqual(DialogSelectionStatus.Completed, visible.Result.Session.Select(offer.Token).Status);
+            Assert.AreEqual(DialogSessionPhase.CompletedAtFrontier, visible.Result.Session.Phase);
+            Assert.AreEqual(new DialogNodeId(50), visible.Result.Session.CurrentNodeId);
+            Assert.AreEqual(2, visible.Ports.QueryCount);
+            CollectionAssert.AreEqual(
+                new[] { typeof(QuestStateCommand), typeof(LocalFlagWriteCommand), typeof(RumorLogCommand) },
+                visible.Result.Session.CommandAttempts.Select(attempt => attempt.Command.GetType()).ToArray());
+            CollectionAssert.AreEqual(
+                new[] { 30, 31, 50 },
+                visible.Result.Session.CommandAttempts.Select(attempt => attempt.Source.RecordId.Value).ToArray());
+            Assert.IsTrue(visible.Result.Session.CommandAttempts.All(attempt =>
+                attempt.Source.FieldKind == DlgFieldKind.Action && attempt.Source.OperationOrdinal == 0));
+            Assert.AreEqual(new DialogParticipantId(2), ((QuestStateCommand)visible.Result.Session.CommandAttempts[0].Command).PlayerCharacter);
+            Assert.AreEqual(new DialogParticipantId(3), ((QuestStateCommand)visible.Result.Session.CommandAttempts[0].Command).NpcContext);
+            Assert.AreEqual(new DialogId(1), ((LocalFlagWriteCommand)visible.Result.Session.CommandAttempts[1].Command).Dialog);
+            Assert.AreEqual(new DialogParticipantId(3), ((LocalFlagWriteCommand)visible.Result.Session.CommandAttempts[1].Command).Npc);
+            Assert.AreEqual(new DialogParticipantId(2), ((RumorLogCommand)visible.Result.Session.CommandAttempts[2].Command).PlayerCharacter);
         }
 
         Assert.AreEqual(ArchiveHash, Hash(archivePath), "Archive SHA-256 mismatch after reads.");
@@ -93,8 +127,10 @@ public sealed class DialogRuntimeRealDataTests
             QueryCount++;
             return LocalFlagReadResult.Found(localFlag);
         }
-        public DialogCommandResult Execute(LocalFlagWriteCommand command) => DialogCommandResult.Applied;
-        public DialogCommandResult Execute(QuestStateCommand command) => DialogCommandResult.Applied;
-        public DialogCommandResult Execute(RumorLogCommand command) => DialogCommandResult.Applied;
+        public DialogCommandResult Execute(LocalFlagWriteCommand command) => Apply(command);
+        public DialogCommandResult Execute(QuestStateCommand command) => Apply(command);
+        public DialogCommandResult Execute(RumorLogCommand command) => Apply(command);
+
+        private static DialogCommandResult Apply(DialogCommand command) => DialogCommandResult.Applied;
     }
 }
