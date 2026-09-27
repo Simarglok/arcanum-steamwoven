@@ -75,6 +75,57 @@ positive target ID, then smallest response ID, among the only currently
 admissible service set: the source-backed serialized transition itself.
 First-record order is never entry evidence.
 
+## ARC-RES-006 selected semantic slice
+
+The following is an identifier-only, research-selected structural slice from
+`dlg\01478Erland.dlg` (ordinal 220) in `arcanum3.dat`. The archive and decoded
+payload SHA-256 fingerprints are recorded in `dialog-evidence.md`. It is not a
+claim about dialogue identity, invocation, initial entry, archive precedence,
+or a runtime-selected branch.
+
+`N30` is a structural NPC row. Its selected action has grammar
+`QU(integer questId, integer questState)`. `P31` is its immediate structural
+player row. It has `LF(integer localFlagIndex, integer expectedValue)` as its
+selected condition, `LF(integer localFlagIndex, integer newValue)` as its
+selected action, and a positive serialized response whose checked structural
+target is NPC `N50`. `N50` has `RU(integer rumorId)` as its selected action.
+The probe validates only these operation forms in this opt-in slice. It emits
+the opcode and `int` arity category, never raw parameter values or fields.
+
+For the selected proposal, local-flag indices are restricted to `0..31` and
+both LF values to `0..1`; QU state is restricted to documented labels/range
+`0..6`; RU identifiers use the source-backed `>=1000` domain. These are
+bounded admission policies, not a claim of full quest, rumor, or local-state
+semantics. A positive P31 response is `Direct(N50)` only after target
+existence and NPC-role validation. Zero remains an `exit` class and negative
+values remain `special` classes; neither is part of this real slice.
+
+The optional CLI form
+`--semantic-slice NPC_ID PLAYER_ID TARGET_NPC_ID` validates an explicit
+structural slice after the physical archive/document parse. It accepts only
+LF-condition, QU/LF/RU action positions, ordered integer parameters, and the
+positive direct edge. Unknown/malformed/out-of-domain operations, missing or
+wrong-role nodes, and invalid direct targets reject fail-closed. It performs no
+state mutation and does not evaluate a game conversation.
+
+## Readiness split
+
+**Physical DLG reader: Ready for this bounded, byte-preserving research
+subset.** The seven-field parser, selector, size caps, opaque display bytes,
+and structural reference classification are independently exercised with
+synthetic data and one opt-in hashed sample. This is not a generic encoding or
+localization verdict.
+
+**Selected semantic subset: proposal validated synthetically and structurally
+validated on the selected hashed slice.** The explicit query/command ports and
+fail-closed LF/QU/RU/direct behavior are project design plus synthetic evidence;
+they are not original-runtime execution.
+
+**In-game conversation: not ready.** Runtime entry and invocation, dialogue
+identity, archive precedence, generated dialogue, SCR bridge, nonselected
+operations, game services/UI/gameplay, and encoding beyond the sampled
+ASCII-only observation remain unknown or out of scope.
+
 ## Encoding and unknowns
 
 The physical parser is byte-oriented. It accepts printable ASCII only for IDs,
