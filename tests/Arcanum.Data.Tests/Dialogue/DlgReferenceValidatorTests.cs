@@ -54,5 +54,26 @@ public sealed class DlgReferenceValidatorTests
         Assert.IsTrue(result.References.All(reference => reference.Status == DlgReferenceStatus.Valid));
     }
 
+    [TestMethod]
+    public void Validate_ignores_npc_responses_and_accepts_player_cycles_without_traversal()
+    {
+        var document = Read(
+            "{50}{}{}{}{}{99}{}" +
+            "{1}{}{}{1}{}{50}{}" +
+            "{2}{}{}{1}{}{3}{}" +
+            "{3}{}{}{1}{}{2}{}");
+
+        var result = DlgReferenceValidator.Validate(document);
+
+        Assert.AreEqual(99, document.Records[0].ResponseValue);
+        Assert.AreEqual(3, result.References.Count);
+        CollectionAssert.AreEqual(new[] { 1, 2, 3 }, result.References.Select(reference => reference.SourceRecordId).ToArray());
+        Assert.AreEqual(DlgReferenceStatus.Valid, result.References[0].Status);
+        CollectionAssert.AreEqual(
+            new[] { DlgReferenceStatus.WrongTargetRole, DlgReferenceStatus.WrongTargetRole },
+            result.References.Skip(1).Select(reference => reference.Status).ToArray());
+        Assert.IsFalse(result.IsValid);
+    }
+
     private static DlgDocument Read(string value) => DlgReader.Read(Encoding.Latin1.GetBytes(value));
 }

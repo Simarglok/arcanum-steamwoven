@@ -79,7 +79,7 @@ original data:
 
 ```csharp
 var bytes = System.Text.Encoding.ASCII.GetBytes(
-    "{100}{synthetic-npc}{}{ }{}{200}{}\n{200}{synthetic-player}{}{5}{}{0}{}");
+    "{100}{synthetic-npc}{}{}{}{200}{}\n{200}{synthetic-player}{}{5}{}{0}{}");
 var document = DlgReader.Read(bytes);
 ```
 

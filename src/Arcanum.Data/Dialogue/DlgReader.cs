@@ -24,9 +24,9 @@ public static class DlgReader
     {
         ArgumentNullException.ThrowIfNull(stream);
         var effectiveOptions = options ?? new DlgReaderOptions();
-        effectiveOptions.Validate();
         try
         {
+            effectiveOptions.Validate();
             if (!stream.CanRead)
             {
                 throw new ArgumentException("The DLG stream must be readable.", nameof(stream));

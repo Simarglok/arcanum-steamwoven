@@ -53,6 +53,11 @@ public sealed class DlgRealDataTests
         var document = DlgReader.Read(payload);
         Assert.AreEqual(recordCount, document.Records.Count);
         Assert.AreEqual(recordCount, document.Records.Select(record => record.Id).Distinct().Count());
+        foreach (var record in document.Records)
+        {
+            Assert.IsTrue(document.TryGetRecord(record.Id, out var indexed), "Serialized record is missing from the parse-time index.");
+            Assert.AreSame(record, indexed, "Parse-time index did not retain the serialized record instance.");
+        }
         if (npcCount.HasValue)
         {
             Assert.AreEqual(npcCount.Value, document.Records.Count(record => record.Role == DlgRecordRole.Npc));
@@ -63,9 +68,9 @@ public sealed class DlgRealDataTests
         }
         foreach (var field in document.Records.SelectMany(record => record.Fields))
         {
-            CollectionAssert.AreEqual(payload.AsSpan(field.PayloadOffset, field.Length).ToArray(), field.Bytes.ToArray());
+            Assert.IsTrue(payload.AsSpan(field.PayloadOffset, field.Length).SequenceEqual(field.Bytes.ToArray()), "Field span mismatch.");
         }
-        CollectionAssert.AreEqual(inputBefore, payload);
+        Assert.IsTrue(inputBefore.AsSpan().SequenceEqual(payload), "Parser input changed.");
 
         var validation = DlgReferenceValidator.Validate(document);
         var players = document.Records.Count(record => record.Role == DlgRecordRole.Player);
