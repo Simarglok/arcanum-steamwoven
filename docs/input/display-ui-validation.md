@@ -31,7 +31,20 @@ The evidence capture index is: 1280×720@200 dialogue; 1920×1080@100 inventory;
 
 ### Candidate-bound result records
 
-This pipeline deliberately makes no tracked-file result claim for a moving candidate. A successful run records its exact full commit, base, ordinary-diff hash, observed toolchain/template data, named checks, app/evidence paths, classifications, and delivery state in the ignored candidate `manifest.json`; only then does it atomically replace `artifacts/builds/ARC-UI-001/current.json`. The later final-validation continuation will record the observed final-head outcome here after its documentation commit and rerun.
+One complete provisional local validation passed before this result-record commit. Its exact candidate, base, ordinary-diff hash, observed toolchain/template values, app/evidence paths, named checks, classifications, and delivery state are bound by the ignored `manifest.json` selected by `artifacts/builds/ARC-UI-001/current.json`. The pointer identifies that successfully validated provisional candidate; it does not claim to bind this later tracked documentation commit.
+
+| Observed gate | Result | Classification and recorded scope |
+|---|---|---|
+| Direct locked restore/build | PASS | Literal canonical .NET 8.0.425 commands, with no property override; the committed lock remained unchanged through the editor/export checks. |
+| Godot editor bridge | PASS | Godot 4.7.2 mono bridge ran with the process-local canonical SDK environment. |
+| Source layout matrix | PASS | 74 simulated-layout cases: the eight logical viewports at 100/150/200 across Dialogue, Inventory, and Settings, plus 125/175 smoke cases. The actual scene assertions include geometry, sticky/scroll accessibility, wrapping/visible-line clipping, responsive separation, fallback Cyrillic glyphs, and configured contrast. |
+| Transition and routed-input probes | PASS | The source report records scalar A→B→A resize and 100→200→100 snapshots, camera/UI-scale independence, Close hover/click/signal/state, Tab and Shift-Tab traversal, compact selector/close, vertical wheel scroll, keyboard reachability of an initially offscreen horizontal action, middle-drag pan with unchanged UI rectangles, and windowed Escape panel close. |
+| Four screenshot captures | PASS capture; visual inspection NOT_VERIFIED | Render-synchronized, simulated logical layouts: 1280×720@200 Dialogue; 1920×1080@100 Inventory; 3440×1440@150 Dialogue; and 3840×2160@200 Settings with diagnostics. The PNGs are not evidence of physical-display readability. |
+| macOS export and exported matrix | PASS | The exported app was created and its 74-case simulated-layout matrix passed. |
+| Exported native smoke/ordinary launch | PASS | A non-headless exported app performed two programmatic client-size relayouts, keyboard fullscreen/F11/Escape precedence including second-Escape panel close, keyboard Reset after mutation, root Close hover/signal/state, and asserted final restoration of the original window bounds. These are actual programmatic native-window observations, not a genuine user drag-resize session. |
+| Bundle/package checks | PASS | Plist lint, bundle identifier, HiDPI declaration, universal arm64/x86_64 architecture, and strict/deep codesign verification passed. |
+| Root regressions | PASS | Root locked restore/build passed; non-real-data Data tests passed 24/24 and Presentation tests passed 14/14. |
+| Hygiene and evidence schema | PASS | Allowed-scope, clean-tree, diff, ignored-artifact, privacy/secret/private-key/original-data, binary/font, and provenance scans passed; manifest/evidence validation passed before pointer replacement. |
 
 ## Classification and manual checklist
 
