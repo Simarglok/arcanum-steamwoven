@@ -6,5 +6,6 @@
     <RuntimeIdentifier>osx-arm64</RuntimeIdentifier>
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <RestorePackagesWithLockFile Condition="'$(GodotTargetPlatform)' == ''">true</RestorePackagesWithLockFile>
+    <NuGetLockFilePath Condition="'$(GodotTargetPlatform)' != ''">$(BaseIntermediateOutputPath)godot.packages.lock.json</NuGetLockFilePath>
   </PropertyGroup>
 </Project>
