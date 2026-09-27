@@ -8,13 +8,17 @@ internal static class TargetingTests
         var engine = new TargetingEngine(); var viewport = new Rect(0, 0, 1280, 800); var focus = viewport.Center;
         var candidates = new[] { new TargetCandidate("crate", "container", focus + new Vec2(60, 0), 4), new TargetCandidate("tiny-gear", "item", focus + new Vec2(61, 0), 5), new TargetCandidate("alpha", "npc", focus + new Vec2(80, 0), 1), new TargetCandidate("zeta", "enemy", focus + new Vec2(-80, 0), 2) };
         var result = engine.Update(candidates, viewport, new(), new()); Assertions.Equal(result.Id!, "crate", "nearest selection");
-        var cycle = engine.Cycle(result, 1); Assertions.Equal(cycle.SelectedId!, "tiny-gear", "crate then gear cycle");
-        Assertions.Equal(engine.Cycle(engine.Update(candidates, viewport, cycle, new()), -1).SelectedId!, "crate", "backward cycle");
-        var tie = engine.Update(new[] { candidates[2], candidates[3] }, viewport, new(), new()); Assertions.Equal(tie.Id!, "alpha", "ordinal tie");
-        var locked = engine.Update(candidates, viewport, new("tiny-gear", true), new()); Assertions.Equal(locked.Id!, "tiny-gear", "manual lock");
-        var invalid = engine.Update(candidates.Select(x => x.Id == "tiny-gear" ? x with { ContextValid = false } : x).ToArray(), viewport, new("tiny-gear", true), new()); Assertions.True(invalid.Id != "tiny-gear" && !invalid.ManualLock, "invalid clears lock");
-        var offscreen = engine.Update(new[] { new TargetCandidate("off", "item", new(-1, 20), 1) }, viewport, new(), new()); Assertions.True(offscreen.IsGround && offscreen.GroundPoint == focus, "offscreen ground fallback");
+        var cycle = engine.Cycle(result, 1); Assertions.Equal(cycle.SelectedId!, "tiny-gear", "crate then tiny gear cycle"); Assertions.Equal(engine.Cycle(engine.Update(candidates, viewport, cycle, new()), -1).SelectedId!, "crate", "bidirectional cycle");
+        var epsilonTie = engine.Update(new[] { new TargetCandidate("zeta", "enemy", focus + new Vec2(80.0005, 0), 2), new TargetCandidate("alpha", "npc", focus + new Vec2(80, 0), 1) }, viewport, new(), new()); Assertions.Equal(epsilonTie.Id!, "alpha", "sub-epsilon tie uses ordinal id");
+        var exactTie = engine.Update(new[] { candidates[2], candidates[3] }, viewport, new(), new()); Assertions.Equal(exactTie.Id!, "alpha", "equal tie uses ordinal id");
+        var retained = engine.Update(candidates, viewport, new("tiny-gear"), new()); Assertions.Equal(retained.Id!, "tiny-gear", "automatic hysteresis retains within 24px");
+        var outsideHysteresis = engine.Update(candidates.Select(x => x.Id == "tiny-gear" ? x with { Anchor = focus + new Vec2(85, 0) } : x).ToArray(), viewport, new("tiny-gear"), new()); Assertions.True(outsideHysteresis.Id != "tiny-gear", "automatic hysteresis releases beyond 24px");
+        var locked = engine.Update(candidates, viewport, new("tiny-gear", true), new()); Assertions.Equal(locked.Id!, "tiny-gear", "manual lock"); Assertions.True(!engine.Update(candidates.Select(x => x.Id == "tiny-gear" ? x with { ContextValid = false } : x).ToArray(), viewport, new("tiny-gear", true), new()).ManualLock, "context invalidation clears lock");
+        Assertions.True(!engine.Update(candidates.Where(x => x.Id != "tiny-gear").ToArray(), viewport, new("tiny-gear", true), new()).ManualLock, "removal clears lock");
+        Assertions.True(!engine.Update(candidates.Select(x => x.Id == "tiny-gear" ? x with { Anchor = focus + new Vec2(181, 0) } : x).ToArray(), viewport, new("tiny-gear", true), new()).ManualLock, "out of radius clears lock");
+        var offscreen = engine.Update(new[] { new TargetCandidate("off", "item", new(-1, 20), 1) }, viewport, new(), new(), new(10, 20)); Assertions.True(offscreen.IsGround && offscreen.GroundPoint == new Vec2(10, 20), "offscreen rejected and actual world ground retained");
         var radius = engine.Update(new[] { new TargetCandidate("edge", "item", focus + new Vec2(180, 0), 1) }, viewport, new(), new()); Assertions.Equal(radius.Id!, "edge", "radius inclusive");
-        foreach (var size in new[] { new Rect(0, 0, 1280, 800), new Rect(0, 0, 1920, 1080) }) foreach (var zoom in new[] { .5, 1d, 2d }) Assertions.True(engine.Update(new[] { new TargetCandidate("center", "item", size.Center, 1) }, size, new(), new()).Id == "center", $"projection fixture {size.Width} {zoom}");
+        foreach (var size in new[] { new Rect(0, 0, 1280, 800), new Rect(0, 0, 1920, 1080) })
+            foreach (var zoom in new[] { .5, 1d, 2d }) { var ground = new Vec2(size.Center.X / zoom, size.Center.Y / zoom); var projection = engine.Update(new[] { new TargetCandidate("center", "item", size.Center, 1) }, size, new(), new(), ground); Assertions.Equal(projection.Id!, "center", $"viewport projection {size.Width} zoom {zoom}"); Assertions.Equal(engine.Update([], size, new(), new(), ground).GroundPoint, ground, $"ground conversion fixture {size.Width} zoom {zoom}"); }
     }
 }

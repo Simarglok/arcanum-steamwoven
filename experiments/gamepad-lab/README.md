@@ -15,7 +15,7 @@ The center reticle is the focus. The lab evaluates visible interaction anchors i
 | Context / settings | C / F1 | Y / Start |
 | Menu directions | arrows/WASD | D-pad / left stick |
 
-The first modal owner consumes semantic input before world routing. Controller events are accepted only from the deterministic active device; reconnect/focus/reset require a complete neutral sampled frame and a following arm frame. Circular deadzone defaults to 0.20 (0.05–0.45); sensitivity defaults to 1.0 (0.5–2.0). Camera logical speed is `520 * sensitivity`, adjusted for delta and zoom. The app labels engine delivery `LIVE OS EVENT (not physical usability proof)` and all injected automation `SIMULATION`.
+InputMap declares the keyboard and SDL semantic actions; the adapter maintains per-device event state and accepts joy events only from the deterministic active device. It samples held stick/keyboard pan every frame, so panning is continuous and frame-rate/zoom scaled. Controller connect/disconnect and focus transitions clear held/repeat state; reconnect/focus/reset require a complete neutral sampled frame and a following arm frame. Circular deadzone defaults to 0.20 (0.05–0.45); sensitivity defaults to 1.0 (0.5–2.0). The app labels engine delivery `LIVE OS EVENT (not physical usability proof)` and all injected automation `SIMULATION`.
 
 ## Build and checks
 
@@ -31,7 +31,7 @@ Use the canonical process-local SDK and Godot executable:
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --editor --path . --quit
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . -- --self-test
 
-The Core executable harness covers radial deadzone/no drift, normalization and delta scaling, device quarantine, rising edges, modal suppression, deterministic menu repeat, radius/tie/hysteresis, cycling/lock invalidation/offscreen fallback, and center/projection fixtures at 1280×800 and 1920×1080. Godot self-test drives the actual scene with explicit **SIMULATION** provenance.
+The Core executable harness covers radial deadzone/no drift, normalization and delta/zoom scaling, device quarantine and method thresholds, every rising-edge pulse, focus/reset stale-edge suppression, modal world suppression, deterministic digital/analog menu repeat, epsilon ties/hysteresis, cycling/lock invalidation/removal/out-of-radius, offscreen/world-ground fallback, and projection fixtures at 1280×800 and 1920×1080. Godot self-test drives actual adapter key events through the scene, settings/menu activation, selection, focus and disconnect hooks with explicit **SIMULATION** provenance.
 
 ## Evidence limits and owner checklist
 

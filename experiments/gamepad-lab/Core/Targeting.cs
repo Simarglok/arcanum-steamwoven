@@ -7,13 +7,13 @@ public sealed record SelectionResult(string? Id, bool IsGround, Vec2 GroundPoint
 
 public sealed class TargetingEngine
 {
-    public SelectionResult Update(IReadOnlyList<TargetCandidate> candidates, Rect viewport, SelectionState state, TargetingPolicy policy)
+    public SelectionResult Update(IReadOnlyList<TargetCandidate> candidates, Rect viewport, SelectionState state, TargetingPolicy policy, Vec2? groundPoint = null)
     {
         var focus = viewport.Center;
         var eligible = candidates.Where(c => c.Alive && c.ContextValid && c.Visible && viewport.Contains(c.Anchor) && Vec2.Distance(c.Anchor, focus) <= policy.Radius)
             .OrderBy(c => c.CycleOrder).ThenBy(c => c.Id, StringComparer.Ordinal).ToArray();
         var byId = eligible.ToDictionary(c => c.Id, StringComparer.Ordinal);
-        var best = eligible.OrderBy(c => Vec2.Distance(c.Anchor, focus)).ThenBy(c => c.Id, StringComparer.Ordinal).FirstOrDefault();
+        var best = Best(eligible, focus, policy.TieEpsilon);
         TargetCandidate? selected = null;
         var manual = state.ManualLock;
         if (state.SelectedId is not null && byId.TryGetValue(state.SelectedId, out var current))
@@ -21,7 +21,18 @@ public sealed class TargetingEngine
             if (manual || best is null || Vec2.Distance(current.Anchor, focus) <= Vec2.Distance(best.Anchor, focus) + policy.Hysteresis) selected = current;
         }
         if (selected is null) { selected = best; manual = false; }
-        return new(selected?.Id, selected is null, focus, selected is null ? null : Vec2.Distance(selected.Anchor, focus), manual, eligible);
+        return new(selected?.Id, selected is null, groundPoint ?? focus, selected is null ? null : Vec2.Distance(selected.Anchor, focus), manual, eligible);
+    }
+
+    private static TargetCandidate? Best(IEnumerable<TargetCandidate> candidates, Vec2 focus, double epsilon)
+    {
+        TargetCandidate? best = null; var bestScore = 0d;
+        foreach (var candidate in candidates)
+        {
+            var score = Vec2.Distance(candidate.Anchor, focus);
+            if (best is null || score < bestScore - epsilon || (Math.Abs(score - bestScore) <= epsilon && StringComparer.Ordinal.Compare(candidate.Id, best.Id) < 0)) { best = candidate; bestScore = score; }
+        }
+        return best;
     }
 
     public SelectionState Cycle(SelectionResult result, int direction)
