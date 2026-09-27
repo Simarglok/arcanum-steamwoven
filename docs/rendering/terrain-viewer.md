@@ -29,3 +29,9 @@ X, and ordinal.  This makes no claim about original scenery or facade occlusion.
 asymmetric synthetic row-major fixture.  Real-data, native-display, fullscreen,
 and physical readability checks remain opt-in local evidence; headless success
 does not establish graphical or visual parity.
+
+For local native smoke evidence only, `--native-smoke` drives the production
+canvas through both required window sizes and input/fullscreen events after a
+complete explicit-input load.  Its optional `--native-smoke-screenshot PATH`
+must target ignored local evidence; it is never a viewer feature or source-data
+export mechanism.

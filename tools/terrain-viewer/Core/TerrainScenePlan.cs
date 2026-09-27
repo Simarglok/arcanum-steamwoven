@@ -16,6 +16,15 @@ public sealed class TerrainScenePlan
     public TerrainRect WorldBounds { get; }
     public IReadOnlyList<TerrainDrawCommand> Commands { get; }
 
+    /// <summary>Creates a literal command plan for production-canvas render verification.</summary>
+    /// <remarks>The caller supplies already placed commands; this method performs no terrain geometry.</remarks>
+    public static TerrainScenePlan CreateLiteral(TerrainRect worldBounds, IReadOnlyList<TerrainDrawCommand> commands)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        if (commands.Count == 0) throw new ArgumentException("A terrain scene needs commands.", nameof(commands));
+        return new TerrainScenePlan(worldBounds, commands.ToArray());
+    }
+
     public static TerrainScenePlan Create(TerrainSector sector)
     {
         ArgumentNullException.ThrowIfNull(sector);

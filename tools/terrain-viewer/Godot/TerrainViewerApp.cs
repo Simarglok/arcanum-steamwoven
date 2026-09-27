@@ -12,6 +12,8 @@ public partial class TerrainViewerApp : Node
     private Label? _status;
     private long _generation;
     private bool _dragging;
+    private bool _nativeSmoke;
+    private string? _nativeSmokeScreenshot;
 
     public override void _Ready()
     {
@@ -28,13 +30,17 @@ public partial class TerrainViewerApp : Node
         AddChild(layer);
         _status = status;
 
-        var args = OS.GetCmdlineUserArgs();
+        var args = OS.GetCmdlineUserArgs().ToList();
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
             TerrainViewerSelfTest.Run(this);
             return;
         }
-        try { _ = StartLoadAsync(TerrainViewerArguments.Parse(args)); }
+        try
+        {
+            (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
+            _ = StartLoadAsync(TerrainViewerArguments.Parse(args));
+        }
         catch (ArgumentException) { ShowStatus("Usage"); }
     }
 
@@ -53,9 +59,53 @@ public partial class TerrainViewerApp : Node
             _canvas.Publish(result.Plan, _cache);
             _camera!.SetPlan(result.Plan, GetViewport().GetVisibleRect().Size);
             ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {arguments.SourceId} | decoded {result.Textures.Count} | {result.ElapsedMilliseconds}ms");
+            if (_nativeSmoke) await RunNativeSmokeAsync(result);
         }
         catch (TerrainViewerException exception) { if (requestGeneration == _generation) ShowStatus(exception.Error.ToString()); }
         catch { ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString()); }
+    }
+
+    private static (bool Enabled, string? ScreenshotPath) TakeNativeSmokeArguments(List<string> args)
+    {
+        var enabled = args.Remove("--native-smoke");
+        var screenshotIndex = args.IndexOf("--native-smoke-screenshot");
+        if (screenshotIndex < 0) return (enabled, null);
+        if (!enabled || screenshotIndex + 1 >= args.Count) throw new ArgumentException("Usage");
+        var screenshotPath = args[screenshotIndex + 1];
+        args.RemoveAt(screenshotIndex + 1);
+        args.RemoveAt(screenshotIndex);
+        return (enabled, screenshotPath);
+    }
+
+    private async Task RunNativeSmokeAsync(TerrainLoadResult result)
+    {
+        var commandCount = _canvas!.CommandCount;
+        var textureCount = _cache.Count;
+        DisplayServer.WindowSetSize(new Vector2I(1280, 800));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
+        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
+        Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
+        Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.F, Pressed = true });
+        DisplayServer.WindowSetSize(new Vector2I(1920, 1080));
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Escape, Pressed = true });
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        if (commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount || _cache.Count != textureCount || result.MaximumObservedConcurrency != 1)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        if (_nativeSmokeScreenshot is not null)
+        {
+            using var screenshot = GetViewport().GetTexture().GetImage();
+            if (screenshot.SavePng(_nativeSmokeScreenshot) != Error.Ok) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        }
+        GD.Print("ARC-RENDER-003 native smoke PASS 1280x800 1920x1080 commands=4096 concurrency=1");
+        GetTree().Quit(0);
     }
 
     public override void _Process(double delta)
