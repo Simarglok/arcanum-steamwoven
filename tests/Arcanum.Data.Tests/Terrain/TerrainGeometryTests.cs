@@ -44,11 +44,35 @@ public sealed class TerrainGeometryTests
         AssertThrows<ArgumentOutOfRangeException>(() => TerrainGeometry.Place(TerrainKind.Tile, 0, 0, 0, 1, 0, new TerrainRect(0, 0, 1, 1)));
         AssertThrows<ArgumentOutOfRangeException>(() => _ = new TerrainRect(0, 0, -1, 0));
         AssertThrows<OverflowException>(() => TerrainGeometry.Project(int.MinValue, int.MaxValue));
+        AssertThrows<OverflowException>(() => TerrainGeometry.Place(TerrainKind.Tile, 0, 0, 0, 1, 1, new TerrainRect(int.MaxValue, 0, 1, 1)));
+    }
+
+    [TestMethod]
+    public void Place_has_literal_adjacent_tile_and_facade_overlap_edges()
+    {
+        var viewport = new TerrainRect(-100, -100, 300, 300);
+        var originTile = TerrainGeometry.Place(TerrainKind.Tile, 0, 0, 0, 78, 40, viewport)!.Value.Footprint;
+        var horizontalTile = TerrainGeometry.Place(TerrainKind.Tile, 1, 0, 0, 78, 40, viewport)!.Value.Footprint;
+        var verticalTile = TerrainGeometry.Place(TerrainKind.Tile, 0, 1, 0, 78, 40, viewport)!.Value.Footprint;
+        var adjacentFacade = TerrainGeometry.Place(TerrainKind.Facade, 1, 0, 0xB0000000, 78, 40, viewport)!.Value.Footprint;
+
+        Assert.AreEqual(new TerrainRect(1, 20, 38, 20), Overlap(originTile, horizontalTile));
+        Assert.AreEqual(new TerrainRect(41, 20, 38, 20), Overlap(originTile, verticalTile));
+        Assert.AreEqual(new TerrainRect(1, 20, 40, 20), Overlap(originTile, adjacentFacade));
     }
 
     private static void AssertThrows<TException>(Action action) where TException : Exception
     {
         try { action(); Assert.Fail($"Expected {typeof(TException).Name}."); }
         catch (TException) { }
+    }
+
+    private static TerrainRect Overlap(TerrainRect first, TerrainRect second)
+    {
+        var left = Math.Max(first.X, second.X);
+        var top = Math.Max(first.Y, second.Y);
+        var right = Math.Min(first.X + first.Width, second.X + second.Width);
+        var bottom = Math.Min(first.Y + first.Height, second.Y + second.Height);
+        return new TerrainRect(left, top, right - left, bottom - top);
     }
 }

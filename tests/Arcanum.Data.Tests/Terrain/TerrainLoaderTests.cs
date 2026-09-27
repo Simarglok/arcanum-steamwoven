@@ -120,6 +120,25 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
+    public void Non_ascii_archive_name_is_excluded_instead_of_collapsing_onto_ascii_question_mark()
+    {
+        var sector = Sector(Enumerable.Repeat(0x000001C0u, 4096).ToArray());
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\raw-name.sec", sector))), leaveOpen: true);
+        var exactName = Ascii("ART/TILE/AA?BSE0A.ART\0");
+        var nonAsciiName = exactName.ToArray();
+        nonAsciiName[nonAsciiName.ToList().IndexOf((byte)'?')] = 0xff;
+        using var resource = DatArchive.Open(new MemoryStream(DatRaw(
+            (Ascii("art\\tile\\tilename.mes\0"), Ascii("{0}{aa?}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
+            (Ascii("art\\facade\\facadename.mes\0"), Ascii("{0}{zero}")),
+            (exactName, Art()),
+            (nonAsciiName, Art()))), leaveOpen: true);
+
+        var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\raw-name.sec"), Source(resource));
+        Assert.IsTrue(report.IsComplete);
+        Assert.AreEqual("art/tile/aa?bse0a.art", report.ResolvedRecords[0].LogicalPath);
+    }
+
+    [TestMethod]
     public void Exact_module_and_normalized_art_selection_fail_closed_for_zero_and_many_candidates()
     {
         var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
@@ -196,16 +215,16 @@ public sealed class TerrainLoaderTests
         var words = Enumerable.Range(0, 4096).Select(index => index % 2 == 0 ? 0x000001C0u : 0xB0000000u).ToArray();
         using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\tokens.sec", Sector(words)))), leaveOpen: true);
         using var resource = DatArchive.Open(new MemoryStream(Dat(
-            ("art\\tile\\tilename.mes", Ascii("{0}{longtile}{100}{bbb/suffix}{200}{ccc}{300}{ddd}{400}{000000}")),
-            ("art\\facade\\facadename.mes", Ascii("{0}{longfacade/suffix}")),
-            ("ART/TILE/LONGTILEBSE0A.ART", Art()),
-            ("ART/FACADE/LONGFACADE.ART", Art()))), leaveOpen: true);
+            ("art\\tile\\tilename.mes", Ascii("{0}{oak /suffix with spaces}{100}{bbb/suffix}{200}{ccc}{300}{ddd}{400}{000000}")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{front facade/suffix with spaces}")),
+            ("ART/TILE/OAK BSE0A.ART", Art()),
+            ("ART/FACADE/FRONT FACADE.ART", Art()))), leaveOpen: true);
 
         var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\tokens.sec"), Source(resource));
 
         Assert.IsTrue(report.IsComplete);
-        Assert.AreEqual("art/tile/longtilebse0a.art", report.Outcomes[0].Record!.LogicalPath);
-        Assert.AreEqual("art/facade/longfacade.art", report.Outcomes[1].Record!.LogicalPath);
+        Assert.AreEqual("art/tile/oak bse0a.art", report.Outcomes[0].Record!.LogicalPath);
+        Assert.AreEqual("art/facade/front facade.art", report.Outcomes[1].Record!.LogicalPath);
     }
 
     [TestMethod]
@@ -260,6 +279,27 @@ public sealed class TerrainLoaderTests
             ("ART/TILE/TILENAME.MES", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
             ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
         AssertTerrainCode(TerrainErrorCode.AmbiguousMesEntry, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\validation.sec"), Source(manyTile)));
+
+        using var missingFacade = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
+            ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+        AssertTerrainCode(TerrainErrorCode.MissingMesEntry, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\validation.sec"), Source(missingFacade)));
+
+        using var manyFacade = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+            ("ART/FACADE/FACADENAME.MES", Ascii("{0}{zero}")))), leaveOpen: true);
+        AssertTerrainCode(TerrainErrorCode.AmbiguousMesEntry, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\validation.sec"), Source(manyFacade)));
+
+        using var malformedMes = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii("not-a-brace-record")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
+        AssertTerrainCode(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\validation.sec"), Source(malformedMes)));
+
+        using var missingAnchor = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}")),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
+        AssertTerrainCode(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\validation.sec"), Source(missingAnchor)));
 
         var invalidRoof = Sector(words); BinaryPrimitives.WriteInt32LittleEndian(invalidRoof.AsSpan(4 + (4096 * 4)), 2);
         using var badRoof = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\roof-invalid.sec", invalidRoof))), leaveOpen: true);
@@ -316,6 +356,36 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
+    public void Art_validation_selects_group_zero_and_validates_requested_or_fallback_palette()
+    {
+        var tileWords = Enumerable.Repeat(0x000001D0u, 4096).ToArray();
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\art-options.sec", Sector(tileWords)))), leaveOpen: true);
+
+        var unsupportedBpp = Art(); BinaryPrimitives.WriteInt32LittleEndian(unsupportedBpp.AsSpan(8), 7);
+        using var unsupportedResource = Resource(("ART/TILE/AAABSE0A.ART", unsupportedBpp));
+        var unsupported = TerrainLoader.Inspect(module, Selector("maps\\fixture\\art-options.sec"), Source(unsupportedResource));
+        Assert.AreEqual(TerrainIssueCode.UnsupportedArt, unsupported.Issues[0].Code);
+
+        using var fallbackResource = Resource(("ART/TILE/AAABSE0A.ART", Art()));
+        var fallback = TerrainLoader.Inspect(module, Selector("maps\\fixture\\art-options.sec"), Source(fallbackResource));
+        Assert.IsTrue(fallback.IsComplete);
+        Assert.AreEqual(0, fallback.ResolvedRecords[0].EffectivePaletteSlot);
+
+        var requestedArt = ArtWithHeader(1, 2);
+        Assert.AreEqual(1u, ArtDecoder.Inspect(requestedArt).Header.PalettePresenceWords[1]);
+        using var requestedResource = Resource(("ART/TILE/AAABSE0A.ART", requestedArt));
+        var requested = TerrainLoader.Inspect(module, Selector("maps\\fixture\\art-options.sec"), Source(requestedResource));
+        Assert.IsTrue(requested.IsComplete);
+        Assert.AreEqual(1, requested.ResolvedRecords[0].Selection.PaletteSlot);
+        Assert.AreEqual(1, requested.ResolvedRecords[0].EffectivePaletteSlot);
+
+        using var eightGroupResource = Resource(("ART/TILE/AAABSE0A.ART", ArtWithHeader(0, 1)));
+        var eightGroup = TerrainLoader.Inspect(module, Selector("maps\\fixture\\art-options.sec"), Source(eightGroupResource));
+        Assert.IsTrue(eightGroup.IsComplete);
+        Assert.AreEqual(0, eightGroup.ResolvedRecords[0].Selection.GroupIndex);
+    }
+
+    [TestMethod]
     public void Outcomes_preserve_source_ordinals_world_coordinates_and_editor_layer_order()
     {
         var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray(); words[1] = 0xB0000000u; words[64] = 0x000001C0u;
@@ -327,6 +397,79 @@ public sealed class TerrainLoaderTests
         Assert.AreEqual((0, 1, 100, 201), (sector.Records[64].LocalX, sector.Records[64].LocalY, sector.Records[64].WorldX, sector.Records[64].WorldY));
         Assert.AreEqual(TerrainKind.Tile, sector.DiagnosticOrder[0].Kind);
         Assert.AreEqual(TerrainKind.Facade, sector.DiagnosticOrder[^1].Kind);
+    }
+
+    [TestMethod]
+    public void Framing_accepts_all_observed_placeholder_branches_and_preserves_owned_opaque_window()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        using var resource = Resource(("ART/TILE/AAABSE0A.ART", Art()));
+        foreach (var placeholder in Enumerable.Range(0, 5).Select(value => 0xAA0000 + value))
+        {
+            var opaque = new byte[] { 7, 8, 9 };
+            var sector = Sector(words, roofDiscriminator: 0, placeholder: placeholder, opaque: opaque, terminalCount: 17);
+            using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\opaque.sec", sector))), leaveOpen: true);
+            var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\opaque.sec"), Source(resource));
+            Assert.IsTrue(report.IsComplete);
+            Assert.AreEqual(placeholder, report.Framing.Placeholder);
+            Assert.AreEqual(17, report.Framing.ObjectWindow.TerminalObjectCount);
+            CollectionAssert.AreEqual(new byte[] { 7, 8, 9 }, report.Framing.ObjectWindow.Bytes.ToArray());
+            opaque[0] = 99;
+            Assert.AreEqual((byte)7, report.Framing.ObjectWindow.Bytes[0]);
+            var exposed = report.Framing.ObjectWindow.Bytes as IList<byte>;
+            Assert.IsNotNull(exposed);
+            AssertThrows<NotSupportedException>(() => exposed[0] = 1);
+        }
+    }
+
+    [TestMethod]
+    public void Framing_rejects_each_admitted_section_truncation_and_count_limit()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        var valid = Sector(words, roofDiscriminator: 0, placeholder: 0xAA0004, opaque: new byte[] { 1 });
+        using var resource = Resource(("ART/TILE/AAABSE0A.ART", Art()));
+        var cuts = new[] { 0, 3, 4, 4 + (4096 * 4) - 1, 4 + (4096 * 4) + 3, 4 + (4096 * 4) + 4 + 1023,
+            4 + (4096 * 4) + 4 + 1024 + 3, 4 + (4096 * 4) + 4 + 1024 + 4 + 3,
+            4 + (4096 * 4) + 4 + 1024 + 4 + 4 + 23, valid.Length - 5 };
+        foreach (var cut in cuts)
+        {
+            using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\cut.sec", valid[..cut]))), leaveOpen: true);
+            AssertTerrainCode(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\cut.sec"), Source(resource)));
+        }
+
+        var negativeLights = Sector(words); BinaryPrimitives.WriteInt32LittleEndian(negativeLights, -1);
+        var overLights = Sector(words); BinaryPrimitives.WriteInt32LittleEndian(overLights, 1025);
+        var negativeTerminal = Sector(words); BinaryPrimitives.WriteInt32LittleEndian(negativeTerminal.AsSpan(negativeTerminal.Length - 4), -1);
+        foreach (var bytes in new[] { negativeLights, overLights, negativeTerminal })
+        {
+            using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\count.sec", bytes))), leaveOpen: true);
+            AssertTerrainCode(TerrainErrorCode.LimitExceeded, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\count.sec"), Source(resource)));
+        }
+    }
+
+    [TestMethod]
+    public void Partial_reports_keep_exact_ordinals_and_exclude_each_failure_from_resolved_records()
+    {
+        var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
+        words[0] = 0xA0000000u;
+        words[1] = (1u << 22) | 0x000001C0u;
+        words[2] = 0x00000000u;
+        words[3] = 0xB0000002u;
+        using var module = DatArchive.Open(new MemoryStream(Dat(("maps\\fixture\\mixed.sec", Sector(words)))), leaveOpen: true);
+        using var resource = Resource(("ART/TILE/AAABSE0A.ART", Art()), ("ART/FACADE/ZERO.ART", Art()));
+        var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\mixed.sec"), Source(resource));
+
+        Assert.IsFalse(report.IsComplete);
+        Assert.AreEqual(4096, report.Outcomes.Count);
+        CollectionAssert.AreEqual(new[] { TerrainIssueCode.UnsupportedClass, TerrainIssueCode.InvalidTileSelector, TerrainIssueCode.MissingResource, TerrainIssueCode.InvalidFrame }, report.Issues.Take(4).Select(issue => issue.Code).ToArray());
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3 }, report.Issues.Take(4).Select(issue => issue.Ordinal).ToArray());
+        Assert.IsTrue(report.Outcomes.All(outcome => (outcome.Record is null) != (outcome.Issue is null)));
+        Assert.IsFalse(report.ResolvedRecords.Any(record => record.Ordinal is >= 0 and <= 3));
+        TerrainIncompleteException? incomplete = null;
+        try { _ = TerrainLoader.Load(module, Selector("maps\\fixture\\mixed.sec"), Source(resource)); }
+        catch (TerrainIncompleteException caught) { incomplete = caught; }
+        Assert.IsNotNull(incomplete);
+        Assert.AreEqual(4, incomplete.Report.Issues.Count);
     }
 
     [TestMethod]
@@ -360,21 +503,21 @@ public sealed class TerrainLoaderTests
         var viewport = new TerrainRect(-3000, 0, 5000, 2000);
         var representatives = new[]
         {
-            (392, TerrainKind.Tile, 4587, 0, new TerrainRect(-79, 280, 78, 40), true, false),
-            (573, TerrainKind.Tile, 4587, 0, new TerrainRect(-2119, 1380, 78, 40), true, true),
-            (821, TerrainKind.Tile, 4577, 0, new TerrainRect(-1639, 1300, 78, 40), true, true),
-            (18, TerrainKind.Tile, 4490, 0, new TerrainRect(-719, 360, 78, 40), true, false),
-            (2075, TerrainKind.Facade, 90, 0, new TerrainRect(201, 1180, 80, 40), false, false),
-            (2011, TerrainKind.Facade, 90, 1, new TerrainRect(161, 1160, 80, 40), false, false),
-            (1947, TerrainKind.Facade, 90, 2, new TerrainRect(121, 1140, 80, 40), false, false)
+            (Ordinal: 392, Kind: TerrainKind.Tile, DatOrdinal: 4587, Frame: 0, Footprint: new TerrainRect(-79, 280, 78, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: false),
+            (Ordinal: 573, Kind: TerrainKind.Tile, DatOrdinal: 4587, Frame: 0, Footprint: new TerrainRect(-2119, 1380, 78, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: true),
+            (Ordinal: 821, Kind: TerrainKind.Tile, DatOrdinal: 4577, Frame: 0, Footprint: new TerrainRect(-1639, 1300, 78, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: true),
+            (Ordinal: 18, Kind: TerrainKind.Tile, DatOrdinal: 4490, Frame: 0, Footprint: new TerrainRect(-719, 360, 78, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: false),
+            (Ordinal: 2075, Kind: TerrainKind.Facade, DatOrdinal: 90, Frame: 0, Footprint: new TerrainRect(201, 1180, 80, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: false),
+            (Ordinal: 2011, Kind: TerrainKind.Facade, DatOrdinal: 90, Frame: 1, Footprint: new TerrainRect(161, 1160, 80, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: false),
+            (Ordinal: 1947, Kind: TerrainKind.Facade, DatOrdinal: 90, Frame: 2, Footprint: new TerrainRect(121, 1140, 80, 40), Source: new TerrainRect(0, 0, 78, 40), FlipX: false)
         };
         foreach (var expected in representatives)
         {
-            var record = report.Outcomes[expected.Item1].Record!;
-            Assert.AreEqual(expected.Item2, record.Kind); Assert.AreEqual(expected.Item3, record.ResourceIdentity.DatOrdinal); Assert.AreEqual(expected.Item4, record.Selection.FrameIndex);
+            var record = report.Outcomes[expected.Ordinal].Record!;
+            Assert.AreEqual(expected.Kind, record.Kind); Assert.AreEqual(expected.DatOrdinal, record.ResourceIdentity.DatOrdinal); Assert.AreEqual(expected.Frame, record.Selection.FrameIndex);
             var placement = TerrainGeometry.Place(record.Kind, record.LocalX, record.LocalY, record.RawId, record.FrameMetadata.Width, record.FrameMetadata.Height, viewport);
-            Assert.IsNotNull(placement); Assert.AreEqual(expected.Item5, placement.Value.Footprint); Assert.AreEqual(new TerrainRect(0, 0, 78, 40), placement.Value.Source);
-            Assert.AreEqual(new TerrainRect(expected.Item5.X, expected.Item5.Y, 78, 40), placement.Value.Destination); Assert.AreEqual(expected.Item6, placement.Value.FlipX); Assert.IsFalse(placement.Value.FlipY);
+            Assert.IsNotNull(placement); Assert.AreEqual(expected.Footprint, placement.Value.Footprint); Assert.AreEqual(expected.Source, placement.Value.Source);
+            Assert.AreEqual(new TerrainRect(expected.Footprint.X, expected.Footprint.Y, expected.Source.Width, expected.Source.Height), placement.Value.Destination); Assert.AreEqual(expected.FlipX, placement.Value.FlipX); Assert.IsFalse(placement.Value.FlipY);
         }
         Assert.AreEqual(moduleBefore, Hash(modulePath!)); Assert.AreEqual(resourceBefore, Hash(resourcePath!));
         Assert.AreEqual(moduleSizeBefore, new FileInfo(modulePath!).Length); Assert.AreEqual(resourceSizeBefore, new FileInfo(resourcePath!).Length);
@@ -416,15 +559,33 @@ public sealed class TerrainLoaderTests
         try { action(); Assert.Fail($"Expected terrain code {code}."); }
         catch (TerrainException exception) { Assert.AreEqual(code, exception.Code); }
     }
-    private static byte[] Sector(uint[] words, int roofDiscriminator = 1)
+    private static byte[] Sector(uint[] words, int roofDiscriminator = 1, int placeholder = 0xAA0000, int lights = 0,
+        int tileScripts = 0, byte[]? opaque = null, int terminalCount = 0)
     {
+        opaque ??= Array.Empty<byte>();
         var roofBytes = roofDiscriminator == 0 ? 256 * 4 : 0;
-        var bytes = new byte[4 + (words.Length * 4) + 4 + roofBytes + 4 + 4];
-        for (var i = 0; i < words.Length; i++) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(4 + (i * 4)), words[i]);
-        var cursor = 4 + (words.Length * 4);
+        var scriptBytes = placeholder == 0xAA0000 ? 0 : 4 + (tileScripts * 24);
+        var sectorScriptBytes = placeholder >= 0xAA0002 ? 12 : 0;
+        var metadataBytes = placeholder >= 0xAA0003 ? 24 : 0;
+        var blockBytes = placeholder >= 0xAA0004 ? 512 : 0;
+        var bytes = new byte[4 + (lights * 48) + (words.Length * 4) + 4 + roofBytes + 4 + scriptBytes + sectorScriptBytes + metadataBytes + blockBytes + opaque.Length + 4];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes, lights);
+        var cursor = 4 + (lights * 48);
+        for (var i = 0; i < words.Length; i++) BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(cursor + (i * 4)), words[i]);
+        cursor += words.Length * 4;
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(cursor), roofDiscriminator);
         cursor += 4 + roofBytes;
-        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(cursor), 0xAA0000);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(cursor), placeholder);
+        cursor += 4;
+        if (placeholder != 0xAA0000)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(cursor), tileScripts);
+            cursor += 4 + (tileScripts * 24);
+        }
+        cursor += sectorScriptBytes + metadataBytes + blockBytes;
+        opaque.CopyTo(bytes.AsSpan(cursor));
+        cursor += opaque.Length;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(cursor), terminalCount);
         return bytes;
     }
     private static byte[] Art(bool hasPaletteZero = true)
@@ -435,6 +596,26 @@ public sealed class TerrainLoaderTests
         var frame = 132 + paletteBytes; BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 4), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 8), 1); bytes[^1] = 1;
         return bytes;
     }
+    private static byte[] ArtWithHeader(uint flags, uint palettePresence)
+    {
+        var groups = (flags & 1) != 0 ? 1 : 8;
+        var paletteBytes = Enumerable.Range(0, 4).Count(slot => (palettePresence & (1u << slot)) != 0) * 1024;
+        var bytes = new byte[132 + paletteBytes + (groups * 28) + groups];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, flags);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
+        for (var slot = 0; slot < 4; slot++)
+            BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12 + (slot * 4)), (palettePresence & (1u << slot)) != 0 ? 1u : 0u);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), 1);
+        var frame = 132 + paletteBytes;
+        for (var index = 0; index < groups; index++)
+        {
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + (index * 28)), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + (index * 28) + 4), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + (index * 28) + 8), 1);
+            bytes[frame + (groups * 28) + index] = 1;
+        }
+        return bytes;
+    }
     private static byte[] Dat(params (string Name, byte[] Bytes)[] entries)
     {
         using var output = new MemoryStream(); var offsets = new List<uint>();
@@ -442,6 +623,18 @@ public sealed class TerrainLoaderTests
         using var index = new MemoryStream(); WriteU32(index, checked((uint)entries.Length));
         for (var i = 0; i < entries.Length; i++) { var name = Ascii(entries[i].Name + "\0"); WriteU32(index, checked((uint)name.Length)); index.Write(name); index.Write(new byte[4]); WriteU32(index, 1); WriteU32(index, checked((uint)entries[i].Bytes.Length)); WriteU32(index, checked((uint)entries[i].Bytes.Length)); WriteU32(index, offsets[i]); }
         index.Position = 0; index.CopyTo(output); output.Write(new byte[16]); output.Write("1TAD"u8); WriteU32(output, checked((uint)entries.Sum(e => e.Name.Length + 1))); WriteU32(output, checked((uint)(index.Length + 28))); return output.ToArray();
+    }
+    private static byte[] DatRaw(params (byte[] Name, byte[] Bytes)[] entries)
+    {
+        using var output = new MemoryStream(); var offsets = new List<uint>();
+        foreach (var entry in entries) { offsets.Add(checked((uint)output.Position)); output.Write(entry.Bytes); }
+        using var index = new MemoryStream(); WriteU32(index, checked((uint)entries.Length));
+        for (var i = 0; i < entries.Length; i++)
+        {
+            WriteU32(index, checked((uint)entries[i].Name.Length)); index.Write(entries[i].Name); index.Write(new byte[4]); WriteU32(index, 1);
+            WriteU32(index, checked((uint)entries[i].Bytes.Length)); WriteU32(index, checked((uint)entries[i].Bytes.Length)); WriteU32(index, offsets[i]);
+        }
+        index.Position = 0; index.CopyTo(output); output.Write(new byte[16]); output.Write("1TAD"u8); WriteU32(output, checked((uint)entries.Sum(e => e.Name.Length))); WriteU32(output, checked((uint)(index.Length + 28))); return output.ToArray();
     }
     private static byte[] Ascii(string value) => Encoding.ASCII.GetBytes(value);
     private static string Hash(string path) { using var input = File.OpenRead(path); return Convert.ToHexString(SHA256.HashData(input)).ToLowerInvariant(); }

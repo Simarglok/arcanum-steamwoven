@@ -162,7 +162,6 @@ public static class TerrainLoader
         if (bytes.Length < 4) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector light count is truncated.");
         var terminalStart = checked(bytes.Length - 4); if (terminalStart < 4) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector terminal count is truncated.");
         var terminal = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(terminalStart));
-        if (terminal is < 0 or > 4096 || terminal > limits.MaxObjectTerminalCount) throw new TerrainLimitExceededException("Sector terminal object count is outside the configured limit.");
         var ranges = new Dictionary<TerrainSection, TerrainByteRange>();
         var cursor = new Cursor(bytes, terminalStart);
         var lightStart = cursor.Offset; var lights = cursor.I32("light count");
@@ -179,6 +178,7 @@ public static class TerrainLoader
         var metadataStart = cursor.Offset; if (placeholder >= 0xAA0003) cursor.Skip(24, "metadata and sound"); ranges[TerrainSection.MetadataAndSound] = new TerrainByteRange(metadataStart, checked(cursor.Offset - metadataStart));
         var blockStart = cursor.Offset; if (placeholder >= 0xAA0004) cursor.Skip(512, "block mask"); ranges[TerrainSection.BlockMask] = new TerrainByteRange(blockStart, checked(cursor.Offset - blockStart));
         var objectStart = cursor.Offset; var objectLength = checked(terminalStart - objectStart); if (objectLength < 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector sections overlap the terminal count.");
+        if (terminal is < 0 or > 4096 || terminal > limits.MaxObjectTerminalCount) throw new TerrainLimitExceededException("Sector terminal object count is outside the configured limit.");
         ranges[TerrainSection.ObjectWindow] = new TerrainByteRange(objectStart, objectLength); ranges[TerrainSection.TerminalObjectCount] = new TerrainByteRange(terminalStart, 4);
         var opaque = new TerrainOpaqueWindow(ranges[TerrainSection.ObjectWindow], terminal, bytes.AsSpan(objectStart, objectLength).ToArray());
         return new ParsedSector(words, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
@@ -254,11 +254,9 @@ public static class TerrainLoader
 
     private static string MesPathToken(string value)
     {
-        if (string.IsNullOrEmpty(value) || value.Any(character => character is < '!' or > '~'))
-            throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES pathname token is malformed.");
         var slash = value.IndexOf('/');
         var token = slash < 0 ? value : value[..slash];
-        if (token.Length == 0 || token.Any(character => character is < '!' or > '~'))
+        if (token.Length == 0 || token.Any(char.IsControl))
             throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES pathname token is malformed.");
         return token;
     }
