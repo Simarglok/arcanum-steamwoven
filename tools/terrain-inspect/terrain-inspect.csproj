@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>terrain-inspect</AssemblyName>
+    <RootNamespace>Arcanum.Tools.TerrainInspect</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.Data.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Arcanum.Data/Arcanum.Data.csproj" />
+  </ItemGroup>
+</Project>
