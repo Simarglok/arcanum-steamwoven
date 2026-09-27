@@ -31,7 +31,7 @@ The evidence capture index is: 1280×720@200 dialogue; 1920×1080@100 inventory;
 
 ### Candidate-bound result records
 
-One complete provisional local validation passed before this result-record commit. Its exact candidate, base, ordinary-diff hash, observed toolchain/template values, app/evidence paths, named checks, classifications, and delivery state are bound by the ignored `manifest.json` selected by `artifacts/builds/ARC-UI-001/current.json`. The pointer identifies that successfully validated provisional candidate; it does not claim to bind this later tracked documentation commit.
+The exact final candidate is bound by the ignored `manifest.json` selected by `artifacts/builds/ARC-UI-001/current.json`. Together they identify the final tracked candidate, base, ordinary-diff hash, observed toolchain/template values, app/evidence paths, named checks, classifications, and delivery state without embedding a self-referential commit SHA in this document.
 
 | Observed gate | Result | Classification and recorded scope |
 |---|---|---|

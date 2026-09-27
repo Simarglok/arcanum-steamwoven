@@ -138,6 +138,7 @@ public partial class LayoutMatrixRunner : Node
             new MatrixResult("ui-scale-keeps-world-and-camera", worldBeforeScale.WorldMarkerViewport.DistanceTo(worldAfterScale.WorldMarkerViewport) <= 0.5f && worldBeforeScale.State.CameraZoom == worldAfterScale.State.CameraZoom, $"world={worldBeforeScale.WorldMarkerViewport}/{worldAfterScale.WorldMarkerViewport}; zoom={worldBeforeScale.State.CameraZoom}"),
             new MatrixResult("pushinput-mouse-click", input.MousePassed, input.MouseDetail),
             new MatrixResult("keyboard-focus-and-scroll-escape", input.KeyboardPassed, input.KeyboardDetail),
+            new MatrixResult("ordinary-panel-selector-labels-and-focus", input.OrdinarySelectorPassed, input.OrdinarySelectorDetail),
             new MatrixResult("compact-panel-selector", input.CompactSelectorPassed, input.CompactSelectorDetail),
             new MatrixResult("routed-wheel-scroll-outcomes", input.ScrollPassed, input.ScrollDetail),
             new MatrixResult("routed-middle-drag-pan", input.PanPassed, input.PanDetail),
@@ -212,6 +213,35 @@ public partial class LayoutMatrixRunner : Node
 
     private async Task<InputProbe> VerifyInput(SubViewport viewport, LabSurface surface)
     {
+        viewport.Size = new Vector2I(1920, 1080);
+        surface.SimulateViewport(viewport.Size);
+        surface.ApplyUiScale(UiScalePreset.Scale100);
+        surface.ShowPanel(LabPanel.Dialogue);
+        await Settle();
+        var ordinarySelector = surface.ImportantControl("PanelInventory") as Button;
+        var ordinarySelectorSignals = 0;
+        if (ordinarySelector != null)
+            ordinarySelector.Pressed += () => ordinarySelectorSignals++;
+        var ordinaryCenter = ordinarySelector?.GetGlobalRect().GetCenter() ?? Vector2.Zero;
+        viewport.PushInput(new InputEventMouseMotion { Position = ordinaryCenter }, true);
+        viewport.PushInput(new InputEventMouseButton { Position = ordinaryCenter, ButtonIndex = MouseButton.Left, Pressed = true }, true);
+        viewport.PushInput(new InputEventMouseButton { Position = ordinaryCenter, ButtonIndex = MouseButton.Left, Pressed = false }, true);
+        await Settle();
+        var ordinaryTitle = surface.ImportantControl("PanelTitle") as Label;
+        var ordinaryPanelSelector = surface.ImportantControl("PanelSelector") as Button;
+        var inventoryItem = surface.ImportantControl("Item01") as Button;
+        inventoryItem?.GrabFocus();
+        PushKey(viewport, Key.Tab);
+        await Settle();
+        var ordinaryNextFocus = viewport.GuiGetFocusOwner()?.Name.ToString() ?? "none";
+        var ordinaryTitleText = ordinaryTitle?.Text;
+        var ordinaryPanelSelectorText = ordinaryPanelSelector?.Text;
+        var ordinaryPassed = ordinarySelectorSignals == 1
+            && surface.State.ActivePanel == LabPanel.Inventory
+            && ordinaryTitleText == "Inventory"
+            && ordinaryPanelSelectorText == "Panel: Inventory"
+            && ordinaryNextFocus.StartsWith("Item", StringComparison.Ordinal);
+
         surface.ShowPanel(LabPanel.Dialogue);
         await Settle();
         var close = surface.ImportantControl("Close") as Button;
@@ -281,8 +311,12 @@ public partial class LayoutMatrixRunner : Node
         compactClose?.GrabFocus();
         PushKey(viewport, Key.Enter);
         await Settle();
-        var compactPassed = compactSnapshot.ResponsiveClass == ResponsiveClass.Compact && compactSelector?.IsVisibleInTree() == true && selectorSignals == 1 && surface.State.ActivePanel != LabPanel.Dialogue && !surface.State.PanelVisible;
-        var compactDetail = $"class={compactSnapshot.ResponsiveClass}; selectorVisible={compactSelector?.IsVisibleInTree()}; pressedSignals={selectorSignals}; active={surface.State.ActivePanel}; closed={!surface.State.PanelVisible}";
+        var compactTitle = surface.ImportantControl("PanelTitle") as Label;
+        var compactPanelSelector = surface.ImportantControl("PanelSelector") as Button;
+        var compactLabelsUpdated = compactTitle?.Text == surface.State.ActivePanel.ToString()
+            && compactPanelSelector?.Text == $"Panel: {surface.State.ActivePanel}";
+        var compactPassed = compactSnapshot.ResponsiveClass == ResponsiveClass.Compact && compactSelector?.IsVisibleInTree() == true && selectorSignals == 1 && surface.State.ActivePanel != LabPanel.Dialogue && compactLabelsUpdated && !surface.State.PanelVisible;
+        var compactDetail = $"class={compactSnapshot.ResponsiveClass}; selectorVisible={compactSelector?.IsVisibleInTree()}; pressedSignals={selectorSignals}; active={surface.State.ActivePanel}; title={compactTitle?.Text}; selectorText={compactPanelSelector?.Text}; labelsUpdated={compactLabelsUpdated}; closed={!surface.State.PanelVisible}";
 
         surface.ShowPanel(LabPanel.Dialogue);
         await Settle();
@@ -347,7 +381,8 @@ public partial class LayoutMatrixRunner : Node
             horizontalBefore, horizontalAfter, horizontalMin, horizontalMax, initiallyOffscreen, horizontalFocus,
             SnapshotEvidence.From(panBefore, panCameraBefore), SnapshotEvidence.From(panAfter, panCameraAfter),
             escapePassed, compactSnapshot.ResponsiveClass.ToString(), surface.State.ActivePanel.ToString());
-        return new InputProbe(mousePassed, mouseDetail, keyboardPassed, keyboardDetail, compactPassed, compactDetail, scrollPassed, scrollDetail, panPassed, panDetail, escapePassed, escapeDetail, evidence);
+        var ordinaryDetail = $"pressedSignals={ordinarySelectorSignals}; activeAfterSelection=Inventory; title={ordinaryTitleText}; selectorText={ordinaryPanelSelectorText}; nextFocus={ordinaryNextFocus}";
+        return new InputProbe(mousePassed, mouseDetail, keyboardPassed, keyboardDetail, ordinaryPassed, ordinaryDetail, compactPassed, compactDetail, scrollPassed, scrollDetail, panPassed, panDetail, escapePassed, escapeDetail, evidence);
     }
 
     private static void PushKey(Viewport viewport, Key key, bool shift = false)
@@ -358,7 +393,7 @@ public partial class LayoutMatrixRunner : Node
 
     private sealed record InputProbe(
         bool MousePassed, string MouseDetail, bool KeyboardPassed, string KeyboardDetail,
-        bool CompactSelectorPassed, string CompactSelectorDetail, bool ScrollPassed, string ScrollDetail,
+        bool OrdinarySelectorPassed, string OrdinarySelectorDetail, bool CompactSelectorPassed, string CompactSelectorDetail, bool ScrollPassed, string ScrollDetail,
         bool PanPassed, string PanDetail, bool EscapePassed, string EscapeDetail, RoutedInputEvidence Evidence);
 
     private sealed record RoutedInputEvidence(

@@ -33,10 +33,14 @@ public partial class NativeSmokeRunner : Node
             {
                 window.Size = size;
                 var settled = await WaitUntil(() => DisplayServer.WindowGetSize() == size);
+                // Window-size acknowledgement precedes container sorting on macOS. Sample
+                // only after bounded frame settlement so hidden Medium selectors have reflowed.
+                await Settle();
                 var snapshot = surface.CaptureLayoutSnapshot();
                 var observed = DisplayServer.WindowGetSize();
-                var sizePassed = settled && observed == size && snapshot.Viewport.X > 0 && snapshot.Viewport.Y > 0;
-                checks.Add(new { name = "programmatic-client-relayout", status = sizePassed ? "PASS" : "FAIL", requested = SizeEvidence.From(size), observed = SizeEvidence.From(observed), snapshot = SnapshotEvidence.From(snapshot, surface.CameraPosition) });
+                var requiredStickyControlsInViewport = RequiredStickyControlsInViewport(surface, snapshot.Viewport);
+                var sizePassed = settled && observed == size && snapshot.Viewport.X > 0 && snapshot.Viewport.Y > 0 && requiredStickyControlsInViewport;
+                checks.Add(new { name = "programmatic-client-relayout", status = sizePassed ? "PASS" : "FAIL", requested = SizeEvidence.From(size), observed = SizeEvidence.From(observed), requiredStickyControlsInViewport, snapshot = SnapshotEvidence.From(snapshot, surface.CameraPosition) });
                 passed &= sizePassed;
             }
 
@@ -153,5 +157,19 @@ public partial class NativeSmokeRunner : Node
             if (current == expected)
                 return true;
         return false;
+    }
+
+    private static bool RequiredStickyControlsInViewport(LabSurface surface, Vector2 viewport)
+    {
+        foreach (var id in new[] { "Fullscreen", "PanelSelector", "PanelTitle", "Close", "Reset" })
+        {
+            var control = surface.ImportantControl(id);
+            if (control == null || !control.IsVisibleInTree())
+                return false;
+            var rect = control.GetGlobalRect();
+            if (rect.Position.X < 0 || rect.Position.Y < 0 || rect.End.X > viewport.X || rect.End.Y > viewport.Y)
+                return false;
+        }
+        return true;
     }
 }

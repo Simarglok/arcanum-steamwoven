@@ -83,6 +83,8 @@ public partial class LabSurface : Node2D
     {
         _state = _state with { ActivePanel = panel, PanelVisible = true };
         BuildPanelBody();
+        UpdatePanelLabels();
+        ConfigureFocusOrder();
         Arrange();
     }
 
@@ -251,6 +253,13 @@ public partial class LabSurface : Node2D
     {
         if (_panelBody == null)
             return;
+        // Remove the old active-panel controls before rebuilding. Their path/focus links
+        // must never remain in the explicit keyboard graph for the next panel.
+        foreach (var key in _importantControls
+                     .Where(pair => _panelBody.IsAncestorOf(pair.Value))
+                     .Select(pair => pair.Key)
+                     .ToArray())
+            _importantControls.Remove(key);
         foreach (var child in _panelBody.GetChildren())
             (child as Node)?.Free();
         foreach (var key in _importantControls.Where(pair => !GodotObject.IsInstanceValid(pair.Value)).Select(pair => pair.Key).ToArray())
@@ -294,8 +303,11 @@ public partial class LabSurface : Node2D
             viewport = GetViewport().GetVisibleRect().Size;
         var scale = UiScalePolicy.Factor(_state.UiScale);
         _responsiveClass = UiScalePolicy.Classify(viewport, _state.UiScale);
+        // Medium and Compact use the labelled action-row selector instead of allowing the
+        // top HBox to overflow. Fullscreen remains in the top row and both it and the
+        // selector remain independently keyboard and mouse reachable.
         foreach (var panel in Enum.GetValues<LabPanel>())
-            _importantControls[$"Panel{panel}"].Visible = _responsiveClass != ResponsiveClass.Compact;
+            _importantControls[$"Panel{panel}"].Visible = _responsiveClass == ResponsiveClass.Wide;
         _importantControls["PanelSelector"].Visible = true;
         var margin = UiScalePolicy.Target(12, _state.UiScale);
         var topHeight = UiScalePolicy.Target(52, _state.UiScale);
@@ -321,6 +333,7 @@ public partial class LabSurface : Node2D
             ResponsiveLayout.SetRect(_diagnostics, ResponsiveLayout.ClampToViewport(new Rect2(margin, topHeight + margin * 2, diagnosticSize.X, diagnosticSize.Y), viewport));
         }
         RefreshDiagnostics();
+        ConfigureFocusOrder();
     }
 
     private void RefreshDiagnostics()
@@ -388,17 +401,44 @@ public partial class LabSurface : Node2D
         ShowPanel(next);
     }
 
+    private void UpdatePanelLabels()
+    {
+        if (_importantControls.GetValueOrDefault("PanelSelector") is Button selector)
+            selector.Text = $"Panel: {_state.ActivePanel}";
+        if (_importantControls.GetValueOrDefault("PanelTitle") is Label title)
+            title.Text = _state.ActivePanel.ToString();
+    }
+
     private void ConfigureFocusOrder()
     {
-        var ordered = _importantControls.Values
-            .OfType<Button>()
-            .Cast<Control>()
-            .Distinct()
-            .ToArray();
-        for (var index = 0; index < ordered.Length; index++)
+        var ordered = new List<Control>();
+        foreach (var id in new[]
+                 {
+                     "PanelDialogue", "PanelInventory", "PanelSettings", "Fullscreen", "PanelSelector",
+                     "Action100%", "Action125%", "Action150%", "Action175%", "Action200%", "Zoom−", "Zoom+",
+                     "Close", "Reset",
+                 })
         {
-            ordered[index].FocusNext = ordered[(index + 1) % ordered.Length].GetPath();
-            ordered[index].FocusPrevious = ordered[(index - 1 + ordered.Length) % ordered.Length].GetPath();
+            if (_importantControls.GetValueOrDefault(id) is Button button
+                && GodotObject.IsInstanceValid(button)
+                && button.IsVisibleInTree())
+                ordered.Add(button);
+        }
+        AddFocusablePanelButtons(_panelBody, ordered);
+        for (var index = 0; index < ordered.Count; index++)
+        {
+            ordered[index].FocusNext = ordered[(index + 1) % ordered.Count].GetPath();
+            ordered[index].FocusPrevious = ordered[(index - 1 + ordered.Count) % ordered.Count].GetPath();
+        }
+    }
+
+    private static void AddFocusablePanelButtons(Node node, ICollection<Control> controls)
+    {
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Button button && button.FocusMode == Control.FocusModeEnum.All && button.IsVisibleInTree())
+                controls.Add(button);
+            AddFocusablePanelButtons(child, controls);
         }
     }
 }
