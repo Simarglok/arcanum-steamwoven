@@ -37,6 +37,10 @@ internal static class DialogOperationParser
         while (index < bytes.Count)
         {
             var operationStart = index;
+            if (IsCombinatorStart(bytes[index]))
+            {
+                throw Failure(DialogFailureKind.UnsupportedOperation, record, field, operationStart, 1, operations.Count);
+            }
             if (index + 2 > bytes.Count || !IsAsciiLetter(bytes[index]) || !IsAsciiLetter(bytes[index + 1]))
             {
                 throw Failure(DialogFailureKind.InvalidOperation, record, field, operationStart, 1, operations.Count);
@@ -44,6 +48,10 @@ internal static class DialogOperationParser
 
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
+            if (opcode is not ("LF" or "QU" or "RU"))
+            {
+                throw Failure(DialogFailureKind.UnsupportedOperation, record, field, operationStart, 2, operations.Count);
+            }
             RequireSeparators(bytes, ref index, record, field, operationStart, operations.Count);
             var first = ParseInteger(bytes, ref index, record, field, operationStart, operations.Count);
             var secondRequired = opcode is "LF" or "QU";
@@ -65,8 +73,7 @@ internal static class DialogOperationParser
                 "LF" when first is >= 0 and <= 31 && second is >= 0 and <= 1 => new LocalFlagOperationPlan(source, first, second),
                 "QU" when second is >= 0 and <= 6 => new QuestOperationPlan(source, first, second),
                 "RU" when first is >= 1000 => new RumorOperationPlan(source, first),
-                "LF" or "QU" or "RU" => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
-                _ => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                _ => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
             };
             operations.Add(operation);
             if (operations.Count > options.MaxOperationsPerField)
@@ -141,6 +148,7 @@ internal static class DialogOperationParser
     }
 
     private static bool IsSeparator(byte value) => value is (byte)' ' or (byte)'\t' or (byte)',' or (byte)';' or (byte)':' or (byte)'(' or (byte)')';
+    private static bool IsCombinatorStart(byte value) => value is (byte)'&' or (byte)'|' or (byte)'!' or (byte)'~';
     private static bool IsAsciiLetter(byte value) => value is >= (byte)'A' and <= (byte)'Z' or >= (byte)'a' and <= (byte)'z';
     private static byte ToUpper(byte value) => value is >= (byte)'a' and <= (byte)'z' ? (byte)(value - 32) : value;
 

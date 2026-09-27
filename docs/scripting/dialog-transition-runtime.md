@@ -117,18 +117,23 @@ exclude raw operation bytes and display text.
 ## Verification and opt-in data method
 
 Public integration tests use invented DLG bytes through the real `DlgReader` and
-typed in-memory ports. They cover ordered command routing, source provenance,
-refresh/stale generations, static fail-closed grammar, direct/exit/special, and
-dynamic rejection accounting.
+typed in-memory ports. They cover ordered command routing and provenance,
+gender/IQ/LF gate order, refresh/stale generations, current-token checks,
+conditioned Exit/Special zero-port selection, static fail-closed grammar and
+ordered cap attribution, shared-target cap deduplication, direct/exit/special,
+and command/query terminal-failure receipts.
 
 The opt-in `DlgRuntimeRealData` category only reads existing
 `arcanum3.dat` member `dlg\01478Erland.dlg`, checks the versioned archive
 SHA-256 `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`
-before and after, uses manual research IDs 30/31/50, and passes only isolated
-in-memory typed ports. It logs neither extracted text nor operation bytes or
-parameters. It must be run with `DAT_ROOT` pointing to the user-owned
-installation; an absent or mismatched input is skipped/inconclusive operational
-evidence, never a pass.
+before and after, checks the observed structural 31-to-50 Direct classification,
+and uses manual research IDs 30/31/50 with isolated in-memory typed ports. The
+current strict safety grammar rejects the selected source action statically as
+`InvalidOperation`; the test asserts that typed, zero-port/no-receipt result for
+both allowed local-flag values rather than pretending the edge executed. It logs
+neither extracted text nor operation bytes or parameters. It must be run with
+`DAT_ROOT` pointing to the user-owned installation; an absent or mismatched input
+fails safely as inconclusive operational evidence and is never a pass.
 
 ## Provenance and exclusions
 

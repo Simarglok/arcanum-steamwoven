@@ -50,15 +50,16 @@ public static class DialogTransitionRuntime
 
         try
         {
+            var budget = new StepBudget(effectiveOptions);
             var cache = new Dictionary<(int SerializedIndex, DlgFieldKind Kind), ParsedField>();
-            var sourceAction = ParseField(entry, entry.Action, condition: false, effectiveOptions, cache);
+            var sourceAction = ParseField(entry, entry.Action, condition: false, effectiveOptions, cache, budget);
             var plans = new List<DialogResponsePlan>();
             foreach (var response in responses)
             {
                 var condition = response.Condition.Length == 0
                     ? null
-                    : RequireCondition(ParseField(response, response.Condition, condition: true, effectiveOptions, cache));
-                var action = ParseField(response, response.Action, condition: false, effectiveOptions, cache).Operations;
+                    : RequireCondition(ParseField(response, response.Condition, condition: true, effectiveOptions, cache, budget));
+                var action = ParseField(response, response.Action, condition: false, effectiveOptions, cache, budget).Operations;
                 var kind = response.ResponseKind!.Value;
                 DlgRecord? target = null;
                 IReadOnlyList<DialogOperationPlan> targetAction = Array.Empty<DialogOperationPlan>();
@@ -72,7 +73,7 @@ public static class DialogTransitionRuntime
                     {
                         throw StaticFailure(DialogFailureKind.WrongTargetRole, response, response.Response);
                     }
-                    targetAction = ParseField(target, target.Action, condition: false, effectiveOptions, cache).Operations;
+                    targetAction = ParseField(target, target.Action, condition: false, effectiveOptions, cache, budget).Operations;
                 }
                 plans.Add(new DialogResponsePlan(
                     response,
@@ -88,7 +89,6 @@ public static class DialogTransitionRuntime
                     target,
                     targetAction));
             }
-            ValidateWholeStep(cache.Values, effectiveOptions, entry);
             var session = new DialogSession(request, entry, plans, queries, commands);
             if (!session.Execute(sourceAction.Operations))
             {
@@ -159,7 +159,8 @@ public static class DialogTransitionRuntime
         DlgField field,
         bool condition,
         DialogRuntimeOptions options,
-        IDictionary<(int SerializedIndex, DlgFieldKind Kind), ParsedField> cache)
+        IDictionary<(int SerializedIndex, DlgFieldKind Kind), ParsedField> cache,
+        StepBudget budget)
     {
         var key = (record.SerializedIndex, field.Kind);
         if (cache.TryGetValue(key, out var parsed))
@@ -175,6 +176,7 @@ public static class DialogTransitionRuntime
             parsed = DialogOperationParser.Parse(record, field, condition, options);
         }
         cache.Add(key, parsed);
+        budget.Add(record, field, parsed);
         return parsed;
     }
 
@@ -190,21 +192,22 @@ public static class DialogTransitionRuntime
         return condition;
     }
 
-    private static void ValidateWholeStep(IEnumerable<ParsedField> fields, DialogRuntimeOptions options, DlgRecord entry)
+    private sealed class StepBudget(DialogRuntimeOptions options)
     {
-        var bytes = 0;
-        var operations = 0;
-        foreach (var field in fields)
+        private int _bytes;
+        private int _operations;
+
+        internal void Add(DlgRecord record, DlgField field, ParsedField parsed)
         {
-            bytes = checked(bytes + field.SemanticBytes);
-            operations = checked(operations + field.Operations.Count);
-            if (bytes > options.MaxSemanticInputBytes)
+            _bytes = checked(_bytes + parsed.SemanticBytes);
+            _operations = checked(_operations + parsed.Operations.Count);
+            if (_bytes > options.MaxSemanticInputBytes)
             {
-                throw StaticFailure(DialogFailureKind.SemanticInputLimitExceeded, entry, entry.Action);
+                throw StaticFailure(DialogFailureKind.SemanticInputLimitExceeded, record, field);
             }
-            if (operations > options.MaxOperationsPerTransition)
+            if (_operations > options.MaxOperationsPerTransition)
             {
-                throw StaticFailure(DialogFailureKind.OperationLimitExceeded, entry, entry.Action);
+                throw StaticFailure(DialogFailureKind.OperationLimitExceeded, record, field);
             }
         }
     }
@@ -280,18 +283,22 @@ public sealed class DialogSession
             return new DialogSelectionResult(DialogSelectionStatus.NotOffered, null);
         }
         var plan = _responses.Single(response => response.Record.Id == token.Response.Value);
+        if (plan.TransitionKind != DialogTransitionKind.Direct)
+        {
+            return new DialogSelectionResult(DialogSelectionStatus.UnsupportedTransition, null);
+        }
         if (!IsGateOpen(plan))
         {
+            if (Phase == DialogSessionPhase.Failed)
+            {
+                return new DialogSelectionResult(DialogSelectionStatus.Failed, Failure);
+            }
             _generation++;
             if (!RebuildOffers(new Dictionary<int, bool> { [plan.Record.Id] = false }))
             {
                 return new DialogSelectionResult(DialogSelectionStatus.Failed, Failure);
             }
             return new DialogSelectionResult(DialogSelectionStatus.StaleSelection, null);
-        }
-        if (plan.TransitionKind != DialogTransitionKind.Direct)
-        {
-            return new DialogSelectionResult(DialogSelectionStatus.UnsupportedTransition, null);
         }
         if (!Execute(plan.Action) || !Execute(plan.TargetAction))
         {

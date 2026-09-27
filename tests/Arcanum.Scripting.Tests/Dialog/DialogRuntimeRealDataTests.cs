@@ -37,25 +37,29 @@ public sealed class DialogRuntimeRealDataTests
             Assert.AreEqual(DlgRecordRole.Npc, entry!.Role);
             Assert.AreEqual(DlgRecordRole.Player, response!.Role);
             Assert.AreEqual(DlgRecordRole.Npc, target!.Role);
+            Assert.AreEqual(DlgResponseKind.Direct, response.ResponseKind);
+            Assert.AreEqual(50, response.ResponseValue);
 
             var eligibility = document.Records
                 .Skip(entry.SerializedIndex + 1)
                 .TakeWhile(record => record.Role == DlgRecordRole.Player)
                 .Select(record => new DialogResponseEligibility(new DialogResponseId(record.Id), true, true))
                 .ToArray();
+            CollectionAssert.AreEqual(new[] { 31 }, eligibility.Select(item => item.Response.Value).ToArray());
+
             foreach (var localFlag in new[] { 0, 1 })
             {
                 var ports = new RealDataPorts(localFlag);
-                var result = DialogTransitionRuntime.Start(
-                    document,
-                    new DialogStartRequest(
-                        new DialogNodeId(30),
-                        new DialogParticipants(new DialogId(1), new DialogParticipantId(2), new DialogParticipantId(3)),
-                        eligibility),
-                    ports,
-                    ports);
-                Assert.IsTrue(result.Status is DialogStartStatus.AwaitingSelection or DialogStartStatus.Failed);
-                Assert.IsTrue(result.Session.CommandAttempts.All(attempt => attempt.Source.RecordId.Value is 30 or 31 or 50));
+                var result = Start(document, eligibility, ports);
+
+                Assert.AreEqual(DialogStartStatus.Failed, result.Status);
+                Assert.AreEqual(DialogSessionPhase.Failed, result.Session.Phase);
+                Assert.AreEqual(DialogFailureKind.InvalidOperation, result.Failure!.Kind);
+                Assert.AreEqual(new DialogNodeId(30), result.Failure.Source!.Value.RecordId);
+                Assert.AreEqual(DlgFieldKind.Action, result.Failure.Source.Value.FieldKind);
+                Assert.AreEqual(0, result.Session.Offers.Count);
+                Assert.AreEqual(0, result.Session.CommandAttempts.Count);
+                Assert.AreEqual(0, ports.QueryCount);
             }
         }
 
@@ -68,9 +72,27 @@ public sealed class DialogRuntimeRealDataTests
         return Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant();
     }
 
+    private static DialogStartResult Start(
+        DlgDocument document,
+        IReadOnlyList<DialogResponseEligibility> eligibility,
+        RealDataPorts ports) =>
+        DialogTransitionRuntime.Start(
+            document,
+            new DialogStartRequest(
+                new DialogNodeId(30),
+                new DialogParticipants(new DialogId(1), new DialogParticipantId(2), new DialogParticipantId(3)),
+                eligibility),
+            ports,
+            ports);
+
     private sealed class RealDataPorts(int localFlag) : IDialogStateQueryPort, IDialogCommandPort
     {
-        public LocalFlagReadResult Read(LocalFlagQuery query) => LocalFlagReadResult.Found(localFlag);
+        public int QueryCount { get; private set; }
+        public LocalFlagReadResult Read(LocalFlagQuery query)
+        {
+            QueryCount++;
+            return LocalFlagReadResult.Found(localFlag);
+        }
         public DialogCommandResult Execute(LocalFlagWriteCommand command) => DialogCommandResult.Applied;
         public DialogCommandResult Execute(QuestStateCommand command) => DialogCommandResult.Applied;
         public DialogCommandResult Execute(RumorLogCommand command) => DialogCommandResult.Applied;
