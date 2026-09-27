@@ -1,0 +1,30 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.TerrainViewer.Core", "..\Core\Arcanum.TerrainViewer.Core.csproj", "{4B0A7B65-B5F4-4C7E-9D11-23C085B60191}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.TerrainViewer", "Arcanum.TerrainViewer.csproj", "{B60576F8-2FCB-4D91-9F0B-E28BC8A80E4D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.TerrainViewer.Tests", "..\..\..\tests\Arcanum.TerrainViewer.Tests\Arcanum.TerrainViewer.Tests.csproj", "{4B671598-C95D-4D17-8DA4-1469A4421CA5}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4B0A7B65-B5F4-4C7E-9D11-23C085B60191}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B0A7B65-B5F4-4C7E-9D11-23C085B60191}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B0A7B65-B5F4-4C7E-9D11-23C085B60191}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B0A7B65-B5F4-4C7E-9D11-23C085B60191}.Release|Any CPU.Build.0 = Release|Any CPU
+		{B60576F8-2FCB-4D91-9F0B-E28BC8A80E4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{B60576F8-2FCB-4D91-9F0B-E28BC8A80E4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{B60576F8-2FCB-4D91-9F0B-E28BC8A80E4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{B60576F8-2FCB-4D91-9F0B-E28BC8A80E4D}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4B671598-C95D-4D17-8DA4-1469A4421CA5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4B671598-C95D-4D17-8DA4-1469A4421CA5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4B671598-C95D-4D17-8DA4-1469A4421CA5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4B671598-C95D-4D17-8DA4-1469A4421CA5}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+EndGlobal

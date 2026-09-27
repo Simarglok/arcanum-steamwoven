@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.TerrainViewer.Core</AssemblyName>
+    <RootNamespace>Arcanum.TerrainViewer.Core</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Arcanum.Data/Arcanum.Data.csproj" />
+  </ItemGroup>
+</Project>
