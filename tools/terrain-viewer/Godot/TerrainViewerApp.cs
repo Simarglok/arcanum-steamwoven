@@ -139,11 +139,10 @@ public partial class TerrainViewerApp : Node
         await SetSmokeWindowSizeAsync(new Vector2I(1920, 1080));
         await NextFrameAsync();
         if (!_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        if (!await CaptureAndValidateSmokeFrameAsync(new Vector2I(1920, 1080), commandCount, textureCount))
-        {
-            GetTree().Quit(0);
-            return;
-        }
+        // A display clamp truthfully makes the requested-size evidence
+        // NOT_VERIFIED, but must not short-circuit the independent lifecycle,
+        // input, reload, and cleanup checks below.
+        var exactSecondSize = await CaptureAndValidateSmokeFrameAsync(new Vector2I(1920, 1080), commandCount, textureCount);
         var initialMode = GetWindow().Mode;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
         await NextFrameAsync();
@@ -163,7 +162,10 @@ public partial class TerrainViewerApp : Node
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
             await SetSmokeWindowSizeAsync(cycle % 2 == 0 ? new Vector2I(1280, 800) : new Vector2I(1440, 900));
             await NextFrameAsync();
-            if (!_camera.State.FitMode) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            if (!_camera.State.FitMode || _camera.Camera.Position != new Vector2((float)_camera.State.X, (float)_camera.State.Y)
+                || _camera.Camera.Zoom != Vector2.One * (float)_camera.State.Zoom || _status!.GlobalPosition != initialHudPosition
+                || _canvas.CommandCount != commandCount || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature)
+                throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
         var disposedBeforeReload = _cache.DisposedCount;
         await StartLoadAsync(_arguments!, false);
@@ -172,7 +174,7 @@ public partial class TerrainViewerApp : Node
             || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature || result.MaximumObservedConcurrency != 1
             || result.CheckedRgbaBytes <= 0 || result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        GD.Print($"ARC-RENDER-003 native-smoke result status=PASS fullscreen={(fullscreen ? "PASS" : "NOT_VERIFIED")} commands={commandCount} textures={textureCount} bytes={result.CheckedRgbaBytes} loadMs={result.ElapsedMilliseconds} concurrency={result.MaximumObservedConcurrency} fingerprints=equal reload=PASS cycles=100");
+        GD.Print($"ARC-RENDER-003 native-smoke result status={(exactSecondSize ? "PASS" : "NOT_VERIFIED")} fullscreen={(fullscreen ? "PASS" : "NOT_VERIFIED")} commands={commandCount} textures={textureCount} bytes={result.CheckedRgbaBytes} loadMs={result.ElapsedMilliseconds} concurrency={result.MaximumObservedConcurrency} fingerprints=equal reload=PASS cycles=100");
         GetTree().Quit(0);
     }
 
@@ -230,18 +232,6 @@ public partial class TerrainViewerApp : Node
         await NextFrameAsync();
         using var screenshot = GetViewport().GetTexture().GetImage();
         var actualSize = new Vector2I(screenshot.GetWidth(), screenshot.GetHeight());
-        if (actualSize != expectedSize)
-        {
-            GD.Print($"ARC-RENDER-003 native-smoke result status=NOT_VERIFIED requested={expectedSize.X}x{expectedSize.Y} actual={actualSize.X}x{actualSize.Y} reason=display-clamp");
-            return false;
-        }
-        var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
-        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16);
-        var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
-        var landmarkMatches = landmarkFound && TryAssertLandmark(screenshot, landmark);
-        GD.Print($"ARC-RENDER-003 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={landmarkMatches}");
-        if (!stableCounts || !hudReadable || !landmarkMatches)
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         if (_nativeSmokeScreenshot is not null)
         {
             var requested = Path.GetFullPath(_nativeSmokeScreenshot);
@@ -258,6 +248,13 @@ public partial class TerrainViewerApp : Node
             GD.Print($"ARC-RENDER-003 native-smoke result status=NOT_VERIFIED requested={expectedSize.X}x{expectedSize.Y} actual={actualSize.X}x{actualSize.Y} reason=display-clamp");
             return false;
         }
+        var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
+        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16);
+        var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
+        var landmarkMatches = landmarkFound && TryAssertLandmark(screenshot, landmark);
+        GD.Print($"ARC-RENDER-003 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={landmarkMatches}");
+        if (!stableCounts || !hudReadable || !landmarkMatches)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         return true;
     }
 
