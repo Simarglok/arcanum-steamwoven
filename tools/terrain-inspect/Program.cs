@@ -88,6 +88,8 @@ internal static class Program
         }
         if (string.IsNullOrWhiteSpace(result.Module) || string.IsNullOrWhiteSpace(result.Resource) || string.IsNullOrWhiteSpace(result.SourceId))
             throw new ArgumentException("--module, --resource and --source-id are required");
+        if (result.SourceId.Contains('/') || result.SourceId.Contains('\\'))
+            throw new ArgumentException("--source-id must be a non-path label");
         return result;
     }
 

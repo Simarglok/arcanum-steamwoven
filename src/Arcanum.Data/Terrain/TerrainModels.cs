@@ -85,6 +85,8 @@ public sealed record TerrainResourceSource
     {
         Archive = archive ?? throw new ArgumentNullException(nameof(archive));
         TerrainSectorSelector.ValidateAscii(sourceId, nameof(sourceId));
+        if (sourceId.Contains('/') || sourceId.Contains('\\'))
+            throw new ArgumentException("Source ID must be a non-path ASCII label.", nameof(sourceId));
         TerrainSectorSelector.ValidateAscii(tileMesEntryPath, nameof(tileMesEntryPath));
         TerrainSectorSelector.ValidateAscii(facadeMesEntryPath, nameof(facadeMesEntryPath));
         if (pathProfile != TerrainPathProfile.CeNonWindowsMacOs) throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the CE non-Windows/macOS path profile is supported.");

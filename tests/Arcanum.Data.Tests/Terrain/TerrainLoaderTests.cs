@@ -139,6 +139,18 @@ public sealed class TerrainLoaderTests
     }
 
     [TestMethod]
+    public void Resource_source_requires_a_non_path_source_id()
+    {
+        using var resource = Resource();
+
+        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "/Users/name/game/arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "C:\\Games\\Arcanum\\arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+
+        var source = new TerrainResourceSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        Assert.AreEqual("arcanum2-base", source.SourceId);
+    }
+
+    [TestMethod]
     public void Exact_module_and_normalized_art_selection_fail_closed_for_zero_and_many_candidates()
     {
         var words = Enumerable.Repeat(0x000001C0u, 4096).ToArray();
@@ -248,6 +260,22 @@ public sealed class TerrainLoaderTests
         StringAssert.Contains(partialOutput.ToString(), "\"complete\":false");
         Assert.IsFalse(partialOutput.ToString().Contains("/private/", StringComparison.Ordinal));
         Assert.IsFalse(partialOutput.ToString().Contains("No selected resource entry", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
+    public void Terrain_inspect_cli_rejects_path_source_ids_as_private_usage_errors()
+    {
+        var complete = CliReport(includeArt: true);
+        foreach (var sourceId in new[] { "/Users/name/game/arcanum2.dat", "C:\\Games\\Arcanum\\arcanum2.dat" })
+        {
+            var output = new StringWriter();
+            var errors = new StringWriter();
+
+            Assert.AreEqual(2, Program.Run(new[] { "--module", "/private/module.dat", "--resource", "/private/resource.dat", "--source-id", sourceId }, output, errors, new FixtureRuntime(complete.Report, complete.Selector)));
+            Assert.AreEqual(string.Empty, output.ToString());
+            StringAssert.Contains(errors.ToString(), "terrain-inspect: usage:");
+            Assert.IsFalse(errors.ToString().Contains(sourceId, StringComparison.Ordinal));
+        }
     }
 
     [TestMethod]
