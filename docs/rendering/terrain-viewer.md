@@ -24,18 +24,20 @@ archive bytes, and sampled colours are deliberately not shown.
 
 ## Diagnostic rendering contract
 
-Core is Godot-independent. One coordinator owns both caller-owned seek-based
-`DatArchive` objects, serializes inspection, selected-frame decoding, pre/post
-fingerprints, and disposal, and records maximum observed archive concurrency.
+Core is Godot-independent. Each coordinator request creates one caller-owned,
+idempotently disposable archive operation owning both seek-based `DatArchive`
+objects. The coordinator serializes inspection, selected-frame decoding,
+pre/post fingerprints, and per-load success/failure disposal before releasing
+its gate, and records maximum observed archive concurrency.
 It atomically publishes only after all records and deduplicated selected frames
 succeed. The exact selected-frame identity is the source label, DAT ordinal,
 flags, declared size, logical entry name, group, frame, and requested palette.
 The cache preflights each distinct decoded frame against 4,096 keys and 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
-that cache. Reload, failure, and exit clear textures. The graphical self-test
-injects an upload failure to verify partial-upload rollback; archive/decode
-barrier instrumentation remains a focused-test requirement, not a missing-file
-test claim.
+that cache. Reload, failure, and exit clear textures exactly once. The graphical
+self-test injects an upload failure and tracks per-texture reload/failure/exit
+disposal; focused barrier tests prove per-load archive lifetime, serialization,
+and delayed stale success/failure cannot mutate a newer scene or HUD.
 
 `TerrainGeometry.Place` is the only owner of projection, the one-pixel X anchor,
 tile 78x40 / facade 80x40 footprint, crop, and raw tile flip. The adapter draws
@@ -50,7 +52,10 @@ project diagnostic policy, not a claim about original facade/scenery occlusion.
 ## Controls and window behavior
 
 The world canvas is viewport-independent under `Camera2D`; the status HUD is a
-separate `CanvasLayer`. The initial view fits the complete diagnostic bounds
+separate `CanvasLayer`. The fixed-screen ready HUD displays diagnostic mode,
+aggregate counts, safe source label, current bounded zoom, decoded count,
+explicit cache count, and load milliseconds; it refreshes after pan, zoom,
+fit/reset, and resize. The initial view fits the complete diagnostic bounds
 with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
 resets initial Fit, `F` recomputes Fit, and `L` reloads through the same

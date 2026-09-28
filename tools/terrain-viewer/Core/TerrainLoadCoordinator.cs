@@ -12,26 +12,31 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     InputFingerprint ResourceFingerprintAfter, long CheckedRgbaBytes, long ElapsedMilliseconds, int MaximumObservedConcurrency);
 
 /// <summary>
-/// Narrow operation boundary for the coordinator. Production uses the same
-/// caller-owned DAT/TerrainLoader flow below; focused tests use a barrier fake
-/// to prove that the coordinator, rather than an incidental file failure,
-/// serializes archive/decode work and suppresses stale publication.
+/// One caller-owned archive/decode operation. A fresh instance owns precisely
+/// one load's archives and is disposed by <see cref="TerrainLoadCoordinator"/>
+/// after either success or failure, before the serialized gate is released.
 /// </summary>
-public interface ITerrainLoadOperation
+public interface ITerrainLoadOperation : IDisposable
 {
     TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments);
+}
+
+public interface ITerrainLoadOperationFactory
+{
+    ITerrainLoadOperation Create();
 }
 
 public sealed class TerrainLoadCoordinator : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly ITerrainLoadOperation? _operation;
+    private readonly ITerrainLoadOperationFactory _operationFactory;
     private long _generation;
     private int _activeOperations;
     private int _maximumObservedConcurrency;
     private bool _disposed;
 
-    public TerrainLoadCoordinator(ITerrainLoadOperation? operation = null) => _operation = operation;
+    public TerrainLoadCoordinator(ITerrainLoadOperationFactory? operationFactory = null)
+        => _operationFactory = operationFactory ?? new ProductionTerrainLoadOperationFactory();
 
     public long BeginGeneration() => Interlocked.Increment(ref _generation);
     public int MaximumObservedConcurrency => Volatile.Read(ref _maximumObservedConcurrency);
@@ -53,34 +58,56 @@ public sealed class TerrainLoadCoordinator : IDisposable
         await _gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         var active = Interlocked.Increment(ref _activeOperations);
         UpdateMaximum(active);
+        ITerrainLoadOperation? operation = null;
         try
         {
-            return await Task.Run(() => _operation?.Execute(generation, arguments) ?? LoadCore(generation, arguments), CancellationToken.None).ConfigureAwait(false);
+            operation = _operationFactory.Create();
+            var result = await Task.Run(() => operation.Execute(generation, arguments), CancellationToken.None).ConfigureAwait(false);
+            return result with { MaximumObservedConcurrency = MaximumObservedConcurrency };
         }
         finally
         {
-            Interlocked.Decrement(ref _activeOperations);
-            _gate.Release();
+            try { operation?.Dispose(); }
+            finally
+            {
+                Interlocked.Decrement(ref _activeOperations);
+                _gate.Release();
+            }
         }
     }
 
-    private TerrainLoadResult LoadCore(long generation, TerrainViewerArguments arguments)
+    private sealed class ProductionTerrainLoadOperationFactory : ITerrainLoadOperationFactory
     {
-        var started = Environment.TickCount64;
-        try
+        public ITerrainLoadOperation Create() => new ProductionTerrainLoadOperation();
+    }
+
+    /// <summary>
+    /// Production delegates directly to the existing DatArchive/TerrainLoader
+    /// APIs. The archive fields deliberately outlive Execute until the
+    /// coordinator's per-load finally invokes Dispose.
+    /// </summary>
+    private sealed class ProductionTerrainLoadOperation : ITerrainLoadOperation
+    {
+        private DatArchive? _module;
+        private DatArchive? _resource;
+        private int _disposed;
+
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
         {
-            var moduleBefore = Fingerprint(arguments.ModulePath);
-            var resourceBefore = Fingerprint(arguments.ResourcePath);
-            Verify(moduleBefore, CrashSiteProfile.ModuleSize, CrashSiteProfile.ModuleSha256, arguments.ExpectedModuleSha256);
-            Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
-            TerrainLoadReport report;
-            Dictionary<TerrainTextureKey, DecodedTerrainTexture> textures;
-            using (var module = DatArchive.Open(arguments.ModulePath, BoundedDatOptions()))
-            using (var resource = DatArchive.Open(arguments.ResourcePath, BoundedDatOptions()))
+            var started = Environment.TickCount64;
+            try
             {
-                var source = new TerrainResourceSource(resource, arguments.SourceId, CrashSiteProfile.TileMesEntry, CrashSiteProfile.FacadeMesEntry,
+                var moduleBefore = Fingerprint(arguments.ModulePath);
+                var resourceBefore = Fingerprint(arguments.ResourcePath);
+                Verify(moduleBefore, CrashSiteProfile.ModuleSize, CrashSiteProfile.ModuleSha256, arguments.ExpectedModuleSha256);
+                Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
+                TerrainLoadReport report;
+                Dictionary<TerrainTextureKey, DecodedTerrainTexture> textures;
+                _module = DatArchive.Open(arguments.ModulePath, BoundedDatOptions());
+                _resource = DatArchive.Open(arguments.ResourcePath, BoundedDatOptions());
+                var source = new TerrainResourceSource(_resource, arguments.SourceId, CrashSiteProfile.TileMesEntry, CrashSiteProfile.FacadeMesEntry,
                     TerrainPathProfile.CeNonWindowsMacOs);
-                report = TerrainLoader.Inspect(module, CrashSiteProfile.CreateSelector(), source);
+                report = TerrainLoader.Inspect(_module, CrashSiteProfile.CreateSelector(), source);
                 if (!report.IsComplete || report.Outcomes.Count != CrashSiteProfile.CellCount)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
                 var tileCount = report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Tile);
@@ -90,7 +117,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 if (tileCount != CrashSiteProfile.TileCount || facadeCount != CrashSiteProfile.FacadeCount
                     || recoveredCount != CrashSiteProfile.NormalizationRecoveredCount || lookupCount != CrashSiteProfile.NormalizationLookupCount)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
-                var sector = TerrainLoader.Load(module, CrashSiteProfile.CreateSelector(), source);
+                var sector = TerrainLoader.Load(_module, CrashSiteProfile.CreateSelector(), source);
                 var plan = TerrainScenePlan.Create(sector);
                 textures = new Dictionary<TerrainTextureKey, DecodedTerrainTexture>();
                 var checkedBytes = 0L;
@@ -98,7 +125,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 {
                     var key = TerrainTextureKey.FromRecord(record);
                     if (textures.ContainsKey(key)) continue;
-                    var frame = TerrainLoader.DecodeSelectedFrame(resource, record, new TerrainLoaderOptions().ArtOptions);
+                    var frame = TerrainLoader.DecodeSelectedFrame(_resource, record, new TerrainLoaderOptions().ArtOptions);
                     checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count, frame.Width, frame.Height);
                     textures.Add(key, new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()));
                 }
@@ -107,19 +134,26 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
                     tileCount, facadeCount, recoveredCount, lookupCount, moduleBefore, resourceBefore, moduleAfter,
-                    resourceAfter, checkedBytes, Environment.TickCount64 - started, MaximumObservedConcurrency);
+                    resourceAfter, checkedBytes, Environment.TickCount64 - started, 0);
             }
+            catch (TerrainViewerException) { throw; }
+            catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
+            catch (DirectoryNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
+            catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
+            catch (TerrainIncompleteException exception) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, exception.Report.ResolvedRecords.Count, exception.Report.Issues.Count)); }
+            catch (TerrainLimitExceededException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit)); }
+            catch (ArtLimitExceededException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit)); }
+            catch (TerrainException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InvalidSector)); }
+            catch (ArtException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure)); }
+            catch (IOException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
         }
-        catch (TerrainViewerException) { throw; }
-        catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
-        catch (DirectoryNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
-        catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
-        catch (TerrainIncompleteException exception) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, exception.Report.ResolvedRecords.Count, exception.Report.Issues.Count)); }
-        catch (TerrainLimitExceededException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit)); }
-        catch (ArtLimitExceededException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit)); }
-        catch (TerrainException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InvalidSector)); }
-        catch (ArtException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure)); }
-        catch (IOException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _resource?.Dispose();
+            _module?.Dispose();
+        }
     }
 
     private static DatReaderOptions BoundedDatOptions() => new() { MaxArchiveBytes = uint.MaxValue, MaxStoredEntryBytes = 1024 * 1024, MaxDecodedEntryBytes = 1024 * 1024 };
@@ -143,7 +177,6 @@ public sealed class TerrainLoadCoordinator : IDisposable
     {
         if (_disposed) return;
         _disposed = true;
-        if (_operation is IDisposable disposable) disposable.Dispose();
         _gate.Dispose();
     }
 }

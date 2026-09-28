@@ -86,24 +86,29 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
-    public async Task Coordinator_serializes_barrier_backed_archive_decode_work_and_disposes_operation()
+    public async Task Coordinator_serializes_per_load_archive_decode_work_and_disposes_each_load_before_gate_release()
     {
-        var operation = new BarrierArchiveDecodeOperation();
-        var coordinator = new TerrainLoadCoordinator(operation);
+        var firstOperation = new BarrierArchiveDecodeOperation();
+        var secondOperation = new ImmediateArchiveOperation(() => Assert.AreEqual(1, firstOperation.DisposeCount,
+            "The completed per-load archive must be disposed before the next serialized load starts."));
+        var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(firstOperation, secondOperation));
         var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
         var first = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
-        await operation.Entered.Task;
+        await firstOperation.Entered.Task;
         var second = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
         await Task.Delay(20);
-        Assert.AreEqual(1, operation.ExecuteCount, "Second request must remain outside the archive/decode operation.");
-        operation.Release.TrySetResult();
+        Assert.AreEqual(1, firstOperation.ExecuteCount, "Second request must remain outside the archive/decode operation.");
+        firstOperation.Release.TrySetResult();
         await Task.WhenAll(first, second);
         Assert.AreEqual(1, coordinator.MaximumObservedConcurrency);
-        Assert.AreEqual(1, operation.MaximumActive);
+        Assert.AreEqual(1, firstOperation.MaximumActive);
+        Assert.AreEqual(1, firstOperation.DisposeCount);
+        Assert.AreEqual(1, secondOperation.DisposeCount);
         coordinator.Dispose();
-        Assert.AreEqual(1, operation.DisposeCount, "Coordinator owns operation/archive cleanup exactly once.");
+        Assert.AreEqual(1, firstOperation.DisposeCount, "Coordinator disposal must not redispose a completed per-load archive.");
+        Assert.AreEqual(1, secondOperation.DisposeCount);
         coordinator.Dispose();
-        Assert.AreEqual(1, operation.DisposeCount);
+        Assert.AreEqual(1, firstOperation.DisposeCount);
     }
 
     [TestMethod]
@@ -121,15 +126,54 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
-    public void Generation_gate_prevents_stale_publication_and_allows_current_generation_once()
+    public async Task Delayed_stale_success_and_failure_cannot_mutate_scene_or_hud_after_a_newer_generation()
     {
-        using var coordinator = new TerrainLoadCoordinator();
-        var stale = coordinator.BeginGeneration();
-        var current = coordinator.BeginGeneration();
-        var publications = 0;
-        Assert.IsFalse(coordinator.TryPublish(stale, () => publications++));
-        Assert.IsTrue(coordinator.TryPublish(current, () => publications++));
-        Assert.AreEqual(1, publications);
+        var success = new BarrierArchiveDecodeOperation();
+        var current = new ImmediateArchiveOperation();
+        using (var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(success, current)))
+        {
+            var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+            var staleGeneration = coordinator.BeginGeneration();
+            var staleLoad = coordinator.LoadAsync(staleGeneration, arguments);
+            await success.Entered.Task;
+            var currentGeneration = coordinator.BeginGeneration();
+            var currentLoad = coordinator.LoadAsync(currentGeneration, arguments);
+            success.Release.TrySetResult();
+            var staleResult = await staleLoad;
+            var scene = "new-generation-clear";
+            var hud = "new-generation-loading";
+            Assert.IsFalse(coordinator.TryPublish(staleResult.Generation, () => scene = "stale-scene"));
+            Assert.IsFalse(coordinator.TryPublish(staleResult.Generation, () => hud = "stale-ready"));
+            Assert.AreEqual("new-generation-clear", scene);
+            Assert.AreEqual("new-generation-loading", hud);
+            var currentResult = await currentLoad;
+            Assert.IsTrue(coordinator.TryPublish(currentResult.Generation, () => { scene = "current-scene"; hud = "current-ready"; }));
+            Assert.AreEqual("current-scene", scene);
+            Assert.AreEqual("current-ready", hud);
+            Assert.AreEqual(1, success.DisposeCount);
+            Assert.AreEqual(1, current.DisposeCount);
+        }
+
+        var failure = new ThrowingBarrierArchiveOperation();
+        var replacement = new ImmediateArchiveOperation();
+        using var failureCoordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(failure, replacement));
+        var failureArguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+        var failedGeneration = failureCoordinator.BeginGeneration();
+        var failedLoad = failureCoordinator.LoadAsync(failedGeneration, failureArguments);
+        await failure.Entered.Task;
+        var replacementGeneration = failureCoordinator.BeginGeneration();
+        var replacementLoad = failureCoordinator.LoadAsync(replacementGeneration, failureArguments);
+        failure.Release.TrySetResult();
+        await AssertThrowsAsync<TerrainViewerException>(failedLoad);
+        var errorHud = "new-generation-loading";
+        var sceneAfterFailure = "new-generation-clear";
+        Assert.IsFalse(failureCoordinator.TryPublish(failedGeneration, () => errorHud = "stale-error"));
+        Assert.IsFalse(failureCoordinator.TryPublish(failedGeneration, () => sceneAfterFailure = "stale-clear"));
+        Assert.AreEqual("new-generation-loading", errorHud);
+        Assert.AreEqual("new-generation-clear", sceneAfterFailure);
+        await replacementLoad;
+        Assert.AreEqual(1, failure.DisposeCount);
+        Assert.AreEqual(1, replacement.DisposeCount);
     }
 
     [TestMethod]
@@ -140,11 +184,20 @@ public sealed class CorePolicyTests
         {
             var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
             await AssertThrowsAsync<TerrainViewerException>(coordinator.LoadAsync(coordinator.BeginGeneration(), arguments));
+            Assert.AreEqual(1, operation.DisposeCount, "The failing per-load archive must be disposed before coordinator disposal.");
         }
         Assert.AreEqual(1, operation.DisposeCount);
     }
 
-    private sealed class BarrierArchiveDecodeOperation : ITerrainLoadOperation, IDisposable
+    private sealed class QueueArchiveOperationFactory : ITerrainLoadOperationFactory
+    {
+        private readonly Queue<ITerrainLoadOperation> _operations;
+
+        public QueueArchiveOperationFactory(params ITerrainLoadOperation[] operations) => _operations = new Queue<ITerrainLoadOperation>(operations);
+        public ITerrainLoadOperation Create() => _operations.Dequeue();
+    }
+
+    private sealed class BarrierArchiveDecodeOperation : ITerrainLoadOperation
     {
         private int _active;
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -166,9 +219,33 @@ public sealed class CorePolicyTests
         public void Dispose() => DisposeCount++;
     }
 
-    private sealed class ThrowingArchiveOperation : ITerrainLoadOperation, IDisposable
+    private sealed class ImmediateArchiveOperation : ITerrainLoadOperation
+    {
+        private readonly Action? _onExecute;
+        public int DisposeCount { get; private set; }
+        public ImmediateArchiveOperation(Action? onExecute = null) => _onExecute = onExecute;
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments) { _onExecute?.Invoke(); return Result(generation); }
+        public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class ThrowingBarrierArchiveOperation : ITerrainLoadOperation
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int DisposeCount { get; private set; }
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        {
+            Entered.TrySetResult();
+            Release.Task.GetAwaiter().GetResult();
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable));
+        }
+        public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class ThrowingArchiveOperation : ITerrainLoadOperationFactory, ITerrainLoadOperation
     {
         public int DisposeCount { get; private set; }
+        public ITerrainLoadOperation Create() => this;
         public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
             => throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable));
         public void Dispose() => DisposeCount++;

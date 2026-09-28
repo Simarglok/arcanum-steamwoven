@@ -1,6 +1,7 @@
 using Godot;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
+using System.Globalization;
 
 namespace Arcanum.TerrainViewer;
 
@@ -17,6 +18,8 @@ public partial class TerrainViewerApp : Node
     private string? _nativeSmokeScreenshot;
     private TerrainViewerArguments? _arguments;
     private Task? _lastLoad;
+    private TerrainLoadResult? _readyResult;
+    private string? _readySourceId;
 
     public override void _Ready()
     {
@@ -26,7 +29,7 @@ public partial class TerrainViewerApp : Node
         var cameraNode = new Camera2D { Name = "TerrainCamera", PositionSmoothingEnabled = false };
         AddChild(cameraNode);
         _camera = new TerrainCameraController(cameraNode);
-        GetViewport().SizeChanged += () => _camera?.Resize(GetViewport().GetVisibleRect().Size);
+        GetViewport().SizeChanged += HandleViewportSizeChanged;
         var layer = new CanvasLayer { Name = "Hud" };
         var status = new Label { Position = new Vector2(16, 16), Text = "Editor diagnostic order | loading" };
         layer.AddChild(status);
@@ -53,6 +56,8 @@ public partial class TerrainViewerApp : Node
         GD.Print($"ARC-RENDER-003 load stage=begin smoke={orchestrateSmoke}");
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
+        _readyResult = null;
+        _readySourceId = null;
         _canvas!.ClearScene();
         _cache.Clear();
         ShowStatus($"Editor diagnostic order | loading | source-id {arguments.SourceId}");
@@ -65,24 +70,35 @@ public partial class TerrainViewerApp : Node
                     _cache.Upload(result.Textures);
                     _canvas.Publish(result.Plan, _cache);
                     _camera!.SetPlan(result.Plan, GetViewport().GetVisibleRect().Size);
+                    _readyResult = result;
+                    _readySourceId = arguments.SourceId;
+                    RefreshReadyStatus();
                 })) return;
-            ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {arguments.SourceId} | decoded {result.Textures.Count} | {result.ElapsedMilliseconds}ms");
             if (_nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
             GD.Print($"ARC-RENDER-003 load stage=complete generation={requestGeneration}");
         }
         catch (TerrainViewerException exception)
         {
-            if (requestGeneration != _generation) return;
-            _canvas!.ClearScene();
-            _cache.Clear();
-            ShowStatus(exception.Error.ToString());
+            if (!_coordinator.TryPublish(requestGeneration, () =>
+                {
+                    _readyResult = null;
+                    _readySourceId = null;
+                    _canvas!.ClearScene();
+                    _cache.Clear();
+                    ShowStatus(exception.Error.ToString());
+                })) return;
             if (_nativeSmoke) GetTree().Quit(1);
         }
         catch
         {
-            _canvas!.ClearScene();
-            _cache.Clear();
-            ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
+            if (!_coordinator.TryPublish(requestGeneration, () =>
+                {
+                    _readyResult = null;
+                    _readySourceId = null;
+                    _canvas!.ClearScene();
+                    _cache.Clear();
+                    ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
+                })) return;
             if (_nativeSmoke) GetTree().Quit(1);
         }
     }
@@ -129,7 +145,7 @@ public partial class TerrainViewerApp : Node
         GD.Print("ARC-RENDER-003 native-smoke stage=input-wheel-frame");
         if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom || afterKeyboard.Y >= initial.Y
             || _camera.Camera.Position == initialCameraPosition || _camera.Camera.Zoom.X <= initial.Zoom
-            || _status.GlobalPosition != initialHudPosition) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            || _status.GlobalPosition != initialHudPosition || !HasReadyHudContent(textureCount)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         var beforeDrag = _camera.State;
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
@@ -186,7 +202,7 @@ public partial class TerrainViewerApp : Node
                 result.Plan.WorldBounds.Height, actualViewport.X, actualViewport.Y);
             if (!_camera.State.FitMode || _camera.Camera.Position != new Vector2((float)_camera.State.X, (float)_camera.State.Y)
                 || _camera.Camera.Zoom != Vector2.One * (float)_camera.State.Zoom || _status!.GlobalPosition != initialHudPosition
-                || _camera.State.Zoom != expectedFit.Zoom || _canvas.CommandCount != commandCount || _cache.Count != textureCount
+                || _camera.State.Zoom != expectedFit.Zoom || _canvas.CommandCount != commandCount || _cache.Count != textureCount || !HasReadyHudContent(textureCount)
                 || _canvas.GeometrySignature != geometrySignature || afterPan == _camera.State)
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
@@ -299,7 +315,7 @@ public partial class TerrainViewerApp : Node
             return false;
         }
         var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
-        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16);
+        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
         var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
         var landmarkMatches = landmarkFound && TryAssertLandmark(screenshot, landmark);
         GD.Print($"ARC-RENDER-003 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={landmarkMatches}");
@@ -331,14 +347,17 @@ public partial class TerrainViewerApp : Node
     public override void _Process(double delta)
     {
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);
+        var before = _camera?.State;
         if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up)) _camera?.Pan(new Vector2(0, -step));
         if (Input.IsKeyPressed(Key.S) || Input.IsKeyPressed(Key.Down)) _camera?.Pan(new Vector2(0, step));
         if (Input.IsKeyPressed(Key.A) || Input.IsKeyPressed(Key.Left)) _camera?.Pan(new Vector2(-step, 0));
         if (Input.IsKeyPressed(Key.D) || Input.IsKeyPressed(Key.Right)) _camera?.Pan(new Vector2(step, 0));
+        if (before != _camera?.State) RefreshReadyStatus();
     }
 
     public override void _Input(InputEvent @event)
     {
+        var before = _camera?.State;
         if (@event is InputEventMouseButton button)
         {
             if (button.ButtonIndex == MouseButton.WheelUp && button.Pressed) _camera?.Zoom(1.25);
@@ -359,9 +378,27 @@ public partial class TerrainViewerApp : Node
             else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
             else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
         }
+        if (before != _camera?.State) RefreshReadyStatus();
     }
 
+    private void HandleViewportSizeChanged()
+    {
+        _camera?.Resize(GetViewport().GetVisibleRect().Size);
+        RefreshReadyStatus();
+    }
 
+    private void RefreshReadyStatus()
+    {
+        if (_readyResult is null || _readySourceId is null || _camera is null) return;
+        var result = _readyResult;
+        ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | decoded {result.Textures.Count} | cache {_cache.Count} | {result.ElapsedMilliseconds}ms");
+    }
+
+    private bool HasReadyHudContent(int textureCount)
+        => _status?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
+            && _status.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
+
+    private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) { if (_status is not null) _status.Text = text; }
     public override void _ExitTree() { _cache.Dispose(); _coordinator.Dispose(); }
 }

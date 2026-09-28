@@ -18,6 +18,7 @@ public static class TerrainViewerSelfTest
             using var cache = new TerrainTextureCache();
             cache.Upload(CreateTextures(keys, frame));
             AssertUploadOwnership(frame, keys.Tile);
+            AssertReloadAndExitTextureOwnership(frame);
 
             if (DisplayServer.GetName() != "headless")
             {
@@ -188,6 +189,53 @@ public static class TerrainViewerSelfTest
         if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial texture upload was not rolled back exactly once.");
         cache.Clear();
         if (disposals != 1) throw new InvalidOperationException("Repeated cache clear disposed an already rolled-back texture.");
+    }
+
+    private static void AssertReloadAndExitTextureOwnership(ArtFrame frame)
+    {
+        var first = new TerrainTextureKey("synthetic", 100, 0, 1, "reload-first", 0, 0, 0);
+        var second = new TerrainTextureKey("synthetic", 101, 0, 1, "reload-second", 0, 0, 0);
+        var created = new List<ImageTexture>();
+        var disposals = new Dictionary<ImageTexture, int>(ReferenceEqualityComparer.Instance);
+        Func<Image, ImageTexture> create = image =>
+        {
+            var texture = ImageTexture.CreateFromImage(image);
+            created.Add(texture);
+            return texture;
+        };
+        Action<ImageTexture> dispose = texture =>
+        {
+            disposals[texture] = disposals.GetValueOrDefault(texture) + 1;
+            texture.Dispose();
+        };
+        var textures = new Dictionary<TerrainTextureKey, DecodedTerrainTexture>
+        {
+            [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
+            [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
+        };
+        using (var reloadCache = new TerrainTextureCache(create, dispose))
+        {
+            reloadCache.Upload(textures);
+            var firstGeneration = created.ToArray();
+            reloadCache.Clear();
+            if (firstGeneration.Any(texture => disposals[texture] != 1) || reloadCache.Count != 0)
+                throw new InvalidOperationException("Reload did not dispose each replaced texture exactly once.");
+            reloadCache.Upload(textures);
+            var secondGeneration = created.Skip(firstGeneration.Length).ToArray();
+            reloadCache.Clear();
+            if (secondGeneration.Length != 2 || secondGeneration.Any(texture => disposals[texture] != 1))
+                throw new InvalidOperationException("Reload replacement textures were not disposed exactly once.");
+        }
+
+        using (var exitCache = new TerrainTextureCache(create, dispose))
+        {
+            var beforeExit = created.Count;
+            exitCache.Upload(textures);
+            var exitGeneration = created.Skip(beforeExit).ToArray();
+            exitCache.Dispose();
+            if (exitCache.Count != 0 || exitGeneration.Length != 2 || exitGeneration.Any(texture => disposals[texture] != 1))
+                throw new InvalidOperationException("Exit did not dispose each live texture exactly once.");
+        }
     }
 
     private static void AssertRgba(IReadOnlyList<byte> rgba, int x, int y, byte r, byte g, byte b, byte a)
