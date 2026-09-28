@@ -1,5 +1,7 @@
 # Static-object loader contract: bounded Crash Site candidate
 
+> Status update (2026-09-28): This historical proposed contract has a bounded [implementation](static-object-loader.md). Its future-tense text preserves the research boundary; it is not the current API specification. [Scenery placement research](../research/scenery-placement.md) and the [rendering contract](../rendering/static-scenery-contract.md) refine diagnostic placement without establishing original scene parity. See [current status](../project/status.md).
+
 ## Status and boundary
 
 This is a proposed, fail-closed contract for a future data-only loader. It is
