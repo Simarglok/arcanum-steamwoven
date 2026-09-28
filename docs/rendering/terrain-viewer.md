@@ -34,10 +34,16 @@ succeed. The exact selected-frame identity is the source label, DAT ordinal,
 flags, declared size, logical entry name, group, frame, and requested palette.
 The cache preflights each distinct decoded frame against 4,096 keys and 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
-that cache. Reload, failure, and exit clear textures exactly once. The graphical
-self-test injects an upload failure and tracks per-texture reload/failure/exit
-disposal; focused barrier tests prove per-load archive lifetime, serialization,
-and delayed stale success/failure cannot mutate a newer scene or HUD.
+that cache. After successful upload, the app retains only the safe source label
+and scalar decoded-count/load-time HUD metrics: neither the completed load
+result nor its decoded RGBA dictionary is scene-lifetime app state. The
+scene-lifetime texture dictionary is the sole cache. Reload, failure, and exit
+clear textures exactly once. The graphical self-test injects an upload failure,
+tracks per-texture reload/failure/exit disposal, and deterministically inspects
+the app field types to prove they cannot retain decoded texture data; it makes
+no nondeterministic GC claim. Focused barrier tests prove per-load archive
+lifetime, serialization, and delayed stale success/failure cannot mutate a
+newer scene or HUD.
 
 `TerrainGeometry.Place` is the only owner of projection, the one-pixel X anchor,
 tile 78x40 / facade 80x40 footprint, crop, and raw tile flip. The adapter draws

@@ -18,8 +18,9 @@ public partial class TerrainViewerApp : Node
     private string? _nativeSmokeScreenshot;
     private TerrainViewerArguments? _arguments;
     private Task? _lastLoad;
-    private TerrainLoadResult? _readyResult;
     private string? _readySourceId;
+    private int _readyDecodedCount;
+    private long _readyElapsedMilliseconds;
 
     public override void _Ready()
     {
@@ -56,8 +57,7 @@ public partial class TerrainViewerApp : Node
         GD.Print($"ARC-RENDER-003 load stage=begin smoke={orchestrateSmoke}");
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
-        _readyResult = null;
-        _readySourceId = null;
+        ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
         ShowStatus($"Editor diagnostic order | loading | source-id {arguments.SourceId}");
@@ -70,8 +70,9 @@ public partial class TerrainViewerApp : Node
                     _cache.Upload(result.Textures);
                     _canvas.Publish(result.Plan, _cache);
                     _camera!.SetPlan(result.Plan, GetViewport().GetVisibleRect().Size);
-                    _readyResult = result;
                     _readySourceId = arguments.SourceId;
+                    _readyDecodedCount = result.Textures.Count;
+                    _readyElapsedMilliseconds = result.ElapsedMilliseconds;
                     RefreshReadyStatus();
                 })) return;
             if (_nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
@@ -81,8 +82,7 @@ public partial class TerrainViewerApp : Node
         {
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
-                    _readyResult = null;
-                    _readySourceId = null;
+                    ClearReadyMetrics();
                     _canvas!.ClearScene();
                     _cache.Clear();
                     ShowStatus(exception.Error.ToString());
@@ -93,8 +93,7 @@ public partial class TerrainViewerApp : Node
         {
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
-                    _readyResult = null;
-                    _readySourceId = null;
+                    ClearReadyMetrics();
                     _canvas!.ClearScene();
                     _cache.Clear();
                     ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
@@ -389,9 +388,15 @@ public partial class TerrainViewerApp : Node
 
     private void RefreshReadyStatus()
     {
-        if (_readyResult is null || _readySourceId is null || _camera is null) return;
-        var result = _readyResult;
-        ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | decoded {result.Textures.Count} | cache {_cache.Count} | {result.ElapsedMilliseconds}ms");
+        if (_readySourceId is null || _camera is null) return;
+        ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | decoded {_readyDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms");
+    }
+
+    private void ClearReadyMetrics()
+    {
+        _readySourceId = null;
+        _readyDecodedCount = 0;
+        _readyElapsedMilliseconds = 0;
     }
 
     private bool HasReadyHudContent(int textureCount)

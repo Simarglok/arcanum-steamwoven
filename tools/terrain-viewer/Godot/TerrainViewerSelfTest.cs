@@ -2,6 +2,7 @@ using Arcanum.Data;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 using Godot;
+using System.Reflection;
 
 namespace Arcanum.TerrainViewer;
 
@@ -19,6 +20,7 @@ public static class TerrainViewerSelfTest
             cache.Upload(CreateTextures(keys, frame));
             AssertUploadOwnership(frame, keys.Tile);
             AssertReloadAndExitTextureOwnership(frame);
+            AssertReadyStateRetainsOnlyHudMetrics();
 
             if (DisplayServer.GetName() != "headless")
             {
@@ -236,6 +238,24 @@ public static class TerrainViewerSelfTest
             if (exitCache.Count != 0 || exitGeneration.Length != 2 || exitGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Exit did not dispose each live texture exactly once.");
         }
+    }
+
+    private static void AssertReadyStateRetainsOnlyHudMetrics()
+    {
+        // This is a deterministic structural ownership assertion, not a GC
+        // timing claim. The app may use decoded textures while a load's local
+        // task is active, but no scene-lifetime app field may retain that
+        // result or its decoded texture dictionary after cache upload.
+        var retainsDecodedData = typeof(TerrainViewerApp).GetFields(BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)
+            .Any(field => field.FieldType == typeof(TerrainLoadResult) || ReferencesDecodedTexture(field.FieldType));
+        if (retainsDecodedData) throw new InvalidOperationException("Ready app state retains decoded terrain textures instead of HUD metrics.");
+    }
+
+    private static bool ReferencesDecodedTexture(Type type)
+    {
+        if (type == typeof(DecodedTerrainTexture) || type == typeof(byte[])) return true;
+        if (type.IsArray) return ReferencesDecodedTexture(type.GetElementType()!);
+        return type.IsGenericType && type.GetGenericArguments().Any(ReferencesDecodedTexture);
     }
 
     private static void AssertRgba(IReadOnlyList<byte> rgba, int x, int y, byte r, byte g, byte b, byte a)
