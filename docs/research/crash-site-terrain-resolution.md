@@ -363,8 +363,10 @@ precedence.
 lighting/palette treatment, camera/dirty-rectangle policy, normal-runtime
 facade intent, and measured presentation comparison remain absent.
 
-**Static scenery: NOT READY.** Object/scenery semantics, current ART/prototype
-selection, baseline, occlusion, and static-scene ordering remain absent.
+**Static-object diagnostic: READY; static scenery scene: NOT READY.**
+ARC-RES-007 establishes the selected-v119 type-3/static predicate,
+current-ART/prototype chain, and five bounded ART metadata examples. Baseline,
+placement, occlusion, and static-scene ordering remain absent.
 
 A future implementation task may build the ready narrow contract; it is not
 authorized by this research result.
@@ -394,10 +396,10 @@ renderer parity remain separate evidence.
 
 ## Remaining blockers
 
-* Determine the selected-version object field envelope and classify an actual
-  static-scenery subset. The object window is now framed and its bounded v119
-  delimiter reaches the terminal count, but that does not prove object
-  semantics, current ART/prototype selection, baseline, or occlusion.
+* Determine baseline/anchor, placement, and overlap evidence for the selected
+  static examples. ARC-RES-007 establishes their selected-version envelope,
+  bounded static predicate, and current-ART/prototype chain, but none of those
+  facts proves a visual baseline or occlusion rule.
 * Establish lighting/palette treatment, dirty-rectangle/camera policy, and a
   measured renderer comparison before claiming terrain scene or CE visual
   parity. The source shows editor-only facade layering, not a normal game

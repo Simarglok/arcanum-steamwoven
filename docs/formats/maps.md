@@ -39,8 +39,10 @@ list, a fixed 4,096-element tile list, roof and conditional intermediate
 sections, then an object list whose count is at the stream end. The actual
 input has `light_count = 0`, `tile_count = 4096`, an object window beginning at
 `17140`, and terminal count `317`. The bounded delimiter reaches `47287` after
-317 version-119 records. This neither classifies any record as static scenery
-nor establishes object resource paths, placement, or draw order.
+317 version-119 records. The separately bounded ARC-RES-007 result classifies
+the selected records with its narrow type-3/static predicate and resolves
+current ART; this framing observation alone establishes neither that chain nor
+placement or draw order.
 
 ## Coordinates and sector address
 
@@ -87,19 +89,23 @@ For this exact base sector, the corrected object cursor is `17140`, not
 `47287`, immediately before the terminal count. The LE word `1` at `16388` is
 the roof `empty` discriminator; it is not a retail object-version claim.
 
-This establishes a framed, bounded record window only. It does not authorize a
-full object parser, identify static scenery, resolve current ART/prototypes, or
-establish an object baseline or ordering rule. Those omissions are deliberate
-static-scenery blockers rather than holes a future loader may fill by default.
+The framing note establishes a framed, bounded record window only. The separate
+ARC-RES-007 result records the selected-version envelope, type-3/static
+predicate, current-ART/prototype resolution, and five ART metadata chains in
+`crash-site-objects.md`. Neither result authorizes a full object parser or
+establishes an object baseline or ordering rule; those omissions remain
+deliberate static-scenery blockers rather than holes a future loader may fill
+by default.
 
 ## Required follow-up before static-scenery resolution
 
-A future, separately authorized object investigation must identify the
-selected-version object field envelope, classify an actual scenery subset, and
-prove each selected current-ART/prototype and placement chain. It must use
-`DatArchive` and `ArtDecoder.Inspect`/`Decode` for a bounded selected ART entry
-rather than reimplementing either decoder. Patch and loose-file precedence,
-scenery baseline, and occlusion ordering remain unknown for this slice.
+A future, separately authorized placement investigation must retain the
+ARC-RES-007 selected-version envelope and selected current-ART/prototype
+chains, then prove each admitted object's visual placement/overlap chain. It
+must use `DatArchive` and `ArtDecoder.Inspect`/`Decode` for a bounded selected
+ART entry rather than reimplementing either decoder. Patch and loose-file
+precedence, scenery baseline, and occlusion ordering remain unknown for this
+slice.
 
 ## Sources and lineage
 
