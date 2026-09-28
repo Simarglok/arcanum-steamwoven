@@ -1,0 +1,26 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/LabSurface.cs" id="1_surface"]
+[ext_resource type="Script" path="res://scripts/ProceduralWorld.cs" id="2_world"]
+
+[node name="LabSurface" type="Node2D"]
+script = ExtResource("1_surface")
+
+[node name="WorldRoot" type="Node2D" parent="."]
+
+[node name="ProceduralWorld" type="Node2D" parent="WorldRoot"]
+script = ExtResource("2_world")
+
+[node name="Camera2D" type="Camera2D" parent="WorldRoot"]
+position = Vector2(640, 400)
+
+[node name="UiLayer" type="CanvasLayer" parent="."]
+
+[node name="Hud" type="Control" parent="UiLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2

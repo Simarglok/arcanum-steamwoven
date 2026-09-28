@@ -1,0 +1,33 @@
+; Standalone synthetic display/UI laboratory.
+config_version=5
+
+[application]
+config/name="Display UI Lab"
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+
+[dotnet]
+project/assembly_name="Arcanum.Experiments.DisplayUiLab"
+
+[display]
+
+[display/window]
+size/viewport_width=1280
+size/viewport_height=800
+size/initial_width_override=1280
+size/initial_height_override=800
+resizable=true
+mode=0
+content_scale_mode=0
+dpi/allow_hidpi=true
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+
+[rendering/textures]
+vram_compression/import_etc2_astc=true
+
+[gui]
+theme/default_font_multichannel_signed_distance_field=true
