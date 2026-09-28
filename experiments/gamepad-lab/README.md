@@ -1,25 +1,27 @@
 # Synthetic Gamepad Input Lab
 
-Standalone Godot 4.7.2 / .NET 8 experiment for camera-centered, semantic gamepad input. It contains procedural primitives only: **no original game data, extracted content, third-party assets, or product integration**.
+Standalone Godot 4.7.2 / .NET 8 experiment for semantic gamepad input. It uses procedural primitives only: no original game data, extracted content, third-party assets, or product integration.
 
-## Hypothesis and controls
+## Controls and scope
 
-The center reticle is the focus. The lab evaluates visible interaction anchors in logical viewport pixels inside a 180 px radius, scores Euclidean distance (zero kind bias), breaks 0.001 px ties by ordinal ID, retains automatic selection within 24 px hysteresis, and cycles immutable `CycleOrder` (crate immediately before tiny gear). An offscreen, invalid, removed, or out-of-radius target is ineligible. With no eligible target, the exact reticle center is Ground; Ground is excluded from cycling.
-
-| Intent | keyboard/mouse | controller |
+| Intent | Keyboard | Controller |
 |---|---|---|
-| Pan | WASD/arrows | SDL left stick |
+| Move synthetic actor | WASD | Left stick |
+| Pan world image/camera | arrows (world mode) | Right stick |
+| Menu navigation | arrows (modal) | D-pad / left stick |
 | Confirm / cancel | Enter/Space / Escape | A / B |
-| Inspect | I | X |
-| Target cycle | Q / E | LB / RB |
-| Context / settings | C / F1 | Y / Start |
-| Menu directions | arrows/WASD | D-pad / left stick |
+| Inspect / context / settings | I / C / F1 | X / Y / Start |
+| Recenter actor | F2 | F2 keyboard equivalent only |
 
-InputMap declares the keyboard and SDL semantic actions (including both left-stick directions); the adapter maintains per-device event state and accepts joy events only from the deterministic active device. With no active device, a frame collects meaningful controller candidates and selects the lowest ID; additional connected controllers remain diagnostic-only. Keyboard and active-controller samples remain separate: held levels continue routing pan/menu semantics but only a non-echo keyboard/mouse press, controller rising edge (including D-pad), or a once-per-excursion qualified stick motion changes the input method. A stick must return below the 0.25 method threshold before it can qualify again, preventing an already-held stick from reclaiming a later keyboard/mouse prompt. It samples held stick/keyboard pan every frame, so panning is continuous and frame-rate/zoom scaled. `Camera2D` is intentionally outside the translated WorldRoot, while the fixed reticle is drawn by the CanvasLayer HUD in viewport space. Keyboard/mouse switching is immediate for a non-echo press/button, while pointer travel accumulates to 6 logical pixels within a 150 ms frame-clock window; expiry, quarantine, and a successful switch reset that window. Active-controller disconnect and focus transitions clear held/repeat state; when a controller remains selected, keyboard/no-device frames cannot rearm it: reconnect/focus/reset require a complete neutral selected-controller sample and a following arm frame. Circular deadzone defaults to 0.20 (0.05–0.45); sensitivity defaults to 1.0 (0.5–2.0). Prompts are method-appropriate (Xbox semantic glyphs or keyboard/mouse alternatives), while diagnostics identify the concrete raw button/axis/key event, its accepted/rejected state, and provenance. The app labels engine delivery `LIVE OS EVENT (not physical usability proof)` and all injected automation `SIMULATION`.
+The left stick has no interaction, targeting, mouse-emulation, or OS-cursor behavior. It supplies direct desired direction to the visible synthetic actor. The right stick only pans the world image. They can operate concurrently. The center reticle remains a targeting/interacting feature independent of the actor.
 
-## Build and checks
+Fresh settings and Reset defaults set `invertCameraX=true` and `invertCameraY=true`; therefore right-stick right/down moves the world image right/down (camera left/up). Settings exposes independent X/Y toggles, separate camera/actor deadzones and sensitivities, the retained Nearby Goal comparison mode, recenter, and Reset. Values are versioned in `user://gamepad_lab_settings_v1.json`; missing, corrupt, or unsupported-version data falls back to the inverted v1 defaults.
 
-Use the canonical process-local SDK and Godot executable:
+Direct desired-direction intent is the default prototype policy. Nearby Goal is a small comparison mode: an actor-relative 96 px goal refreshes at most every 0.15 seconds and only beyond 12 px hysteresis. Neutral, blocked, modal, cancel, focus, and disconnect clear movement. The procedural courtyard has a wall, corner, narrow passage, actor heading, and goal marker. Collision blocks the actor and cancels the goal; it does not claim pathfinding. See [../../docs/input/gamepad-movement-study.md](../../docs/input/gamepad-movement-study.md) for the research comparison and limitations.
+
+## Checks
+
+Use only the canonical SDK 8.0.425 and Godot 4.7.2 mono:
 
     export DOTNET_ROOT="$HOME/.local/share/dotnet"
     export PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -32,10 +34,16 @@ Use the canonical process-local SDK and Godot executable:
     "$DOTNET_ROOT/dotnet" build GamepadLab.csproj -c Debug --no-restore
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . -- --self-test
 
-The Core executable harness covers radial deadzone/no drift, normalization and delta/zoom scaling, same-frame lowest-device arbitration/quarantine, cumulative 6 px/150 ms mouse switching (including expiry, jitter, reset, and held-level non-oscillation), every rising-edge pulse, focus/reset stale-edge suppression, modal world suppression, deterministic digital/analog menu repeat, epsilon ties/exact hysteresis boundary, bidirectional cycle wrap/cancel-to-auto/lock invalidation/removal/out-of-radius, offscreen/world-ground fallback, and projection fixtures at 1280×800 and 1920×1080. After a fresh Debug build, Godot self-test drives actual scene/adapter events: controller arbitration and held delta/zoom pan with canvas displacement, method-specific prompt/accepted-event diagnostics, target/ground projection at both sizes and zooms, digital and analog modal repeat with world suppression, focus/disconnect pulse/log clearing, and responsive in-bounds/non-overlapping HUD rectangles. This is explicit **SIMULATION** provenance, not physical-device evidence.
+The Core harness covers defaults/reset/serialization/corruption fallback; all four inversion combinations; per-domain deadzones, diagonal normalization, delta and zoom behavior; concurrent stick separation; active device, focus/disconnect/modal safety; actor-relative goal cadence; stop/blocked states; and no implicit interaction pulse. The Godot self-test is explicitly `SIMULATION`; it drives the actual adapter/scene and checks actor displacement independently from camera displacement, concurrent sticks, settings reload, modal/focus clearing, and wall collision.
 
-## Evidence limits and owner checklist
+After the candidate is clean and committed, run:
 
-Export/capture proves a local unsigned/unnotarized macOS prototype, not distribution readiness. Preserve every capture launch command, candidate SHA/UUID, timestamps, timeout/exit result, and crash correlation in evidence; a saved PNG is not proof that its process exited cleanly. `--smoke` emits `physicalDeviceEvidence` as an object with `xboxBluetoothAxesButtons`, `disconnectReconnect`, `drift`, and `comfort`, each **Not verified** unless a human records live observations. Owner checklist: connect; fine/coarse pan; crowded target and crate→tiny gear cycle; inspect/interact; context/settings navigation/cancel; disconnect/reconnect; focus change; keyboard/mouse/gamepad prompt switching.
+    experiments/gamepad-lab/tools/validate-macos.sh
 
-Official API references: [Input](https://docs.godotengine.org/en/4.7/classes/class_input.html), [InputMap](https://docs.godotengine.org/en/4.7/classes/class_inputmap.html), [controllers](https://docs.godotengine.org/en/4.7/tutorials/inputs/controllers_gamepads_joysticks.html), [Node](https://docs.godotengine.org/en/4.7/classes/class_node.html), and [macOS export](https://docs.godotengine.org/en/4.7/tutorials/export/exporting_for_macos.html).
+It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-002/<head>/GamepadLab.app`, runs exported smoke, and atomically records `manifest.json` plus `artifacts/builds/ARC-GPAD-002/current.json`. The app is local, unsigned, and unnotarized. `SIMULATION` checks do not establish physical Xbox Bluetooth behavior.
+
+## Owner checklist
+
+Connect an Xbox Bluetooth controller; verify both default inversion axes and each independent toggle; move/pan concurrently; test drift, modal/focus/disconnect/reconnect safety; walk into the wall/corner/narrow passage and use F2 recenter; compare movement modes; then confirm targeting, cycling, keyboard/mouse fallback, and that left-stick movement has no interaction side effect. Physical axes/buttons, disconnect/reconnect, drift, glyph correctness, and comfort are **Not verified** until that session.
+
+Official version-pinned references: [controllers](https://docs.godotengine.org/en/4.7/tutorials/inputs/controllers_gamepads_joysticks.html), [NavigationAgent usage](https://docs.godotengine.org/en/4.7/tutorials/navigation/navigation_using_navigationagents.html), [AStarGrid2D](https://docs.godotengine.org/en/4.7/classes/class_astargrid2d.html), [CharacterBody2D](https://docs.godotengine.org/en/4.7/classes/class_characterbody2d.html).

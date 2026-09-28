@@ -52,7 +52,7 @@ public partial class LabHud : Control
 
     public void UpdateView(string diagnostics, string prompt, IEnumerable<string> logs) { _diagnostics.Text = diagnostics; _prompt.Text = prompt; _log.Text = string.Join("\n", logs.TakeLast(8)); QueueRedraw(); }
     public void ShowContext(string primary) { ModalKind = ModalKind.Context; _options = [primary, "Inspect", "Cancel"]; _selected = 0; RenderModal(); }
-    public void ShowSettings() { ModalKind = ModalKind.Settings; _options = ["Deadzone −", "Deadzone +", "Sensitivity −", "Sensitivity +", "Reset defaults", "Close"]; _selected = 0; RenderModal(); }
+    public void ShowSettings() { ModalKind = ModalKind.Settings; _options = ["Camera deadzone −", "Camera deadzone +", "Actor deadzone −", "Actor deadzone +", "Camera sensitivity −", "Camera sensitivity +", "Actor sensitivity −", "Actor sensitivity +", "Toggle invert X", "Toggle invert Y", "Toggle comparison mode", "Recenter actor", "Reset defaults", "Close"]; _selected = 0; RenderModal(); }
     public void Navigate(int direction) { if (ModalVisible && direction != 0) { _selected = (_selected + Math.Sign(direction) + _options.Length) % _options.Length; RenderModal(); } }
     public string Activate() => SelectedOption;
     public void SelectAt(Vector2 position)
