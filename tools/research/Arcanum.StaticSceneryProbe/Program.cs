@@ -58,17 +58,20 @@ internal static class Program
         var frame = Decode(BuildArt(width: 4, height: 3, hotX: 1, hotY: 2, artOffsetX: 9, artOffsetY: -4,
             pixels: [1, 0, 0, 0, 0, 2, 0, 0, 0, 0, 3, 0]));
         var placement = Placement.For(anchor: new Point(100, 50), frame);
-        var normal = new Canvas(128, 96);
+        const byte transparentDestinationSentinel = 17;
+        var normal = new Canvas(128, 96, transparentDestinationSentinel);
         normal.Draw(frame, placement, flipX: false);
         Require(normal.RedAt(99, 48) == 31 && normal.RedAt(100, 49) == 63 && normal.RedAt(101, 50) == 95,
-            "unflipped asymmetric landmark coordinates");
-        Require(normal.RedAt(102, 48) == 0 && normal.RedAt(99, 49) == 0,
-            "transparent source index leaves independent canvas background unchanged");
+            "unflipped opaque asymmetric landmarks overwrite the destination sentinel");
+        Require(normal.RedAt(102, 48) == transparentDestinationSentinel && normal.RedAt(99, 49) == transparentDestinationSentinel,
+            "transparent source index leaves named nonzero destination sentinels unchanged");
 
-        var flipped = new Canvas(128, 96);
+        var flipped = new Canvas(128, 96, transparentDestinationSentinel);
         flipped.Draw(frame, placement, flipX: true);
         Require(flipped.RedAt(102, 48) == 31 && flipped.RedAt(101, 49) == 63 && flipped.RedAt(100, 50) == 95,
-            "horizontally flipped asymmetric landmark coordinates");
+            "horizontally flipped opaque asymmetric landmarks overwrite the destination sentinel");
+        Require(flipped.RedAt(99, 48) == transparentDestinationSentinel && flipped.RedAt(102, 49) == transparentDestinationSentinel,
+            "flipped transparent source index leaves named nonzero destination sentinels unchanged");
         Require(placement.TopLeft == new Point(99, 48), "flip preserves diagnostic anchor and destination rectangle");
     }
 
@@ -155,10 +158,11 @@ internal static class Program
         private readonly byte[] _red;
         private readonly int _width;
 
-        public Canvas(int width, int height)
+        public Canvas(int width, int height, byte backgroundRed = 0)
         {
             _width = width;
             _red = new byte[checked(width * height)];
+            Array.Fill(_red, backgroundRed);
         }
 
         public void Draw(ArtFrame frame, Placement placement, bool flipX)
