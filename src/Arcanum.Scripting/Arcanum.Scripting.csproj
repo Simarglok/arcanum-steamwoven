@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Scripting</AssemblyName>
+    <RootNamespace>Arcanum.Scripting</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Arcanum.Data/Arcanum.Data.csproj" />
+  </ItemGroup>
+</Project>
