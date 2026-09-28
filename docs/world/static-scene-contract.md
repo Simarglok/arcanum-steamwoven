@@ -17,12 +17,15 @@ the roof-empty discriminator, not a retail object version.
   integration has been implemented. Lighting/palette treatment,
   camera/dirty-rectangle policy, normal-runtime facade behavior, and a measured
   presentation comparison remain unestablished.
-- **Static-object diagnostic: READY, static scene: NOT READY.** ARC-RES-007
-  establishes the selected v119 object census, type-3/static predicate,
-  current-ART/prototype resolution, and five bounded ART metadata examples in
-  `docs/research/crash-site-objects.md` (with the future fail-closed model in
-  `static-object-loader-contract.md`). It does not establish a baseline,
-  placement, occlusion, or static-scene ordering.
+- **Static-object diagnostic placement: READY, static scene: NOT READY.**
+  ARC-RES-007 establishes the selected v119 object census, type-3/static
+  predicate, current-ART/prototype resolution, and five bounded ART metadata
+  examples in `docs/research/crash-site-objects.md` (with the future fail-closed
+  model in `static-object-loader-contract.md`). ARC-RES-008 additionally
+  establishes a finite direct-instance-offset plus frame-hotspot diagnostic
+  rectangle for those five examples in `docs/research/scenery-placement.md` and
+  `docs/rendering/static-scenery-contract.md`. It does not establish original
+  baseline parity, occlusion, normal-runtime ordering, or a static scene.
 
 This is a bounded research contract, not a production loader, renderer, Godot
 scene, or gameplay model. A future broader loader or scene must fail closed
@@ -37,7 +40,7 @@ rather than inventing fallbacks.
 | Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
 | Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence for all 4,096 selected frames |
 | Intermediate sections | roof then placeholder-controlled script, metadata/sound, and block sections | selected roof `empty=1`, placeholder `0xAA0004`; checked framing only |
-| Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; ARC-RES-007 separately establishes a selected type-3/static predicate and current-ART/prototype chain, not scene placement or order |
+| Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; ARC-RES-007 establishes a selected type-3/static predicate and current-ART/prototype chain, while ARC-RES-008 limits diagnostic placement to five direct-offset/hotspot chains; neither establishes original scene order |
 
 No archive-overrides policy is implied. The caller must supply an explicitly
 chosen source set; this research does not select between module, PATCH, or
@@ -126,8 +129,10 @@ The probe's synthetic checks cover these numerical examples:
 | start offset `(30, 32)` | `(80, 1240)` | CE-derived formula; synthetic checked |
 
 A static scene must choose `originX`, `originY`, camera anchoring, rounding,
-and asset baseline policy explicitly. The formula is not evidence that raw ART
-hotspots or a viewer canvas offset are world-placement offsets.
+and asset baseline policy explicitly. ARC-RES-008 has a separate five-record
+diagnostic where a direct instance offset plus ART hotspot selects a rectangle;
+it is not evidence for unadmitted records, a viewer canvas offset, or original
+static-scene parity.
 
 ## Resource and placement gates
 
@@ -135,8 +140,9 @@ Before emitting a terrain diagnostic record, a future task must validate this
 complete chain for each included record; it must retain an explicit error record
 for every failed lookup. The one-source experiment proves the marked
 tile/facade steps only for its representatives, not the policy or completeness
-of a general source set. Scenery begins at the separately bounded object envelope; a scene still needs
-placement and ordering evidence:
+of a general source set. Scenery begins at the separately bounded object envelope;
+ARC-RES-008 admits only five direct-offset/hotspot diagnostic placements. A
+scene still needs original ordering/occlusion evidence:
 
 ```text
 selected sector word/object record
@@ -145,7 +151,8 @@ selected sector word/object record
   -> ART entry
   -> ArtDecoder.Inspect metadata
   -> type-specific selected frame/palette
-  -> bounded diagnostic terrain placement OR independently validated scene baseline/order
+  -> bounded diagnostic terrain placement OR five-record static-scenery diagnostic placement
+  -> independently validated scene baseline/order for any scene claim
 ```
 
 `DatArchive` and `ArtDecoder` are mandatory reuse points. No alternative DAT
@@ -165,13 +172,14 @@ for ART baselines and object overlap exists:
 4. define walls/roofs only if they occur in the chosen slice and their resource
    and ordering rules are separately measured.
 
-There is no accepted overlap/order example from the original slice: visual
-baseline/placement and an original overlap/order reference remain unproven.
-ARC-RES-007 has safely delimited and classified the 317 type-3 records and
-provided five bounded static examples, but neither result establishes their
-visual overlap. A future decoder must retain the validated record sequence as
-a deterministic tie key, but that is only a reproducibility requirement—not an
-evidence-backed occlusion rule. Any ordering example before a selected,
+There is no accepted overlap/order example from the original slice: original
+visual baseline and original overlap/order reference remain unproven.
+ARC-RES-007 has safely delimited and classified the 317 type-3 records, and
+ARC-RES-008 has five direct-offset/hotspot diagnostic placements plus a
+synthetic stable-tie policy. Neither establishes their original visual overlap.
+A future decoder must retain the validated record sequence as a deterministic
+tie key only when its policy says so; that is a reproducibility requirement,
+not an evidence-backed occlusion rule. Any ordering example before a selected,
 validated pair is synthetic and must not be reported as original scene parity.
 
 ## Follow-on outlines (not Kanban authorization)
