@@ -35,6 +35,23 @@ public static class TerrainLoader
         return new TerrainLoadReport(selector, parsed.Framing, outcomes);
     }
 
+    /// <summary>
+    /// Extracts the owned opaque object window from one explicitly selected 64 by 64 sector.
+    /// This is a framing-only seam: it does not resolve terrain resources or interpret object records.
+    /// </summary>
+    public static TerrainOpaqueWindow ExtractObjectWindow(DatArchive moduleArchive, string moduleEntryPath, TerrainLoaderOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(moduleArchive);
+        TerrainSectorSelector.ValidateAscii(moduleEntryPath, nameof(moduleEntryPath));
+        var limits = options ?? new TerrainLoaderOptions();
+        limits.Validate();
+        var selector = new TerrainSectorSelector(moduleEntryPath, "static-object-window", 0, 0, 0, 0, 0, 64, 64);
+        var module = SelectModule(moduleArchive, selector);
+        if (module.DeclaredOutputSize > limits.MaxSectorDecodedEntryBytes)
+            throw new TerrainLimitExceededException("The selected sector exceeds the decoded byte limit.");
+        return ParseSector(moduleArchive.ReadEntry(module), limits).Framing.ObjectWindow;
+    }
+
     public static TerrainSector Load(DatArchive moduleArchive, TerrainSectorSelector selector, TerrainResourceSource resourceSource, TerrainLoaderOptions? options = null)
     {
         var report = Inspect(moduleArchive, selector, resourceSource, options);

@@ -15,6 +15,7 @@ public sealed class DatArchive : IDisposable
     private readonly Stream _stream;
     private readonly bool _ownsStream;
     private readonly DatReaderOptions _options;
+    private readonly object _readGate = new();
     private bool _disposed;
 
     private DatArchive(Stream stream, bool ownsStream, DatReaderOptions options, DatFooter footer, List<DatEntry> entries)
@@ -67,48 +68,54 @@ public sealed class DatArchive : IDisposable
 
     public byte[] ReadEntry(DatEntry entry)
     {
-        ThrowIfDisposed();
-        ArgumentNullException.ThrowIfNull(entry);
-        if (!ReferenceEquals(entry.Owner, this))
+        lock (_readGate)
         {
-            throw new ArgumentException("The entry belongs to a different archive.", nameof(entry));
-        }
-        if (entry.Flags == DirectoryFlag)
-        {
-            throw new DatUnsupportedEntryException("Directory metadata records have no supported payload read.");
-        }
-        if (entry.Flags != PlainFlag && entry.Flags != ZlibFlag)
-        {
-            throw new DatUnsupportedEntryException($"Unsupported DAT entry flags 0x{entry.Flags:x8}.");
-        }
-        ValidatePayloadBounds(entry);
-        CheckLimit(entry.StoredSize, _options.MaxStoredEntryBytes, "Stored entry size");
-        CheckLimit(entry.DeclaredOutputSize, _options.MaxDecodedEntryBytes, "Decoded entry size");
-        if (entry.StoredSize > int.MaxValue || entry.DeclaredOutputSize > int.MaxValue)
-        {
-            throw new DatLimitExceededException("Entry size exceeds the supported in-memory array range.");
-        }
-        if (entry.Flags == PlainFlag && entry.StoredSize != entry.DeclaredOutputSize)
-        {
-            throw new DatFormatException("Plain entry stored and declared sizes differ.");
-        }
+            ThrowIfDisposed();
+            ArgumentNullException.ThrowIfNull(entry);
+            if (!ReferenceEquals(entry.Owner, this))
+            {
+                throw new ArgumentException("The entry belongs to a different archive.", nameof(entry));
+            }
+            if (entry.Flags == DirectoryFlag)
+            {
+                throw new DatUnsupportedEntryException("Directory metadata records have no supported payload read.");
+            }
+            if (entry.Flags != PlainFlag && entry.Flags != ZlibFlag)
+            {
+                throw new DatUnsupportedEntryException($"Unsupported DAT entry flags 0x{entry.Flags:x8}.");
+            }
+            ValidatePayloadBounds(entry);
+            CheckLimit(entry.StoredSize, _options.MaxStoredEntryBytes, "Stored entry size");
+            CheckLimit(entry.DeclaredOutputSize, _options.MaxDecodedEntryBytes, "Decoded entry size");
+            if (entry.StoredSize > int.MaxValue || entry.DeclaredOutputSize > int.MaxValue)
+            {
+                throw new DatLimitExceededException("Entry size exceeds the supported in-memory array range.");
+            }
+            if (entry.Flags == PlainFlag && entry.StoredSize != entry.DeclaredOutputSize)
+            {
+                throw new DatFormatException("Plain entry stored and declared sizes differ.");
+            }
 
-        var stored = new byte[(int)entry.StoredSize];
-        _stream.Seek(entry.Offset, SeekOrigin.Begin);
-        ReadExactly(_stream, stored, "entry payload");
-        return entry.Flags == PlainFlag ? stored : InflateExact(stored, checked((int)entry.DeclaredOutputSize));
+            var stored = new byte[(int)entry.StoredSize];
+            _stream.Seek(entry.Offset, SeekOrigin.Begin);
+            ReadExactly(_stream, stored, "entry payload");
+            return entry.Flags == PlainFlag ? stored : InflateExact(stored, checked((int)entry.DeclaredOutputSize));
+        }
     }
 
     public void Dispose()
     {
-        if (_disposed)
+        lock (_readGate)
         {
-            return;
-        }
-        _disposed = true;
-        if (_ownsStream)
-        {
-            _stream.Dispose();
+            if (_disposed)
+            {
+                return;
+            }
+            _disposed = true;
+            if (_ownsStream)
+            {
+                _stream.Dispose();
+            }
         }
     }
 
