@@ -1,0 +1,11 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.TerrainViewer</AssemblyName>
+    <RootNamespace>Arcanum.TerrainViewer</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Core/Arcanum.TerrainViewer.Core.csproj" />
+  </ItemGroup>
+</Project>
