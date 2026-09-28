@@ -32,6 +32,7 @@ run_log debug-build.log "$DOTNET" build "$lab_root/GamepadLab.csproj" -c Debug -
 run_log godot-self-test.log "$GODOT" --headless --path "$lab_root" -- --self-test
 git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 run_log export.log "$GODOT" --headless --path "$lab_root" --export-debug macOS "$build_root/GamepadLab.app"
+git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 app=$(find "$build_root/GamepadLab.app/Contents/MacOS" -type f -perm -111 | head -n 1)
 test -n "$app"
 run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/exported-smoke.json"
