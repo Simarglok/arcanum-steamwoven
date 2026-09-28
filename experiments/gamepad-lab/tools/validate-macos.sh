@@ -14,6 +14,9 @@ if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be cl
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
 DOTNET="$DOTNET_ROOT/dotnet"
 GODOT=/Applications/Godot_mono.app/Contents/MacOS/Godot
+export DOTNET_ROOT
+export PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin"
+export __GODOT_SHELL_ENV_SET=1
 if test ! -x "$DOTNET" || test ! -x "$GODOT"; then printf '%s\n' 'Canonical SDK 8.0.425 or Godot 4.7.2 mono is unavailable.' >&2; exit 2; fi
 mkdir -p "$build_root/evidence"
 run_log() { name=$1; shift; "$@" >"$build_root/evidence/$name" 2>&1; }
