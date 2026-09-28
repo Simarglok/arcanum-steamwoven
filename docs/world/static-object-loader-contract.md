@@ -75,7 +75,7 @@ Only two field defaults are admitted by evidence:
 currentArt = instance.currentArt when field 0 is present
            = exactly-one validated matching prototype.currentArt otherwise
 
-effectiveFlags = instance.flags when field 19 is present
+effectiveFlags = instance.flags when CE OBJ_F_FLAGS enum ID 19 is present at serialized slot 18
                = exactly-one validated matching prototype.flags otherwise
 ```
 
@@ -104,8 +104,8 @@ height, flatness semantics, occlusion, or ordering.
 | Type classification | all real records type 3 | no type promotion or inferred aliases | `unsupported-type` |
 | Location | local coordinates present in the five handoff records | optional field must be present for a coordinate record | `unresolved-location` |
 | Current ART | 288 direct, 29 inherited real values | direct field or exactly-one valid prototype default | `unresolved-reference` |
-| Flags for static predicate | effective instance/prototype flags | direct field or exactly-one valid prototype default | `unresolved-reference` |
-| Prototype file selection | nine real files used | one canonical numeric candidate; unchanged fingerprint | `unresolved-reference` |
+| Flags for static predicate | 31 direct / 286 inherited effective instance/prototype object flags from serialized slot 18 (CE enum ID 19) | direct slot or exactly-one valid prototype default; do not substitute adjacent slot 19 spell flags | `unresolved-reference` |
+| Prototype file selection | six real files used | one canonical numeric candidate; unchanged fingerprint | `unresolved-reference` |
 | Scenery mapping | five real selected examples | one mapping key and safe relative filename | `unresolved-resource` |
 | ART entry | five real selected examples | one normalized candidate in explicit resource archive, 1 MiB cap | `unresolved-resource` |
 | ART metadata | five real selected examples | type/category/number, group/frame bounds, inspected metadata | `invalid-art-selector` |

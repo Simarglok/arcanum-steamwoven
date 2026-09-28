@@ -18,6 +18,12 @@ internal static class Program
     private const int ExpectedTileEnd = 16_388;
     private const int ExpectedTrailingInt32 = 317;
     private const uint DynamicObjectFlag = 0x00002000;
+    // Pinned CE OBJ_F_FLAGS is enum value 19, while serialized common fields are
+    // zero-based because OBJ_F_CURRENT_AID (enum value 1) occupies slot 0.
+    private const int CurrentArtField = 0;
+    private const int LocationField = 1;
+    private const int ObjectFlagsField = 18;
+    private const int SpellFlagsField = 19;
     private const long ExpectedModuleBytes = 355_938_305;
     private const string ExpectedModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
     private const long ExpectedResourceBytes = 147_991_122;
@@ -30,7 +36,7 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (bounded sector, complete object delimiter, and prototype inheritance checks)");
+                Console.WriteLine("self-test: PASS (bounded sector, complete object delimiter, prototype inheritance, and object-flag slot checks)");
                 return 0;
             }
 
@@ -119,7 +125,7 @@ internal static class Program
         Console.WriteLine($"framing objects start={framing.ObjectStart} length={framing.ObjectBytes} end={framing.ObjectEnd} count={sector.TrailingInt32} first_le_i32={framing.FirstObjectVersion}");
         Console.WriteLine($"framing trailing_i32 start={framing.TrailingInt32Start} length=4 end={framing.TrailingInt32End} value={sector.TrailingInt32}");
         Console.WriteLine($"objects records={instances.Count} consumed_bytes={framing.ObjectBytes} cursor={framing.ObjectEnd} type_counts={typeCounts}");
-        Console.WriteLine($"objects scenery_type3={sceneryInstances.Length} current_aid_resolution=validated direct={resolved.Count(instance => !instance.CurrentAidInherited)} inherited={resolved.Count(instance => instance.CurrentAidInherited)} prototype_files={prototypeRead.Prototypes.Count} prototype_fingerprint_aggregate={prototypeRead.FingerprintAggregate} static_scenery_type3={staticScenery.Length}");
+        Console.WriteLine($"objects scenery_type3={sceneryInstances.Length} current_aid_resolution=validated direct={resolved.Count(instance => !instance.CurrentAidInherited)} inherited={resolved.Count(instance => instance.CurrentAidInherited)} flags_resolution=validated direct={resolved.Count(instance => instance.Instance.DirectFlags.HasValue)} inherited={resolved.Count(instance => !instance.Instance.DirectFlags.HasValue)} prototype_files={prototypeRead.Prototypes.Count} prototype_fingerprint_aggregate={prototypeRead.FingerprintAggregate} static_scenery_type3={staticScenery.Length}");
         foreach (var example in artExamples)
         {
             var location = example.Object.Instance.Location!.Value;
@@ -177,13 +183,14 @@ internal static class Program
             if (parsed.Count != 1 || parsed[0].Type != type || parsed[0].DirectCurrentAid != 1000 + type) throw new InvalidOperationException("A supported type or wire kind was not delimited in the synthetic suite.");
         }
 
-        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true);
+        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false);
         var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41);
         var chained = ObjectWire.ParseWindow(inherited.Concat(direct).ToArray(), 2);
         if (chained.Count != 2 || chained[0].Location is null || chained[1].DirectCurrentAid != 41) throw new InvalidOperationException("Synthetic record chaining or early-field retention failed.");
         var prototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73));
         if (!prototype.Id.Matches(prototypeId) || prototype.Type != 3 || prototype.CurrentAid != 73) throw new InvalidOperationException("Synthetic prototype validation failed.");
         if (!ObjectWire.ResolveCurrentAids(chained, [prototype]).SequenceEqual([73, 41])) throw new InvalidOperationException("Direct and inherited AID resolution did not return concrete values.");
+        AssertStaticFlagResolution(prototypeId);
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, []), "missing prototype");
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [prototype, prototype]), "duplicate prototype");
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(4, prototypeId, 73))]), "type-mismatched prototype");
@@ -224,6 +231,30 @@ internal static class Program
     private static void AssertProjection(int localX, int localY, int expectedX, int expectedY)
     {
         if (checked(40 * (localY - localX)) != expectedX || checked(20 * (localY + localX)) != expectedY) throw new InvalidOperationException("Synthetic numeric projection regression failed.");
+    }
+
+    private static void AssertStaticFlagResolution(ObjectId prototypeId)
+    {
+        var directStaticWithSpellDynamic = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41, flags: 0, spellFlags: DynamicObjectFlag), 1)[0];
+        var directDynamic = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 42, flags: DynamicObjectFlag, spellFlags: 0), 1)[0];
+        var inheritedFlags = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: DynamicObjectFlag), 1)[0];
+        var staticPrototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: DynamicObjectFlag));
+        var dynamicPrototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 74, flags: DynamicObjectFlag, spellFlags: 0));
+
+        var directlyResolved = ObjectWire.ResolveEffectiveInstances([directStaticWithSpellDynamic, directDynamic], [staticPrototype]);
+        if (directlyResolved[0].EffectiveFlags != 0 || directlyResolved[1].EffectiveFlags != DynamicObjectFlag ||
+            directlyResolved.Count(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0) != 1)
+        {
+            throw new InvalidOperationException("Direct object flags were not distinguished from adjacent spell flags in the static predicate.");
+        }
+
+        var inheritedResolved = ObjectWire.ResolveEffectiveInstances([inheritedFlags], [staticPrototype]);
+        var inheritedDynamic = ObjectWire.ResolveEffectiveInstances([inheritedFlags], [dynamicPrototype]);
+        if (inheritedResolved[0].EffectiveFlags != 0 || inheritedDynamic[0].EffectiveFlags != DynamicObjectFlag ||
+            (inheritedResolved[0].EffectiveFlags & DynamicObjectFlag) != 0 || (inheritedDynamic[0].EffectiveFlags & DynamicObjectFlag) == 0)
+        {
+            throw new InvalidOperationException("Inherited object flags were not distinguished from adjacent spell flags in the static predicate.");
+        }
     }
 
     private static void AssertObjectArtResolution()
@@ -914,7 +945,7 @@ internal static class Program
             uint flags = 0;
             for (var field = 1; field < fields.Count; field++)
             {
-                if (field == 19) flags = cursor.U32();
+                if (field == ObjectFlagsField) flags = cursor.U32();
                 else Skip(ref cursor, fields[field], requireNul: true);
             }
             if (!cursor.AtEnd) throw new InvalidDataException("Prototype entry contains trailing bytes.");
@@ -939,9 +970,9 @@ internal static class Program
             for (var field = 0; field < fields.Count; field++)
             {
                 if (!set[field]) continue;
-                if (field == 0) currentAid = cursor.I32();
-                else if (field == 1) location = cursor.Presence() ? cursor.I64() : null;
-                else if (field == 19) flags = cursor.U32();
+                if (field == CurrentArtField) currentAid = cursor.I32();
+                else if (field == LocationField) location = cursor.Presence() ? cursor.I64() : null;
+                else if (field == ObjectFlagsField) flags = cursor.U32();
                 else Skip(ref cursor, fields[field], requireNul: true);
             }
             return new InstanceInfo(-1, prototype, type, currentAid, location, flags);
@@ -1073,22 +1104,23 @@ internal static class Program
             return values.ToArray();
         }
 
-        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0)
+        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0, uint flags = 0, uint spellFlags = 0, bool flagsOverridden = true)
         {
             var fields = FieldsFor(type); var masks = new uint[MaskWords(type)];
-            for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == 0 && currentAidOverridden)) SetBit(type, masks, index);
-            if (!currentAidOverridden) ClearBit(type, masks, 0);
+            for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == CurrentArtField && currentAidOverridden)) SetBit(type, masks, index);
+            if (!currentAidOverridden) ClearBit(type, masks, CurrentArtField);
+            if (!flagsOverridden) ClearBit(type, masks, ObjectFlagsField);
             var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, prototype); AddObjectId(list, ObjectId.A(17)); AddI32(list, type); AddI16(list, checked((short)masks.Sum(mask => BitOperations.PopCount(mask)))); foreach (var mask in masks) AddU32(list, mask);
-            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == 1, index == 0 ? currentAid : 0);
+            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == LocationField, index == CurrentArtField ? currentAid : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0);
             return list.ToArray();
         }
 
-        public static byte[] CreateSyntheticPrototype(int type, ObjectId id, int currentAid)
+        public static byte[] CreateSyntheticPrototype(int type, ObjectId id, int currentAid, uint flags = 0, uint spellFlags = 0)
         {
             var fields = FieldsFor(type);
             var masks = new uint[MaskWords(type)];
             for (var index = 0; index < fields.Count; index++) SetBit(type, masks, index);
-            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); for (var index = 0; index < fields.Count; index++) AddWire(list, fields[index], false, index == 0 ? currentAid : 0); return list.ToArray();
+            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); for (var index = 0; index < fields.Count; index++) AddWire(list, fields[index], false, index == CurrentArtField ? currentAid : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0); return list.ToArray();
         }
 
         public static byte[] CreateUncheckedInstance(int encodedType, ObjectId prototype)

@@ -13,7 +13,7 @@ in this repository.
 | --- | --- | --- |
 | Module DAT | 355,938,305 bytes; SHA-256 `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`; selected sector ordinal 463, compressed flag `0x00000002`, decoded length 47,291 | Exact selected base sector only; no `.dif`, PATCH, or loose-file policy |
 | Explicit resource DAT | 147,991,122 bytes; SHA-256 `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` | One caller-selected source for five ART metadata checks; no winner/preference claim |
-| Explicit prototype directory | Nine referenced canonical prototype files; aggregate SHA-256 `667b95791cb670257592ef37d98da1286167becac64383171c9cfce99be532a4` over sorted `six-digit ID:file SHA-256` pairs | Required only where an instance lacks current-ART and/or flags; directory names and payloads are not reported |
+| Explicit prototype directory | Six referenced canonical prototype files; aggregate SHA-256 `00d5610fc295b84a8dd355d843b0307d0dff5f73e6d353ed25c81667882d65d6` over sorted `six-digit ID:file SHA-256` pairs | Required only where an instance lacks current-ART and/or object flags; directory names and payloads are not reported |
 | Project code | `DatArchive`, `ArtDecoder`, and `Arcanum.CrashSiteProbe` | Bounded read-only diagnostic tooling, not reusable loading API |
 | Attributed source lineage | `arcanum-ce` commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` | One source lineage, not independent corroboration and not copied implementation |
 
@@ -39,9 +39,9 @@ before/after use. It outputs only aggregates and selected numeric metadata.
 | Claim | Source attribution | Measured or synthetic evidence | Status |
 | --- | --- | --- | --- |
 | Object-list envelope obtains the terminal count from end-of-stream, reads that many objects from the saved cursor, then compares the final count | `src/game/sector_object_list.c:115-185` | Selected window `17140..47287` and final word `317`; delimiter consumes exactly 317 records | source-supported plus measured |
-| Object-ID type A is prototype-addressable, and one serialized ID is 24 bytes | `src/game/obj_id.h:14-34` | All referenced inherited records used type-A IDs and exactly nine canonical local prototypes resolved | source-supported plus measured |
-| Common fields begin with current ART, location, and later flags | `src/game/obj.h:10-48` | v119 field-mask parser retains only current ART, location, and flags; other present fields are skipped with bounded wire validation | source-supported plus measured parser scope |
-| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | `src/game/object.c:1779-1789`; `src/game/obj_flags.h:24` | 317 parsed type-3 records all had an effective flags value without `0x00002000` | source-supported plus measured |
+| Object-ID type A is prototype-addressable, and one serialized ID is 24 bytes | `src/game/obj_id.h:14-34` | All referenced inherited records used type-A IDs and exactly six canonical local prototypes resolved | source-supported plus measured |
+| Common fields begin with current ART and location; CE `OBJ_F_FLAGS` enum value 19 serializes at zero-based common slot 18 | `src/game/obj.h:10-48` | v119 field-mask parser retains current ART, location, and slot-18 object flags; adjacent slot 19 (`OBJ_F_SPELL_FLAGS`) is skipped | source-supported plus measured parser scope and synthetic discrimination |
+| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | `src/game/object.c:1779-1789`; `src/game/obj_flags.h:24` | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; synthetic direct and inherited cases distinguish it from slot-19 spell flags | source-supported plus measured |
 | Current ART is used by the object-list art precache | `src/game/sector_object_list.c:515-528` | Instance override or prototype default resolved for all 317 records | source-supported plus measured |
 | Scenery ART lookup key and path family derive from scenery category/number | `src/game/name.c:937-943`; `first_party/tig/src/art.c:2068-2096` | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
 | ART type/frame/palette and physical-frame metadata | `first_party/tig/src/art.c:668-690,903-921,1029-1037`; project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
@@ -68,7 +68,7 @@ claim that every skipped field has a known semantic interpretation.
 | Object type | Record type integer | All 317 values equal `3`; source attribution labels this scenery | A universal type catalog |
 | Current ART | Common field index 0, direct when present; otherwise selected prototype default | Resolves 288 direct and 29 inherited values | That prototype and instance values normally coincide |
 | Local location | Common optional field index 1 | Each selected handoff example carries source-local `x,y` | Global coordinate, offsets, baseline, hitbox, or visual anchor |
-| Object flags | Common field index 19, direct when present; otherwise selected prototype default | Checked only for `OF_DYNAMIC` in the static subset test | Meaning or handling of every other bit |
+| Object flags | CE `OBJ_F_FLAGS` enum ID 19, serialized as zero-based common slot 18; direct when present, otherwise selected prototype default | Checked only for `OF_DYNAMIC` in the static subset test; synthetic slot-18/slot-19 values differ | Meaning or handling of every other bit |
 | Other masked fields | Wire-kind bounded skip | Safe traversal to the next record | Their names, meanings, or loader representation |
 
 ## Reproduced result and reconciliation
@@ -84,7 +84,9 @@ v119.
 | Type-3 records | 317 | Parsed record type, not an inference from the terminal count |
 | Current-ART direct overrides | 288 | Present instance field 0 |
 | Current-ART prototype defaults | 29 | Missing instance field 0, one validated matching prototype each |
-| Referenced prototype files | 9 | Unique canonical type-A references needed for inherited values |
+| Object-flags direct overrides | 31 | Present instance slot 18 |
+| Object-flags prototype defaults | 286 | Missing instance slot 18, one validated matching prototype each |
+| Referenced prototype files | 6 | Unique canonical type-A references needed for current-ART and/or object-flags inheritance |
 | Type-3 records passing the bounded static predicate | 317 | Type eligibility plus effective flags with `OF_DYNAMIC` clear |
 | Unsupported or unresolved records in this frozen window | 0 | No record was silently skipped or widened to force the count |
 
@@ -140,10 +142,11 @@ evidence.
 bounds, all placeholder branches, v119 and unknown-version rejection,
 unsupported type rejection, mask/count/reserved-bit validation, optional and
 array wire corruption, canonical prototype missing/duplicate/malformed/type/ID
-and boundary cases, direct-versus-inherited precedence, and synthetic resource
-mapping missing/ambiguous rejection plus selected ART metadata retention. The
-ART decoder's own existing suite remains its independent structure/limit
-coverage.
+and boundary cases, direct-versus-inherited current-ART and object-flags
+precedence (including discriminating slot-18 `OF_DYNAMIC` and adjacent slot-19
+spell-flags cases), and synthetic resource mapping missing/ambiguous rejection
+plus selected ART metadata retention. The ART decoder's own existing suite
+remains its independent structure/limit coverage.
 
 Unknown or excluded: `.dif` behavior; other object versions; all skipped-field
 semantics; runtime temporary IDs and postprocessing; original object names;

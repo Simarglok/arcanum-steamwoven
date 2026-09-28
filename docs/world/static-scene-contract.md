@@ -20,7 +20,8 @@ the roof-empty discriminator, not a retail object version.
 - **Static-object diagnostic: READY, static scene: NOT READY.** ARC-RES-007
   establishes the selected v119 object census, type-3/static predicate,
   current-ART/prototype resolution, and five bounded ART metadata examples in
-  `static-object-loader-contract.md`. It does not establish a baseline,
+  `docs/research/crash-site-objects.md` (with the future fail-closed model in
+  `static-object-loader-contract.md`). It does not establish a baseline,
   placement, occlusion, or static-scene ordering.
 
 This is a bounded research contract, not a production loader, renderer, Godot

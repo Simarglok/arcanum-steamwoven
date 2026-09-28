@@ -107,8 +107,7 @@ precedence, or call the unresolved whole sector ready.
 
 ## Explicitly not established
 
-- a static-scenery subset, object current-ART/prototype chain, object baseline,
-  or occlusion rule;
+- object baseline, placement, occlusion, or static-scene ordering rule;
 - a complete terrain scene or multi-source precedence policy; R2 establishes
   diagnostic tile/editor-facade footprint/crop/flip/order only, while lighting,
   camera policy, normal-game facade rendering, and scene parity remain open;
