@@ -40,8 +40,8 @@ before/after use. It outputs only aggregates and selected numeric metadata.
 | --- | --- | --- | --- |
 | Object-list envelope obtains the terminal count from end-of-stream, reads that many objects from the saved cursor, then compares the final count | `src/game/sector_object_list.c:115-185` | Selected window `17140..47287` and final word `317`; delimiter consumes exactly 317 records | source-supported plus measured |
 | Object-ID type A is prototype-addressable, and one serialized ID is 24 bytes | `src/game/obj_id.h:14-34` | All referenced inherited records used type-A IDs and exactly six canonical local prototypes resolved | source-supported plus measured |
-| Common fields begin with current ART and location; CE `OBJ_F_FLAGS` enum value 19 serializes at zero-based common slot 18 | `src/game/obj.h:10-48` | v119 field-mask parser retains current ART, location, and slot-18 object flags; adjacent slot 19 (`OBJ_F_SPELL_FLAGS`) is skipped | source-supported plus measured parser scope and synthetic discrimination |
-| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | `src/game/object.c:1779-1789`; `src/game/obj_flags.h:24` | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; synthetic direct and inherited cases distinguish it from slot-19 spell flags | source-supported plus measured |
+| Common fields begin with current ART and location; CE `OBJ_F_FLAGS` enum value 19 serializes at zero-based common slot 18 | `src/game/obj.h:10-48` | v119 field-mask parser retains current ART, location, and slot-18 object flags; test-only fixtures independently write distinct sentinels at literal raw slots 18 and 19 | source-supported plus measured parser scope and independently framed synthetic evidence |
+| Object type `3` is scenery; a static object excludes dynamic flags after type eligibility | `src/game/object.c:1779-1789`; `src/game/obj_flags.h:24` | 317 parsed type-3 records all had an effective slot-18 object-flags value without `0x00002000`; direct and inherited fixtures independently write reversed static/dynamic sentinels at literal raw slots 18 and 19 | source-supported plus measured |
 | Current ART is used by the object-list art precache | `src/game/sector_object_list.c:515-528` | Instance override or prototype default resolved for all 317 records | source-supported plus measured |
 | Scenery ART lookup key and path family derive from scenery category/number | `src/game/name.c:937-943`; `first_party/tig/src/art.c:2068-2096` | Five exact selected metadata chains resolved uniquely in the explicit resource archive | source-supported plus measured |
 | ART type/frame/palette and physical-frame metadata | `first_party/tig/src/art.c:668-690,903-921,1029-1037`; project `ArtDecoder` | Five selected group/frame/palette values passed physical-table bounds and metadata inspection | source-supported plus measured |
@@ -143,8 +143,8 @@ bounds, all placeholder branches, v119 and unknown-version rejection,
 unsupported type rejection, mask/count/reserved-bit validation, optional and
 array wire corruption, canonical prototype missing/duplicate/malformed/type/ID
 and boundary cases, direct-versus-inherited current-ART and object-flags
-precedence (including discriminating slot-18 `OF_DYNAMIC` and adjacent slot-19
-spell-flags cases), and synthetic resource mapping missing/ambiguous rejection
+precedence (including independently written distinct sentinels at literal raw
+serialized slot 18 and adjacent slot 19, with reversed `OF_DYNAMIC` cases), and synthetic resource mapping missing/ambiguous rejection
 plus selected ART metadata retention. The ART decoder's own existing suite
 remains its independent structure/limit coverage.
 

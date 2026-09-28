@@ -235,25 +235,60 @@ internal static class Program
 
     private static void AssertStaticFlagResolution(ObjectId prototypeId)
     {
-        var directStaticWithSpellDynamic = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41, flags: 0, spellFlags: DynamicObjectFlag), 1)[0];
-        var directDynamic = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 42, flags: DynamicObjectFlag, spellFlags: 0), 1)[0];
-        var inheritedFlags = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: DynamicObjectFlag), 1)[0];
-        var staticPrototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: DynamicObjectFlag));
-        var dynamicPrototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 74, flags: DynamicObjectFlag, spellFlags: 0));
+        // Test-only raw payload offsets for the fixed all-fields type-3 layouts:
+        // instance header 70 + literal slots 0..17 = 297/301; prototype header 68
+        // + literal slots 0..17 = 295/299. These deliberately do not use decoder
+        // field constants, semantic fixture arguments, or field-layout helpers.
+        const int InstanceSlot18RawOffset = 297;
+        const int InstanceSlot19RawOffset = 301;
+        const int PrototypeSlot18RawOffset = 295;
+        const int PrototypeSlot19RawOffset = 299;
+        const uint StaticFlagSentinel = 0x00000004;
 
-        var directlyResolved = ObjectWire.ResolveEffectiveInstances([directStaticWithSpellDynamic, directDynamic], [staticPrototype]);
-        if (directlyResolved[0].EffectiveFlags != 0 || directlyResolved[1].EffectiveFlags != DynamicObjectFlag ||
-            directlyResolved.Count(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0) != 1)
+        var directStaticBytes = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41, flags: 0, spellFlags: 0);
+        var directDynamicBytes = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 42, flags: 0, spellFlags: 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot18RawOffset), StaticFlagSentinel);
+        BinaryPrimitives.WriteUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot19RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot18RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot19RawOffset), StaticFlagSentinel);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot18RawOffset)) != StaticFlagSentinel ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot19RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot18RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot19RawOffset)) != StaticFlagSentinel)
         {
-            throw new InvalidOperationException("Direct object flags were not distinguished from adjacent spell flags in the static predicate.");
+            throw new InvalidOperationException("Direct literal slot fixture bytes changed unexpectedly.");
         }
 
-        var inheritedResolved = ObjectWire.ResolveEffectiveInstances([inheritedFlags], [staticPrototype]);
-        var inheritedDynamic = ObjectWire.ResolveEffectiveInstances([inheritedFlags], [dynamicPrototype]);
-        if (inheritedResolved[0].EffectiveFlags != 0 || inheritedDynamic[0].EffectiveFlags != DynamicObjectFlag ||
-            (inheritedResolved[0].EffectiveFlags & DynamicObjectFlag) != 0 || (inheritedDynamic[0].EffectiveFlags & DynamicObjectFlag) == 0)
+        var directStatic = ObjectWire.ParseWindow(directStaticBytes, 1)[0];
+        var directDynamic = ObjectWire.ParseWindow(directDynamicBytes, 1)[0];
+        var directlyResolved = ObjectWire.ResolveEffectiveInstances([directStatic, directDynamic], []);
+        if (directlyResolved[0].EffectiveFlags != StaticFlagSentinel || directlyResolved[1].EffectiveFlags != DynamicObjectFlag ||
+            directlyResolved.Count(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0) != 1)
         {
-            throw new InvalidOperationException("Inherited object flags were not distinguished from adjacent spell flags in the static predicate.");
+            throw new InvalidOperationException("Direct literal object-flags slots were not distinguished from adjacent spell flags in the static predicate.");
+        }
+
+        var inherited = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: 0), 1)[0];
+        var staticPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: 0);
+        var dynamicPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 74, flags: 0, spellFlags: 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot18RawOffset), StaticFlagSentinel);
+        BinaryPrimitives.WriteUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot19RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot18RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot19RawOffset), StaticFlagSentinel);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot18RawOffset)) != StaticFlagSentinel ||
+            BinaryPrimitives.ReadUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot19RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot18RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot19RawOffset)) != StaticFlagSentinel)
+        {
+            throw new InvalidOperationException("Inherited literal slot fixture bytes changed unexpectedly.");
+        }
+
+        var inheritedStatic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(staticPrototypeBytes)])[0];
+        var inheritedDynamic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(dynamicPrototypeBytes)])[0];
+        if (inherited.DirectFlags is not null || inheritedStatic.EffectiveFlags != StaticFlagSentinel || inheritedDynamic.EffectiveFlags != DynamicObjectFlag ||
+            (inheritedStatic.EffectiveFlags & DynamicObjectFlag) != 0 || (inheritedDynamic.EffectiveFlags & DynamicObjectFlag) == 0)
+        {
+            throw new InvalidOperationException("Inherited literal object-flags slots were not distinguished from adjacent spell flags in the static predicate.");
         }
     }
 
