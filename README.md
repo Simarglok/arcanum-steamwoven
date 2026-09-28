@@ -2,7 +2,7 @@
 
 Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
 
-**Status:** `Arcanum.Data` implements the observed R1 `1TAD` DAT subset, bounded 8-bpp ART-to-RGBA decode, and read-only ART metadata inspection. `Arcanum.Godot` is a bounded macOS developer animation inspector with source/override FPS controls, one physical group timeline, and raw-hotspot diagnostic placement. It is not a game animation runtime: no gameplay events, action-frame behavior, simulation, writer, extractor, or archive-precedence policy has been implemented. Current development targets macOS; Windows, Linux and handheld PCs remain product goals.
+**Status (merged main `b1858fc`, 2026-09-28):** bounded DAT/ART/DLG readers, a headless dialog transition runtime, fixed-source terrain and static-object loaders, ART and terrain diagnostic viewers, and synthetic display/gamepad labs exist. These are separate evidence-bounded components. There is no integrated playable scene, full SCR VM, navigation/collision, combat, or save/load, and original-runtime parity is unverified. See the [component catalogue](docs/project/status.md) for implemented scope, evidence and source links.
 
 ## Direction
 
@@ -17,6 +17,9 @@ Players provide their own legally acquired copy. Original game assets, third-par
 
 ## Start here
 
+- [Documentation index](docs/README.md)
+- [Project vision](docs/project/vision.md) and [dependency roadmap](docs/project/roadmap.md)
+- [Toolchain and checks](docs/workflow/toolchain.md)
 - [Architecture decisions](docs/architecture/decisions.md)
 - [Research method and R1 boundary](docs/research/method.md)
 - [DAT format boundary](docs/formats/dat.md)
@@ -26,6 +29,6 @@ Players provide their own legally acquired copy. Original game assets, third-par
 - [Hermes delivery workflow](docs/workflow/hermes.md)
 - [Contributor guidance](CONTRIBUTING.md)
 
-**Tasks and acceptance contracts live in the Hermes Kanban board `arcanum-steamwoven`.** Obsidian stores research and discussions; it is not a task queue. Repository documents describe product and engineering policy, not runnable tickets.
+**The Hermes Kanban board `arcanum-steamwoven` is authoritative for board-managed tasks and acceptance contracts.** Explicit user instructions may authorize bounded direct Codex work. Obsidian stores research and discussions; it is not a task queue. Repository documents describe product and engineering policy, not runnable tickets.
 
 The local `toolkit/` archive is intentionally ignored. No task starts merely because a roadmap or research note exists.

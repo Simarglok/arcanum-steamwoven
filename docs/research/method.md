@@ -4,7 +4,9 @@ Research starts from community knowledge, then verifies claims on the user's unc
 
 Each technical claim records its source and lineage, conditions/version, evidence, confidence and unknowns. Suggested states: reported, corroborated, experimentally verified, disputed, unknown. Two projects sharing one decoder are not independent confirmation.
 
-## R1 direction — not an executable task
+## Historical R1 direction — not an executable task
+
+The initial research sequence below is preserved as the R1 scope record. Bounded DAT/ART implementations and diagnostic viewers now exist; consult the [current component catalogue](../project/status.md). Future-tense statements below describe the initial plan, not current implementation status.
 
 First establish the DAT container structure and validate selected local files. DAT parsing and runtime resource precedence are separate questions. A later bounded implementation can provide a C# reader and inspection CLI; ART decoding and a Godot viewer follow.
 

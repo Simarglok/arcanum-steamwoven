@@ -2,22 +2,11 @@
 
 `Arcanum.Data` is an independently written, evidence-bounded reader for the observed R1 `1TAD` DAT container subset and a bounded 8-bpp ART one-frame decoder. The DAT reader parses metadata incrementally and reads one selected payload into memory; it does not extract files, write archives, normalize names, or implement resource precedence.
 
-## Toolchain and commands
+## Components and toolchain
 
-The repository pins SDK `8.0.425` (`net8.0`) in `global.json` and central package versions in `Directory.Packages.props`. The SDK is a temporary compatibility floor for future Godot 4.5 C# work and reaches .NET support end on 2026-11-10; future integration must revisit it.
+The library also contains byte-preserving [DLG reading/reference validation](formats/dlg-reader.md), a fixed-source [terrain loader](world/terrain-loader.md), and a bounded [static-object loader](world/static-object-loader.md). These APIs remain Godot-independent. The separate [dialog transition runtime](scripting/dialog-transition-runtime.md) belongs to `Arcanum.Scripting`; frame playback policy belongs to `Arcanum.Presentation`.
 
-```sh
-export DOTNET_ROOT="${DOTNET_ROOT:-$HOME/.local/share/dotnet}"
-export PATH="$DOTNET_ROOT:$PATH"
-dotnet --info
-dotnet restore
-dotnet restore --locked-mode
-dotnet build --no-restore
-dotnet test --no-build --filter "TestCategory!=RealData"
-python3 -B tools/research/dat_probe.py --self-test
-# Opt-in only; the test requires the eight documented local R1 candidates.
-DAT_ROOT=/path/to/Arcanum dotnet test --no-build --filter "TestCategory=RealData"
-```
+See the [component catalogue](project/status.md) for current coverage and [toolchain](workflow/toolchain.md) for pinned SDK/Godot versions, synthetic checks and opt-in input/filter requirements. `DAT_ROOT` alone does not supply terrain/static-object inputs; a broad `TestCategory=RealData` run requires every documented input.
 
 ## API and ownership
 
@@ -65,4 +54,4 @@ The supported structure and evidence boundary are in [formats/dat.md](formats/da
 
 ART layout and decoder boundary are in [formats/art.md](formats/art.md). The CE-source-derived rules used for the ART API are separately attributed in [research/art-ce-spec.md](research/art-ce-spec.md); they are not a CE dependency or a claim of pixel parity.
 
-The opt-in check first and last verifies the documented size/SHA-256 manifest without writing inputs. It compares the parsed footer and all index metadata (including raw name and opaque fields) in memory with the existing Python R1 probe through a length-prefixed test adapter, then reads the five documented bounded payload ordinals. It publishes no source names, payload bytes, payload hashes, or local paths; a missing `DAT_ROOT` is an explicit failing/inconclusive invocation, not a pass.
+The DAT-specific opt-in check first and last verifies the documented size/SHA-256 manifest without writing inputs. It compares the parsed footer and all index metadata (including raw name and opaque fields) in memory with the existing Python R1 probe through a length-prefixed test adapter, then reads the five documented bounded payload ordinals. It publishes no source names, payload bytes, payload hashes, or local paths; a missing `DAT_ROOT` is an explicit failing/inconclusive invocation, not a pass.

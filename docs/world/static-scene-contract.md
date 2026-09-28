@@ -1,5 +1,7 @@
 # Static-scene contract: bounded Crash Site candidate
 
+> Status update (2026-09-28): The original readiness assessment below is preserved as research evidence. A bounded [terrain loader](terrain-loader.md), [terrain diagnostic viewer](../rendering/terrain-viewer.md) and [static-object loader](static-object-loader.md) now exist. Statements below about a future loader or absent Godot integration describe that earlier stage. Integrated terrain/scenery gameplay and original scene parity remain unimplemented; see [current status](../project/status.md).
+
 ## Readiness verdicts
 
 The selected map and one sector are reproducible. Corrected framing establishes

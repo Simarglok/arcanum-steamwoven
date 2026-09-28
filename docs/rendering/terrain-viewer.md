@@ -7,11 +7,13 @@ coverage, not the full Crash Site and not original visual parity.
 
 ## Inputs and launch
 
+Use the `godot_canonical` function from the [shared toolchain](../workflow/toolchain.md), after restoring/building the viewer solution below. Launch the Godot project through the engine; its C# project is not a `dotnet run` executable.
+
 The viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
 policy, or extraction behavior. It requires caller-selected inputs and a safe,
 non-path source label:
 
-    "$HOME/.local/share/dotnet/dotnet" run --project tools/terrain-viewer/Godot -- \
+    godot_canonical --path tools/terrain-viewer/Godot -- \
       --module PATH --resource PATH --source-id LABEL
 
 It validates the fixed Crash Site profile before and after its read: fixed
@@ -111,16 +113,16 @@ explicitly NOT_VERIFIED unless a human records them.
 
 ## Reproducible local verification
 
-Set `DOTNET=/path/to/canonical/dotnet`, `GODOT=/path/to/Godot`, and provide the
+Initialize `DOTNET`, `GODOT` and `godot_canonical` from the shared toolchain, and provide the
 caller-selected `MODULE`, `RESOURCE`, and safe `SOURCE_ID` only in the local
 shell. Do not place those paths in a manifest, commit, or issue.
 
     "$DOTNET" restore tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --locked-mode
     "$DOTNET" build tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --no-restore
     "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build
-    "$GODOT" --headless --path tools/terrain-viewer/Godot -- --self-test
-    "$GODOT" --path tools/terrain-viewer/Godot -- --self-test
-    "$GODOT" --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
+    godot_canonical --headless --path tools/terrain-viewer/Godot -- --self-test
+    godot_canonical --path tools/terrain-viewer/Godot -- --self-test
+    godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
 
 After committing the source candidate, export it to the ignored
 `artifacts/builds/ARC-RENDER-003/<commit>/ArcanumTerrainViewer.app`, run its
