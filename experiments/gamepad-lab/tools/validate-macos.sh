@@ -33,7 +33,8 @@ run_log godot-self-test.log "$GODOT" --headless --path "$lab_root" -- --self-tes
 git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 run_log export.log "$GODOT" --headless --path "$lab_root" --export-debug macOS "$build_root/GamepadLab.app"
 git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
-app="$build_root/GamepadLab.app/Contents/MacOS/GamepadLab"
+executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$build_root/GamepadLab.app/Contents/Info.plist")
+app="$build_root/GamepadLab.app/Contents/MacOS/$executable"
 test -x "$app"
 run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/exported-smoke.json"
 # This intentionally does not use --headless: the exported macOS application
