@@ -74,7 +74,10 @@ public partial class LabRoot : Node2D
         // keyboard companion sample must not hide a controller release, and neutral
         // must clear an actor-relative goal rather than leave stale motion behind.
         var movement = sampled.Aggregate(default(Vec2), (total, intent) => total + intent.Movement);
-        if (movement.Length > 1) movement = movement.Normalized();
+        // Reducer output already carries the one linear actor-sensitivity multiplier.
+        // A simultaneous keyboard/controller sample cannot bypass that configured cap,
+        // but neither can this integration layer erase a 1.0–2.0 effort value.
+        if (movement.Length > _settings.ActorSensitivity) movement = movement.Normalized() * _settings.ActorSensitivity;
         var step = _movement.Update(_actor, movement, delta, _settings.MovementMode, _movementPolicy,
             (candidate, radius) => _courtyard.CanOccupy(ToGodot(candidate), (float)radius));
         var wasBlocked = _actor.Outcome == MovementOutcome.Blocked;
@@ -139,6 +142,49 @@ public partial class LabRoot : Node2D
         {
             foreach (var action in new[] { "lab_actor_move", "lab_camera_pan", "lab_confirm", "lab_cancel", "lab_inspect", "lab_previous", "lab_next", "lab_context", "lab_settings", "lab_menu_up", "lab_menu_down" }) VerificationMode.Require(InputMap.HasAction(action) && InputMap.ActionGetEvents(action).Count > 0, $"missing mapping {action}");
             var saved = _settings; var initialActor = _actor.Position; var initialWorld = _world.Position;
+            var initialSize = GetWindow().Size; var initialScaleSize = GetWindow().ContentScaleSize; var initialZoom = _camera.Zoom;
+
+            // Retain the GPAD001 scene-level projection and responsive-layout checks.
+            // These deliberately traverse actual Godot canvas transforms rather than
+            // duplicating target selection in the Core harness.
+            foreach (var size in new[] { new Vector2I(1280, 800), new Vector2I(1920, 1080) })
+            {
+                GetWindow().Size = size; await LayoutFrames();
+                // The macOS headless surface can cap a requested 1920x1080 window to
+                // the available framebuffer. Reflow against its actual accepted size;
+                // on an unconstrained display this remains the requested size.
+                var visible = GetViewport().GetVisibleRect(); GetWindow().Size = new Vector2I((int)visible.Size.X, (int)visible.Size.Y); GetWindow().ContentScaleSize = new Vector2I((int)visible.Size.X, (int)visible.Size.Y); await LayoutFrames(); _hud.ShowSettings(); await LayoutFrames();
+                VerificationMode.Require(_hud.HasReadableLayout(GetViewport().GetVisibleRect()), $"responsive HUD bounds failed at requested {size}");
+                VerificationMode.Require(_hud.ReticleCanvasCenter.DistanceTo(GetViewport().GetVisibleRect().GetCenter()) < .1f, $"reticle is not centered at {size}");
+                _hud.HideModal();
+                foreach (var zoom in new[] { .5f, 1f, 2f })
+                {
+                    _camera.Zoom = new Vector2(zoom, zoom); await LayoutFrames();
+                    var crate = _courtyard.Candidates(_world).First(candidate => candidate.Id == "crate");
+                    Handle(new InputEventMouseButton { Position = ToGodot(crate.Anchor), ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation);
+                    VerificationMode.Require(_selection.ManualLock && _result!.Id == "crate", $"canvas target pick failed at {size} zoom {zoom}");
+                    var miss = new Vector2(24, 24); var expectedGround = _world.MakeCanvasPositionLocal(miss);
+                    Handle(new InputEventMouseButton { Position = miss, ButtonIndex = MouseButton.Left, Pressed = true }, VerificationMode.Simulation);
+                    VerificationMode.Require(_result!.IsGround && _result.GroundPoint == new Vec2(expectedGround.X, expectedGround.Y), $"canvas ground conversion failed at {size} zoom {zoom}");
+                }
+            }
+            _camera.Zoom = initialZoom; GetWindow().Size = initialSize; GetWindow().ContentScaleSize = initialScaleSize; _world.Position = initialWorld; await LayoutFrames();
+
+            // Same-frame meaningful device reports must choose the lowest id. Do not
+            // pre-pin the selected controller: verify the real candidate arbitration.
+            _input.SetStartupDevices(Array.Empty<int>()); _input.Reset(); _adapter.Clear();
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation);
+            _Process(0); VerificationMode.Require(_input.ActiveDevice == 3, "same-frame controller arbitration did not select lowest id");
+            _Process(0); _Process(0);
+            var arbitrationActor = _actor.Position; var arbitrationWorld = _world.Position; var arbitrationLog = _log.Count;
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadMotion { Device = 5, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation);
+            Handle(new InputEventJoypadButton { Device = 5, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_actor.Position == arbitrationActor && _world.Position == arbitrationWorld && _log.Count == arbitrationLog, "non-active controller leaked actor, camera, or action input");
+            Handle(new InputEventJoypadButton { Device = 5, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation);
             VerificationMode.Require(!_courtyard.CanOccupy(new Vector2(690, 500), (float)_movementPolicy.ActorRadius), "scene wall collision was not active");
             VerificationMode.Require(!_courtyard.CanOccupy(new Vector2(815, 275), (float)_movementPolicy.ActorRadius), "scene corner collision was not active");
             VerificationMode.Require(_courtyard.CanOccupy(new Vector2(950, 580), (float)_movementPolicy.ActorRadius), "scene narrow passage was unexpectedly closed");
@@ -172,6 +218,79 @@ public partial class LabRoot : Node2D
             _hud.ShowContext("Talk"); _hud.Navigate(2); ActivateModal();
             VerificationMode.Require(!_hud.ModalVisible && _settingsStore.Load() == contextSettings, "context Cancel wrote settings or remained visible");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
+            // GPAD001 provenance and modal-repeat regressions through the actual
+            // adapter: held input never oscillates a fresh keyboard method/prompt,
+            // and menus consume D-pad/left-stick input without moving either world
+            // domain.
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.PromptText.Contains("[A]", StringComparison.Ordinal), "qualified controller input did not set gamepad provenance/prompt");
+            PressKey(Key.D); ReleaseKey(Key.D); _Process(0); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.PromptText.Contains("WASD", StringComparison.Ordinal), "fresh keyboard event did not update the actual prompt");
+            _Process(.1); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "held controller input oscillated keyboard provenance");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_input.Method == InputMethod.Gamepad, "released/requalified controller input did not restore gamepad provenance");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+
+            PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            var settingsIndex = _hud.SelectedIndex; var menuActor = _actor.Position; var menuWorld = _world.Position;
+            PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % 14, "adapter digital menu repeat did not move immediately"); _Process(.34); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % 14, "adapter digital menu repeated too early"); _Process(.01); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 2) % 14, "adapter digital menu repeat missed threshold"); ReleaseKey(Key.Down); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .65f }, VerificationMode.Simulation); _Process(0); var analogIndex = _hud.SelectedIndex; _Process(.35); VerificationMode.Require(_hud.SelectedIndex != analogIndex, "adapter analog menu repeat did not advance");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .45f }, VerificationMode.Simulation); _Process(0); var releasedIndex = _hud.SelectedIndex; _Process(.2); VerificationMode.Require(_hud.SelectedIndex == releasedIndex, "adapter analog menu repeat did not release");
+            VerificationMode.Require(_actor.Position == menuActor && _world.Position == menuWorld, "modal menu routing leaked actor or camera movement");
+            PressKey(Key.Escape); ReleaseKey(Key.Escape); VerificationMode.Require(!_hud.ModalVisible, "settings cancel through adapter did not close modal");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            PressKey(Key.C); ReleaseKey(Key.C); VerificationMode.Require(_hud.ModalKind == ModalKind.Context, "context did not open through adapter");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            var contextAdapterSettings = _settingsStore.Load(); var contextAdapterLog = _log.Count;
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = true }, VerificationMode.Simulation); _Process(0); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = false }, VerificationMode.Simulation);
+            VerificationMode.Require(_hud.SelectedOption == "Inspect", "context adapter navigation did not select Inspect");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation);
+            VerificationMode.Require(!_hud.ModalVisible && _log.Skip(contextAdapterLog).Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase)) && _settingsStore.Load() == contextAdapterSettings, "context Inspect through adapter wrote settings or missed dispatch");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
+            // Measure actual scene displacement after adapter/reducer processing. The
+            // actor effort is deliberately checked at both ends of the settings range
+            // for both control sources and both comparison modes.
+            foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
+            {
+                double ControllerDistance(double sensitivity)
+                {
+                    _settings = saved with { MovementMode = mode, ActorSensitivity = sensitivity }; Recenter(); var start = _actor.Position;
+                    Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); _Process(.1);
+                    var distance = _actor.Position.X - start.X; Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0); return distance;
+                }
+                double KeyboardDistance(double sensitivity)
+                {
+                    _settings = saved with { MovementMode = mode, ActorSensitivity = sensitivity }; Recenter(); var start = _actor.Position;
+                    PressKey(Key.D); _Process(.1); ReleaseKey(Key.D); _Process(0); return _actor.Position.X - start.X;
+                }
+                var controllerLow = ControllerDistance(.5); var controllerHigh = ControllerDistance(2);
+                var keyboardLow = KeyboardDistance(.5); var keyboardHigh = KeyboardDistance(2);
+                VerificationMode.Require(Math.Abs(controllerHigh / controllerLow - 4) < .001, $"{mode} controller sensitivity did not change scene displacement linearly");
+                VerificationMode.Require(Math.Abs(keyboardHigh / keyboardLow - 4) < .001, $"{mode} keyboard sensitivity did not change scene displacement linearly");
+            }
+
+            // Drive the visible actor through the replaceable courtyard callback: each
+            // mode must stop at wall/corner sweeps and pass the centered narrow gap.
+            foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
+            {
+                _settings = saved with { MovementMode = mode, ActorSensitivity = 1 };
+                _actor = new MovementState(new Vec2(620, 610), new Vec2(1, 0)); SyncActor();
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); _Process(.5);
+                VerificationMode.Require(_actor.Outcome == MovementOutcome.Blocked && _actor.Position.X < 675 - _movementPolicy.ActorRadius && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor tunnelled through wall instead of retaining a safe position");
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
+                _actor = new MovementState(new Vec2(760, 420), new Vec2(1, -1).Normalized()); SyncActor();
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .9f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = -.9f }, VerificationMode.Simulation); _Process(1.3);
+                VerificationMode.Require(_actor.Outcome == MovementOutcome.Blocked && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor did not stop safely at the corner sweep");
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
+                _actor = new MovementState(new Vec2(950, 480), new Vec2(0, 1)); SyncActor(); var passageStart = _actor.Position;
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }, VerificationMode.Simulation); _Process(.5);
+                VerificationMode.Require(_actor.Position.Y > passageStart.Y && _actor.Outcome != MovementOutcome.Blocked && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor failed centered narrow-passage traversal");
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            }
             _settings = _settings with { MovementMode = MovementMode.NearbyGoal };
             Recenter(); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); for (var step = 0; step < 20; step++) _Process(.1);
             VerificationMode.Require(_actor.Position.X < 675 - _movementPolicy.ActorRadius, "actor crossed synthetic wall"); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); Recenter();
@@ -185,6 +304,12 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.B, Pressed = false }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_actor.Position.X > cancelActor.X, "neutral rearm did not permit safe movement resume after cancel");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            // Exercise the adapter's active-device disconnect path while both world
+            // domains are held. Subsequent frames must contain no stale action or
+            // movement after OnJoyConnectionChanged forgets that device.
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+            OnJoyConnectionChanged(3, false); var disconnectedActor = _actor.Position; var disconnectedWorld = _world.Position; var disconnectLog = _log.Count; _Process(.1);
+            VerificationMode.Require(_input.ActiveDevice is null && _actor.Position == disconnectedActor && _world.Position == disconnectedWorld && _actor.Goal is null && _actor.BlockedIntent is null && _log.Count == disconnectLog, "active disconnect retained stale device, movement, goal, or action");
             _settings = saved; _world.Position = initialWorld; _actor = new MovementState(initialActor, new Vec2(1, 0)); SyncActor(); AddLog("SIMULATION self-test passed: independent sticks, persistence, modal/lifecycle gates and obstacle collision."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
@@ -214,6 +339,11 @@ public partial class LabRoot : Node2D
     }
     public void RunCapture(string[] args) { var index = Array.IndexOf(args, "--capture"); if (index < 0 || index + 2 >= args.Length) { GetTree().Quit(1); return; } var parts = args[index + 1].Split('x'); GetWindow().Size = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1])); CallDeferred(nameof(SaveCaptureAfterLayout), args[index + 2]); }
     public async void SaveCaptureAfterLayout(string path) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); var image = GetViewport().GetTexture().GetImage(); GetTree().Quit(image.SavePng(path) == Error.Ok ? 0 : 1); }
+    private async Task LayoutFrames()
+    {
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
     private void PressKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = true }, VerificationMode.Simulation);
     private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
     private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_settings.CameraDeadzone, _settings.ActorDeadzone, _settings.CameraSensitivity, _settings.ActorSensitivity, delta, _camera.Zoom.X, _settings.InvertCameraX, _settings.InvertCameraY, modal, advanceTime);

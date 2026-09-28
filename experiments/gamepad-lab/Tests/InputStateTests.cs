@@ -84,6 +84,36 @@ internal static class InputStateTests
         var neutral = engine.Update(nearby.State, default, .1, MovementMode.NearbyGoal, policy, Open);
         Assertions.Equal(neutral.State.Outcome, MovementOutcome.Idle, "neutral stops and clears destination");
         Assertions.True(neutral.State.Goal is null && neutral.State.BlockedIntent is null, "neutral clears both destination and retry latch");
+
+        // Actor sensitivity is effort, not a reducer-only diagnostic: both movement
+        // modes must preserve it through the engine's actual displacement.
+        foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
+        {
+            var low = engine.Update(new MovementState(default, new(1, 0)), new(.5, 0), .1, mode, policy, Open);
+            var high = engine.Update(new MovementState(default, new(1, 0)), new(2, 0), .1, mode, policy, Open);
+            Assertions.Near(low.State.Position.X, 5, .001, $"{mode} retains 0.5 actor effort through displacement");
+            Assertions.Near(high.State.Position.X, 20, .001, $"{mode} retains 2.0 actor effort through displacement");
+            Assertions.Near(high.State.Position.X / low.State.Position.X, 4, .001, $"{mode} actor sensitivity has a 4:1 displacement ratio");
+
+            var one = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .1, mode, policy, Open);
+            var split = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .04, mode, policy, Open);
+            split = engine.Update(split.State, new(1, 0), .06, mode, policy, Open);
+            Assertions.Near(split.State.Position.X, one.State.Position.X, .001, $"{mode} open movement is frame-delta consistent");
+        }
+
+        // The endpoint after 30 px is legal, but the 10–20 px strip is not. An
+        // endpoint-only callback would tunnel through it; the bounded sweep must stop
+        // at the last safe sampled position and latch held intent.
+        bool ThinWall(Vec2 point, double radius) => point.X < 10 || point.X > 20;
+        var tunnelPolicy = policy with { MaximumCollisionSamples = 16, MaxCollisionSampleDistance = 4 };
+        foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
+        {
+            var swept = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .3, mode, tunnelPolicy, ThinWall);
+            Assertions.Equal(swept.State.Outcome, MovementOutcome.Blocked, $"{mode} sweep detects a thin obstacle before a legal endpoint");
+            Assertions.True(swept.State.Position.X < 10 && swept.State.Position.X >= 0, $"{mode} sweep retains last safe position");
+            var heldSweep = engine.Update(swept.State, new(1, 0), .3, mode, tunnelPolicy, ThinWall);
+            Assertions.True(!heldSweep.AttemptedMotion && heldSweep.State.Position == swept.State.Position, $"{mode} held blocked sweep remains bounded");
+        }
     }
 
     private static InputStateReducer Armed(int device)

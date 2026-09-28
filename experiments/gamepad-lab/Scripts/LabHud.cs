@@ -80,12 +80,13 @@ public partial class LabHud : Control
     {
         foreach (var child in _modalRows.GetChildren()) child.QueueFree();
         _choiceRows.Clear();
-        var title = TextLabel(ModalKind == ModalKind.Context ? "CONTEXTUAL ACTIONS\n[A/Enter] choose  [B/Esc] cancel" : "SETTINGS\nKeyboard/D-pad/stick: navigate; A confirms\nMouse: choose a row then click", 16);
+        var compactSettings = ModalKind == ModalKind.Settings;
+        var title = TextLabel(ModalKind == ModalKind.Context ? "CONTEXTUAL ACTIONS\n[A/Enter] choose  [B/Esc] cancel" : "SETTINGS\nKeyboard/D-pad/stick: navigate; A confirms\nMouse: choose a row then click", compactSettings ? 14 : 16);
         title.AutowrapMode = TextServer.AutowrapMode.WordSmart; _modalRows.AddChild(title);
         for (var index = 0; index < _options.Length; index++)
         {
-            var row = TextLabel($"{(index == _selected ? ">" : " ")} {_options[index]}", 18);
-            row.CustomMinimumSize = new Vector2(0, 24); _modalRows.AddChild(row); _choiceRows.Add(row);
+            var row = TextLabel($"{(index == _selected ? ">" : " ")} {_options[index]}", compactSettings ? 15 : 18);
+            row.CustomMinimumSize = new Vector2(0, compactSettings ? 20 : 24); _modalRows.AddChild(row); _choiceRows.Add(row);
         }
         _modal.Visible = true;
     }
