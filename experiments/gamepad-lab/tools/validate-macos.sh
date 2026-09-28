@@ -37,9 +37,12 @@ executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$build_root
 app="$build_root/GamepadLab.app/Contents/MacOS/$executable"
 test -x "$app"
 run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/exported-smoke.json"
+run_log persistence-write.log "$app" --headless -- --persistence write "$build_root/evidence/persistence-write.json"
+run_log persistence-verify-nondefault.log "$app" --headless -- --persistence verify-nondefault "$build_root/evidence/persistence-verify-nondefault.json"
+run_log persistence-verify-default.log "$app" --headless -- --persistence verify-default "$build_root/evidence/persistence-verify-default.json"
 # This intentionally does not use --headless: the exported macOS application
 # performs its bounded capture/layout path, writes a PNG, and quits itself.
-run_log ordinary-launch.log "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
+run_log ordinary-launch.log /usr/bin/python3 "$lab_root/tools/run_with_timeout.py" 30 "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
 test -s "$build_root/evidence/ordinary-launch.png"
 if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/ordinary-launch.log"; then printf '%s\n' 'Ordinary exported-app launch logged an engine error.' >&2; exit 1; fi
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"

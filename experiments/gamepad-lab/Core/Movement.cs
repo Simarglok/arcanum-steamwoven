@@ -47,15 +47,16 @@ public sealed class MovementEngine
                 goal = candidate; age = 0; replans++;
             }
             else if (goal is null) { goal = candidate; age = 0; replans++; }
-            inputDirection = (goal.Value - previous.Position).Normalized();
+            // The nearby point is a bounded semantic/debug marker, not a waypoint
+            // that caps a long render frame.  Desired-direction effort remains the
+            // source of velocity; otherwise a .5s frame would travel only one 96px
+            // lookahead while equivalent split frames could travel farther.
         }
 
         // Effort is intentionally retained from the reducer through displacement:
         // settings constrain it to 0.5–2.0, while direction only determines heading
         // and the semantic nearby goal.  Do not normalize this value downstream.
         var distance = policy.Speed * effort * delta;
-        var remainingBeforeMove = goal is null ? double.PositiveInfinity : Vec2.Distance(previous.Position, goal.Value);
-        distance = Math.Min(distance, remainingBeforeMove);
         var samples = (int)Math.Ceiling(distance / policy.MaxCollisionSampleDistance);
         if (samples > policy.MaximumCollisionSamples)
             return new(previous with { Goal = null, GoalAgeSeconds = 0, ReplanCount = replans, Outcome = MovementOutcome.Blocked, BlockedIntent = inputDirection }, false, "movement exceeds bounded synthetic collision sweep; intent latched");
@@ -68,8 +69,10 @@ public sealed class MovementEngine
             return new(previous with { Position = lastSafe, Heading = inputDirection, Goal = null, GoalAgeSeconds = 0, ReplanCount = replans, Outcome = MovementOutcome.Blocked, BlockedIntent = inputDirection }, true, "blocked by synthetic obstacle sweep; destination cancelled and intent latched");
         }
 
-        var remaining = goal is null ? double.PositiveInfinity : Vec2.Distance(lastSafe, goal.Value);
-        var outcome = remaining <= policy.StopDistance ? MovementOutcome.Arrived : MovementOutcome.Moving;
-        return new(previous with { Position = lastSafe, Heading = inputDirection, Goal = outcome == MovementOutcome.Arrived ? null : goal, GoalAgeSeconds = age, ReplanCount = replans, Outcome = outcome, BlockedIntent = null }, true, mode == MovementMode.DirectIntent ? "direct desired-direction intent" : "actor-relative nearby semantic goal");
+        // Keep the visible Nearby Goal bounded relative to the actor after every
+        // successful displacement.  It is not a path waypoint, so reaching/passing
+        // it during a long frame does not discard remaining requested travel.
+        Vec2? visibleGoal = mode == MovementMode.NearbyGoal ? lastSafe + inputDirection * policy.Lookahead : null;
+        return new(previous with { Position = lastSafe, Heading = inputDirection, Goal = visibleGoal, GoalAgeSeconds = age, ReplanCount = replans, Outcome = MovementOutcome.Moving, BlockedIntent = null }, true, mode == MovementMode.DirectIntent ? "direct desired-direction intent" : "actor-relative nearby semantic goal");
     }
 }

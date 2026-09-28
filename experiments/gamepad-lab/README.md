@@ -34,13 +34,13 @@ Use only the canonical SDK 8.0.425 and Godot 4.7.2 mono:
     "$DOTNET_ROOT/dotnet" build GamepadLab.csproj -c Debug --no-restore
     /Applications/Godot_mono.app/Contents/MacOS/Godot --headless --path . -- --self-test
 
-The Core harness covers defaults/reset/serialization/corruption fallback; all four inversion combinations; per-domain deadzones, diagonal normalization, delta and zoom behavior; concurrent stick separation; active device, focus/disconnect/modal safety; actor-relative goal cadence; linear 0.5/2.0 effort, stop/blocked states, and a swept thin-obstacle fixture. The Godot self-test is explicitly `SIMULATION`; it drives the actual adapter/scene and checks responsive reticle/projection, controller arbitration/provenance, modal repeats, actor displacement independently from camera displacement, concurrent sticks, settings reload, modal/focus/disconnect clearing, sensitivity ratios, and wall/corner/narrow-passage motion.
+The Core harness covers defaults/reset/serialization/corruption fallback; all four inversion combinations; per-domain deadzones, diagonal normalization, delta and zoom behavior; concurrent stick separation; active device, focus/disconnect/modal safety; actor-relative marker cadence; linear 0.5/2.0 effort, default-policy long-vs-split Nearby Goal displacement, stop/blocked states, and a swept thin-obstacle fixture. The Godot self-test is explicitly `SIMULATION`; it drives the actual adapter/scene and checks responsive reticle/projection, controller arbitration/rendered provenance diagnostics, modal repeats, actor displacement independently from camera displacement, concurrent sticks, settings reload, modal/focus/disconnect clearing, long-vs-split sensitivity ratios, and wall/corner/far-side narrow-passage motion.
 
 After the candidate is clean and committed, run:
 
     experiments/gamepad-lab/tools/validate-macos.sh
 
-It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-002/<head>/GamepadLab.app`, runs exported smoke, and atomically records `manifest.json` plus `artifacts/builds/ARC-GPAD-002/current.json`. The app is local, unsigned, and unnotarized. `SIMULATION` checks do not establish physical Xbox Bluetooth behavior.
+It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-002/<head>/GamepadLab.app`, runs exported smoke plus a three-process settings write/restart/reset/restart check, and runs the ordinary capture under a 30-second deadline. It hashes/inventories the app bundle and all gate evidence in `manifest.json`, then atomically records a relative exact-head manifest pointer plus manifest SHA-256 in `artifacts/builds/ARC-GPAD-002/current.json`. The app is local, unsigned, and unnotarized. `SIMULATION` checks do not establish physical Xbox Bluetooth behavior.
 
 ## Owner checklist
 

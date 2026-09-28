@@ -18,7 +18,7 @@ public partial class LabRoot : Node2D
         LabInputAdapter.EnsureInputMap(); _world = GetNode<Node2D>("WorldRoot"); _camera = GetNode<Camera2D>("Camera2D"); _courtyard = GetNode<SyntheticCourtyard>("WorldRoot/SyntheticCourtyard"); _hud = GetNode<LabHud>("CanvasLayer/LabHud");
         _settings = _settingsStore.Load(); _input.SetStartupDevices(Input.GetConnectedJoypads()); Input.JoyConnectionChanged += OnJoyConnectionChanged;
         SyncActor(); AddLog("Lab ready: synthetic-only scene; no original data. Default camera inversion is X=true, Y=true.");
-        var args = OS.GetCmdlineUserArgs(); if (args.Contains("--self-test")) CallDeferred(nameof(RunSelfTest)); else if (args.Contains("--smoke")) CallDeferred(nameof(RunSmoke), args); else if (args.Contains("--capture")) CallDeferred(nameof(RunCapture), args);
+        var args = OS.GetCmdlineUserArgs(); if (args.Contains("--self-test")) CallDeferred(nameof(RunSelfTest)); else if (args.Contains("--smoke")) CallDeferred(nameof(RunSmoke), args); else if (args.Contains("--persistence")) CallDeferred(nameof(RunPersistence), args); else if (args.Contains("--capture")) CallDeferred(nameof(RunCapture), args);
     }
     public override void _ExitTree() => Input.JoyConnectionChanged -= OnJoyConnectionChanged;
 
@@ -224,11 +224,11 @@ public partial class LabRoot : Node2D
             // and menus consume D-pad/left-stick input without moving either world
             // domain.
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
-            VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.PromptText.Contains("[A]", StringComparison.Ordinal), "qualified controller input did not set gamepad provenance/prompt");
-            PressKey(Key.D); ReleaseKey(Key.D); _Process(0); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.PromptText.Contains("WASD", StringComparison.Ordinal), "fresh keyboard event did not update the actual prompt");
-            _Process(.1); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse, "held controller input oscillated keyboard provenance");
+            VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.PromptText.Contains("[A]", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Method: Gamepad", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("JoyAxis", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("accepted: True", StringComparison.Ordinal), "qualified controller input did not set rendered gamepad provenance/prompt/diagnostics");
+            PressKey(Key.D); ReleaseKey(Key.D); _Process(0); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.PromptText.Contains("WASD", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Method: KeyboardMouse", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("Key D released", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("accepted: True", StringComparison.Ordinal), "fresh keyboard event did not update rendered keyboard provenance/prompt/diagnostics");
+            _Process(.1); VerificationMode.Require(_input.Method == InputMethod.KeyboardMouse && _hud.DiagnosticsText.Contains("Method: KeyboardMouse", StringComparison.Ordinal), "held controller input oscillated rendered keyboard provenance");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
-            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_input.Method == InputMethod.Gamepad, "released/requalified controller input did not restore gamepad provenance");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_input.Method == InputMethod.Gamepad && _hud.DiagnosticsText.Contains("Method: Gamepad", StringComparison.Ordinal) && _hud.DiagnosticsText.Contains("accepted: True", StringComparison.Ordinal), "released/requalified controller input did not restore rendered gamepad provenance");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
 
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
@@ -271,6 +271,24 @@ public partial class LabRoot : Node2D
                 VerificationMode.Require(Math.Abs(keyboardHigh / keyboardLow - 4) < .001, $"{mode} keyboard sensitivity did not change scene displacement linearly");
             }
 
+            // Exercise the default policy through the actual adapter/scene with a
+            // deliberately long .5s frame and its five .1s equivalent. The Nearby
+            // marker must not cap this movement or erase the 0.5/2.0 ratio.
+            double NearbyDistance(double sensitivity, IReadOnlyList<double> deltas)
+            {
+                _settings = saved with { MovementMode = MovementMode.NearbyGoal, ActorSensitivity = sensitivity };
+                _actor = new MovementState(new Vec2(300, 680), new Vec2(1, 0)); SyncActor(); var start = _actor.Position;
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation);
+                foreach (var frameDelta in deltas) _Process(frameDelta);
+                var distance = _actor.Position.X - start.X;
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+                return distance;
+            }
+            var nearbyLowLarge = NearbyDistance(.5, new[] { .5 }); var nearbyLowSplit = NearbyDistance(.5, new[] { .1, .1, .1, .1, .1 });
+            var nearbyHighLarge = NearbyDistance(2, new[] { .5 }); var nearbyHighSplit = NearbyDistance(2, new[] { .1, .1, .1, .1, .1 });
+            VerificationMode.Require(Math.Abs(nearbyLowLarge - nearbyLowSplit) < .001 && Math.Abs(nearbyHighLarge - nearbyHighSplit) < .001, "default Nearby Goal scene movement changed with frame partition");
+            VerificationMode.Require(Math.Abs(nearbyHighLarge / nearbyLowLarge - 4) < .001, "default Nearby Goal scene effort ratio was not 4:1 through a long frame");
+
             // Drive the visible actor through the replaceable courtyard callback: each
             // mode must stop at wall/corner sweeps and pass the centered narrow gap.
             foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
@@ -286,9 +304,9 @@ public partial class LabRoot : Node2D
                 VerificationMode.Require(_actor.Outcome == MovementOutcome.Blocked && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor did not stop safely at the corner sweep");
                 Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
 
-                _actor = new MovementState(new Vec2(950, 480), new Vec2(0, 1)); SyncActor(); var passageStart = _actor.Position;
-                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }, VerificationMode.Simulation); _Process(.5);
-                VerificationMode.Require(_actor.Position.Y > passageStart.Y && _actor.Outcome != MovementOutcome.Blocked && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor failed centered narrow-passage traversal");
+                _actor = new MovementState(new Vec2(950, 480), new Vec2(0, 1)); SyncActor();
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }, VerificationMode.Simulation); for (var frame = 0; frame < 8; frame++) _Process(.1);
+                VerificationMode.Require(_actor.Position.Y > 656 && _actor.Outcome != MovementOutcome.Blocked && _courtyard.CanOccupy(ToGodot(_actor.Position), (float)_movementPolicy.ActorRadius), $"{mode} actor failed to traverse centered narrow passage to its far side");
                 Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
             }
             _settings = _settings with { MovementMode = MovementMode.NearbyGoal };
@@ -334,6 +352,41 @@ public partial class LabRoot : Node2D
             VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to Reset defaults"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
             VerificationMode.Require(confirmed && inspected && _settings == LabSettings.Default && _settingsStore.Load() == LabSettings.Default, "smoke did not prove confirm, inspect, settings change, and reset persistence");
             System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, movementMode = _settings.MovementMode.ToString(), exercises = new[] { "scene", "actor-displacement", "camera-displacement", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
+        }
+        catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
+    }
+    /// <summary>
+    /// Export-validation helper: each invocation is a new process, so this proves
+    /// user:// persistence across restart without relying on the in-process smoke.
+    /// It leaves the lab at the safe inverted defaults on every verification path.
+    /// </summary>
+    public void RunPersistence(string[] args)
+    {
+        var index = Array.IndexOf(args, "--persistence");
+        if (index < 0 || index + 2 >= args.Length) { GetTree().Quit(1); return; }
+        var operation = args[index + 1]; var report = args[index + 2];
+        try
+        {
+            var persisted = LabSettings.Default with { InvertCameraX = false, InvertCameraY = true, ActorSensitivity = 1.5, MovementMode = MovementMode.NearbyGoal };
+            if (operation == "write")
+            {
+                _settingsStore.Save(persisted);
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, settings = persisted, provenance = VerificationMode.Simulation }));
+            }
+            else if (operation == "verify-nondefault")
+            {
+                VerificationMode.Require(_settingsStore.Load() == persisted, "fresh exported process did not load the non-default user-local settings");
+                _settingsStore.Save(LabSettings.Default);
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, loaded = persisted, resetTo = LabSettings.Default, provenance = VerificationMode.Simulation }));
+            }
+            else if (operation == "verify-default")
+            {
+                VerificationMode.Require(_settingsStore.Load() == LabSettings.Default, "fresh exported process did not load reset inverted defaults");
+                _settingsStore.Save(LabSettings.Default);
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, loaded = LabSettings.Default, provenance = VerificationMode.Simulation }));
+            }
+            else { GetTree().Quit(1); return; }
+            GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }

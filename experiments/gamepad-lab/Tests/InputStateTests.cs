@@ -72,7 +72,7 @@ internal static class InputStateTests
         var direct = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .1, MovementMode.DirectIntent, policy, Open);
         Assertions.Near(direct.State.Position.X, 10, .001, "direct intent advances at explicit prototype speed");
         var nearby = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .1, MovementMode.NearbyGoal, policy, Open);
-        Assertions.True(nearby.State.Goal is not null && nearby.State.Goal!.Value.X == 40 && nearby.State.ReplanCount == 1, "nearby goal is actor-relative and bounded");
+        Assertions.True(nearby.State.Goal is not null && nearby.State.Goal!.Value.X == 50 && nearby.State.ReplanCount == 1, "nearby goal is actor-relative and bounded after displacement");
         var unchangedGoal = engine.Update(nearby.State, new(1, 0), .05, MovementMode.NearbyGoal, policy, Open);
         Assertions.Equal(unchangedGoal.State.ReplanCount, 1, "goal cadence suppresses same-target replan");
         var blocked = engine.Update(new MovementState(new(15, 0), new(1, 0)), new(1, 0), .1, MovementMode.NearbyGoal, policy, Wall);
@@ -99,6 +99,21 @@ internal static class InputStateTests
             var split = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .04, mode, policy, Open);
             split = engine.Update(split.State, new(1, 0), .06, mode, policy, Open);
             Assertions.Near(split.State.Position.X, one.State.Position.X, .001, $"{mode} open movement is frame-delta consistent");
+        }
+
+        // Default 240 px/s / 96 px lookahead policy must retain movement distance
+        // through long frames. This specifically guards Nearby Goal from treating
+        // its marker as a movement cap and hiding a 0.5/2.0 effort ratio.
+        var defaultPolicy = new MovementPolicy();
+        foreach (var effort in new[] { .5, 2d })
+        {
+            var oneLarge = engine.Update(new MovementState(default, new(1, 0)), new(effort, 0), .5, MovementMode.NearbyGoal, defaultPolicy, Open);
+            var splitLarge = new MovementState(default, new(1, 0));
+            for (var frameIndex = 0; frameIndex < 5; frameIndex++)
+                splitLarge = engine.Update(splitLarge, new(effort, 0), .1, MovementMode.NearbyGoal, defaultPolicy, Open).State;
+            Assertions.Near(oneLarge.State.Position.X, splitLarge.Position.X, .001, $"default Nearby Goal effort {effort:F1} is frame-partition independent");
+            Assertions.Near(oneLarge.State.Position.X, defaultPolicy.Speed * effort * .5, .001, $"default Nearby Goal effort {effort:F1} retains requested displacement");
+            Assertions.True(oneLarge.State.Goal is Vec2 goal && Vec2.Distance(goal, oneLarge.State.Position) == defaultPolicy.Lookahead, $"default Nearby Goal marker remains actor-relative at effort {effort:F1}");
         }
 
         // The endpoint after 30 px is legal, but the 10–20 px strip is not. An
