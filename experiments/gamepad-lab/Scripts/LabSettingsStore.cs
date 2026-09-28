@@ -6,7 +6,15 @@ namespace GamepadLab;
 /// <summary>Only the synthetic lab's user:// storage is touched; no global or game settings are read.</summary>
 public sealed class LabSettingsStore
 {
-    private const string Path = "user://gamepad_lab_settings_v1.json";
+    private const string DefaultPath = "user://gamepad_lab_settings_v1.json";
+    private const string TestPathVariable = "GAMEPAD_LAB_SETTINGS_TEST_PATH";
+    private static string Path => string.IsNullOrWhiteSpace(OS.GetEnvironment(TestPathVariable)) ? DefaultPath : OS.GetEnvironment(TestPathVariable);
+
+    /// <summary>
+    /// Export validation can opt into a per-run lab file. Normal launches always use
+    /// the versioned user:// preference and never inherit validation test state.
+    /// </summary>
+    public bool UsesIsolatedTestStorage => !string.IsNullOrWhiteSpace(OS.GetEnvironment(TestPathVariable));
     public LabSettings Load()
     {
         if (!Godot.FileAccess.FileExists(Path)) return LabSettings.Default;

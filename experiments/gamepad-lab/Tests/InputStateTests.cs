@@ -72,9 +72,9 @@ internal static class InputStateTests
         var direct = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .1, MovementMode.DirectIntent, policy, Open);
         Assertions.Near(direct.State.Position.X, 10, .001, "direct intent advances at explicit prototype speed");
         var nearby = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .1, MovementMode.NearbyGoal, policy, Open);
-        Assertions.True(nearby.State.Goal is not null && nearby.State.Goal!.Value.X == 50 && nearby.State.ReplanCount == 1, "nearby goal is actor-relative and bounded after displacement");
+        Assertions.True(nearby.State.Goal is not null && nearby.State.Goal!.Value.X == 40 && nearby.State.ReplanCount == 1, "nearby goal is an actor-relative stored destination rather than a live direction marker");
         var unchangedGoal = engine.Update(nearby.State, new(1, 0), .05, MovementMode.NearbyGoal, policy, Open);
-        Assertions.Equal(unchangedGoal.State.ReplanCount, 1, "goal cadence suppresses same-target replan");
+        Assertions.Equal(unchangedGoal.State.ReplanCount, 2, "goal refreshes once when its cadence and actor-relative hysteresis gates both open");
         var blocked = engine.Update(new MovementState(new(15, 0), new(1, 0)), new(1, 0), .1, MovementMode.NearbyGoal, policy, Wall);
         Assertions.Equal(blocked.State.Outcome, MovementOutcome.Blocked, "wall produces bounded blocked state"); Assertions.True(blocked.State.Goal is null, "blocked goal is cancelled rather than endlessly replanned");
         var heldBlocked = engine.Update(blocked.State, new(1, 0), .1, MovementMode.NearbyGoal, policy, Wall);
@@ -84,6 +84,21 @@ internal static class InputStateTests
         var neutral = engine.Update(nearby.State, default, .1, MovementMode.NearbyGoal, policy, Open);
         Assertions.Equal(neutral.State.Outcome, MovementOutcome.Idle, "neutral stops and clears destination");
         Assertions.True(neutral.State.Goal is null && neutral.State.BlockedIntent is null, "neutral clears both destination and retry latch");
+
+        // Nearby Goal deliberately differs from Direct Intent: direction changes do
+        // not replace a stored destination before cadence/hysteresis permit it, then
+        // the actor steers toward the replacement destination. A nearby stop is an
+        // observable Arrived state rather than an unreachable enum member.
+        var semanticPolicy = policy with { GoalCadenceSeconds = .15, GoalHysteresis = 12, StopDistance = 3 };
+        var nearbyRight = engine.Update(new MovementState(default, new(1, 0)), new(1, 0), .05, MovementMode.NearbyGoal, semanticPolicy, Open);
+        var nearbyTurnBeforeCadence = engine.Update(nearbyRight.State, new(0, 1), .05, MovementMode.NearbyGoal, semanticPolicy, Open);
+        Assertions.True(nearbyTurnBeforeCadence.State.Heading.X > .99 && nearbyTurnBeforeCadence.State.Position.X > nearbyRight.State.Position.X, "Nearby Goal keeps steering toward its stored target before cadence");
+        var directTurn = engine.Update(nearbyRight.State with { Goal = null, GoalAgeSeconds = 0 }, new(0, 1), .05, MovementMode.DirectIntent, semanticPolicy, Open);
+        Assertions.True(directTurn.State.Heading.Y > .99 && directTurn.State.Position.Y > nearbyRight.State.Position.Y, "Direct Intent changes direction immediately");
+        var nearbyTurnAfterCadence = engine.Update(nearbyTurnBeforeCadence.State, new(0, 1), .1, MovementMode.NearbyGoal, semanticPolicy, Open);
+        Assertions.True(nearbyTurnAfterCadence.State.Heading.Y > .99 && nearbyTurnAfterCadence.State.ReplanCount > nearbyTurnBeforeCadence.State.ReplanCount, "Nearby Goal replaces its destination only after cadence/hysteresis permit it");
+        var arrived = engine.Update(new MovementState(default, new(1, 0), new(2, 0), 0), new(0, 1), .1, MovementMode.NearbyGoal, semanticPolicy, Open);
+        Assertions.Equal(arrived.State.Outcome, MovementOutcome.Arrived, "Nearby Goal reports an explicit arrival within stop distance");
 
         // Actor sensitivity is effort, not a reducer-only diagnostic: both movement
         // modes must preserve it through the engine's actual displacement.
@@ -113,7 +128,7 @@ internal static class InputStateTests
                 splitLarge = engine.Update(splitLarge, new(effort, 0), .1, MovementMode.NearbyGoal, defaultPolicy, Open).State;
             Assertions.Near(oneLarge.State.Position.X, splitLarge.Position.X, .001, $"default Nearby Goal effort {effort:F1} is frame-partition independent");
             Assertions.Near(oneLarge.State.Position.X, defaultPolicy.Speed * effort * .5, .001, $"default Nearby Goal effort {effort:F1} retains requested displacement");
-            Assertions.True(oneLarge.State.Goal is Vec2 goal && Vec2.Distance(goal, oneLarge.State.Position) == defaultPolicy.Lookahead, $"default Nearby Goal marker remains actor-relative at effort {effort:F1}");
+            Assertions.True(oneLarge.State.Goal is Vec2 goal && Vec2.Distance(goal, oneLarge.State.Position) > defaultPolicy.StopDistance && Vec2.Distance(goal, oneLarge.State.Position) <= defaultPolicy.Lookahead, $"default Nearby Goal retains a bounded stored destination at effort {effort:F1}");
         }
 
         // The endpoint after 30 px is legal, but the 10–20 px strip is not. An

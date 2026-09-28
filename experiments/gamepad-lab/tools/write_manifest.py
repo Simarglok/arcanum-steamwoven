@@ -51,6 +51,8 @@ def validate_report(path: Path) -> None:
         raise SystemExit(f"invalid persistence/smoke report {path.name}: {error}") from error
     if payload.get("status") != "passed":
         raise SystemExit(f"report did not pass: {path.name}")
+    if payload.get("isolatedTestStorage") is not True:
+        raise SystemExit(f"report did not use isolated test storage: {path.name}")
 
 
 def write_json(path: Path, payload: object) -> None:

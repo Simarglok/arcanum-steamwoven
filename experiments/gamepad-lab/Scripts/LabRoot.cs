@@ -289,6 +289,25 @@ public partial class LabRoot : Node2D
             VerificationMode.Require(Math.Abs(nearbyLowLarge - nearbyLowSplit) < .001 && Math.Abs(nearbyHighLarge - nearbyHighSplit) < .001, "default Nearby Goal scene movement changed with frame partition");
             VerificationMode.Require(Math.Abs(nearbyHighLarge / nearbyLowLarge - 4) < .001, "default Nearby Goal scene effort ratio was not 4:1 through a long frame");
 
+            // This is deliberately adapter/scene-level rather than a second Core
+            // calculation: Direct immediately applies a changed left-stick direction,
+            // while Nearby Goal continues toward its stored marker until its explicit
+            // cadence/hysteresis gate permits a fresh actor-relative destination.
+            _settings = saved with { MovementMode = MovementMode.DirectIntent, ActorSensitivity = 1 };
+            _actor = new MovementState(new Vec2(300, 680), new Vec2(1, 0)); SyncActor(); var directTurnStart = _actor.Position;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); _Process(.05);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }, VerificationMode.Simulation); _Process(.05);
+            VerificationMode.Require(_actor.Position.Y > directTurnStart.Y && _actor.Heading.Y > .99, "Direct Intent scene adapter did not apply changed direction immediately");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
+            _settings = saved with { MovementMode = MovementMode.NearbyGoal, ActorSensitivity = 1 };
+            _actor = new MovementState(new Vec2(300, 680), new Vec2(1, 0)); SyncActor(); var nearbyTurnStart = _actor.Position;
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); _Process(.05);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }, VerificationMode.Simulation); _Process(.05);
+            VerificationMode.Require(_actor.Position.X > nearbyTurnStart.X && _actor.Position.Y == nearbyTurnStart.Y && _actor.Goal is not null, "Nearby Goal scene adapter did not retain its stored destination before cadence");
+            _Process(.1); VerificationMode.Require(_actor.Position.Y > nearbyTurnStart.Y && _actor.Heading.Y > .99, "Nearby Goal scene adapter did not refresh its destination after cadence/hysteresis");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+
             // Drive the visible actor through the replaceable courtyard callback: each
             // mode must stop at wall/corner sweeps and pass the centered narrow gap.
             foreach (var mode in new[] { MovementMode.DirectIntent, MovementMode.NearbyGoal })
@@ -351,7 +370,7 @@ public partial class LabRoot : Node2D
             for (var step = 0; step < 11; step++) { PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); }
             VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to Reset defaults"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
             VerificationMode.Require(confirmed && inspected && _settings == LabSettings.Default && _settingsStore.Load() == LabSettings.Default, "smoke did not prove confirm, inspect, settings change, and reset persistence");
-            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, movementMode = _settings.MovementMode.ToString(), exercises = new[] { "scene", "actor-displacement", "camera-displacement", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
+            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, isolatedTestStorage = _settingsStore.UsesIsolatedTestStorage, movementMode = _settings.MovementMode.ToString(), exercises = new[] { "scene", "actor-displacement", "camera-displacement", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
@@ -371,19 +390,19 @@ public partial class LabRoot : Node2D
             if (operation == "write")
             {
                 _settingsStore.Save(persisted);
-                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, settings = persisted, provenance = VerificationMode.Simulation }));
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, isolatedTestStorage = _settingsStore.UsesIsolatedTestStorage, settings = persisted, provenance = VerificationMode.Simulation }));
             }
             else if (operation == "verify-nondefault")
             {
                 VerificationMode.Require(_settingsStore.Load() == persisted, "fresh exported process did not load the non-default user-local settings");
                 _settingsStore.Save(LabSettings.Default);
-                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, loaded = persisted, resetTo = LabSettings.Default, provenance = VerificationMode.Simulation }));
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, isolatedTestStorage = _settingsStore.UsesIsolatedTestStorage, loaded = persisted, resetTo = LabSettings.Default, provenance = VerificationMode.Simulation }));
             }
             else if (operation == "verify-default")
             {
                 VerificationMode.Require(_settingsStore.Load() == LabSettings.Default, "fresh exported process did not load reset inverted defaults");
                 _settingsStore.Save(LabSettings.Default);
-                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, loaded = LabSettings.Default, provenance = VerificationMode.Simulation }));
+                System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { status = "passed", operation, isolatedTestStorage = _settingsStore.UsesIsolatedTestStorage, loaded = LabSettings.Default, provenance = VerificationMode.Simulation }));
             }
             else { GetTree().Quit(1); return; }
             GetTree().Quit(0);

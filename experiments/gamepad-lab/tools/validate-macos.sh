@@ -19,6 +19,13 @@ export PATH="$DOTNET_ROOT:/usr/bin:/bin:/usr/sbin:/sbin"
 export __GODOT_SHELL_ENV_SET=1
 if test ! -x "$DOTNET" || test ! -x "$GODOT"; then printf '%s\n' 'Canonical SDK 8.0.425 or Godot 4.7.2 mono is unavailable.' >&2; exit 2; fi
 mkdir -p "$build_root/evidence"
+settings_test_path="$build_root/evidence/isolated-settings.json"
+rm -f "$settings_test_path"
+# Source self-test, exported smoke, and restart probes use this exact ignored lab
+# file. The trap removes it on both success and failure, so validation neither
+# reads nor replaces a local user's normal user:// preference.
+trap 'rm -f "$settings_test_path"' EXIT HUP INT TERM
+export GAMEPAD_LAB_SETTINGS_TEST_PATH="$settings_test_path"
 run_log() { name=$1; shift; "$@" >"$build_root/evidence/$name" 2>&1; }
 
 run_log sdk-info.log "$DOTNET" --info
