@@ -22,6 +22,10 @@ internal static class Program
     // zero-based because OBJ_F_CURRENT_AID (enum value 1) occupies slot 0.
     private const int CurrentArtField = 0;
     private const int LocationField = 1;
+    // These are direct instance values only. Their prototype-default behavior
+    // is deliberately not inferred by this bounded probe.
+    private const int OffsetXField = 2;
+    private const int OffsetYField = 3;
     private const int ObjectFlagsField = 18;
     private const int SpellFlagsField = 19;
     private const long ExpectedModuleBytes = 355_938_305;
@@ -131,7 +135,14 @@ internal static class Program
             var location = example.Object.Instance.Location!.Value;
             var localX = location & 0x3f;
             var localY = (location >> 32) & 0x3f;
-            Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY}");
+            var offsetX = example.Object.Instance.DirectOffsetX?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "absent";
+            var offsetY = example.Object.Instance.DirectOffsetY?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "absent";
+            DiagnosticPlacement? placement = example.Object.Instance.DirectOffsetX is int directOffsetX && example.Object.Instance.DirectOffsetY is int directOffsetY
+                ? DiagnosticPlacement.For(localX, localY, directOffsetX, directOffsetY, example.HotX, example.HotY)
+                : null;
+            var anchor = placement is null ? "absent" : $"{placement.Value.AnchorX},{placement.Value.AnchorY}";
+            var topLeft = placement is null ? "absent" : $"{placement.Value.TopLeftX},{placement.Value.TopLeftY}";
+            Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} direct_offset_x={offsetX} direct_offset_y={offsetY} diagnostic_anchor={anchor} diagnostic_top_left={topLeft} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY} frame_offset={example.ArtOffsetX},{example.ArtOffsetY}");
         }
         Console.WriteLine("integrity before_after_match=true");
     }
@@ -184,9 +195,10 @@ internal static class Program
         }
 
         var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false);
-        var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41);
+        var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41, offsetX: -7, offsetY: 13);
         var chained = ObjectWire.ParseWindow(inherited.Concat(direct).ToArray(), 2);
-        if (chained.Count != 2 || chained[0].Location is null || chained[1].DirectCurrentAid != 41) throw new InvalidOperationException("Synthetic record chaining or early-field retention failed.");
+        if (chained.Count != 2 || chained[0].Location is null || chained[1].DirectCurrentAid != 41 || chained[1].DirectOffsetX != -7 || chained[1].DirectOffsetY != 13) throw new InvalidOperationException("Synthetic record chaining or direct offset retention failed.");
+        if (DiagnosticPlacement.For(6, 1, -7, 13, 34, 39) != new DiagnosticPlacement(-207, 153, -241, 114)) throw new InvalidOperationException("Synthetic direct-offset diagnostic placement failed.");
         var prototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73));
         if (!prototype.Id.Matches(prototypeId) || prototype.Type != 3 || prototype.CurrentAid != 73) throw new InvalidOperationException("Synthetic prototype validation failed.");
         if (!ObjectWire.ResolveCurrentAids(chained, [prototype]).SequenceEqual([73, 41])) throw new InvalidOperationException("Direct and inherited AID resolution did not return concrete values.");
@@ -295,7 +307,7 @@ internal static class Program
     private static void AssertObjectArtResolution()
     {
         var currentAid = unchecked((int)0x40000000u);
-        var example = new ResolvedInstance(0, new InstanceInfo(0, ObjectId.A(7001), 3, currentAid, 0, 0), currentAid, 0, false);
+        var example = new ResolvedInstance(0, new InstanceInfo(0, ObjectId.A(7001), 3, currentAid, 0, null, null, 0), currentAid, 0, false);
         var mapping = System.Text.Encoding.ASCII.GetBytes("{0}{fixture.art}\n");
         var art = CreateSyntheticArt();
         WithSyntheticArchive(CreateSyntheticDat(
@@ -716,14 +728,23 @@ internal static class Program
         }
     }
 
-    private sealed record InstanceInfo(int SourceIndex, ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location, uint? DirectFlags)
+    private sealed record InstanceInfo(int SourceIndex, ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location, int? DirectOffsetX, int? DirectOffsetY, uint? DirectFlags)
     {
         public bool CurrentAidOverridden => DirectCurrentAid.HasValue;
     }
     private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags);
     private sealed record ResolvedInstance(int SourceIndex, InstanceInfo Instance, int CurrentAid, uint EffectiveFlags, bool CurrentAidInherited);
     private sealed record PrototypeReadResult(List<PrototypeInfo> Prototypes, string FingerprintAggregate);
-    private sealed record ObjectArtExample(ResolvedInstance Object, int ArtType, int SceneryCategory, int ArtNumber, int RotationGroup, int Frame, int Palette, int Width, int Height, int HotX, int HotY);
+    private sealed record ObjectArtExample(ResolvedInstance Object, int ArtType, int SceneryCategory, int ArtNumber, int RotationGroup, int Frame, int Palette, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY);
+    private readonly record struct DiagnosticPlacement(long AnchorX, long AnchorY, long TopLeftX, long TopLeftY)
+    {
+        public static DiagnosticPlacement For(long localX, long localY, int offsetX, int offsetY, int hotX, int hotY)
+        {
+            var anchorX = checked((40 * checked(localY - localX)) + offsetX);
+            var anchorY = checked((20 * checked(localY + localX)) + offsetY);
+            return new DiagnosticPlacement(anchorX, anchorY, checked(anchorX - hotX), checked(anchorY - hotY));
+        }
+    }
 
     private static class ObjectArt
     {
@@ -752,7 +773,7 @@ internal static class Program
                 var metadata = ArtDecoder.Inspect(resource.ReadEntry(artEntry), new ArtDecoderOptions { MaxInputBytes = MaxDecodedSectorBytes });
                 if (rotation >= metadata.Header.PhysicalGroupCount || frame >= metadata.Header.FramesPerGroup) throw new InvalidDataException("A selected scenery ART selector is outside its physical frame table.");
                 var selected = metadata.GetFrame(rotation, frame);
-                resolved.Add(new ObjectArtExample(example, artType, category, artNumber, rotation, frame, palette, selected.Width, selected.Height, selected.HotX, selected.HotY));
+                resolved.Add(new ObjectArtExample(example, artType, category, artNumber, rotation, frame, palette, selected.Width, selected.Height, selected.HotX, selected.HotY, selected.OffsetX, selected.OffsetY));
             }
             return resolved;
         }
@@ -1001,16 +1022,20 @@ internal static class Program
             if (numFields != popcount || numFields > 94) throw new InvalidDataException("Instance field count does not match its valid override mask.");
             int? currentAid = null;
             long? location = null;
+            int? offsetX = null;
+            int? offsetY = null;
             uint? flags = null;
             for (var field = 0; field < fields.Count; field++)
             {
                 if (!set[field]) continue;
                 if (field == CurrentArtField) currentAid = cursor.I32();
                 else if (field == LocationField) location = cursor.Presence() ? cursor.I64() : null;
+                else if (field == OffsetXField) offsetX = cursor.I32();
+                else if (field == OffsetYField) offsetY = cursor.I32();
                 else if (field == ObjectFlagsField) flags = cursor.U32();
                 else Skip(ref cursor, fields[field], requireNul: true);
             }
-            return new InstanceInfo(-1, prototype, type, currentAid, location, flags);
+            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags);
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)
@@ -1139,14 +1164,14 @@ internal static class Program
             return values.ToArray();
         }
 
-        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0, uint flags = 0, uint spellFlags = 0, bool flagsOverridden = true)
+        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0, int offsetX = 0, int offsetY = 0, uint flags = 0, uint spellFlags = 0, bool flagsOverridden = true)
         {
             var fields = FieldsFor(type); var masks = new uint[MaskWords(type)];
             for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == CurrentArtField && currentAidOverridden)) SetBit(type, masks, index);
             if (!currentAidOverridden) ClearBit(type, masks, CurrentArtField);
             if (!flagsOverridden) ClearBit(type, masks, ObjectFlagsField);
             var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, prototype); AddObjectId(list, ObjectId.A(17)); AddI32(list, type); AddI16(list, checked((short)masks.Sum(mask => BitOperations.PopCount(mask)))); foreach (var mask in masks) AddU32(list, mask);
-            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == LocationField, index == CurrentArtField ? currentAid : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0);
+            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == LocationField, index == CurrentArtField ? currentAid : index == OffsetXField ? offsetX : index == OffsetYField ? offsetY : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0);
             return list.ToArray();
         }
 
