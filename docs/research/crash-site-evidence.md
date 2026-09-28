@@ -41,7 +41,8 @@ dotnet run \
 
 dotnet run \
   --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj \
-  --no-build -- --module <explicit-module-path>
+  --no-build -- --module <explicit-module-path> \
+  --prototype-root <explicit-prototype-directory> --resource <explicit-resource-path>
 
 dotnet restore tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --locked-mode
 dotnet build tools/research/Arcanum.TerrainProbe/Arcanum.TerrainProbe.csproj --no-restore
@@ -58,8 +59,8 @@ and must not be committed or reported.
 
 | Check | Result |
 | --- | --- |
-| Crash Site probe synthetic suite | PASS: framing branches, checked count/length bounds, roof and placeholder discriminators, and the bounded v119 delimiter are exercised without retaining real payloads. |
-| Read-only selected-sector framing run | PASS: size/SHA-256 matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 records reached the terminal count. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
+| Crash Site probe synthetic suite | PASS: framing branches, checked count/length bounds, roof and placeholder discriminators, and the bounded v119 delimiter are exercised without retaining real payloads; direct and inherited object-flag cases independently write distinct sentinels to literal raw serialized slots 18 and 19 before parsing. |
+| Read-only selected-sector object run | PASS: module and explicit resource SHA-256 values matched before and after; ordinal 463 decoded to 47,291 bytes; all contiguous sections led to object window `17140..47287`; 317 v119 type-3 records reached the terminal count. Current ART resolved directly for 288 and through six validated prototype files for 29; object flags resolved directly for 31 and through those six files for 286. All passed the bounded static predicate using serialized common slot 18 (CE `OBJ_F_FLAGS` enum ID 19), not adjacent slot 19 spell flags. Five selected numeric source examples completed exact resource/mapping/ART metadata chains. The word at `16388` was correctly treated as roof `empty=1`, not an object version. |
 | Terrain probe synthetic suite | PASS: fail-closed MES initialization (malformed, missing, duplicate, non-zero facade start, each shifted/missing tile anchor, range/capacity cases), no name trimming, type-specific palette selection, unsupported-class/invalid-selector rejection, every resolver branch through exact raw-path archive lookup, separate corrected/historical candidate inventory through the production archive reader, projection arithmetic, and successful no-draw results for empty footprint/viewport and source/frame intersections. |
 | Read-only terrain run with explicit `arcanum2.dat` source | PASS: module `355,938,305` bytes / `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` and resource `147,991,122` bytes / `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d` matched before and after; all 3,033 tile and 1,063 facade cells resolved uniquely; zero missing/ambiguous/bad-selector/unsupported outcomes; all 4,096 selected frames inspected; seven bounded identifier-to-ART/frame/metadata/anchor chains include one normalization recovery. The explicit non-Windows/macOS CE pathname profile reported 220 corrected paths only in `arcanum2.dat`, zero historical paths in all eight archives, and zero candidates under three existing relevant loose ART roots, none of which contained a generated candidate file. |
 | Existing DAT synthetic tests | PASS: canonical SDK 8.0.425 locked run with `DAT_ROOT` set to user-owned inputs: Arcanum.Data.Tests 25/25 and Arcanum.Presentation.Tests 14/14. |
@@ -107,9 +108,11 @@ rule was inferred from these observations.
 - The bounded one-source terrain resolver covers all 4,096 records only for
   the recorded explicit source. It establishes neither a general
   resource-precedence policy nor a complete rendered sector.
-- Framing and the v119 delimiter establish no selected-version object field
-  semantics, static-scenery subset, current-ART/prototype chain, baseline, or
-  occlusion rule. The word `1` at offset `16388` is not an object version.
+- ARC-RES-007 establishes the selected-v119 record envelope, type-3/static
+  subset, current-ART/prototype chain, and five ART-metadata examples only.
+  Baseline, placement, occlusion, ordering, resource precedence, and scene
+  parity remain unmeasured. The word `1` at offset `16388` is not an object
+  version.
 - R2 source tracing establishes diagnostic tile/editor-facade destination
   footprints, source/destination crop, raw-tile flip, and a mode-qualified
   order. Lighting/palette behavior, camera/dirty-rectangle policy, normal-game
@@ -128,9 +131,9 @@ The three deliverables have separate readiness verdicts:
   integration exists, and lighting/palette treatment, camera/dirty-rectangle
   policy, normal-runtime facade intent, and measured presentation comparison
   remain open.
-- **Static scenery: NOT READY.** The framed object suffix does not establish
-  object/scenery semantics, current ART/prototype selection, baseline,
-  occlusion, or static-scene ordering.
+- **Static-object diagnostic: READY; static scenery scene: NOT READY.** The
+  framed suffix now has a bounded object/current-ART result, but baseline,
+  placement, occlusion, and static-scene ordering remain unestablished.
 
 These verdicts do not imply a general source-precedence policy or a production
 loader. The broader terrain-scene and scenery gates are stated in

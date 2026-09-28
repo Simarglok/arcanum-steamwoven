@@ -76,9 +76,11 @@ sector script, metadata/sound, and block-mask sections. The object window is
 therefore `17140..47287` (30,147 bytes), followed by the terminal count `317`.
 The bounded v119 delimiter reaches that terminal word for 317 records.
 
-This does not identify any object as static scenery or prove its current ART,
-baseline, or order. The object envelope's semantics remain a separate bounded
-research gate; no full object parser is authorized by this correction.
+This framing result alone did not identify any object as static scenery or
+prove its current ART, baseline, or order. ARC-RES-007 subsequently records a
+separate selected-v119 object/current-ART result in
+`crash-site-objects.md`; no general object parser is authorized by either
+result.
 
 The two observed terrain classes are no longer blocked at raw-ID decomposition:
 the companion investigation records their CE-attributed MES callback lookup,
@@ -98,14 +100,14 @@ precedence, or call the unresolved whole sector ready.
   integration do not exist; lighting/palette treatment, camera/dirty-rectangle
   policy, normal-runtime facade behavior, and measured presentation comparison
   remain unestablished.
-- **Static scenery: NOT READY.** No object/scenery classification, current
-  ART/prototype chain, baseline, occlusion, or static-scene ordering has been
-  established for the framed suffix.
+- **Static-object diagnostic: READY; static scenery scene: NOT READY.** The
+  separate ARC-RES-007 result establishes a selected-v119 type-3/static
+  predicate and current-ART/prototype chain for this framed suffix. Baseline,
+  placement, occlusion, and static-scene ordering remain unestablished.
 
 ## Explicitly not established
 
-- a static-scenery subset, object current-ART/prototype chain, object baseline,
-  or occlusion rule;
+- object baseline, placement, occlusion, or static-scene ordering rule;
 - a complete terrain scene or multi-source precedence policy; R2 establishes
   diagnostic tile/editor-facade footprint/crop/flip/order only, while lighting,
   camera policy, normal-game facade rendering, and scene parity remain open;

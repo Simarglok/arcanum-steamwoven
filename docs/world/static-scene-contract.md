@@ -17,9 +17,12 @@ the roof-empty discriminator, not a retail object version.
   integration has been implemented. Lighting/palette treatment,
   camera/dirty-rectangle policy, normal-runtime facade behavior, and a measured
   presentation comparison remain unestablished.
-- **Static scenery: NOT READY.** The suffix does not establish object/scenery
-  classification, current ART/prototype selection, baseline, occlusion, or
-  static-scene ordering.
+- **Static-object diagnostic: READY, static scene: NOT READY.** ARC-RES-007
+  establishes the selected v119 object census, type-3/static predicate,
+  current-ART/prototype resolution, and five bounded ART metadata examples in
+  `docs/research/crash-site-objects.md` (with the future fail-closed model in
+  `static-object-loader-contract.md`). It does not establish a baseline,
+  placement, occlusion, or static-scene ordering.
 
 This is a bounded research contract, not a production loader, renderer, Godot
 scene, or gameplay model. A future broader loader or scene must fail closed
@@ -34,7 +37,7 @@ rather than inventing fallbacks.
 | Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
 | Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence for all 4,096 selected frames |
 | Intermediate sections | roof then placeholder-controlled script, metadata/sound, and block sections | selected roof `empty=1`, placeholder `0xAA0004`; checked framing only |
-| Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; no object semantics or scenery classification |
+| Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; ARC-RES-007 separately establishes a selected type-3/static predicate and current-ART/prototype chain, not scene placement or order |
 
 No archive-overrides policy is implied. The caller must supply an explicitly
 chosen source set; this research does not select between module, PATCH, or
@@ -51,11 +54,10 @@ records. This establishes a **minimum boundary** only, not permission for a
 general object parser:
 
 1. retain the already proven framing and terminal-count consistency;
-2. identify the selected-version object field envelope before interpreting a
-   record;
-3. classify any proposed scenery record and prove its current-ART/prototype
-   chain; and
-4. keep that future result separate from a baseline or ordering claim.
+2. reuse the separately proven selected-v119 object/current-ART chain only
+   within its explicit input contract;
+3. validate every admitted reference with that chain's fail-closed rules; and
+4. keep that result separate from a baseline or ordering claim.
 
 The source paths establish why no constant byte offset is safe; the measured
 window/count establish the bounded impact on this sector. They do not prove an
@@ -133,11 +135,12 @@ Before emitting a terrain diagnostic record, a future task must validate this
 complete chain for each included record; it must retain an explicit error record
 for every failed lookup. The one-source experiment proves the marked
 tile/facade steps only for its representatives, not the policy or completeness
-of a general source set. Scenery begins at the still-unresolved object envelope:
+of a general source set. Scenery begins at the separately bounded object envelope; a scene still needs
+placement and ordering evidence:
 
 ```text
 selected sector word/object record
-  -> supported tile/facade resolver OR future validated object/prototype rule
+  -> supported tile/facade resolver OR validated object/prototype rule
   -> exact archive/loose winner under an explicit policy
   -> ART entry
   -> ArtDecoder.Inspect metadata
@@ -154,7 +157,7 @@ produces no substitute image.
 ## Ordering proposal, deliberately blocked
 
 The following should become an implementation requirement only after evidence
-for object fields and ART baselines exists:
+for ART baselines and object overlap exists:
 
 1. render terrain at the relative coordinate;
 2. order scenery using a documented baseline-derived sort key;
@@ -162,12 +165,14 @@ for object fields and ART baselines exists:
 4. define walls/roofs only if they occur in the chosen slice and their resource
    and ordering rules are separately measured.
 
-There is no accepted overlap example from the original slice because object
-boundaries/types are not yet safely available. The first decoder must retain
-the validated record sequence as a deterministic tie key, but that is only a
-reproducibility requirement—not an evidence-backed occlusion rule. Any
-ordering example before a selected, validated pair is synthetic and must not
-be reported as original scene parity.
+There is no accepted overlap/order example from the original slice: visual
+baseline/placement and an original overlap/order reference remain unproven.
+ARC-RES-007 has safely delimited and classified the 317 type-3 records and
+provided five bounded static examples, but neither result establishes their
+visual overlap. A future decoder must retain the validated record sequence as
+a deterministic tie key, but that is only a reproducibility requirement—not an
+evidence-backed occlusion rule. Any ordering example before a selected,
+validated pair is synthetic and must not be reported as original scene parity.
 
 ## Follow-on outlines (not Kanban authorization)
 

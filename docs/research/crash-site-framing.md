@@ -32,7 +32,8 @@ dotnet build --no-restore
 dotnet restore tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --locked-mode
 dotnet build tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --no-restore
 dotnet run --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --no-build -- --self-test
-dotnet run --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --no-build -- --module <explicit-module-path>
+dotnet run --project tools/research/Arcanum.CrashSiteProbe/Arcanum.CrashSiteProbe.csproj --no-build -- \
+  --module <explicit-module-path> --prototype-root <explicit-prototype-directory> --resource <explicit-resource-path>
 ```
 
 The probe opens one exact raw DAT entry through `DatArchive`, caps stored and
@@ -79,9 +80,10 @@ matches; the terminal word ends at decoded length 47,291.
 With the corrected object start, the first LE signed word is 119. The existing
 bounded delimiter consumes exactly 317 version-119 records from
 `[17140, 47287)` and reaches the terminal count; the probe retains no record
-payloads, IDs, names, or ART values. It deliberately does **not** request
-prototype/current-ART resolution in the selected real-data run, because that
-is outside this framing result.
+payloads or names and emits only selected numeric identifiers/metadata.
+Prototype/current-ART resolution is
+documented separately in `crash-site-objects.md`; it does not change this
+framing result.
 
 ## Resolution of the earlier `1 / 119` discrepancy
 
@@ -114,8 +116,9 @@ fingerprint before and after.
 Still not established:
 
 - `.dif` selection/precedence or any runtime/save-state content for this run;
-- object-to-static-scenery classification, current ART inheritance, resource
-  winner/path, ART frame/palette, baseline, or draw order;
+- resource winner/path, baseline, or draw order; selected object classification,
+  current-ART inheritance, and five bounded ART metadata chains are documented
+  separately in `crash-site-objects.md`;
 - a terrain or static-scene readiness claim.
 
 The source-derived framing is sufficient to prevent treating the suffix as an

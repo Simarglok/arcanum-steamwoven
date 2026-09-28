@@ -17,8 +17,17 @@ internal static class Program
     private const int ExpectedObjectVersion = 119;
     private const int ExpectedTileEnd = 16_388;
     private const int ExpectedTrailingInt32 = 317;
+    private const uint DynamicObjectFlag = 0x00002000;
+    // Pinned CE OBJ_F_FLAGS is enum value 19, while serialized common fields are
+    // zero-based because OBJ_F_CURRENT_AID (enum value 1) occupies slot 0.
+    private const int CurrentArtField = 0;
+    private const int LocationField = 1;
+    private const int ObjectFlagsField = 18;
+    private const int SpellFlagsField = 19;
     private const long ExpectedModuleBytes = 355_938_305;
     private const string ExpectedModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
+    private const long ExpectedResourceBytes = 147_991_122;
+    private const string ExpectedResourceSha256 = "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d";
 
     private static int Main(string[] args)
     {
@@ -27,16 +36,16 @@ internal static class Program
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
-                Console.WriteLine("self-test: PASS (bounded sector, complete object delimiter, and prototype inheritance checks)");
+                Console.WriteLine("self-test: PASS (bounded sector, complete object delimiter, prototype inheritance, and object-flag slot checks)");
                 return 0;
             }
 
-            if (args.Length != 2 || args[0] != "--module")
+            if (args.Length != 6 || args[0] != "--module" || args[2] != "--prototype-root" || args[4] != "--resource")
             {
-                throw new ArgumentException("usage: --self-test | --module PATH");
+                throw new ArgumentException("usage: --self-test | --module PATH --prototype-root PATH --resource PATH");
             }
 
-            ProbeModule(args[1]);
+            ProbeModule(args[1], args[3], args[5]);
             return 0;
         }
         catch (Exception exception)
@@ -46,12 +55,17 @@ internal static class Program
         }
     }
 
-    private static void ProbeModule(string path)
+    private static void ProbeModule(string path, string prototypeRoot, string resourcePath)
     {
         var before = InputFingerprint.Create(path);
         if (before.Bytes != ExpectedModuleBytes || before.Sha256 != ExpectedModuleSha256)
         {
             throw new InvalidDataException("Module fingerprint does not match the bounded Crash Site input.");
+        }
+        var resourceBefore = InputFingerprint.Create(resourcePath);
+        if (resourceBefore.Bytes != ExpectedResourceBytes || resourceBefore.Sha256 != ExpectedResourceSha256)
+        {
+            throw new InvalidDataException("Resource fingerprint does not match the explicit bounded ART source.");
         }
 
         using var archive = DatArchive.Open(path, BoundedOptions());
@@ -75,14 +89,28 @@ internal static class Program
             throw new InvalidDataException("The selected sector no longer matches the frozen prefix and terminal framing measurements.");
         }
         var instances = ObjectWire.ParseWindow(sectorBytes.AsSpan(framing.ObjectStart, framing.ObjectBytes), sector.TrailingInt32);
+        var sceneryInstances = instances.Where(instance => instance.Type == 3).ToArray();
+        var inheritedPrototypeIds = sceneryInstances.Where(instance => !instance.DirectCurrentAid.HasValue || !instance.DirectFlags.HasValue).Select(instance => instance.PrototypeId).ToArray();
+        var prototypeRead = ObjectWire.ReadReferencedPrototypesFromDirectory(prototypeRoot, inheritedPrototypeIds);
+        var resolved = ObjectWire.ResolveEffectiveInstances(sceneryInstances, prototypeRead.Prototypes);
+        var typeCounts = string.Join(',', instances.GroupBy(instance => instance.Type).OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
+        var staticScenery = resolved.Where(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0).ToArray();
+        using var resource = DatArchive.Open(resourcePath, BoundedOptions());
+        var artExamples = ObjectArt.ResolveExamples(resource, staticScenery.Take(5).ToArray());
 
         var after = InputFingerprint.Create(path);
         if (after != before)
         {
             throw new InvalidDataException("The module changed during this read-only probe.");
         }
+        var resourceAfter = InputFingerprint.Create(resourcePath);
+        if (resourceAfter != resourceBefore)
+        {
+            throw new InvalidDataException("The explicit ART source changed during this read-only probe.");
+        }
 
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
+        Console.WriteLine($"resource bytes={resourceBefore.Bytes} sha256={resourceBefore.Sha256}");
         Console.WriteLine($"sector ordinal={entry.Ordinal} flags=0x{entry.Flags:x8} decoded_bytes={entry.DeclaredOutputSize}");
         Console.WriteLine($"sector lights={sector.LightCount} tiles={SectorTileCount} distinct_tile_art_ids={sector.DistinctTileArtIds} invalid_tile_art_ids={sector.InvalidTileArtIds} non_tile_art_ids={sector.NonTileArtIds}");
         Console.WriteLine($"sector art_type_counts={string.Join(',', sector.ArtTypeCounts.Select(count => count.ToString()))}");
@@ -96,7 +124,15 @@ internal static class Program
         Console.WriteLine($"framing block_mask start={framing.BlockMaskStart} length={framing.BlockMaskBytes} end={framing.BlockMaskEnd}");
         Console.WriteLine($"framing objects start={framing.ObjectStart} length={framing.ObjectBytes} end={framing.ObjectEnd} count={sector.TrailingInt32} first_le_i32={framing.FirstObjectVersion}");
         Console.WriteLine($"framing trailing_i32 start={framing.TrailingInt32Start} length=4 end={framing.TrailingInt32End} value={sector.TrailingInt32}");
-        Console.WriteLine($"objects records={instances.Count} consumed_bytes={framing.ObjectBytes} cursor={framing.ObjectEnd} current_aid_resolution=not_requested");
+        Console.WriteLine($"objects records={instances.Count} consumed_bytes={framing.ObjectBytes} cursor={framing.ObjectEnd} type_counts={typeCounts}");
+        Console.WriteLine($"objects scenery_type3={sceneryInstances.Length} current_aid_resolution=validated direct={resolved.Count(instance => !instance.CurrentAidInherited)} inherited={resolved.Count(instance => instance.CurrentAidInherited)} flags_resolution=validated direct={resolved.Count(instance => instance.Instance.DirectFlags.HasValue)} inherited={resolved.Count(instance => !instance.Instance.DirectFlags.HasValue)} prototype_files={prototypeRead.Prototypes.Count} prototype_fingerprint_aggregate={prototypeRead.FingerprintAggregate} static_scenery_type3={staticScenery.Length}");
+        foreach (var example in artExamples)
+        {
+            var location = example.Object.Instance.Location!.Value;
+            var localX = location & 0x3f;
+            var localY = (location >> 32) & 0x3f;
+            Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY}");
+        }
         Console.WriteLine("integrity before_after_match=true");
     }
 
@@ -147,13 +183,14 @@ internal static class Program
             if (parsed.Count != 1 || parsed[0].Type != type || parsed[0].DirectCurrentAid != 1000 + type) throw new InvalidOperationException("A supported type or wire kind was not delimited in the synthetic suite.");
         }
 
-        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true);
+        var inherited = ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false);
         var direct = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41);
         var chained = ObjectWire.ParseWindow(inherited.Concat(direct).ToArray(), 2);
         if (chained.Count != 2 || chained[0].Location is null || chained[1].DirectCurrentAid != 41) throw new InvalidOperationException("Synthetic record chaining or early-field retention failed.");
         var prototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73));
         if (!prototype.Id.Matches(prototypeId) || prototype.Type != 3 || prototype.CurrentAid != 73) throw new InvalidOperationException("Synthetic prototype validation failed.");
         if (!ObjectWire.ResolveCurrentAids(chained, [prototype]).SequenceEqual([73, 41])) throw new InvalidOperationException("Direct and inherited AID resolution did not return concrete values.");
+        AssertStaticFlagResolution(prototypeId);
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, []), "missing prototype");
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [prototype, prototype]), "duplicate prototype");
         AssertRejected(() => ObjectWire.ResolveCurrentAids(chained, [ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(4, prototypeId, 73))]), "type-mismatched prototype");
@@ -187,11 +224,116 @@ internal static class Program
         AssertRejected(() => ObjectWire.ParseWindow(arrayFixture[..^1], 1), "truncated array or bitset");
 
         AssertPrototypeArchivePath(inherited, prototypeId);
+        AssertPrototypeDirectoryPath(inherited, prototypeId);
+        AssertObjectArtResolution();
     }
 
     private static void AssertProjection(int localX, int localY, int expectedX, int expectedY)
     {
         if (checked(40 * (localY - localX)) != expectedX || checked(20 * (localY + localX)) != expectedY) throw new InvalidOperationException("Synthetic numeric projection regression failed.");
+    }
+
+    private static void AssertStaticFlagResolution(ObjectId prototypeId)
+    {
+        // Test-only raw payload offsets for the fixed all-fields type-3 layouts:
+        // instance header 70 + literal slots 0..17 = 297/301; prototype header 68
+        // + literal slots 0..17 = 295/299. These deliberately do not use decoder
+        // field constants, semantic fixture arguments, or field-layout helpers.
+        const int InstanceSlot18RawOffset = 297;
+        const int InstanceSlot19RawOffset = 301;
+        const int PrototypeSlot18RawOffset = 295;
+        const int PrototypeSlot19RawOffset = 299;
+        const uint StaticFlagSentinel = 0x00000004;
+
+        var directStaticBytes = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 41, flags: 0, spellFlags: 0);
+        var directDynamicBytes = ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true, currentAid: 42, flags: 0, spellFlags: 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot18RawOffset), StaticFlagSentinel);
+        BinaryPrimitives.WriteUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot19RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot18RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot19RawOffset), StaticFlagSentinel);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot18RawOffset)) != StaticFlagSentinel ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directStaticBytes.AsSpan(InstanceSlot19RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot18RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(directDynamicBytes.AsSpan(InstanceSlot19RawOffset)) != StaticFlagSentinel)
+        {
+            throw new InvalidOperationException("Direct literal slot fixture bytes changed unexpectedly.");
+        }
+
+        var directStatic = ObjectWire.ParseWindow(directStaticBytes, 1)[0];
+        var directDynamic = ObjectWire.ParseWindow(directDynamicBytes, 1)[0];
+        var directlyResolved = ObjectWire.ResolveEffectiveInstances([directStatic, directDynamic], []);
+        if (directlyResolved[0].EffectiveFlags != StaticFlagSentinel || directlyResolved[1].EffectiveFlags != DynamicObjectFlag ||
+            directlyResolved.Count(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0) != 1)
+        {
+            throw new InvalidOperationException("Direct literal object-flags slots were not distinguished from adjacent spell flags in the static predicate.");
+        }
+
+        var inherited = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: 0), 1)[0];
+        var staticPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: 0);
+        var dynamicPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 74, flags: 0, spellFlags: 0);
+        BinaryPrimitives.WriteUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot18RawOffset), StaticFlagSentinel);
+        BinaryPrimitives.WriteUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot19RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot18RawOffset), DynamicObjectFlag);
+        BinaryPrimitives.WriteUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot19RawOffset), StaticFlagSentinel);
+        if (BinaryPrimitives.ReadUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot18RawOffset)) != StaticFlagSentinel ||
+            BinaryPrimitives.ReadUInt32LittleEndian(staticPrototypeBytes.AsSpan(PrototypeSlot19RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot18RawOffset)) != DynamicObjectFlag ||
+            BinaryPrimitives.ReadUInt32LittleEndian(dynamicPrototypeBytes.AsSpan(PrototypeSlot19RawOffset)) != StaticFlagSentinel)
+        {
+            throw new InvalidOperationException("Inherited literal slot fixture bytes changed unexpectedly.");
+        }
+
+        var inheritedStatic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(staticPrototypeBytes)])[0];
+        var inheritedDynamic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(dynamicPrototypeBytes)])[0];
+        if (inherited.DirectFlags is not null || inheritedStatic.EffectiveFlags != StaticFlagSentinel || inheritedDynamic.EffectiveFlags != DynamicObjectFlag ||
+            (inheritedStatic.EffectiveFlags & DynamicObjectFlag) != 0 || (inheritedDynamic.EffectiveFlags & DynamicObjectFlag) == 0)
+        {
+            throw new InvalidOperationException("Inherited literal object-flags slots were not distinguished from adjacent spell flags in the static predicate.");
+        }
+    }
+
+    private static void AssertObjectArtResolution()
+    {
+        var currentAid = unchecked((int)0x40000000u);
+        var example = new ResolvedInstance(0, new InstanceInfo(0, ObjectId.A(7001), 3, currentAid, 0, 0), currentAid, 0, false);
+        var mapping = System.Text.Encoding.ASCII.GetBytes("{0}{fixture.art}\n");
+        var art = CreateSyntheticArt();
+        WithSyntheticArchive(CreateSyntheticDat(
+            new SyntheticDatEntry(NameBytes("art\\scenery\\scenery.mes"), mapping),
+            new SyntheticDatEntry(NameBytes("art\\scenery\\fixture.art"), art)), (archive, stream) =>
+        {
+            var resolved = ObjectArt.ResolveExamples(archive, [example]);
+            if (resolved.Count != 1 || resolved[0].ArtType != 4 || resolved[0].SceneryCategory != 0 || resolved[0].ArtNumber != 0 || resolved[0].RotationGroup != 0 || resolved[0].Frame != 0 || resolved[0].Palette != 0 || resolved[0].Width != 1 || resolved[0].Height != 1)
+            {
+                throw new InvalidOperationException("Synthetic scenery ART resolution did not retain the selected metadata.");
+            }
+            AssertPayloadReadPattern(archive, stream, 0, 1);
+        });
+        AssertArchiveArtRejected(CreateSyntheticDat(new SyntheticDatEntry(NameBytes("art\\scenery\\scenery.mes"), System.Text.Encoding.ASCII.GetBytes("{1}{fixture.art}\n"))), example, "missing scenery mapping");
+        AssertArchiveArtRejected(CreateSyntheticDat(
+            new SyntheticDatEntry(NameBytes("art\\scenery\\scenery.mes"), mapping),
+            new SyntheticDatEntry(NameBytes("art\\scenery\\fixture.art"), art),
+            new SyntheticDatEntry(NameBytes("ART\\SCENERY\\FIXTURE.ART"), art)), example, "ambiguous scenery ART");
+    }
+
+    private static void AssertArchiveArtRejected(SyntheticDatFixture fixture, ResolvedInstance example, string label)
+    {
+        WithSyntheticArchive(fixture, (archive, _) => AssertRejected(() => ObjectArt.ResolveExamples(archive, [example]), label));
+    }
+
+    private static byte[] CreateSyntheticArt()
+    {
+        var bytes = new byte[132 + 1024 + 28 + 1];
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes, 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), 1);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 1);
+        var frame = 132 + 1024;
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 4), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(frame + 8), 1);
+        bytes[^1] = 1;
+        return bytes;
     }
 
     private static byte[] CreateFixture(int lightCount, uint tileId, int trailingObjectCount)
@@ -317,6 +459,39 @@ internal static class Program
         }
         AssertCanonicalNameRejected(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - fixture.pro"), "missing terminal NUL");
         AssertCanonicalNameRejected(System.Text.Encoding.ASCII.GetBytes("proto\\007001 - fixture.pro\0x"), "extra byte after terminal NUL");
+    }
+
+    private static void AssertPrototypeDirectoryPath(byte[] inheritedBytes, ObjectId prototypeId)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"ArcanumCrashSiteProbe-{Guid.NewGuid():N}");
+        var first = Path.Combine(root, "007001 - first.pro");
+        var second = Path.Combine(root, "007001 - second.pro");
+        try
+        {
+            Directory.CreateDirectory(root);
+            var valid = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73);
+            File.WriteAllBytes(first, valid);
+            var resolved = ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]);
+            if (resolved.Prototypes.Count != 1 || resolved.FingerprintAggregate.Length != 64 ||
+                !ObjectWire.ResolveCurrentAids(ObjectWire.ParseWindow(inheritedBytes, 1), resolved.Prototypes).SequenceEqual([73]))
+            {
+                throw new InvalidOperationException("The directory-path prototype did not resolve inherited AID 73.");
+            }
+
+            File.WriteAllBytes(second, valid);
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]), "ambiguous directory prototype");
+            File.Delete(second);
+            File.WriteAllBytes(first, valid[..^1]);
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]), "truncated directory prototype");
+            File.WriteAllBytes(first, ObjectWire.CreateSyntheticPrototype(3, ObjectId.A(7002), currentAid: 73));
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]), "ID-mismatched directory prototype");
+            File.Delete(first);
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]), "missing directory prototype");
+        }
+        finally
+        {
+            if (Directory.Exists(root)) Directory.Delete(root, recursive: true);
+        }
     }
 
     private static void AssertCanonicalArchiveAcceptance(int aid)
@@ -529,6 +704,11 @@ internal static class Program
         public static ObjectId Null() => new(0, new byte[16]);
         public static ObjectId Guid(byte seed) { var payload = new byte[16]; payload[0] = seed; return new ObjectId(2, payload); }
         public static ObjectId P(long location, int temporaryId, int mapId) { var payload = new byte[16]; BinaryPrimitives.WriteInt64LittleEndian(payload, location); BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(8), temporaryId); BinaryPrimitives.WriteInt32LittleEndian(payload.AsSpan(12), mapId); return new ObjectId(3, payload); }
+        public int AidValue()
+        {
+            if (Type != 1) throw new InvalidDataException("A non-A ObjectID cannot be emitted as a prototype identifier.");
+            return BinaryPrimitives.ReadInt32LittleEndian(Payload);
+        }
         public bool Matches(ObjectId other)
         {
             if (Type != other.Type) return false;
@@ -536,11 +716,104 @@ internal static class Program
         }
     }
 
-    private sealed record InstanceInfo(ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location)
+    private sealed record InstanceInfo(int SourceIndex, ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location, uint? DirectFlags)
     {
         public bool CurrentAidOverridden => DirectCurrentAid.HasValue;
     }
-    private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid);
+    private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags);
+    private sealed record ResolvedInstance(int SourceIndex, InstanceInfo Instance, int CurrentAid, uint EffectiveFlags, bool CurrentAidInherited);
+    private sealed record PrototypeReadResult(List<PrototypeInfo> Prototypes, string FingerprintAggregate);
+    private sealed record ObjectArtExample(ResolvedInstance Object, int ArtType, int SceneryCategory, int ArtNumber, int RotationGroup, int Frame, int Palette, int Width, int Height, int HotX, int HotY);
+
+    private static class ObjectArt
+    {
+        private const string SceneryMesPath = "art\\scenery\\scenery.mes";
+
+        public static List<ObjectArtExample> ResolveExamples(DatArchive resource, IReadOnlyList<ResolvedInstance> examples)
+        {
+            var mesEntry = ReadUnique(resource, SceneryMesPath, "scenery mapping");
+            if (mesEntry.DeclaredOutputSize > MaxDecodedSectorBytes) throw new InvalidDataException("The scenery mapping exceeds the 1 MiB read cap.");
+            var names = ParseMes(resource.ReadEntry(mesEntry));
+            var resolved = new List<ObjectArtExample>(examples.Count);
+            foreach (var example in examples)
+            {
+                var current = unchecked((uint)example.CurrentAid);
+                var artType = (int)(current >> 28);
+                if (artType != 4) throw new InvalidDataException("A selected static scenery record has a non-scenery current ART type.");
+                var artNumber = (int)((current >> 19) & 0x1ff);
+                var frame = (int)((current >> 14) & 0x1f);
+                var rotation = (int)((current >> 11) & 0x7);
+                var category = (int)((current >> 6) & 0x1f);
+                var palette = (int)((current >> 4) & 0x3);
+                var key = checked((category * 1000) + artNumber);
+                if (!names.TryGetValue(key, out var filename) || !IsSafeRelativeArtFilename(filename)) throw new InvalidDataException("A selected scenery ART mapping is missing or unsafe.");
+                var artEntry = ReadUnique(resource, SceneryMesPath[..12] + filename, "selected scenery ART");
+                if (artEntry.DeclaredOutputSize > MaxDecodedSectorBytes) throw new InvalidDataException("A selected scenery ART entry exceeds the 1 MiB read cap.");
+                var metadata = ArtDecoder.Inspect(resource.ReadEntry(artEntry), new ArtDecoderOptions { MaxInputBytes = MaxDecodedSectorBytes });
+                if (rotation >= metadata.Header.PhysicalGroupCount || frame >= metadata.Header.FramesPerGroup) throw new InvalidDataException("A selected scenery ART selector is outside its physical frame table.");
+                var selected = metadata.GetFrame(rotation, frame);
+                resolved.Add(new ObjectArtExample(example, artType, category, artNumber, rotation, frame, palette, selected.Width, selected.Height, selected.HotX, selected.HotY));
+            }
+            return resolved;
+        }
+
+        private static DatEntry ReadUnique(DatArchive archive, string path, string label)
+        {
+            var normalized = NormalizePath(System.Text.Encoding.ASCII.GetBytes(path + "\0"));
+            var matches = archive.Entries.Where(entry => NormalizePath(entry.RawNameBytes) == normalized).ToArray();
+            if (matches.Length != 1) throw new InvalidDataException($"The {label} did not resolve exactly once in the explicit resource archive.");
+            return matches[0];
+        }
+
+        private static SortedDictionary<int, string> ParseMes(byte[] bytes)
+        {
+            var text = System.Text.Encoding.ASCII.GetString(bytes);
+            var result = new SortedDictionary<int, string>();
+            for (var cursor = 0; cursor < text.Length;)
+            {
+                while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
+                if (cursor == text.Length || text[cursor] == '\0') break;
+                if (text[cursor] == ';' || (cursor + 1 < text.Length && text[cursor] == '/' && text[cursor + 1] == '/'))
+                {
+                    var lineEnd = text.IndexOf('\n', cursor + 2);
+                    cursor = lineEnd < 0 ? text.Length : lineEnd + 1;
+                    continue;
+                }
+                if (text[cursor] != '{')
+                {
+                    var next = text.IndexOf('{', cursor + 1);
+                    if (next < 0) break;
+                    cursor = next;
+                }
+                var keyEnd = text.IndexOf('}', cursor + 1);
+                if (keyEnd < 0 || !int.TryParse(text.AsSpan(cursor + 1, keyEnd - cursor - 1), out var key)) throw new InvalidDataException("The scenery mapping has an invalid key.");
+                cursor = keyEnd + 1;
+                while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
+                if (cursor == text.Length || text[cursor] != '{') throw new InvalidDataException("The scenery mapping has a key without a braced value.");
+                var valueEnd = text.IndexOf('}', cursor + 1);
+                if (valueEnd < 0 || !result.TryAdd(key, text[(cursor + 1)..valueEnd])) throw new InvalidDataException("The scenery mapping is malformed or has duplicate keys.");
+                cursor = valueEnd + 1;
+            }
+            if (result.Count == 0) throw new InvalidDataException("The scenery mapping has no entries.");
+            return result;
+        }
+
+        private static bool IsSafeRelativeArtFilename(string value) => value.Length > 4 && value.EndsWith(".art", StringComparison.OrdinalIgnoreCase) && value.All(character => character is >= ' ' and <= '~' && character is not '/' and not '\\');
+
+        private static string NormalizePath(IReadOnlyList<byte> raw)
+        {
+            if (raw.Count == 0 || raw[^1] != 0) throw new InvalidDataException("A resource pathname lacks its terminal NUL.");
+            var normalized = new byte[raw.Count - 1];
+            for (var index = 0; index < normalized.Length; index++)
+            {
+                var value = raw[index];
+                if (value == (byte)'\\') value = (byte)'/';
+                if (value is >= (byte)'A' and <= (byte)'Z') value = checked((byte)(value + ((byte)'a' - (byte)'A')));
+                normalized[index] = value;
+            }
+            return System.Text.Encoding.ASCII.GetString(normalized);
+        }
+    }
 
     private static class ObjectWire
     {
@@ -565,7 +838,7 @@ internal static class Program
         public static List<InstanceInfo> ParseWindow(ReadOnlySpan<byte> bytes, int expectedCount)
         {
             var cursor = new Cursor(bytes); var records = new List<InstanceInfo>(expectedCount);
-            for (var index = 0; index < expectedCount; index++) records.Add(ParseInstance(ref cursor));
+            for (var index = 0; index < expectedCount; index++) records.Add(ParseInstance(ref cursor) with { SourceIndex = index });
             if (!cursor.AtEnd) throw new InvalidDataException("Object window has trailing bytes after the required record count.");
             return records;
         }
@@ -602,7 +875,7 @@ internal static class Program
             {
                 if (candidate.Value.Count != 1)
                 {
-                    throw new InvalidDataException("A referenced prototype is missing or duplicated in the immutable module.");
+                    throw new InvalidDataException($"A referenced prototype is missing or duplicated in the immutable module (A ID {candidate.Key}, matches {candidate.Value.Count}).");
                 }
             }
 
@@ -621,20 +894,74 @@ internal static class Program
             return found;
         }
 
+        public static PrototypeReadResult ReadReferencedPrototypesFromDirectory(string root, ObjectId[] referenced)
+        {
+            if (!Directory.Exists(root)) throw new InvalidDataException("The explicit prototype root does not exist.");
+            var wanted = ReferencedPrototypeAids(referenced);
+            var found = new List<PrototypeInfo>(wanted.Count);
+            var fingerprints = new List<string>(wanted.Count);
+            foreach (var aid in wanted.Order())
+            {
+                var candidates = Directory.EnumerateFiles(root, $"{aid:D6} - *.pro", SearchOption.TopDirectoryOnly)
+                    .Where(candidate => TryParseCanonicalPrototypeAid(System.Text.Encoding.ASCII.GetBytes("proto\\" + Path.GetFileName(candidate) + "\0"), out var parsed) && parsed == aid)
+                    .ToArray();
+                if (candidates.Length != 1) throw new InvalidDataException("A referenced prototype is missing or ambiguous in the explicit prototype root.");
+                var before = InputFingerprint.Create(candidates[0]);
+                if (before.Bytes > MaxDecodedSectorBytes) throw new InvalidDataException("A candidate prototype exceeds the 1 MiB read cap.");
+                var prototype = ParsePrototype(File.ReadAllBytes(candidates[0]));
+                var after = InputFingerprint.Create(candidates[0]);
+                if (after != before) throw new InvalidDataException("A prototype changed during this read-only probe.");
+                if (prototype.Id.Type != 1 || prototype.Id.AidValue() != aid) throw new InvalidDataException("A selected prototype candidate does not match its requested A ID.");
+                found.Add(prototype);
+                fingerprints.Add($"{aid:D6}:{before.Sha256}");
+            }
+            var evidence = System.Text.Encoding.ASCII.GetBytes(string.Join("|", fingerprints));
+            return new PrototypeReadResult(found, Convert.ToHexString(SHA256.HashData(evidence)).ToLowerInvariant());
+        }
+
+        private static HashSet<int> ReferencedPrototypeAids(ObjectId[] referenced)
+        {
+            var wanted = new HashSet<int>();
+            foreach (var referencedId in referenced)
+            {
+                if (referencedId.Type != 1) throw new InvalidDataException("A referenced prototype ObjectID is not a locatable A form.");
+                var aid = referencedId.AidValue();
+                if (aid is < 0 or > 999999) throw new InvalidDataException("A referenced prototype A ID is outside the locatable six-digit range.");
+                wanted.Add(aid);
+            }
+            return wanted;
+        }
+
         public static List<int> ResolveCurrentAids(IEnumerable<InstanceInfo> instances, IReadOnlyList<PrototypeInfo> prototypes)
         {
-            var resolved = new List<int>();
-            foreach (var instance in instances)
+            return ResolveEffectiveInstances(instances.ToList(), prototypes).Select(instance => instance.CurrentAid).ToList();
+        }
+
+        public static List<ResolvedInstance> ResolveEffectiveInstances(IReadOnlyList<InstanceInfo> instances, IReadOnlyList<PrototypeInfo> prototypes)
+        {
+            var resolved = new List<ResolvedInstance>(instances.Count);
+            for (var index = 0; index < instances.Count; index++)
             {
+                var instance = instances[index];
+                PrototypeInfo? prototype = null;
+                if (!instance.DirectCurrentAid.HasValue || !instance.DirectFlags.HasValue)
+                {
+                    var matches = prototypes.Where(candidate => candidate.Id.Matches(instance.PrototypeId)).ToArray();
+                    if (matches.Length != 1 || matches[0].Type != instance.Type)
+                    {
+                        var field = instance.DirectCurrentAid.HasValue ? "object field" : "current ART ID";
+                        throw new InvalidDataException($"An inherited {field} did not resolve to one matching validated prototype.");
+                    }
+                    prototype = matches[0];
+                }
                 if (instance.DirectCurrentAid is int direct)
                 {
-                    resolved.Add(direct);
-                    continue;
+                    resolved.Add(new ResolvedInstance(instance.SourceIndex, instance, direct, instance.DirectFlags ?? prototype!.Flags, false));
                 }
-
-                var matches = prototypes.Where(prototype => prototype.Id.Matches(instance.PrototypeId)).ToArray();
-                if (matches.Length != 1 || matches[0].Type != instance.Type) throw new InvalidDataException("An inherited current ART ID did not resolve to one matching validated prototype.");
-                resolved.Add(matches[0].CurrentAid);
+                else
+                {
+                    resolved.Add(new ResolvedInstance(instance.SourceIndex, instance, prototype!.CurrentAid, instance.DirectFlags ?? prototype.Flags, true));
+                }
             }
             return resolved;
         }
@@ -650,9 +977,14 @@ internal static class Program
             ReadMasks(ref cursor, type, prototype: true, out _);
             var fields = FieldsFor(type);
             var currentAid = cursor.I32();
-            for (var field = 1; field < fields.Count; field++) Skip(ref cursor, fields[field], requireNul: true);
+            uint flags = 0;
+            for (var field = 1; field < fields.Count; field++)
+            {
+                if (field == ObjectFlagsField) flags = cursor.U32();
+                else Skip(ref cursor, fields[field], requireNul: true);
+            }
             if (!cursor.AtEnd) throw new InvalidDataException("Prototype entry contains trailing bytes.");
-            return new PrototypeInfo(id, type, currentAid);
+            return new PrototypeInfo(id, type, currentAid, flags);
         }
 
         private static InstanceInfo ParseInstance(ref Cursor cursor)
@@ -669,14 +1001,16 @@ internal static class Program
             if (numFields != popcount || numFields > 94) throw new InvalidDataException("Instance field count does not match its valid override mask.");
             int? currentAid = null;
             long? location = null;
+            uint? flags = null;
             for (var field = 0; field < fields.Count; field++)
             {
                 if (!set[field]) continue;
-                if (field == 0) currentAid = cursor.I32();
-                else if (field == 1) location = cursor.Presence() ? cursor.I64() : null;
+                if (field == CurrentArtField) currentAid = cursor.I32();
+                else if (field == LocationField) location = cursor.Presence() ? cursor.I64() : null;
+                else if (field == ObjectFlagsField) flags = cursor.U32();
                 else Skip(ref cursor, fields[field], requireNul: true);
             }
-            return new InstanceInfo(prototype, type, currentAid, location);
+            return new InstanceInfo(-1, prototype, type, currentAid, location, flags);
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)
@@ -805,22 +1139,23 @@ internal static class Program
             return values.ToArray();
         }
 
-        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0)
+        public static byte[] CreateSyntheticInstance(int type, ObjectId prototype, bool currentAidOverridden, bool includeAllFields, bool invalidPresence = false, int currentAid = 0, uint flags = 0, uint spellFlags = 0, bool flagsOverridden = true)
         {
             var fields = FieldsFor(type); var masks = new uint[MaskWords(type)];
-            for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == 0 && currentAidOverridden)) SetBit(type, masks, index);
-            if (!currentAidOverridden) ClearBit(type, masks, 0);
+            for (var index = 0; index < fields.Count; index++) if (includeAllFields || (index == CurrentArtField && currentAidOverridden)) SetBit(type, masks, index);
+            if (!currentAidOverridden) ClearBit(type, masks, CurrentArtField);
+            if (!flagsOverridden) ClearBit(type, masks, ObjectFlagsField);
             var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, prototype); AddObjectId(list, ObjectId.A(17)); AddI32(list, type); AddI16(list, checked((short)masks.Sum(mask => BitOperations.PopCount(mask)))); foreach (var mask in masks) AddU32(list, mask);
-            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == 1, index == 0 ? currentAid : 0);
+            for (var index = 0; index < fields.Count; index++) if (IsSet(type, masks, index)) AddWire(list, fields[index], invalidPresence && index == LocationField, index == CurrentArtField ? currentAid : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0);
             return list.ToArray();
         }
 
-        public static byte[] CreateSyntheticPrototype(int type, ObjectId id, int currentAid)
+        public static byte[] CreateSyntheticPrototype(int type, ObjectId id, int currentAid, uint flags = 0, uint spellFlags = 0)
         {
             var fields = FieldsFor(type);
             var masks = new uint[MaskWords(type)];
             for (var index = 0; index < fields.Count; index++) SetBit(type, masks, index);
-            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); for (var index = 0; index < fields.Count; index++) AddWire(list, fields[index], false, index == 0 ? currentAid : 0); return list.ToArray();
+            var list = new List<byte>(); AddI32(list, ExpectedObjectVersion); AddObjectId(list, new ObjectId(-1, new byte[16])); AddObjectId(list, id); AddI32(list, type); foreach (var mask in masks) AddU32(list, mask); for (var index = 0; index < fields.Count; index++) AddWire(list, fields[index], false, index == CurrentArtField ? currentAid : index == ObjectFlagsField ? unchecked((int)flags) : index == SpellFlagsField ? unchecked((int)spellFlags) : 0); return list.ToArray();
         }
 
         public static byte[] CreateUncheckedInstance(int encodedType, ObjectId prototype)
