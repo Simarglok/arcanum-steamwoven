@@ -12,28 +12,66 @@ visibility, collision, interaction, occlusion, or runtime-parity claims.
 The loader reuses `TerrainLoader.ExtractObjectWindow` for the fixed sector
 framing and `DatArchive`/`ArtDecoder` for archive and ART metadata handling.
 Caller-owned archives remain caller-owned; the result owns copies of parsed
-values only.
+values only. `DatArchive.ReadEntry` serializes its seek/read/decompression
+operation, so concurrent callers cannot corrupt a shared seek-based archive.
 
 ## API
 
 ```csharp
 using var module = DatArchive.Open(modulePath);
 using var resource = DatArchive.Open(resourcePath);
-var source = new StaticObjectSource(module, selectedEntryPath, resource, "selected-resource");
-var prototypes = new StaticObjectPrototypeSource(prototypeDirectory, "selected-prototypes");
+var source = new StaticObjectSource(module, selectedEntryPath, resource);
+var prototypes = new StaticObjectPrototypeSource(prototypeDirectory);
 StaticObjectInspection report = StaticObjectLoader.Inspect(source, prototypes);
 ```
 
-For an opt-in original-data check, `ValidateOriginalData` owns its temporary
-archive handles, fingerprints the module/resource and selected prototype set,
-checks them again after inspection, and returns identifier-only size/hash
-evidence with the inspection. It does not retain the supplied paths.
+The same public API is exercised by a complete, executable synthetic fixture:
+`StaticObjectLoaderTests.Selected_resource_stage_resolves_five_synthetic_records_without_claiming_original_identity`
+in `tests/Arcanum.Data.Tests/StaticObjects/StaticObjectLoaderTests.cs`. The one
+test-local source file constructs five unrelated direct-field v119 records, the
+sector window, both 1TAD archives, a mapping, and minimal ART metadata before
+calling `InspectSelectedResources`; it asserts every returned metadata field.
+Run that exact synthetic example with:
 
-`StaticObjectSource` requires a single exact module entry and a non-path
-resource label. `StaticObjectPrototypeSource` receives one caller-selected
-directory; it has no archive or loose-file precedence behavior. Limits are
-configured with `StaticObjectLoaderOptions` and cap sector, record, field,
-array, string, prototype, resource, and ART metadata sizes before allocation.
+```text
+dotnet test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --filter "FullyQualifiedName~Selected_resource_stage_resolves_five_synthetic_records_without_claiming_original_identity" --no-restore
+```
+
+The fixture is intentionally test-local: production exposes no fixture encoder,
+test profile, golden record, original path, or original payload.
+
+The loader neither disposes the caller-owned streams nor mutates their buffers;
+its inspection result is an immutable copy of the admitted numeric fields.
+`InspectSelectedResources` is likewise caller-owned and structural: it resolves
+only source indexes 0 through 4 and fails closed on those five resource chains.
+It is useful for synthetic tests but does not claim an authenticated Crash Site
+identity or return validation evidence.
+
+For an opt-in original-data check, `ValidateOriginalData` owns bounded temporary
+archive handles, fingerprints the module/resource and each canonical selected
+prototype before its production read, compares the production-read fingerprint
+to that pre-read evidence, and checks all inputs again after inspection. Its
+result returns identifier-only module/resource and per-prototype size/hash
+evidence plus an aggregate; it does not retain supplied paths. The operation
+uses private fixed selectors and documented module/resource hashes and
+six-prototype hash set before it reads the fixed five-record profile. Callers
+cannot supply labels, selectors, expected records, or fingerprints to that API.
+
+`StaticObjectSource` requires a single exact module entry and caller-owned
+archives. `StaticObjectPrototypeSource` receives one caller-selected directory;
+it has no archive or loose-file precedence behavior. Limits are
+configured with `StaticObjectLoaderOptions` and cap path-owned archive/index/
+entry totals, sector, record, field, array, string, prototype, resource,
+mapping entries/values, and ART metadata sizes before allocation.
+
+`Inspect` performs census/default resolution only. It deliberately leaves every
+resource outcome `NotEvaluated`. `InspectSelectedResources` is the separate,
+untrusted structural resource-stage operation. It admits source indexes 0
+through 4 only when each is resolved type 3, static, and has the required direct
+instance fields; it fails the entire operation on a selected mapping/ART/group/
+frame/palette failure. The authenticated `ValidateOriginalData` operation alone
+uses the private Crash Site selector and immutable input identities. For its
+317-record input it leaves exactly the other 312 records `NotEvaluated`.
 
 `StaticObjectInspection` deliberately has separate dimensions:
 
@@ -68,7 +106,8 @@ Slot 19 is not substituted for object flags. Direct instance offsets remain
 distinct from ART frame offsets/hotspots and the API does not project or
 rasterize either value.
 
-For source indexes 0 through 4 only, the loader resolves the packed ART type,
+For source indexes 0 through 4 only, the selected-resource operation resolves
+the packed ART type,
 scenery mapping, unique normalized resource entry, physical group/frame, and
 palette metadata. A missing/ambiguous mapping or resource, unsafe mapping
 filename, non-scenery ART type, invalid group/frame, or unavailable palette
@@ -86,7 +125,7 @@ invalid or resource-complete.
 | five selected metadata chains | `ResourceStatus.Resolved` |
 | all other census records | `ResourceStatus.NotEvaluated` |
 
-Diagnostics intentionally contain stage/index information only and never
+Diagnostics expose a typed `Stage` plus nullable source index/offset, and never
 return original paths, archive names, raw bytes, strings, or pixels.
 
 ## Verification

@@ -5,20 +5,17 @@ namespace Arcanum.Data.StaticObjects;
 /// <summary>Bounded, caller-selected input for the v119 static-object inspection.</summary>
 public sealed class StaticObjectSource
 {
-    public StaticObjectSource(DatArchive moduleArchive, string moduleEntryPath, DatArchive resourceArchive, string resourceSourceId)
+    public StaticObjectSource(DatArchive moduleArchive, string moduleEntryPath, DatArchive resourceArchive)
     {
         ModuleArchive = moduleArchive ?? throw new ArgumentNullException(nameof(moduleArchive));
         ResourceArchive = resourceArchive ?? throw new ArgumentNullException(nameof(resourceArchive));
         ValidateLabel(moduleEntryPath, nameof(moduleEntryPath), allowPath: true);
-        ValidateLabel(resourceSourceId, nameof(resourceSourceId), allowPath: false);
         ModuleEntryPath = moduleEntryPath;
-        ResourceSourceId = resourceSourceId;
     }
 
     public DatArchive ModuleArchive { get; }
     public string ModuleEntryPath { get; }
     public DatArchive ResourceArchive { get; }
-    public string ResourceSourceId { get; }
 
     internal static void ValidateLabel(string value, string parameter, bool allowPath)
     {
@@ -30,20 +27,20 @@ public sealed class StaticObjectSource
 
 public sealed class StaticObjectPrototypeSource
 {
-    public StaticObjectPrototypeSource(string directoryPath, string sourceId)
+    public StaticObjectPrototypeSource(string directoryPath)
     {
         ArgumentException.ThrowIfNullOrEmpty(directoryPath, nameof(directoryPath));
-        StaticObjectSource.ValidateLabel(sourceId, nameof(sourceId), allowPath: false);
         DirectoryPath = directoryPath;
-        SourceId = sourceId;
     }
 
     public string DirectoryPath { get; }
-    public string SourceId { get; }
 }
 
 public sealed class StaticObjectLoaderOptions
 {
+    public uint MaxArchiveBytes { get; init; } = 512 * 1024 * 1024;
+    public uint MaxArchiveIndexBytes { get; init; } = 64 * 1024 * 1024;
+    public int MaxArchiveEntries { get; init; } = 128 * 1024;
     public int MaxSectorBytes { get; init; } = 1024 * 1024;
     public int MaxRecords { get; init; } = 4096;
     public int MaxFields { get; init; } = 128;
@@ -51,7 +48,7 @@ public sealed class StaticObjectLoaderOptions
     public int MaxStringBytes { get; init; } = 1024 * 1024;
     public int MaxPrototypeBytes { get; init; } = 1024 * 1024;
     public int MaxResourceBytes { get; init; } = 1024 * 1024;
-    public int MaxMetadataEntries { get; init; } = 32;
+    public int MaxMetadataEntries { get; init; } = 8192;
     public ArtDecoderOptions ArtOptions { get; init; } = new()
     {
         MaxInputBytes = 1024 * 1024,
@@ -65,7 +62,7 @@ public sealed class StaticObjectLoaderOptions
 
     internal void Validate()
     {
-        if (MaxSectorBytes <= 0 || MaxRecords <= 0 || MaxFields <= 0 || MaxArrayElements <= 0 || MaxStringBytes <= 0 ||
+        if (MaxArchiveBytes == 0 || MaxArchiveIndexBytes == 0 || MaxArchiveEntries <= 0 || MaxSectorBytes <= 0 || MaxRecords <= 0 || MaxFields <= 0 || MaxArrayElements <= 0 || MaxStringBytes <= 0 ||
             MaxPrototypeBytes <= 0 || MaxResourceBytes <= 0 || MaxMetadataEntries <= 0 || ArtOptions is null)
             throw new ArgumentOutOfRangeException(nameof(StaticObjectLoaderOptions), "All static-object limits must be positive.");
         ArtOptions.Validate();
@@ -76,11 +73,26 @@ public enum StaticObjectCensusStatus { Complete, InvalidFraming }
 public enum StaticObjectFieldStatus { Resolved, UnresolvedReference, UnsupportedType }
 public enum StaticObjectResourceStatus { Resolved, NotEvaluated, OutsideResourceScope, UnresolvedResource, InvalidArtSelector }
 public enum StaticObjectErrorCode { InvalidSelector, MissingModule, AmbiguousModule, InvalidFraming, LimitExceeded, UnsupportedVersion, UnsupportedType, InvalidRecord, UnresolvedReference, UnresolvedResource, InvalidArtSelector }
+/// <summary>Sanitized stage of a bounded loader failure.</summary>
+public enum StaticObjectFailureStage { Selector, Archive, SectorFraming, Record, Prototype, Mapping, Art, FingerprintInput }
 
 public sealed class StaticObjectException : Exception
 {
-    public StaticObjectException(StaticObjectErrorCode code, string message, Exception? innerException = null) : base(message, innerException) => Code = code;
+    internal StaticObjectException(StaticObjectErrorCode code, string message, Exception? innerException = null)
+        : base(message, innerException)
+    {
+        Code = code; Stage = StaticObjectFailureStage.Record;
+    }
+
+    public StaticObjectException(StaticObjectErrorCode code, StaticObjectFailureStage stage, string message,
+        int? sourceIndex = null, int? offset = null) : base(message)
+    {
+        Code = code; Stage = stage; SourceIndex = sourceIndex; Offset = offset;
+    }
     public StaticObjectErrorCode Code { get; }
+    public StaticObjectFailureStage Stage { get; }
+    public int? SourceIndex { get; }
+    public int? Offset { get; }
 }
 
 public sealed class StaticObjectRecord
@@ -94,6 +106,8 @@ public sealed class StaticObjectRecord
         DirectFlags = directFlags; Location = location; DirectOffsetX = directOffsetX; DirectOffsetY = directOffsetY;
         FieldStatus = fieldStatus; CurrentArt = currentArt; CurrentArtInherited = currentArtInherited; EffectiveFlags = effectiveFlags;
         FlagsInherited = flagsInherited; IsStatic = isStatic; ResourceStatus = resourceStatus; ArtMetadata = artMetadata;
+        LocalX = location is long locationValue ? (int)(locationValue & 0x3f) : null;
+        LocalY = location is long locationYValue ? (int)((locationYValue >> 32) & 0x3f) : null;
     }
 
     public int SourceIndex { get; }
@@ -102,6 +116,9 @@ public sealed class StaticObjectRecord
     public int? DirectCurrentArt { get; }
     public uint? DirectFlags { get; }
     public long? Location { get; }
+    /// <summary>Serialized sector-local coordinates, retained only when the location field is present.</summary>
+    public int? LocalX { get; }
+    public int? LocalY { get; }
     public int? DirectOffsetX { get; }
     public int? DirectOffsetY { get; }
     public StaticObjectFieldStatus FieldStatus { get; }
@@ -143,13 +160,19 @@ public sealed record StaticObjectInputFingerprint(long Length, string Sha256);
 public sealed class StaticObjectValidation
 {
     internal StaticObjectValidation(StaticObjectInspection inspection, StaticObjectInputFingerprint module,
-        StaticObjectInputFingerprint resource, string prototypeAggregate)
+        StaticObjectInputFingerprint resource, IReadOnlyList<StaticObjectPrototypeFingerprint> prototypes, string prototypeAggregate)
     {
-        Inspection = inspection; Module = module; Resource = resource; PrototypeAggregateSha256 = prototypeAggregate;
+        Inspection = inspection; Module = module; Resource = resource;
+        PrototypeFingerprints = new ReadOnlyCollection<StaticObjectPrototypeFingerprint>(prototypes.ToArray());
+        PrototypeAggregateSha256 = prototypeAggregate;
     }
 
     public StaticObjectInspection Inspection { get; }
     public StaticObjectInputFingerprint Module { get; }
     public StaticObjectInputFingerprint Resource { get; }
+    public IReadOnlyList<StaticObjectPrototypeFingerprint> PrototypeFingerprints { get; }
     public string PrototypeAggregateSha256 { get; }
 }
+
+/// <summary>Identifier-only evidence for one canonical type-A prototype file.</summary>
+public sealed record StaticObjectPrototypeFingerprint(int Aid, StaticObjectInputFingerprint Fingerprint);
