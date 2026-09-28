@@ -27,8 +27,10 @@ run_log locked-tests-restore.log "$DOTNET" restore "$lab_root/Tests/GamepadLab.T
 run_log release-build.log "$DOTNET" build "$lab_root/GamepadLab.csproj" -c Release --no-restore
 run_log core-harness.log "$DOTNET" run --project "$lab_root/Tests/GamepadLab.Tests.csproj" -c Release --no-restore -- --all
 run_log editor-import.log "$GODOT" --headless --editor --path "$lab_root" --quit
+git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 run_log debug-build.log "$DOTNET" build "$lab_root/GamepadLab.csproj" -c Debug --no-restore
 run_log godot-self-test.log "$GODOT" --headless --path "$lab_root" -- --self-test
+git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 run_log export.log "$GODOT" --headless --path "$lab_root" --export-debug macOS "$build_root/GamepadLab.app"
 app=$(find "$build_root/GamepadLab.app/Contents/MacOS" -type f -perm -111 | head -n 1)
 test -n "$app"
