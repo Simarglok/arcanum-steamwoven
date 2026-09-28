@@ -1,0 +1,28 @@
+; Synthetic-only standalone gamepad-input experiment.
+config_version=5
+
+[application]
+config/name="Synthetic Gamepad Input Lab"
+run/main_scene="res://Scenes/Main.tscn"
+config/features=PackedStringArray("4.7", "GL Compatibility")
+
+[dotnet]
+project/assembly_name="GamepadLab"
+
+[display]
+
+[display/window]
+size/viewport_width=1280
+size/viewport_height=800
+size/window_width_override=1280
+size/window_height_override=800
+resizable=true
+stretch/mode="canvas_items"
+stretch/aspect="expand"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+
+[rendering/textures]
+vram_compression/import_etc2_astc=true

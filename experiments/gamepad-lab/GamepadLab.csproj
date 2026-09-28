@@ -1,0 +1,4 @@
+<Project Sdk="Godot.NET.Sdk/4.7.2">
+  <PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyName>GamepadLab</AssemblyName><RootNamespace>GamepadLab</RootNamespace><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
+  <ItemGroup><Compile Remove="Core/**/*.cs" /><Compile Remove="Tests/**/*.cs" /><ProjectReference Include="Core/GamepadLab.Core.csproj" /></ItemGroup>
+</Project>
