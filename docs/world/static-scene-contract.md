@@ -165,12 +165,14 @@ for ART baselines and object overlap exists:
 4. define walls/roofs only if they occur in the chosen slice and their resource
    and ordering rules are separately measured.
 
-There is no accepted overlap example from the original slice because object
-boundaries/types are not yet safely available. The first decoder must retain
-the validated record sequence as a deterministic tie key, but that is only a
-reproducibility requirement—not an evidence-backed occlusion rule. Any
-ordering example before a selected, validated pair is synthetic and must not
-be reported as original scene parity.
+There is no accepted overlap/order example from the original slice: visual
+baseline/placement and an original overlap/order reference remain unproven.
+ARC-RES-007 has safely delimited and classified the 317 type-3 records and
+provided five bounded static examples, but neither result establishes their
+visual overlap. A future decoder must retain the validated record sequence as
+a deterministic tie key, but that is only a reproducibility requirement—not an
+evidence-backed occlusion rule. Any ordering example before a selected,
+validated pair is synthetic and must not be reported as original scene parity.
 
 ## Follow-on outlines (not Kanban authorization)
 
