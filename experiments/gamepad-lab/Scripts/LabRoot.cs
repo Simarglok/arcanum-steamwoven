@@ -111,7 +111,14 @@ public partial class LabRoot : Node2D
     }
     private void CloseModal() { _hud.HideModal(); ClearWorldIntents("Modal closed; both sticks require neutral."); }
     private void ClearWorldIntents(string log) { CancelMovement(null); _input.Quarantine(); _menuRepeat.Clear(); AddLog(log); }
-    private void CancelMovement(string? reason) { _actor = _actor with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Idle }; SyncActor(); if (reason is not null) AddLog($"Movement cancelled: {reason}."); }
+    private void CancelMovement(string? reason)
+    {
+        _actor = _actor with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Idle, BlockedIntent = null };
+        // macOS can send a focus notification while this node is entering the tree,
+        // before child references are ready. State still clears; drawing waits.
+        if (_courtyard is not null) SyncActor();
+        if (reason is not null) AddLog($"Movement cancelled: {reason}.");
+    }
     private void Recenter() { _courtyard.RecenterActor(); _actor = new MovementState(new Vec2(_courtyard.ActorPosition.X, _courtyard.ActorPosition.Y), new Vec2(1, 0)); AddLog("Actor recentered (F2). "); }
     private void SyncActor() => _courtyard.SetActor(ToGodot(_actor.Position), ToGodot(_actor.Heading), _actor.Goal is Vec2 goal ? ToGodot(goal) : null);
     private void OnJoyConnectionChanged(long device, bool connected)

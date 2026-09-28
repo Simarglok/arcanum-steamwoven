@@ -41,6 +41,7 @@ run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/ex
 # performs its bounded capture/layout path, writes a PNG, and quits itself.
 run_log ordinary-launch.log "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
 test -s "$build_root/evidence/ordinary-launch.png"
+if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/ordinary-launch.log"; then printf '%s\n' 'Ordinary exported-app launch logged an engine error.' >&2; exit 1; fi
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/GamepadLab.app"
 git diff --check
