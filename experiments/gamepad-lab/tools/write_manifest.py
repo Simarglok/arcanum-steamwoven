@@ -13,11 +13,13 @@ if subprocess.run(["git", "-C", str(candidate_root), "status", "--porcelain"], c
 app_path = pathlib.Path(app)
 if not app_path.is_file():
     raise SystemExit("exported app executable is missing")
-checks = ["sdk-info.log", "locked-restore.log", "locked-tests-restore.log", "release-build.log", "core-harness.log", "editor-import.log", "debug-build.log", "godot-self-test.log", "export.log", "exported-smoke.log", "plist-lint.log", "codesign.log"]
+checks = ["sdk-info.log", "locked-restore.log", "locked-tests-restore.log", "release-build.log", "core-harness.log", "editor-import.log", "debug-build.log", "godot-self-test.log", "export.log", "exported-smoke.log", "ordinary-launch.log", "plist-lint.log", "codesign.log"]
 evidence = build_root / "evidence"
 missing = [name for name in checks if not (evidence / name).is_file()]
 if missing:
     raise SystemExit(f"missing gate logs: {missing}")
+if not (evidence / "ordinary-launch.png").is_file() or not (evidence / "ordinary-launch.png").stat().st_size:
+    raise SystemExit("ordinary exported-app launch did not produce capture evidence")
 manifest = {
     "schemaVersion": 1,
     "task": "ARC-GPAD-002",

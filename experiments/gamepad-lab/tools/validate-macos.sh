@@ -33,9 +33,13 @@ run_log godot-self-test.log "$GODOT" --headless --path "$lab_root" -- --self-tes
 git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
 run_log export.log "$GODOT" --headless --path "$lab_root" --export-debug macOS "$build_root/GamepadLab.app"
 git -C "$candidate_root" restore -- experiments/gamepad-lab/packages.lock.json experiments/gamepad-lab/Core/packages.lock.json
-app=$(find "$build_root/GamepadLab.app/Contents/MacOS" -type f -perm -111 | head -n 1)
-test -n "$app"
+app="$build_root/GamepadLab.app/Contents/MacOS/GamepadLab"
+test -x "$app"
 run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/exported-smoke.json"
+# This intentionally does not use --headless: the exported macOS application
+# performs its bounded capture/layout path, writes a PNG, and quits itself.
+run_log ordinary-launch.log "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
+test -s "$build_root/evidence/ordinary-launch.png"
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/GamepadLab.app"
 git diff --check

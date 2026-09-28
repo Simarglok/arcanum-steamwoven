@@ -28,7 +28,7 @@ public partial class LabRoot : Node2D
         var intents = new List<IntentFrame>(); var controller = _adapter.SampleController(_input.ActiveDevice, _focused);
         if (controller is RawInputFrame joy) intents.Add(_input.Reduce(joy, Context(delta, _hud.ModalVisible, true)));
         intents.Add(_input.Reduce(_adapter.SampleKeyboard(_focused), Context(delta, _hud.ModalVisible, controller is null)));
-        foreach (var intent in intents.Where(i => i.Accepted && !_hud.ModalVisible)) ApplyWorldIntent(intent, delta);
+        if (!_hud.ModalVisible) ApplyWorldIntents(intents.Where(i => i.Accepted), delta);
         if (_hud.ModalVisible)
         {
             var menu = intents.LastOrDefault(i => i.Accepted && (i.MenuDirection != 0 || Math.Abs(i.MenuAnalog) > .45));
@@ -56,7 +56,7 @@ public partial class LabRoot : Node2D
             GetViewport().SetInputAsHandled(); return;
         }
         if (intent.Previous || intent.Next) { _selection = _targeting.Cycle(_result!, intent.Next ? 1 : -1); RefreshSelection(); AddLog($"Cycle -> {_selection.SelectedId}"); }
-        if (intent.Cancel) { _selection = _targeting.CancelLock(); CancelMovement("cancel"); }
+        if (intent.Cancel) { _selection = _targeting.CancelLock(); ClearWorldIntents("Movement cancelled: cancel; both sticks require neutral."); }
         if (intent.Context) { _hud.ShowContext(PrimaryAction()); ClearWorldIntents("Context menu opened."); }
         if (intent.Settings) { _hud.ShowSettings(); ClearWorldIntents("Settings opened."); }
         if (intent.Confirm) AddLog(_result!.IsGround ? "destination selected for targeting only; left stick moves actor" : $"{PrimaryAction()} {_result.Id} (synthetic)");
@@ -64,19 +64,32 @@ public partial class LabRoot : Node2D
         GetViewport().SetInputAsHandled();
     }
 
-    private void ApplyWorldIntent(IntentFrame intent, double delta)
+    private void ApplyWorldIntents(IEnumerable<IntentFrame> intents, double delta)
     {
-        if (intent.CameraPan != default) _world.Position += ToGodot(intent.CameraPan);
-        if (intent.Movement != default)
-        {
-            var step = _movement.Update(_actor, intent.Movement, delta, _settings.MovementMode, _movementPolicy,
-                (candidate, radius) => _courtyard.CanOccupy(ToGodot(candidate), (float)radius));
-            _actor = step.State; SyncActor(); if (_actor.Outcome == MovementOutcome.Blocked) AddLog("Actor blocked; goal cancelled (no replan loop).");
-        }
+        var sampled = intents.ToArray();
+        var camera = sampled.Aggregate(default(Vec2), (total, intent) => total + intent.CameraPan);
+        if (camera != default) _world.Position += ToGodot(camera);
+
+        // Update movement once per frame even when neutral. This is essential: a
+        // keyboard companion sample must not hide a controller release, and neutral
+        // must clear an actor-relative goal rather than leave stale motion behind.
+        var movement = sampled.Aggregate(default(Vec2), (total, intent) => total + intent.Movement);
+        if (movement.Length > 1) movement = movement.Normalized();
+        var step = _movement.Update(_actor, movement, delta, _settings.MovementMode, _movementPolicy,
+            (candidate, radius) => _courtyard.CanOccupy(ToGodot(candidate), (float)radius));
+        var wasBlocked = _actor.Outcome == MovementOutcome.Blocked;
+        _actor = step.State; SyncActor();
+        if (!wasBlocked && _actor.Outcome == MovementOutcome.Blocked) AddLog("Actor blocked; intent latched until neutral or direction changes.");
     }
     private void ActivateModal()
     {
         var choice = _hud.Activate(); if (choice == "" || choice == "Close" || choice == "Cancel") { CloseModal(); return; }
+        if (_hud.ModalKind == ModalKind.Context)
+        {
+            if (choice == "Inspect") AddLog(_result!.IsGround ? "inspect ground (synthetic)" : $"inspect {_result.Id} (synthetic)");
+            else AddLog($"{choice} {_result?.Id ?? "ground"} (synthetic)");
+            AddLog($"Menu choice: {choice}"); CloseModal(); return;
+        }
         _settings = (choice switch
         {
             "Camera deadzone −" => _settings with { CameraDeadzone = _settings.CameraDeadzone - .05 },
@@ -119,7 +132,11 @@ public partial class LabRoot : Node2D
         {
             foreach (var action in new[] { "lab_actor_move", "lab_camera_pan", "lab_confirm", "lab_cancel", "lab_inspect", "lab_previous", "lab_next", "lab_context", "lab_settings", "lab_menu_up", "lab_menu_down" }) VerificationMode.Require(InputMap.HasAction(action) && InputMap.ActionGetEvents(action).Count > 0, $"missing mapping {action}");
             var saved = _settings; var initialActor = _actor.Position; var initialWorld = _world.Position;
-            _settingsStore.Save(_settings with { InvertCameraX = false }); VerificationMode.Require(!_settingsStore.Load().InvertCameraX, "user-local settings did not persist/reload"); _settingsStore.Save(saved);
+            VerificationMode.Require(!_courtyard.CanOccupy(new Vector2(690, 500), (float)_movementPolicy.ActorRadius), "scene wall collision was not active");
+            VerificationMode.Require(!_courtyard.CanOccupy(new Vector2(815, 275), (float)_movementPolicy.ActorRadius), "scene corner collision was not active");
+            VerificationMode.Require(_courtyard.CanOccupy(new Vector2(950, 580), (float)_movementPolicy.ActorRadius), "scene narrow passage was unexpectedly closed");
+            _settingsStore.Save(_settings with { InvertCameraX = false }); VerificationMode.Require(!_settingsStore.Load().InvertCameraX, "user-local settings did not persist/reload");
+            _settingsStore.Save(LabSettings.Default); VerificationMode.Require(_settingsStore.Load() == LabSettings.Default, "reset defaults did not persist/restart with inverted axes"); _settingsStore.Save(saved);
             // Self-test injects device 3 through the actual adapter. Pin it only for
             // this synthetic harness, then enforce the same two-frame neutral rearm.
             _input.SetStartupDevices(new[] { 3 }); _input.Reset();
@@ -140,9 +157,28 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
             VerificationMode.Require(_actor.Position == focusActor && _world.Position == focusWorld, "focus loss retained a stick intent"); _Notification((int)NotificationApplicationFocusIn);
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            var contextSettings = _settings; var contextLog = _log.Count;
+            _hud.ShowContext("Talk"); ActivateModal();
+            VerificationMode.Require(!_hud.ModalVisible && _log.Skip(contextLog).Any(line => line.Contains("Talk", StringComparison.Ordinal)) && _settings == contextSettings && _settingsStore.Load() == contextSettings, "context primary action was not dispatched without settings write");
+            _hud.ShowContext("Talk"); _hud.Navigate(1); contextLog = _log.Count; ActivateModal();
+            VerificationMode.Require(!_hud.ModalVisible && _log.Skip(contextLog).Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase)) && _settingsStore.Load() == contextSettings, "context Inspect was not dispatched without settings write");
+            _hud.ShowContext("Talk"); _hud.Navigate(2); ActivateModal();
+            VerificationMode.Require(!_hud.ModalVisible && _settingsStore.Load() == contextSettings, "context Cancel wrote settings or remained visible");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            _settings = _settings with { MovementMode = MovementMode.NearbyGoal };
             Recenter(); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); for (var step = 0; step < 20; step++) _Process(.1);
             VerificationMode.Require(_actor.Position.X < 675 - _movementPolicy.ActorRadius, "actor crossed synthetic wall"); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); Recenter();
-            _world.Position = initialWorld; _actor = new MovementState(initialActor, new Vec2(1, 0)); SyncActor(); AddLog("SIMULATION self-test passed: independent sticks, persistence, modal/lifecycle gates and obstacle collision."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); GetTree().Quit(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }, VerificationMode.Simulation); for (var step = 0; step < 20; step++) _Process(.1);
+            VerificationMode.Require(_actor.Outcome == MovementOutcome.Blocked, "wall did not yield blocked movement outcome"); var heldBlockedReplans = _actor.ReplanCount; for (var step = 0; step < 8; step++) _Process(.1);
+            VerificationMode.Require(_actor.ReplanCount == heldBlockedReplans, "held blocked stick replanned without a bound");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); VerificationMode.Require(_actor.Goal is null && _actor.Outcome == MovementOutcome.Idle, "left-stick release did not clear pending goal");
+            Recenter(); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); var cancelActor = _actor.Position; var cancelWorld = _world.Position;
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.B, Pressed = true }, VerificationMode.Simulation); _Process(.1);
+            VerificationMode.Require(_actor.Position == cancelActor && _world.Position == cancelWorld && _actor.Goal is null, "cancel while both sticks are held did not quarantine both world domains");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.B, Pressed = false }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1); VerificationMode.Require(_actor.Position.X > cancelActor.X, "neutral rearm did not permit safe movement resume after cancel");
+            Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0);
+            _settings = saved; _world.Position = initialWorld; _actor = new MovementState(initialActor, new Vec2(1, 0)); SyncActor(); AddLog("SIMULATION self-test passed: independent sticks, persistence, modal/lifecycle gates and obstacle collision."); GD.Print("GamepadLab Godot self-test: PASS (SIMULATION)"); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
@@ -152,15 +188,27 @@ public partial class LabRoot : Node2D
         var index = Array.IndexOf(args, "--smoke"); if (index < 0 || index == args.Length - 1) { GetTree().Quit(1); return; }
         try
         {
+            // The smoke is repeatable even after a previous local run changed a
+            // preference; it then proves an actual non-default write and reset.
+            _settings = LabSettings.Default; _settingsStore.Save(_settings);
             var actorBefore = _actor.Position; Handle(new InputEventKey { Keycode = Key.D, Pressed = true }, VerificationMode.Simulation); _Process(.1); Handle(new InputEventKey { Keycode = Key.D, Pressed = false }, VerificationMode.Simulation);
             var worldBefore = _world.Position; Handle(new InputEventKey { Keycode = Key.Right, Pressed = true }, VerificationMode.Simulation); _Process(.1); Handle(new InputEventKey { Keycode = Key.Right, Pressed = false }, VerificationMode.Simulation);
             VerificationMode.Require(_actor.Position.X > actorBefore.X && _world.Position.X > worldBefore.X, "smoke did not prove actor/camera keyboard separation");
-            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, movementMode = _settings.MovementMode.ToString(), exercises = new[] { "scene", "actor-displacement", "camera-displacement", "settings" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
+            PressKey(Key.Enter); ReleaseKey(Key.Enter); var confirmed = _log.Any(line => line.Contains("(synthetic)", StringComparison.Ordinal));
+            PressKey(Key.I); ReleaseKey(Key.I); var inspected = _log.Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase));
+            PressKey(Key.F1); ReleaseKey(Key.F1); _Process(0); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "smoke did not open settings");
+            PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); PressKey(Key.Enter); ReleaseKey(Key.Enter); VerificationMode.Require(_settings.CameraDeadzone != LabSettings.Default.CameraDeadzone && _settingsStore.Load().CameraDeadzone == _settings.CameraDeadzone, "smoke did not persist changed setting");
+            for (var step = 0; step < 11; step++) { PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); }
+            VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to Reset defaults"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
+            VerificationMode.Require(confirmed && inspected && _settings == LabSettings.Default && _settingsStore.Load() == LabSettings.Default, "smoke did not prove confirm, inspect, settings change, and reset persistence");
+            System.IO.File.WriteAllText(args[index + 1], JsonSerializer.Serialize(new { status = "passed", provenance = VerificationMode.Simulation, movementMode = _settings.MovementMode.ToString(), exercises = new[] { "scene", "actor-displacement", "camera-displacement", "confirm", "inspect", "settings-change", "settings-reset" }, physicalDeviceEvidence = new { xboxBluetoothAxesButtons = "Not verified", disconnectReconnect = "Not verified", drift = "Not verified", comfort = "Not verified" } })); GetTree().Quit(0);
         }
         catch (Exception exception) { GD.PushError(exception.ToString()); GetTree().Quit(1); }
     }
     public void RunCapture(string[] args) { var index = Array.IndexOf(args, "--capture"); if (index < 0 || index + 2 >= args.Length) { GetTree().Quit(1); return; } var parts = args[index + 1].Split('x'); GetWindow().Size = new Vector2I(int.Parse(parts[0]), int.Parse(parts[1])); CallDeferred(nameof(SaveCaptureAfterLayout), args[index + 2]); }
     public async void SaveCaptureAfterLayout(string path) { await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame); var image = GetViewport().GetTexture().GetImage(); GetTree().Quit(image.SavePng(path) == Error.Ok ? 0 : 1); }
+    private void PressKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = true }, VerificationMode.Simulation);
+    private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
     private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_settings.CameraDeadzone, _settings.ActorDeadzone, _settings.CameraSensitivity, _settings.ActorSensitivity, delta, _camera.Zoom.X, _settings.InvertCameraX, _settings.InvertCameraY, modal, advanceTime);
     private string PrimaryAction() => _result?.Id is null ? "Choose destination" : _result.Id.StartsWith("npc") ? "Talk" : _result.Id.StartsWith("door") || _result.Id == "crate" ? "Open" : _result.Id.StartsWith("enemy") ? "Mark" : "Pick up";
     private string Prompt() => _input.Method == InputMethod.Gamepad ? "Left stick: move actor   Right stick: camera   [A] interact [X] inspect [Y] context [Start] settings" : "WASD: actor   arrows: camera/menu   [F2] recenter   [Enter] interact [I] inspect [F1] settings";

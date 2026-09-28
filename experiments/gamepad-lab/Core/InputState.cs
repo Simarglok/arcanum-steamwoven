@@ -113,9 +113,12 @@ public sealed class InputStateReducer
         }
         if (isJoy && (freshControllerPress || freshStickQualification)) { Method = InputMethod.Gamepad; _mouseMotionSeconds = 0; _mouseLogicalDistance = 0; }
 
-        var actor = (left * context.ActorSensitivity + Normalize(raw.KeyboardActor)).Normalized();
-        var camera = right * context.CameraSensitivity + Normalize(raw.KeyboardCamera);
-        camera = camera * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
+        // Sensitivity is deliberately a single, linear multiplier per domain.  Both
+        // physical-stick and keyboard vectors use the same policy; normalization
+        // only caps a mixed diagonal command and must not erase sensitivity.
+        var actor = CombineDirection(left, Normalize(raw.KeyboardActor)) * context.ActorSensitivity;
+        var camera = CombineDirection(right, Normalize(raw.KeyboardCamera))
+            * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
         // The scene translates its world image. Default inversion makes stick-right move
         // that image right, equivalent to a camera pan left as requested by the owner.
         camera = new Vec2(context.InvertCameraX ? camera.X : -camera.X, context.InvertCameraY ? camera.Y : -camera.Y);
@@ -125,6 +128,11 @@ public sealed class InputStateReducer
     }
 
     private static Vec2 Normalize(Vec2 value) => value.Length > 0 ? value.Normalized() : default;
+    private static Vec2 CombineDirection(Vec2 first, Vec2 second)
+    {
+        var combined = first + second;
+        return combined.Length > 1 ? combined.Normalized() : combined;
+    }
     private static bool Digital(RawInputFrame r) => r.Confirm || r.Cancel || r.Inspect || r.Previous || r.Next || r.Context || r.Settings || r.MenuUp || r.MenuDown;
     private static bool Meaningful(RawInputFrame r, InputContext c) => Digital(r) || Vec2.CircularDeadzone(r.LeftStick, c.ActorDeadzone).Length >= .25 || Vec2.CircularDeadzone(r.RightStick, c.CameraDeadzone).Length >= .25;
     private static bool AnyLevel(RawInputFrame r, Vec2 left, Vec2 right) => Digital(r) || left.Length > 0 || right.Length > 0 || r.KeyboardActor.Length > 0 || r.KeyboardCamera.Length > 0;

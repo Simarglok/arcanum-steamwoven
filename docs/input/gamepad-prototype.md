@@ -17,7 +17,7 @@ Settings are versioned JSON in `user://gamepad_lab_settings_v1.json` through the
 
 ## Movement experiment
 
-The default is direct desired-direction/velocity intent. A settings comparison mode uses a bounded actor-relative nearby goal with 96 px lookahead, 0.15 second refresh cadence, 12 px hysteresis, explicit stop/arrival/blocked states, duplicate-target suppression, and cancellation on neutral/blocked/focus/disconnect/modal transitions. The procedural wall, corner and narrow passage have collision queries; an unreachable attempted goal returns `Blocked`, clears the goal, and does not loop replan.
+The default is direct desired-direction/velocity intent. A settings comparison mode uses a bounded actor-relative nearby goal with 96 px lookahead, 0.15 second refresh cadence, 12 px hysteresis, explicit stop/arrival/blocked states, duplicate-target suppression, and cancellation on neutral/blocked/focus/disconnect/modal transitions. A held blocked direction is latched until neutral or a materially changed direction, so it cannot replan every frame. The procedural wall, corner and narrow passage have collision queries; an unreachable attempted goal returns `Blocked`, clears the goal, and does not loop replan.
 
 This is not a pathfinding implementation. It does not route around the synthetic wall/corner/narrow passage. The rationale, observed test fixture paths/stops/replan counts, official 4.7 sources, and limitations are in [gamepad-movement-study.md](gamepad-movement-study.md).
 

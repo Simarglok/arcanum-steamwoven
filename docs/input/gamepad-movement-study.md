@@ -9,7 +9,7 @@ The owner's click-and-hold description is treated as an input-preference hypothe
 | Option | Result in this lab | Decision |
 |---|---|---|
 | A. Emit synthetic mouse presses/motion | Not implemented as a movement adapter. It would conflate controller intent with targeting/interaction, depend on reticle/canvas transforms, and reintroduce click side effects. | Rejected for production/lab default. |
-| B. Refresh actor-relative nearby semantic goal | Implemented as the inexpensive comparison mode. A goal is actor position plus a bounded 96 px lookahead. It updates only after 0.15 s and at least 12 px goal difference, cancels on neutral or blocked state, and records replan count. | Retained for comparison. |
+| B. Refresh actor-relative nearby semantic goal | Implemented as the inexpensive comparison mode. A goal is actor position plus a bounded 96 px lookahead. It updates only after 0.15 s and at least 12 px goal difference, cancels on neutral or blocked state, records replan count, and latches a held blocked direction until neutral or a materially changed direction. | Retained for comparison. |
 | C. Direct desired direction / velocity intent | Implemented as the default. Input is a semantic unit direction; the replaceable scene adapter applies the explicit 240 px/s prototype policy and collision query. | Provisional default. |
 
 ## Observed reproducible comparison
@@ -21,6 +21,7 @@ The owner's click-and-hold description is treated as an input-preference hypothe
 | Open straight segment, 0.1 s | position advances 10 px | position advances 10 px; initial actor-relative goal is x=40; replan count=1 |
 | Same held direction, a further 0.05 s | direct continues | retained goal; replan count stays 1 because cadence/hysteresis suppresses a duplicate target |
 | Wall at x=20 from x=15 | attempted step blocks | same bounded `Blocked` outcome; goal is cleared rather than queued for replan |
+| Held direction after `Blocked` | subsequent direct collision probes may occur by prototype policy | no new motion attempt or replan; neutral or a materially redirected intent is required before retry |
 | Neutral input | no pending path state | goal cleared and outcome `Idle` |
 
 The rendered synthetic courtyard provides a wall, a corner, and a narrow passage. The Godot `--self-test` drives the actual left-stick actor adapter against the wall and checks that the actor cannot cross it. It does not claim that either adapter can route around obstacles: direct intent stops, and the nearby-goal comparison stops/cancels. That limitation is deliberate; no large navigation stack was added.

@@ -17,7 +17,7 @@ public sealed record LabSettings(
 
     public LabSettings Validated()
     {
-        if (Version != 1 || !double.IsFinite(CameraDeadzone) || !double.IsFinite(ActorDeadzone)
+        if (Version != 1 || !Enum.IsDefined(MovementMode) || !double.IsFinite(CameraDeadzone) || !double.IsFinite(ActorDeadzone)
             || !double.IsFinite(CameraSensitivity) || !double.IsFinite(ActorSensitivity)) return Default;
         return this with
         {

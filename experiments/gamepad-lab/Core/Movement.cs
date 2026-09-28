@@ -12,7 +12,7 @@ public sealed record MovementPolicy(
     double GoalCadenceSeconds = .15,
     double StopDistance = 3);
 
-public sealed record MovementState(Vec2 Position, Vec2 Heading, Vec2? Goal = null, double GoalAgeSeconds = 0, int ReplanCount = 0, MovementOutcome Outcome = MovementOutcome.Idle);
+public sealed record MovementState(Vec2 Position, Vec2 Heading, Vec2? Goal = null, double GoalAgeSeconds = 0, int ReplanCount = 0, MovementOutcome Outcome = MovementOutcome.Idle, Vec2? BlockedIntent = null);
 public sealed record MovementStep(MovementState State, bool AttemptedMotion, string Note);
 
 /// <summary>
@@ -26,7 +26,13 @@ public sealed class MovementEngine
     {
         var desired = desiredScreenDirection.Length > 1 ? desiredScreenDirection.Normalized() : desiredScreenDirection;
         if (desired.Length == 0)
-            return new(previous with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Idle }, false, "neutral cancels pending destination");
+            return new(previous with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Idle, BlockedIntent = null }, false, "neutral cancels pending destination and blocked latch");
+
+        // A blocked held stick is not a request to replan every rendered frame.
+        // It must be released or materially redirected before the lab tries again.
+        var inputDirection = desired.Normalized();
+        if (previous.BlockedIntent is Vec2 blocked && Vec2.Distance(blocked, inputDirection) < .2)
+            return new(previous with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Blocked }, false, "blocked intent remains latched until neutral or changed direction");
 
         var goal = previous.Goal;
         var age = previous.GoalAgeSeconds + delta;
@@ -45,10 +51,10 @@ public sealed class MovementEngine
         var distance = policy.Speed * delta;
         var candidatePosition = previous.Position + desired * distance;
         if (!canOccupy(candidatePosition, policy.ActorRadius))
-            return new(previous with { Goal = null, GoalAgeSeconds = 0, ReplanCount = replans, Outcome = MovementOutcome.Blocked }, true, "blocked by synthetic obstacle; destination cancelled");
+            return new(previous with { Goal = null, GoalAgeSeconds = 0, ReplanCount = replans, Outcome = MovementOutcome.Blocked, BlockedIntent = inputDirection }, true, "blocked by synthetic obstacle; destination cancelled and intent latched");
 
         var remaining = goal is null ? double.PositiveInfinity : Vec2.Distance(candidatePosition, goal.Value);
         var outcome = remaining <= policy.StopDistance ? MovementOutcome.Arrived : MovementOutcome.Moving;
-        return new(previous with { Position = candidatePosition, Heading = desired, Goal = outcome == MovementOutcome.Arrived ? null : goal, GoalAgeSeconds = age, ReplanCount = replans, Outcome = outcome }, true, mode == MovementMode.DirectIntent ? "direct desired-direction intent" : "actor-relative nearby semantic goal");
+        return new(previous with { Position = candidatePosition, Heading = desired, Goal = outcome == MovementOutcome.Arrived ? null : goal, GoalAgeSeconds = age, ReplanCount = replans, Outcome = outcome, BlockedIntent = null }, true, mode == MovementMode.DirectIntent ? "direct desired-direction intent" : "actor-relative nearby semantic goal");
     }
 }
