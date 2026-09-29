@@ -25,7 +25,7 @@ caller-selected inputs before and after its read-only traversal:
 | --- | ---: | --- |
 | module DAT | 355,938,305 | `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` |
 | resource DAT | 447,470,816 | `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576` |
-| explicit prototype-root aggregate | 949,341 | `e956718e2a978a4a84f34b9aee52c77e2166bac86970bb2641b38e3a20114956` |
+| explicit prototype-root aggregate | 949,341 | `1741dec3e542e2717a130c8162a4d739c82edf0a14866905d2b85a070d5ec33c` |
 
 The selected source is module-DAT ordinal **643**. It is a fully consumed v119
 object envelope of type 16 (NPC), whose serialized common field 0 supplied the
@@ -119,8 +119,11 @@ Current ART has only these distinct outcomes:
 | `Invalid` | unlocatable/mismatched/malformed/over-cap prototype | reject candidate |
 
 The prototype directory is explicit and fingerprinted before/after even when a
-direct candidate needs no prototype payload. No generic inheritance, adjacent
-field default, fallback archive, or filename-based ART guess is allowed.
+direct candidate needs no prototype payload. Its private aggregate binds each
+top-level leaf filename and parsed canonical selector, bounded file length, and
+raw content digest without emitting a name or path. No generic inheritance,
+adjacent field default, fallback archive, or filename-based ART guess is
+allowed.
 
 ## Evidence ledger and provenance
 
@@ -144,18 +147,22 @@ community reports, not independent evidence.
 
 ## Synthetic production-path coverage
 
-`--self-test` constructs ordinary synthetic caller inputs and invokes the same
-`Probe` path, not a hard-coded report. It covers direct and inherited ART,
-player exclusion, full-envelope truncation/version/type/count/reserved-mask
-rejection, optional and array wire corruption, direct action selector mutation,
-non-single-layer rejection, physical group/flip behavior, missing/unsafe mapping
-rejection through normal resolution, malformed ART rejection through
-`ArtDecoder`, deterministic ordinal choice, input fingerprints, and stdout
-privacy-sentinel suppression. Additional targeted fixtures reject missing,
-duplicate, type-mismatched, ID-mismatched and malformed prototypes, incomplete
-action pairs/palettes, unsafe/ambiguous resources, cap/overflow inputs, and
-trailing bytes. These are synthetic traversal checks, not an original-runtime
-oracle.
+`--self-test` constructs only synthetic inputs. The matrix below records its
+actual entry point and stable outcome; it is a traversal/serialization check,
+not an original-runtime oracle.
+
+| Case | Entry point | Asserted result |
+| --- | --- | --- |
+| Direct + exact inherited candidate, type-15 exclusion, two qualifying index ordinals | `Main → Input.Parse → Probe` twice | exit 3, deterministic byte-identical report, lower index ordinal, `direct`, `prototype_default`, and `player_excluded` counters |
+| Full v119 envelope version/type/count/reserved-mask/truncation/trailing bytes | `Main → Probe` | exit 3 with the corresponding `record-*` typed rejection |
+| Optional presence; array header/population; valid, unterminated, and over-cap strings | `Main → Probe` | player exclusion for the valid string; typed `optional-presence`, `array-*`, `string-*` rejections otherwise |
+| Missing, duplicate, type/ID-mismatched, truncated, trailing, and over-cap canonical prototypes | `Main → Probe` | `prototype-missing-or-ambiguous`, `prototype-invalid`, or fail-closed exit 1 for aggregate over-cap input |
+| Missing/malformed/duplicate/unsafe mapping; missing/duplicate-normalized/wrong-family resource; palette, malformed ART, resource cap | `Main → Probe` | sanitized fatal mapping exit or typed `mapping-*`, `resource-*`, and `art-*` rejection |
+| Wrong ART family and non-single-layer armor/shield/weapon selectors | `Main → Probe` | typed `composite-or-nonmonster` rejection |
+| Distinct Idle/Walk FPS and two group-major frames with nonzero geometry | `Main → Probe` | report preserves action FPS, frame order/geometry, `SourceScheduler` cadence authority, and no movement-speed inference |
+| Private input sentinel and fatal missing path sentinel | captured `Main` stdout + stderr | exit 3/1 respectively; both streams omit the sentinel and fatal output is sanitized |
+| Prototype suffix/selector rename and per-file cap | `FingerprintDirectory` helper-only identity policy | unchanged total with changed aggregate SHA-256 for each rename, restored original aggregate, and fail-closed cap |
+| All eight physical group/flip bindings and unreachable out-of-domain action | `MapPhysicalFacing` / `MonsterPath` helper-only source policy | exact opaque bindings; unsupported action rejected |
 
 ## Reproduction
 

@@ -111,6 +111,7 @@ internal static class Program
         var status = selected is null ? "no-complete-monster-chain" : "actor-anchor-unobserved";
         output.WriteLine($"result=NOT_READY source={input.SourceId} module_length={before[0].Length} module_sha256={before[0].Sha256} resource_length={before[1].Length} resource_sha256={before[1].Sha256} prototype_aggregate_length={before[2].Length} prototype_aggregate_sha256={before[2].Sha256} eligible={result.Eligible} npc={result.Npc} player_excluded={result.PlayerExcluded} direct={result.Direct} prototype_default={result.PrototypeDefault} missing={result.Missing} invalid={result.Invalid} inspected_chains={result.InspectedChains} selected_ordinal={(selected?.Ordinal.ToString() ?? "none")} selected_source={(selected?.Source.ToString() ?? "none")} reason={status}");
         if (selected is not null) output.WriteLine("selected_metadata=" + selected.SafeMetadata());
+        output.WriteLine("cadence_authority=SourceScheduler raw_art_fps=metadata-only movement_speed=not-inferred");
         output.WriteLine($"rejections={result.RenderReasons()}");
         output.WriteLine("next_evidence=measure-actor-world-anchor-to-top-left-delta-without-inferring-collision-or-movement-speed");
         return ExitNotReady;
@@ -408,18 +409,45 @@ internal static class Program
         {
             if (!Directory.Exists(root)) throw new ProbeException("prototypes", "unavailable");
             using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256); long total = 0;
+            var selectorBytes = new byte[4]; var lengthBytes = new byte[8];
             foreach (var path in Directory.EnumerateFiles(root, "*.pro", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
             {
+                var file = new FileInfo(path);
+                if (file.Length <= 0 || file.Length > MaxEntryBytes) throw new ProbeException("prototypes", "entry-cap");
+                var leafBytes = Encoding.UTF8.GetBytes(Path.GetFileName(path));
+                AppendLengthPrefixed(hash, leafBytes);
+                var selector = CanonicalPrototypeSelector(Path.GetFileName(path));
+                hash.AppendData([selector is null ? (byte)0 : (byte)1]);
+                if (selector is int aid)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(selectorBytes, aid);
+                    hash.AppendData(selectorBytes);
+                }
                 var fingerprint = Fingerprint(path, "prototypes");
                 total = checked(total + fingerprint.Length);
                 if (total > (long)MaxEligibleRecords * MaxEntryBytes) throw new ProbeException("prototypes", "cap-exceeded");
-                hash.AppendData(Encoding.ASCII.GetBytes($"{fingerprint.Length}:{fingerprint.Sha256}|"));
+                BinaryPrimitives.WriteInt64LittleEndian(lengthBytes, fingerprint.Length);
+                hash.AppendData(lengthBytes);
+                hash.AppendData(Convert.FromHexString(fingerprint.Sha256));
             }
             return new InputFingerprint(total, Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant());
         }
         catch (ProbeException) { throw; }
         catch (IOException) { throw new ProbeException("prototypes", "unavailable"); }
         catch (UnauthorizedAccessException) { throw new ProbeException("prototypes", "unavailable"); }
+    }
+    private static void AppendLengthPrefixed(IncrementalHash hash, ReadOnlySpan<byte> value)
+    {
+        Span<byte> length = stackalloc byte[4];
+        BinaryPrimitives.WriteInt32LittleEndian(length, value.Length);
+        hash.AppendData(length);
+        hash.AppendData(value);
+    }
+    private static int? CanonicalPrototypeSelector(string leaf)
+    {
+        if (leaf.Length < 10 || leaf[6] != ' ' || leaf[7] != '-' || leaf[8] != ' ') return null;
+        for (var index = 0; index < 6; index++) if (!char.IsAsciiDigit(leaf[index])) return null;
+        return int.TryParse(leaf.AsSpan(0, 6), out var aid) ? aid : null;
     }
     private static InputFingerprint FingerprintStream(Stream stream, string stage)
     {
@@ -431,46 +459,78 @@ internal static class Program
 
     private static void SelfTest()
     {
-        // The production path is exercised with a synthetic ordinary DAT pair and a temporary explicit prototype root.
-        var root = Path.Combine(Path.GetTempPath(), "ActorVisualProbe-" + Guid.NewGuid().ToString("N"));
+        // These are independently authored, ordinary DAT/prototype fixtures. Cases that can enter
+        // through Main do so; only sealed source-policy helpers remain direct assertions below.
+        const string sentinel = "PRIVATE_ORIGINAL_NAME_MUST_NOT_LEAK";
+        var root = Path.Combine(Path.GetTempPath(), "ActorVisualProbe-" + sentinel + "-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         try
         {
-            var art = CreateArt();
-            var resource = CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", art), ("art/monster/safe/safeUWXAb.art", art));
             var direct = CreateInstance(NpcObjectType, ObjectId.A(7), true, unchecked((int)0xc0000000));
             var inherited = CreateInstance(NpcObjectType, ObjectId.A(8), false, 0);
-            File.WriteAllBytes(Path.Combine(root, "000008 - fixture.pro"), CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
-            var module = CreateDat(("000.mob", direct), ("001.mob", inherited), ("002.mob", CreateInstance(PlayerObjectType, ObjectId.A(9), true, 0)));
-            var modulePath = Path.Combine(root, "module.dat"); var resourcePath = Path.Combine(root, "resource.dat"); File.WriteAllBytes(modulePath, module); File.WriteAllBytes(resourcePath, resource);
-            var writer = new StringWriter();
-            Assert(Probe(new Input(modulePath, resourcePath, root, "synthetic"), writer) == ExitNotReady, "production path did not return bounded not-ready");
-            var report = writer.ToString(); Assert(report.Contains("direct=1", StringComparison.Ordinal) && report.Contains("prototype_default=1", StringComparison.Ordinal), "direct/prototype production resolution was not exercised");
-            const string sentinel = "PRIVATE_ORIGINAL_NAME_MUST_NOT_LEAK"; Assert(!report.Contains(sentinel, StringComparison.Ordinal), "privacy sentinel leaked into production report");
-            Reject(() => ReadExactPrototype(root, ObjectId.A(99)), "missing prototype accepted");
-            File.WriteAllBytes(Path.Combine(root, "000008 - duplicate.pro"), CreatePrototype(NpcObjectType, ObjectId.A(8), 0));
-            Reject(() => ReadExactPrototype(root, ObjectId.A(8)), "duplicate prototype accepted");
-            File.Delete(Path.Combine(root, "000008 - duplicate.pro"));
-            File.WriteAllBytes(Path.Combine(root, "000008 - fixture.pro"), CreatePrototype(NpcObjectType, ObjectId.A(9), 0));
-            Reject(() => ResolvePrototypeForTest(root, ObjectId.A(8)), "ID-mismatched prototype accepted");
-            File.WriteAllBytes(Path.Combine(root, "000008 - fixture.pro"), CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
-            using (var incomplete = DatArchive.Open(new MemoryStream(CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", art))), DatOptions()))
-                Assert(InspectActions(incomplete, ReadMonsterNames(incomplete), unchecked((int)0xc0000000), new Census()) is null, "incomplete action pair accepted");
-            using (var unsafeMap = DatArchive.Open(new MemoryStream(CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{..}")), ("art/monster/safe/safeUWXAa.art", art))), DatOptions()))
-                Assert(InspectActions(unsafeMap, ReadMonsterNames(unsafeMap), unchecked((int)0xc0000000), new Census()) is null, "unsafe mapping component accepted");
-            Reject(() => ArtDecoder.Inspect(art[..^1], ArtOptions()), "truncated ART accepted");
+            var idle = CreateArt(fps: 7, framesPerGroup: 2, geometrySeed: 10);
+            var walk = CreateArt(fps: 13, framesPerGroup: 2, geometrySeed: 40);
+            var safeDirectory = "safe" + sentinel;
+            var completeResource = CreateResource(safeDirectory, idle, walk);
+            var goodPrototype = Path.Combine(root, "000008 - " + sentinel + ".pro");
+            File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
 
-            Reject(() => ParseInstance([]), "truncation accepted");
-            Reject(() => ParseInstance(WithI32(direct, 0, 118)), "wrong version accepted");
-            Reject(() => ParseInstance(WithI32(direct, 52, 17)), "wrong type accepted as NPC");
-            Reject(() => ParseInstance(WithI16(direct, 56, -1)), "negative field count accepted");
-            Reject(() => ParseInstance(WithU32(direct, 58, uint.MaxValue)), "reserved mask bits accepted");
-            Reject(() => ParseInstance(direct[..^1]), "trailing field truncation accepted");
-            Reject(() => ParseInstance(WithByte(CreateOptionalFixture(), 70, 2)), "bad optional presence accepted");
-            Reject(() => ParseInstance(WithI32(CreateArrayFixture(), 71, 999999)), "bad array count accepted");
-            Assert(MapPhysicalFacing(1) == new PhysicalFacing(7, true) && MapPhysicalFacing(4) == new PhysicalFacing(4, false), "facing/flip policy changed");
-            Assert(!IsSingleLayerMonster(unchecked((int)0xc0100001)), "equipment composite admitted");
-            Assert(SetAction(unchecked((int)0xc0000000), WalkAction) == unchecked((int)0xc0000040), "action selector changed");
+            var positive = RunFixture(root, CreateDat(("003.mob", direct), ("001.mob", inherited), ("002.mob", CreateInstance(PlayerObjectType, ObjectId.A(9), true, 0))), completeResource);
+            var repeated = RunFixture(root, CreateDat(("003.mob", direct), ("001.mob", inherited), ("002.mob", CreateInstance(PlayerObjectType, ObjectId.A(9), true, 0))), completeResource);
+            Assert(positive.Exit == ExitNotReady && positive.Stdout == repeated.Stdout, "deterministic Main fixture changed");
+            Assert(positive.Stdout.Contains("selected_ordinal=0", StringComparison.Ordinal) && positive.Stdout.Contains("direct=1", StringComparison.Ordinal) && positive.Stdout.Contains("prototype_default=1", StringComparison.Ordinal) && positive.Stdout.Contains("player_excluded=1", StringComparison.Ordinal), "Main did not exercise direct/inherited/player selection");
+            Assert(positive.Stdout.Contains("fps=7", StringComparison.Ordinal) && positive.Stdout.Contains("fps=13", StringComparison.Ordinal) && positive.Stdout.Contains("0:11x12@13,14+15,16/1:12x13@14,15+16,17", StringComparison.Ordinal) && positive.Stdout.Contains("cadence_authority=SourceScheduler raw_art_fps=metadata-only movement_speed=not-inferred", StringComparison.Ordinal), "Main did not retain ordered frame geometry/cadence metadata");
+            Assert(!positive.Stdout.Contains(sentinel, StringComparison.Ordinal) && !positive.Stderr.Contains(sentinel, StringComparison.Ordinal), "private successful inputs leaked through CLI");
+            var fatal = RunCli(["--module", Path.Combine(root, sentinel + ".dat"), "--resource", "x", "--prototype-root", "x", "--source-id", "synthetic"]);
+            Assert(fatal.Exit == ExitFailure && fatal.Stdout.Length == 0 && fatal.Stderr.Contains("stage=module", StringComparison.Ordinal) && !fatal.Stderr.Contains(sentinel, StringComparison.Ordinal), "fatal CLI privacy boundary changed");
+
+            AssertCliReason(root, completeResource, WithI32(direct, 0, 118), "record-unsupported-version");
+            AssertCliReason(root, completeResource, WithI32(direct, 52, 17), "record-non-npc-envelope-unsupported");
+            AssertCliReason(root, completeResource, WithI16(direct, 56, -1), "record-mask-count");
+            AssertCliReason(root, completeResource, WithU32(direct, 62, uint.MaxValue), "record-reserved-mask");
+            AssertCliReason(root, completeResource, WithByte(CreateOptionalFixture(), 78, 2), "record-optional-presence");
+            AssertCliReason(root, completeResource, WithI32(CreateArrayFixture(), 83, 999999), "record-array-header");
+            AssertCliReason(root, completeResource, WithU32(CreateArrayFixture(), 99, 0), "record-array-population");
+            AssertCliReason(root, completeResource, CreateStringFixture(valid: false), "record-string-terminator");
+            AssertCliReason(root, completeResource, WithI32(CreateStringFixture(valid: true), 79, MaxEntryBytes + 1), "record-string-cap");
+            var validString = RunFixture(root, CreateDat(("000.mob", CreateStringFixture(valid: true))), completeResource); Assert(validString.Exit == ExitNotReady && validString.Stdout.Contains("player_excluded=1", StringComparison.Ordinal), "valid string traversal did not reach player exclusion");
+            AssertCliReason(root, completeResource, direct[..^1], "record-truncated");
+            AssertCliReason(root, completeResource, WithTrailingByte(direct), "record-trailing-bytes");
+
+            File.Delete(goodPrototype);
+            AssertCliReason(root, completeResource, inherited, "prototype-missing-or-ambiguous");
+            File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
+            File.WriteAllBytes(Path.Combine(root, "000008 - duplicate.pro"), CreatePrototype(NpcObjectType, ObjectId.A(8), 0));
+            AssertCliReason(root, completeResource, inherited, "prototype-missing-or-ambiguous"); File.Delete(Path.Combine(root, "000008 - duplicate.pro"));
+            File.WriteAllBytes(goodPrototype, CreatePrototype(PlayerObjectType, ObjectId.A(8), 0)); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
+            File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(9), 0)); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
+            File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), 0)[..^1]); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
+            File.WriteAllBytes(goodPrototype, WithTrailingByte(CreatePrototype(NpcObjectType, ObjectId.A(8), 0))); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
+            File.WriteAllBytes(goodPrototype, new byte[MaxEntryBytes + 1]); Assert(RunFixture(root, CreateDat(("000.mob", inherited)), completeResource).Exit == ExitFailure, "over-cap prototype did not fail closed");
+            File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
+
+            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat()).Exit == ExitFailure, "missing mapping did not fail at Main");
+            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("bad")))).Exit == ExitFailure, "malformed mapping did not fail at Main");
+            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("ART/MONSTER/MONSTER.MES", Encoding.ASCII.GetBytes("{0}{safe}")))).Exit == ExitFailure, "duplicate mapping did not fail at Main");
+            AssertCliReason(root, CreateResource("..", idle, walk), direct, "mapping-missing-or-unsafe");
+            AssertCliReason(root, CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", idle)), direct, "resource-missing-or-ambiguous");
+            AssertCliReason(root, CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", idle), ("ART/MONSTER/SAFE/SAFEUWXAA.ART", idle), ("art/monster/safe/safeUWXAb.art", walk)), direct, "resource-missing-or-ambiguous");
+            AssertCliReason(root, CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("safeUWXAa.art", idle), ("safeUWXAb.art", walk)), direct, "resource-missing-or-ambiguous");
+            AssertCliReason(root, CreateResource("safe", CreateArt(paletteSlot: 1), walk), direct, "art-incomplete-facing-or-palette");
+            AssertCliReason(root, CreateResource("safe", idle[..^1], walk), direct, "art-invalid");
+            AssertCliReason(root, CreateResource("safe", new byte[MaxEntryBytes + 1], walk), direct, "resource-entry-cap");
+            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xb0000000)), "composite-or-nonmonster");
+            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xc0100001)), "composite-or-nonmonster");
+
+            var beforeRename = FingerprintDirectory(root); File.Move(goodPrototype, Path.Combine(root, "000008 - renamed.pro")); var suffixRename = FingerprintDirectory(root);
+            File.Move(Path.Combine(root, "000008 - renamed.pro"), Path.Combine(root, "000009 - renamed.pro")); var selectorRename = FingerprintDirectory(root);
+            File.Move(Path.Combine(root, "000009 - renamed.pro"), goodPrototype); var restored = FingerprintDirectory(root);
+            Assert(beforeRename.Length == suffixRename.Length && beforeRename.Sha256 != suffixRename.Sha256 && suffixRename.Sha256 != selectorRename.Sha256 && beforeRename == restored, "prototype filename/selector identity is not bound");
+            File.WriteAllBytes(Path.Combine(root, "000010 - over-cap.pro"), new byte[MaxEntryBytes + 1]); Reject(() => FingerprintDirectory(root), "over-cap prototype fingerprint accepted"); File.Delete(Path.Combine(root, "000010 - over-cap.pro"));
+
+            var expectedFacings = new[] { new PhysicalFacing(0, false), new PhysicalFacing(7, true), new PhysicalFacing(6, true), new PhysicalFacing(5, true), new PhysicalFacing(4, false), new PhysicalFacing(5, false), new PhysicalFacing(6, false), new PhysicalFacing(7, false) };
+            Assert(expectedFacings.Select((facing, index) => MapPhysicalFacing(index) == facing).All(value => value), "all source-facing group/flip bindings changed");
+            Reject(() => MonsterPath("safe", SetAction(unchecked((int)0xc0000000), 25)), "out-of-domain action accepted by helper policy");
             Assert(ExitNotReady == 3 && ExitUsage == 2 && ExitFailure == 1, "exit contract changed");
         }
         finally { Directory.Delete(root, recursive: true); }
@@ -482,6 +542,28 @@ internal static class Program
         var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, prototype); AddObjectId(result, ObjectId.A(1)); AddI32(result, type); AddI16(result, (short)(direct ? 1 : 0)); foreach (var mask in masks) AddU32(result, mask);
         if (direct) AddI32(result, art); return result.ToArray();
     }
+    private static CliResult RunFixture(string root, byte[] module, byte[] resource)
+    {
+        var modulePath = Path.Combine(root, "module.dat"); var resourcePath = Path.Combine(root, "resource.dat");
+        File.WriteAllBytes(modulePath, module); File.WriteAllBytes(resourcePath, resource);
+        return RunCli(["--module", modulePath, "--resource", resourcePath, "--prototype-root", root, "--source-id", "synthetic"]);
+    }
+    private static CliResult RunCli(string[] args)
+    {
+        var previousOut = Console.Out; var previousError = Console.Error;
+        using var output = new StringWriter(); using var error = new StringWriter();
+        try { Console.SetOut(output); Console.SetError(error); return new CliResult(Main(args), output.ToString(), error.ToString()); }
+        finally { Console.SetOut(previousOut); Console.SetError(previousError); }
+    }
+    private static void AssertCliReason(string root, byte[] resource, byte[] mob, string reason)
+    {
+        var result = RunFixture(root, CreateDat(("000.mob", mob)), resource);
+        Assert(result.Exit == ExitNotReady && result.Stdout.Contains(reason, StringComparison.Ordinal), "Main scenario did not report " + reason);
+    }
+    private static byte[] CreateResource(string directory, byte[] idle, byte[] walk) => CreateDat(
+        ("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{" + directory + "}")),
+        ("art/monster/" + directory + "/" + directory + "UWXAa.art", idle),
+        ("art/monster/" + directory + "/" + directory + "UWXAb.art", walk));
     private static void ResolvePrototypeForTest(string root, ObjectId id)
     {
         var prototype = ReadExactPrototype(root, id);
@@ -503,10 +585,21 @@ internal static class Program
         var fields = FieldsFor(NpcObjectType); var field = Array.FindIndex(fields, kind => kind == WireKind.ArrU32); var masks = new uint[MaskWords(NpcObjectType)]; SetMaskBit(NpcObjectType, masks, field);
         var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, ObjectId.A(1)); AddObjectId(result, ObjectId.A(2)); AddI32(result, NpcObjectType); AddI16(result, 1); foreach (var mask in masks) AddU32(result, mask); result.Add(1); AddI32(result, 4); AddI32(result, 1); AddI32(result, 0); AddI32(result, 0); AddI32(result, 2); AddU32(result, 1); AddU32(result, 0); return result.ToArray();
     }
-    private static byte[] CreateArt()
+    private static byte[] CreateStringFixture(bool valid)
     {
-        var bytes = new byte[132 + 1024 + (8 * 28) + 8]; BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), 10); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8); BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), 1);
-        var frameStart = 132 + 1024; for (var group = 0; group < 8; group++) { var offset = frameStart + group * 28; BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 4), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 8), 1); bytes[frameStart + (8 * 28) + group] = 1; }
+        var fields = FieldsFor(PlayerObjectType); var field = Array.FindIndex(fields, kind => kind == WireKind.OptString); var masks = new uint[MaskWords(PlayerObjectType)]; SetMaskBit(PlayerObjectType, masks, field);
+        var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, ObjectId.A(1)); AddObjectId(result, ObjectId.A(2)); AddI32(result, PlayerObjectType); AddI16(result, 1); foreach (var mask in masks) AddU32(result, mask); result.Add(1); AddI32(result, 3); result.AddRange(Encoding.ASCII.GetBytes("abc")); result.Add(valid ? (byte)0 : (byte)1); return result.ToArray();
+    }
+    private static byte[] CreateArt(int fps = 8, int framesPerGroup = 1, int paletteSlot = 0, int geometrySeed = 0)
+    {
+        var frameCount = checked(8 * framesPerGroup); var paletteOffset = 132; var frameStart = paletteOffset + 1024; var payloadStart = frameStart + (frameCount * 28);
+        var bytes = new byte[payloadStart + frameCount]; BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), fps); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8); BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(12 + (paletteSlot * 4)), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), framesPerGroup);
+        for (var index = 0; index < frameCount; index++)
+        {
+            var offset = frameStart + (index * 28); var seed = geometrySeed + index;
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), geometrySeed == 0 ? 1 : seed + 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 4), geometrySeed == 0 ? 1 : seed + 2); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 8), 1);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 12), geometrySeed == 0 ? 0 : seed + 3); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 16), geometrySeed == 0 ? 0 : seed + 4); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 20), geometrySeed == 0 ? 0 : seed + 5); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 24), geometrySeed == 0 ? 0 : seed + 6); bytes[payloadStart + index] = 1;
+        }
         return bytes;
     }
     private static byte[] CreateDat(params (string Path, byte[] Payload)[] entries)
@@ -527,6 +620,7 @@ internal static class Program
     private static byte[] WithI16(byte[] source, int offset, short value) { var copy = source.ToArray(); BinaryPrimitives.WriteInt16LittleEndian(copy.AsSpan(offset), value); return copy; }
     private static byte[] WithU32(byte[] source, int offset, uint value) { var copy = source.ToArray(); BinaryPrimitives.WriteUInt32LittleEndian(copy.AsSpan(offset), value); return copy; }
     private static byte[] WithByte(byte[] source, int offset, byte value) { var copy = source.ToArray(); copy[offset] = value; return copy; }
+    private static byte[] WithTrailingByte(byte[] source) { var copy = new byte[source.Length + 1]; source.CopyTo(copy, 0); return copy; }
     private static void AddObjectId(List<byte> result, ObjectId id) { AddI16(result, id.Kind); result.AddRange(new byte[6]); result.AddRange(id.Payload); }
     private static void AddI16(List<byte> result, short value) { var bytes = new byte[2]; BinaryPrimitives.WriteInt16LittleEndian(bytes, value); result.AddRange(bytes); }
     private static void AddI32(List<byte> result, int value) { var bytes = new byte[4]; BinaryPrimitives.WriteInt32LittleEndian(bytes, value); result.AddRange(bytes); }
@@ -545,6 +639,7 @@ internal static class Program
         }
     }
 
+    private readonly record struct CliResult(int Exit, string Stdout, string Stderr);
     private sealed class Census
     {
         private readonly SortedDictionary<string, int> _reasons = new(StringComparer.Ordinal);
