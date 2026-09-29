@@ -1,6 +1,6 @@
 # Project status and component catalogue
 
-Baseline: merged main `8cdb6249ad33e6eaebd1aa529b47677d19ad9614`, 2026-09-29 (through PR #24). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
+Baseline: merged main `b453ee19620385096cc5644c0f8e3f5265ada560`, 2026-09-29 (through PR #25). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
 
 | Component | Implemented scope and evidence | Source | Remaining boundary |
 | --- | --- | --- | --- |
@@ -16,6 +16,7 @@ Baseline: merged main `8cdb6249ad33e6eaebd1aa529b47677d19ad9614`, 2026-09-29 (th
 | Gamepad lab | ARC-GPAD-002/003 add left-stick synthetic actor motion, right-stick camera pan, both-axis inversion defaults/settings, Follow/Manual transitions and a bounded obstacle fixture; direct intent is default, Nearby Goal is a comparison mode. [Lab and automated checks](../../experiments/gamepad-lab/README.md), [movement study](../input/gamepad-movement-study.md). | [Lab](../../experiments/gamepad-lab) | Original-world movement/collision and scene integration; physical Xbox Bluetooth behavior and comfort remain unverified. |
 | Actor visual research | ARC-RES-009 identifies one direct single-layer monster’s idle/walk resource chain, facing/group/flip bindings, palettes, frame geometry and raw FPS. [Evidence](../research/actor-visual-evidence.md), [proposed contract](../rendering/actor-visual-contract.md). | [Research probe](../../tools/research/Arcanum.ActorVisualProbe) | Contract remains **NOT READY**: actor-specific world-anchor-to-top-left delta is unknown. No production actor renderer or scheduler; raw FPS does not establish movement speed. |
 | Local pathfinding research | Pinned CE source study documents direct attempts, one bounded local fallback and traversal context. [Study](../input/arcanum-pathfinding-study.md). | Source references in the study | An alternate branch is incomplete in CE; no original-runtime validation, navigation implementation or demonstrated path-quality improvement. |
+| Selected-sector passability research | ARC-RES-011 records a fixed base-sector block-mask/facade source trace, one identity-checked aggregate run, and proposed separate occupancy/step outcomes. [Evidence](../research/sector-passability-evidence.md), [proposal](../world/passability-contract.md). | Bounded Crash Site probe | **NOT READY**: tile-name, static spatial, actor/state, diagonal and cross-sector behavior remain unknown or unsupported. Navigation/collision is not implemented. |
 | Research tools | Bounded probes for DAT, ART, terrain, Crash Site, scenery and dialog evidence. [Method](../research/method.md). | [Tools](../../tools/research) | Universal production APIs or independent corroboration merely from multiple tools. |
 
 ## Not implemented

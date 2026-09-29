@@ -44,12 +44,14 @@ internal static class Program
                 return 0;
             }
 
-            if (args.Length != 6 || args[0] != "--module" || args[2] != "--prototype-root" || args[4] != "--resource")
+            var passability = args.Length == 7 && args[0] == "--passability";
+            var argumentOffset = passability ? 1 : 0;
+            if (args.Length != argumentOffset + 6 || args[argumentOffset] != "--module" || args[argumentOffset + 2] != "--prototype-root" || args[argumentOffset + 4] != "--resource")
             {
-                throw new ArgumentException("usage: --self-test | --module PATH --prototype-root PATH --resource PATH");
+                throw new ArgumentException("usage: --self-test | [--passability] --module PATH --prototype-root PATH --resource PATH");
             }
 
-            ProbeModule(args[1], args[3], args[5]);
+            ProbeModule(args[argumentOffset + 1], args[argumentOffset + 3], args[argumentOffset + 5], passability);
             return 0;
         }
         catch (Exception exception)
@@ -59,7 +61,7 @@ internal static class Program
         }
     }
 
-    private static void ProbeModule(string path, string prototypeRoot, string resourcePath)
+    private static void ProbeModule(string path, string prototypeRoot, string resourcePath, bool passability)
     {
         var before = InputFingerprint.Create(path);
         if (before.Bytes != ExpectedModuleBytes || before.Sha256 != ExpectedModuleSha256)
@@ -145,6 +147,10 @@ internal static class Program
             Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} direct_offset_x={offsetX} direct_offset_y={offsetY} diagnostic_anchor={anchor} diagnostic_top_left={topLeft} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY} frame_offset={example.ArtOffsetX},{example.ArtOffsetY}");
         }
         Console.WriteLine("integrity before_after_match=true");
+        if (passability)
+        {
+            PassabilityProbe.Emit(sectorBytes, framing.TileStart, framing.BlockMaskStart, framing.BlockMaskBytes, staticScenery.Length);
+        }
     }
 
     private static DatReaderOptions BoundedOptions() => new()
@@ -162,6 +168,7 @@ internal static class Program
 
     private static void SelfTest()
     {
+        PassabilityProbe.SelfTest();
         var valid = CreateFramedFixture(trailingObjectCount: 2);
         var sector = SectorSlice.Parse(valid, rejectNonTileArtIds: true);
         var framing = SectorFraming.Parse(valid, sector.LightCount);

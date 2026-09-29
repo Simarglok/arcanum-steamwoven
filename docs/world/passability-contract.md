@@ -1,0 +1,94 @@
+# Proposed selected-sector passability contract
+
+## Status
+
+This is an evidence-bounded proposal for a future consumer of [selected-sector passability evidence](../research/sector-passability-evidence.md). It is **not implemented** as a production collision grid, navigation API, path finder, actor controller, renderer overlay, or gameplay rule.
+
+It applies only to the immutable base-sector profile `(1452,1290)`, origin `(92928,82560)`, extent 64×64, module selector and identities recorded in the evidence document. A caller must supply the version/profile, base-input identity, coordinate, and the declared actor/context boundary. It does not choose archive, `.dif`, PATCH, or loose-file precedence.
+
+## Result vocabulary
+
+Both result kinds keep two independent dimensions:
+
+```text
+Coverage    = Supported | Unsupported | Unknown
+Disposition = Open | Blocked | null
+```
+
+`Unknown` never means Open. `Supported + Open` is allowed only after every required component is admitted and nonblocking. `Supported + Blocked` requires an unconditional, non-overridable blocker in the declared context. `Unknown + null` preserves an in-profile missing, ambiguous, runtime-derived, or unverified dependency. `Unsupported + null` identifies a request outside this bounded profile.
+
+Every result carries machine-readable reason and provenance codes, not an implied boolean. Suggested codes include:
+
+```text
+BASE_BLOCK_MASK_SET                 CE_SERIALIZED_BASE
+FACADE_WALKABILITY_BIT              CE_SERIALIZED_BASE
+TILE_NAME_RULE_UNAVAILABLE          CE_ART_MES_NAME
+STATIC_SPATIAL_CONTRIBUTION_UNKNOWN CE_RUNTIME_CONTEXT
+ACTOR_CAPABILITY_UNAVAILABLE        CE_RUNTIME_CONTEXT
+DIAGONAL_RULE_UNPROVED              CE_SOURCE_GAP
+CROSS_SECTOR_DATA_ABSENT            PROJECT_POLICY
+PROFILE_OR_PRECEDENCE_UNSUPPORTED   PROJECT_POLICY
+```
+
+## `CellOccupancyAssessment`
+
+A cell assessment is a coordinate-scoped evidence record, not a reusable grid cell:
+
+```text
+CellOccupancyAssessment
+  profile: fixed base-sector identity
+  local/world coordinate: required, 0..63 in the admitted sector
+  components:
+    serializedBlockMask: coverage + disposition + provenance
+    tileFacadeName: coverage + disposition + provenance
+    staticObjects: coverage + disposition + provenance
+    dynamicAndContext: coverage + disposition + provenance
+  combined: coverage + disposition + reason/provenance codes
+```
+
+For this candidate, a set serialized block bit may report `Supported + Blocked` for that component because the CE trace tests it before later tile branches. A clear bit does **not** report Open. Facade bit 0 is a raw-word component only; tile-class records additionally require an ART/MES/name rule. The static component remains `Unknown + null`: local record locations, five metadata samples, a type-3 census, a non-`OF_DYNAMIC` predicate, frame geometry, hotspots, alpha, pixels, and source index do not establish a traversal footprint or all contributors.
+
+The combined cell assessment is therefore `Unknown + null` in the present candidate, even when a component contains a useful blocking fact. Component visibility prevents a future consumer from silently treating a clear/unknown component as Open.
+
+## `StepTraversalAssessment`
+
+A step assessment is directional and distinct from occupancy:
+
+```text
+StepTraversalAssessment
+  from, to: required fixed-sector coordinates
+  relation: adjacent cardinal | adjacent diagonal
+  actor/context: required declared capability/state/flags profile
+  fromCell, toCell, edgeAndCorner, objectTraversal: component assessments
+  combined: coverage + disposition + reason/provenance codes
+```
+
+Same-cell and non-adjacent requests are `Unsupported + null`; they are not route-search requests. A cardinal step remains `Unknown + null` until its source/destination terrain components, all relevant object contributors, actor capability/context, and source-proven edge semantics are admitted. Diagonal steps are `Unknown + null` in-profile because the CE source has recursive shoulder/object behavior but this contract has not established all required corner/cross-cell semantics. It must not invent a diagonal corner policy.
+
+A step that leaves the 64×64 sector is `Unsupported + null` with `CROSS_SECTOR_DATA_ABSENT`. The proposal deliberately does not load or infer a neighbor. Other sector IDs, source versions, profiles, `.dif`/PATCH/loose precedence, generalized dynamic objects, and unsupported actor/state categories are likewise `Unsupported + null`.
+
+`PATH_FLAG_0x1000` is an unavailable source branch, not a fallback: the pinned CE implementation is explicitly incomplete. A future consumer must reject/mark unknown that context rather than select a default behavior.
+
+## Composition rule
+
+The future implementation must evaluate every admitted component and retain all component results. It may short-circuit the **combined** result to `Supported + Blocked` only if a blocker is source-proven unconditional under the entire declared context. It may return `Supported + Open` only if all terrain, facade/name, static-object, edge/diagonal, actor, and state dependencies are admitted and nonblocking. Otherwise, in-profile uncertainty remains `Unknown + null`.
+
+This policy deliberately does not translate a source-level traversal cost into an occupancy boolean. The attributed CE object routine distinguishes source/destination lists, wall/portal orientation, object flags/state, actor portal/window capability, traps/fire, and directed rotation. Those are contract inputs or declared unknowns, not convenience defaults.
+
+## Static-subset readiness gate
+
+A static combined result may become implementation-ready only when all of the following are true:
+
+1. the exact base input and coordinate profile are fingerprinted and fixed;
+2. block-mask shape, ordinal mapping, bit order, and polarity are proven;
+3. each explicit tile/facade/name rule is resolved from admitted source data;
+4. every relevant selected static object is completely enumerated and its spatial contribution is proven;
+5. every direct/prototype field needed by traversal is resolved to an exact serialized slot/default;
+6. actor/context and state inputs are declared with no omitted dynamic override; and
+7. the cardinal edge and any admitted diagonal/corner rule are source-proven.
+
+If any condition fails, terrain-only component facts can be useful, but combined occupancy and step traversal remain unknown. The current candidate fails conditions 3 through 7, and specifically does not promote the 317-record static census to collision semantics.
+
+## Non-goals
+
+This proposal does not authorize changes to `TerrainLoader`, `StaticObjectLoader`, their public models, the viewer, Godot, the gamepad lab, simulation/navigation APIs, or the fixed local pathfinding study. It introduces no collision data structure, navmesh, route search, actor/controller, visual overlay, generalized object parser, generalized map/version support, or original-runtime compatibility assertion.
