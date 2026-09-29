@@ -45,6 +45,7 @@ public sealed class ActorDiagnosticScenePlan
     public ActorDiagnosticScenePlan Select(ActorDiagnosticPlacementInput input)
     {
         ArgumentNullException.ThrowIfNull(input);
+        ValidateSelectionInput(input);
         var facing = MapFacing(input.Facing);
         if (!Catalog.TryGetValue((input.Action, facing.Group, input.Frame), out var selected))
             throw Failure(TerrainViewerErrorCode.ActorFrame);
@@ -55,7 +56,9 @@ public sealed class ActorDiagnosticScenePlan
 
     public static ActorDiagnosticScenePlan CreateSynthetic(ActorDiagnosticPlacementInput input, IEnumerable<ActorDiagnosticFrame> frames)
     {
+        ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(frames);
+        ValidateSelectionInput(input);
         var catalog = frames.ToArray();
         if (catalog.Length == 0) throw Failure(TerrainViewerErrorCode.ActorMetadata);
         var facing = MapFacing(input.Facing);
@@ -84,17 +87,16 @@ public sealed class ActorDiagnosticScenePlan
     }
 
     public static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame)
-        => Place(input, frame, MapFacing(input.Facing));
+    {
+        ArgumentNullException.ThrowIfNull(input);
+        ValidateSelectionInput(input);
+        return Place(input, frame, MapFacing(input.Facing));
+    }
 
     private static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame, ActorPhysicalFacing facing)
     {
-        if (input.MapX is null || input.MapY is null || input.CameraOriginX is null || input.CameraOriginY is null ||
-            input.InstanceOffsetX is null || input.InstanceOffsetY is null || input.Shrunk is null)
-            throw Failure(TerrainViewerErrorCode.ActorInput);
-        if (input.RenderBranch != ActorDiagnosticRenderBranch.NormalUncached || input.ScalePercent != 100 || input.Shrunk != false)
-            throw Failure(TerrainViewerErrorCode.ActorRenderState);
-        if (!Enum.IsDefined(input.Action))
-            throw Failure(TerrainViewerErrorCode.ActorInput);
+        ArgumentNullException.ThrowIfNull(input);
+        ValidateSelectionInput(input);
         if (frame.TextureKey.Palette != 1 || facing.Group != frame.TextureKey.PhysicalGroup)
             throw Failure(TerrainViewerErrorCode.ActorMetadata);
         if (input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Width != frame.Width || input.Height != frame.Height ||
@@ -102,10 +104,10 @@ public sealed class ActorDiagnosticScenePlan
             throw Failure(TerrainViewerErrorCode.ActorFrame);
         try
         {
-            var projectedX = checked(input.CameraOriginX.Value + checked(40L * checked(checked(input.MapY.Value - input.MapX.Value) - 1L)));
-            var projectedY = checked(input.CameraOriginY.Value + checked(20L * checked(input.MapY.Value + input.MapX.Value)));
-            var anchorX = checked(checked(projectedX + input.InstanceOffsetX.Value) + 40L);
-            var anchorY = checked(checked(projectedY + input.InstanceOffsetY.Value) + 20L);
+            var projectedX = checked(input.CameraOriginX!.Value + checked(40L * checked(checked(input.MapY!.Value - input.MapX!.Value) - 1L)));
+            var projectedY = checked(input.CameraOriginY!.Value + checked(20L * checked(input.MapY!.Value + input.MapX!.Value)));
+            var anchorX = checked(checked(projectedX + input.InstanceOffsetX!.Value) + 40L);
+            var anchorY = checked(checked(projectedY + input.InstanceOffsetY!.Value) + 20L);
             var effectiveHotX = facing.FlipX ? checked(frame.Width - frame.HotX - 1) : frame.HotX;
             var effectiveOffsetX = facing.FlipX ? checked(-frame.ArtOffsetX) : frame.ArtOffsetX;
             var left = checked(anchorX - effectiveHotX);
@@ -133,6 +135,22 @@ public sealed class ActorDiagnosticScenePlan
         0 => new(0, false), 1 => new(7, true), 2 => new(6, true), 3 => new(5, true),
         4 => new(4, false), 5 => new(5, false), 6 => new(6, false), 7 => new(7, false), _ => throw Failure(TerrainViewerErrorCode.ActorFacing)
     };
+
+    /// <summary>
+    /// Public selection methods validate the closed caller state before they
+    /// access a facing or catalogue, so invalid input cannot become a
+    /// misleading missing-frame result.
+    /// </summary>
+    private static void ValidateSelectionInput(ActorDiagnosticPlacementInput input)
+    {
+        if (input.MapX is null || input.MapY is null || input.CameraOriginX is null || input.CameraOriginY is null ||
+            input.InstanceOffsetX is null || input.InstanceOffsetY is null || input.Shrunk is null)
+            throw Failure(TerrainViewerErrorCode.ActorInput);
+        if (!Enum.IsDefined(input.Action)) throw Failure(TerrainViewerErrorCode.ActorInput);
+        if (input.RenderBranch != ActorDiagnosticRenderBranch.NormalUncached || input.ScalePercent != 100 || input.Shrunk != false)
+            throw Failure(TerrainViewerErrorCode.ActorRenderState);
+        _ = MapFacing(input.Facing);
+    }
 
     private static TerrainRect VisibleGuideBounds(ActorDiagnosticDrawCommand command)
     {

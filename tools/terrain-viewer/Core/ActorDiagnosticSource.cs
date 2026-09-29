@@ -31,7 +31,7 @@ public static class ActorDiagnosticSource
     /// so actor mode shares the unchanged aggregate cap.
     /// </summary>
     public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
-        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken)
+        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint = null)
     {
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(resource);
@@ -46,9 +46,9 @@ public static class ActorDiagnosticSource
         var catalog = new List<ActorDiagnosticFrame>(PhysicalGroups * (IdleFrames + WalkFrames));
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
         var checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Idle, IdleSelector, IdleResourceOrdinal, IdleFps, IdleFrames,
-            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken);
+            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken, retainedFrameCheckpoint);
         checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Walk, WalkSelector, WalkResourceOrdinal, WalkFps, WalkFrames,
-            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken);
+            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, retainedFrameCheckpoint);
         if (textures.Count != TerrainCachePolicy.MaxActorDistinctKeys || catalog.Count != TerrainCachePolicy.MaxActorDistinctKeys)
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
         ActorPhysicalFacing physical;
@@ -65,7 +65,7 @@ public static class ActorDiagnosticSource
 
     private static long DecodeAction(DatArchive resource, ActorDiagnosticAction action, uint selector, int ordinal, int fps, int expectedFrames,
         ICollection<ActorDiagnosticFrame> catalog, IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures, int alreadyRetainedCount,
-        long checkedRgbaBytes, CancellationToken cancellationToken)
+        long checkedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint)
     {
         var entries = resource.Entries.Where(candidate => candidate.Ordinal == ordinal).ToArray();
         if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
@@ -90,8 +90,17 @@ public static class ActorDiagnosticSource
                     // The decoder's transient frame is not scene state.  Check
                     // the shared terrain+actor cap before copying/retaining the
                     // frame's RGBA array in this load-local texture catalogue.
-                    checkedRgbaBytes = TerrainCachePolicy.AddCheckedFrame(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), decoded.Width, decoded.Height);
+                    try
+                    {
+                        checkedRgbaBytes = TerrainCachePolicy.AddCheckedFrame(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), decoded.Width, decoded.Height);
+                    }
+                    catch (TerrainViewerException exception) when (exception.Error.Code is TerrainViewerErrorCode.ResourceLimit or TerrainViewerErrorCode.DecodeFailure)
+                    {
+                        throw Failure(exception.Error.Code, TerrainViewerFailureStage.ActorDecode);
+                    }
                     textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
+                    retainedFrameCheckpoint?.Invoke(textures.Count);
+                    cancellationToken.ThrowIfCancellationRequested();
                 }
             }
             return checkedRgbaBytes;
@@ -99,12 +108,57 @@ public static class ActorDiagnosticSource
         catch (TerrainViewerException) { throw; }
         catch (DatException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
         catch (ArtException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
-        catch (ArgumentException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
-        catch (InvalidOperationException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
         catch (IOException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
     }
 
     private static TerrainViewerException Failure(TerrainViewerErrorCode code, TerrainViewerFailureStage stage) => new(new TerrainViewerError(code, Stage: stage));
+
+    /// <summary>Path-free identity boundary shared by production and fixture tests.</summary>
+    public static void VerifyIdentity(InputFingerprint actual, long expectedSize, string expectedHash, string? requestedHash)
+    {
+        ArgumentNullException.ThrowIfNull(expectedHash);
+        if (actual.Size != expectedSize || !string.Equals(actual.Sha256, expectedHash, StringComparison.Ordinal)
+            || (requestedHash is not null && !string.Equals(actual.Sha256, requestedHash, StringComparison.Ordinal)))
+            throw Failure(TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+    }
+}
+
+/// <summary>
+/// Owns the actor archive for one production load. Its narrow archive-open
+/// boundary safely classifies actor input failures without swallowing
+/// cancellation or unrelated programmer exceptions.
+/// </summary>
+public sealed class ActorDiagnosticSourceOperation : IDisposable
+{
+    private readonly Func<DatArchive> _openArchive;
+    private DatArchive? _archive;
+    private int _disposed;
+
+    public ActorDiagnosticSourceOperation(Func<DatArchive> openArchive)
+        => _openArchive = openArchive ?? throw new ArgumentNullException(nameof(openArchive));
+
+    public ActorDiagnosticLoad Execute(DatArchive module, ActorDiagnosticPlacementInput input, int alreadyRetainedCount,
+        long alreadyCheckedRgbaBytes, TerrainViewerProgress progress, CancellationToken cancellationToken,
+        Action<int>? retainedFrameCheckpoint = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        try { _archive ??= _openArchive(); }
+        catch (DatException) { throw OpenFailure(progress); }
+        catch (IOException) { throw OpenFailure(progress); }
+        catch (UnauthorizedAccessException) { throw OpenFailure(progress); }
+        ArgumentNullException.ThrowIfNull(module);
+        return ActorDiagnosticSource.Create(module, _archive, input, alreadyRetainedCount, alreadyCheckedRgbaBytes,
+            cancellationToken, retainedFrameCheckpoint);
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+        _archive?.Dispose();
+    }
+
+    private static TerrainViewerException OpenFailure(TerrainViewerProgress progress)
+        => new(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint, Progress: progress));
 }
 
 public sealed record DecodedActorTexture(ActorDiagnosticTextureKey Key, int Width, int Height, byte[] Rgba);

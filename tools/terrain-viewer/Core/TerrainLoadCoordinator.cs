@@ -158,7 +158,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
     {
         private DatArchive? _module;
         private DatArchive? _resource;
-        private DatArchive? _actorResource;
+        private ActorDiagnosticSourceOperation? _actorOperation;
         private int _disposed;
 
         public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
@@ -181,8 +181,8 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     actorResourceBefore = FingerprintActorFile(arguments.ActorResourcePath!);
                     cancellationToken.ThrowIfCancellationRequested();
                     prototypeBefore = FingerprintActorPrototypeRoot(arguments.PrototypePath!);
-                    VerifyActor(actorResourceBefore, CrashSiteProfile.ActorResourceSize, CrashSiteProfile.ActorResourceSha256, arguments.ExpectedActorResourceSha256);
-                    VerifyActor(prototypeBefore, CrashSiteProfile.ActorPrototypeAggregateSize, CrashSiteProfile.ActorPrototypeAggregateSha256, null);
+                    ActorDiagnosticSource.VerifyIdentity(actorResourceBefore, CrashSiteProfile.ActorResourceSize, CrashSiteProfile.ActorResourceSha256, arguments.ExpectedActorResourceSha256);
+                    ActorDiagnosticSource.VerifyIdentity(prototypeBefore, CrashSiteProfile.ActorPrototypeAggregateSize, CrashSiteProfile.ActorPrototypeAggregateSha256, null);
                 }
                 TerrainLoadReport report;
                 Dictionary<TerrainTextureKey, DecodedTerrainTexture> textures;
@@ -271,9 +271,8 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         // This archive has a deliberately separate authenticated role:
                         // terrain resolution never consults it, and actor ordinal lookup
                         // never consults the terrain resource.
-                        _actorResource = DatArchive.Open(arguments.ActorResourcePath!, BoundedDatOptions());
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var actor = ActorDiagnosticSource.Create(_module, _actorResource, arguments.ActorInput!, textures.Count, checkedBytes, cancellationToken);
+                        _actorOperation = new ActorDiagnosticSourceOperation(() => DatArchive.Open(arguments.ActorResourcePath!, BoundedDatOptions()));
+                        var actor = _actorOperation.Execute(_module, arguments.ActorInput!, textures.Count, checkedBytes, progress, cancellationToken);
                         if (actor.Textures.Count != TerrainCachePolicy.MaxActorDistinctKeys)
                             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorMetadata, Stage: TerrainViewerFailureStage.ActorMetadata, Progress: progress));
                         checkedBytes = actor.CheckedRgbaBytes;
@@ -284,11 +283,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     {
                         throw new TerrainViewerException(exception.Error with { Progress = exception.Error.Progress ?? progress });
                     }
-                    catch (IOException)
-                    {
-                        throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint,
-                            Stage: TerrainViewerFailureStage.ActorFingerprint, Progress: progress));
-                    }
+
                 }
                 cancellationToken.ThrowIfCancellationRequested();
                 var moduleAfter = Fingerprint(arguments.ModulePath);
@@ -343,7 +338,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
-            _actorResource?.Dispose();
+            _actorOperation?.Dispose();
             _resource?.Dispose();
             _module?.Dispose();
         }
@@ -361,12 +356,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
             || (requestedSha256 is not null && !string.Equals(actual.Sha256, requestedSha256, StringComparison.Ordinal)))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch, Stage: TerrainViewerFailureStage.Fingerprint));
     }
-    private static void VerifyActor(InputFingerprint actual, long expectedSize, string expectedSha256, string? requestedSha256)
-    {
-        if (actual.Size != expectedSize || !string.Equals(actual.Sha256, expectedSha256, StringComparison.Ordinal)
-            || (requestedSha256 is not null && !string.Equals(actual.Sha256, requestedSha256, StringComparison.Ordinal)))
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint));
-    }
+
     private static InputFingerprint FingerprintActorFile(string path)
     {
         try { return Fingerprint(path); }

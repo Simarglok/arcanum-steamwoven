@@ -26,14 +26,14 @@ public static class TerrainViewerSelfTest
             AssertActorUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
+            await AssertSyntheticProductionAppAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {
                 await AssertCanvasOraclesAsync(host, cache, keys);
                 await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
                 await AssertStaticRasterPoliciesAsync(host, cache, keys.Red);
-                await AssertActorCanvasOracleAsync(host, cache, keys.Red);
-                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor production-canvas pixel oracle");
+                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor production-app pixel oracle");
             }
             else
             {
@@ -156,6 +156,111 @@ public static class TerrainViewerSelfTest
         AssertPixel(image, 20, 20, 255, 0, 0, 255);
         AssertPixel(image, 21, 20, 0, 0, 255, 255);
         viewport.QueueFree();
+    }
+
+    /// <summary>
+    /// Drives a bootstrapped real TerrainViewerApp through its production ready
+    /// publication, input and timeline paths. Expected state/pixel tables are
+    /// literals, independent of the placement/facing implementation.
+    /// </summary>
+    private static async Task AssertSyntheticProductionAppAsync(Node host)
+    {
+        var viewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var app = new TerrainViewerApp { SelfTestBootstrap = true };
+        viewport.AddChild(app);
+        host.AddChild(viewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var fixture = SyntheticActorFixture.Create();
+        app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var expectedFacings = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
+        var callerInput = fixture.Arguments.ActorInput!;
+        foreach (var actionCase in new[]
+        {
+            (Key.Key1, ActorDiagnosticAction.Idle, 15, 8, SyntheticActorFixture.IdlePixel),
+            (Key.Key2, ActorDiagnosticAction.Walk, 8, 15, SyntheticActorFixture.WalkPixel)
+        })
+        {
+            app._Input(new InputEventKey { Keycode = actionCase.Item1, Pressed = true });
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (var turns = 0; turns < 8 && app.GetSelfTestSnapshot().Actor?.RequestedFacing != 0; turns++)
+                app._Input(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            for (var requested = 0; requested < 8; requested++)
+            {
+                var snapshot = app.GetSelfTestSnapshot();
+                var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
+                if (actor.Action != actionCase.Item2 || actor.RequestedFacing != requested || actor.PhysicalGroup != expectedFacings[requested].Item1
+                    || actor.FlipX != expectedFacings[requested].Item2 || actor.Frame != 0 || actor.FrameCount != actionCase.Item3
+                    || actor.RawFramesPerSecond != actionCase.Item4 || snapshot.Playing || snapshot.CacheCount != 185
+                    || !HasStationaryCallerInput(snapshot.Input, callerInput) || snapshot.HudPosition != new Vector2(16, 16)
+                    || !snapshot.Hud.Contains("Original placement parity: NOT VERIFIED", StringComparison.Ordinal)
+                    || !snapshot.Hud.Contains("Layering: diagnostic terrain -> actor -> guides", StringComparison.Ordinal)
+                    || !snapshot.Hud.Contains("Controls: 1 Idle | 2 Walk", StringComparison.Ordinal))
+                    throw new InvalidOperationException("Synthetic app actor state diverges from the literal action/facing policy.");
+                if (DisplayServer.GetName() != "headless")
+                {
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    using var image = viewport.GetTexture().GetImage();
+                    AssertSyntheticActorPixels(image, snapshot, actionCase.Item5);
+                }
+                if (requested < 7) app._Input(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            }
+        }
+
+        // Walk's real input/timeline policy: step, play/advance, pause, then
+        // switch reset to Idle. The immutable caller input stays unchanged.
+        app._Input(new InputEventKey { Keycode = Key.Period, Pressed = true });
+        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Walk step did not pause at frame one.");
+        app._Input(new InputEventKey { Keycode = Key.Comma, Pressed = true });
+        if (app.GetSelfTestSnapshot().Actor?.Frame != 0) throw new InvalidOperationException("Walk reverse step did not return to frame zero.");
+        app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        app._Process(0.1);
+        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || !app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Walk playback did not advance through AnimationTimeline.");
+        app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        app._Process(1.0);
+        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Paused timeline advanced unexpectedly.");
+        app._Input(new InputEventKey { Keycode = Key.Key1, Pressed = true });
+        if (app.GetSelfTestSnapshot().Actor?.Frame != 0 || app.GetSelfTestSnapshot().Actor?.FrameCount != 15) throw new InvalidOperationException("Idle selection did not reset the timeline.");
+
+        var beforeCamera = app.GetSelfTestSnapshot();
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
+        app._Input(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        var afterCamera = app.GetSelfTestSnapshot();
+        if (!HasStationaryCallerInput(afterCamera.Input, callerInput) || afterCamera.Actor?.AnchorX != beforeCamera.Actor?.AnchorX || afterCamera.Actor?.AnchorY != beforeCamera.Actor?.AnchorY
+            || (afterCamera.CameraX, afterCamera.CameraY, afterCamera.CameraZoom) == (beforeCamera.CameraX, beforeCamera.CameraY, beforeCamera.CameraZoom)
+            || afterCamera.CanvasTransform == beforeCamera.CanvasTransform)
+            throw new InvalidOperationException("Inspection camera mutated stationary caller input or failed to update the canvas transform.");
+        viewport.QueueFree();
+    }
+
+    private static bool HasStationaryCallerInput(ActorDiagnosticPlacementInput? actual, ActorDiagnosticPlacementInput expected)
+        => actual is not null && actual.MapX == expected.MapX && actual.MapY == expected.MapY
+            && actual.CameraOriginX == expected.CameraOriginX && actual.CameraOriginY == expected.CameraOriginY
+            && actual.InstanceOffsetX == expected.InstanceOffsetX && actual.InstanceOffsetY == expected.InstanceOffsetY
+            && actual.RenderBranch == expected.RenderBranch && actual.ScalePercent == expected.ScalePercent && actual.Shrunk == expected.Shrunk;
+
+    private static void AssertSyntheticActorPixels(Image image, TerrainViewerSelfTestSnapshot snapshot, (byte R, byte G, byte B) expected)
+    {
+        var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
+        var pixelX = actor.Destination.X + (actor.FlipX ? 7 : 1);
+        var pixelY = actor.Destination.Y + 1;
+        var point = snapshot.CanvasTransform * new Vector2(pixelX, pixelY);
+        var x = (int)Math.Round(point.X);
+        var y = (int)Math.Round(point.Y);
+        var matched = false;
+        for (var sampleY = y - 1; sampleY <= y + 1; sampleY++)
+        {
+            for (var sampleX = x - 1; sampleX <= x + 1; sampleX++)
+            {
+                if (sampleX < 0 || sampleY < 0 || sampleX >= image.GetWidth() || sampleY >= image.GetHeight()) continue;
+                var pixel = image.GetPixel(sampleX, sampleY);
+                matched |= Math.Abs(Math.Round(pixel.R * 255) - expected.R) <= 1 && Math.Abs(Math.Round(pixel.G * 255) - expected.G) <= 1
+                    && Math.Abs(Math.Round(pixel.B * 255) - expected.B) <= 1 && Math.Round(pixel.A * 255) == 255;
+            }
+        }
+        if (!matched) throw new InvalidOperationException("Synthetic literal actor pixel/reflection oracle failed.");
     }
 
     private static async Task AssertActorCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)

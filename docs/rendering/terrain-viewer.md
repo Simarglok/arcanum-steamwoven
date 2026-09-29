@@ -83,6 +83,10 @@ the app field types to prove they cannot retain decoded texture data; it makes
 no nondeterministic GC claim. Focused barrier tests prove per-load archive
 lifetime, serialization, and delayed stale success/failure cannot mutate a
 newer scene or HUD.
+Actor archive opening is a separate disposable production operation. It maps
+only DAT-format/limit hierarchy failures, I/O hierarchy failures, and access
+denials at that boundary to the path-free actor fingerprint category; caller
+cancellation and unrelated programmer failures remain control flow/errors.
 
 `TerrainGeometry.Place` is the only owner of projection, the one-pixel X anchor,
 tile 78x40 / facade 80x40 footprint, crop, and raw tile flip. The adapter draws
@@ -122,6 +126,16 @@ corners and local `(30,32) -> (80,1240)` before the separate X anchor.
 A non-headless Godot run reads the `SubViewport` pixels; the dummy headless
 renderer cannot read a `ViewportTexture`, so its output explicitly records
 `graphical readback NOT_VERIFIED` rather than claiming rendered pixels.
+
+The same self-test also bootstraps a second real `TerrainViewerApp` in a fixed
+synthetic `SubViewport` and publishes a public-data terrain plus the bounded
+184-frame actor catalogue through the exact ready-publication method used by
+loads. It drives `1`/`2`, facing selection, step, play/pause and timeline
+advance for Idle and Walk across all eight requested facings. The non-headless
+matrix reads literal asymmetric actor/reflection pixels and verifies terrain,
+guides, HUD, cache, camera-transform and stationary caller-input policy. The
+headless run executes the same structural matrix but reports pixels
+`NOT_VERIFIED`; it never turns the structural result into a pixel claim.
 
 `--native-smoke` uses explicit original inputs, validates seven fixed
 representative ordinals through isolated production canvases, then drives the production scene at

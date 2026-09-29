@@ -35,6 +35,9 @@ public partial class TerrainViewerApp : Node
     private TerrainViewerMode _readyMode;
     private long _readyElapsedMilliseconds;
 
+    /// <summary>Internal-only bootstrap used by the deterministic SubViewport self-test.</summary>
+    internal bool SelfTestBootstrap { get; set; }
+
     public override void _Ready()
     {
         var canvas = new TerrainCanvas { Name = "TerrainCanvas" };
@@ -49,6 +52,8 @@ public partial class TerrainViewerApp : Node
         layer.AddChild(status);
         AddChild(layer);
         _status = status;
+
+        if (SelfTestBootstrap) return;
 
         var args = OS.GetCmdlineUserArgs().ToList();
         if (args.Contains("--self-test", StringComparer.Ordinal))
@@ -90,29 +95,7 @@ public partial class TerrainViewerApp : Node
         {
             result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
-            if (_exiting || !_coordinator.TryPublish(requestGeneration, () =>
-                {
-                    _cache.Upload(result.Textures);
-                    _cache.UploadStatic(result.StaticTextures);
-                    _cache.UploadActor(result.ActorTextures);
-                    _readyDiagnosticPlan = result.DiagnosticPlan ?? DiagnosticScenePlan.Create(result.Plan, result.StaticPlan);
-                    _canvas.Publish(_readyDiagnosticPlan, _cache);
-                    _camera!.SetPlan(_readyDiagnosticPlan, GetViewport().GetVisibleRect().Size);
-                    _readySourceId = arguments.SourceId;
-                    _readyDecodedCount = result.Textures.Count;
-                    _readyStaticDecodedCount = result.StaticTextures.Count;
-                    _readyStaticAdmittedCount = result.StaticPlan?.Commands.Count ?? 0;
-                    _readyStaticCensus = result.StaticCensusCount;
-                    _readyStaticOutsideScope = result.StaticOutsideScopeCount;
-                    _readyActor = result.ActorPlan?.Current;
-                    _readyActorPlan = result.ActorPlan;
-                    _readyActorInput = arguments.ActorInput;
-                    _actorTimeline = result.ActorPlan is null ? null : new AnimationTimeline(result.ActorPlan.Current.FrameCount, result.ActorPlan.Current.RawFramesPerSecond);
-                    if (_actorTimeline is not null && result.ActorPlan!.Current.Frame != 0) _actorTimeline.Seek(result.ActorPlan.Current.Frame);
-                    _readyMode = arguments.Mode;
-                    _readyElapsedMilliseconds = result.ElapsedMilliseconds;
-                    RefreshReadyStatus();
-                })) return;
+            if (_exiting || !_coordinator.TryPublish(requestGeneration, () => PublishReadyResult(arguments, result))) return;
             if (!_exiting && _nativeSmoke && orchestrateSmoke)
             {
                 try { await RunNativeSmokeAsync(result); }
@@ -164,6 +147,54 @@ public partial class TerrainViewerApp : Node
                 })) return;
         }
     }
+
+    /// <summary>
+    /// Sole ready-publication path for both production loads and the internal
+    /// synthetic harness. It uploads decoded bytes only into the texture cache
+    /// and retains scalar/current-plan state after the local result is gone.
+    /// </summary>
+    private void PublishReadyResult(TerrainViewerArguments arguments, TerrainLoadResult result)
+    {
+        _cache.Upload(result.Textures);
+        _cache.UploadStatic(result.StaticTextures);
+        _cache.UploadActor(result.ActorTextures);
+        _readyDiagnosticPlan = result.DiagnosticPlan ?? DiagnosticScenePlan.Create(result.Plan, result.StaticPlan);
+        _canvas!.Publish(_readyDiagnosticPlan, _cache);
+        _camera!.SetPlan(_readyDiagnosticPlan, GetViewport().GetVisibleRect().Size);
+        _readySourceId = arguments.SourceId;
+        _readyDecodedCount = result.Textures.Count;
+        _readyStaticDecodedCount = result.StaticTextures.Count;
+        _readyStaticAdmittedCount = result.StaticPlan?.Commands.Count ?? 0;
+        _readyStaticCensus = result.StaticCensusCount;
+        _readyStaticOutsideScope = result.StaticOutsideScopeCount;
+        _readyActor = result.ActorPlan?.Current;
+        _readyActorPlan = result.ActorPlan;
+        _readyActorInput = arguments.ActorInput;
+        _actorTimeline = result.ActorPlan is null ? null : new AnimationTimeline(result.ActorPlan.Current.FrameCount, result.ActorPlan.Current.RawFramesPerSecond);
+        if (_actorTimeline is not null && result.ActorPlan!.Current.Frame != 0) _actorTimeline.Seek(result.ActorPlan.Current.Frame);
+        _readyMode = arguments.Mode;
+        _readyElapsedMilliseconds = result.ElapsedMilliseconds;
+        RefreshReadyStatus();
+    }
+
+    private void ClearPublishedScene()
+    {
+        ClearReadyMetrics();
+        _canvas!.ClearScene();
+        _cache.Clear();
+    }
+
+    internal void PublishSyntheticForSelfTest(TerrainViewerArguments arguments, TerrainLoadResult result)
+    {
+        if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic publication is limited to the internal self-test bootstrap.");
+        ClearPublishedScene();
+        PublishReadyResult(arguments, result);
+    }
+
+    internal TerrainViewerSelfTestSnapshot GetSelfTestSnapshot()
+        => new(_readyActor, _readyActorInput, _actorTimeline?.IsPlaying ?? false, _cache.Count, _status?.Text ?? string.Empty,
+            _status?.GlobalPosition ?? Vector2.Zero, _camera?.State.X ?? 0, _camera?.State.Y ?? 0, _camera?.State.Zoom ?? 0,
+            _canvas?.GetGlobalTransformWithCanvas() ?? Transform2D.Identity);
 
     private static (bool Enabled, string? ScreenshotPath) TakeNativeSmokeArguments(List<string> args)
     {
@@ -783,3 +814,8 @@ public partial class TerrainViewerApp : Node
         _cache.Dispose();
     }
 }
+
+/// <summary>Scalar-only harness observation; it deliberately contains no load result or decoded RGBA.</summary>
+internal readonly record struct TerrainViewerSelfTestSnapshot(ActorDiagnosticDrawCommand? Actor,
+    ActorDiagnosticPlacementInput? Input, bool Playing, int CacheCount, string Hud, Vector2 HudPosition,
+    double CameraX, double CameraY, double CameraZoom, Transform2D CanvasTransform);

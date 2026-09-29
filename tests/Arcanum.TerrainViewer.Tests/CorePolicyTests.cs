@@ -91,6 +91,35 @@ public sealed class CorePolicyTests
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 8 }, frame), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Frame = 1 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame with { TextureKey = frame.TextureKey with { Palette = 0 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+
+        // Select/CreateSynthetic are public production entry points. Their
+        // closed input failures must precede an absent catalogue lookup.
+        var planWithAbsentSelection = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        AssertViewerFailure(() => planWithAbsentSelection.Select(input with { Action = (ActorDiagnosticAction)99 }), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { Action = (ActorDiagnosticAction)99 }, [frame]), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => planWithAbsentSelection.Select(input with { RenderBranch = ActorDiagnosticRenderBranch.Unknown }), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+    }
+
+    [TestMethod]
+    public void Actor_archive_open_boundary_maps_only_authorized_input_failures_and_identity_is_path_free()
+    {
+        var input = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 1, 1, 0, 0, 0, 0);
+        var progress = new TerrainViewerProgress(1, 1, 0);
+        foreach (var exception in new Exception[]
+        {
+            new DatException("private"), new DatFormatException("private"), new DatUnsupportedFormatException("private"),
+            new DatLimitExceededException("private"), new DatUnsupportedEntryException("private"), new IOException("private"),
+            new FileNotFoundException("private"), new DirectoryNotFoundException("private"), new UnauthorizedAccessException("private")
+        })
+        {
+            using var operation = new ActorDiagnosticSourceOperation(() => throw exception);
+            AssertViewerFailure(() => operation.Execute(null!, input, 0, 0, progress, CancellationToken.None), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        }
+        ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "abc", "abc");
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(6, "abc"), 7, "abc", null), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "def", null), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "abc", "def"), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
     }
 
     [TestMethod]
