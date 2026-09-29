@@ -1,0 +1,2 @@
+# Godot regenerates C# script UID sidecars during editor import; this lab does not reference them.
+*.uid
