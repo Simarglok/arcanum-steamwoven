@@ -74,6 +74,36 @@ public static class StaticObjectLoader
         return InspectParsed(source, prototypes, limits, SelectedResourceIndexes, null);
     }
 
+    /// <summary>
+    /// Decodes the already-resolved selected frame only after the immutable resource
+    /// identity and the recorded group/frame/palette selection match this archive.
+    /// This is structural; it does not authenticate caller-owned archives.
+    /// </summary>
+    public static ArtFrame DecodeSelectedFrame(DatArchive resourceArchive, StaticObjectRecord record, ArtDecoderOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(resourceArchive);
+        ArgumentNullException.ThrowIfNull(record);
+        var metadata = record.ArtMetadata;
+        if (record.ResourceStatus != StaticObjectResourceStatus.Resolved || metadata is null)
+            throw Failure(StaticObjectErrorCode.InvalidArtSelector, StaticObjectFailureStage.Art, "The selected resource frame is not resolved.", record.SourceIndex);
+        try
+        {
+            var matches = resourceArchive.Entries.Where(entry => ResourceIdentity(entry) == metadata.ResourceIdentity).ToArray();
+            if (matches.Length != 1)
+                throw Failure(StaticObjectErrorCode.UnresolvedResource, StaticObjectFailureStage.Art, "The selected resource identity is unavailable or ambiguous.", record.SourceIndex);
+            var decoded = ArtDecoder.Decode(resourceArchive.ReadEntry(matches[0]),
+                new ArtFrameSelection(metadata.RotationGroup, metadata.Frame, metadata.Palette), options);
+            if (decoded.Width != metadata.Width || decoded.Height != metadata.Height || decoded.Frame.HotX != metadata.HotX || decoded.Frame.HotY != metadata.HotY ||
+                decoded.Frame.OffsetX != metadata.ArtOffsetX || decoded.Frame.OffsetY != metadata.ArtOffsetY || decoded.GroupIndex != metadata.RotationGroup ||
+                decoded.FrameIndex != metadata.Frame || decoded.RequestedPaletteSlot != metadata.Palette || decoded.EffectivePaletteSlot != metadata.EffectivePalette)
+                throw Failure(StaticObjectErrorCode.InvalidArtSelector, StaticObjectFailureStage.Art, "The selected resource frame metadata changed.", record.SourceIndex);
+            return decoded;
+        }
+        catch (StaticObjectException) { throw; }
+        catch (DatException) { throw Failure(StaticObjectErrorCode.UnresolvedResource, StaticObjectFailureStage.Art, "The selected resource archive cannot supply the frame.", record.SourceIndex); }
+        catch (ArtException) { throw Failure(StaticObjectErrorCode.InvalidArtSelector, StaticObjectFailureStage.Art, "The selected resource frame is invalid.", record.SourceIndex); }
+    }
+
     private static StaticObjectInspection InspectParsed(StaticObjectSource source, StaticObjectPrototypeSource prototypes,
         StaticObjectLoaderOptions limits, IReadOnlyList<int>? selectedIndexes,
         IReadOnlyDictionary<int, PrototypeInput>? fingerprints)
@@ -86,6 +116,8 @@ public static class StaticObjectLoader
             if (selectedIndexes is not null)
             {
                 ValidateSelectedResourceEligibility(resolved, selectedIndexes);
+                for (var index = 0; index < resolved.Length; index++)
+                    if (!selectedIndexes.Contains(index)) resolved[index] = Copy(resolved[index], StaticObjectResourceStatus.OutsideResourceScope, null);
                 foreach (var sourceIndex in selectedIndexes)
                 {
                     var resolvedRecord = ResolveSelectedResource(resolved[sourceIndex], source.ResourceArchive, limits);
@@ -366,7 +398,7 @@ public static class StaticObjectLoader
                 throw Failure(StaticObjectErrorCode.InvalidArtSelector, StaticObjectFailureStage.Art, "The selected ART group, frame, or palette is unavailable.", record.SourceIndex);
             var selected = metadata.GetFrame(group, frame);
             return Copy(record, StaticObjectResourceStatus.Resolved, new StaticObjectArtMetadata(artType, category, number, group, frame, palette, palette,
-                selected.Width, selected.Height, selected.HotX, selected.HotY, selected.OffsetX, selected.OffsetY));
+                selected.Width, selected.Height, selected.HotX, selected.HotY, selected.OffsetX, selected.OffsetY, ResourceIdentity(art)));
         }
         catch (StaticObjectException) { throw; }
         catch (DatException) { throw Failure(StaticObjectErrorCode.UnresolvedResource, StaticObjectFailureStage.Archive, "The selected resource archive cannot supply a bounded ART chain.", record.SourceIndex); }
@@ -512,6 +544,8 @@ public static class StaticObjectLoader
     }
 
     private static string Normalize(string value) => Normalize(Encoding.ASCII.GetBytes(value + "\0"));
+    private static StaticObjectResourceIdentity ResourceIdentity(DatEntry entry) => new(entry.Ordinal, entry.Flags, entry.DeclaredOutputSize,
+        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Normalize(entry.RawNameBytes)))).ToLowerInvariant());
     private static string Normalize(IReadOnlyList<byte> raw)
     {
         if (raw.Count == 0 || raw[^1] != 0 || raw.Take(raw.Count - 1).Any(value => value > 0x7f)) return string.Empty;

@@ -13,6 +13,8 @@ public readonly record struct TerrainTextureKey(string SourceId, int DatOrdinal,
 public static class TerrainCachePolicy
 {
     public const int MaxDistinctKeys = 4096;
+    public const int MaxStaticDistinctKeys = 5;
+    public const int MaxTotalDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys;
     public const long MaxRgbaBytes = 256L * 1024 * 1024;
 
     public static long CheckedRgbaBytes(int width, int height) => checked((long)width * height * 4);
@@ -32,7 +34,7 @@ public static class TerrainCachePolicy
     /// <summary>Checks a frame before its bytes are retained, preventing unbounded failed loads.</summary>
     public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height)
     {
-        if (currentCount >= MaxDistinctKeys) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
+        if (currentCount >= MaxTotalDistinctKeys) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
         if (width <= 0 || height <= 0) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure));
         var total = checked(currentBytes + CheckedRgbaBytes(width, height));
         if (total > MaxRgbaBytes) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));

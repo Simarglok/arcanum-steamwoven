@@ -1,5 +1,6 @@
 using Arcanum.Data;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.StaticObjects;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 using System.Reflection;
@@ -18,21 +19,26 @@ public static class TerrainViewerSelfTest
             var keys = CreateKeys();
             using var cache = new TerrainTextureCache();
             cache.Upload(CreateTextures(keys, frame));
+            cache.UploadStatic(CreateStaticTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
+            AssertStaticUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
 
             if (DisplayServer.GetName() != "headless")
             {
                 await AssertCanvasOraclesAsync(host, cache, keys);
-                GD.Print("ARC-RENDER-003 self-test PASS production-canvas pixel oracle");
+                await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
+                await AssertStaticRasterPoliciesAsync(host, cache, keys.Red);
+                GD.Print("ARC-RENDER-004 self-test PASS combined production-canvas pixel oracle");
             }
             else
             {
                 // The dummy renderer cannot read a ViewportTexture. Plans and
                 // source constants are still constructed, but no pixels are claimed.
                 AssertPlanConstants(keys.Tile, keys.Facade);
-                GD.Print("ARC-RENDER-003 self-test PASS decoded fixture/production plan; graphical readback NOT_VERIFIED headless");
+                AssertCombinedPlan();
+                GD.Print("ARC-RENDER-004 self-test PASS combined structural plan; graphical readback NOT_VERIFIED headless");
             }
             host.GetTree().Quit(0);
         }
@@ -67,6 +73,12 @@ public static class TerrainViewerSelfTest
             rgba[offset] = r; rgba[offset + 1] = g; rgba[offset + 2] = b; rgba[offset + 3] = 255;
         }
         return new DecodedTerrainTexture(key, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, rgba);
+    }
+
+    private static Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> CreateStaticTextures(ArtFrame frame)
+    {
+        var key = new StaticSceneryTextureKey(new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64)), 0, 0, 0);
+        return new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
     }
 
     private static async Task AssertCanvasOraclesAsync(Node host, TerrainTextureCache cache,
@@ -117,6 +129,93 @@ public static class TerrainViewerSelfTest
         var image = viewport.GetTexture().GetImage();
         viewport.QueueFree();
         return image;
+    }
+
+    private static async Task AssertCombinedCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
+    {
+        var terrain = Plan(new TerrainRect(0, 0, 100, 60), [Input(30, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
+        var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0,
+            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 0, 0, false)]);
+        var viewport = new SubViewport { Size = new Vector2I(100, 60), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas();
+        viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, statics), cache);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        using var image = viewport.GetTexture().GetImage();
+        AssertPixel(image, 20, 20, 255, 0, 0, 255);
+        AssertPixel(image, 21, 20, 0, 0, 255, 255);
+        viewport.QueueFree();
+    }
+
+    private static async Task AssertStaticRasterPoliciesAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
+    {
+        // Literal asymmetric RGBA keeps this oracle independent of the ART
+        // fixture's layout.  It exercises the production static canvas pass:
+        // transparent source pixels retain terrain, X flip swaps only X, and
+        // equal anchors paint the larger source-index command last.
+        var identity = new StaticObjectResourceIdentity(31, 0, 6, new string('e', 64));
+        var asymmetric = new StaticSceneryTextureKey(identity, 0, 0, 0);
+        var overlapFirst = new StaticSceneryTextureKey(identity, 0, 1, 0);
+        var overlapLast = new StaticSceneryTextureKey(identity, 0, 2, 0);
+        cache.UploadStatic(new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>
+        {
+            [asymmetric] = new(asymmetric, 3, 2, Rgba(
+                (0, 0, 0, 0), (10, 20, 30, 255), (40, 50, 60, 255),
+                (70, 80, 90, 255), (100, 110, 120, 255), (130, 140, 150, 255))),
+            [overlapFirst] = new(overlapFirst, 3, 2, SolidRgba(3, 2, 1, 2, 3)),
+            [overlapLast] = new(overlapLast, 3, 2, SolidRgba(3, 2, 200, 201, 202))
+        });
+        var terrain = Plan(new TerrainRect(0, 0, 100, 60), [Input(40, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
+        var unflipped = StaticSceneryScenePlan.CreateSynthetic([StaticInput(4, 10, 10, identity, 0, false)]);
+        using (var image = await RenderDiagnosticAsync(host, cache, terrain, unflipped))
+        {
+            AssertPixel(image, 10, 10, 255, 0, 0, 255); // transparent static leaves terrain.
+            AssertPixel(image, 11, 10, 10, 20, 30, 255);
+            AssertPixel(image, 12, 10, 40, 50, 60, 255);
+            AssertPixel(image, 10, 11, 70, 80, 90, 255);
+        }
+        var flipped = StaticSceneryScenePlan.CreateSynthetic([StaticInput(4, 10, 10, identity, 0, true)]);
+        using (var image = await RenderDiagnosticAsync(host, cache, terrain, flipped))
+        {
+            AssertPixel(image, 10, 10, 40, 50, 60, 255);
+            AssertPixel(image, 11, 10, 10, 20, 30, 255);
+            AssertPixel(image, 12, 10, 255, 0, 0, 255); // same rectangle, reversed X only.
+            AssertPixel(image, 10, 11, 130, 140, 150, 255); // no Y flip.
+        }
+        var overlap = StaticSceneryScenePlan.CreateSynthetic([
+            StaticInput(7, 30, 10, identity, 1, false), StaticInput(9, 30, 10, identity, 2, false)]);
+        using var overlapImage = await RenderDiagnosticAsync(host, cache, terrain, overlap);
+        AssertPixel(overlapImage, 31, 10, 200, 201, 202, 255);
+    }
+
+    private static StaticSceneryPlanInput StaticInput(int sourceIndex, int offsetX, int offsetY, StaticObjectResourceIdentity identity, int frame, bool flipX)
+        => new(sourceIndex, 0, 0, offsetX, offsetY, identity, 0, frame, 0, 3, 2, 0, 0, 0, 0, flipX);
+
+    private static byte[] Rgba(params (byte R, byte G, byte B, byte A)[] pixels)
+        => pixels.SelectMany(pixel => new[] { pixel.R, pixel.G, pixel.B, pixel.A }).ToArray();
+
+    private static byte[] SolidRgba(int width, int height, byte r, byte g, byte b)
+        => Rgba(Enumerable.Repeat((r, g, b, (byte)255), checked(width * height)).ToArray());
+
+    private static async Task<Image> RenderDiagnosticAsync(Node host, TerrainTextureCache cache, TerrainScenePlan terrain, StaticSceneryScenePlan statics)
+    {
+        var viewport = new SubViewport { Size = new Vector2I(100, 60), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas();
+        viewport.AddChild(canvas); host.AddChild(viewport);
+        canvas.Publish(DiagnosticScenePlan.Create(terrain, statics), cache);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var image = viewport.GetTexture().GetImage();
+        viewport.QueueFree();
+        return image;
+    }
+
+    private static void AssertCombinedPlan()
+    {
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
+        var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false)]);
+        if (statics.Commands.Single().Destination != new TerrainRect(20, 20, 3, 3)) throw new InvalidOperationException("Combined static geometry differs from literal oracle.");
     }
 
     private static TerrainScenePlan FullTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(10, key, TerrainKind.Tile, 0, 0, 0)]);
@@ -193,6 +292,33 @@ public static class TerrainViewerSelfTest
         if (disposals != 1) throw new InvalidOperationException("Repeated cache clear disposed an already rolled-back texture.");
     }
 
+    private static void AssertStaticUploadOwnership(ArtFrame frame)
+    {
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('d', 64));
+        var first = new StaticSceneryTextureKey(identity, 0, 0, 0);
+        var second = new StaticSceneryTextureKey(identity, 0, 1, 0);
+        var attempts = 0;
+        var disposals = 0;
+        using var cache = new TerrainTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 2) throw new InvalidOperationException("injected static upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, _ => disposals++);
+        try
+        {
+            cache.UploadStatic(new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>
+            {
+                [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
+                [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
+            });
+        }
+        catch (InvalidOperationException) { }
+        if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial static texture upload was not rolled back exactly once.");
+        cache.Clear();
+        if (disposals != 1) throw new InvalidOperationException("Repeated static cache clear disposed an already rolled-back texture.");
+    }
+
     private static void AssertReloadAndExitTextureOwnership(ArtFrame frame)
     {
         var first = new TerrainTextureKey("synthetic", 100, 0, 1, "reload-first", 0, 0, 0);
@@ -215,17 +341,25 @@ public static class TerrainViewerSelfTest
             [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
             [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
         };
+        var staticIdentity = new StaticObjectResourceIdentity(10, 0, 1, new string('f', 64));
+        var staticKey = new StaticSceneryTextureKey(staticIdentity, 0, 0, 0);
+        var staticTextures = new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>
+        {
+            [staticKey] = new(staticKey, frame.Width, frame.Height, frame.Rgba.ToArray())
+        };
         using (var reloadCache = new TerrainTextureCache(create, dispose))
         {
             reloadCache.Upload(textures);
+            reloadCache.UploadStatic(staticTextures);
             var firstGeneration = created.ToArray();
             reloadCache.Clear();
             if (firstGeneration.Any(texture => disposals[texture] != 1) || reloadCache.Count != 0)
                 throw new InvalidOperationException("Reload did not dispose each replaced texture exactly once.");
             reloadCache.Upload(textures);
+            reloadCache.UploadStatic(staticTextures);
             var secondGeneration = created.Skip(firstGeneration.Length).ToArray();
             reloadCache.Clear();
-            if (secondGeneration.Length != 2 || secondGeneration.Any(texture => disposals[texture] != 1))
+            if (secondGeneration.Length != 3 || secondGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Reload replacement textures were not disposed exactly once.");
         }
 
@@ -233,9 +367,10 @@ public static class TerrainViewerSelfTest
         {
             var beforeExit = created.Count;
             exitCache.Upload(textures);
+            exitCache.UploadStatic(staticTextures);
             var exitGeneration = created.Skip(beforeExit).ToArray();
             exitCache.Dispose();
-            if (exitCache.Count != 0 || exitGeneration.Length != 2 || exitGeneration.Any(texture => disposals[texture] != 1))
+            if (exitCache.Count != 0 || exitGeneration.Length != 3 || exitGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Exit did not dispose each live texture exactly once.");
         }
     }
@@ -253,7 +388,7 @@ public static class TerrainViewerSelfTest
 
     private static bool ReferencesDecodedTexture(Type type)
     {
-        if (type == typeof(DecodedTerrainTexture) || type == typeof(byte[])) return true;
+        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(byte[])) return true;
         if (type.IsArray) return ReferencesDecodedTexture(type.GetElementType()!);
         return type.IsGenericType && type.GetGenericArguments().Any(ReferencesDecodedTexture);
     }

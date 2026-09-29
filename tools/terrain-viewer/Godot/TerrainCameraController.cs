@@ -8,6 +8,7 @@ public sealed class TerrainCameraController
     private readonly Camera2D _camera;
     private CameraState _state;
     private TerrainScenePlan? _plan;
+    private Arcanum.Data.Terrain.TerrainRect? _bounds;
 
     public TerrainCameraController(Camera2D camera)
     {
@@ -18,13 +19,22 @@ public sealed class TerrainCameraController
     public void SetPlan(TerrainScenePlan plan, Vector2 viewport)
     {
         _plan = plan;
+        _bounds = plan.WorldBounds;
+        Fit(viewport);
+    }
+
+    public void SetPlan(DiagnosticScenePlan plan, Vector2 viewport)
+    {
+        _plan = plan.Terrain;
+        _bounds = plan.WorldBounds;
         Fit(viewport);
     }
 
     public void Fit(Vector2 viewport)
     {
-        if (_plan is null) return;
-        _state = CameraPolicy.Fit(_plan.WorldBounds.X, _plan.WorldBounds.Y, _plan.WorldBounds.Width, _plan.WorldBounds.Height, viewport.X, viewport.Y);
+        if (_bounds is null) return;
+        var bounds = _bounds.Value;
+        _state = CameraPolicy.Fit(bounds.X, bounds.Y, bounds.Width, bounds.Height, viewport.X, viewport.Y);
         Apply();
     }
 

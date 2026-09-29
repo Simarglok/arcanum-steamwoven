@@ -71,7 +71,7 @@ through 4 only when each is resolved type 3, static, and has the required direct
 instance fields; it fails the entire operation on a selected mapping/ART/group/
 frame/palette failure. The authenticated `ValidateOriginalData` operation alone
 uses the private Crash Site selector and immutable input identities. For its
-317-record input it leaves exactly the other 312 records `NotEvaluated`.
+317-record input it marks exactly the other 312 records `OutsideResourceScope`.
 
 `StaticObjectInspection` deliberately has separate dimensions:
 
@@ -79,12 +79,13 @@ uses the private Crash Site selector and immutable input identities. For its
 | --- | --- |
 | `TerminalRecordCount`, `Records`, `FieldResolvedCount` | v119 census and current-ART/object-flag field resolution |
 | `ResourceResolvedCount` | selected ART metadata chains completed |
-| `ResourceNotEvaluatedCount` | valid census records deliberately outside selected resource scope |
+| `ResourceNotEvaluatedCount` | census-only records whose resource stage was not requested |
+| `ResourceOutsideScopeCount` | selected-resource records deliberately excluded from the five admitted source indexes |
 
 For the reviewed fixed input the expected reconciliation is 317 serialized
 records, 288 direct and 29 prototype current ART values, 31 direct and 286
 prototype object flags, five selected resource metadata outcomes, and 312
-`NotEvaluated` resource outcomes. Census/default success is not a claim that
+`OutsideResourceScope` resource outcomes. Census/default success is not a claim that
 all sector resources are resolved.
 
 ## Admitted fields and precedence
@@ -111,8 +112,8 @@ the packed ART type,
 scenery mapping, unique normalized resource entry, physical group/frame, and
 palette metadata. A missing/ambiguous mapping or resource, unsafe mapping
 filename, non-scenery ART type, invalid group/frame, or unavailable palette
-fails closed. All later records are explicitly `NotEvaluated` rather than
-invalid or resource-complete.
+fails closed. All later records are explicitly `OutsideResourceScope` rather
+than invalid or resource-complete.
 
 ## Errors and statuses
 
@@ -123,7 +124,7 @@ invalid or resource-complete.
 | missing/ambiguous/mismatched required prototype | `UnresolvedReference` exception or record field status |
 | missing/ambiguous/unsafe selected ART chain | `UnresolvedResource` / `InvalidArtSelector` |
 | five selected metadata chains | `ResourceStatus.Resolved` |
-| all other census records | `ResourceStatus.NotEvaluated` |
+| all other selected-resource census records | `OutsideResourceScope` |
 
 Diagnostics expose a typed `Stage` plus nullable source index/offset, and never
 return original paths, archive names, raw bytes, strings, or pixels.

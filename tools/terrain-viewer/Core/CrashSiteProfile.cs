@@ -23,10 +23,53 @@ public static class CrashSiteProfile
 
 public enum TerrainViewerErrorCode
 {
-    Usage, InputUnavailable, FingerprintMismatch, InvalidSector, IncompleteSector, ResourceLimit, DecodeFailure, RenderFailure
+    Usage, InputUnavailable, FingerprintMismatch, InvalidSector, IncompleteSector, ResourceLimit, DecodeFailure, RenderFailure,
+    StaticFingerprint, StaticCensus, StaticResource, StaticDecode, StaticPlan, Cancelled
 }
 
-public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0)
+/// <summary>Safe, explicit load boundary. Never infer this from an error code.</summary>
+public enum TerrainViewerFailureStage
 {
-    public override string ToString() => $"{Code} (resolved={ResolvedCount}, issues={IssueCount})";
+    Arguments, Fingerprint, TerrainCensus, TerrainDecode, StaticFingerprint,
+    StaticCensus, StaticResource, StaticDecode, Plan, Upload, Readback
+}
+
+/// <summary>Immutable aggregate values that are safe to show after a completed boundary.</summary>
+public sealed class TerrainViewerProgress
+{
+    public TerrainViewerProgress(int terrainResolved = 0, int terrainTiles = 0, int terrainFacades = 0,
+        int staticCensus = 0, int staticAdmitted = 0, int staticOutsideScope = 0)
+    {
+        if (terrainResolved is < 0 or > CrashSiteProfile.CellCount || terrainTiles is < 0 or > CrashSiteProfile.TileCount
+            || terrainFacades is < 0 or > CrashSiteProfile.FacadeCount || terrainTiles + terrainFacades > terrainResolved
+            || staticCensus is < 0 or > 317 || staticAdmitted is < 0 or > 5 || staticOutsideScope is < 0 or > 312
+            || staticAdmitted + staticOutsideScope > staticCensus)
+            throw new ArgumentOutOfRangeException(nameof(terrainResolved), "Diagnostic progress is outside the safe aggregate profile.");
+        TerrainResolved = terrainResolved;
+        TerrainTiles = terrainTiles;
+        TerrainFacades = terrainFacades;
+        StaticCensus = staticCensus;
+        StaticAdmitted = staticAdmitted;
+        StaticOutsideScope = staticOutsideScope;
+    }
+
+    public int TerrainResolved { get; }
+    public int TerrainTiles { get; }
+    public int TerrainFacades { get; }
+    public int StaticCensus { get; }
+    public int StaticAdmitted { get; }
+    public int StaticOutsideScope { get; }
+
+    /// <summary>Returns a separately validated post-static-census snapshot.</summary>
+    public TerrainViewerProgress WithStaticCensus(int staticCensus, int staticAdmitted, int staticOutsideScope) =>
+        new(TerrainResolved, TerrainTiles, TerrainFacades, staticCensus, staticAdmitted, staticOutsideScope);
+
+    public static TerrainViewerProgress Empty { get; } = new();
+}
+
+public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0,
+    TerrainViewerFailureStage Stage = TerrainViewerFailureStage.Arguments, TerrainViewerProgress? Progress = null)
+{
+    public TerrainViewerProgress SafeProgress => Progress ?? TerrainViewerProgress.Empty;
+    public override string ToString() => $"{Code} stage={Stage} (resolved={ResolvedCount}, issues={IssueCount})";
 }
