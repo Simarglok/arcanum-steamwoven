@@ -18,13 +18,22 @@ internal static class InputStateTests
         Assertions.Equal(Vec2.CircularDeadzone(new(.19, 0), .2), default(Vec2), "one circular deadzone removes drift");
         Assertions.Near(Vec2.CircularDeadzone(new(.6, 0), .2).X, .5, .0001, "deadzone radial rescale");
         Assertions.Near(new Vec2(1, 1).Normalized().Length, 1, .0001, "diagonal normalization");
+        // Characterization of the actual GPAD001 baseline (c0bcbb0): its positive
+        // pan translation made the image move right/down. The owner superseded the
+        // former false/false compatibility clause: true retains that visual sign,
+        // while false reverses only the corresponding camera axis.
+        const int historicalImageSign = 1;
         var frame = new RawInputFrame(2, new(.8, .8), new(.8, .8));
         foreach (var axes in new[] { (true, true), (true, false), (false, true), (false, false) })
         {
             var reducer = Armed(2); var intent = reducer.Reduce(frame, new InputContext(InvertCameraX: axes.Item1, InvertCameraY: axes.Item2));
             Assertions.True(intent.Movement.X > 0 && intent.Movement.Y > 0, "camera inversion never changes actor direction");
-            Assertions.True(Math.Sign(intent.CameraPan.X) == (axes.Item1 ? 1 : -1) && Math.Sign(intent.CameraPan.Y) == (axes.Item2 ? 1 : -1), "each camera inversion combination has explicit sign");
+            Assertions.True(Math.Sign(intent.CameraPan.X) == (axes.Item1 ? historicalImageSign : -historicalImageSign) && Math.Sign(intent.CameraPan.Y) == (axes.Item2 ? historicalImageSign : -historicalImageSign), "each camera inversion combination has the owner-confirmed image sign");
         }
+        var ownerDefault = Armed(2).Reduce(frame, new InputContext(InvertCameraX: true, InvertCameraY: true));
+        var ownerReversed = Armed(2).Reduce(frame, new InputContext(InvertCameraX: false, InvertCameraY: false));
+        Assertions.True(Math.Sign(ownerDefault.CameraPan.X) == historicalImageSign && Math.Sign(ownerDefault.CameraPan.Y) == historicalImageSign, "owner true defaults retain the characterized GPAD001 image-right/down sign");
+        Assertions.True(Math.Sign(ownerReversed.CameraPan.X) == -historicalImageSign && Math.Sign(ownerReversed.CameraPan.Y) == -historicalImageSign, "false defaults reverse the characterized image sign on both axes");
         var simultaneous = Armed(2).Reduce(new RawInputFrame(2, new(.8, 0), new(0, .8)), new InputContext(Delta: .1));
         Assertions.True(simultaneous.Movement.X > 0 && simultaneous.CameraPan.Y > 0 && !simultaneous.Confirm, "sticks operate independently without interaction pulse");
         var deltaOne = Armed(2).Reduce(new RawInputFrame(2, default, new(1, 0)), new InputContext(Delta: .1)).CameraPan.X;

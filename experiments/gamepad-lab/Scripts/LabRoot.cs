@@ -194,6 +194,22 @@ public partial class LabRoot : Node2D
             // this synthetic harness, then enforce the same two-frame neutral rearm.
             _input.SetStartupDevices(new[] { 3 }); _input.Reset();
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            // Actual scene characterization of the camera sign. GPAD001's positive
+            // translated-world baseline rendered stick-right/down as image-right/down.
+            // Per the owner amendment, true retains that visual sign and false
+            // reverses its own axis; this does not restore the former left-stick pan.
+            foreach (var axes in new[] { (true, true), (true, false), (false, true), (false, false) })
+            {
+                _settings = saved with { InvertCameraX = axes.Item1, InvertCameraY = axes.Item2 };
+                var imageBefore = _world.Position;
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation);
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightY, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
+                var imageDelta = _world.Position - imageBefore;
+                VerificationMode.Require(Math.Sign(imageDelta.X) == (axes.Item1 ? 1 : -1) && Math.Sign(imageDelta.Y) == (axes.Item2 ? 1 : -1), $"camera image sign did not match owner mapping X={axes.Item1}, Y={axes.Item2}");
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation);
+                Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
+            }
+            _settings = saved;
             var actorBefore = _actor.Position; var worldBefore = _world.Position;
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
             VerificationMode.Require(_actor.Position.X > actorBefore.X && _world.Position == worldBefore, "left stick did not move only actor");
@@ -424,7 +440,7 @@ public partial class LabRoot : Node2D
     private void UpdateHud()
     {
         var active = _input.ActiveDevice; var name = active is int id ? Input.GetJoyName(id) : "none"; var goal = _actor.Goal is Vec2 g ? $"{g.X:F0},{g.Y:F0}" : "none";
-        _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}; active: {active?.ToString() ?? "none"} / {name}\nLeft raw: {_lastRaw.LeftStick.X:F2},{_lastRaw.LeftStick.Y:F2}; right raw: {_lastRaw.RightStick.X:F2},{_lastRaw.RightStick.Y:F2}\nCamera deadzone {_settings.CameraDeadzone:F2}, sensitivity {_settings.CameraSensitivity:F1}; invert X={_settings.InvertCameraX}, Y={_settings.InvertCameraY}\nActor deadzone {_settings.ActorDeadzone:F2}, sensitivity {_settings.ActorSensitivity:F1}; mode={_settings.MovementMode} (PROTOTYPE POLICY)\nActor {_actor.Position.X:F0},{_actor.Position.Y:F0}; goal={goal}; outcome={_actor.Outcome}; replans={_actor.ReplanCount}\nLast event: {_lastEvent}; accepted: {_lastAccepted}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
+        _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}; active: {active?.ToString() ?? "none"} / {name}\nLeft raw: {_lastRaw.LeftStick.X:F2},{_lastRaw.LeftStick.Y:F2}; right raw: {_lastRaw.RightStick.X:F2},{_lastRaw.RightStick.Y:F2}\nCamera deadzone {_settings.CameraDeadzone:F2}, sensitivity {_settings.CameraSensitivity:F1}; invert X={_settings.InvertCameraX} (right -> image {(_settings.InvertCameraX ? "right" : "left")}), Y={_settings.InvertCameraY} (down -> image {(_settings.InvertCameraY ? "down" : "up")})\nActor deadzone {_settings.ActorDeadzone:F2}, sensitivity {_settings.ActorSensitivity:F1}; mode={_settings.MovementMode} (PROTOTYPE POLICY)\nActor {_actor.Position.X:F0},{_actor.Position.Y:F0}; goal={goal}; outcome={_actor.Outcome}; replans={_actor.ReplanCount}\nLast event: {_lastEvent}; accepted: {_lastAccepted}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
     }
     private void AddLog(string text) => _log.Add($"• {text}");
     private void RefreshSelection()

@@ -119,8 +119,10 @@ public sealed class InputStateReducer
         var actor = CombineDirection(left, Normalize(raw.KeyboardActor)) * context.ActorSensitivity;
         var camera = CombineDirection(right, Normalize(raw.KeyboardCamera))
             * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
-        // The scene translates its world image. Default inversion makes stick-right move
-        // that image right, equivalent to a camera pan left as requested by the owner.
+        // The scene translates its world image. The historical GPAD001 positive pan
+        // sign also moved that image right/down. The owner explicitly retains that
+        // visual sign for the true defaults; false intentionally reverses an axis.
+        // This is camera-only: actor and modal directions are calculated above.
         camera = new Vec2(context.InvertCameraX ? camera.X : -camera.X, context.InvertCameraY ? camera.Y : -camera.Y);
         var result = new IntentFrame(camera, actor, confirm, cancel, inspect, previous, next, contextPulse, settings,
             raw.MenuUp ? -1 : raw.MenuDown ? 1 : 0, raw.LeftStick.Y, Method, true, provenance);
