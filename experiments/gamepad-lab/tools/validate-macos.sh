@@ -54,6 +54,10 @@ test -s "$build_root/evidence/ordinary-launch.png"
 if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/ordinary-launch.log"; then printf '%s\n' 'Ordinary exported-app launch logged an engine error.' >&2; exit 1; fi
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/GamepadLab.app"
+# The isolated settings file is validation-only state, never durable evidence.
+# Remove it before manifest inventory; the EXIT trap still covers early failures.
+rm -f "$settings_test_path"
+if test -e "$settings_test_path"; then printf '%s\n' 'Isolated settings cleanup failed.' >&2; exit 1; fi
 git diff --check
 /usr/bin/python3 "$lab_root/tools/write_manifest.py" "$candidate_root" "$main_root" "$build_root" "$head" "$app"
 printf '%s\n' "Validated $head in $build_root"

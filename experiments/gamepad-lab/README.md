@@ -40,7 +40,7 @@ After the candidate is clean and committed, run:
 
     experiments/gamepad-lab/tools/validate-macos.sh
 
-It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-002/<head>/GamepadLab.app`, runs exported smoke plus a three-process settings write/restart/reset/restart check against an isolated per-validation lab file (removed on success or failure), and runs the ordinary capture under a 30-second deadline. It hashes/inventories the app bundle and all gate evidence in `manifest.json`, then atomically records a relative exact-head manifest pointer plus manifest SHA-256 in `artifacts/builds/ARC-GPAD-002/current.json`. The app is local, unsigned, and unnotarized. `SIMULATION` checks do not establish physical Xbox Bluetooth behavior.
+It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-002/<head>/GamepadLab.app`, runs exported smoke plus a three-process settings write/restart/reset/restart check against an isolated per-validation lab file (removed on success or failure), and runs the ordinary capture under a 30-second deadline. It removes that temporary settings file before hashing/inventorying the app bundle and durable gate evidence in `manifest.json`, then reads the manifest back to verify every durable inventory entry and atomically records a relative exact-head manifest pointer plus manifest SHA-256 in `artifacts/builds/ARC-GPAD-002/current.json`. The app is local, unsigned, and unnotarized. `SIMULATION` checks do not establish physical Xbox Bluetooth behavior.
 
 ## Owner checklist
 

@@ -59,6 +59,16 @@ def write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def verify_inventory(manifest_path: Path, app_root: Path, evidence: Path) -> None:
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"could not read generated manifest: {error}") from error
+    expected = inventory(app_root, "GamepadLab.app") + inventory(evidence, "evidence")
+    if payload.get("files") != expected:
+        raise SystemExit("generated manifest inventory does not match durable artifacts")
+
+
 def main() -> None:
     if len(sys.argv) != 6:
         raise SystemExit("usage: write_manifest.py CANDIDATE_ROOT MAIN_ROOT BUILD_ROOT HEAD APP")
@@ -114,6 +124,7 @@ def main() -> None:
     }
     manifest_path = build_root / "manifest.json"
     write_json(manifest_path, manifest)
+    verify_inventory(manifest_path, build_root / "GamepadLab.app", evidence)
     pointer = main_root / "artifacts" / "builds" / TASK / "current.json"
     pointer.parent.mkdir(parents=True, exist_ok=True)
     pointer_payload = {"schemaVersion": 1, "taskId": TASK, "candidateCommit": head,
