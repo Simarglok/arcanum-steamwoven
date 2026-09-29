@@ -8,6 +8,7 @@ public partial class TerrainCanvas : Node2D
     private TerrainScenePlan? _plan;
     private StaticSceneryScenePlan? _staticPlan;
     private TerrainTextureCache? _textures;
+    private bool _showStatics = true;
 
     public TerrainCanvas()
     {
@@ -19,7 +20,8 @@ public partial class TerrainCanvas : Node2D
     /// <summary>Stable, content-free geometry snapshot used by camera smoke checks.</summary>
     public string GeometrySignature => _plan is null
         ? string.Empty
-        : string.Join(';', _plan.Commands.Select(command => $"{command.Ordinal}:{command.Footprint.X},{command.Footprint.Y},{command.Footprint.Width},{command.Footprint.Height}:{command.Source.X},{command.Source.Y},{command.Source.Width},{command.Source.Height}:{command.Destination.X},{command.Destination.Y},{command.Destination.Width},{command.Destination.Height}:{command.FlipX}"));
+        : string.Join(';', _plan.Commands.Select(command => $"terrain:{command.Ordinal}:{command.Footprint.X},{command.Footprint.Y},{command.Footprint.Width},{command.Footprint.Height}:{command.Source.X},{command.Source.Y},{command.Source.Width},{command.Source.Height}:{command.Destination.X},{command.Destination.Y},{command.Destination.Width},{command.Destination.Height}:{command.FlipX}")
+            .Concat((_staticPlan?.Commands ?? Array.Empty<StaticSceneryDrawCommand>()).Select(command => $"static:{command.SourceIndex}:{command.TextureKey.ResourceIdentity.DatOrdinal},{command.TextureKey.Group},{command.TextureKey.Frame},{command.TextureKey.Palette}:{command.AnchorX},{command.AnchorY}:{command.Destination.X},{command.Destination.Y},{command.Destination.Width},{command.Destination.Height}:{command.FlipX}")));
 
     public bool TryGetOpaqueLandmark(out TerrainCanvasLandmark landmark)
     {
@@ -42,10 +44,20 @@ public partial class TerrainCanvas : Node2D
     public bool TryGetOpaqueStaticLandmark(out TerrainCanvasLandmark landmark)
     {
         landmark = default;
-        if (_staticPlan is null || _textures is null) return false;
-        foreach (var command in _staticPlan.Commands.Reverse())
+        if (_plan is null || _staticPlan is null || _textures is null) return false;
+        // Choose a static source pixel whose destination is outside terrain's
+        // diagnostic bounds. Its full-scene readback cannot be confused with
+        // an underlying terrain colour or alpha blend.
+        var terrainBounds = _plan.WorldBounds;
+        foreach (var command in _staticPlan.Commands)
         {
-            if (!_textures.TryFindOpaquePixel(command.TextureKey, out var pixel)) continue;
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, (x, y) =>
+            {
+                var worldX = command.Destination.X + (command.FlipX ? command.Destination.Width - 1 - x : x);
+                var worldY = command.Destination.Y + y;
+                return worldX < terrainBounds.X || worldX >= terrainBounds.X + terrainBounds.Width
+                    || worldY < terrainBounds.Y || worldY >= terrainBounds.Y + terrainBounds.Height;
+            }, out var pixel)) continue;
             var offsetX = command.FlipX ? command.Destination.Width - 1 - pixel.X : pixel.X;
             landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y,
                 pixel.R, pixel.G, pixel.B, pixel.A, command.SourceIndex);
@@ -78,6 +90,13 @@ public partial class TerrainCanvas : Node2D
         QueueRedraw();
     }
 
+    /// <summary>Native smoke-only full-viewport comparison seam.</summary>
+    public void SetStaticVisibilityForReadback(bool visible)
+    {
+        _showStatics = visible;
+        QueueRedraw();
+    }
+
     public override void _Draw()
     {
         if (_plan is null || _textures is null) return;
@@ -96,7 +115,7 @@ public partial class TerrainCanvas : Node2D
                 DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
             }
         }
-        if (_staticPlan is null) return;
+        if (_staticPlan is null || !_showStatics) return;
         foreach (var command in _staticPlan.Commands)
         {
             if (!_textures.TryGet(command.TextureKey, out var texture)) continue;

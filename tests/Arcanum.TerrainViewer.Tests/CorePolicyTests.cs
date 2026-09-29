@@ -224,6 +224,53 @@ public sealed class CorePolicyTests
         Assert.AreEqual(1, operation.DisposeCount);
     }
 
+    [TestMethod]
+    public async Task Coordinator_cancellation_prevents_publish_disposes_once_and_remains_reusable()
+    {
+        var cancelled = new CancellableBarrierOperation();
+        var replacement = new ImmediateArchiveOperation();
+        using var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(cancelled, replacement));
+        var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+        using var source = new CancellationTokenSource();
+        var cancelledGeneration = coordinator.BeginGeneration();
+        var load = coordinator.LoadAsync(cancelledGeneration, arguments, source.Token);
+        await cancelled.Entered.Task;
+        source.Cancel();
+        await AssertThrowsAsync<OperationCanceledException>(load);
+        Assert.AreEqual(1, cancelled.DisposeCount);
+        var replacementGeneration = coordinator.BeginGeneration();
+        var scene = "new-generation-clear";
+        Assert.IsFalse(coordinator.TryPublish(cancelledGeneration, () => scene = "cancelled-scene"));
+        Assert.AreEqual("new-generation-clear", scene);
+
+        var result = await coordinator.LoadAsync(replacementGeneration, arguments);
+        Assert.IsTrue(coordinator.TryPublish(result.Generation, () => scene = "replacement-scene"));
+        Assert.AreEqual("replacement-scene", scene);
+        Assert.AreEqual(1, replacement.DisposeCount);
+        Assert.AreEqual(1, coordinator.MaximumObservedConcurrency);
+    }
+
+    [TestMethod]
+    public async Task Coordinator_waiting_cancellation_creates_no_operation_and_can_load_again()
+    {
+        var first = new BarrierArchiveDecodeOperation();
+        var waiting = new ImmediateArchiveOperation();
+        using var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(first, waiting));
+        var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+        var firstLoad = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
+        await first.Entered.Task;
+        using var source = new CancellationTokenSource();
+        var waitingLoad = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments, source.Token);
+        source.Cancel();
+        await AssertThrowsAsync<OperationCanceledException>(waitingLoad);
+        Assert.AreEqual(0, waiting.DisposeCount, "Waiting cancellation must not create an archive/decode operation.");
+        first.Release.TrySetResult();
+        await firstLoad;
+        var replacement = await coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
+        Assert.AreEqual(1, waiting.DisposeCount, "The queued operation must remain available after a waiting cancellation.");
+        Assert.IsTrue(coordinator.TryPublish(replacement.Generation, () => { }));
+    }
+
     private sealed class QueueArchiveOperationFactory : ITerrainLoadOperationFactory
     {
         private readonly Queue<ITerrainLoadOperation> _operations;
@@ -241,7 +288,7 @@ public sealed class CorePolicyTests
         public int MaximumActive { get; private set; }
         public int DisposeCount { get; private set; }
 
-        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
         {
             ExecuteCount++;
             MaximumActive = Math.Max(MaximumActive, Interlocked.Increment(ref _active));
@@ -259,7 +306,7 @@ public sealed class CorePolicyTests
         private readonly Action? _onExecute;
         public int DisposeCount { get; private set; }
         public ImmediateArchiveOperation(Action? onExecute = null) => _onExecute = onExecute;
-        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments) { _onExecute?.Invoke(); return Result(generation); }
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken) { _onExecute?.Invoke(); return Result(generation); }
         public void Dispose() => DisposeCount++;
     }
 
@@ -268,7 +315,7 @@ public sealed class CorePolicyTests
         public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public int DisposeCount { get; private set; }
-        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
         {
             Entered.TrySetResult();
             Release.Task.GetAwaiter().GetResult();
@@ -281,8 +328,24 @@ public sealed class CorePolicyTests
     {
         public int DisposeCount { get; private set; }
         public ITerrainLoadOperation Create() => this;
-        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
             => throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable));
+        public void Dispose() => DisposeCount++;
+    }
+
+    private sealed class CancellableBarrierOperation : ITerrainLoadOperation
+    {
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public int DisposeCount { get; private set; }
+
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
+        {
+            Entered.TrySetResult();
+            cancellationToken.WaitHandle.WaitOne();
+            cancellationToken.ThrowIfCancellationRequested();
+            return Result(generation);
+        }
+
         public void Dispose() => DisposeCount++;
     }
 

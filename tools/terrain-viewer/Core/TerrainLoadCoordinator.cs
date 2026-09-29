@@ -27,7 +27,7 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
 /// </summary>
 public interface ITerrainLoadOperation : IDisposable
 {
-    TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments);
+    TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken);
 }
 
 public interface ITerrainLoadOperationFactory
@@ -71,7 +71,11 @@ public sealed class TerrainLoadCoordinator : IDisposable
         try
         {
             operation = _operationFactory.Create();
-            var result = await Task.Run(() => operation.Execute(generation, arguments), CancellationToken.None).ConfigureAwait(false);
+            // The worker task always runs so that an operation which was created
+            // reaches its disposal finally before the serialization gate opens.
+            // Execute, rather than Task.Run, observes caller cancellation.
+            var result = await Task.Run(() => operation.Execute(generation, arguments, cancellationToken), CancellationToken.None).ConfigureAwait(false);
+            cancellationToken.ThrowIfCancellationRequested();
             return result with { MaximumObservedConcurrency = MaximumObservedConcurrency };
         }
         finally
@@ -101,13 +105,16 @@ public sealed class TerrainLoadCoordinator : IDisposable
         private DatArchive? _resource;
         private int _disposed;
 
-        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments)
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
         {
             var started = Environment.TickCount64;
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var moduleBefore = Fingerprint(arguments.ModulePath);
+                cancellationToken.ThrowIfCancellationRequested();
                 var resourceBefore = Fingerprint(arguments.ResourcePath);
+                cancellationToken.ThrowIfCancellationRequested();
                 Verify(moduleBefore, CrashSiteProfile.ModuleSize, CrashSiteProfile.ModuleSha256, arguments.ExpectedModuleSha256);
                 Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
                 TerrainLoadReport report;
@@ -117,10 +124,13 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 var staticCensus = 0;
                 var staticOutsideScope = 0;
                 _module = DatArchive.Open(arguments.ModulePath, BoundedDatOptions());
+                cancellationToken.ThrowIfCancellationRequested();
                 _resource = DatArchive.Open(arguments.ResourcePath, BoundedDatOptions());
+                cancellationToken.ThrowIfCancellationRequested();
                 var source = new TerrainResourceSource(_resource, arguments.SourceId, CrashSiteProfile.TileMesEntry, CrashSiteProfile.FacadeMesEntry,
                     TerrainPathProfile.CeNonWindowsMacOs);
                 report = TerrainLoader.Inspect(_module, CrashSiteProfile.CreateSelector(), source);
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!report.IsComplete || report.Outcomes.Count != CrashSiteProfile.CellCount)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
                 var tileCount = report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Tile);
@@ -131,11 +141,13 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     || recoveredCount != CrashSiteProfile.NormalizationRecoveredCount || lookupCount != CrashSiteProfile.NormalizationLookupCount)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.IncompleteSector, report.ResolvedRecords.Count, report.Issues.Count));
                 var sector = TerrainLoader.Load(_module, CrashSiteProfile.CreateSelector(), source);
+                cancellationToken.ThrowIfCancellationRequested();
                 var plan = TerrainScenePlan.Create(sector);
                 textures = new Dictionary<TerrainTextureKey, DecodedTerrainTexture>();
                 var checkedBytes = 0L;
                 foreach (var record in sector.Records)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var key = TerrainTextureKey.FromRecord(record);
                     if (textures.ContainsKey(key)) continue;
                     var frame = TerrainLoader.DecodeSelectedFrame(_resource, record, new TerrainLoaderOptions().ArtOptions);
@@ -146,15 +158,21 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 {
                     try
                     {
+                        cancellationToken.ThrowIfCancellationRequested();
                         var validation = StaticObjectLoader.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!);
+                        cancellationToken.ThrowIfCancellationRequested();
                         staticCensus = validation.Inspection.TerminalRecordCount;
                         staticOutsideScope = validation.Inspection.ResourceOutsideScopeCount;
                         staticPlan = StaticSceneryScenePlan.FromAuthenticatedInspection(validation.Inspection);
                         foreach (var record in validation.Inspection.Records.Where(item => item.SourceIndex is >= 0 and <= 4))
                         {
+                            cancellationToken.ThrowIfCancellationRequested();
                             var command = staticPlan.Commands.Single(item => item.SourceIndex == record.SourceIndex);
                             if (staticTextures.ContainsKey(command.TextureKey)) continue;
-                            var frame = StaticObjectLoader.DecodeSelectedFrame(_resource, record, new StaticObjectLoaderOptions().ArtOptions);
+                            ArtFrame frame;
+                            try { frame = StaticObjectLoader.DecodeSelectedFrame(_resource, record, new StaticObjectLoaderOptions().ArtOptions); }
+                            catch (StaticObjectException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode)); }
+                            cancellationToken.ThrowIfCancellationRequested();
                             checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count + staticTextures.Count, frame.Width, frame.Height);
                             staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, frame.Rgba.ToArray()));
                         }
@@ -164,7 +182,9 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     catch (TerrainViewerException) { throw; }
                     catch (StaticObjectException exception) { throw new TerrainViewerException(new TerrainViewerError(exception.Stage == StaticObjectFailureStage.FingerprintInput ? TerrainViewerErrorCode.StaticFingerprint : TerrainViewerErrorCode.StaticResource)); }
                 }
+                cancellationToken.ThrowIfCancellationRequested();
                 var moduleAfter = Fingerprint(arguments.ModulePath);
+                cancellationToken.ThrowIfCancellationRequested();
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
@@ -179,6 +199,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 };
             }
             catch (TerrainViewerException) { throw; }
+            catch (OperationCanceledException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.Cancelled)); }
             catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
             catch (DirectoryNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }
             catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }

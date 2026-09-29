@@ -18,9 +18,11 @@ public partial class TerrainViewerApp : Node
     private string? _nativeSmokeScreenshot;
     private TerrainViewerArguments? _arguments;
     private Task? _lastLoad;
+    private CancellationTokenSource? _loadCancellation;
     private string? _readySourceId;
     private int _readyDecodedCount;
     private int _readyStaticDecodedCount;
+    private int _readyStaticAdmittedCount;
     private int _readyStaticCensus;
     private int _readyStaticOutsideScope;
     private TerrainViewerMode _readyMode;
@@ -59,15 +61,19 @@ public partial class TerrainViewerApp : Node
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
     {
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
+        var priorCancellation = Interlocked.Exchange(ref _loadCancellation, new CancellationTokenSource());
+        priorCancellation?.Cancel();
+        priorCancellation?.Dispose();
+        var cancellationToken = _loadCancellation!.Token;
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
-        ShowStatus($"Editor diagnostic order | loading | source-id {arguments.SourceId}");
+        ShowStatus($"Diagnostic mode {ModeName(arguments.Mode)} | loading stage=Arguments | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0 | source-id {arguments.SourceId}");
         try
         {
-            var result = await _coordinator.LoadAsync(requestGeneration, arguments);
+            var result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
@@ -78,6 +84,7 @@ public partial class TerrainViewerApp : Node
                     _readySourceId = arguments.SourceId;
                     _readyDecodedCount = result.Textures.Count;
                     _readyStaticDecodedCount = result.StaticTextures.Count;
+                    _readyStaticAdmittedCount = result.StaticPlan?.Commands.Count ?? 0;
                     _readyStaticCensus = result.StaticCensusCount;
                     _readyStaticOutsideScope = result.StaticOutsideScopeCount;
                     _readyMode = arguments.Mode;
@@ -87,26 +94,32 @@ public partial class TerrainViewerApp : Node
             if (_nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
             GD.Print($"ARC-RENDER-004 load stage=complete generation={requestGeneration}");
         }
+        catch (OperationCanceledException)
+        {
+            // Reload/exit cancellation is intentionally silent: a newer
+            // generation owns the HUD and scene, and no cancelled load may
+            // publish an error over it.
+        }
         catch (TerrainViewerException exception)
         {
-            if (_nativeSmoke) { GetTree().Quit(1); return; }
+            if (_nativeSmoke) { GD.Print($"ARC-RENDER-004 native-smoke failure mode={ModeName(arguments.Mode)} stage={FailureStage(exception.Error.Code)} code={exception.Error.Code} terrain=0 static=0"); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     ClearReadyMetrics();
                     _canvas!.ClearScene();
                     _cache.Clear();
-                    ShowStatus(exception.Error.ToString());
+                    ShowFailureStatus(arguments.Mode, exception.Error);
                 })) return;
         }
         catch
         {
-            if (_nativeSmoke) { GetTree().Quit(1); return; }
+            if (_nativeSmoke) { GD.Print($"ARC-RENDER-004 native-smoke failure mode={ModeName(arguments.Mode)} stage=Upload code={TerrainViewerErrorCode.RenderFailure} terrain=0 static=0"); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     ClearReadyMetrics();
                     _canvas!.ClearScene();
                     _cache.Clear();
-                    ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
+                    ShowFailureStatus(arguments.Mode, new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
                 })) return;
         }
     }
@@ -207,8 +220,9 @@ public partial class TerrainViewerApp : Node
             var requestedSize = cycle % 2 == 0 ? new Vector2I(1280, 800) : new Vector2I(1440, 900);
             await SetSmokeWindowSizeAsync(requestedSize);
             var actualViewport = GetViewport().GetVisibleRect().Size;
-            var expectedFit = CameraPolicy.Fit(result.Plan.WorldBounds.X, result.Plan.WorldBounds.Y, result.Plan.WorldBounds.Width,
-                result.Plan.WorldBounds.Height, actualViewport.X, actualViewport.Y);
+            var diagnosticBounds = result.DiagnosticPlan?.WorldBounds ?? result.Plan.WorldBounds;
+            var expectedFit = CameraPolicy.Fit(diagnosticBounds.X, diagnosticBounds.Y, diagnosticBounds.Width,
+                diagnosticBounds.Height, actualViewport.X, actualViewport.Y);
             if (!_camera.State.FitMode || _camera.Camera.Position != new Vector2((float)_camera.State.X, (float)_camera.State.Y)
                 || _camera.Camera.Zoom != Vector2.One * (float)_camera.State.Zoom || _status!.GlobalPosition != initialHudPosition
                 || _camera.State.Zoom != expectedFit.Zoom || _canvas.CommandCount != commandCount || _cache.Count != textureCount || !HasReadyHudContent(textureCount)
@@ -359,10 +373,42 @@ public partial class TerrainViewerApp : Node
         var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
         var terrainLandmarkFound = _canvas.TryGetOpaqueLandmark(out var terrainLandmark);
         var terrainLandmarkMatches = terrainLandmarkFound && TryAssertLandmark(screenshot, terrainLandmark);
-        GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches}");
-        if (!stableCounts || !hudReadable || !terrainLandmarkMatches)
+        TerrainCanvasLandmark staticLandmark = default;
+        var staticLandmarkFound = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic || _canvas.TryGetOpaqueStaticLandmark(out staticLandmark);
+        var staticLandmarkMatches = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic || await HasStaticDifferenceInFullSceneAsync(screenshot);
+        GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches} static={staticLandmarkMatches} static-landmark={staticLandmarkFound}");
+        if (!stableCounts || !hudReadable || !terrainLandmarkMatches || !staticLandmarkMatches)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         return true;
+    }
+
+    private async Task<bool> HasStaticDifferenceInFullSceneAsync(Image combined)
+    {
+        // Keep the exact-size production combined frame above as the terrain
+        // preservation evidence, then render the same canvas/camera/viewport
+        // without only its static pass. A differing pixel proves that an
+        // admitted static object is present in that full production viewport,
+        // without treating an isolated subviewport as the scene oracle.
+        _canvas!.SetStaticVisibilityForReadback(false);
+        try
+        {
+            await NextFrameAsync();
+            using var terrainOnly = GetViewport().GetTexture().GetImage();
+            if (terrainOnly.GetWidth() != combined.GetWidth() || terrainOnly.GetHeight() != combined.GetHeight()) return false;
+            for (var y = 0; y < combined.GetHeight(); y++)
+            {
+                for (var x = 0; x < combined.GetWidth(); x++)
+                {
+                    if (combined.GetPixel(x, y) != terrainOnly.GetPixel(x, y)) return true;
+                }
+            }
+            return false;
+        }
+        finally
+        {
+            _canvas.SetStaticVisibilityForReadback(true);
+            await NextFrameAsync();
+        }
     }
 
     private bool TryAssertLandmark(Image screenshot, TerrainCanvasLandmark landmark)
@@ -433,7 +479,7 @@ public partial class TerrainViewerApp : Node
         if (_readySourceId is null || _camera is null) return;
         var mode = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : "terrain-only";
         var staticStatus = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic
-            ? $"static census {_readyStaticCensus}/admitted {_readyStaticDecodedCount}/outside-scope {_readyStaticOutsideScope}"
+            ? $"static census {_readyStaticCensus}/admitted {_readyStaticAdmittedCount}/outside-scope {_readyStaticOutsideScope}"
             : "static not requested";
         ShowStatus($"Diagnostic mode {mode} | terrain 4096/3033/1063 | {staticStatus} | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | terrain decoded {_readyDecodedCount} | static decoded {_readyStaticDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms");
     }
@@ -443,6 +489,7 @@ public partial class TerrainViewerApp : Node
         _readySourceId = null;
         _readyDecodedCount = 0;
         _readyStaticDecodedCount = 0;
+        _readyStaticAdmittedCount = 0;
         _readyStaticCensus = 0;
         _readyStaticOutsideScope = 0;
         _readyMode = TerrainViewerMode.TerrainOnly;
@@ -453,7 +500,28 @@ public partial class TerrainViewerApp : Node
         => _status?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
             && _status.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
+    private static string ModeName(TerrainViewerMode mode) => mode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : "terrain-only";
+    private static string FailureStage(TerrainViewerErrorCode code) => code switch
+    {
+        TerrainViewerErrorCode.FingerprintMismatch or TerrainViewerErrorCode.StaticFingerprint => "Fingerprint",
+        TerrainViewerErrorCode.InvalidSector or TerrainViewerErrorCode.IncompleteSector or TerrainViewerErrorCode.StaticCensus => "Census",
+        TerrainViewerErrorCode.DecodeFailure or TerrainViewerErrorCode.StaticDecode => "Decode",
+        TerrainViewerErrorCode.StaticResource => "StaticResource",
+        TerrainViewerErrorCode.StaticPlan => "Plan",
+        TerrainViewerErrorCode.RenderFailure => "Upload",
+        TerrainViewerErrorCode.Cancelled => "Cancelled",
+        _ => "Arguments"
+    };
+    private void ShowFailureStatus(TerrainViewerMode mode, TerrainViewerError error)
+        => ShowStatus($"Diagnostic mode {ModeName(mode)} | failure stage={FailureStage(error.Code)} code={error.Code} | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
     private void ShowStatus(string text) { if (_status is not null) _status.Text = text; }
-    public override void _ExitTree() { _cache.Dispose(); _coordinator.Dispose(); }
+    public override void _ExitTree()
+    {
+        var cancellation = Interlocked.Exchange(ref _loadCancellation, null);
+        cancellation?.Cancel();
+        cancellation?.Dispose();
+        _cache.Dispose();
+        _coordinator.Dispose();
+    }
 }

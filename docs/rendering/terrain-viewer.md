@@ -114,9 +114,10 @@ remain local and ignored.
 
 The previously retained blank source/export PNGs are failed historical evidence,
 not smoke passes. Current exact-head ARC-RENDER-004 local build evidence lives below
-`artifacts/builds/ARC-RENDER-004/<commit>/` with the app, `manifest.json`, and
-an `evidence/` directory; `artifacts/builds/ARC-RENDER-004/current.json` points
-to the exact commit-bound manifest/app. It is ignored and must not be committed
+`artifacts/builds/ARC-RENDER-004/<commit>/` with the app and `manifest.json`;
+an optional local screenshot directory is created only when a smoke invocation
+requests it. `artifacts/builds/ARC-RENDER-004/current.json` points to the exact
+commit-bound manifest/app. The artifact tree is ignored and must not be committed
 or attached. Evidence distinguishes synthetic checks, original automated checks,
 original visual inspection, and physical/readability. Only the first two are
 automatable here; local visual and physical/readability observations remain
@@ -177,6 +178,7 @@ placement conventions are attributed CE-derived specification evidence at the
 pinned research reference; no CE code/runtime or mechanical translation is
 included, and this makes no clean-room or independent-corroboration claim.
 Original inputs, extracted frames, archive paths, screenshots, and toolkit
-payloads remain local. The viewer does not implement objects, scenery, roofs,
-collision, navigation, gameplay, dialogue, controller UX, archive precedence,
-or original scene/visual parity.
+payloads remain local. The viewer implements only its authenticated finite
+five-object `combined` diagnostic policy, not general scenery, roofs, collision,
+navigation, gameplay, dialogue, controller UX, archive precedence, or original
+scene/visual parity.

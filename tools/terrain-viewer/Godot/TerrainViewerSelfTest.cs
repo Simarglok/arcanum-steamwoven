@@ -21,6 +21,7 @@ public static class TerrainViewerSelfTest
             cache.Upload(CreateTextures(keys, frame));
             cache.UploadStatic(CreateStaticTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
+            AssertStaticUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
 
@@ -227,6 +228,33 @@ public static class TerrainViewerSelfTest
         if (disposals != 1) throw new InvalidOperationException("Repeated cache clear disposed an already rolled-back texture.");
     }
 
+    private static void AssertStaticUploadOwnership(ArtFrame frame)
+    {
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('d', 64));
+        var first = new StaticSceneryTextureKey(identity, 0, 0, 0);
+        var second = new StaticSceneryTextureKey(identity, 0, 1, 0);
+        var attempts = 0;
+        var disposals = 0;
+        using var cache = new TerrainTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 2) throw new InvalidOperationException("injected static upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, _ => disposals++);
+        try
+        {
+            cache.UploadStatic(new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>
+            {
+                [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
+                [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
+            });
+        }
+        catch (InvalidOperationException) { }
+        if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial static texture upload was not rolled back exactly once.");
+        cache.Clear();
+        if (disposals != 1) throw new InvalidOperationException("Repeated static cache clear disposed an already rolled-back texture.");
+    }
+
     private static void AssertReloadAndExitTextureOwnership(ArtFrame frame)
     {
         var first = new TerrainTextureKey("synthetic", 100, 0, 1, "reload-first", 0, 0, 0);
@@ -287,7 +315,7 @@ public static class TerrainViewerSelfTest
 
     private static bool ReferencesDecodedTexture(Type type)
     {
-        if (type == typeof(DecodedTerrainTexture) || type == typeof(byte[])) return true;
+        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(byte[])) return true;
         if (type.IsArray) return ReferencesDecodedTexture(type.GetElementType()!);
         return type.IsGenericType && type.GetGenericArguments().Any(ReferencesDecodedTexture);
     }
