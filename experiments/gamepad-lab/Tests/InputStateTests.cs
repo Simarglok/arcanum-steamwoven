@@ -153,6 +153,41 @@ internal static class InputStateTests
             var heldSweep = engine.Update(swept.State, new(1, 0), .3, mode, tunnelPolicy, ThinWall);
             Assertions.True(!heldSweep.AttemptedMotion && heldSweep.State.Position == swept.State.Position, $"{mode} held blocked sweep remains bounded");
         }
+
+        // Camera follow is a separate transition table: it consumes the reducer's
+        // post-deadzone vectors, so neutral here is also the drift-safe policy
+        // neutral. The image-pan vector keeps the historical visual sign while the
+        // tracked center moves in the opposite world direction.
+        var camera = new CameraFollowEngine();
+        var bounds = new CameraBounds(new(0, 0), new(1000, 1000), new(200, 200), 1);
+        var center = new Vec2(500, 500);
+        var cameraState = new CameraFollowState();
+        var manual = camera.Update(cameraState, new(520, 500), center, new(1, 0), new(60, 0), bounds);
+        Assertions.Equal(manual.State.Mode, CameraMode.Manual, "right-stick pan immediately takes camera out of Follow");
+        Assertions.Near(manual.Center.X, 440, .001, "manual image pan moves camera center oppositely");
+        var heldActor = camera.Update(manual.State, new(540, 500), manual.Center, new(1, 0), default, bounds);
+        Assertions.Equal(heldActor.State.Mode, CameraMode.Manual, "right release while left remains held does not recenter");
+        Assertions.Near(heldActor.Center.X, 440, .001, "manual camera remains fixed while left is held");
+        var neutralCamera = camera.Update(heldActor.State, new(540, 500), heldActor.Center, default, default, bounds);
+        Assertions.True(neutralCamera.State.RecenterArmed && neutralCamera.State.Mode == CameraMode.Manual, "both neutral domains arm but do not snap the camera");
+        var resumed = camera.Update(neutralCamera.State, new(560, 500), neutralCamera.Center, new(1, 0), default, bounds);
+        Assertions.Equal(resumed.State.Mode, CameraMode.Follow, "new actor-only neutral-to-active edge resumes Follow");
+        Assertions.Near(resumed.Center.X, 560, .001, "Follow recenters directly and deterministically on the moving actor");
+        var interrupted = camera.Update(resumed.State, new(580, 500), resumed.Center, new(1, 0), new(40, 0), bounds);
+        Assertions.Equal(interrupted.State.Mode, CameraMode.Manual, "new right-stick input interrupts Follow even with actor input");
+        Assertions.True(!interrupted.State.RecenterArmed, "simultaneous pan disarms stale recenter eligibility");
+        var blockedFollow = camera.Update(resumed.State, new(560, 500), resumed.Center, new(1, 0), default, bounds);
+        Assertions.Equal(blockedFollow.Center, new Vec2(560, 500), "held actor input follows actual actor position even when collision blocked movement");
+        var smallWorld = camera.ResetCentered(new(10, 20), new CameraBounds(new(0, 0), new(100, 80), new(200, 200), 1));
+        Assertions.Equal(smallWorld.Center, new Vec2(50, 40), "world smaller than viewport clamps camera to map midpoint");
+        var edge = camera.ResetCentered(new(2, 998), bounds);
+        Assertions.Equal(edge.Center, new Vec2(100, 900), "camera bounds account for viewport extent at map edges");
+        var quarantined = camera.SafetyReset(interrupted.State);
+        var afterSafety = camera.Update(quarantined, new(580, 500), interrupted.Center, default, default, bounds);
+        Assertions.Equal(afterSafety.State.Mode, CameraMode.Follow, "modal/focus/disconnect safety reset returns status to Follow");
+        Assertions.Equal(afterSafety.Center, interrupted.Center, "safety reset with no fresh actor input does not snap camera on reconnect");
+        var afterSafetyMove = camera.Update(afterSafety.State, new(600, 500), afterSafety.Center, new(1, 0), default, bounds);
+        Assertions.Equal(afterSafetyMove.Center, new Vec2(600, 500), "fresh actor input resumes safety-reset Follow");
     }
 
     private static InputStateReducer Armed(int device)

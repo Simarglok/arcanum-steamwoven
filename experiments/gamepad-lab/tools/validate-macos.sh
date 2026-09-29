@@ -1,5 +1,5 @@
 #!/bin/sh
-# Candidate-bound local macOS validation for ARC-GPAD-002. No publication.
+# Candidate-bound local macOS validation for ARC-GPAD-003. No publication.
 set -eu
 
 candidate_root=$(git rev-parse --show-toplevel)
@@ -7,8 +7,8 @@ lab_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
-build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/builds/ARC-GPAD-002/$head"}
-case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-002/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be exact-head ARC-GPAD-002 root.' >&2; exit 2 ;; esac
+build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/builds/ARC-GPAD-003/$head"}
+case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-003/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be exact-head ARC-GPAD-003 root.' >&2; exit 2 ;; esac
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before validating.' >&2; exit 2; fi
 
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
