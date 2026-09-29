@@ -133,7 +133,9 @@ public sealed class TerrainObstructionInspectorTests
         words[0] = 0xB0000001;
         words[1] = Tile(0, outdoor: true, flippable: true);
         using var module = Open(("private\\sector.sec", Sector(words, 0xAA0004, new uint[128])));
-        using var source = Open(("private\\names.mes", TileMes(new Dictionary<int, string> { [0] = "abc/b" })));
+        using var source = Open(
+            ("harmless-before.mes", Ascii("{0}{abc}")),
+            ("private\\names.mes", TileMes(new Dictionary<int, string> { [0] = "abc/b" })));
         var report = TerrainObstructionInspector.InspectSector(module, "module-source", Selector("private\\sector.sec"),
             new TerrainTileNameSource(source, "name-source", "private\\names.mes", TerrainPathProfile.CeNonWindowsMacOs));
 
@@ -141,7 +143,7 @@ public sealed class TerrainObstructionInspectorTests
         Assert.AreEqual(0, report.Sector.EntryOrdinal);
         Assert.AreEqual(10, report.Sector.OriginX);
         Assert.AreEqual(0, report.GetCell(0, 0).FacadeWalkabilityBit.Provenance.EntryOrdinal);
-        Assert.AreEqual(0, report.GetCell(1, 0).TileNameRule.Provenance.EntryOrdinal);
+        Assert.AreEqual(1, report.GetCell(1, 0).TileNameRule.Provenance.EntryOrdinal);
     }
 
     [TestMethod]
@@ -295,9 +297,10 @@ public sealed class TerrainObstructionInspectorTests
             ("abc/bfs", TerrainObstructionDisposition.Blocked), ("abc/bb", TerrainObstructionDisposition.Blocked), ("abc/ff", TerrainObstructionDisposition.Blocked),
             ("abc/s", TerrainObstructionDisposition.NoBlock), ("abc/i", TerrainObstructionDisposition.NoBlock), ("abc/n", TerrainObstructionDisposition.NoBlock),
             ("abc/p", TerrainObstructionDisposition.NoBlock), ("abc/ss", TerrainObstructionDisposition.NoBlock), ("abc/", TerrainObstructionDisposition.NoBlock),
-            ("abc/ 0", TerrainObstructionDisposition.NoBlock), ("abc/s +12", TerrainObstructionDisposition.NoBlock), ("abc/n -19", TerrainObstructionDisposition.NoBlock), ("abc", TerrainObstructionDisposition.NoBlock) })
+            ("abc/ 0", TerrainObstructionDisposition.NoBlock), ("abc/s +12", TerrainObstructionDisposition.NoBlock), ("abc/n -19", TerrainObstructionDisposition.NoBlock),
+            ("abc/p 123456789012345678901234567890", TerrainObstructionDisposition.NoBlock), ("abc", TerrainObstructionDisposition.NoBlock) })
             Assert.AreEqual(disposition, TileResult(value).Disposition, value);
-        foreach (var value in new[] { "", "a", "ab", "abcd", "abc/q", "abc/b//", "abc/b 1x", "abc/ +", "abc/ -", "abc/0x", "abc/\u0001", "abc/\0", "abc/é" })
+        foreach (var value in new[] { "", "a", "ab", "abcd", "abc/q", "abc/b//", "abc/b 1x", "abc/ +", "abc/ -", "abc/0x", "abc/{x", "abc/\u0001", "abc/\0", "abc/é" })
         {
             var result = TileResult(value);
             Assert.AreEqual(TerrainObstructionSupportedness.Unknown, result.Supportedness, value);
@@ -309,11 +312,11 @@ public sealed class TerrainObstructionInspectorTests
     public void Structural_mes_and_limit_failures_are_typed_and_do_not_leak_private_input()
     {
         foreach (var mes in new[] { "{bogus}{abc}", "{0}", "{0}{abc", "{0}{abc}}", "{0}{abc}{0}{def}", "{0}{abc}\u0001" })
-            AssertSanitizedTerrainFailure(() => InspectRawMes(mes));
-        AssertSanitizedTerrainFailure(() => InspectRawMesBytes([(byte)'{', (byte)'0', (byte)'}', (byte)'{', 0x80, (byte)'}']));
-        AssertSanitizedTerrainFailure(() => InspectRawMes("{0}{abc}", new TerrainLoaderOptions { MaxMesDecodedEntryBytes = 1 }));
-        AssertSanitizedTerrainFailure(() => InspectRawMes("{0}{abcdef}", new TerrainLoaderOptions { MaxMesValueBytes = 3 }));
-        AssertSanitizedTerrainFailure(() => InspectRawMes("{0}{abc}{1}{abc}", new TerrainLoaderOptions { MaxMesEntries = 1 }));
+            AssertSanitizedTerrainFailure(TerrainErrorCode.InvalidFraming, () => InspectRawMes(mes));
+        AssertSanitizedTerrainFailure(TerrainErrorCode.InvalidFraming, () => InspectRawMesBytes([(byte)'{', (byte)'0', (byte)'}', (byte)'{', 0x80, (byte)'}']));
+        AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abc}", new TerrainLoaderOptions { MaxMesDecodedEntryBytes = 1 }));
+        AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abcdef}", new TerrainLoaderOptions { MaxMesValueBytes = 3 }));
+        AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abc}{1}{abc}", new TerrainLoaderOptions { MaxMesEntries = 1 }));
     }
 
     [TestMethod]
@@ -328,8 +331,12 @@ public sealed class TerrainObstructionInspectorTests
         using var source = DatArchive.Open(mesStream, leaveOpen: true);
         var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\owned.sec"),
             new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
-        _ = module.ReadEntry(module.Entries[0]); _ = source.ReadEntry(source.Entries[0]);
+        var selectedModuleEntry = module.Entries[0];
+        var serializedMaskOffset = checked((int)selectedModuleEntry.Offset
+            + module.ReadEntry(selectedModuleEntry).Length - TerrainSerializedBlockMask.ByteLength - sizeof(int));
+        _ = source.ReadEntry(source.Entries[0]);
         moduleStream.GetBuffer()[(int)module.Entries[0].Offset + 4] ^= 0xff;
+        moduleStream.GetBuffer()[serializedMaskOffset] ^= 0x01;
         mesStream.GetBuffer()[(int)source.Entries[0].Offset + 3] ^= 0xff;
         module.Dispose(); source.Dispose();
         Assert.AreEqual(TerrainObstructionDisposition.Blocked, report.GetCell(0, 0).SerializedBlockMask.Disposition);
@@ -341,6 +348,46 @@ public sealed class TerrainObstructionInspectorTests
         Assert.AreEqual(TerrainObstructionDisposition.Blocked, missing.SerializedBlockMask.Disposition);
         Assert.AreEqual(TerrainObstructionSupportedness.Unknown, missing.TileNameRule.Supportedness);
         Assert.IsNull(missing.TileNameRule.Disposition);
+    }
+
+    [TestMethod]
+    public void Component_composition_preserves_unknowns_and_only_allows_applicable_no_block_claims()
+    {
+        var tileWords = new uint[4096]; tileWords[0] = Tile(0, true, true);
+        using var tileModule = Open(("maps\\fixture\\tile-composition.sec", Sector(tileWords, 0xAA0004, new uint[128])));
+        using var tileSource = Open(("art\\tile\\tilename.mes", SparseMes(new Dictionary<int, string> { [0] = "abc" })));
+        var tileCell = TerrainObstructionInspector.InspectSector(tileModule, "fixture-module", Selector("maps\\fixture\\tile-composition.sec"),
+            new TerrainTileNameSource(tileSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0);
+        Assert.AreEqual(TerrainObstructionDisposition.NoBlock, tileCell.SerializedBlockMask.Disposition);
+        Assert.AreEqual(TerrainObstructionDisposition.NoBlock, tileCell.TileNameRule.Disposition);
+        Assert.AreEqual(TerrainObstructionApplicability.NotApplicable, tileCell.FacadeWalkabilityBit.Applicability);
+        AssertNullUnlessSupportedAndApplicable(tileCell.SerializedBlockMask, tileCell.FacadeWalkabilityBit, tileCell.TileNameRule);
+
+        var facadeWords = new uint[4096]; facadeWords[0] = 0xB0000001;
+        using var facadeModule = Open(("maps\\fixture\\facade-composition.sec", Sector(facadeWords, 0xAA0004, new uint[128])));
+        var facadeCell = TerrainObstructionInspector.InspectSector(facadeModule, "fixture-module", Selector("maps\\fixture\\facade-composition.sec"), null).GetCell(0, 0);
+        Assert.AreEqual(TerrainObstructionDisposition.NoBlock, facadeCell.SerializedBlockMask.Disposition);
+        Assert.AreEqual(TerrainObstructionDisposition.NoBlock, facadeCell.FacadeWalkabilityBit.Disposition);
+        Assert.AreEqual(TerrainObstructionApplicability.NotApplicable, facadeCell.TileNameRule.Applicability);
+        AssertNullUnlessSupportedAndApplicable(facadeCell.SerializedBlockMask, facadeCell.FacadeWalkabilityBit, facadeCell.TileNameRule);
+
+        using var oldModule = Open(("maps\\fixture\\old-composition.sec", Sector(facadeWords, 0xAA0003, null)));
+        var oldCell = TerrainObstructionInspector.InspectSector(oldModule, "fixture-module", Selector("maps\\fixture\\old-composition.sec"), null).GetCell(0, 0);
+        Assert.AreEqual(TerrainObstructionSupportedness.Unknown, oldCell.SerializedBlockMask.Supportedness);
+        Assert.AreEqual(TerrainObstructionDisposition.NoBlock, oldCell.FacadeWalkabilityBit.Disposition);
+        Assert.AreEqual(TerrainObstructionApplicability.NotApplicable, oldCell.TileNameRule.Applicability);
+        AssertNullUnlessSupportedAndApplicable(oldCell.SerializedBlockMask, oldCell.FacadeWalkabilityBit, oldCell.TileNameRule);
+
+        var missingSourceCell = TerrainObstructionInspector.InspectSector(tileModule, "fixture-module", Selector("maps\\fixture\\tile-composition.sec"), null).GetCell(0, 0);
+        Assert.AreEqual(TerrainObstructionSupportedness.Unknown, missingSourceCell.TileNameRule.Supportedness);
+        AssertNullUnlessSupportedAndApplicable(missingSourceCell.SerializedBlockMask, missingSourceCell.FacadeWalkabilityBit, missingSourceCell.TileNameRule);
+
+        var unsupportedWords = new uint[4096]; unsupportedWords[0] = 0xA0000000;
+        using var unsupportedModule = Open(("maps\\fixture\\unsupported-composition.sec", Sector(unsupportedWords, 0xAA0004, new uint[128])));
+        var unsupportedCell = TerrainObstructionInspector.InspectSector(unsupportedModule, "fixture-module", Selector("maps\\fixture\\unsupported-composition.sec"), null).GetCell(0, 0);
+        Assert.AreEqual(TerrainObstructionSupportedness.Unsupported, unsupportedCell.FacadeWalkabilityBit.Supportedness);
+        Assert.AreEqual(TerrainObstructionSupportedness.Unsupported, unsupportedCell.TileNameRule.Supportedness);
+        AssertNullUnlessSupportedAndApplicable(unsupportedCell.SerializedBlockMask, unsupportedCell.FacadeWalkabilityBit, unsupportedCell.TileNameRule);
     }
 
     [TestMethod]
@@ -404,12 +451,19 @@ public sealed class TerrainObstructionInspectorTests
         catch (TerrainException exception) { Assert.AreEqual(expected, exception.Code); }
     }
 
-    private static void AssertSanitizedTerrainFailure(Action action)
+    private static void AssertNullUnlessSupportedAndApplicable(params TerrainObstructionComponentResult[] components)
+    {
+        foreach (var component in components)
+            if (component.Supportedness != TerrainObstructionSupportedness.Supported || component.Applicability != TerrainObstructionApplicability.Applicable)
+                Assert.IsNull(component.Disposition, component.ReasonCode);
+    }
+
+    private static void AssertSanitizedTerrainFailure(TerrainErrorCode expectedCode, Action action)
     {
         try { action(); Assert.Fail("Expected a typed terrain failure."); }
         catch (TerrainException exception)
         {
-            Assert.IsTrue(exception.Code is TerrainErrorCode.InvalidFraming or TerrainErrorCode.LimitExceeded);
+            Assert.AreEqual(expectedCode, exception.Code);
             Assert.IsFalse(exception.Message.Contains("private", StringComparison.OrdinalIgnoreCase));
             Assert.IsFalse(exception.Message.Contains("bogus", StringComparison.OrdinalIgnoreCase));
         }
