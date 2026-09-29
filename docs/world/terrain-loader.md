@@ -6,6 +6,8 @@
 
 The module and resource archives remain caller-owned. They are seek-based and must not be used concurrently. The loader does not dispose either archive. Input paths belong only to the calling CLI; reusable API records contain a caller-provided non-path source ID and normalized logical entry names, not local archive paths.
 
+The separate [terrain obstruction component API](terrain-obstruction-components.md) reads only the framed block mask, raw facade bit, and an explicitly selected tile-name MES projection. It does not combine those components or alter this loader's resource/ART-resolution behavior.
+
 ## API
 
 Use `TerrainLoader.Inspect(module, selector, source, options)` to receive exactly 4,096 ordinal outcomes. Successful outcomes form `ResolvedRecords`; failed cells form `Issues`, and never count as supported. `TerrainLoader.Load(...)` uses the same pipeline and throws `TerrainIncompleteException` with its report if any cell failed. `DecodeSelectedFrame(resourceArchive, record, options)` reselects the record's exact DAT ordinal and identity before calling `ArtDecoder.Decode`; it is the only on-demand RGBA path.

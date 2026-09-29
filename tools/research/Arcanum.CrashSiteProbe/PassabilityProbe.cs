@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
 
@@ -18,7 +19,36 @@ internal static class PassabilityProbe
     private readonly record struct Assessment(Coverage Coverage, Disposition? Disposition, string Reason);
     private readonly record struct Local(int X, int Y);
 
-    internal static void Emit(byte[] sectorBytes, int tileStart, int blockMaskStart, int blockMaskBytes, int staticCensusCount)
+    internal static void Emit(TerrainObstructionSectorReport report, int staticCensusCount)
+    {
+        var maskBlocked = 0;
+        var maskNoBlock = 0;
+        var facadeNoBlock = 0;
+        var facadeBlocked = 0;
+        var tileBlocked = 0;
+        var tileNoBlock = 0;
+        var tileUnknown = 0;
+        for (var ordinal = 0; ordinal < CellCount; ordinal++)
+        {
+            var cell = report.GetCell(ordinal & 63, ordinal >> 6);
+            if (cell.SerializedBlockMask.Disposition == TerrainObstructionDisposition.Blocked) maskBlocked++; else if (cell.SerializedBlockMask.Disposition == TerrainObstructionDisposition.NoBlock) maskNoBlock++;
+            if (cell.FacadeWalkabilityBit.Disposition == TerrainObstructionDisposition.NoBlock) facadeNoBlock++;
+            if (cell.FacadeWalkabilityBit.Disposition == TerrainObstructionDisposition.Blocked) facadeBlocked++;
+            if (cell.TileNameRule.Disposition == TerrainObstructionDisposition.Blocked) tileBlocked++;
+            else if (cell.TileNameRule.Disposition == TerrainObstructionDisposition.NoBlock) tileNoBlock++;
+            else if (cell.TileNameRule.Supportedness == TerrainObstructionSupportedness.Unknown) tileUnknown++;
+        }
+
+        Console.WriteLine($"terrain-obstruction profile=base-sector-only sector=1452,1290 origin={OriginX},{OriginY} extent=64x64");
+        Console.WriteLine($"terrain-obstruction aggregate serialized_mask_blocked={maskBlocked} serialized_mask_no_block={maskNoBlock} facade_no_block={facadeNoBlock} facade_blocked={facadeBlocked} tile_name_blocked={tileBlocked} tile_name_no_block={tileNoBlock} tile_name_unknown={tileUnknown}");
+        Console.WriteLine($"terrain-obstruction aggregate static_census={staticCensusCount} full_passability=not-ready");
+        if (maskBlocked + maskNoBlock != CellCount || facadeNoBlock + facadeBlocked != 1_063 || tileBlocked + tileNoBlock + tileUnknown != 3_033)
+        {
+            throw new InvalidDataException("Terrain obstruction component aggregates did not match the fixed profile's component domains.");
+        }
+    }
+
+    private static void EmitLegacyCellDiagnostics(byte[] sectorBytes, int tileStart, int blockMaskStart, int blockMaskBytes, int staticCensusCount)
     {
         var mask = ReadMask(sectorBytes, blockMaskStart, blockMaskBytes).ToArray();
         var blocked = 0;

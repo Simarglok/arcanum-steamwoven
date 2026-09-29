@@ -4,7 +4,7 @@
 
 ## Components and toolchain
 
-The library also contains byte-preserving [DLG reading/reference validation](formats/dlg-reader.md), a fixed-source [terrain loader](world/terrain-loader.md), and a bounded [static-object loader](world/static-object-loader.md). These APIs remain Godot-independent. The separate [dialog transition runtime](scripting/dialog-transition-runtime.md) belongs to `Arcanum.Scripting`; frame playback policy belongs to `Arcanum.Presentation`.
+The library also contains byte-preserving [DLG reading/reference validation](formats/dlg-reader.md), a fixed-source [terrain loader](world/terrain-loader.md), independent [terrain obstruction components](world/terrain-obstruction-components.md), and a bounded [static-object loader](world/static-object-loader.md). These APIs remain Godot-independent. The separate [dialog transition runtime](scripting/dialog-transition-runtime.md) belongs to `Arcanum.Scripting`; frame playback policy belongs to `Arcanum.Presentation`.
 
 See the [component catalogue](project/status.md) for current coverage and [toolchain](workflow/toolchain.md) for pinned SDK/Godot versions, synthetic checks and opt-in input/filter requirements. `DAT_ROOT` alone does not supply terrain/static-object inputs; a broad `TestCategory=RealData` run requires every documented input.
 
