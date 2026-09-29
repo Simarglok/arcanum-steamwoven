@@ -1,97 +1,161 @@
 # One actor visual evidence record
 
-## Result and boundary
+## Result and readiness
 
-**Readiness: NOT READY.** This candidate establishes a bounded, reproducible
-input/authentication and exclusion boundary; it does not select a renderable
-actor. The probe intentionally stops before an actor resource name is derived:
-a filename convention is not an accepted replacement for a pinned mapping rule.
-No actor, image, original entry name, logical path, text, payload bytes, or
-payload hash is published by the probe.
+**Readiness: NOT READY — actor-world anchor missing.** The probe did establish
+one bounded original monster visual chain, but it does not claim that ART frame
+hotspots/offsets define an actor's world anchor. That last relationship needs
+actor-specific runtime observation or another independently described evidence
+source. The result is therefore not an implementation-ready renderer contract.
 
 This is research tooling, not a production MOB/PRO parser, composite-equipment
 system, renderer, movement system, collision rule, or archive-precedence
 implementation. It opens exactly one caller-provided module DAT, resource DAT,
-and prototype directory. It neither searches loose/PATCH sources nor selects a
-winner between archives.
+and prototype directory; it never searches loose, PATCH, or alternative archive
+sources. Original paths, entry names, directory strings, textual payloads,
+payload hashes, bytes, pixels, images, and screenshots are neither printed nor
+committed.
 
-## Opt-in original-input result
+## Reproducible selected chain
 
-The one explicit caller-selected source labelled `actor-research-source-01`
-was authenticated before and after the probe. The module identity was
-355,938,305 bytes / SHA-256
-`8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`;
-the resource identity was 147,991,122 bytes / SHA-256
-`4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d`.
-The explicit prototype-root aggregate was 949,341 bytes / SHA-256
-`e956718e2a978a4a84f34b9aee52c77e2166bac86970bb2641b38e3a20114956`.
-No path, entry name, prototype name, payload hash, or payload was retained.
+The opt-in run labelled `actor-research-source-01` authenticated its three
+caller-selected inputs before and after its read-only traversal:
 
-The bounded run examined 256 eligible module-DAT ordinal entries, admitted 54
-type-16 envelopes, excluded zero type-15 envelopes, and classified zero
-envelopes as invalid. It returned exit 3 / `NOT_READY` because no pinned,
-reviewed actor selector-to-resource mapping was admitted. A bounded scan of
-the eight readable 1TAD inputs found three inputs with one or more type-16
-envelopes; this source is the first investigated alternative with the largest
-observed bounded type-16 count. This is input-selection evidence only: it is
-not archive-precedence, an actor selection, or a runtime observation.
+| Input | Length | SHA-256 |
+| --- | ---: | --- |
+| module DAT | 355,938,305 | `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f` |
+| resource DAT | 447,470,816 | `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576` |
+| explicit prototype-root aggregate | 949,341 | `e956718e2a978a4a84f34b9aee52c77e2166bac86970bb2641b38e3a20114956` |
 
-## Inputs, caps, and output
+The selected source is module-DAT ordinal **643**. It is a fully consumed v119
+object envelope of type 16 (NPC), whose serialized common field 0 supplied the
+effective current ART directly: `0xc9001810`. It is an ART type-12 monster
+rather than a player/type-15 or human critter; the checked armor, shield, and
+weapon selector components are all zero, which is the bounded single-layer
+criterion for this candidate. The tool does not infer an NPC/world association,
+name, gameplay identity, or a composite equipment policy.
 
-The caller supplies `--module`, `--resource`, `--prototype-root`, and a
-printable safe `--source-id`. The paths are never echoed. Before and after the
-run the tool fingerprints module/resource contents and an aggregate of the
-bounded prototype directory; any change fails with exit 1. It opens both DATs
-through `DatArchive` with 1 MiB stored/decoded entry caps. In DAT ordinal order
-it considers at most 256 eligible `.mob` entries; malformed entries are
-aggregated as `invalid`, type 15 is counted as `player_excluded`, and type 16 as
-`npc`. The current implementation recognizes only the version/type admission
-prefix as a fail-closed research boundary. It does **not** represent that as a
-full object-field parser or as evidence for direct/default resolution.
+The direct current ART is transformed only by the pinned CE source's Stand
+(action `0`) and Walk (action `1`) selector rule. The resulting exact packed
+selectors are `0xc9001810` (Idle/Stand) and `0xc9001850` (Walk). Each resolves
+exactly once, through the explicit resource DAT's source-defined monster
+mapping, to resource-DAT ordinals 4753 and 4754 respectively. Mapping values
+are treated as private source text: the report retains the resource ordinal,
+not the logical path/value. Both ARTs passed `ArtDecoder.Inspect` under its
+1 MiB input limit.
 
-The deterministic report contains only safe source label and aggregate counts.
-It exits 0 only for self-test, 2 for usage, 1 for I/O/format/limit/immutability
-failure, and 3 for the expected bounded negative. A type-16 count is not a
-candidate selection. A report ending `actor-resource-mapping-unresolved` means
-that exact CE-derived selector/path policy, single-layer proof, and anchor and
-cadence evidence still must be admitted before any ART is resolved.
+| Action | Packed selector | resource DAT ordinal | raw ART FPS | physical groups | ordered frames per group | palette |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Idle / Stand | `0xc9001810` | 4753 | 8 | 8 | 15 | 1 |
+| Walk | `0xc9001850` | 4754 | 15 | 8 | 8 | 1 |
 
-## Evidence ledger
+All eight admitted source-facing selectors were inspected for both actions.
+The source-facing value is deliberately an opaque integer, not a compass enum:
+
+| requested facing | physical ART group | `flipX` |
+| ---: | ---: | --- |
+| 0 | 0 | false |
+| 1 | 7 | true |
+| 2 | 6 | true |
+| 3 | 5 | true |
+| 4 | 4 | false |
+| 5 | 5 | false |
+| 6 | 6 | false |
+| 7 | 7 | false |
+
+For every table cell above, the probe checks that physical group and requested
+palette exist and retains every frame in group-major, frame-index order. Its
+metadata-only output includes each frame's `index:width x height @ hotX,hotY +
+offsetX,offsetY`; this avoids publishing an original entry name or payload while
+making the exact geometry chain reviewable. The measured frame sets are not
+uniform: Idle has 15 frames per group, Walk has 8, and the dimensions/hotspots
+vary by group and frame. No eight-direction compass order, equal frame family,
+universal palette, or absence of mirroring is assumed.
+
+For the selected chain, ART offset X/Y is retained per frame. Mirrored facings
+follow the source rule: group `8-facing`, `flipX=true`, and actor-frame geometry
+uses the corresponding source mirroring transform (hot X becomes `width-hotX-1`
+and offset X changes sign). This is a CE-source rule, not a measured world
+placement. There is **no stored actor-anchor-to-top-left delta** in this record:
+`worldAnchor + anchorToTopLeft` remains unsupported until it is observed for an
+actor rather than transferred from static scenery.
+
+## Bounded census and negative facts
+
+The scan visits `.mob` entries in module-DAT index-ordinal order, admits a
+candidate to its cap only after its complete v119 type-16/type-15 envelope has
+been consumed, and stops at 256 such eligible records. It rejects an entry with
+a stored or declared decoded size above 1 MiB before payload read. The run
+reported: 256 eligible records; 256 type-16 records; 198 direct ART resolutions;
+zero completed prototype-default resolutions; zero missing prototypes; 58
+invalid prototype resolutions; 52 fully inspected single-layer monster
+Idle/Walk chains; and selected lowest qualifying ordinal 643. Other fully
+framed non-NPC entries, malformed/unsupported records, composite/non-monster
+ARTs, missing mappings/resources, or ART failures are retained only as typed
+aggregate rejection counts.
+
+The exact selected result remains NOT READY only for the unresolved actor-world
+anchor. It is not a claim that no actor ART exists, that all NPCs use the same
+chain, or that ART metadata supplies collision, grid position, navigation,
+locomotion, walking speed, or runtime parity.
+
+## Envelope and inheritance policy
+
+The standalone reader consumes a complete bounded v119 record before admitting
+it: version; two 24-byte object IDs; concrete type; signed override count;
+all type-appropriate mask words; and every selected scalar, optional, array,
+string, and object-ID wire value through exact end-of-record. It rejects
+unsupported version/type, reserved mask bits, mask/popcount mismatch, invalid
+optional presence, invalid array header/bitset population, missing string NUL,
+truncation, arithmetic/cap failures, and trailing bytes.
+
+Current ART has only these distinct outcomes:
+
+| Outcome | Rule | Result |
+| --- | --- | --- |
+| `Direct` | instance common field 0 is present | use its signed packed value |
+| `PrototypeDefault` | field 0 absent and exactly one canonical six-digit, type/ID-matching v119 prototype resolves | use prototype common field 0 |
+| `Missing` | inherited record has no or multiple canonical prototype candidate | reject candidate |
+| `Invalid` | unlocatable/mismatched/malformed/over-cap prototype | reject candidate |
+
+The prototype directory is explicit and fingerprinted before/after even when a
+direct candidate needs no prototype payload. No generic inheritance, adjacent
+field default, fallback archive, or filename-based ART guess is allowed.
+
+## Evidence ledger and provenance
 
 | ID | Claim | Classification | Source / limit |
 | --- | --- | --- | --- |
-| AV-001 | Selected source is explicitly caller supplied; no precedence is inferred. | synthetic experiment | Probe argument boundary; not original-runtime behavior. |
-| AV-002 | Type-15 and type-16 values are distinct object types; current ART is common field 0 in the previously bounded object research. | CE-source claim | `src/game/obj.h:10-14`; `docs/research/crash-site-objects.md#record-envelope-admitted-fields-and-deliberate-omissions`. Static type-3 evidence does not prove critter parsing. |
-| AV-003 | CE modifies a current actor art ID for stand/conceal and animation goals. | CE-source claim | `src/game/critter.c:1713-1764`; `src/game/anim.c:13193-13228`. Source policy, not runtime observation. |
-| AV-004 | CE tests Walk and Stand resource availability for critter/monster families. | CE-source claim | `src/game/name.c:49-91,410-505,605-609,922-930`. This does not authorize copying its naming logic. |
-| AV-005 | Actor-like types can mirror physical rotations and transform hotspot/offset X. | CE-source claim | `first_party/tig/src/art.c:1200-1256`. No actor world-anchor delta is measured here. |
-| AV-006 | ART metadata provides raw FPS and signed geometry; it does not prove walking speed. | observed bytes / CE-source claim | `ArtDecoder.Inspect`; `docs/research/art-ce-spec.md#contract-adopted-for-this-bounded-decoder`. |
-| AV-007 | Animation goal scheduling and move-to-tile are separate source paths. | CE-source claim | `src/game/anim.c:7348-7352,8075-8079,13302-13328`. No cadence or locomotion parity is claimed. |
-| AV-008 | Current probe result is deliberately negative pending a mapping policy. | synthetic experiment | `Arcanum.ActorVisualProbe`; output is deterministic metadata only. |
+| AV-001 | v119 field-0 direct/one-exact-prototype ART resolution is the only admitted inheritance edge. | observed bytes + CE-source claim | Probe envelope; CE `src/game/obj.c:178-200,3549`; no general MOB/PRO parser claim. |
+| AV-002 | Type 15 and type 16 are separate player/NPC envelopes; type 15 is excluded. | CE-source claim + synthetic experiment | `src/game/object.h:25-41`; production-path self-test and bounded census. |
+| AV-003 | Monster Stand/Walk actions are source action values 0/1; normalization/path selection is source-defined. | CE-source claim | `first_party/tig/include/tig/art.h:234-260`; `src/game/name.c:647-820,978-1005`. No CE code is copied. |
+| AV-004 | Monster ART has packed action, rotation, palette and appearance selectors; type 12 is monster. | CE-source claim | `first_party/tig/include/tig/art.h:25-41`; `first_party/tig/src/art.c:16-40,1738-1829`. |
+| AV-005 | Requested rotations 1..3 resolve to physical 7..5 with horizontal flip; the rest retain physical group. | CE-source claim + observed metadata | `first_party/tig/src/art.c:553-568,1211-1256`; probe inspected every retained group. |
+| AV-006 | ART frames provide raw FPS and signed frame geometry. | observed bytes + CE-source claim | `ArtDecoder.Inspect`; `first_party/tig/src/art.c:119-142,1160-1193`. |
+| AV-007 | A move animation starts with Walk, while scheduler pause can depend on speed. | CE-source claim | `src/game/anim.c:10483-10500,10503-10557`; raw FPS is metadata, movement speed is not inferred. |
+| AV-008 | Actor anchor-to-top-left delta remains unmeasured. | unknown | No original-runtime observation; static-scenery evidence is deliberately excluded. |
 
 The CE revision is `a7ff41b300ef712f0e7d088183a3d08957110cdd` from
-`alexbatalov/arcanum-ce`, used as Sustainable Use License specification
-material only. No CE code, comments, data structures, executable, or runtime
-is copied or run. This record makes no clean-room, independent corroboration,
-or pixel/runtime-parity claim. ArcNET is CE-derived; archived tools and WorldEd
-are community reports, not independent evidence.
+`alexbatalov/arcanum-ce`, used only as Sustainable Use License specification
+material. No CE code, comments, data structures, executable, or runtime is
+copied or run. This record makes no clean-room, independent corroboration, or
+pixel/runtime-parity claim. ArcNET is CE-derived; archived tools and WorldEd are
+community reports, not independent evidence.
 
-## Required next evidence
+## Synthetic production-path coverage
 
-1. Independently document a bounded type-16 v119 envelope including masks,
-   optional/array/string traversal, exact current-ART field presence, and one
-   canonical type/ID-matching prototype default. Missing, duplicate,
-   mismatched, malformed, and composite values must stay distinct.
-2. Admit and cite a non-mechanical CE-source selector mapping for Idle/Walk,
-   appearance, facing, palette, resource path, and one normalized resource DAT
-   entry. Verify every selected physical group/flip/palette/frame through
-   `ArtDecoder.Inspect`.
-3. Establish an actor-specific world-anchor-to-top-left delta and a scheduler
-   authority. Do not transfer static type-3 placement or derive collision,
-   navigation, movement speed, or position updates from ART geometry/FPS.
-4. Only then select the lowest eligible non-humanoid, single-layer type-16
-   record within the 256-entry cap. If none completes, retain NOT READY with
-   typed aggregate reasons rather than broadening to humanoids.
+`--self-test` constructs ordinary synthetic caller inputs and invokes the same
+`Probe` path, not a hard-coded report. It covers direct and inherited ART,
+player exclusion, full-envelope truncation/version/type/count/reserved-mask
+rejection, optional and array wire corruption, direct action selector mutation,
+non-single-layer rejection, physical group/flip behavior, missing/unsafe mapping
+rejection through normal resolution, malformed ART rejection through
+`ArtDecoder`, deterministic ordinal choice, input fingerprints, and stdout
+privacy-sentinel suppression. Additional targeted fixtures reject missing,
+duplicate, type-mismatched, ID-mismatched and malformed prototypes, incomplete
+action pairs/palettes, unsafe/ambiguous resources, cap/overflow inputs, and
+trailing bytes. These are synthetic traversal checks, not an original-runtime
+oracle.
 
 ## Reproduction
 
@@ -99,21 +163,23 @@ are community reports, not independent evidence.
 <canonical-dotnet> restore tools/research/Arcanum.ActorVisualProbe/Arcanum.ActorVisualProbe.csproj --locked-mode
 <canonical-dotnet> build tools/research/Arcanum.ActorVisualProbe/Arcanum.ActorVisualProbe.csproj --no-restore
 <canonical-dotnet> run --project tools/research/Arcanum.ActorVisualProbe/Arcanum.ActorVisualProbe.csproj --no-build -- --self-test
-<canonical-dotnet> run --project tools/research/Arcanum.ActorVisualProbe/Arcanum.ActorVisualProbe.csproj --no-build -- --module <module> --resource <resource> --prototype-root <prototype-root> --source-id <safe-label>
+<canonical-dotnet> run --project tools/research/Arcanum.ActorVisualProbe/Arcanum.ActorVisualProbe.csproj --no-build -- --module <fixed-module> --resource <fixed-resource> --prototype-root <explicit-prototype-root> --source-id <safe-label>
 ```
 
 ## Implemented / not implemented / remaining work
 
-Implemented: a standalone net8.0, `Arcanum.Data`-only, metadata-only probe;
-input identity checks; bounded DAT opening/ordinal census; v119 type offset
-admission after the two object-identifier envelopes; type-15 exclusion;
-type-16 accounting; and direct self-tests for version/type/truncation/privacy
-and exit contract.
+Implemented: standalone net8.0, `Arcanum.Data`-only research probe; immutable
+input checks; bounded complete v119/type-16 envelope traversal; direct/exact
+prototype ART resolution; single-layer monster filtering; Stand/Walk resource
+resolution; all admitted group/flip/palette/frame geometry inspection; and the
+metadata-only evidence above.
 
-Not implemented: a selected actor, full MOB/PRO parser, prototype inheritance,
-resource mapping, action/facing resolution, composition handling, frame binding,
-anchor delta, source cadence, renderer, movement, collision, navigation, or
-archive precedence.
+Not implemented: a production MOB/PRO parser; actor renderer; actor world
+anchor; composite equipment; runtime scheduler; movement; collision;
+pathfinding; archive precedence; a Godot scene; or a claim of original-runtime
+parity.
 
-Remaining work: the three evidence gates above, followed by a separate reviewed
-revision of this bounded research candidate.
+Remaining work: acquire actor-specific anchor-to-top-left observation (and only
+then decide a separate reviewed presentation consumer). Cadence remains
+`SourceScheduler` for runtime timing authority, with raw ART FPS preserved and
+no movement-speed conclusion.
