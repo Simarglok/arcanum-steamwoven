@@ -32,20 +32,22 @@ public static class TerrainObstructionInspector
         }
         else
         {
-            var sourceProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId);
             try
             {
-                var bytes = TerrainLoader.ReadSelected(tileNameSource.Archive, tileNameSource.MesEntryPath, "tile-name MES", limits.MaxMesDecodedEntryBytes);
+                var selectedMesEntry = TerrainLoader.SelectSelected(tileNameSource.Archive, tileNameSource.MesEntryPath, "tile-name MES", limits.MaxMesDecodedEntryBytes);
+                var sourceProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId, selectedMesEntry.Ordinal);
+                var bytes = tileNameSource.Archive.ReadEntry(selectedMesEntry);
                 var records = TerrainLoader.ParseMes(bytes, limits, allowObservedTileInterstitialText: true);
                 table = TerrainTileNameRuleTable.Create(records, sourceProvenance);
                 unavailable = TerrainObstructionSectorReport.Unknown("TILE_NAME_TABLE_UNAVAILABLE", sourceProvenance);
             }
             catch (TerrainSelectionException exception) when (exception.Code is TerrainErrorCode.MissingMesEntry or TerrainErrorCode.AmbiguousMesEntry)
             {
-                unavailable = TerrainObstructionSectorReport.Unknown(exception.Code == TerrainErrorCode.MissingMesEntry ? "TILE_NAME_ENTRY_MISSING" : "TILE_NAME_ENTRY_AMBIGUOUS", sourceProvenance);
+                unavailable = TerrainObstructionSectorReport.Unknown(exception.Code == TerrainErrorCode.MissingMesEntry ? "TILE_NAME_ENTRY_MISSING" : "TILE_NAME_ENTRY_AMBIGUOUS",
+                    new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId));
             }
         }
-        return new TerrainObstructionSectorReport(selector, sector.Words, sector.BlockMaskWords, table, unavailable, moduleProvenance);
+        return new TerrainObstructionSectorReport(selector, sector.Words, sector.BlockMask, table, unavailable, moduleProvenance);
     }
 }
 

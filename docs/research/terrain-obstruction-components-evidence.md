@@ -8,7 +8,7 @@ The precise fixed selector and immutable input fingerprints remain in [selected-
 
 ## Fixed-profile aggregate check
 
-The opt-in Crash Site probe called `TerrainObstructionInspector` directly after before/after fingerprint verification of the selected module and explicit resource. It also verified selector ordinal `463`, compressed flag `0x00000002`, decoded length `47,291`, and the existing six-prototype manifest. The parser-derived aggregate was:
+The opt-in Crash Site probe called `TerrainObstructionInspector` directly, emitted its parser-derived aggregate, then repeated module and explicit-resource length/SHA-256 fingerprint checks before declaring integrity. It also verified selector ordinal `463`, compressed flag `0x00000002`, decoded length `47,291`, and the existing six-prototype manifest. The aggregate was:
 
 | Independent component/domain | Blocked | NoBlock | Unknown |
 | --- | ---: | ---: | ---: |
@@ -20,6 +20,6 @@ The tile-name row is a component aggregate, not a passability result. Its 91 str
 
 ## Verification matrix
 
-Synthetic API tests cover exact 512-byte mask interpretation, little-endian word/row/final boundaries, absent prior framing, checked coordinate rejection, class-11 raw-bit polarity, all four tile-name category selections, `b`/`f` and non-block/suppressed values, unsupported packed classes, missing name source, strict grammar unknown behavior, independent result values, and report lifetime after archive disposal. Existing terrain framing tests cover malformed/truncated/overlapping sections and configured limits. The Crash Site probe self-test remains a regression sanity check; it is separate from the identity-bound local run.
+Synthetic API tests cover direct 511/512/513-byte mask admission, owned input lifetime, little-endian word/row/final boundaries, checked coordinate and ordinal rejection, absent prior framing, class-11 raw-bit polarity, all four tile-name category selections, `b`/`f` and non-block/suppressed values, unsupported packed classes, missing name source, strict grammar unknown behavior, independent result values, safe selected-entry provenance, and report lifetime after archive disposal. Existing terrain framing tests cover malformed/truncated/overlapping sections and configured limits. The Crash Site probe self-test remains a regression sanity check; it is separate from the identity-bound local run.
 
 Full passability remains **NOT READY** because static object spatial contribution, doors and dynamic state, actor/context capability, diagonal/corner/edge behavior, cross-sector state, PATCH/dif/loose precedence, and original-runtime comparison have not been admitted. See [the retained passability contract](../world/passability-contract.md) for those explicit gaps.

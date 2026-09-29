@@ -116,18 +116,6 @@ internal static class Program
         using var resource = DatArchive.Open(resourcePath, BoundedOptions());
         var artExamples = ObjectArt.ResolveExamples(resource, staticScenery.Take(5).ToArray());
 
-        var after = InputFingerprint.Create(path);
-        if (after != before)
-        {
-            throw new InvalidDataException("The module changed during this read-only probe.");
-        }
-        var resourceAfter = InputFingerprint.Create(resourcePath);
-        if (resourceAfter != resourceBefore)
-        {
-            throw new InvalidDataException("The explicit ART source changed during this read-only probe.");
-        }
-        ObjectWire.VerifyExpectedPrototypeManifest(prototypeRead, ExpectedPrototypeFingerprints, requireUnchanged: true);
-
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
         Console.WriteLine($"resource bytes={resourceBefore.Bytes} sha256={resourceBefore.Sha256}");
         Console.WriteLine($"sector ordinal={entry.Ordinal} flags=0x{entry.Flags:x8} decoded_bytes={entry.DeclaredOutputSize}");
@@ -159,7 +147,6 @@ internal static class Program
             var topLeft = placement is null ? "absent" : $"{placement.Value.TopLeftX},{placement.Value.TopLeftY}";
             Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} direct_offset_x={offsetX} direct_offset_y={offsetY} diagnostic_anchor={anchor} diagnostic_top_left={topLeft} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY} frame_offset={example.ArtOffsetX},{example.ArtOffsetY}");
         }
-        Console.WriteLine("integrity before_after_match=true");
         if (passability)
         {
             var selector = new TerrainSectorSelector(SectorEntryName, "Arcanum1-024-fixed", 1452, 1290, 86_570_436_012, 92_928, 82_560, 64, 64,
@@ -172,6 +159,18 @@ internal static class Program
             });
             PassabilityProbe.Emit(report, staticScenery.Length);
         }
+        var after = InputFingerprint.Create(path);
+        if (after != before)
+        {
+            throw new InvalidDataException("The module changed during this read-only probe.");
+        }
+        var resourceAfter = InputFingerprint.Create(resourcePath);
+        if (resourceAfter != resourceBefore)
+        {
+            throw new InvalidDataException("The explicit ART source changed during this read-only probe.");
+        }
+        ObjectWire.VerifyExpectedPrototypeManifest(prototypeRead, ExpectedPrototypeFingerprints, requireUnchanged: true);
+        Console.WriteLine("integrity before_after_match=true");
     }
 
     private static DatReaderOptions BoundedOptions() => new()

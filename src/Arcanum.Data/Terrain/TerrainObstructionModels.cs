@@ -10,6 +10,9 @@ public enum TerrainObstructionProvenanceKind { SerializedSector, PackedTerrainId
 /// <summary>Safe source identity; it intentionally contains no filesystem path or decoded payload text.</summary>
 public sealed record TerrainObstructionProvenance(TerrainObstructionProvenanceKind Kind, string SourceId, int? EntryOrdinal = null);
 
+/// <summary>Safe numeric identity for the selected 64 by 64 sector; it deliberately has no source path or label.</summary>
+public sealed record TerrainObstructionSectorIdentity(int EntryOrdinal, int OriginX, int OriginY, int Width, int Height);
+
 /// <summary>
 /// A result for exactly one source component. A null disposition is required unless coverage is
 /// Supported and the component is Applicable; NoBlock never means that an actor can traverse.
@@ -85,44 +88,45 @@ public sealed class TerrainCellObstructionComponents
 public sealed class TerrainObstructionSectorReport
 {
     private readonly uint[] _tileWords;
-    private readonly uint[]? _blockMaskWords;
+    private readonly TerrainSerializedBlockMask? _blockMask;
     private readonly TerrainTileNameRuleTable? _tileNameRules;
     private readonly TerrainObstructionComponentResult _tileSourceFailure;
     private readonly TerrainObstructionProvenance _moduleProvenance;
-    private readonly TerrainSectorSelector _selector;
+    private readonly TerrainObstructionSectorIdentity _sector;
 
-    internal TerrainObstructionSectorReport(TerrainSectorSelector selector, uint[] tileWords, uint[]? blockMaskWords,
+    internal TerrainObstructionSectorReport(TerrainSectorSelector selector, uint[] tileWords, TerrainSerializedBlockMask? blockMask,
         TerrainTileNameRuleTable? tileNameRules, TerrainObstructionComponentResult tileSourceFailure,
         TerrainObstructionProvenance moduleProvenance)
     {
-        _selector = selector;
+        _sector = new TerrainObstructionSectorIdentity(moduleProvenance.EntryOrdinal ?? throw new ArgumentException("Selected module provenance requires an entry ordinal.", nameof(moduleProvenance)),
+            selector.OriginX, selector.OriginY, selector.Width, selector.Height);
         _tileWords = tileWords.ToArray();
-        _blockMaskWords = blockMaskWords?.ToArray();
+        _blockMask = blockMask;
         _tileNameRules = tileNameRules;
         _tileSourceFailure = tileSourceFailure;
         _moduleProvenance = moduleProvenance;
     }
 
-    public TerrainSectorSelector Selector => _selector;
+    public TerrainObstructionSectorIdentity Sector => _sector;
     public TerrainCellObstructionComponents GetCell(int localX, int localY, TileNameRuleMode tileNameRuleMode = TileNameRuleMode.Apply)
     {
         if ((uint)localX >= 64 || (uint)localY >= 64)
             throw new ArgumentOutOfRangeException(nameof(localX), "Local terrain coordinates must be in the inclusive range 0 through 63.");
         var ordinal = checked(localX + (64 * localY));
-        var mask = _blockMaskWords is null
+        var mask = _blockMask is null
             ? Unknown("BLOCK_MASK_ABSENT", _moduleProvenance)
-            : Applicable(((_blockMaskWords[ordinal / 32] & (1u << (ordinal % 32))) != 0) ? TerrainObstructionDisposition.Blocked : TerrainObstructionDisposition.NoBlock,
+            : Applicable(_blockMask.GetDisposition(localX, localY),
                 "SERIALIZED_BLOCK_MASK", _moduleProvenance);
         var rawId = _tileWords[ordinal];
         var packedClass = rawId >> 28;
         var facade = packedClass switch
         {
-            11 => Applicable((rawId & 1) != 0 ? TerrainObstructionDisposition.NoBlock : TerrainObstructionDisposition.Blocked, "FACADE_WALKABILITY_BIT", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId)),
-            0 => NotApplicable("FACADE_NOT_APPLICABLE", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId)),
-            _ => Unsupported("FACADE_CLASS_UNSUPPORTED", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId)),
+            11 => Applicable((rawId & 1) != 0 ? TerrainObstructionDisposition.NoBlock : TerrainObstructionDisposition.Blocked, "FACADE_WALKABILITY_BIT", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId, _moduleProvenance.EntryOrdinal)),
+            0 => NotApplicable("FACADE_NOT_APPLICABLE", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId, _moduleProvenance.EntryOrdinal)),
+            _ => Unsupported("FACADE_CLASS_UNSUPPORTED", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId, _moduleProvenance.EntryOrdinal)),
         };
         var tile = TileName(rawId, packedClass, tileNameRuleMode);
-        return new TerrainCellObstructionComponents(ordinal, localX, localY, checked(_selector.OriginX + localX), checked(_selector.OriginY + localY), mask, facade, tile);
+        return new TerrainCellObstructionComponents(ordinal, localX, localY, checked(_sector.OriginX + localX), checked(_sector.OriginY + localY), mask, facade, tile);
     }
 
     private TerrainObstructionComponentResult TileName(uint rawId, uint packedClass, TileNameRuleMode mode)

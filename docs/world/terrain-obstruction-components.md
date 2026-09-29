@@ -2,7 +2,7 @@
 
 ## Scope
 
-`Arcanum.Data.Terrain.TerrainObstructionInspector` is a Godot-independent, fixed-64-by-64 snapshot/query API. It reports three independent source components for one selected local cell:
+`Arcanum.Data.Terrain.TerrainObstructionInspector` is a Godot-independent, fixed-64-by-64 snapshot/query API. `TerrainSerializedBlockMask.Parse(ReadOnlySpan<byte>)` is the separately usable exact-size, owned snapshot for a raw serialized mask: it accepts exactly 512 bytes, interprets 128 little-endian words, and exposes checked coordinate or ordinal component queries. It reports three independent source components for one selected local cell:
 
 - `SerializedBlockMask`, decoded only from the framed 512-byte / 128 little-endian `uint32` section. Ordinal is `x + 64*y`; a set bit is `Blocked` and a clear bit is `NoBlock` for this component.
 - `FacadeWalkabilityBit`, applicable only to packed class 11. Raw bit 0 set is `NoBlock`; clear is `Blocked` for this component.
@@ -14,9 +14,9 @@ The API has no `IsWalkable`, `IsPassable`, combined cell value, step value, impl
 
 Call `TerrainObstructionInspector.InspectSector(moduleArchive, moduleSourceId, selector, tileNameSource, options)`. Both archives are explicitly selected and caller-owned; the API neither searches an alternative archive nor disposes or retains either archive. `moduleSourceId` and `TerrainTileNameSource.SourceId` are non-path ASCII labels. The tile source supplies one exact MES entry path and one admitted path profile. Passing no tile source preserves mask/facade inspection and reports tile-name `Unknown`.
 
-The returned `TerrainObstructionSectorReport` owns copies of sector words, the optional block mask, and accepted MES projections. It remains usable after caller data mutate or caller archives are disposed. `GetCell(localX, localY, TileNameRuleMode)` rejects coordinates outside `0..63`; checked world coordinates derive from the selected sector origin.
+The returned `TerrainObstructionSectorReport` owns copies of sector words, the optional block mask, and accepted MES projections. It remains usable after caller data mutate or caller archives are disposed. Its `Sector` exposes only safe numeric entry/coordinate dimensions, never the caller selector's source path or label. `GetCell(localX, localY, TileNameRuleMode)` rejects coordinates outside `0..63`; checked world coordinates derive from the selected sector origin.
 
-Every result independently includes `Supportedness` (`Supported`, `Unknown`, `Unsupported`), `Applicability` (`Applicable`, `NotApplicable`, `Unknown`), nullable `Disposition` (`Blocked`, `NoBlock`), an uppercase stable reason token, and safe provenance. A disposition exists only for `Supported + Applicable`. Unknown, unsupported, and not-applicable results always have null disposition; unknown never becomes `NoBlock`.
+Every result independently includes `Supportedness` (`Supported`, `Unknown`, `Unsupported`), `Applicability` (`Applicable`, `NotApplicable`, `Unknown`), nullable `Disposition` (`Blocked`, `NoBlock`), an uppercase stable reason token, and safe provenance. Successful serialized-sector, facade, and MES provenance retains the selected numeric DAT entry ordinal; missing or ambiguous MES selection deliberately has no invented ordinal. A disposition exists only for `Supported + Applicable`. Unknown, unsupported, and not-applicable results always have null disposition; unknown never becomes `NoBlock`.
 
 ## Tile-name subset
 

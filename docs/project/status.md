@@ -1,6 +1,6 @@
 # Project status and component catalogue
 
-Baseline: merged main `b453ee19620385096cc5644c0f8e3f5265ada560`, 2026-09-29 (through PR #25). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
+Baseline: merged main `d19b40404e979d9757cfd08491957193b6d7e59b`, 2026-09-29 (through PR #27). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
 
 | Component | Implemented scope and evidence | Source | Remaining boundary |
 | --- | --- | --- | --- |

@@ -166,12 +166,17 @@ public static class TerrainLoader
 
     internal static byte[] ReadSelected(DatArchive archive, string path, string label, int cap)
     {
+        return archive.ReadEntry(SelectSelected(archive, path, label, cap));
+    }
+
+    internal static DatEntry SelectSelected(DatArchive archive, string path, string label, int cap)
+    {
         var normalized = NormalizePath(Encoding.ASCII.GetBytes(path));
         var matches = archive.Entries.Where(e => NormalizeEntry(e) == normalized).ToArray();
         if (matches.Length == 0) throw new TerrainSelectionException(TerrainErrorCode.MissingMesEntry, $"The required {label} entry is missing.");
         if (matches.Length != 1) throw new TerrainSelectionException(TerrainErrorCode.AmbiguousMesEntry, $"The required {label} entry is ambiguous.");
         if (matches[0].DeclaredOutputSize > cap) throw new TerrainLimitExceededException($"The required {label} entry exceeds the decoded byte limit.");
-        return archive.ReadEntry(matches[0]);
+        return matches[0];
     }
 
     internal static ParsedSector ParseSector(byte[] bytes, TerrainLoaderOptions limits)
@@ -194,20 +199,18 @@ public static class TerrainLoader
         var sectorScriptStart = cursor.Offset; if (placeholder >= 0xAA0002) cursor.Skip(12, "sector script"); ranges[TerrainSection.SectorScript] = new TerrainByteRange(sectorScriptStart, checked(cursor.Offset - sectorScriptStart));
         var metadataStart = cursor.Offset; if (placeholder >= 0xAA0003) cursor.Skip(24, "metadata and sound"); ranges[TerrainSection.MetadataAndSound] = new TerrainByteRange(metadataStart, checked(cursor.Offset - metadataStart));
         var blockStart = cursor.Offset;
-        uint[]? blockMaskWords = null;
+        TerrainSerializedBlockMask? blockMask = null;
         if (placeholder >= 0xAA0004)
         {
             cursor.Skip(512, "block mask");
-            blockMaskWords = new uint[128];
-            for (var index = 0; index < blockMaskWords.Length; index++)
-                blockMaskWords[index] = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(checked(blockStart + (index * sizeof(uint))), sizeof(uint)));
+            blockMask = TerrainSerializedBlockMask.Parse(bytes.AsSpan(blockStart, TerrainSerializedBlockMask.ByteLength));
         }
         ranges[TerrainSection.BlockMask] = new TerrainByteRange(blockStart, checked(cursor.Offset - blockStart));
         var objectStart = cursor.Offset; var objectLength = checked(terminalStart - objectStart); if (objectLength < 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector sections overlap the terminal count.");
         if (terminal is < 0 or > 4096 || terminal > limits.MaxObjectTerminalCount) throw new TerrainLimitExceededException("Sector terminal object count is outside the configured limit.");
         ranges[TerrainSection.ObjectWindow] = new TerrainByteRange(objectStart, objectLength); ranges[TerrainSection.TerminalObjectCount] = new TerrainByteRange(terminalStart, 4);
         var opaque = new TerrainOpaqueWindow(ranges[TerrainSection.ObjectWindow], terminal, bytes.AsSpan(objectStart, objectLength).ToArray());
-        return new ParsedSector(words, blockMaskWords, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
+        return new ParsedSector(words, blockMask, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
     }
 
     private static int SectionBytes(int count, int width, string label)
@@ -324,7 +327,7 @@ public static class TerrainLoader
         return token;
     }
 
-    internal sealed record ParsedSector(uint[] Words, uint[]? BlockMaskWords, TerrainSectorFraming Framing);
+    internal sealed record ParsedSector(uint[] Words, TerrainSerializedBlockMask? BlockMask, TerrainSectorFraming Framing);
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
     private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
     {
