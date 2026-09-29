@@ -2,11 +2,13 @@
 
 ## Result and readiness
 
-**Readiness: NOT READY — actor-world anchor missing.** The probe did establish
-one bounded original monster visual chain, but it does not claim that ART frame
-hotspots/offsets define an actor's world anchor. That last relationship needs
-actor-specific runtime observation or another independently described evidence
-source. The result is therefore not an implementation-ready renderer contract.
+**Readiness: NOT READY — original-runtime actor placement remains unobserved.**
+The probe established one bounded original monster visual chain. ARC-RES-010
+subsequently traced the pinned CE actor route and documents its source-derived
+world-anchor-to-top-left relation in
+[actor placement evidence](actor-placement-evidence.md). That trace proves
+neither an original-runtime observation nor renderer readiness; ART metadata
+alone remains insufficient and the runtime/parity gate stays closed.
 
 This is research tooling, not a production MOB/PRO parser, composite-equipment
 system, renderer, movement system, collision rule, or archive-precedence
@@ -75,10 +77,11 @@ universal palette, or absence of mirroring is assumed.
 For the selected chain, ART offset X/Y is retained per frame. Mirrored facings
 follow the source rule: group `8-facing`, `flipX=true`, and actor-frame geometry
 uses the corresponding source mirroring transform (hot X becomes `width-hotX-1`
-and offset X changes sign). This is a CE-source rule, not a measured world
-placement. There is **no stored actor-anchor-to-top-left delta** in this record:
-`worldAnchor + anchorToTopLeft` remains unsupported until it is observed for an
-actor rather than transferred from static scenery.
+and offset X changes sign). The later [actor placement evidence](actor-placement-evidence.md)
+records the exact pinned-source caller's state-dependent relation and confirms
+that the normal object rectangle does not add ART frame offsets. It is a
+CE-source rule, not a measured original-runtime placement; static-scenery
+behavior is still not transferred.
 
 ## Bounded census and negative facts
 
@@ -95,10 +98,15 @@ framed non-NPC entries, malformed/unsupported records, composite/non-monster
 ARTs, missing mappings/resources, or ART failures are retained only as typed
 aggregate rejection counts.
 
-The exact selected result remains NOT READY only for the unresolved actor-world
-anchor. It is not a claim that no actor ART exists, that all NPCs use the same
-chain, or that ART metadata supplies collision, grid position, navigation,
-locomotion, walking speed, or runtime parity.
+At RES009 completion, the exact selected result was NOT READY because the
+actor-world anchor was unresolved. ARC-RES-010 now conditionally characterizes
+the source-level normal placement branch, but the result remains NOT READY
+pending an independent original-runtime observation/parity check; the
+source-visible cached-render state is also explicitly unsupported until its
+actor applicability is established. This is not a claim that no actor ART
+exists, that all NPCs use the same chain, or that ART metadata supplies
+collision, grid position, navigation, locomotion, walking speed, or runtime
+parity.
 
 ## Envelope and inheritance policy
 
@@ -137,7 +145,7 @@ allowed.
 | AV-005 | Requested rotations 1..3 resolve to physical 7..5 with horizontal flip; the rest retain physical group. | CE-source claim + observed metadata | `first_party/tig/src/art.c:553-568,1211-1256`; probe inspected every retained group. |
 | AV-006 | ART frames provide raw FPS and signed frame geometry. | observed bytes + CE-source claim | `ArtDecoder.Inspect`; `first_party/tig/src/art.c:119-142,1160-1193`. |
 | AV-007 | A move animation starts with Walk, while scheduler pause can depend on speed. | CE-source claim | `src/game/anim.c:10483-10500,10503-10557`; raw FPS is metadata, movement speed is not inferred. |
-| AV-008 | Actor anchor-to-top-left delta remains unmeasured. | unknown | No original-runtime observation; static-scenery evidence is deliberately excluded. |
+| AV-008 | At RES009 completion, actor anchor-to-top-left delta was unmeasured. | historical unknown | Superseded only at the pinned-source level by [actor placement evidence](actor-placement-evidence.md); no original-runtime observation exists and static-scenery evidence remains excluded. |
 
 The CE revision is `a7ff41b300ef712f0e7d088183a3d08957110cdd` from
 `alexbatalov/arcanum-ce`, used only as Sustainable Use License specification
@@ -188,7 +196,8 @@ anchor; composite equipment; runtime scheduler; movement; collision;
 pathfinding; archive precedence; a Godot scene; or a claim of original-runtime
 parity.
 
-Remaining work: acquire actor-specific anchor-to-top-left observation (and only
-then decide a separate reviewed presentation consumer). Cadence remains
-`SourceScheduler` for runtime timing authority, with raw ART FPS preserved and
-no movement-speed conclusion.
+Remaining work: acquire the discriminating actor-specific original-runtime
+observation specified in [actor placement evidence](actor-placement-evidence.md)
+(and only then decide a separate reviewed presentation consumer). Cadence
+remains `SourceScheduler` for runtime timing authority, with raw ART FPS
+preserved and no movement-speed conclusion.
