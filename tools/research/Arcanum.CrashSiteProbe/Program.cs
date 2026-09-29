@@ -17,6 +17,8 @@ internal static class Program
     private const int ExpectedObjectVersion = 119;
     private const int ExpectedTileEnd = 16_388;
     private const int ExpectedTrailingInt32 = 317;
+    private const int ExpectedSectorOrdinal = 463;
+    private const int ExpectedSectorDecodedBytes = 47_291;
     private const uint DynamicObjectFlag = 0x00002000;
     // Pinned CE OBJ_F_FLAGS is enum value 19, while serialized common fields are
     // zero-based because OBJ_F_CURRENT_AID (enum value 1) occupies slot 0.
@@ -32,6 +34,15 @@ internal static class Program
     private const string ExpectedModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
     private const long ExpectedResourceBytes = 147_991_122;
     private const string ExpectedResourceSha256 = "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d";
+    private static readonly PrototypeFingerprint[] ExpectedPrototypeFingerprints =
+    [
+        new(4026, new InputFingerprint(414, "1378ddb05e981098eca7816b22a366e6733c9df7c580ccc3f19345f782319874")),
+        new(4028, new InputFingerprint(414, "c2442deca958715bc49f5f0504066f951a7d549e5787be41dcded2257e23d6e3")),
+        new(4030, new InputFingerprint(406, "f15e7b0ed999ac9eeabcafa1bcddbd55b96dcbba9b2d71a7d485024c06f9c310")),
+        new(4031, new InputFingerprint(414, "3c5ad2f204a010b3908d0a02e693128e9f8ff421b4a7dafb7ee3e78b66420c53")),
+        new(4038, new InputFingerprint(414, "2531e1a1c6ddca2f483a2d557bebcfd6c1b0b89bd2d996a3f559adc28924214b")),
+        new(4048, new InputFingerprint(378, "ec807b77ea283d8d84387993a439953b7acf1a1ef7bdfb30b6a86a334dcfe8d1")),
+    ];
 
     private static int Main(string[] args)
     {
@@ -82,9 +93,9 @@ internal static class Program
         }
 
         var entry = sectorEntries[0];
-        if (entry.Flags != 0x00000002 || entry.DeclaredOutputSize > MaxDecodedSectorBytes)
+        if (entry.Ordinal != ExpectedSectorOrdinal || entry.Flags != 0x00000002 || entry.DeclaredOutputSize != ExpectedSectorDecodedBytes)
         {
-            throw new InvalidDataException("The selected sector entry violates its bounded compressed-input contract.");
+            throw new InvalidDataException("The selected sector entry does not match the fixed ordinal, compression, and decoded-length profile.");
         }
 
         var sectorBytes = archive.ReadEntry(entry);
@@ -97,7 +108,7 @@ internal static class Program
         var instances = ObjectWire.ParseWindow(sectorBytes.AsSpan(framing.ObjectStart, framing.ObjectBytes), sector.TrailingInt32);
         var sceneryInstances = instances.Where(instance => instance.Type == 3).ToArray();
         var inheritedPrototypeIds = sceneryInstances.Where(instance => !instance.DirectCurrentAid.HasValue || !instance.DirectFlags.HasValue).Select(instance => instance.PrototypeId).ToArray();
-        var prototypeRead = ObjectWire.ReadReferencedPrototypesFromDirectory(prototypeRoot, inheritedPrototypeIds);
+        var prototypeRead = ObjectWire.ReadReferencedPrototypesFromDirectory(prototypeRoot, inheritedPrototypeIds, ExpectedPrototypeFingerprints);
         var resolved = ObjectWire.ResolveEffectiveInstances(sceneryInstances, prototypeRead.Prototypes);
         var typeCounts = string.Join(',', instances.GroupBy(instance => instance.Type).OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
         var staticScenery = resolved.Where(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0).ToArray();
@@ -114,6 +125,7 @@ internal static class Program
         {
             throw new InvalidDataException("The explicit ART source changed during this read-only probe.");
         }
+        ObjectWire.VerifyExpectedPrototypeManifest(prototypeRead, ExpectedPrototypeFingerprints, requireUnchanged: true);
 
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
         Console.WriteLine($"resource bytes={resourceBefore.Bytes} sha256={resourceBefore.Sha256}");
@@ -186,6 +198,7 @@ internal static class Program
         AssertRejected(() => SectorFraming.Parse(WithI32(valid, ExpectedTileEnd + (sizeof(int) * 2), SectorTileCount + 1), 0), "oversized tile-script count");
         var completeFraming = SectorFraming.Parse(CreateFramedFixture(0, placeholder: 0xAA0004), 0);
         if (completeFraming.SectorScriptBytes != 12 || completeFraming.MetadataAndSoundBytes != 24 || completeFraming.BlockMaskBytes != 512) throw new InvalidOperationException("The complete placeholder-controlled framing branches were not consumed as expected.");
+        AssertRejected(() => SectorFraming.Parse(CreateFramedFixture(0, placeholder: 0xAA0004)[..^1], 0), "511-byte block-mask framing");
         AssertProjection(0, 0, 0, 0); AssertProjection(1, 0, -40, 20); AssertProjection(0, 1, 40, 20); AssertProjection(30, 32, 80, 1240);
 
         var prototypeId = ObjectId.A(7001);
@@ -496,6 +509,9 @@ internal static class Program
             {
                 throw new InvalidOperationException("The directory-path prototype did not resolve inherited AID 73.");
             }
+            var expected = resolved.Inputs.Select(input => input.Fingerprint).ToArray();
+            ObjectWire.VerifyExpectedPrototypeManifest(resolved, expected, requireUnchanged: true);
+            AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId], [new PrototypeFingerprint(prototypeId.AidValue(), new InputFingerprint(1, "mismatch"))]), "fixed prototype fingerprint mismatch");
 
             File.WriteAllBytes(second, valid);
             AssertRejected(() => ObjectWire.ReadReferencedPrototypesFromDirectory(root, [prototypeId]), "ambiguous directory prototype");
@@ -741,7 +757,9 @@ internal static class Program
     }
     private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags);
     private sealed record ResolvedInstance(int SourceIndex, InstanceInfo Instance, int CurrentAid, uint EffectiveFlags, bool CurrentAidInherited);
-    private sealed record PrototypeReadResult(List<PrototypeInfo> Prototypes, string FingerprintAggregate);
+    private sealed record PrototypeFingerprint(int Aid, InputFingerprint Fingerprint);
+    private sealed record PrototypeInput(string Path, PrototypeFingerprint Fingerprint);
+    private sealed record PrototypeReadResult(List<PrototypeInfo> Prototypes, List<PrototypeInput> Inputs, string FingerprintAggregate);
     private sealed record ObjectArtExample(ResolvedInstance Object, int ArtType, int SceneryCategory, int ArtNumber, int RotationGroup, int Frame, int Palette, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY);
     private readonly record struct DiagnosticPlacement(long AnchorX, long AnchorY, long TopLeftX, long TopLeftY)
     {
@@ -922,12 +940,16 @@ internal static class Program
             return found;
         }
 
-        public static PrototypeReadResult ReadReferencedPrototypesFromDirectory(string root, ObjectId[] referenced)
+        public static PrototypeReadResult ReadReferencedPrototypesFromDirectory(string root, ObjectId[] referenced, IReadOnlyList<PrototypeFingerprint>? expectedManifest = null)
         {
             if (!Directory.Exists(root)) throw new InvalidDataException("The explicit prototype root does not exist.");
             var wanted = ReferencedPrototypeAids(referenced);
+            if (expectedManifest is not null && expectedManifest.Count != wanted.Count)
+            {
+                throw new InvalidDataException("The referenced prototype set does not match the fixed bounded profile.");
+            }
             var found = new List<PrototypeInfo>(wanted.Count);
-            var fingerprints = new List<string>(wanted.Count);
+            var inputs = new List<PrototypeInput>(wanted.Count);
             foreach (var aid in wanted.Order())
             {
                 var candidates = Directory.EnumerateFiles(root, $"{aid:D6} - *.pro", SearchOption.TopDirectoryOnly)
@@ -936,15 +958,38 @@ internal static class Program
                 if (candidates.Length != 1) throw new InvalidDataException("A referenced prototype is missing or ambiguous in the explicit prototype root.");
                 var before = InputFingerprint.Create(candidates[0]);
                 if (before.Bytes > MaxDecodedSectorBytes) throw new InvalidDataException("A candidate prototype exceeds the 1 MiB read cap.");
+                var expected = expectedManifest?.SingleOrDefault(item => item.Aid == aid);
+                if (expectedManifest is not null && (expected is null || before != expected.Fingerprint))
+                {
+                    throw new InvalidDataException("A referenced prototype fingerprint does not match the fixed bounded profile.");
+                }
                 var prototype = ParsePrototype(File.ReadAllBytes(candidates[0]));
                 var after = InputFingerprint.Create(candidates[0]);
                 if (after != before) throw new InvalidDataException("A prototype changed during this read-only probe.");
                 if (prototype.Id.Type != 1 || prototype.Id.AidValue() != aid) throw new InvalidDataException("A selected prototype candidate does not match its requested A ID.");
                 found.Add(prototype);
-                fingerprints.Add($"{aid:D6}:{before.Sha256}");
+                inputs.Add(new PrototypeInput(candidates[0], new PrototypeFingerprint(aid, before)));
             }
-            var evidence = System.Text.Encoding.ASCII.GetBytes(string.Join("|", fingerprints));
-            return new PrototypeReadResult(found, Convert.ToHexString(SHA256.HashData(evidence)).ToLowerInvariant());
+            var fingerprints = inputs.Select(input => input.Fingerprint).OrderBy(item => item.Aid).ToArray();
+            if (expectedManifest is not null && !fingerprints.SequenceEqual(expectedManifest.OrderBy(item => item.Aid)))
+            {
+                throw new InvalidDataException("The referenced prototype manifest does not match the fixed bounded profile.");
+            }
+            var evidence = System.Text.Encoding.ASCII.GetBytes(string.Join("|", fingerprints.Select(item => $"{item.Aid:D6}:{item.Fingerprint.Bytes}:{item.Fingerprint.Sha256}")));
+            return new PrototypeReadResult(found, inputs, Convert.ToHexString(SHA256.HashData(evidence)).ToLowerInvariant());
+        }
+
+        public static void VerifyExpectedPrototypeManifest(PrototypeReadResult result, IReadOnlyList<PrototypeFingerprint> expectedManifest, bool requireUnchanged)
+        {
+            var actual = result.Inputs.Select(input => input.Fingerprint).OrderBy(item => item.Aid).ToArray();
+            if (!actual.SequenceEqual(expectedManifest.OrderBy(item => item.Aid)))
+            {
+                throw new InvalidDataException("The referenced prototype manifest does not match the fixed bounded profile.");
+            }
+            if (requireUnchanged && result.Inputs.Any(input => InputFingerprint.Create(input.Path) != input.Fingerprint.Fingerprint))
+            {
+                throw new InvalidDataException("A referenced prototype changed during this read-only probe.");
+            }
         }
 
         private static HashSet<int> ReferencedPrototypeAids(ObjectId[] referenced)
