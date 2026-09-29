@@ -62,6 +62,11 @@ public sealed class ActorDiagnosticScenePlan
         var catalog = frames.ToArray();
         if (catalog.Length == 0) throw Failure(TerrainViewerErrorCode.ActorMetadata);
         var facing = MapFacing(input.Facing);
+        // This is a fixed two-resource profile, not a general actor catalogue.
+        // Validate each descriptor before grouping so a substituted resource,
+        // selector, action, timing, or frame range never becomes a plausible
+        // missing-frame result later in selection.
+        foreach (var item in catalog) ValidateFixedProfileFrame(item);
         var grouped = catalog.GroupBy(frame => (Action: ActionFor(frame.TextureKey.Selector), frame.TextureKey.PhysicalGroup, frame.TextureKey.Frame)).ToArray();
         if (grouped.Any(group => group.Count() != 1)) throw Failure(TerrainViewerErrorCode.ActorMetadata);
         var lookup = grouped.ToDictionary(group => group.Key, group => group.Single());
@@ -70,8 +75,7 @@ public sealed class ActorDiagnosticScenePlan
         var all = new List<TerrainRect>();
         foreach (var item in lookup.Values)
         {
-            if (item.TextureKey.Palette != 1 || item.TextureKey.PhysicalGroup is < 0 or > 7 || item.Width <= 0 || item.Height <= 0 || item.FramesPerAction <= 0 || item.RawFramesPerSecond <= 0)
-                throw Failure(TerrainViewerErrorCode.ActorMetadata);
+
             // Apply this frame at the unchanged caller anchor. Groups 5..7
             // have both an unmirrored request and a reflected 1..3 request;
             // both rectangles participate in stable diagnostic fit bounds.
@@ -90,6 +94,9 @@ public sealed class ActorDiagnosticScenePlan
     {
         ArgumentNullException.ThrowIfNull(input);
         ValidateSelectionInput(input);
+        ValidateFixedProfileFrame(frame);
+        if (ActionFor(frame.TextureKey.Selector) != input.Action)
+            throw Failure(TerrainViewerErrorCode.ActorMetadata);
         return Place(input, frame, MapFacing(input.Facing));
     }
 
@@ -97,7 +104,8 @@ public sealed class ActorDiagnosticScenePlan
     {
         ArgumentNullException.ThrowIfNull(input);
         ValidateSelectionInput(input);
-        if (frame.TextureKey.Palette != 1 || facing.Group != frame.TextureKey.PhysicalGroup)
+        ValidateFixedProfileFrame(frame);
+        if (ActionFor(frame.TextureKey.Selector) != input.Action || facing.Group != frame.TextureKey.PhysicalGroup)
             throw Failure(TerrainViewerErrorCode.ActorMetadata);
         if (input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Width != frame.Width || input.Height != frame.Height ||
             input.Width <= 0 || input.Height <= 0)
@@ -112,13 +120,16 @@ public sealed class ActorDiagnosticScenePlan
             var effectiveOffsetX = facing.FlipX ? checked(-frame.ArtOffsetX) : frame.ArtOffsetX;
             var left = checked(anchorX - effectiveHotX);
             var top = checked(anchorY - frame.HotY);
-            // Drawing uses integer Rect2 coordinates.  Validate and narrow all
-            // four extrema before constructing the command, rather than merely
-            // proving the right/bottom in widened arithmetic.
+            // Form every extent in widened arithmetic before narrowing any
+            // edge.  This makes overflow at left/top/right/bottom/extent a
+            // deterministic ActorPlan failure rather than an accidental
+            // implementation-order artefact.
+            var rightWide = checked(left + frame.Width);
+            var bottomWide = checked(top + frame.Height);
             var narrowLeft = checked((int)left);
             var narrowTop = checked((int)top);
-            var right = checked((int)checked(left + frame.Width));
-            var bottom = checked((int)checked(top + frame.Height));
+            var right = checked((int)rightWide);
+            var bottom = checked((int)bottomWide);
             return new ActorDiagnosticDrawCommand(frame.TextureKey, new TerrainRect(narrowLeft, narrowTop,
                 checked(right - narrowLeft), checked(bottom - narrowTop)),
                 anchorX, anchorY, input.Action, input.Facing, facing.Group, facing.FlipX, frame.ArtOffsetX, frame.ArtOffsetY,
@@ -150,6 +161,26 @@ public sealed class ActorDiagnosticScenePlan
         if (input.RenderBranch != ActorDiagnosticRenderBranch.NormalUncached || input.ScalePercent != 100 || input.Shrunk != false)
             throw Failure(TerrainViewerErrorCode.ActorRenderState);
         _ = MapFacing(input.Facing);
+    }
+
+    /// <summary>
+    /// Validates the complete owner-authorized descriptor profile. Select,
+    /// CreateSynthetic and direct Place all reach this same closed seam; ART
+    /// bytes do not carry selector metadata, so selector/resource binding is
+    /// intentionally validated here rather than fabricated in a fixture.
+    /// </summary>
+    private static void ValidateFixedProfileFrame(ActorDiagnosticFrame frame)
+    {
+        var action = ActionFor(frame.TextureKey.Selector);
+        var expectedResource = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleResourceOrdinal : ActorDiagnosticSource.WalkResourceOrdinal;
+        var expectedSelector = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleSelector : ActorDiagnosticSource.WalkSelector;
+        var expectedFrames = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFrames : ActorDiagnosticSource.WalkFrames;
+        var expectedFps = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFps : ActorDiagnosticSource.WalkFps;
+        if (frame.TextureKey.ResourceOrdinal != expectedResource || frame.TextureKey.Selector != expectedSelector
+            || frame.TextureKey.Palette != ActorDiagnosticSource.Palette || frame.TextureKey.PhysicalGroup < 0 || frame.TextureKey.PhysicalGroup >= ActorDiagnosticSource.PhysicalGroups
+            || frame.TextureKey.Frame < 0 || frame.TextureKey.Frame >= expectedFrames || frame.FramesPerAction != expectedFrames || frame.RawFramesPerSecond != expectedFps
+            || frame.Width <= 0 || frame.Height <= 0)
+            throw Failure(TerrainViewerErrorCode.ActorMetadata);
     }
 
     private static TerrainRect VisibleGuideBounds(ActorDiagnosticDrawCommand command)

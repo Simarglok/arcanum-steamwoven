@@ -136,9 +136,10 @@ timeline advance for Idle and Walk across all eight requested facings. The
 non-headless matrix uses fixture-literal placement and two asymmetric pixels
 per reflection state, plus literal terrain and guide colors; it verifies HUD,
 cache, camera-transform and stationary caller-input policy. It also republishes
-and clears the live app through the normal production paths, proving ownership
-of exactly 185 textures (one terrain plus 184 actor), exact replacement
-disposal, and no double-clear disposal. The headless run executes the same
+and exercises shared load-failure clearing, a deterministic partial actor-upload
+rollback, and live `_ExitTree` through the normal production paths, proving
+ownership of exactly 185 textures (one terrain plus 184 actor), exact
+replacement disposal, and no double-clear/double-exit disposal. The headless run executes the same
 structural matrix but reports pixels `NOT_VERIFIED`; it never turns the
 structural result into a pixel claim.
 

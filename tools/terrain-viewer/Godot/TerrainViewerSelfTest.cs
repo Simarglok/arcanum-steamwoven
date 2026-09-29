@@ -193,9 +193,8 @@ public static class TerrainViewerSelfTest
                     || actor.FlipX != expectedFacings[requested].Item2 || actor.Frame != 0 || actor.FrameCount != actionCase.Item3
                     || actor.RawFramesPerSecond != actionCase.Item4 || snapshot.Playing || snapshot.CacheCount != 185
                     || !HasStationaryCallerInput(snapshot.Input, callerInput) || snapshot.HudPosition != new Vector2(16, 16)
-                    || !snapshot.Hud.Contains("Original placement parity: NOT VERIFIED", StringComparison.Ordinal)
-                    || !snapshot.Hud.Contains("Layering: diagnostic terrain -> actor -> guides", StringComparison.Ordinal)
-                    || !snapshot.Hud.Contains("Controls: 1 Idle | 2 Walk", StringComparison.Ordinal))
+                    || !HasCompleteActorHud(snapshot, actionCase.Item2, requested, expectedFacings[requested].Item1,
+                        expectedFacings[requested].Item2, actionCase.Item3, actionCase.Item4, frame: 0, playing: false))
                     throw new InvalidOperationException("Synthetic app actor state diverges from the literal action/facing policy.");
                 if (DisplayServer.GetName() != "headless")
                 {
@@ -240,14 +239,78 @@ public static class TerrainViewerSelfTest
         var republished = app.GetSelfTestSnapshot();
         if (republished.CacheCount != 185 || republished.CreatedTextures != 370 || republished.DisposedTextures != 185)
             throw new InvalidOperationException("Production-app republish did not replace exactly 185 textures.");
-        app.ClearSyntheticForSelfTest();
+        app.PublishSyntheticFailureForSelfTest(TerrainViewerMode.ActorDiagnostic,
+            new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
         var cleared = app.GetSelfTestSnapshot();
-        if (cleared.CacheCount != 0 || cleared.DisposedTextures != 370)
-            throw new InvalidOperationException("Production-app clear did not dispose its live 185 textures once.");
+        if (cleared.CacheCount != 0 || cleared.DisposedTextures != 370 || !cleared.Hud.Contains("failure stage=Upload code=RenderFailure", StringComparison.Ordinal))
+            throw new InvalidOperationException("Production-app load failure did not clear its live 185 textures once.");
         app.ClearSyntheticForSelfTest();
         if (app.GetSelfTestSnapshot().DisposedTextures != 370)
             throw new InvalidOperationException("Repeated production-app clear double-disposed textures.");
         viewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // Force an actor upload after terrain and one actor texture exist. The
+        // normal PublishReadyResult failure path must roll both back through
+        // PublishFailure without retaining an alternate test implementation.
+        var failingViewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var failingApp = new TerrainViewerApp { SelfTestBootstrap = true };
+        var attempts = 0;
+        failingApp.ConfigureSelfTestTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 3) throw new InvalidOperationException("injected actor upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, texture => texture.Dispose());
+        failingViewport.AddChild(failingApp); host.AddChild(failingViewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        try { failingApp.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result); }
+        catch (InvalidOperationException) { }
+        var failedUpload = failingApp.GetSelfTestSnapshot();
+        if (failedUpload.CacheCount != 0 || failedUpload.CreatedTextures != 2 || failedUpload.DisposedTextures != 2)
+            throw new InvalidOperationException("Production-app partial actor upload did not roll back exactly once.");
+        failingApp.ClearSyntheticForSelfTest();
+        if (failingApp.GetSelfTestSnapshot().DisposedTextures != 2)
+            throw new InvalidOperationException("Repeated production failure clear double-disposed textures.");
+        failingViewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // Exercise live _ExitTree ownership before any clear; a second call is
+        // idempotent and must not double-dispose the 185 textures.
+        var exitViewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var exitApp = new TerrainViewerApp { SelfTestBootstrap = true };
+        exitViewport.AddChild(exitApp); host.AddChild(exitViewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        exitApp.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        exitApp._ExitTree();
+        var exited = exitApp.GetSelfTestSnapshot();
+        if (exited.CacheCount != 0 || exited.CreatedTextures != 185 || exited.DisposedTextures != 185)
+            throw new InvalidOperationException("Live production _ExitTree did not dispose exactly 185 textures.");
+        exitApp._ExitTree();
+        if (exitApp.GetSelfTestSnapshot().DisposedTextures != 185)
+            throw new InvalidOperationException("Repeated production _ExitTree double-disposed textures.");
+        exitViewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static bool HasCompleteActorHud(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticAction action, int facing, int group,
+        bool mirrored, int frameCount, int fps, int frame, bool playing)
+    {
+        var actionName = action == ActorDiagnosticAction.Idle ? "Idle" : "Walk";
+        var actionNumber = action == ActorDiagnosticAction.Idle ? 0 : 1;
+        var playback = playing ? "playing" : "paused";
+        var mirror = mirrored ? "yes" : "no";
+        var required = new[]
+        {
+            "Diagnostic mode actor-diagnostic", "terrain 4096/3033/1063", "static not requested", "source-id synthetic", "zoom ",
+            "terrain decoded 1", "static decoded 0", "cache 185", "Actor anchor policy: caller-selected diagnostic",
+            "Actor render state: caller-supplied normal-uncached | scale 100 | shrunk false", $"Actor: {actionName} (source action {actionNumber})",
+            $"Facing: requested {facing} -> physical group {group} | mirror {mirror}", $"Frame: {frame}/{frameCount}",
+            $"Playback: {playback} | raw ART FPS preview {fps} (not source scheduler/gameplay)", "World position: stationary",
+            "Layering: diagnostic terrain -> actor -> guides", "Original placement parity: NOT VERIFIED",
+            "Controls: 1 Idle | 2 Walk | [ ] facing | Space play/pause | , . step"
+        };
+        return required.All(item => snapshot.Hud.Contains(item, StringComparison.Ordinal));
     }
 
     private static bool HasStationaryCallerInput(ActorDiagnosticPlacementInput? actual, ActorDiagnosticPlacementInput expected)
@@ -312,7 +375,7 @@ public static class TerrainViewerSelfTest
     {
         var terrain = Plan(new TerrainRect(0, 0, 200, 100), [Input(51, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
         var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
-            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2, 1, ActorDiagnosticSource.IdleFps);
+            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2, ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps);
         var input = new ActorDiagnosticPlacementInput(0, 0, 100, 20, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
             ActorDiagnosticAction.Idle, 1, 0, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2);
         var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
@@ -400,7 +463,7 @@ public static class TerrainViewerSelfTest
     private static void AssertActorPlan()
     {
         var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
-            3, 2, 0, 0, 8, -1, 1, ActorDiagnosticSource.IdleFps);
+            3, 2, 0, 0, 8, -1, ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps);
         var plan = ActorDiagnosticScenePlan.CreateSynthetic(new ActorDiagnosticPlacementInput(0, 0, 10, 20, 0, 0,
             ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Idle, 1, 0, 3, 2, 0, 0, 8, -1), [frame]);
         if (!plan.Current.FlipX || plan.Current.Destination != new TerrainRect(8, 40, 3, 2) || plan.Current.EffectiveOffsetX != -8)

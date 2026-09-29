@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainViewerApp : Node
 {
     private readonly TerrainLoadCoordinator _coordinator = new();
-    private readonly TerrainTextureCache _cache = new();
+    private TerrainTextureCache _cache = new();
     private TerrainCanvas? _canvas;
     private TerrainCameraController? _camera;
     private Label? _status;
@@ -121,11 +121,7 @@ public partial class TerrainViewerApp : Node
         {
             if (_exiting) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, exception.Error)); GetTree().Quit(1); return; }
-            if (!_coordinator.TryPublish(requestGeneration, () =>
-                {
-                    ClearPublishedScene();
-                    ShowFailureStatus(arguments.Mode, exception.Error);
-                })) return;
+            if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, exception.Error))) return;
         }
         catch
         {
@@ -134,11 +130,7 @@ public partial class TerrainViewerApp : Node
                 Stage: TerrainViewerFailureStage.Upload,
                 Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
-            if (!_coordinator.TryPublish(requestGeneration, () =>
-                {
-                    ClearPublishedScene();
-                    ShowFailureStatus(arguments.Mode, error);
-                })) return;
+            if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error))) return;
         }
     }
 
@@ -178,11 +170,36 @@ public partial class TerrainViewerApp : Node
         _cache.Clear();
     }
 
+    /// <summary>Sole failure publication route for normal loads and self-test injection.</summary>
+    private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
+    {
+        ClearPublishedScene();
+        ShowFailureStatus(mode, error);
+    }
+
+    internal void ConfigureSelfTestTextureCache(Func<Image, ImageTexture> createTexture, Action<ImageTexture> disposeTexture)
+    {
+        if (!SelfTestBootstrap || IsInsideTree())
+            throw new InvalidOperationException("Texture-cache injection is limited to an unready self-test bootstrap.");
+        ArgumentNullException.ThrowIfNull(createTexture);
+        ArgumentNullException.ThrowIfNull(disposeTexture);
+        _cache.Dispose();
+        _cache = new TerrainTextureCache(createTexture, disposeTexture);
+    }
+
     internal void PublishSyntheticForSelfTest(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic publication is limited to the internal self-test bootstrap.");
         ClearPublishedScene();
-        PublishReadyResult(arguments, result);
+        try { PublishReadyResult(arguments, result); }
+        catch (TerrainViewerException exception) { PublishFailure(arguments.Mode, exception.Error); throw; }
+        catch
+        {
+            var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload,
+                Progress: ProgressFromResult(result));
+            PublishFailure(arguments.Mode, error);
+            throw;
+        }
     }
 
     /// <summary>Self-test calls the production clear route used by reload and failure.</summary>
@@ -190,6 +207,12 @@ public partial class TerrainViewerApp : Node
     {
         if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic clearing is limited to the internal self-test bootstrap.");
         ClearPublishedScene();
+    }
+
+    internal void PublishSyntheticFailureForSelfTest(TerrainViewerMode mode, TerrainViewerError error)
+    {
+        if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic failure is limited to the internal self-test bootstrap.");
+        PublishFailure(mode, error);
     }
 
     internal TerrainViewerSelfTestSnapshot GetSelfTestSnapshot()
@@ -457,9 +480,31 @@ public partial class TerrainViewerApp : Node
         }
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key2, Pressed = true });
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-005 actor native stage=walk-timeline");
+        GD.Print("ARC-RENDER-005 actor native stage=walk-raster");
         if (_readyActor?.Action != ActorDiagnosticAction.Walk || !_status!.Text.Contains("Actor: Walk", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        for (var turn = 0; turn < 8 && _readyActor?.RequestedFacing != 0; turn++)
+        {
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            await NextFrameAsync();
+        }
+        if (_readyActor?.RequestedFacing != 0) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        for (var requested = 0; requested < 8; requested++)
+        {
+            var actor = _readyActor ?? throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorPlan));
+            if (actor.RequestedFacing != requested || actor.PhysicalGroup != expectedFacings[requested].Item1 || actor.FlipX != expectedFacings[requested].Item2
+                || _readyActorInput.MapX != callerInput.MapX || _readyActorInput.MapY != callerInput.MapY
+                || _readyActorInput.CameraOriginX != callerInput.CameraOriginX || _readyActorInput.CameraOriginY != callerInput.CameraOriginY
+                || _readyActorInput.InstanceOffsetX != callerInput.InstanceOffsetX || _readyActorInput.InstanceOffsetY != callerInput.InstanceOffsetY)
+                throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            await AssertActorRasterAsync(result, actor);
+            if (requested < 7)
+            {
+                Input.ParseInputEvent(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+                await NextFrameAsync();
+            }
+        }
+        GD.Print("ARC-RENDER-005 actor native stage=walk-timeline");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Space, Pressed = true });
         await NextFrameAsync();
         if (!_actorTimeline.IsPlaying || !_status.Text.Contains("Playback: playing", StringComparison.Ordinal))
@@ -479,7 +524,7 @@ public partial class TerrainViewerApp : Node
             || _readyActorInput.CameraOriginX != callerInput.CameraOriginX || _readyActorInput.CameraOriginY != callerInput.CameraOriginY
             || _readyActorInput.InstanceOffsetX != callerInput.InstanceOffsetX || _readyActorInput.InstanceOffsetY != callerInput.InstanceOffsetY)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        GD.Print("ARC-RENDER-005 actor native controls=PASS idle-walk=PASS facings=8 mirror=PASS pause-step=PASS hud=PASS stationary-caller-input=PASS");
+        GD.Print("ARC-RENDER-005 actor native controls=PASS actions=2 facings-per-action=8 rasters=16 mirror=PASS pause-step=PASS hud=PASS stationary-caller-input=PASS");
     }
 
     private async Task AssertActorRasterAsync(TerrainLoadResult result, ActorDiagnosticDrawCommand actor)
