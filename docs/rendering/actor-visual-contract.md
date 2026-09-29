@@ -55,6 +55,7 @@ SourceDerivedActorPlacement
   isometricMapCellX:int64, isometricMapCellY:int64,
   cameraOriginX:int64, cameraOriginY:int64,
   instanceOffsetX:int, instanceOffsetY:int,
+  renderFlags:uint32, placementPath: ArtFrameHotspot | CachedRenderUnsupported | Unknown,
   effectiveHotX:int, effectiveHotY:int,
   scalePercent:int, shrunk:bool,
   topLeftX:int, topLeftY:int, classification: PinnedCeDerived
@@ -82,12 +83,19 @@ compass convention.
 
 For the admitted isometric source route, the caller supplies map cell,
 camera/view origin, direct instance offsets, action/facing/frame, and render
-state. The pinned CE source relation is `topLeft = location_xy(mapCell) +
-instanceOffset + (40,20) - effectiveHotspot`, after the source's mirror,
-scale, and shrunk transforms; see the [placement evidence](../research/actor-placement-evidence.md)
-for domains and operation order. ART frame offsets remain metadata and are not
-added by this normal object rectangle. `flipX` preserves the selected physical
-mapping and changes the effective hotspot before the rectangle is formed.
+state. The pinned CE hotspot relation is admitted only when
+`ORF_08000000` is clear: `topLeft = location_xy(mapCell) + instanceOffset +
+(40,20) - effectiveHotspot`, after the source's mirror, binary-float scale,
+cast-to-int truncation toward zero, and (when shrunk) signed `/ 2` truncation
+toward zero transforms; see the [placement evidence](../research/actor-placement-evidence.md)
+for domains and operation order. With `ORF_08000000` set, the source instead
+uses cached `RENDER_X/Y/WIDTH/HEIGHT` and returns before current-ART frame
+lookup/hotspot placement. The selected metadata evidence does not establish
+that flag, so `CachedRenderUnsupported` and `Unknown` are fail-closed states;
+they must not be represented by a hotspot default. ART frame offsets remain
+metadata and are not added by the normal object rectangle. `flipX` preserves
+the selected physical mapping and changes the effective hotspot before the
+rectangle is formed.
 
 This is a source-derived documentation shape, not a runtime API or a readiness
 claim. A future consumer must use checked widened arithmetic and make every
@@ -104,8 +112,9 @@ override is explicit; no frame rate inference is allowed.
 
 | Condition | Result |
 | --- | --- |
-| Direct or exactly-one matching prototype default, single layer, both actions, admitted facings/groups/palettes/frames, unique resource, checked caller inputs, pinned-source rule **and** independent original-runtime observation | `Ready` |
+| Direct or exactly-one matching prototype default, single layer, both actions, admitted facings/groups/palettes/frames, unique resource, checked caller inputs including known `ORF_08000000` clear state, pinned-source rule **and** independent original-runtime observation | `Ready` |
 | Missing/duplicate/mismatched prototype; invalid mask/envelope; unknown composition | `Unsupported` |
+| Cached-render state (`ORF_08000000` set), or unknown render flags | `Unsupported` |
 | Resource/action/facing mapping, palette, ART metadata, caller input, or cadence authority unknown | `Unsupported` |
 | Only the pinned-source placement relation is available; original-runtime observation/parity is absent | `NotReady` |
 | Bounded census ends without a complete non-humanoid candidate | `NotReady` with aggregate reasons |

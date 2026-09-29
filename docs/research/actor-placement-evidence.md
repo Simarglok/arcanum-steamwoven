@@ -2,12 +2,13 @@
 
 ## Result and readiness
 
-**Research result: source-derived placement relation identified; original-runtime
-placement parity remains NOT READY.** This record closes the previously unknown
-relationship for the bounded direct, single-layer monster Idle/Walk chain only
-at the exact pinned `arcanum-ce` source level. It does not claim that the
-original executable was observed, that the CE implementation is an independent
-oracle, or that a production actor renderer is authorized.
+**Research result: a conditional source-derived placement relation is
+identified; original-runtime placement parity remains NOT READY.** This record
+closes the previously unknown relationship for the bounded direct, single-layer
+monster Idle/Walk chain only when its cached-render branch is inactive, at the
+exact pinned `arcanum-ce` source level. It does not claim that the original
+executable was observed, that the CE implementation is an independent oracle,
+or that a production actor renderer is authorized.
 
 The candidate remains the chain recorded by
 [actor visual evidence](actor-visual-evidence.md): module ordinal 643, direct
@@ -24,10 +25,11 @@ has 8. No locomotion distance or movement speed is inferred from ART FPS.
 | AP-002 | ArcNET describes `arcanum-ce` as a primary source for its object/art format work; it is therefore CE-derived and not independent placement corroboration. | community description, derivative | Local archived ArcNET README credits section; no ArcNET code was used or run. |
 | AP-003 | The preserved WorldEd/ArtView references document tooling availability or unrelated editor/dialogue material, not an actor top-left observation. | community description, silent | Existing ART/dialogue provenance records; no archived executable was run. |
 | AP-004 | The exact game draw route calls the generic object draw pass, which visits visible object nodes including NPCs. | pinned CE-derived rule | `src/game/gamelib.c:1703-1715`; `src/game/object.c:495-576`. The selected record is a type-16 NPC, so this is an actor-specific use of the generic object route, not scenery transfer. |
-| AP-005 | The source location projector, instance offsets, frame hotspot, scaling/shrunk state, and current ART select the object rectangle before its queued blit. | pinned CE-derived rule | `src/game/location.c:135-143`; `src/game/object.c:764-912,1985-2101,4665-4791`. |
+| AP-005 | When the cached-render flag is clear, the source location projector, instance offsets, frame hotspot, scaling/shrunk state, and current ART select the object rectangle before its queued blit. | pinned CE-derived rule | `src/game/location.c:135-143`; `src/game/object.c:764-912,2053-2101,4665-4791`. |
 | AP-006 | ART frame lookup applies the admitted critter/monster/unique-NPC mirror mapping before returning hotspot and offset metadata; the final art blit horizontally samples reflected pixels. | pinned CE-derived rule | `first_party/tig/src/art.c:523-568,1197-1256,3078-3267`. |
 | AP-007 | The recorded module/resource/prototype fingerprints, selected ordinal/ART/resources, all facing metadata, and sanitized reports are deterministic. | observed original bytes/metadata | Two opt-in read-only probe runs on the existing candidate produced byte-identical sanitized reports; both returned the documented exit 3 (`NOT_READY`). This is structural evidence, not a runtime placement observation. |
 | AP-008 | A synthetic formula test or a CE source trace establishes original-game pixel placement. | not established | No original executable was run and no independent original-runtime measurement is recorded. |
+| AP-009 | `ORF_08000000` selects a cached render rectangle instead of the current-ART hotspot path. | pinned CE-derived rule; selected-state unknown | `src/game/object.c:2053-2062` sets rectangle X/Y from `RENDER_X/Y`, width/height from `RENDER_WIDTH/HEIGHT`, and returns before current-ART frame lookup. The selected metadata probe does not establish this runtime render-flag state, so cached-render placement is unsupported rather than inferred from frame metadata. |
 
 The pinned source revision is
 `a7ff41b300ef712f0e7d088183a3d08957110cdd`, acquired as public source text
@@ -74,9 +76,22 @@ rule.
    `width - hotX - 1`, and negates `offsetX`. Requested rotations 0 and 4..7
    retain their physical groups. This preserves the existing eight-facing
    mapping; it does not invent compass semantics.
-5. `object_get_rect` reads the effective frame width, height, hotspot and the
-   object scale/shrunk state. It scales hotspot and dimensions with the source's
-   float-to-int truncation and halves them when shrunk. It then computes:
+5. `object_get_rect` first tests `ORF_08000000`. When that flag is set, it
+   returns the cached-render rectangle: `x/y = projected + instanceOffset +
+   (40,20) - RENDER_X/Y`, with `RENDER_WIDTH/HEIGHT`. This branch bypasses
+   current-ART frame lookup and hotspot placement. The selected metadata probe
+   does not establish the flag, so this cached-render state is unsupported and
+   no hotspot relation is claimed for it.
+6. Only when `ORF_08000000` is clear does `object_get_rect` read the effective
+   current-ART frame width, height, hotspot and object scale/shrunk state. For
+   each hotspot and dimension, a non-100 scale first performs the source's
+   binary `float` multiply and divide, then casts the result to `int`; that
+   cast truncates toward zero. If `OF_SHRUNK` is then set, the already-cast
+   signed integer is divided by two, also truncating toward zero. Thus a
+   negative hotspot is rounded toward zero before its later subtraction, and
+   may be rounded toward zero again by shrinking; it must not be rounded with
+   floor, ceiling, or a combined rational operation. Only after those ordered
+   transforms does the normal branch compute:
 
    ```text
    topLeft = base - effectiveHotspot
@@ -87,18 +102,19 @@ rule.
    object-rectangle calculation. They remain frame metadata and may vary across
    Walk frames; neither zero nor any other placement default is inferred for
    them.
-6. The normal object route queues the resulting source/destination rectangles
+7. The normal object route queues the resulting source/destination rectangles
    and eventually calls the ART window blit. The art layer performs reflected
    pixel sampling for the mirrored requested facings; the rectangle itself uses
    the already mirrored effective hotspot. Clipping, dirty rectangles, blending,
    ordering, and scaling do not establish a different world anchor.
 
-For the unscaled, non-shrunk supported case, the source-derived relation can be
-expressed compactly as `topLeft = projected + instanceOffset + (40,20) -
-effectiveHotspot`. The apparent `-1` in the X projector and the later `+40` are
-both present in this actor draw route; they must be preserved together rather
-than borrowed from scenery. Frame offset is deliberately absent from that
-expression.
+For the supported normal branch only (`ORF_08000000` clear), the unscaled,
+non-shrunk source-derived relation can be expressed compactly as `topLeft =
+projected + instanceOffset + (40,20) - effectiveHotspot`. For scaled or shrunk
+normal geometry, `effectiveHotspot` is the ordered float/cast/divide result
+above. The apparent `-1` in the X projector and the later `+40` are both
+present in this actor draw route; they must be preserved together rather than
+borrowed from scenery. Frame offset is deliberately absent from that expression.
 
 The source uses mixed 64-bit location projection and narrower rectangle
 operations. A future independently authored consumer must use widened signed
@@ -123,7 +139,8 @@ rather than normalizing it:
 | Frame hotspot | Effective data-derived subtraction from base. It varies by group/frame and is mirror-sensitive. |
 | Frame offset | Retained metadata only in this normal path; no second placement translation is evidenced. |
 | Camera/view origin | Caller-controlled projector state. Camera change moves projected/base/top-left together. |
-| Scale/shrunk flags | Caller/object render state; source changes rectangle geometry before the hotspot subtraction. The selected-record parity of each state remains unobserved. |
+| Scale/shrunk flags | Caller/object render state on the normal branch; source applies binary-float scale then cast-to-int truncation toward zero, followed by signed `/ 2` truncation toward zero when shrunk, before hotspot subtraction. The selected-record parity of each state remains unobserved. |
+| Cached-render flag `ORF_08000000` | When set, source uses cached `RENDER_X/Y/WIDTH/HEIGHT` and returns before current-ART hotspot placement. The selected runtime state is unobserved, so this branch is unsupported/unknown rather than a zero/default hotspot case. |
 
 The source's movement scheduler consults more than raw ART metadata for move
 progress/pause behavior. ART FPS remains recorded metadata only and does not
@@ -147,15 +164,17 @@ source-line references.
 
 ## Readiness boundary and minimum future observation
 
-The relation is sufficient only as a **pinned-source-derived research rule**.
-It is not sufficient to mark the proposed actor contract `Ready`, implement a
-presentation consumer, or claim original-runtime parity.
+The conditional normal-branch relation is sufficient only as a
+**pinned-source-derived research rule**. It is not sufficient to mark the
+proposed actor contract `Ready`, implement a presentation consumer, or claim
+original-runtime parity. The cached-render state must remain unsupported until
+an actor-specific invariant or independent evidence establishes it.
 
 A future authorized original-runtime observation must bind the same fingerprinted
 module/resource/prototype inputs and record locally: actor map location,
 camera/view origin, action, requested facing, physical group, flip state, frame
-index, scale/shrunk state, instance offsets, and measured screen top-left. The
-minimum discriminating set is:
+index, scale/shrunk state, instance offsets, render-flag state, and measured
+screen top-left. The minimum discriminating set is:
 
 1. one unchanged actor/camera/frame state rendered as an unmirrored physical
    group and through its mirrored requested-facing partner;

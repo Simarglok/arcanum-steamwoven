@@ -98,10 +98,15 @@ framed non-NPC entries, malformed/unsupported records, composite/non-monster
 ARTs, missing mappings/resources, or ART failures are retained only as typed
 aggregate rejection counts.
 
-The exact selected result remains NOT READY only for the unresolved actor-world
-anchor. It is not a claim that no actor ART exists, that all NPCs use the same
-chain, or that ART metadata supplies collision, grid position, navigation,
-locomotion, walking speed, or runtime parity.
+At RES009 completion, the exact selected result was NOT READY because the
+actor-world anchor was unresolved. ARC-RES-010 now conditionally characterizes
+the source-level normal placement branch, but the result remains NOT READY
+pending an independent original-runtime observation/parity check; the
+source-visible cached-render state is also explicitly unsupported until its
+actor applicability is established. This is not a claim that no actor ART
+exists, that all NPCs use the same chain, or that ART metadata supplies
+collision, grid position, navigation, locomotion, walking speed, or runtime
+parity.
 
 ## Envelope and inheritance policy
 
