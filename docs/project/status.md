@@ -1,6 +1,6 @@
 # Project status and component catalogue
 
-Baseline: merged main `b1858fcaf6ae785cb1a4e345926a6706da99cb0b`, 2026-09-28 (after PR #19). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
+Baseline: merged main `8cdb6249ad33e6eaebd1aa529b47677d19ad9614`, 2026-09-29 (through PR #24). This catalogue is source/document inspection, not a new runtime validation run. Linked component documents retain their measured evidence, conditions and unknowns. Read “implemented” as the bounded scope in that row, never full original-game parity.
 
 | Component | Implemented scope and evidence | Source | Remaining boundary |
 | --- | --- | --- | --- |
@@ -13,14 +13,25 @@ Baseline: merged main `b1858fcaf6ae785cb1a4e345926a6706da99cb0b`, 2026-09-28 (af
 | Terrain viewer | Godot diagnostic terrain plus an optional finite five-object static diagnostic mode; caller-selected inputs, camera, bounded combined cache and synthetic/native-smoke seams. [Viewer](../rendering/terrain-viewer.md). | [Viewer Core/adapter](../../tools/terrain-viewer), [tests](../../tests/Arcanum.TerrainViewer.Tests) | Objects are limited to authenticated source indexes 0..4 under explicit diagnostic ordering; roofs, integrated game scene, original ordering/visual parity remain outside scope. |
 | Static objects | Selected v119 census/default resolution (317 records) and separate bounded resource metadata for five samples. [Loader](../world/static-object-loader.md), [placement evidence](../research/scenery-placement.md). | [StaticObjects](../../src/Arcanum.Data/StaticObjects), [tests](../../tests/Arcanum.Data.Tests/StaticObjects) | Full scenery rendering, occlusion/order, visibility, collision, interaction and original placement parity. |
 | Display UI lab | Synthetic resolution/scaling/window experiment. [Validation](../input/display-ui-validation.md), [lab](../../experiments/display-ui-lab/README.md). | [Lab](../../experiments/display-ui-lab) | Production game UI and platform/readability certification. |
-| Gamepad lab | Merged ARC-GPAD-001 synthetic targeting, camera pan, input arbitration and modal menus. [Evidence](../input/gamepad-prototype.md), [lab](../../experiments/gamepad-lab/README.md). | [Lab](../../experiments/gamepad-lab) | Actor movement and accepted dual-stick/follow direction; Bluetooth physical checks remain unverified. ARC-GPAD-002/003 are not part of this baseline. |
+| Gamepad lab | ARC-GPAD-002/003 add left-stick synthetic actor motion, right-stick camera pan, both-axis inversion defaults/settings, Follow/Manual transitions and a bounded obstacle fixture; direct intent is default, Nearby Goal is a comparison mode. [Lab and automated checks](../../experiments/gamepad-lab/README.md), [movement study](../input/gamepad-movement-study.md). | [Lab](../../experiments/gamepad-lab) | Original-world movement/collision and scene integration; physical Xbox Bluetooth behavior and comfort remain unverified. |
+| Actor visual research | ARC-RES-009 identifies one direct single-layer monster’s idle/walk resource chain, facing/group/flip bindings, palettes, frame geometry and raw FPS. [Evidence](../research/actor-visual-evidence.md), [proposed contract](../rendering/actor-visual-contract.md). | [Research probe](../../tools/research/Arcanum.ActorVisualProbe) | Contract remains **NOT READY**: actor-specific world-anchor-to-top-left delta is unknown. No production actor renderer or scheduler; raw FPS does not establish movement speed. |
+| Local pathfinding research | Pinned CE source study documents direct attempts, one bounded local fallback and traversal context. [Study](../input/arcanum-pathfinding-study.md). | Source references in the study | An alternate branch is incomplete in CE; no original-runtime validation, navigation implementation or demonstrated path-quality improvement. |
 | Research tools | Bounded probes for DAT, ART, terrain, Crash Site, scenery and dialog evidence. [Method](../research/method.md). | [Tools](../../tools/research) | Universal production APIs or independent corroboration merely from multiple tools. |
 
 ## Not implemented
 
-There is no integrated playable world with an actor, movement, obstacle handling, interaction and dialog. Navigation, collision, full SCR/quest execution, inventory, combat, persistence/save-load and world transitions remain future work. The finite diagnostic viewer listed above is not an integrated renderer or a claim of original-runtime parity.
+There is no integrated playable world with an actor, movement, obstacle handling, interaction and dialog. Original-world navigation/collision, full SCR/quest execution, inventory, combat, persistence/save-load and world transitions remain future work. The synthetic gamepad lab’s movement and obstacle checks do not implement those original-world systems. The finite diagnostic viewer listed above is not an integrated renderer or a claim of original-runtime parity.
 
 The [vision](vision.md) records accepted product direction, including controller behavior. The [roadmap](roadmap.md) describes dependencies and evidence gates; active tasks and acceptance contracts remain on the Hermes board. Do not infer readiness from a viewer, synthetic lab, or code presence alone.
+
+## Merged delivery references
+
+- [PR #21 — ARC-GPAD-002](https://github.com/Simarglok/arcanum-steamwoven/pull/21): synthetic dual-stick movement and inversion settings.
+- [PR #22 — ARC-RES-009](https://github.com/Simarglok/arcanum-steamwoven/pull/22): completed research with an explicit actor-anchor readiness gap.
+- [PR #23 — ARC-GPAD-003](https://github.com/Simarglok/arcanum-steamwoven/pull/23): Follow/Manual camera and bounded CE path study.
+- [PR #24 — ARC-RENDER-004](https://github.com/Simarglok/arcanum-steamwoven/pull/24): five-object combined diagnostic viewer.
+
+Merged research does not imply that its proposed consumer is ready to implement. Automated lab checks do not replace human visual review or physical controller testing.
 
 ## Maintaining this catalogue
 

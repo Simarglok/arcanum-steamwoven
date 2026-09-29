@@ -11,7 +11,7 @@ These are accepted product directions, not claims of implementation. Detailed im
 | Visual modes | Shared simulation for Legacy and later Remastered visuals; intended switching preserves world/action state. |
 | Early graphics | Legacy first. Later upscale existing assets one-to-one; no new directions/frames or 3D required. |
 | Display | Modern resolution, high-DPI and scalable UI are baseline, independent of HD assets. Viewport must not define simulation rules. |
-| Controls | Keyboard/mouse and first-class gamepad. Accepted Xbox Series Bluetooth direction: left stick moves actor; right stick moves camera, both camera axes inverted by default and configurable. Manual camera cancels follow; after camera and actor stop, actor-only movement resumes recentering. This direction is not implemented in the merged ARC-GPAD-001 lab; see [vision](../project/vision.md). |
+| Controls | Keyboard/mouse and first-class gamepad. Accepted Xbox Series Bluetooth direction: left stick moves actor; right stick moves camera, both camera axes inverted by default and configurable. Manual camera cancels follow; after camera and actor stop, actor-only movement resumes recentering. ARC-GPAD-002/003 implement this direction in the synthetic lab; original-world integration and physical Bluetooth validation remain pending. See [vision](../project/vision.md). |
 | Platform sequence | Develop/research on macOS now; validate Windows/Linux/handheld support later. |
 | Compatibility | Original game is the principal behavioral reference; mods/patches need explicit versioned profiles. |
 
