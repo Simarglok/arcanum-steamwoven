@@ -212,7 +212,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         cancellationToken.ThrowIfCancellationRequested();
                         staticCensus = validation.Inspection.TerminalRecordCount;
                         staticOutsideScope = validation.Inspection.ResourceOutsideScopeCount;
-                        progress = progress with { StaticCensus = staticCensus, StaticAdmitted = validation.Inspection.ResourceResolvedCount, StaticOutsideScope = staticOutsideScope };
+                        progress = progress.WithStaticCensus(staticCensus, validation.Inspection.ResourceResolvedCount, staticOutsideScope);
                         try { staticPlan = StaticSceneryScenePlan.FromAuthenticatedInspection(validation.Inspection); }
                         catch (TerrainViewerException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticPlan, Stage: TerrainViewerFailureStage.Plan, Progress: progress)); }
                         foreach (var record in validation.Inspection.Records.Where(item => item.SourceIndex is >= 0 and <= 4))
@@ -254,7 +254,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     resourceAfter, checkedBytes, Environment.TickCount64 - started, 0)
                 {
                     StaticPlan = staticPlan,
-                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan),
+                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan, progress),
                     StaticTextures = staticTextures,
                     StaticCensusCount = staticCensus,
                     StaticOutsideScopeCount = staticOutsideScope

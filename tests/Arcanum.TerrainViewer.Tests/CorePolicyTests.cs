@@ -90,7 +90,7 @@ public sealed class CorePolicyTests
     public void Failure_diagnostics_preserve_explicit_stage_and_safe_reached_aggregates()
     {
         var terrainComplete = new TerrainViewerProgress(4096, 3033, 1063);
-        var staticComplete = terrainComplete with { StaticCensus = 317, StaticAdmitted = 5, StaticOutsideScope = 312 };
+        var staticComplete = terrainComplete.WithStaticCensus(317, 5, 312);
         var terrainDecode = new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure, Stage: TerrainViewerFailureStage.TerrainDecode, Progress: terrainComplete);
         var staticFingerprint = new TerrainViewerError(TerrainViewerErrorCode.StaticFingerprint, Stage: TerrainViewerFailureStage.StaticFingerprint, Progress: terrainComplete);
         var staticDecode = new TerrainViewerError(TerrainViewerErrorCode.StaticDecode, Stage: TerrainViewerFailureStage.StaticDecode, Progress: staticComplete);
@@ -109,6 +109,42 @@ public sealed class CorePolicyTests
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4097));
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(1, 1, 1));
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4096, 3033, 1063, 317, 6, 311));
+        Assert.AreNotSame(terrainComplete, staticComplete);
+        foreach (var property in typeof(TerrainViewerProgress).GetProperties())
+            Assert.IsNull(property.SetMethod, $"{property.Name} must not expose a mutation path.");
+    }
+
+    [TestMethod]
+    public void Combined_diagnostic_plan_overflow_preserves_plan_stage_and_completed_progress()
+    {
+        var terrainKey = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(0, 0, 100, 60),
+            [new TerrainPlanInput(0, terrainKey, TerrainKind.Tile, 0, 0, 0, 78, 40,
+                new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        var identity = new Arcanum.Data.StaticObjects.StaticObjectResourceIdentity(7, 3, 99, new string('d', 64));
+        var statics = StaticSceneryScenePlan.CreateSynthetic(
+        [
+            new StaticSceneryPlanInput(0, 0, 0, int.MinValue, 0, identity, 0, 0, 0, 1, 1, 0, 0, 0, 0, false),
+            new StaticSceneryPlanInput(1, 0, 0, int.MaxValue - 1, 0, identity, 0, 0, 0, 1, 1, 0, 0, 0, 0, false)
+        ]);
+        var progress = new TerrainViewerProgress(4096, 3033, 1063, 317, 5, 312);
+
+        try
+        {
+            _ = DiagnosticScenePlan.Create(terrain, statics, progress);
+            Assert.Fail("Expected a checked combined-bounds failure.");
+        }
+        catch (TerrainViewerException exception)
+        {
+            Assert.AreEqual(TerrainViewerErrorCode.StaticPlan, exception.Error.Code);
+            Assert.AreEqual(TerrainViewerFailureStage.Plan, exception.Error.Stage);
+            Assert.AreEqual(4096, exception.Error.SafeProgress.TerrainResolved);
+            Assert.AreEqual(3033, exception.Error.SafeProgress.TerrainTiles);
+            Assert.AreEqual(1063, exception.Error.SafeProgress.TerrainFacades);
+            Assert.AreEqual(317, exception.Error.SafeProgress.StaticCensus);
+            Assert.AreEqual(5, exception.Error.SafeProgress.StaticAdmitted);
+            Assert.AreEqual(312, exception.Error.SafeProgress.StaticOutsideScope);
+        }
     }
 
     [TestMethod]

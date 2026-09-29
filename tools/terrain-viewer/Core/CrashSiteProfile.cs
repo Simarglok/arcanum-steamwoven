@@ -34,8 +34,8 @@ public enum TerrainViewerFailureStage
     StaticCensus, StaticResource, StaticDecode, Plan, Upload, Readback
 }
 
-/// <summary>Aggregate values that are safe to show after a completed boundary.</summary>
-public sealed record TerrainViewerProgress
+/// <summary>Immutable aggregate values that are safe to show after a completed boundary.</summary>
+public sealed class TerrainViewerProgress
 {
     public TerrainViewerProgress(int terrainResolved = 0, int terrainTiles = 0, int terrainFacades = 0,
         int staticCensus = 0, int staticAdmitted = 0, int staticOutsideScope = 0)
@@ -53,13 +53,18 @@ public sealed record TerrainViewerProgress
         StaticOutsideScope = staticOutsideScope;
     }
 
-    public int TerrainResolved { get; init; }
-    public int TerrainTiles { get; init; }
-    public int TerrainFacades { get; init; }
-    public int StaticCensus { get; init; }
-    public int StaticAdmitted { get; init; }
-    public int StaticOutsideScope { get; init; }
-    public static readonly TerrainViewerProgress Empty = new();
+    public int TerrainResolved { get; }
+    public int TerrainTiles { get; }
+    public int TerrainFacades { get; }
+    public int StaticCensus { get; }
+    public int StaticAdmitted { get; }
+    public int StaticOutsideScope { get; }
+
+    /// <summary>Returns a separately validated post-static-census snapshot.</summary>
+    public TerrainViewerProgress WithStaticCensus(int staticCensus, int staticAdmitted, int staticOutsideScope) =>
+        new(TerrainResolved, TerrainTiles, TerrainFacades, staticCensus, staticAdmitted, staticOutsideScope);
+
+    public static TerrainViewerProgress Empty { get; } = new();
 }
 
 public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0,

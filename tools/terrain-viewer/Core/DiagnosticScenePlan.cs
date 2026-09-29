@@ -16,7 +16,8 @@ public sealed class DiagnosticScenePlan
     public StaticSceneryScenePlan? Statics { get; }
     public TerrainRect WorldBounds { get; }
 
-    public static DiagnosticScenePlan Create(TerrainScenePlan terrain, StaticSceneryScenePlan? statics)
+    public static DiagnosticScenePlan Create(TerrainScenePlan terrain, StaticSceneryScenePlan? statics,
+        TerrainViewerProgress? progress = null)
     {
         ArgumentNullException.ThrowIfNull(terrain);
         if (statics is null) return new DiagnosticScenePlan(terrain, null, terrain.WorldBounds);
@@ -31,7 +32,8 @@ public sealed class DiagnosticScenePlan
         }
         catch (OverflowException)
         {
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticPlan));
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticPlan,
+                Stage: TerrainViewerFailureStage.Plan, Progress: progress));
         }
     }
 }

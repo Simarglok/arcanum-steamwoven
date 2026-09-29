@@ -18,7 +18,7 @@ Baseline: merged main `b1858fcaf6ae785cb1a4e345926a6706da99cb0b`, 2026-09-28 (af
 
 ## Not implemented
 
-There is no integrated playable world with an actor, movement, obstacle handling, interaction and dialog. Navigation, collision, full SCR/quest execution, inventory, combat, persistence/save-load and world transitions remain future work. ARC-RENDER-004 is a proposed integration direction, not a merged renderer result.
+There is no integrated playable world with an actor, movement, obstacle handling, interaction and dialog. Navigation, collision, full SCR/quest execution, inventory, combat, persistence/save-load and world transitions remain future work. The finite diagnostic viewer listed above is not an integrated renderer or a claim of original-runtime parity.
 
 The [vision](vision.md) records accepted product direction, including controller behavior. The [roadmap](roadmap.md) describes dependencies and evidence gates; active tasks and acceptance contracts remain on the Hermes board. Do not infer readiness from a viewer, synthetic lab, or code presence alone.
 
