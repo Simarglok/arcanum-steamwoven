@@ -177,8 +177,8 @@ public static class TerrainViewerSelfTest
         var callerInput = fixture.Arguments.ActorInput!;
         foreach (var actionCase in new[]
         {
-            (Key.Key1, ActorDiagnosticAction.Idle, 15, 8, SyntheticActorFixture.IdlePixel),
-            (Key.Key2, ActorDiagnosticAction.Walk, 8, 15, SyntheticActorFixture.WalkPixel)
+            (Key.Key1, ActorDiagnosticAction.Idle, 15, 8, SyntheticActorFixture.IdleLeftPixel, SyntheticActorFixture.IdleRightPixel),
+            (Key.Key2, ActorDiagnosticAction.Walk, 8, 15, SyntheticActorFixture.WalkLeftPixel, SyntheticActorFixture.WalkRightPixel)
         })
         {
             app._Input(new InputEventKey { Keycode = actionCase.Item1, Pressed = true });
@@ -201,7 +201,7 @@ public static class TerrainViewerSelfTest
                 {
                     await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
                     using var image = viewport.GetTexture().GetImage();
-                    AssertSyntheticActorPixels(image, snapshot, actionCase.Item5);
+                    AssertSyntheticActorPixels(image, snapshot, actionCase.Item5, actionCase.Item6);
                 }
                 if (requested < 7) app._Input(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
             }
@@ -232,6 +232,21 @@ public static class TerrainViewerSelfTest
             || (afterCamera.CameraX, afterCamera.CameraY, afterCamera.CameraZoom) == (beforeCamera.CameraX, beforeCamera.CameraY, beforeCamera.CameraZoom)
             || afterCamera.CanvasTransform == beforeCamera.CanvasTransform)
             throw new InvalidOperationException("Inspection camera mutated stationary caller input or failed to update the canvas transform.");
+        // The app-level lifecycle must use normal publication/clearing rather
+        // than the cache in isolation: 1 terrain + 184 decoded actor textures.
+        if (afterCamera.CacheCount != 185 || afterCamera.CreatedTextures != 185 || afterCamera.DisposedTextures != 0)
+            throw new InvalidOperationException("Initial production-app texture ownership differs from the 185-texture fixture.");
+        app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        var republished = app.GetSelfTestSnapshot();
+        if (republished.CacheCount != 185 || republished.CreatedTextures != 370 || republished.DisposedTextures != 185)
+            throw new InvalidOperationException("Production-app republish did not replace exactly 185 textures.");
+        app.ClearSyntheticForSelfTest();
+        var cleared = app.GetSelfTestSnapshot();
+        if (cleared.CacheCount != 0 || cleared.DisposedTextures != 370)
+            throw new InvalidOperationException("Production-app clear did not dispose its live 185 textures once.");
+        app.ClearSyntheticForSelfTest();
+        if (app.GetSelfTestSnapshot().DisposedTextures != 370)
+            throw new InvalidOperationException("Repeated production-app clear double-disposed textures.");
         viewport.QueueFree();
     }
 
@@ -241,26 +256,56 @@ public static class TerrainViewerSelfTest
             && actual.InstanceOffsetX == expected.InstanceOffsetX && actual.InstanceOffsetY == expected.InstanceOffsetY
             && actual.RenderBranch == expected.RenderBranch && actual.ScalePercent == expected.ScalePercent && actual.Shrunk == expected.Shrunk;
 
-    private static void AssertSyntheticActorPixels(Image image, TerrainViewerSelfTestSnapshot snapshot, (byte R, byte G, byte B) expected)
+    private static void AssertSyntheticActorPixels(Image image, TerrainViewerSelfTestSnapshot snapshot,
+        (byte R, byte G, byte B) leftExpected, (byte R, byte G, byte B) rightExpected)
     {
+        // Fixture literals do not read the produced command to establish actor
+        // placement: caller input fixes destination (96,57), anchor (100,60),
+        // and source pixels (1,1)/(7,1) for the decoded 9x7 ART.
         var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
-        var pixelX = actor.Destination.X + (actor.FlipX ? 7 : 1);
-        var pixelY = actor.Destination.Y + 1;
-        var point = snapshot.CanvasTransform * new Vector2(pixelX, pixelY);
+        if (actor.Destination != new TerrainRect(96, 57, 9, 7) || actor.AnchorX != 100 || actor.AnchorY != 60)
+            throw new InvalidOperationException("Synthetic actor placement differs from the literal fixture oracle.");
+        AssertTransformedPixel(image, snapshot.CanvasTransform, actor.FlipX ? 103 : 97, 58, leftExpected);
+        AssertTransformedPixel(image, snapshot.CanvasTransform, actor.FlipX ? 97 : 103, 58, rightExpected);
+        AssertTransformedPixel(image, snapshot.CanvasTransform, 10, 10, (41, 82, 143));
+        AssertGuideAt(image, snapshot.CanvasTransform, 96, 57, false);
+        AssertGuideAt(image, snapshot.CanvasTransform, 100, 60, true);
+    }
+
+    private static void AssertTransformedPixel(Image image, Transform2D transform, int worldX, int worldY, (byte R, byte G, byte B) expected)
+    {
+        var point = transform * new Vector2(worldX, worldY);
         var x = (int)Math.Round(point.X);
         var y = (int)Math.Round(point.Y);
-        var matched = false;
         for (var sampleY = y - 1; sampleY <= y + 1; sampleY++)
+        for (var sampleX = x - 1; sampleX <= x + 1; sampleX++)
         {
-            for (var sampleX = x - 1; sampleX <= x + 1; sampleX++)
-            {
-                if (sampleX < 0 || sampleY < 0 || sampleX >= image.GetWidth() || sampleY >= image.GetHeight()) continue;
-                var pixel = image.GetPixel(sampleX, sampleY);
-                matched |= Math.Abs(Math.Round(pixel.R * 255) - expected.R) <= 1 && Math.Abs(Math.Round(pixel.G * 255) - expected.G) <= 1
-                    && Math.Abs(Math.Round(pixel.B * 255) - expected.B) <= 1 && Math.Round(pixel.A * 255) == 255;
-            }
+            if (sampleX < 0 || sampleY < 0 || sampleX >= image.GetWidth() || sampleY >= image.GetHeight()) continue;
+            var pixel = image.GetPixel(sampleX, sampleY);
+            if (Math.Abs(Math.Round(pixel.R * 255) - expected.R) <= 1 && Math.Abs(Math.Round(pixel.G * 255) - expected.G) <= 1
+                && Math.Abs(Math.Round(pixel.B * 255) - expected.B) <= 1 && Math.Round(pixel.A * 255) == 255) return;
         }
-        if (!matched) throw new InvalidOperationException("Synthetic literal actor pixel/reflection oracle failed.");
+        throw new InvalidOperationException("Synthetic literal pixel oracle failed.");
+    }
+
+    private static void AssertGuideAt(Image image, Transform2D transform, int worldX, int worldY, bool yellow)
+    {
+        var point = transform * new Vector2(worldX, worldY);
+        if (!HasSyntheticGuideColor(image, new Vector2I((int)Math.Round(point.X), (int)Math.Round(point.Y)), yellow))
+            throw new InvalidOperationException(yellow ? "Synthetic yellow anchor oracle failed." : "Synthetic magenta rectangle oracle failed.");
+    }
+
+    private static bool HasSyntheticGuideColor(Image image, Vector2I center, bool yellow)
+    {
+        for (var y = center.Y - 5; y <= center.Y + 5; y++)
+        for (var x = center.X - 5; x <= center.X + 5; x++)
+        {
+            if (x < 0 || y < 0 || x >= image.GetWidth() || y >= image.GetHeight()) continue;
+            var pixel = image.GetPixel(x, y);
+            if (yellow ? pixel.R > .9f && pixel.G > .9f && pixel.B < .2f : pixel.R > .9f && pixel.G < .2f && pixel.B > .9f)
+                return true;
+        }
+        return false;
     }
 
     private static async Task AssertActorCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)

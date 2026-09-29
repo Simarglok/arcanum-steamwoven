@@ -86,9 +86,7 @@ public partial class TerrainViewerApp : Node
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
         if (_exiting) return;
-        ClearReadyMetrics();
-        _canvas!.ClearScene();
-        _cache.Clear();
+        ClearPublishedScene();
         ShowStatus($"Diagnostic mode {ModeName(arguments.Mode)} | loading stage=Arguments | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0 | source-id {arguments.SourceId}");
         TerrainLoadResult? result = null;
         try
@@ -125,9 +123,7 @@ public partial class TerrainViewerApp : Node
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, exception.Error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
-                    ClearReadyMetrics();
-                    _canvas!.ClearScene();
-                    _cache.Clear();
+                    ClearPublishedScene();
                     ShowFailureStatus(arguments.Mode, exception.Error);
                 })) return;
         }
@@ -140,9 +136,7 @@ public partial class TerrainViewerApp : Node
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
-                    ClearReadyMetrics();
-                    _canvas!.ClearScene();
-                    _cache.Clear();
+                    ClearPublishedScene();
                     ShowFailureStatus(arguments.Mode, error);
                 })) return;
         }
@@ -191,8 +185,15 @@ public partial class TerrainViewerApp : Node
         PublishReadyResult(arguments, result);
     }
 
+    /// <summary>Self-test calls the production clear route used by reload and failure.</summary>
+    internal void ClearSyntheticForSelfTest()
+    {
+        if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic clearing is limited to the internal self-test bootstrap.");
+        ClearPublishedScene();
+    }
+
     internal TerrainViewerSelfTestSnapshot GetSelfTestSnapshot()
-        => new(_readyActor, _readyActorInput, _actorTimeline?.IsPlaying ?? false, _cache.Count, _status?.Text ?? string.Empty,
+        => new(_readyActor, _readyActorInput, _actorTimeline?.IsPlaying ?? false, _cache.Count, _cache.CreatedCount, _cache.DisposedCount, _status?.Text ?? string.Empty,
             _status?.GlobalPosition ?? Vector2.Zero, _camera?.State.X ?? 0, _camera?.State.Y ?? 0, _camera?.State.Zoom ?? 0,
             _canvas?.GetGlobalTransformWithCanvas() ?? Transform2D.Identity);
 
@@ -817,5 +818,5 @@ public partial class TerrainViewerApp : Node
 
 /// <summary>Scalar-only harness observation; it deliberately contains no load result or decoded RGBA.</summary>
 internal readonly record struct TerrainViewerSelfTestSnapshot(ActorDiagnosticDrawCommand? Actor,
-    ActorDiagnosticPlacementInput? Input, bool Playing, int CacheCount, string Hud, Vector2 HudPosition,
+    ActorDiagnosticPlacementInput? Input, bool Playing, int CacheCount, int CreatedTextures, int DisposedTextures, string Hud, Vector2 HudPosition,
     double CameraX, double CameraY, double CameraZoom, Transform2D CanvasTransform);

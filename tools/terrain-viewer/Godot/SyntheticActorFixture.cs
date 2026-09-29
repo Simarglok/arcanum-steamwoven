@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using Arcanum.Data;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 
@@ -5,15 +7,17 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// Public-data-only deterministic actor fixture for the application self-test.
-/// The fixture constructs bounded decoded inputs; production publication, cache,
-/// canvas, controls and timeline remain the code under test.
+/// It writes tiny asymmetric ART containers and decodes every texture through
+/// the production <see cref="ArtDecoder"/> before normal publication.
 /// </summary>
 internal static class SyntheticActorFixture
 {
     internal const int Width = 9;
     internal const int Height = 7;
-    internal static readonly (byte R, byte G, byte B) IdlePixel = (231, 37, 19);
-    internal static readonly (byte R, byte G, byte B) WalkPixel = (18, 197, 71);
+    internal static readonly (byte R, byte G, byte B) IdleLeftPixel = (231, 37, 19);
+    internal static readonly (byte R, byte G, byte B) IdleRightPixel = (24, 218, 236);
+    internal static readonly (byte R, byte G, byte B) WalkLeftPixel = (18, 197, 71);
+    internal static readonly (byte R, byte G, byte B) WalkRightPixel = (237, 58, 184);
 
     internal static SyntheticActorLoad Create()
     {
@@ -23,9 +27,9 @@ internal static class SyntheticActorFixture
         var frames = new List<ActorDiagnosticFrame>(TerrainCachePolicy.MaxActorDistinctKeys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>(TerrainCachePolicy.MaxActorDistinctKeys);
         AddAction(ActorDiagnosticAction.Idle, ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector,
-            ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps, IdlePixel, frames, textures);
+            ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps, IdleLeftPixel, IdleRightPixel, frames, textures);
         AddAction(ActorDiagnosticAction.Walk, ActorDiagnosticSource.WalkResourceOrdinal, ActorDiagnosticSource.WalkSelector,
-            ActorDiagnosticSource.WalkFrames, ActorDiagnosticSource.WalkFps, WalkPixel, frames, textures);
+            ActorDiagnosticSource.WalkFrames, ActorDiagnosticSource.WalkFps, WalkLeftPixel, WalkRightPixel, frames, textures);
         var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, frames);
         var terrainKey = new TerrainTextureKey("synthetic", 1, 0, 1, "terrain", 0, 0, 0);
         var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(0, 0, 200, 100),
@@ -56,26 +60,61 @@ internal static class SyntheticActorFixture
     }
 
     private static void AddAction(ActorDiagnosticAction action, int ordinal, uint selector, int frameCount, int fps,
-        (byte R, byte G, byte B) color, ICollection<ActorDiagnosticFrame> frames,
+        (byte R, byte G, byte B) leftColor, (byte R, byte G, byte B) rightColor, ICollection<ActorDiagnosticFrame> frames,
         IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures)
     {
+        var art = CreateActorArt(frameCount, fps, leftColor, rightColor);
         for (var group = 0; group < ActorDiagnosticSource.PhysicalGroups; group++)
         {
             for (var frame = 0; frame < frameCount; frame++)
             {
                 var key = new ActorDiagnosticTextureKey(ordinal, selector, group, frame, ActorDiagnosticSource.Palette);
-                frames.Add(new ActorDiagnosticFrame(key, Width, Height, 4, 3, 0, 0, frameCount, fps));
-                textures.Add(key, new DecodedActorTexture(key, Width, Height, Asymmetric(color)));
+                var decoded = ArtDecoder.Decode(art, new ArtFrameSelection(group, frame, ActorDiagnosticSource.Palette));
+                frames.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
+                    decoded.Frame.OffsetX, decoded.Frame.OffsetY, frameCount, fps));
+                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
             }
         }
     }
 
-    private static byte[] Asymmetric((byte R, byte G, byte B) color)
+    private static byte[] CreateActorArt(int framesPerGroup, int fps, (byte R, byte G, byte B) leftColor, (byte R, byte G, byte B) rightColor)
     {
-        var rgba = new byte[Width * Height * 4];
-        Set(rgba, 1, 1, color.R, color.G, color.B, 255);
-        Set(rgba, 7, 1, (byte)(255 - color.R), (byte)(255 - color.G), (byte)(255 - color.B), 255);
-        return rgba;
+        const int headerBytes = 132;
+        const int paletteBytes = 1024;
+        const int frameHeaderBytes = 28;
+        var frameCount = ActorDiagnosticSource.PhysicalGroups * framesPerGroup;
+        var payloadBytes = Width * Height;
+        var tableOffset = headerBytes + paletteBytes;
+        var payloadOffset = tableOffset + (frameCount * frameHeaderBytes);
+        var bytes = new byte[payloadOffset + (frameCount * payloadBytes)];
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(4), fps);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8), 8);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(16), 1);
+        BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(32), framesPerGroup);
+        SetPalette(bytes, 1, leftColor);
+        SetPalette(bytes, 2, rightColor);
+        for (var index = 0; index < frameCount; index++)
+        {
+            var header = tableOffset + (index * frameHeaderBytes);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(header), Width);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(header + 4), Height);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(header + 8), payloadBytes);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(header + 12), 4);
+            BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(header + 16), 3);
+            var payload = payloadOffset + (index * payloadBytes);
+            bytes[payload + Width + 1] = 1;
+            bytes[payload + Width + 7] = 2;
+        }
+        return bytes;
+    }
+
+    private static void SetPalette(byte[] bytes, int index, (byte R, byte G, byte B) color)
+    {
+        var offset = 132 + (index * 4);
+        bytes[offset] = color.B;
+        bytes[offset + 1] = color.G;
+        bytes[offset + 2] = color.R;
+        bytes[offset + 3] = byte.MaxValue;
     }
 
     private static byte[] Solid(int width, int height, byte r, byte g, byte b)
@@ -88,11 +127,6 @@ internal static class SyntheticActorFixture
         return rgba;
     }
 
-    private static void Set(byte[] rgba, int x, int y, byte r, byte g, byte b, byte a)
-    {
-        var offset = ((y * Width) + x) * 4;
-        rgba[offset] = r; rgba[offset + 1] = g; rgba[offset + 2] = b; rgba[offset + 3] = a;
-    }
 }
 
 internal sealed record SyntheticActorLoad(TerrainViewerArguments Arguments, TerrainLoadResult Result);
