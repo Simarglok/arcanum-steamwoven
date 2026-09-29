@@ -42,6 +42,14 @@ public partial class TerrainCanvas : Node2D
     }
 
     public bool TryGetOpaqueStaticLandmark(out TerrainCanvasLandmark landmark)
+        => TryGetOpaqueStaticLandmark(null, out landmark);
+
+    /// <summary>
+    /// Finds an opaque pixel from the reverse static draw order.  A caller may
+    /// reject candidates that cannot survive the active camera sampling; this
+    /// still returns an exact decoded static RGBA landmark, not a pass-delta.
+    /// </summary>
+    public bool TryGetOpaqueStaticLandmark(Func<TerrainCanvasLandmark, bool>? accept, out TerrainCanvasLandmark landmark)
     {
         landmark = default;
         if (_plan is null || _staticPlan is null || _textures is null) return false;
@@ -49,7 +57,13 @@ public partial class TerrainCanvas : Node2D
         // so no later static command can obscure the chosen opaque pixel.
         foreach (var command in _staticPlan.Commands.Reverse())
         {
-            if (!_textures.TryFindOpaquePixel(command.TextureKey, out var pixel)) continue;
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, pixel =>
+                {
+                    var offsetX = command.FlipX ? command.Destination.Width - 1 - pixel.X : pixel.X;
+                    var candidate = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y,
+                        pixel.R, pixel.G, pixel.B, pixel.A, command.SourceIndex);
+                    return accept is null || accept(candidate);
+                }, out var pixel)) continue;
             var offsetX = command.FlipX ? command.Destination.Width - 1 - pixel.X : pixel.X;
             landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y,
                 pixel.R, pixel.G, pixel.B, pixel.A, command.SourceIndex);

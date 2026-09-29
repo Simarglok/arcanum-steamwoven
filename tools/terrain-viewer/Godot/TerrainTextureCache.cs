@@ -57,9 +57,9 @@ public sealed class TerrainTextureCache : IDisposable
     public bool TryGet(StaticSceneryTextureKey key, out ImageTexture texture) => _staticTextures.TryGetValue(key, out texture!);
 
     public bool TryFindOpaquePixel(StaticSceneryTextureKey key, out TerrainTexturePixel pixel)
-        => TryFindOpaquePixel(key, static (_, _) => true, out pixel);
+        => TryFindOpaquePixel(key, static _ => true, out pixel);
 
-    public bool TryFindOpaquePixel(StaticSceneryTextureKey key, Func<int, int, bool> accept, out TerrainTexturePixel pixel)
+    public bool TryFindOpaquePixel(StaticSceneryTextureKey key, Func<TerrainTexturePixel, bool> accept, out TerrainTexturePixel pixel)
     {
         pixel = default;
         ArgumentNullException.ThrowIfNull(accept);
@@ -73,9 +73,11 @@ public sealed class TerrainTextureCache : IDisposable
                 // A full-scene landmark must be fully opaque: a merely
                 // translucent ART pixel is correctly blended with terrain and
                 // cannot be compared to its decoded straight-RGBA value.
-                if (color.A < 1f || !accept(x, y)) continue;
-                pixel = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
+                if (color.A < 1f) continue;
+                var candidate = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
                     (byte)Math.Round(color.B * 255), (byte)Math.Round(color.A * 255));
+                if (!accept(candidate)) continue;
+                pixel = candidate;
                 return true;
             }
         }

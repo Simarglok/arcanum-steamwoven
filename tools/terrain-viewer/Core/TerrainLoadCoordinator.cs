@@ -76,9 +76,14 @@ public sealed class TerrainLoadCoordinator : IDisposable
             var token = linkedCancellation.Token;
             await _gate.WaitAsync(token).ConfigureAwait(false);
             acquired = true;
-            token.ThrowIfCancellationRequested();
+            // Account for the acquired permit before observing cancellation.
+            // The finally below releases every acquired permit and must therefore
+            // decrement only a count that was definitely incremented.  Doing the
+            // cancellation check first left a narrow acquired-but-unregistered
+            // window that could drive the count negative during coordinator exit.
             var active = Interlocked.Increment(ref _activeOperations);
             UpdateMaximum(active);
+            token.ThrowIfCancellationRequested();
             operation = _operationFactory.Create();
             // The worker task always runs so that an operation which was created
             // reaches its disposal finally before the serialization gate opens.
@@ -236,7 +241,9 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 var moduleAfter = Fingerprint(arguments.ModulePath);
                 cancellationToken.ThrowIfCancellationRequested();
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
-                if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
+                if (moduleBefore != moduleAfter || resourceBefore != resourceAfter)
+                    throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch,
+                        Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
                     tileCount, facadeCount, recoveredCount, lookupCount, moduleBefore, resourceBefore, moduleAfter,
                     resourceAfter, checkedBytes, Environment.TickCount64 - started, 0)

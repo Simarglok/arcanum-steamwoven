@@ -56,7 +56,12 @@ public partial class TerrainViewerApp : Node
             _arguments = TerrainViewerArguments.Parse(args);
             _lastLoad = StartLoadAsync(_arguments);
         }
-        catch (ArgumentException) { ShowStatus("Usage"); }
+        catch (ArgumentException)
+        {
+            // Parsing has no resolved mode.  Keep the safe Arguments stage
+            // explicit rather than emitting an ambiguous bare usage string.
+            ShowStatus("Diagnostic mode unresolved | failure stage=Arguments code=Usage | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0");
+        }
     }
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
@@ -74,9 +79,10 @@ public partial class TerrainViewerApp : Node
         _canvas!.ClearScene();
         _cache.Clear();
         ShowStatus($"Diagnostic mode {ModeName(arguments.Mode)} | loading stage=Arguments | terrain 0/0/0 | static census 0/admitted 0/outside-scope 0 | source-id {arguments.SourceId}");
+        TerrainLoadResult? result = null;
         try
         {
-            var result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
+            result = await _coordinator.LoadAsync(requestGeneration, arguments, cancellationToken);
             GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
             if (_exiting || !_coordinator.TryPublish(requestGeneration, () =>
                 {
@@ -94,7 +100,21 @@ public partial class TerrainViewerApp : Node
                     _readyElapsedMilliseconds = result.ElapsedMilliseconds;
                     RefreshReadyStatus();
                 })) return;
-            if (!_exiting && _nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
+            if (!_exiting && _nativeSmoke && orchestrateSmoke)
+            {
+                try { await RunNativeSmokeAsync(result); }
+                catch (TerrainViewerException exception)
+                {
+                    // All failures after ready publication while exercising a
+                    // native-smoke frame are readback failures.  Preserve the
+                    // load's reached aggregates rather than reverting to zero.
+                    throw new TerrainViewerException(exception.Error with
+                    {
+                        Stage = TerrainViewerFailureStage.Readback,
+                        Progress = ProgressFromResult(result)
+                    });
+                }
+            }
             GD.Print($"ARC-RENDER-004 load stage=complete generation={requestGeneration}");
         }
         catch (OperationCanceledException)
@@ -118,13 +138,16 @@ public partial class TerrainViewerApp : Node
         catch
         {
             if (_exiting) return;
-            if (_nativeSmoke) { GD.Print($"ARC-RENDER-004 native-smoke failure mode={ModeName(arguments.Mode)} stage=Upload code={TerrainViewerErrorCode.RenderFailure} terrain=0 static=0"); GetTree().Quit(1); return; }
+            var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
+                Stage: TerrainViewerFailureStage.Upload,
+                Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
+            if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     ClearReadyMetrics();
                     _canvas!.ClearScene();
                     _cache.Clear();
-                    ShowFailureStatus(arguments.Mode, new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+                    ShowFailureStatus(arguments.Mode, error);
                 })) return;
         }
     }
@@ -379,15 +402,21 @@ public partial class TerrainViewerApp : Node
         var terrainLandmarkFound = _canvas.TryGetOpaqueLandmark(out var terrainLandmark);
         var terrainLandmarkMatches = terrainLandmarkFound && TryAssertLandmark(screenshot, terrainLandmark);
         TerrainCanvasLandmark staticLandmark = default;
-        var staticLandmarkFound = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic || _canvas.TryGetOpaqueStaticLandmark(out staticLandmark);
+        // Camera Fit can downsample an arbitrary source texel away. Choose an
+        // opaque pixel of the final static command that survives the actual
+        // exact-size production screenshot, then assert its decoded RGBA.
+        var staticLandmarkFound = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic
+            || _canvas.TryGetOpaqueStaticLandmark(candidate => TryAssertLandmark(screenshot, candidate), out staticLandmark);
         // The exact-size production frame itself must carry both semantic
         // landmarks. The pass-difference check below is only a supplementary
         // control, not a substitute for the selected static pixel oracle.
-        var staticPixelMatches = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic && staticLandmarkFound
-            && await HasStaticDifferenceInFullSceneAsync(screenshot, staticLandmark);
-        var staticPassDiffers = staticPixelMatches;
-        var staticLandmarkMatches = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic || staticPixelMatches;
-        GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches} static={staticLandmarkMatches} static-landmark={staticLandmarkFound} static-index={staticLandmark.Ordinal} static-pixel={staticPixelMatches} static-difference={staticPassDiffers}");
+        var staticLandmarkMatches = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic
+            || (staticLandmarkFound && TryAssertLandmark(screenshot, staticLandmark));
+        // Difference is an independent control only.  It is deliberately not
+        // used as a proxy for the selected RGBA landmark assertion above.
+        var staticPassDiffers = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic
+            && staticLandmarkMatches && await HasStaticDifferenceInFullSceneAsync(screenshot, staticLandmark);
+        GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches} static={staticLandmarkMatches} static-landmark={staticLandmarkFound} static-index={staticLandmark.Ordinal} static-difference={staticPassDiffers}");
         if (!stableCounts || !hudReadable || !terrainLandmarkMatches || !staticLandmarkMatches
             || (_readyMode == TerrainViewerMode.CombinedStaticDiagnostic && !staticLandmarkFound))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
@@ -523,6 +552,9 @@ public partial class TerrainViewerApp : Node
             && _status.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
     private static string ModeName(TerrainViewerMode mode) => mode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : "terrain-only";
+    private static TerrainViewerProgress ProgressFromResult(TerrainLoadResult result)
+        => new(result.ResolvedCount, result.TileCount, result.FacadeCount,
+            result.StaticCensusCount, result.StaticPlan?.Commands.Count ?? 0, result.StaticOutsideScopeCount);
     private static string FormatFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
         var progress = error.SafeProgress;
