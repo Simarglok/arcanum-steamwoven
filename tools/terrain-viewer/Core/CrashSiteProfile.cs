@@ -35,9 +35,30 @@ public enum TerrainViewerFailureStage
 }
 
 /// <summary>Aggregate values that are safe to show after a completed boundary.</summary>
-public sealed record TerrainViewerProgress(int TerrainResolved = 0, int TerrainTiles = 0, int TerrainFacades = 0,
-    int StaticCensus = 0, int StaticAdmitted = 0, int StaticOutsideScope = 0)
+public sealed record TerrainViewerProgress
 {
+    public TerrainViewerProgress(int terrainResolved = 0, int terrainTiles = 0, int terrainFacades = 0,
+        int staticCensus = 0, int staticAdmitted = 0, int staticOutsideScope = 0)
+    {
+        if (terrainResolved is < 0 or > CrashSiteProfile.CellCount || terrainTiles is < 0 or > CrashSiteProfile.TileCount
+            || terrainFacades is < 0 or > CrashSiteProfile.FacadeCount || terrainTiles + terrainFacades > terrainResolved
+            || staticCensus is < 0 or > 317 || staticAdmitted is < 0 or > 5 || staticOutsideScope is < 0 or > 312
+            || staticAdmitted + staticOutsideScope > staticCensus)
+            throw new ArgumentOutOfRangeException(nameof(terrainResolved), "Diagnostic progress is outside the safe aggregate profile.");
+        TerrainResolved = terrainResolved;
+        TerrainTiles = terrainTiles;
+        TerrainFacades = terrainFacades;
+        StaticCensus = staticCensus;
+        StaticAdmitted = staticAdmitted;
+        StaticOutsideScope = staticOutsideScope;
+    }
+
+    public int TerrainResolved { get; init; }
+    public int TerrainTiles { get; init; }
+    public int TerrainFacades { get; init; }
+    public int StaticCensus { get; init; }
+    public int StaticAdmitted { get; init; }
+    public int StaticOutsideScope { get; init; }
     public static readonly TerrainViewerProgress Empty = new();
 }
 

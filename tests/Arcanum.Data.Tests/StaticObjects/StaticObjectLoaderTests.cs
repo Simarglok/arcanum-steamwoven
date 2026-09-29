@@ -201,6 +201,70 @@ public sealed class StaticObjectLoaderTests
     }
 
     [TestMethod]
+    public void Selected_resource_decode_rejects_each_immutable_identity_component_and_selected_art_dimension()
+    {
+        var records = SyntheticResourceRecords();
+        var mapping = System.Text.Encoding.ASCII.GetBytes("{1001}{one.art}\n{2002}{two.art}\0");
+        var art = Art();
+        using var fixture = new Fixture(Sector(records), true,
+            [("art/scenery/scenery.mes", mapping), ("art/scenery/one.art", art), ("art/scenery/two.art", art)], "maps\\fixture\\object.sec");
+        var record = StaticObjectLoader.InspectSelectedResources(fixture.Source, fixture.Prototypes).Records[0];
+        var baseline = record.ArtMetadata!.ResourceIdentity;
+        Assert.AreEqual(1, baseline.DatOrdinal);
+        Assert.AreEqual(1u, baseline.Flags);
+        Assert.AreEqual((uint)art.Length, baseline.DeclaredDecodedSize);
+
+        var identityMutations = new[]
+        {
+            ("ordinal", Dat(("padding", [1]), ("art/scenery/scenery.mes", mapping), ("art/scenery/one.art", art), ("art/scenery/two.art", art))),
+            ("flags", DatWithMetadata(("art/scenery/scenery.mes", mapping, 1u, null), ("art/scenery/one.art", art, 2u, null), ("art/scenery/two.art", art, 1u, null))),
+            ("size", DatWithMetadata(("art/scenery/scenery.mes", mapping, 1u, null), ("art/scenery/one.art", art, 1u, (uint)(art.Length + 1)), ("art/scenery/two.art", art, 1u, null))),
+            ("name", Dat(("art/scenery/scenery.mes", mapping), ("art/scenery/renamed.art", art), ("art/scenery/two.art", art)))
+        };
+        foreach (var mutation in identityMutations)
+        {
+            using var stream = new MemoryStream(mutation.Item2);
+            using var archive = DatArchive.Open(stream, leaveOpen: true);
+            var failure = AssertStaticFailure(() => StaticObjectLoader.DecodeSelectedFrame(archive, record),
+                StaticObjectErrorCode.UnresolvedResource, StaticObjectFailureStage.Art, 0);
+            Assert.IsFalse(failure.Message.Contains(mutation.Item1, StringComparison.Ordinal));
+        }
+
+        foreach (var offset in new[] { 0, 8, 12 }) // group count, frame count, palette presence
+        {
+            var incompatible = art.ToArray();
+            BinaryPrimitives.WriteUInt32LittleEndian(incompatible.AsSpan(offset), 0);
+            using var stream = new MemoryStream(Dat(("art/scenery/scenery.mes", mapping), ("art/scenery/one.art", incompatible), ("art/scenery/two.art", art)));
+            using var archive = DatArchive.Open(stream, leaveOpen: true);
+            AssertStaticFailure(() => StaticObjectLoader.DecodeSelectedFrame(archive, record),
+                StaticObjectErrorCode.InvalidArtSelector, StaticObjectFailureStage.Art, 0);
+        }
+    }
+
+    [TestMethod]
+    public void Selected_resource_stage_admits_exactly_indexes_zero_through_four_and_marks_every_later_record_outside_scope()
+    {
+        var records = SyntheticResourceRecords().Concat(
+        [
+            Record(7106, unchecked((int)0x40080040), 0, 0, 1005, 6, -6),
+            Record(7107, unchecked((int)0x40100080), 0, 0, 1006, 7, -7)
+        ]).ToArray();
+        var resources = new[]
+        {
+            ("art/scenery/scenery.mes", System.Text.Encoding.ASCII.GetBytes("{1001}{one.art}\n{2002}{two.art}\0")),
+            ("art/scenery/one.art", Art()), ("art/scenery/two.art", Art())
+        };
+        using var fixture = new Fixture(Sector(records), true, resources, "maps\\fixture\\object.sec");
+        var report = StaticObjectLoader.InspectSelectedResources(fixture.Source, fixture.Prototypes);
+        Assert.AreEqual(7, report.TerminalRecordCount);
+        Assert.AreEqual(5, report.ResourceResolvedCount);
+        Assert.AreEqual(2, report.ResourceOutsideScopeCount);
+        Assert.AreEqual(0, report.ResourceNotEvaluatedCount);
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4 }, report.Records.Where(record => record.ResourceStatus == StaticObjectResourceStatus.Resolved).Select(record => record.SourceIndex).ToArray());
+        CollectionAssert.AreEqual(new[] { 5, 6 }, report.Records.Where(record => record.ResourceStatus == StaticObjectResourceStatus.OutsideResourceScope).Select(record => record.SourceIndex).ToArray());
+    }
+
+    [TestMethod]
     public void Inspection_is_immutable_after_caller_owned_buffer_mutation()
     {
         using var fixture = new Fixture(Record(7001, 0x40000000, 0, 0));
@@ -576,9 +640,12 @@ public sealed class StaticObjectLoaderTests
     }
 
     private static byte[] Dat(params (string Name, byte[] Payload)[] entries)
+        => DatWithMetadata(entries.Select(entry => (entry.Name, entry.Payload, 1u, (uint?)null)).ToArray());
+
+    private static byte[] DatWithMetadata(params (string Name, byte[] Payload, uint Flags, uint? DeclaredSize)[] entries)
     {
         using var output = new MemoryStream(); var offsets = new List<uint>(); foreach (var entry in entries) { offsets.Add(checked((uint)output.Position)); output.Write(entry.Payload); }
-        using var index = new MemoryStream(); U32(index, checked((uint)entries.Length)); for (var i = 0; i < entries.Length; i++) { var name = System.Text.Encoding.ASCII.GetBytes(entries[i].Name + "\0"); U32(index, checked((uint)name.Length)); index.Write(name); index.Write(new byte[4]); U32(index, 1); U32(index, checked((uint)entries[i].Payload.Length)); U32(index, checked((uint)entries[i].Payload.Length)); U32(index, offsets[i]); }
+        using var index = new MemoryStream(); U32(index, checked((uint)entries.Length)); for (var i = 0; i < entries.Length; i++) { var name = System.Text.Encoding.ASCII.GetBytes(entries[i].Name + "\0"); U32(index, checked((uint)name.Length)); index.Write(name); U32(index, 0); U32(index, entries[i].Flags); U32(index, checked((uint)entries[i].Payload.Length)); U32(index, entries[i].DeclaredSize ?? checked((uint)entries[i].Payload.Length)); U32(index, offsets[i]); }
         index.Position = 0; index.CopyTo(output); output.Write(new byte[16]); output.Write("1TAD"u8); U32(output, 0); U32(output, checked((uint)(index.Length + 28))); return output.ToArray();
     }
 

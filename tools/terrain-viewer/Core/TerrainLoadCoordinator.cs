@@ -40,6 +40,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly CancellationTokenSource _lifetimeCancellation = new();
     private readonly ITerrainLoadOperationFactory _operationFactory;
+    private readonly Action? _afterPermitAcquired;
     private readonly object _lifetimeGate = new();
     private TaskCompletionSource _registeredLoadsDrained = CompletedDrain();
     private long _generation;
@@ -48,8 +49,11 @@ public sealed class TerrainLoadCoordinator : IDisposable
     private int _maximumObservedConcurrency;
     private bool _disposed;
 
-    public TerrainLoadCoordinator(ITerrainLoadOperationFactory? operationFactory = null)
-        => _operationFactory = operationFactory ?? new ProductionTerrainLoadOperationFactory();
+    public TerrainLoadCoordinator(ITerrainLoadOperationFactory? operationFactory = null, Action? afterPermitAcquired = null)
+    {
+        _operationFactory = operationFactory ?? new ProductionTerrainLoadOperationFactory();
+        _afterPermitAcquired = afterPermitAcquired;
+    }
 
     public long BeginGeneration() => Interlocked.Increment(ref _generation);
     public int MaximumObservedConcurrency => Volatile.Read(ref _maximumObservedConcurrency);
@@ -83,6 +87,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
             // window that could drive the count negative during coordinator exit.
             var active = Interlocked.Increment(ref _activeOperations);
             UpdateMaximum(active);
+            _afterPermitAcquired?.Invoke();
             token.ThrowIfCancellationRequested();
             operation = _operationFactory.Create();
             // The worker task always runs so that an operation which was created

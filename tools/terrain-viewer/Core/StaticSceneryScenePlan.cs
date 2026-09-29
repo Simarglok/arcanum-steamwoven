@@ -43,11 +43,13 @@ public sealed class StaticSceneryScenePlan
         ArgumentNullException.ThrowIfNull(inspection);
         if (inspection.TerminalRecordCount != 317 || inspection.ResourceResolvedCount != 5 || inspection.ResourceOutsideScopeCount != 312 ||
             inspection.ResourceNotEvaluatedCount != 0)
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticCensus));
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticCensus,
+                Stage: TerrainViewerFailureStage.StaticCensus));
         var selected = inspection.Records.Where(record => record.SourceIndex is >= 0 and <= 4).ToArray();
         if (selected.Length != 5 || selected.Any(record => record.ResourceStatus != StaticObjectResourceStatus.Resolved || record.FieldStatus != StaticObjectFieldStatus.Resolved ||
             record.IsStatic != true || record.LocalX is null || record.LocalY is null || record.DirectOffsetX is null || record.DirectOffsetY is null || record.ArtMetadata is null))
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticResource));
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticResource,
+                Stage: TerrainViewerFailureStage.StaticResource));
         return CreateSynthetic(selected.Select(record =>
         {
             var metadata = record.ArtMetadata!;
@@ -65,7 +67,8 @@ public static class StaticSceneryGeometry
         if (input.SourceIndex < 0 || input.LocalX is null || input.LocalY is null || input.DirectOffsetX is null || input.DirectOffsetY is null ||
             input.Width <= 0 || input.Height <= 0 || input.Group < 0 || input.Frame < 0 || input.Palette < 0 ||
             input.ResourceIdentity.DatOrdinal < 0 || string.IsNullOrWhiteSpace(input.ResourceIdentity.NormalizedLogicalNameSha256))
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticResource));
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticResource,
+                Stage: TerrainViewerFailureStage.Plan));
         try
         {
             var anchorX = checked(40 * checked(input.LocalY.Value - input.LocalX.Value));
@@ -81,7 +84,8 @@ public static class StaticSceneryGeometry
         }
         catch (OverflowException)
         {
-            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticPlan));
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticPlan,
+                Stage: TerrainViewerFailureStage.Plan));
         }
     }
 }

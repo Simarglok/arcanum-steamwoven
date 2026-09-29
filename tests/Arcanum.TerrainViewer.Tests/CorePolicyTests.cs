@@ -54,6 +54,39 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public void Static_scenery_geometry_rejects_each_public_input_and_checked_arithmetic_boundary()
+    {
+        var identity = new Arcanum.Data.StaticObjects.StaticObjectResourceIdentity(7, 3, 99, new string('c', 64));
+        var valid = new StaticSceneryPlanInput(4, 0, 0, 0, 0, identity, 0, 0, 0, 2, 3, 0, 0, 0, 0, false);
+        var invalidInputs = new[]
+        {
+            valid with { SourceIndex = -1 }, valid with { LocalX = null }, valid with { LocalY = null },
+            valid with { DirectOffsetX = null }, valid with { DirectOffsetY = null }, valid with { Width = 0 },
+            valid with { Width = -1 }, valid with { Height = 0 }, valid with { Height = -1 }, valid with { Group = -1 },
+            valid with { Frame = -1 }, valid with { Palette = -1 }, valid with { ResourceIdentity = identity with { DatOrdinal = -1 } },
+            valid with { ResourceIdentity = identity with { NormalizedLogicalNameSha256 = " " } }
+        };
+        foreach (var input in invalidInputs)
+            AssertViewerFailure(() => StaticSceneryGeometry.Place(input), TerrainViewerErrorCode.StaticResource, TerrainViewerFailureStage.Plan);
+
+        var overflows = new[]
+        {
+            valid with { LocalY = int.MinValue, LocalX = 1 }, // X subtraction
+            valid with { LocalY = int.MaxValue, LocalX = 0 }, // X multiplication
+            valid with { LocalY = int.MaxValue, LocalX = 1 }, // Y addition
+            valid with { LocalY = 100_000_000, LocalX = 100_000_000 }, // Y multiplication
+            valid with { LocalY = 1, DirectOffsetX = int.MaxValue }, // X anchor add
+            valid with { LocalY = 1, DirectOffsetY = int.MaxValue }, // Y anchor add
+            valid with { HotX = int.MinValue }, // left subtraction
+            valid with { HotY = int.MinValue }, // top subtraction
+            valid with { DirectOffsetX = int.MaxValue }, // right bound add
+            valid with { DirectOffsetY = int.MaxValue } // bottom bound add
+        };
+        foreach (var input in overflows)
+            AssertViewerFailure(() => StaticSceneryGeometry.Place(input), TerrainViewerErrorCode.StaticPlan, TerrainViewerFailureStage.Plan);
+    }
+
+    [TestMethod]
     public void Failure_diagnostics_preserve_explicit_stage_and_safe_reached_aggregates()
     {
         var terrainComplete = new TerrainViewerProgress(4096, 3033, 1063);
@@ -72,6 +105,10 @@ public sealed class CorePolicyTests
         Assert.AreEqual(312, staticDecode.SafeProgress.StaticOutsideScope);
         CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "Plan", "Upload", "Readback" },
             Enum.GetNames<TerrainViewerFailureStage>());
+        AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(-1));
+        AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4097));
+        AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(1, 1, 1));
+        AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4096, 3033, 1063, 317, 6, 311));
     }
 
     [TestMethod]
@@ -293,6 +330,22 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public async Task Coordinator_acquired_permit_cancellation_releases_without_creating_an_operation()
+    {
+        var replacement = new ImmediateArchiveOperation();
+        using var cancellation = new CancellationTokenSource();
+        using var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(replacement), cancellation.Cancel);
+        var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+        await AssertThrowsAsync<OperationCanceledException>(coordinator.LoadAsync(coordinator.BeginGeneration(), arguments, cancellation.Token));
+        Assert.AreEqual(0, replacement.DisposeCount, "Cancellation after permit acquisition must not create an operation.");
+        Assert.AreEqual(1, coordinator.MaximumObservedConcurrency, "The acquired permit remains correctly accounted for.");
+
+        var result = await coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
+        Assert.AreEqual(1, replacement.DisposeCount, "The released permit must make the same queued operation reusable.");
+        Assert.IsTrue(coordinator.TryPublish(result.Generation, () => { }));
+    }
+
+    [TestMethod]
     public async Task Coordinator_exit_cancels_active_and_waiting_loads_drains_before_gate_disposal_and_rejects_later_loads()
     {
         var active = new CancellableBarrierOperation();
@@ -412,5 +465,15 @@ public sealed class CorePolicyTests
     {
         try { await task; Assert.Fail($"Expected {typeof(T).Name}."); }
         catch (T) { }
+    }
+
+    private static void AssertViewerFailure(Action action, TerrainViewerErrorCode code, TerrainViewerFailureStage stage)
+    {
+        try { action(); Assert.Fail($"Expected {nameof(TerrainViewerException)}."); }
+        catch (TerrainViewerException exception)
+        {
+            Assert.AreEqual(code, exception.Error.Code);
+            Assert.AreEqual(stage, exception.Error.Stage);
+        }
     }
 }
