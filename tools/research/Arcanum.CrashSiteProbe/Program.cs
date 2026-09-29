@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 using Arcanum.Data;
+using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
 
@@ -161,7 +162,15 @@ internal static class Program
         Console.WriteLine("integrity before_after_match=true");
         if (passability)
         {
-            PassabilityProbe.Emit(sectorBytes, framing.TileStart, framing.BlockMaskStart, framing.BlockMaskBytes, staticScenery.Length);
+            var selector = new TerrainSectorSelector(SectorEntryName, "Arcanum1-024-fixed", 1452, 1290, 86_570_436_012, 92_928, 82_560, 64, 64,
+                new TerrainEntryExpectation(ExpectedSectorOrdinal, 0x00000002, ExpectedSectorDecodedBytes));
+            var source = new TerrainTileNameSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+            var report = TerrainObstructionInspector.InspectSector(archive, "arcanum-module", selector, source, new TerrainLoaderOptions
+            {
+                MaxSectorDecodedEntryBytes = MaxDecodedSectorBytes,
+                MaxMesDecodedEntryBytes = MaxDecodedSectorBytes,
+            });
+            PassabilityProbe.Emit(report, staticScenery.Length);
         }
     }
 

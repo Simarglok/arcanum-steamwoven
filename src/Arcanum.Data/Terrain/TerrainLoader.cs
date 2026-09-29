@@ -152,7 +152,7 @@ public static class TerrainLoader
     private static TerrainCellOutcome Issue(int ordinal, TerrainIssueCode code, string message, string? logicalPath = null) =>
         new(ordinal, null, new TerrainIssue(code, ordinal, message, logicalPath));
 
-    private static DatEntry SelectModule(DatArchive archive, TerrainSectorSelector selector)
+    internal static DatEntry SelectModule(DatArchive archive, TerrainSectorSelector selector)
     {
         var expected = Encoding.ASCII.GetBytes(selector.ModuleEntryPath + "\0");
         var matches = archive.Entries.Where(e => e.RawNameBytes.SequenceEqual(expected)).ToArray();
@@ -164,7 +164,7 @@ public static class TerrainLoader
         return entry;
     }
 
-    private static byte[] ReadSelected(DatArchive archive, string path, string label, int cap)
+    internal static byte[] ReadSelected(DatArchive archive, string path, string label, int cap)
     {
         var normalized = NormalizePath(Encoding.ASCII.GetBytes(path));
         var matches = archive.Entries.Where(e => NormalizeEntry(e) == normalized).ToArray();
@@ -174,7 +174,7 @@ public static class TerrainLoader
         return archive.ReadEntry(matches[0]);
     }
 
-    private static ParsedSector ParseSector(byte[] bytes, TerrainLoaderOptions limits)
+    internal static ParsedSector ParseSector(byte[] bytes, TerrainLoaderOptions limits)
     {
         if (bytes.Length < 4) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector light count is truncated.");
         var terminalStart = checked(bytes.Length - 4); if (terminalStart < 4) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector terminal count is truncated.");
@@ -193,12 +193,21 @@ public static class TerrainLoader
         ranges[TerrainSection.TileScripts] = new TerrainByteRange(scriptsStart, checked(cursor.Offset - scriptsStart));
         var sectorScriptStart = cursor.Offset; if (placeholder >= 0xAA0002) cursor.Skip(12, "sector script"); ranges[TerrainSection.SectorScript] = new TerrainByteRange(sectorScriptStart, checked(cursor.Offset - sectorScriptStart));
         var metadataStart = cursor.Offset; if (placeholder >= 0xAA0003) cursor.Skip(24, "metadata and sound"); ranges[TerrainSection.MetadataAndSound] = new TerrainByteRange(metadataStart, checked(cursor.Offset - metadataStart));
-        var blockStart = cursor.Offset; if (placeholder >= 0xAA0004) cursor.Skip(512, "block mask"); ranges[TerrainSection.BlockMask] = new TerrainByteRange(blockStart, checked(cursor.Offset - blockStart));
+        var blockStart = cursor.Offset;
+        uint[]? blockMaskWords = null;
+        if (placeholder >= 0xAA0004)
+        {
+            cursor.Skip(512, "block mask");
+            blockMaskWords = new uint[128];
+            for (var index = 0; index < blockMaskWords.Length; index++)
+                blockMaskWords[index] = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(checked(blockStart + (index * sizeof(uint))), sizeof(uint)));
+        }
+        ranges[TerrainSection.BlockMask] = new TerrainByteRange(blockStart, checked(cursor.Offset - blockStart));
         var objectStart = cursor.Offset; var objectLength = checked(terminalStart - objectStart); if (objectLength < 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Sector sections overlap the terminal count.");
         if (terminal is < 0 or > 4096 || terminal > limits.MaxObjectTerminalCount) throw new TerrainLimitExceededException("Sector terminal object count is outside the configured limit.");
         ranges[TerrainSection.ObjectWindow] = new TerrainByteRange(objectStart, objectLength); ranges[TerrainSection.TerminalObjectCount] = new TerrainByteRange(terminalStart, 4);
         var opaque = new TerrainOpaqueWindow(ranges[TerrainSection.ObjectWindow], terminal, bytes.AsSpan(objectStart, objectLength).ToArray());
-        return new ParsedSector(words, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
+        return new ParsedSector(words, blockMaskWords, new TerrainSectorFraming(ranges, lights, roof, placeholder, scripts, opaque));
     }
 
     private static int SectionBytes(int count, int width, string label)
@@ -213,7 +222,7 @@ public static class TerrainLoader
         }
     }
 
-    private static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits, bool allowObservedTileInterstitialText)
+    internal static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits, bool allowObservedTileInterstitialText)
     {
         if (bytes.Length > limits.MaxMesDecodedEntryBytes) throw new TerrainLimitExceededException("MES input exceeds the decoded byte limit.");
         if (bytes.Any(value => value > 0x7f)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains non-ASCII bytes.");
@@ -315,7 +324,7 @@ public static class TerrainLoader
         return token;
     }
 
-    private sealed record ParsedSector(uint[] Words, TerrainSectorFraming Framing);
+    internal sealed record ParsedSector(uint[] Words, uint[]? BlockMaskWords, TerrainSectorFraming Framing);
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
     private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
     {
