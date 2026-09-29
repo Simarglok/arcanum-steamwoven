@@ -47,9 +47,7 @@ public sealed record TerrainTileNameSource
     public TerrainTileNameSource(DatArchive archive, string sourceId, string mesEntryPath, TerrainPathProfile pathProfile)
     {
         Archive = archive ?? throw new ArgumentNullException(nameof(archive));
-        TerrainSectorSelector.ValidateAscii(sourceId, nameof(sourceId));
-        if (sourceId.Contains('/') || sourceId.Contains('\\'))
-            throw new ArgumentException("Source ID must be a non-path ASCII label.", nameof(sourceId));
+        TerrainObstructionSourceId.Validate(sourceId, nameof(sourceId));
         TerrainSectorSelector.ValidateAscii(mesEntryPath, nameof(mesEntryPath));
         if (pathProfile != TerrainPathProfile.CeNonWindowsMacOs)
             throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the CE non-Windows/macOS path profile is supported.");
@@ -110,8 +108,10 @@ public sealed class TerrainObstructionSectorReport
     public TerrainObstructionSectorIdentity Sector => _sector;
     public TerrainCellObstructionComponents GetCell(int localX, int localY, TileNameRuleMode tileNameRuleMode = TileNameRuleMode.Apply)
     {
-        if ((uint)localX >= 64 || (uint)localY >= 64)
+        if ((uint)localX >= 64)
             throw new ArgumentOutOfRangeException(nameof(localX), "Local terrain coordinates must be in the inclusive range 0 through 63.");
+        if ((uint)localY >= 64)
+            throw new ArgumentOutOfRangeException(nameof(localY), "Local terrain coordinates must be in the inclusive range 0 through 63.");
         var ordinal = checked(localX + (64 * localY));
         var mask = _blockMask is null
             ? Unknown("BLOCK_MASK_ABSENT", _moduleProvenance)
@@ -126,7 +126,14 @@ public sealed class TerrainObstructionSectorReport
             _ => Unsupported("FACADE_CLASS_UNSUPPORTED", new(TerrainObstructionProvenanceKind.PackedTerrainId, _moduleProvenance.SourceId, _moduleProvenance.EntryOrdinal)),
         };
         var tile = TileName(rawId, packedClass, tileNameRuleMode);
-        return new TerrainCellObstructionComponents(ordinal, localX, localY, checked(_sector.OriginX + localX), checked(_sector.OriginY + localY), mask, facade, tile);
+        try
+        {
+            return new TerrainCellObstructionComponents(ordinal, localX, localY, checked(_sector.OriginX + localX), checked(_sector.OriginY + localY), mask, facade, tile);
+        }
+        catch (OverflowException exception)
+        {
+            throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Terrain coordinate arithmetic overflowed.", exception);
+        }
     }
 
     private TerrainObstructionComponentResult TileName(uint rawId, uint packedClass, TileNameRuleMode mode)
@@ -148,4 +155,14 @@ public sealed class TerrainObstructionSectorReport
         new(TerrainObstructionSupportedness.Unknown, TerrainObstructionApplicability.Unknown, null, reason, provenance);
     internal static TerrainObstructionComponentResult Unsupported(string reason, TerrainObstructionProvenance provenance) =>
         new(TerrainObstructionSupportedness.Unsupported, TerrainObstructionApplicability.Unknown, null, reason, provenance);
+}
+
+internal static class TerrainObstructionSourceId
+{
+    internal static void Validate(string value, string parameterName)
+    {
+        TerrainSectorSelector.ValidateAscii(value, parameterName);
+        if (value.Any(c => c is < ' ' or > '~' or '/' or '\\'))
+            throw new ArgumentException("Source ID must be a printable non-path ASCII label.", parameterName);
+    }
 }

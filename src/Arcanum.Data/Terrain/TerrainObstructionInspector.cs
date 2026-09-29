@@ -11,9 +11,7 @@ public static class TerrainObstructionInspector
     {
         ArgumentNullException.ThrowIfNull(moduleArchive);
         ArgumentNullException.ThrowIfNull(selector);
-        TerrainSectorSelector.ValidateAscii(moduleSourceId, nameof(moduleSourceId));
-        if (moduleSourceId.Contains('/') || moduleSourceId.Contains('\\'))
-            throw new ArgumentException("Source ID must be a non-path ASCII label.", nameof(moduleSourceId));
+        TerrainObstructionSourceId.Validate(moduleSourceId, nameof(moduleSourceId));
         var limits = options ?? new TerrainLoaderOptions();
         limits.Validate();
 
