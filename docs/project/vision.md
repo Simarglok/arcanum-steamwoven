@@ -14,7 +14,7 @@ Early graphics use the original sprites. Later upscale original assets one-to-on
 
 Keyboard/mouse and first-class gamepad are product goals. The accepted target is an Xbox Series controller over Bluetooth: left stick moves the actor, right stick controls the camera. Both right-stick camera axes are inverted by default, with configurable inversion. Manual camera movement cancels actor follow. Once camera and actor movement have stopped, subsequent actor-only movement resumes recentering/follow.
 
-This direction is accepted but not implemented in the merged ARC-GPAD-001 prototype. That lab currently pans the camera with left-stick input and logs synthetic interactions. Dual-stick/follow work (ARC-GPAD-002/003) is outside the [merged baseline](status.md). Exact thresholds, speed, transitions and physical comfort need bounded implementation and device evidence; no default runtime behavior is inferred from this vision.
+ARC-GPAD-002/003 implement this direction in the [synthetic gamepad lab](../../experiments/gamepad-lab/README.md), including configurable inversion, direct movement intent and the neutral-then-actor-only Follow transition. The lab uses procedural obstacles and synthetic map bounds; it is not connected to the original terrain or a production character. Physical Xbox Bluetooth behavior and comfort remain unverified. See the [merged status](status.md) and lab owner checklist for the evidence boundary.
 
 ## Authority and evidence
 

@@ -2,7 +2,7 @@
 
 Research-first, independent reimplementation of **Arcanum: Of Steamworks and Magick Obscura**, using the player's original game data.
 
-**Status (merged main `b1858fc`, 2026-09-28):** bounded DAT/ART/DLG readers, a headless dialog transition runtime, fixed-source terrain and static-object loaders, ART and terrain diagnostic viewers, and synthetic display/gamepad labs exist. These are separate evidence-bounded components. There is no integrated playable scene, full SCR VM, navigation/collision, combat, or save/load, and original-runtime parity is unverified. See the [component catalogue](docs/project/status.md) for implemented scope, evidence and source links.
+**Status (merged main `8cdb624`, 2026-09-29, through PR #24):** bounded DAT/ART/DLG readers, a headless dialog transition runtime, fixed-source terrain and static-object loaders, and ART/display diagnostics exist. The terrain viewer can combine terrain with five admitted static objects. The synthetic gamepad lab supports dual-stick movement, configurable camera inversion and Follow/Manual camera behavior. One actor’s idle/walk visual chain is researched, but its world-anchor placement remains unresolved. There is no integrated playable scene, full SCR VM, original-world navigation/collision, combat, or save/load, and original-runtime parity is unverified. See the [component catalogue](docs/project/status.md) for implemented scope, evidence and source links.
 
 ## Direction
 
