@@ -1,5 +1,6 @@
 using Arcanum.Data;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.StaticObjects;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 using System.Reflection;
@@ -18,6 +19,7 @@ public static class TerrainViewerSelfTest
             var keys = CreateKeys();
             using var cache = new TerrainTextureCache();
             cache.Upload(CreateTextures(keys, frame));
+            cache.UploadStatic(CreateStaticTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
@@ -25,14 +27,16 @@ public static class TerrainViewerSelfTest
             if (DisplayServer.GetName() != "headless")
             {
                 await AssertCanvasOraclesAsync(host, cache, keys);
-                GD.Print("ARC-RENDER-003 self-test PASS production-canvas pixel oracle");
+                await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
+                GD.Print("ARC-RENDER-004 self-test PASS combined production-canvas pixel oracle");
             }
             else
             {
                 // The dummy renderer cannot read a ViewportTexture. Plans and
                 // source constants are still constructed, but no pixels are claimed.
                 AssertPlanConstants(keys.Tile, keys.Facade);
-                GD.Print("ARC-RENDER-003 self-test PASS decoded fixture/production plan; graphical readback NOT_VERIFIED headless");
+                AssertCombinedPlan();
+                GD.Print("ARC-RENDER-004 self-test PASS combined structural plan; graphical readback NOT_VERIFIED headless");
             }
             host.GetTree().Quit(0);
         }
@@ -67,6 +71,12 @@ public static class TerrainViewerSelfTest
             rgba[offset] = r; rgba[offset + 1] = g; rgba[offset + 2] = b; rgba[offset + 3] = 255;
         }
         return new DecodedTerrainTexture(key, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, rgba);
+    }
+
+    private static Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> CreateStaticTextures(ArtFrame frame)
+    {
+        var key = new StaticSceneryTextureKey(new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64)), 0, 0, 0);
+        return new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
     }
 
     private static async Task AssertCanvasOraclesAsync(Node host, TerrainTextureCache cache,
@@ -117,6 +127,30 @@ public static class TerrainViewerSelfTest
         var image = viewport.GetTexture().GetImage();
         viewport.QueueFree();
         return image;
+    }
+
+    private static async Task AssertCombinedCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
+    {
+        var terrain = Plan(new TerrainRect(0, 0, 100, 60), [Input(30, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
+        var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0,
+            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 0, 0, false)]);
+        var viewport = new SubViewport { Size = new Vector2I(100, 60), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas();
+        viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, statics), cache);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        using var image = viewport.GetTexture().GetImage();
+        AssertPixel(image, 20, 20, 255, 0, 0, 255);
+        AssertPixel(image, 21, 20, 0, 0, 255, 255);
+        viewport.QueueFree();
+    }
+
+    private static void AssertCombinedPlan()
+    {
+        var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
+        var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false)]);
+        if (statics.Commands.Single().Destination != new TerrainRect(20, 20, 3, 3)) throw new InvalidOperationException("Combined static geometry differs from literal oracle.");
     }
 
     private static TerrainScenePlan FullTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(10, key, TerrainKind.Tile, 0, 0, 0)]);

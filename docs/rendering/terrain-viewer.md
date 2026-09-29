@@ -1,4 +1,4 @@
-# Terrain viewer (ARC-RENDER-003)
+# Terrain viewer (ARC-RENDER-003 / ARC-RENDER-004)
 
 `tools/terrain-viewer` is a standalone macOS Godot diagnostic viewer for exactly
 one fixed Crash Site terrain sector. It is not a game renderer: 4,096 resolved
@@ -14,7 +14,16 @@ policy, or extraction behavior. It requires caller-selected inputs and a safe,
 non-path source label:
 
     godot_canonical --path tools/terrain-viewer/Godot -- \
-      --module PATH --resource PATH --source-id LABEL
+      --mode terrain-only --module PATH --resource PATH --source-id LABEL
+
+Omitting `--mode` is terrain-only compatibility. `--mode combined` requires
+exactly one additional caller-selected `--prototypes PATH`; terrain-only rejects
+that option. Combined is a finite project diagnostic: it validates the fixed
+original-data profile, admits only source indexes 0 through 4, draws terrain
+tiles then diagnostic facades then the five static commands sorted by
+`(anchor.y, anchor.x, sourceIndex)`, and reports the separate 317/5/312 census.
+It does not establish original object order, occlusion, facade/wall/roof,
+lighting, palette, or overall visual parity.
 
 It validates the fixed Crash Site profile before and after its read: fixed
 module/resource sizes and SHA-256 values, sector selector, all 4,096 outcomes,
@@ -33,8 +42,10 @@ pre/post fingerprints, and per-load success/failure disposal before releasing
 its gate, and records maximum observed archive concurrency.
 It atomically publishes only after all records and deduplicated selected frames
 succeed. The exact selected-frame identity is the source label, DAT ordinal,
-flags, declared size, logical entry name, group, frame, and requested palette.
-The cache preflights each distinct decoded frame against 4,096 keys and 256 MiB
+flags, declared size, normalized logical-name hash, group, frame, and requested
+palette.
+The cache preflights terrain frames against 4,096 identities, static frames
+against 5 identities (4,101 total), and 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
 that cache. After successful upload, the app retains only the safe source label
 and scalar decoded-count/load-time HUD metrics: neither the completed load
@@ -102,9 +113,9 @@ and actual dimensions. These game-graphics screenshots
 remain local and ignored.
 
 The previously retained blank source/export PNGs are failed historical evidence,
-not smoke passes. Current exact-head local build evidence lives below
-`artifacts/builds/ARC-RENDER-003/<commit>/` with the app, `manifest.json`, and
-an `evidence/` directory; `artifacts/builds/ARC-RENDER-003/current.json` points
+not smoke passes. Current exact-head ARC-RENDER-004 local build evidence lives below
+`artifacts/builds/ARC-RENDER-004/<commit>/` with the app, `manifest.json`, and
+an `evidence/` directory; `artifacts/builds/ARC-RENDER-004/current.json` points
 to the exact commit-bound manifest/app. It is ignored and must not be committed
 or attached. Evidence distinguishes synthetic checks, original automated checks,
 original visual inspection, and physical/readability. Only the first two are
@@ -125,7 +136,7 @@ shell. Do not place those paths in a manifest, commit, or issue.
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
 
 After committing the source candidate, export it to the ignored
-`artifacts/builds/ARC-RENDER-003/<commit>/ArcanumTerrainViewer.app`, run its
+`artifacts/builds/ARC-RENDER-004/<commit>/ArcanumTerrainViewer.app`, run its
 `--self-test` and `--native-smoke` with the same local arguments, then run
 `codesign --verify --deep --strict --verbose=2` on that app. Record source and
 export results, requested/actual dimensions, measured load milliseconds,
@@ -137,7 +148,7 @@ For the macOS export, keep the SDK selection process-local. This avoids an
 editor-configured alternate SDK without changing global Godot or .NET settings:
 
     SOURCE_HEAD=$(git rev-parse HEAD)
-    BUILD_ROOT="artifacts/builds/ARC-RENDER-003/$SOURCE_HEAD"
+    BUILD_ROOT="artifacts/builds/ARC-RENDER-004/$SOURCE_HEAD"
     env -i HOME="$HOME" USER="$USER" TMPDIR="$TMPDIR" LANG="${LANG:-en_US.UTF-8}" \
       PATH="$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin" \
       DOTNET_ROOT="$HOME/.local/share/dotnet" DOTNET_HOST_PATH="$HOME/.local/share/dotnet/dotnet" \
@@ -150,7 +161,7 @@ editor-configured alternate SDK without changing global Godot or .NET settings:
       --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
     codesign --verify --deep --strict --verbose=2 "$BUILD_ROOT/ArcanumTerrainViewer.app"
     python3 -m json.tool "$BUILD_ROOT/manifest.json"
-    python3 -m json.tool artifacts/builds/ARC-RENDER-003/current.json
+    python3 -m json.tool artifacts/builds/ARC-RENDER-004/current.json
 
 Before treating an export as usable, inspect its Godot export log for canonical
 SDK `8.0.425` and no Homebrew SDK path, and verify `libhostfxr.dylib` exists in

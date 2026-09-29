@@ -23,7 +23,8 @@ public static class CrashSiteProfile
 
 public enum TerrainViewerErrorCode
 {
-    Usage, InputUnavailable, FingerprintMismatch, InvalidSector, IncompleteSector, ResourceLimit, DecodeFailure, RenderFailure
+    Usage, InputUnavailable, FingerprintMismatch, InvalidSector, IncompleteSector, ResourceLimit, DecodeFailure, RenderFailure,
+    StaticFingerprint, StaticCensus, StaticResource, StaticDecode, StaticPlan, Cancelled
 }
 
 public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0)

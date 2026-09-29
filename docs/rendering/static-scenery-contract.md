@@ -27,6 +27,14 @@ must not substitute prototype offsets, infer a missing field as zero, choose an
 alternate ART/resource winner, or convert an unknown result into a plausible
 image.
 
+ARC-RENDER-004 consumes this envelope in the terrain viewer's explicit
+`combined` diagnostic mode. The Data seam carries a path-free resource identity
+(DAT ordinal, flags, declared decoded size and normalized logical-name hash) to
+identity-bind selected-frame decoding. It is structural only:
+`ValidateOriginalData` remains the sole authenticating operation. Selected
+resource inspection reports five `Resolved` records and marks every other
+record `OutsideResourceScope`; census-only inspection retains `NotEvaluated`.
+
 ## Required finite input record
 
 For each admitted result, retain the following evidence—not a broader inferred

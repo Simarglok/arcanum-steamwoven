@@ -131,8 +131,13 @@ public sealed class StaticObjectRecord
     public StaticObjectArtMetadata? ArtMetadata { get; }
 }
 
+/// <summary>Path-free identity for a selected resource archive entry.</summary>
+public sealed record StaticObjectResourceIdentity(int DatOrdinal, uint Flags, uint DeclaredDecodedSize,
+    string NormalizedLogicalNameSha256);
+
 public sealed record StaticObjectArtMetadata(int ArtType, int SceneryCategory, int ArtNumber, int RotationGroup, int Frame,
-    int Palette, int EffectivePalette, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY);
+    int Palette, int EffectivePalette, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY,
+    StaticObjectResourceIdentity ResourceIdentity);
 
 public sealed class StaticObjectInspection
 {
@@ -142,7 +147,8 @@ public sealed class StaticObjectInspection
         Records = new ReadOnlyCollection<StaticObjectRecord>(records.ToArray());
         FieldResolvedCount = Records.Count(record => record.FieldStatus == StaticObjectFieldStatus.Resolved);
         ResourceResolvedCount = Records.Count(record => record.ResourceStatus == StaticObjectResourceStatus.Resolved);
-        ResourceNotEvaluatedCount = Records.Count(record => record.ResourceStatus is StaticObjectResourceStatus.NotEvaluated or StaticObjectResourceStatus.OutsideResourceScope);
+        ResourceNotEvaluatedCount = Records.Count(record => record.ResourceStatus == StaticObjectResourceStatus.NotEvaluated);
+        ResourceOutsideScopeCount = Records.Count(record => record.ResourceStatus == StaticObjectResourceStatus.OutsideResourceScope);
     }
 
     public StaticObjectCensusStatus CensusStatus { get; }
@@ -151,6 +157,7 @@ public sealed class StaticObjectInspection
     public int FieldResolvedCount { get; }
     public int ResourceResolvedCount { get; }
     public int ResourceNotEvaluatedCount { get; }
+    public int ResourceOutsideScopeCount { get; }
 }
 
 /// <summary>Identifier-only immutable-input evidence; paths and payloads are intentionally not retained.</summary>

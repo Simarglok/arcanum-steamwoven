@@ -6,6 +6,7 @@ namespace Arcanum.TerrainViewer;
 public partial class TerrainCanvas : Node2D
 {
     private TerrainScenePlan? _plan;
+    private StaticSceneryScenePlan? _staticPlan;
     private TerrainTextureCache? _textures;
 
     public TerrainCanvas()
@@ -13,7 +14,7 @@ public partial class TerrainCanvas : Node2D
         TextureFilter = TextureFilterEnum.Nearest;
     }
 
-    public int CommandCount => _plan?.Commands.Count ?? 0;
+    public int CommandCount => (_plan?.Commands.Count ?? 0) + (_staticPlan?.Commands.Count ?? 0);
 
     /// <summary>Stable, content-free geometry snapshot used by camera smoke checks.</summary>
     public string GeometrySignature => _plan is null
@@ -38,9 +39,33 @@ public partial class TerrainCanvas : Node2D
         return false;
     }
 
+    public bool TryGetOpaqueStaticLandmark(out TerrainCanvasLandmark landmark)
+    {
+        landmark = default;
+        if (_staticPlan is null || _textures is null) return false;
+        foreach (var command in _staticPlan.Commands.Reverse())
+        {
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, out var pixel)) continue;
+            var offsetX = command.FlipX ? command.Destination.Width - 1 - pixel.X : pixel.X;
+            landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y,
+                pixel.R, pixel.G, pixel.B, pixel.A, command.SourceIndex);
+            return true;
+        }
+        return false;
+    }
+
     public void Publish(TerrainScenePlan plan, TerrainTextureCache textures)
     {
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
+        _staticPlan = null;
+        _textures = textures ?? throw new ArgumentNullException(nameof(textures));
+        QueueRedraw();
+    }
+
+    public void Publish(DiagnosticScenePlan plan, TerrainTextureCache textures)
+    {
+        _plan = plan?.Terrain ?? throw new ArgumentNullException(nameof(plan));
+        _staticPlan = plan.Statics;
         _textures = textures ?? throw new ArgumentNullException(nameof(textures));
         QueueRedraw();
     }
@@ -48,6 +73,7 @@ public partial class TerrainCanvas : Node2D
     public void ClearScene()
     {
         _plan = null;
+        _staticPlan = null;
         _textures = null;
         QueueRedraw();
     }
@@ -69,6 +95,19 @@ public partial class TerrainCanvas : Node2D
             {
                 DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
             }
+        }
+        if (_staticPlan is null) return;
+        foreach (var command in _staticPlan.Commands)
+        {
+            if (!_textures.TryGet(command.TextureKey, out var texture)) continue;
+            var source = new Rect2(0, 0, command.Destination.Width, command.Destination.Height);
+            if (command.FlipX)
+            {
+                DrawSetTransform(new Vector2(command.Destination.X + command.Destination.Width, command.Destination.Y), 0, new Vector2(-1, 1));
+                DrawTextureRectRegion(texture, new Rect2(0, 0, command.Destination.Width, command.Destination.Height), source);
+                DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+            }
+            else DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
         }
     }
 }

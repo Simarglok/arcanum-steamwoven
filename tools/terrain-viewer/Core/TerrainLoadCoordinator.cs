@@ -1,15 +1,24 @@
 using System.Security.Cryptography;
 using Arcanum.Data;
+using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 
 namespace Arcanum.TerrainViewer.Core;
 
 public sealed record InputFingerprint(long Size, string Sha256);
 public sealed record DecodedTerrainTexture(TerrainTextureKey Key, int Width, int Height, byte[] Rgba);
+public sealed record DecodedStaticTexture(StaticSceneryTextureKey Key, int Width, int Height, byte[] Rgba);
 public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, IReadOnlyDictionary<TerrainTextureKey, DecodedTerrainTexture> Textures,
     int ResolvedCount, int TileCount, int FacadeCount, int NormalizationRecoveredCount, int NormalizationLookupCount,
     InputFingerprint ModuleFingerprint, InputFingerprint ResourceFingerprint, InputFingerprint ModuleFingerprintAfter,
-    InputFingerprint ResourceFingerprintAfter, long CheckedRgbaBytes, long ElapsedMilliseconds, int MaximumObservedConcurrency);
+    InputFingerprint ResourceFingerprintAfter, long CheckedRgbaBytes, long ElapsedMilliseconds, int MaximumObservedConcurrency)
+{
+    public StaticSceneryScenePlan? StaticPlan { get; init; }
+    public DiagnosticScenePlan? DiagnosticPlan { get; init; }
+    public IReadOnlyDictionary<StaticSceneryTextureKey, DecodedStaticTexture> StaticTextures { get; init; } = new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>();
+    public int StaticCensusCount { get; init; }
+    public int StaticOutsideScopeCount { get; init; }
+}
 
 /// <summary>
 /// One caller-owned archive/decode operation. A fresh instance owns precisely
@@ -103,6 +112,10 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
                 TerrainLoadReport report;
                 Dictionary<TerrainTextureKey, DecodedTerrainTexture> textures;
+                StaticSceneryScenePlan? staticPlan = null;
+                var staticTextures = new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>();
+                var staticCensus = 0;
+                var staticOutsideScope = 0;
                 _module = DatArchive.Open(arguments.ModulePath, BoundedDatOptions());
                 _resource = DatArchive.Open(arguments.ResourcePath, BoundedDatOptions());
                 var source = new TerrainResourceSource(_resource, arguments.SourceId, CrashSiteProfile.TileMesEntry, CrashSiteProfile.FacadeMesEntry,
@@ -129,12 +142,41 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count, frame.Width, frame.Height);
                     textures.Add(key, new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()));
                 }
+                if (arguments.Mode == TerrainViewerMode.CombinedStaticDiagnostic)
+                {
+                    try
+                    {
+                        var validation = StaticObjectLoader.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!);
+                        staticCensus = validation.Inspection.TerminalRecordCount;
+                        staticOutsideScope = validation.Inspection.ResourceOutsideScopeCount;
+                        staticPlan = StaticSceneryScenePlan.FromAuthenticatedInspection(validation.Inspection);
+                        foreach (var record in validation.Inspection.Records.Where(item => item.SourceIndex is >= 0 and <= 4))
+                        {
+                            var command = staticPlan.Commands.Single(item => item.SourceIndex == record.SourceIndex);
+                            if (staticTextures.ContainsKey(command.TextureKey)) continue;
+                            var frame = StaticObjectLoader.DecodeSelectedFrame(_resource, record, new StaticObjectLoaderOptions().ArtOptions);
+                            checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count + staticTextures.Count, frame.Width, frame.Height);
+                            staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, frame.Rgba.ToArray()));
+                        }
+                        if (staticTextures.Count > TerrainCachePolicy.MaxStaticDistinctKeys)
+                            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
+                    }
+                    catch (TerrainViewerException) { throw; }
+                    catch (StaticObjectException exception) { throw new TerrainViewerException(new TerrainViewerError(exception.Stage == StaticObjectFailureStage.FingerprintInput ? TerrainViewerErrorCode.StaticFingerprint : TerrainViewerErrorCode.StaticResource)); }
+                }
                 var moduleAfter = Fingerprint(arguments.ModulePath);
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch));
                 return new TerrainLoadResult(generation, plan, textures, report.ResolvedRecords.Count,
                     tileCount, facadeCount, recoveredCount, lookupCount, moduleBefore, resourceBefore, moduleAfter,
-                    resourceAfter, checkedBytes, Environment.TickCount64 - started, 0);
+                    resourceAfter, checkedBytes, Environment.TickCount64 - started, 0)
+                {
+                    StaticPlan = staticPlan,
+                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan),
+                    StaticTextures = staticTextures,
+                    StaticCensusCount = staticCensus,
+                    StaticOutsideScopeCount = staticOutsideScope
+                };
             }
             catch (TerrainViewerException) { throw; }
             catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable)); }

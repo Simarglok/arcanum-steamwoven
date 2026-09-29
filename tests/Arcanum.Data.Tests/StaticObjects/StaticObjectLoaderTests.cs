@@ -173,6 +173,9 @@ public sealed class StaticObjectLoaderTests
         Assert.AreEqual(5, report.ResourceResolvedCount);
         Assert.AreEqual(0, report.ResourceNotEvaluatedCount);
         CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4 }, report.Records.Where(record => record.ResourceStatus == StaticObjectResourceStatus.Resolved).Select(record => record.SourceIndex).ToArray());
+        var decoded = StaticObjectLoader.DecodeSelectedFrame(fixture.Source.ResourceArchive, report.Records[0]);
+        Assert.AreEqual(1, decoded.Width);
+        Assert.AreEqual(1, decoded.Height);
         AssertSyntheticChain(report.Records[0], 7101, 1000, 0x40080040, 1, -1, 1, 1);
         AssertSyntheticChain(report.Records[1], 7102, 1001, 0x40100080, 2, -2, 2, 2);
         AssertSyntheticChain(report.Records[2], 7103, 1002, 0x40080040, 3, -3, 1, 1);
@@ -186,6 +189,15 @@ public sealed class StaticObjectLoaderTests
         Assert.AreEqual(StaticObjectErrorCode.InvalidSelector, failure.Code);
         Assert.AreEqual(StaticObjectFailureStage.Selector, failure.Stage);
         Assert.AreEqual(3, failure.SourceIndex);
+
+        var mismatchedResources = new[]
+        {
+            ("art/scenery/scenery.mes", System.Text.Encoding.ASCII.GetBytes("{1001}{one.art}\n{2002}{two.art}\0")),
+            ("art/scenery/different.art", Art()), ("art/scenery/two.art", Art())
+        };
+        using var mismatched = new Fixture(Sector(records), true, mismatchedResources, "maps\\fixture\\object.sec");
+        AssertStaticFailure(() => StaticObjectLoader.DecodeSelectedFrame(mismatched.Source.ResourceArchive, report.Records[0]),
+            StaticObjectErrorCode.UnresolvedResource, StaticObjectFailureStage.Art, 0);
     }
 
     [TestMethod]
@@ -403,7 +415,8 @@ public sealed class StaticObjectLoaderTests
         Assert.AreEqual(286, report.Records.Count(record => record.FlagsInherited));
         Assert.AreEqual(317, report.Records.Count(record => record.IsStatic == true));
         Assert.AreEqual(5, report.ResourceResolvedCount);
-        Assert.AreEqual(312, report.ResourceNotEvaluatedCount);
+        Assert.AreEqual(0, report.ResourceNotEvaluatedCount);
+        Assert.AreEqual(312, report.ResourceOutsideScopeCount);
         AssertChain(report.Records[0], 0, 4030, 354592500050738, 0x40280140, 2, -15, 0x00400c30u, false, 5, 5, 62, 57, 34, 39);
         AssertChain(report.Records[1], 1, 4027, 354596795017989, 0x40700080, -3, 14, 0x00400800u, true, 2, 14, 204, 267, 113, 262);
         AssertChain(report.Records[2], 2, 4030, 354596795017990, 0x40280140, -21, 8, 0x00400c30u, false, 5, 5, 62, 57, 34, 39);

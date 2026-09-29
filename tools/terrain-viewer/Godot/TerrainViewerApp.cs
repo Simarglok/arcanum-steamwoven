@@ -20,6 +20,10 @@ public partial class TerrainViewerApp : Node
     private Task? _lastLoad;
     private string? _readySourceId;
     private int _readyDecodedCount;
+    private int _readyStaticDecodedCount;
+    private int _readyStaticCensus;
+    private int _readyStaticOutsideScope;
+    private TerrainViewerMode _readyMode;
     private long _readyElapsedMilliseconds;
 
     public override void _Ready()
@@ -54,7 +58,7 @@ public partial class TerrainViewerApp : Node
 
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
     {
-        GD.Print($"ARC-RENDER-003 load stage=begin smoke={orchestrateSmoke}");
+        GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
         _generation = _coordinator.BeginGeneration();
         var requestGeneration = _generation;
         ClearReadyMetrics();
@@ -64,22 +68,28 @@ public partial class TerrainViewerApp : Node
         try
         {
             var result = await _coordinator.LoadAsync(requestGeneration, arguments);
-            GD.Print($"ARC-RENDER-003 load stage=decoded generation={requestGeneration}");
+            GD.Print($"ARC-RENDER-004 load stage=decoded generation={requestGeneration}");
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     _cache.Upload(result.Textures);
-                    _canvas.Publish(result.Plan, _cache);
-                    _camera!.SetPlan(result.Plan, GetViewport().GetVisibleRect().Size);
+                    _cache.UploadStatic(result.StaticTextures);
+                    _canvas.Publish(result.DiagnosticPlan ?? DiagnosticScenePlan.Create(result.Plan, result.StaticPlan), _cache);
+                    _camera!.SetPlan(result.DiagnosticPlan ?? DiagnosticScenePlan.Create(result.Plan, result.StaticPlan), GetViewport().GetVisibleRect().Size);
                     _readySourceId = arguments.SourceId;
                     _readyDecodedCount = result.Textures.Count;
+                    _readyStaticDecodedCount = result.StaticTextures.Count;
+                    _readyStaticCensus = result.StaticCensusCount;
+                    _readyStaticOutsideScope = result.StaticOutsideScopeCount;
+                    _readyMode = arguments.Mode;
                     _readyElapsedMilliseconds = result.ElapsedMilliseconds;
                     RefreshReadyStatus();
                 })) return;
             if (_nativeSmoke && orchestrateSmoke) await RunNativeSmokeAsync(result);
-            GD.Print($"ARC-RENDER-003 load stage=complete generation={requestGeneration}");
+            GD.Print($"ARC-RENDER-004 load stage=complete generation={requestGeneration}");
         }
         catch (TerrainViewerException exception)
         {
+            if (_nativeSmoke) { GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     ClearReadyMetrics();
@@ -87,10 +97,10 @@ public partial class TerrainViewerApp : Node
                     _cache.Clear();
                     ShowStatus(exception.Error.ToString());
                 })) return;
-            if (_nativeSmoke) GetTree().Quit(1);
         }
         catch
         {
+            if (_nativeSmoke) { GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () =>
                 {
                     ClearReadyMetrics();
@@ -98,7 +108,6 @@ public partial class TerrainViewerApp : Node
                     _cache.Clear();
                     ShowStatus(TerrainViewerErrorCode.RenderFailure.ToString());
                 })) return;
-            if (_nativeSmoke) GetTree().Quit(1);
         }
     }
 
@@ -120,28 +129,29 @@ public partial class TerrainViewerApp : Node
         var textureCount = _cache.Count;
         var geometrySignature = _canvas.GeometrySignature;
         await AssertRepresentativeProductionCanvasAsync(result);
+        if (result.StaticPlan is not null) await AssertSelectedStaticProductionCanvasAsync(result);
         await SetSmokeWindowSizeAsync(new Vector2I(1280, 800));
         await NextFrameAsync();
         var initial = _camera!.State;
         var initialCameraPosition = _camera.Camera.Position;
         var initialHudPosition = _status!.GlobalPosition;
-        GD.Print("ARC-RENDER-003 native-smoke stage=initial-readback");
+        GD.Print("ARC-RENDER-004 native-smoke stage=initial-readback");
         if (!await CaptureAndValidateSmokeFrameAsync(new Vector2I(1280, 800), commandCount, textureCount))
         {
             GetTree().Quit(0);
             return;
         }
-        GD.Print("ARC-RENDER-003 native-smoke stage=input");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-003 native-smoke stage=input-keyboard-frame");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input-keyboard-frame");
         var afterKeyboard = _camera.State;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = false });
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-003 native-smoke stage=input-keyboard-release-frame");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input-keyboard-release-frame");
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-003 native-smoke stage=input-wheel-frame");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input-wheel-frame");
         if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom || afterKeyboard.Y >= initial.Y
             || _camera.Camera.Position == initialCameraPosition || _camera.Camera.Zoom.X <= initial.Zoom
             || _status.GlobalPosition != initialHudPosition || !HasReadyHudContent(textureCount)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
@@ -150,11 +160,11 @@ public partial class TerrainViewerApp : Node
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-003 native-smoke stage=input-drag-frame");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input-drag-frame");
         var manual = _camera.State;
         if (_camera.State.FitMode || manual.X == beforeDrag.X || manual.Y == beforeDrag.Y) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         await SetSmokeWindowSizeAsync(new Vector2I(1440, 900));
-        GD.Print("ARC-RENDER-003 native-smoke stage=input-manual-resize");
+        GD.Print("ARC-RENDER-004 native-smoke stage=input-manual-resize");
         if (_camera.State != manual) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.R, Pressed = true });
         await NextFrameAsync();
@@ -168,7 +178,7 @@ public partial class TerrainViewerApp : Node
         // input, reload, and cleanup checks below.
         var exactSecondSize = await CaptureAndValidateSmokeFrameAsync(new Vector2I(1920, 1080), commandCount, textureCount);
         var fullscreen = false;
-        GD.Print("ARC-RENDER-003 native-smoke stage=fullscreen");
+        GD.Print("ARC-RENDER-004 native-smoke stage=fullscreen");
         var initialMode = GetWindow().Mode;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.F11, Pressed = true });
         await NextFrameAsync();
@@ -179,7 +189,7 @@ public partial class TerrainViewerApp : Node
         if (!fullscreenRestored) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         for (var cycle = 0; cycle < 100; cycle++)
         {
-            if (cycle % 10 == 0) GD.Print($"ARC-RENDER-003 native-smoke stage=cycle-{cycle}");
+            if (cycle % 10 == 0) GD.Print($"ARC-RENDER-004 native-smoke stage=cycle-{cycle}");
             var beforePan = _camera.State;
             Input.ParseInputEvent(new InputEventKey { Keycode = Key.W, Pressed = true });
             await NextFrameAsync();
@@ -206,7 +216,7 @@ public partial class TerrainViewerApp : Node
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         }
         var disposedBeforeReload = _cache.DisposedCount;
-        GD.Print("ARC-RENDER-003 native-smoke stage=reload-input");
+        GD.Print("ARC-RENDER-004 native-smoke stage=reload-input");
         var previousLoad = _lastLoad;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.L, Pressed = true });
         // ParseInputEvent queues _Input. Yield before reading _lastLoad so we
@@ -214,15 +224,18 @@ public partial class TerrainViewerApp : Node
         // on this still-running native-smoke task from the initial load.
         await NextFrameAsync();
         if (ReferenceEquals(previousLoad, _lastLoad)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        GD.Print("ARC-RENDER-003 native-smoke stage=reload-await");
+        GD.Print("ARC-RENDER-004 native-smoke stage=reload-await");
         await (_lastLoad ?? Task.CompletedTask);
         await NextFrameAsync();
-        GD.Print("ARC-RENDER-003 native-smoke stage=reload-complete");
-        if (_cache.DisposedCount != disposedBeforeReload + textureCount || commandCount != CrashSiteProfile.CellCount || _canvas.CommandCount != commandCount
+        GD.Print("ARC-RENDER-004 native-smoke stage=reload-complete");
+        var expectedCommandCount = result.Plan.Commands.Count + (result.StaticPlan?.Commands.Count ?? 0);
+        var expectedTextureCount = result.Textures.Count + result.StaticTextures.Count;
+        if (_cache.DisposedCount != disposedBeforeReload + textureCount || commandCount != expectedCommandCount || _canvas.CommandCount != commandCount
             || _cache.Count != textureCount || _canvas.GeometrySignature != geometrySignature || result.MaximumObservedConcurrency != 1
-            || result.CheckedRgbaBytes <= 0 || result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter)
+            || textureCount != expectedTextureCount || result.CheckedRgbaBytes <= 0 || result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter
+            || (result.StaticPlan is not null && (result.StaticCensusCount != 317 || result.StaticOutsideScopeCount != 312 || result.StaticPlan.Commands.Count != 5)))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-        GD.Print($"ARC-RENDER-003 native-smoke result status={(exactSecondSize ? "PASS" : "NOT_VERIFIED")} fullscreen={(fullscreen ? "PASS" : "NOT_VERIFIED")} commands={commandCount} textures={textureCount} bytes={result.CheckedRgbaBytes} loadMs={result.ElapsedMilliseconds} concurrency={result.MaximumObservedConcurrency} fingerprints=equal reload=PASS cycles=100");
+        GD.Print($"ARC-RENDER-004 native-smoke result status={(exactSecondSize ? "PASS" : "NOT_VERIFIED")} fullscreen={(fullscreen ? "PASS" : "NOT_VERIFIED")} commands={commandCount} textures={textureCount} bytes={result.CheckedRgbaBytes} loadMs={result.ElapsedMilliseconds} concurrency={result.MaximumObservedConcurrency} fingerprints=equal reload=PASS cycles=100");
         GetTree().Quit(0);
     }
 
@@ -260,20 +273,49 @@ public partial class TerrainViewerApp : Node
                 || Math.Round(actual.B * 255) != sourcePixel.B || Math.Round(actual.A * 255) != sourcePixel.A
                 || Math.Round(image.GetPixel(0, 0).A * 255) != 0)
                 throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
-            GD.Print($"ARC-RENDER-003 representative ordinal={literal.Item1} status=PASS");
+            GD.Print($"ARC-RENDER-004 representative ordinal={literal.Item1} status=PASS");
         }
     }
 
+    private async Task AssertSelectedStaticProductionCanvasAsync(TerrainLoadResult result)
+    {
+        var command = result.StaticPlan?.Commands.LastOrDefault();
+        if (command is null || !result.StaticTextures.TryGetValue(command.TextureKey, out var decoded)
+            || !TryFindOpaqueDecodedPixel(decoded, new TerrainRect(0, 0, decoded.Width, decoded.Height), out var sourcePixel))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode));
+        var viewport = new SubViewport { Size = new Vector2I(command.Destination.Width + 2, command.Destination.Height + 2), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var isolated = new TerrainCanvas { Position = new Vector2(1 - command.Destination.X, 1 - command.Destination.Y) };
+        viewport.AddChild(isolated);
+        AddChild(viewport);
+        isolated.Publish(DiagnosticScenePlan.Create(result.Plan.Isolate(result.Plan.Commands[0].Ordinal), result.StaticPlan!.Isolate(command.SourceIndex)), _cache);
+        await NextFrameAsync();
+        using var image = viewport.GetTexture().GetImage();
+        var offsetX = command.FlipX ? command.Destination.Width - 1 - sourcePixel.X : sourcePixel.X;
+        var actual = image.GetPixel(1 + offsetX, 1 + sourcePixel.Y);
+        viewport.QueueFree();
+        if (Math.Round(actual.R * 255) != sourcePixel.R || Math.Round(actual.G * 255) != sourcePixel.G
+            || Math.Round(actual.B * 255) != sourcePixel.B || Math.Round(actual.A * 255) != sourcePixel.A)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode));
+        GD.Print($"ARC-RENDER-004 static production-canvas source-index={command.SourceIndex} status=PASS");
+    }
+
     private static bool TryFindOpaqueDecodedPixel(DecodedTerrainTexture texture, TerrainRect source, out TerrainTexturePixel pixel)
+        => TryFindOpaqueDecodedPixel(texture.Width, texture.Height, texture.Rgba, source, out pixel);
+
+    private static bool TryFindOpaqueDecodedPixel(DecodedStaticTexture texture, TerrainRect source, out TerrainTexturePixel pixel)
+        => TryFindOpaqueDecodedPixel(texture.Width, texture.Height, texture.Rgba, source, out pixel);
+
+    private static bool TryFindOpaqueDecodedPixel(int width, int height, byte[] rgba, TerrainRect source, out TerrainTexturePixel pixel)
     {
         pixel = default;
         for (var y = source.Y; y < source.Y + source.Height; y++)
         {
             for (var x = source.X; x < source.X + source.Width; x++)
             {
-                var offset = ((y * texture.Width) + x) * 4;
-                if (texture.Rgba[offset + 3] == 0) continue;
-                pixel = new TerrainTexturePixel(x, y, texture.Rgba[offset], texture.Rgba[offset + 1], texture.Rgba[offset + 2], texture.Rgba[offset + 3]);
+                if (x < 0 || y < 0 || x >= width || y >= height) continue;
+                var offset = ((y * width) + x) * 4;
+                if (rgba[offset + 3] == 0) continue;
+                pixel = new TerrainTexturePixel(x, y, rgba[offset], rgba[offset + 1], rgba[offset + 2], rgba[offset + 3]);
                 return true;
             }
         }
@@ -310,15 +352,15 @@ public partial class TerrainViewerApp : Node
         }
         if (actualSize != expectedSize)
         {
-            GD.Print($"ARC-RENDER-003 native-smoke result status=NOT_VERIFIED requested={expectedSize.X}x{expectedSize.Y} actual={actualSize.X}x{actualSize.Y} reason=display-clamp");
+            GD.Print($"ARC-RENDER-004 native-smoke result status=NOT_VERIFIED requested={expectedSize.X}x{expectedSize.Y} actual={actualSize.X}x{actualSize.Y} reason=display-clamp");
             return false;
         }
         var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
         var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
-        var landmarkFound = _canvas.TryGetOpaqueLandmark(out var landmark);
-        var landmarkMatches = landmarkFound && TryAssertLandmark(screenshot, landmark);
-        GD.Print($"ARC-RENDER-003 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={landmarkMatches}");
-        if (!stableCounts || !hudReadable || !landmarkMatches)
+        var terrainLandmarkFound = _canvas.TryGetOpaqueLandmark(out var terrainLandmark);
+        var terrainLandmarkMatches = terrainLandmarkFound && TryAssertLandmark(screenshot, terrainLandmark);
+        GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches}");
+        if (!stableCounts || !hudReadable || !terrainLandmarkMatches)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         return true;
     }
@@ -371,7 +413,7 @@ public partial class TerrainViewerApp : Node
             else if (key.Keycode == Key.Plus) _camera?.Zoom(1.25);
             else if (key.Keycode == Key.L && _arguments is not null)
             {
-                GD.Print("ARC-RENDER-003 input=L reload");
+                GD.Print("ARC-RENDER-004 input=L reload");
                 _lastLoad = StartLoadAsync(_arguments, false);
             }
             else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
@@ -389,13 +431,21 @@ public partial class TerrainViewerApp : Node
     private void RefreshReadyStatus()
     {
         if (_readySourceId is null || _camera is null) return;
-        ShowStatus($"Editor diagnostic order | 4096/3033/1063 | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | decoded {_readyDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms");
+        var mode = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : "terrain-only";
+        var staticStatus = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic
+            ? $"static census {_readyStaticCensus}/admitted {_readyStaticDecodedCount}/outside-scope {_readyStaticOutsideScope}"
+            : "static not requested";
+        ShowStatus($"Diagnostic mode {mode} | terrain 4096/3033/1063 | {staticStatus} | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | terrain decoded {_readyDecodedCount} | static decoded {_readyStaticDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms");
     }
 
     private void ClearReadyMetrics()
     {
         _readySourceId = null;
         _readyDecodedCount = 0;
+        _readyStaticDecodedCount = 0;
+        _readyStaticCensus = 0;
+        _readyStaticOutsideScope = 0;
+        _readyMode = TerrainViewerMode.TerrainOnly;
         _readyElapsedMilliseconds = 0;
     }
 

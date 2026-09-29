@@ -12,10 +12,45 @@ public sealed class CorePolicyTests
     public void Arguments_require_explicit_non_path_source_id_and_normalize_hashes()
     {
         var result = TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--expect-module-sha256", new string('A', 64)]);
+        Assert.AreEqual(TerrainViewerMode.TerrainOnly, result.Mode);
         Assert.IsTrue(result.SourceId == "fixture");
         Assert.IsTrue(result.ExpectedModuleSha256 == new string('a', 64));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "a/b"]));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--unknown"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--prototypes", "p"]));
+        var combined = TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture", "--prototypes", "p"]);
+        Assert.AreEqual(TerrainViewerMode.CombinedStaticDiagnostic, combined.Mode);
+        Assert.AreEqual("p", combined.PrototypePath);
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "terrain-only", "--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture", "--prototypes", "p"]));
+    }
+
+    [TestMethod]
+    public void Static_scenery_geometry_uses_checked_projection_hotspot_and_not_art_offset()
+    {
+        var identity = new Arcanum.Data.StaticObjects.StaticObjectResourceIdentity(7, 3, 99, new string('a', 64));
+        var command = StaticSceneryGeometry.Place(new StaticSceneryPlanInput(2, 6, 1, -21, 8, identity, 0, 0, 0, 62, 57, 34, 39, 0, 0, false));
+        Assert.AreEqual(-221, command.AnchorX);
+        Assert.AreEqual(148, command.AnchorY);
+        Assert.AreEqual(new TerrainRect(-255, 109, 62, 57), command.Destination);
+
+        var noOffsetTranslation = StaticSceneryGeometry.Place(new StaticSceneryPlanInput(9, 0, 0, 100, 50, identity, 0, 0, 0, 4, 3, 1, 2, 9, -4, true));
+        Assert.AreEqual(new TerrainRect(99, 48, 4, 3), noOffsetTranslation.Destination);
+        Assert.IsTrue(noOffsetTranslation.FlipX);
+        AssertThrows<TerrainViewerException>(() => StaticSceneryGeometry.Place(new StaticSceneryPlanInput(0, int.MaxValue, -1, 0, 0, identity, 0, 0, 0, 1, 1, 0, 0, 0, 0, false)));
+        AssertThrows<TerrainViewerException>(() => StaticSceneryGeometry.Place(new StaticSceneryPlanInput(0, 0, 0, null, 0, identity, 0, 0, 0, 1, 1, 0, 0, 0, 0, false)));
+    }
+
+    [TestMethod]
+    public void Static_scenery_plan_orders_equal_anchors_by_source_index()
+    {
+        var identity = new Arcanum.Data.StaticObjects.StaticObjectResourceIdentity(7, 3, 99, new string('b', 64));
+        var plan = StaticSceneryScenePlan.CreateSynthetic(
+        [
+            new StaticSceneryPlanInput(9, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false),
+            new StaticSceneryPlanInput(7, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false)
+        ]);
+        CollectionAssert.AreEqual(new[] { 7, 9 }, plan.Commands.Select(command => command.SourceIndex).ToArray());
     }
 
     [TestMethod]
@@ -47,7 +82,7 @@ public sealed class CorePolicyTests
         var entries = Enumerable.Range(0, TerrainCachePolicy.MaxDistinctKeys + 1).ToDictionary(i => new TerrainTextureKey("s", i, 0, 1, "a", 0, 0, 0), _ => (1, 1));
         AssertThrows<TerrainViewerException>(() => TerrainCachePolicy.Validate(entries));
         AssertThrows<TerrainViewerException>(() => TerrainCachePolicy.AddCheckedFrame(TerrainCachePolicy.MaxRgbaBytes - 4, 0, 2, 1));
-        AssertThrows<TerrainViewerException>(() => TerrainCachePolicy.AddCheckedFrame(0, TerrainCachePolicy.MaxDistinctKeys, 1, 1));
+        AssertThrows<TerrainViewerException>(() => TerrainCachePolicy.AddCheckedFrame(0, TerrainCachePolicy.MaxTotalDistinctKeys, 1, 1));
         AssertThrows<TerrainViewerException>(() => TerrainCachePolicy.AddCheckedFrame(0, 0, 0, 1));
     }
 
