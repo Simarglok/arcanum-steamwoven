@@ -84,8 +84,9 @@ actor rather than transferred from static scenery.
 
 The scan visits `.mob` entries in module-DAT index-ordinal order, admits a
 candidate to its cap only after its complete v119 type-16/type-15 envelope has
-been consumed, and stops at 256 such eligible records. It rejects an entry with
-a stored or declared decoded size above 1 MiB before payload read. The run
+been consumed, and stops before touching any subsequent module entry once 256
+such eligible records have been admitted. It rejects an entry with a stored or
+declared decoded size above 1 MiB before payload read. The run
 reported: 256 eligible records; 256 type-16 records; 198 direct ART resolutions;
 zero completed prototype-default resolutions; zero missing prototypes; 58
 invalid prototype resolutions; 52 fully inspected single-layer monster
@@ -154,14 +155,15 @@ not an original-runtime oracle.
 | Case | Entry point | Asserted result |
 | --- | --- | --- |
 | Direct + exact inherited candidate, type-15 exclusion, two qualifying index ordinals | `Main → Input.Parse → Probe` twice | exit 3, deterministic byte-identical report, lower index ordinal, `direct`, `prototype_default`, and `player_excluded` counters |
+| Hard eligible-envelope cap | `Main → Input.Parse → Probe` | 256 admitted full envelopes plus a truncated trailing `.mob` report `eligible=256` and do not report the trailing record rejection |
 | Full v119 envelope version/type/count/reserved-mask/truncation/trailing bytes | `Main → Probe` | exit 3 with the corresponding `record-*` typed rejection |
-| Optional presence; array header/population; valid, unterminated, and over-cap strings | `Main → Probe` | player exclusion for the valid string; typed `optional-presence`, `array-*`, `string-*` rejections otherwise |
-| Missing, duplicate, type/ID-mismatched, truncated, trailing, and over-cap canonical prototypes | `Main → Probe` | `prototype-missing-or-ambiguous`, `prototype-invalid`, or fail-closed exit 1 for aggregate over-cap input |
-| Missing/malformed/duplicate/unsafe mapping; missing/duplicate-normalized/wrong-family resource; palette, malformed ART, resource cap | `Main → Probe` | sanitized fatal mapping exit or typed `mapping-*`, `resource-*`, and `art-*` rejection |
-| Wrong ART family and non-single-layer armor/shield/weapon selectors | `Main → Probe` | typed `composite-or-nonmonster` rejection |
+| Optional presence; array header/population; valid, unterminated, over-cap, and exact-entry-cap strings | `Main → Probe` | player exclusion for valid small and exactly 1 MiB entries; typed `optional-presence`, `array-*`, `string-*` rejections otherwise |
+| Missing, duplicate, type/ID-mismatched, truncated, trailing, and over-cap canonical prototypes | `Main → Probe` | `prototype-missing-or-ambiguous`, `prototype-invalid`, or sanitized fail-closed `stage=prototypes reason=entry-cap` |
+| Missing/malformed/duplicate/unsafe mapping; missing/duplicate-normalized/wrong-family resource; palette, malformed ART, resource cap, and ART frame-count limit | `Main → Probe` | stable sanitized fatal `stage=mapping reason=*` for mapping failures; typed `mapping-*`, `resource-*`, and `art-*` rejection otherwise |
+| Wrong ART family and independent non-single-layer armor, shield, and weapon selectors | `Main → Probe` | typed `composite-or-nonmonster` rejection for each selector component |
 | Distinct Idle/Walk FPS and two group-major frames with nonzero geometry | `Main → Probe` | report preserves action FPS, frame order/geometry, `SourceScheduler` cadence authority, and no movement-speed inference |
 | Private input sentinel and fatal missing path sentinel | captured `Main` stdout + stderr | exit 3/1 respectively; both streams omit the sentinel and fatal output is sanitized |
-| Prototype suffix/selector rename and per-file cap | `FingerprintDirectory` helper-only identity policy | unchanged total with changed aggregate SHA-256 for each rename, restored original aggregate, and fail-closed cap |
+| Prototype suffix/selector rename, per-file cap, and aggregate cap | `FingerprintDirectory` helper-only identity policy | unchanged total with changed aggregate SHA-256 for each rename, restored original aggregate, and fail-closed per-file and aggregate caps |
 | All eight physical group/flip bindings and unreachable out-of-domain action | `MapPhysicalFacing` / `MonsterPath` helper-only source policy | exact opaque bindings; unsupported action rejected |
 
 ## Reproduction

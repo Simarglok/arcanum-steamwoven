@@ -72,6 +72,10 @@ internal static class Program
 
             foreach (var entry in module.Entries.Where(IsMob).OrderBy(entry => entry.Ordinal))
             {
+                // Once 256 full v119 player/NPC envelopes have been admitted, do not even
+                // examine another module entry. Malformed/non-v119 entries before that point
+                // remain rejections rather than consuming the eligible-envelope budget.
+                if (result.Eligible == MaxEligibleRecords) break;
                 if (!Bounded(entry)) { result.Add("entry-cap"); continue; }
                 ObjectRecord record;
                 try { record = ParseInstance(module.ReadEntry(entry)); }
@@ -80,9 +84,7 @@ internal static class Program
                     result.Add($"record-{error.Reason}");
                     continue;
                 }
-
-                // Only a successfully full-consumed v119 envelope is eligible for the cap.
-                if (result.Eligible == MaxEligibleRecords) break;
+                // Only a successfully full-consumed v119 player/NPC envelope is eligible for the cap.
                 result.Eligible++;
                 if (record.Type == PlayerObjectType) { result.PlayerExcluded++; continue; }
                 if (record.Type != NpcObjectType) { result.Add("non-npc"); continue; }
@@ -403,7 +405,7 @@ internal static class Program
         catch (IOException) { throw new ProbeException(stage, "unavailable"); }
         catch (UnauthorizedAccessException) { throw new ProbeException(stage, "unavailable"); }
     }
-    private static InputFingerprint FingerprintDirectory(string root)
+    private static InputFingerprint FingerprintDirectory(string root, long? aggregateCap = null)
     {
         try
         {
@@ -425,7 +427,7 @@ internal static class Program
                 }
                 var fingerprint = Fingerprint(path, "prototypes");
                 total = checked(total + fingerprint.Length);
-                if (total > (long)MaxEligibleRecords * MaxEntryBytes) throw new ProbeException("prototypes", "cap-exceeded");
+                if (total > (aggregateCap ?? (long)MaxEligibleRecords * MaxEntryBytes)) throw new ProbeException("prototypes", "cap-exceeded");
                 BinaryPrimitives.WriteInt64LittleEndian(lengthBytes, fingerprint.Length);
                 hash.AppendData(lengthBytes);
                 hash.AppendData(Convert.FromHexString(fingerprint.Sha256));
@@ -496,6 +498,16 @@ internal static class Program
             var validString = RunFixture(root, CreateDat(("000.mob", CreateStringFixture(valid: true))), completeResource); Assert(validString.Exit == ExitNotReady && validString.Stdout.Contains("player_excluded=1", StringComparison.Ordinal), "valid string traversal did not reach player exclusion");
             AssertCliReason(root, completeResource, direct[..^1], "record-truncated");
             AssertCliReason(root, completeResource, WithTrailingByte(direct), "record-trailing-bytes");
+            var exactCapString = CreateStringFixture(valid: true, textLength: MaxEntryBytes - 84);
+            var exactCapResult = RunFixture(root, CreateDat(("000.mob", exactCapString)), completeResource);
+            Assert(exactCapResult.Exit == ExitNotReady && exactCapResult.Stdout.Contains("player_excluded=1", StringComparison.Ordinal), "exact maximum bounded string did not traverse");
+
+            var capEntries = Enumerable.Range(0, MaxEligibleRecords)
+                .Select(index => ($"{index:D3}.mob", direct))
+                .Append(("999.mob", direct[..^1]))
+                .ToArray();
+            var capResult = RunFixture(root, CreateDat(capEntries), completeResource);
+            Assert(capResult.Exit == ExitNotReady && capResult.Stdout.Contains("eligible=256", StringComparison.Ordinal) && !capResult.Stdout.Contains("record-truncated", StringComparison.Ordinal), "post-cap module entry was inspected");
 
             File.Delete(goodPrototype);
             AssertCliReason(root, completeResource, inherited, "prototype-missing-or-ambiguous");
@@ -506,12 +518,12 @@ internal static class Program
             File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(9), 0)); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
             File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), 0)[..^1]); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
             File.WriteAllBytes(goodPrototype, WithTrailingByte(CreatePrototype(NpcObjectType, ObjectId.A(8), 0))); AssertCliReason(root, completeResource, inherited, "prototype-invalid");
-            File.WriteAllBytes(goodPrototype, new byte[MaxEntryBytes + 1]); Assert(RunFixture(root, CreateDat(("000.mob", inherited)), completeResource).Exit == ExitFailure, "over-cap prototype did not fail closed");
+            File.WriteAllBytes(goodPrototype, new byte[MaxEntryBytes + 1]); AssertFatal(RunFixture(root, CreateDat(("000.mob", inherited)), completeResource), "prototypes", "entry-cap", "over-cap prototype did not fail closed");
             File.WriteAllBytes(goodPrototype, CreatePrototype(NpcObjectType, ObjectId.A(8), unchecked((int)0xc0000000)));
 
-            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat()).Exit == ExitFailure, "missing mapping did not fail at Main");
-            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("bad")))).Exit == ExitFailure, "malformed mapping did not fail at Main");
-            Assert(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("ART/MONSTER/MONSTER.MES", Encoding.ASCII.GetBytes("{0}{safe}")))).Exit == ExitFailure, "duplicate mapping did not fail at Main");
+            AssertFatal(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat()), "mapping", "missing-or-ambiguous", "missing mapping did not fail at Main");
+            AssertFatal(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("bad")))), "mapping", "syntax", "malformed mapping did not fail at Main");
+            AssertFatal(RunFixture(root, CreateDat(("000.mob", direct)), CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("ART/MONSTER/MONSTER.MES", Encoding.ASCII.GetBytes("{0}{safe}")))), "mapping", "missing-or-ambiguous", "duplicate mapping did not fail at Main");
             AssertCliReason(root, CreateResource("..", idle, walk), direct, "mapping-missing-or-unsafe");
             AssertCliReason(root, CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", idle)), direct, "resource-missing-or-ambiguous");
             AssertCliReason(root, CreateDat(("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{safe}")), ("art/monster/safe/safeUWXAa.art", idle), ("ART/MONSTER/SAFE/SAFEUWXAA.ART", idle), ("art/monster/safe/safeUWXAb.art", walk)), direct, "resource-missing-or-ambiguous");
@@ -519,14 +531,18 @@ internal static class Program
             AssertCliReason(root, CreateResource("safe", CreateArt(paletteSlot: 1), walk), direct, "art-incomplete-facing-or-palette");
             AssertCliReason(root, CreateResource("safe", idle[..^1], walk), direct, "art-invalid");
             AssertCliReason(root, CreateResource("safe", new byte[MaxEntryBytes + 1], walk), direct, "resource-entry-cap");
+            AssertCliReason(root, CreateResource("safe", CreateArt(framesPerGroup: 257), walk), direct, "art-invalid");
             AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xb0000000)), "composite-or-nonmonster");
-            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xc0100001)), "composite-or-nonmonster");
+            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xc0100000)), "composite-or-nonmonster");
+            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xc0080000)), "composite-or-nonmonster");
+            AssertCliReason(root, completeResource, CreateInstance(NpcObjectType, ObjectId.A(1), true, unchecked((int)0xc0000001)), "composite-or-nonmonster");
 
             var beforeRename = FingerprintDirectory(root); File.Move(goodPrototype, Path.Combine(root, "000008 - renamed.pro")); var suffixRename = FingerprintDirectory(root);
             File.Move(Path.Combine(root, "000008 - renamed.pro"), Path.Combine(root, "000009 - renamed.pro")); var selectorRename = FingerprintDirectory(root);
             File.Move(Path.Combine(root, "000009 - renamed.pro"), goodPrototype); var restored = FingerprintDirectory(root);
             Assert(beforeRename.Length == suffixRename.Length && beforeRename.Sha256 != suffixRename.Sha256 && suffixRename.Sha256 != selectorRename.Sha256 && beforeRename == restored, "prototype filename/selector identity is not bound");
             File.WriteAllBytes(Path.Combine(root, "000010 - over-cap.pro"), new byte[MaxEntryBytes + 1]); Reject(() => FingerprintDirectory(root), "over-cap prototype fingerprint accepted"); File.Delete(Path.Combine(root, "000010 - over-cap.pro"));
+            Reject(() => FingerprintDirectory(root, 1), "prototype aggregate cap accepted");
 
             var expectedFacings = new[] { new PhysicalFacing(0, false), new PhysicalFacing(7, true), new PhysicalFacing(6, true), new PhysicalFacing(5, true), new PhysicalFacing(4, false), new PhysicalFacing(5, false), new PhysicalFacing(6, false), new PhysicalFacing(7, false) };
             Assert(expectedFacings.Select((facing, index) => MapPhysicalFacing(index) == facing).All(value => value), "all source-facing group/flip bindings changed");
@@ -560,6 +576,10 @@ internal static class Program
         var result = RunFixture(root, CreateDat(("000.mob", mob)), resource);
         Assert(result.Exit == ExitNotReady && result.Stdout.Contains(reason, StringComparison.Ordinal), "Main scenario did not report " + reason);
     }
+    private static void AssertFatal(CliResult result, string stage, string reason, string message)
+    {
+        Assert(result.Exit == ExitFailure && result.Stdout.Length == 0 && result.Stderr.Contains($"stage={stage} reason={reason}", StringComparison.Ordinal), message);
+    }
     private static byte[] CreateResource(string directory, byte[] idle, byte[] walk) => CreateDat(
         ("art/monster/monster.mes", Encoding.ASCII.GetBytes("{0}{" + directory + "}")),
         ("art/monster/" + directory + "/" + directory + "UWXAa.art", idle),
@@ -585,10 +605,11 @@ internal static class Program
         var fields = FieldsFor(NpcObjectType); var field = Array.FindIndex(fields, kind => kind == WireKind.ArrU32); var masks = new uint[MaskWords(NpcObjectType)]; SetMaskBit(NpcObjectType, masks, field);
         var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, ObjectId.A(1)); AddObjectId(result, ObjectId.A(2)); AddI32(result, NpcObjectType); AddI16(result, 1); foreach (var mask in masks) AddU32(result, mask); result.Add(1); AddI32(result, 4); AddI32(result, 1); AddI32(result, 0); AddI32(result, 0); AddI32(result, 2); AddU32(result, 1); AddU32(result, 0); return result.ToArray();
     }
-    private static byte[] CreateStringFixture(bool valid)
+    private static byte[] CreateStringFixture(bool valid, int textLength = 3)
     {
+        if (textLength < 0) throw new ArgumentOutOfRangeException(nameof(textLength));
         var fields = FieldsFor(PlayerObjectType); var field = Array.FindIndex(fields, kind => kind == WireKind.OptString); var masks = new uint[MaskWords(PlayerObjectType)]; SetMaskBit(PlayerObjectType, masks, field);
-        var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, ObjectId.A(1)); AddObjectId(result, ObjectId.A(2)); AddI32(result, PlayerObjectType); AddI16(result, 1); foreach (var mask in masks) AddU32(result, mask); result.Add(1); AddI32(result, 3); result.AddRange(Encoding.ASCII.GetBytes("abc")); result.Add(valid ? (byte)0 : (byte)1); return result.ToArray();
+        var result = new List<byte>(); AddI32(result, ObjectVersion); AddObjectId(result, ObjectId.A(1)); AddObjectId(result, ObjectId.A(2)); AddI32(result, PlayerObjectType); AddI16(result, 1); foreach (var mask in masks) AddU32(result, mask); result.Add(1); AddI32(result, textLength); result.AddRange(new byte[textLength]); result.Add(valid ? (byte)0 : (byte)1); return result.ToArray();
     }
     private static byte[] CreateArt(int fps = 8, int framesPerGroup = 1, int paletteSlot = 0, int geometrySeed = 0)
     {
