@@ -23,6 +23,15 @@ public static class ActorDiagnosticSource
     public const int WalkFps = 15;
 
     public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input)
+        => Create(module, resource, input, 0, 0, CancellationToken.None);
+
+    /// <summary>
+    /// Decodes the fixed catalogue while accounting every RGBA frame before it
+    /// is retained.  The caller passes terrain's already-retained count/bytes
+    /// so actor mode shares the unchanged aggregate cap.
+    /// </summary>
+    public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
+        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(resource);
@@ -36,8 +45,12 @@ public static class ActorDiagnosticSource
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
         var catalog = new List<ActorDiagnosticFrame>(PhysicalGroups * (IdleFrames + WalkFrames));
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
-        DecodeAction(resource, ActorDiagnosticAction.Idle, IdleSelector, IdleResourceOrdinal, IdleFps, IdleFrames, catalog, textures);
-        DecodeAction(resource, ActorDiagnosticAction.Walk, WalkSelector, WalkResourceOrdinal, WalkFps, WalkFrames, catalog, textures);
+        var checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Idle, IdleSelector, IdleResourceOrdinal, IdleFps, IdleFrames,
+            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken);
+        checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Walk, WalkSelector, WalkResourceOrdinal, WalkFps, WalkFrames,
+            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken);
+        if (textures.Count != TerrainCachePolicy.MaxActorDistinctKeys || catalog.Count != TerrainCachePolicy.MaxActorDistinctKeys)
+            throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
         ActorPhysicalFacing physical;
         try { physical = ActorDiagnosticScenePlan.MapFacing(input.Facing); }
         catch (TerrainViewerException) { throw; }
@@ -47,11 +60,12 @@ public static class ActorDiagnosticSource
         var plannedInput = input with { Width = selected.Width, Height = selected.Height, HotX = selected.HotX, HotY = selected.HotY,
             ArtOffsetX = selected.ArtOffsetX, ArtOffsetY = selected.ArtOffsetY };
         var plan = ActorDiagnosticScenePlan.CreateSynthetic(plannedInput, catalog);
-        return new ActorDiagnosticLoad(plan, textures);
+        return new ActorDiagnosticLoad(plan, textures, checkedRgbaBytes);
     }
 
-    private static void DecodeAction(DatArchive resource, ActorDiagnosticAction action, uint selector, int ordinal, int fps, int expectedFrames,
-        ICollection<ActorDiagnosticFrame> catalog, IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures)
+    private static long DecodeAction(DatArchive resource, ActorDiagnosticAction action, uint selector, int ordinal, int fps, int expectedFrames,
+        ICollection<ActorDiagnosticFrame> catalog, IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures, int alreadyRetainedCount,
+        long checkedRgbaBytes, CancellationToken cancellationToken)
     {
         var entries = resource.Entries.Where(candidate => candidate.Ordinal == ordinal).ToArray();
         if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
@@ -67,24 +81,32 @@ public static class ActorDiagnosticSource
             {
                 for (var frame = 0; frame < expectedFrames; frame++)
                 {
+                    cancellationToken.ThrowIfCancellationRequested();
                     var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frame, Palette), new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = PhysicalGroups * IdleFrames });
                     if (decoded.EffectivePaletteSlot != Palette) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
                     var key = new ActorDiagnosticTextureKey(ordinal, selector, group, frame, Palette);
                     var geometry = decoded.Frame;
                     catalog.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, geometry.HotX, geometry.HotY, geometry.OffsetX, geometry.OffsetY, expectedFrames, fps));
+                    // The decoder's transient frame is not scene state.  Check
+                    // the shared terrain+actor cap before copying/retaining the
+                    // frame's RGBA array in this load-local texture catalogue.
+                    checkedRgbaBytes = TerrainCachePolicy.AddCheckedFrame(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), decoded.Width, decoded.Height);
                     textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
                 }
             }
+            return checkedRgbaBytes;
         }
         catch (TerrainViewerException) { throw; }
         catch (DatException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
         catch (ArtException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
         catch (ArgumentException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
         catch (InvalidOperationException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
+        catch (IOException) { throw Failure(TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode); }
     }
 
     private static TerrainViewerException Failure(TerrainViewerErrorCode code, TerrainViewerFailureStage stage) => new(new TerrainViewerError(code, Stage: stage));
 }
 
 public sealed record DecodedActorTexture(ActorDiagnosticTextureKey Key, int Width, int Height, byte[] Rgba);
-public sealed record ActorDiagnosticLoad(ActorDiagnosticScenePlan Plan, IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> Textures);
+public sealed record ActorDiagnosticLoad(ActorDiagnosticScenePlan Plan, IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> Textures,
+    long CheckedRgbaBytes);

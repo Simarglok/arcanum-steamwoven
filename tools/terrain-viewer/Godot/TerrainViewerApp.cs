@@ -184,6 +184,7 @@ public partial class TerrainViewerApp : Node
         var geometrySignature = _canvas.GeometrySignature;
         await AssertRepresentativeProductionCanvasAsync(result);
         if (result.StaticPlan is not null) await AssertSelectedStaticProductionCanvasAsync(result);
+        if (result.ActorPlan is not null) await AssertActorProductionCanvasAsync(result);
         await SetSmokeWindowSizeAsync(new Vector2I(1280, 800));
         await NextFrameAsync();
         var initial = _camera!.State;
@@ -385,6 +386,110 @@ public partial class TerrainViewerApp : Node
             || Math.Round(actual.B * 255) != sourcePixel.B || Math.Round(actual.A * 255) != sourcePixel.A)
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode));
         GD.Print($"ARC-RENDER-004 static production-canvas source-index={command.SourceIndex} status=PASS");
+    }
+
+    /// <summary>
+    /// Actor-mode native evidence goes through the ready app's real input
+    /// routes, timeline and published production canvas.  It intentionally
+    /// never changes caller-owned map/camera/instance anchor input.
+    /// </summary>
+    private async Task AssertActorProductionCanvasAsync(TerrainLoadResult result)
+    {
+        if (_readyActorInput is null || _readyActorPlan is null || _readyActor is null || _actorTimeline is null)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorPlan));
+        var callerInput = _readyActorInput;
+        var expectedFacings = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
+        GD.Print("ARC-RENDER-005 actor native stage=idle-control");
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key1, Pressed = true });
+        await NextFrameAsync();
+        if (_readyActor?.Action != ActorDiagnosticAction.Idle || !_status!.Text.Contains("Actor: Idle", StringComparison.Ordinal))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        for (var turn = 0; turn < 8 && _readyActor?.RequestedFacing != 0; turn++)
+        {
+            Input.ParseInputEvent(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            await NextFrameAsync();
+        }
+        if (_readyActor?.RequestedFacing != 0) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        GD.Print("ARC-RENDER-005 actor native stage=facings-raster");
+        for (var requested = 0; requested < 8; requested++)
+        {
+            var actor = _readyActor ?? throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorPlan));
+            if (actor.RequestedFacing != requested || actor.PhysicalGroup != expectedFacings[requested].Item1 || actor.FlipX != expectedFacings[requested].Item2)
+                throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            await AssertActorRasterAsync(result, actor);
+            if (requested < 7)
+            {
+                Input.ParseInputEvent(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+                await NextFrameAsync();
+            }
+        }
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key2, Pressed = true });
+        await NextFrameAsync();
+        GD.Print("ARC-RENDER-005 actor native stage=walk-timeline");
+        if (_readyActor?.Action != ActorDiagnosticAction.Walk || !_status!.Text.Contains("Actor: Walk", StringComparison.Ordinal))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        await NextFrameAsync();
+        if (!_actorTimeline.IsPlaying || !_status.Text.Contains("Playback: playing", StringComparison.Ordinal))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        await NextFrameAsync();
+        if (_actorTimeline.IsPlaying || !_status.Text.Contains("Playback: paused", StringComparison.Ordinal))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        var pausedFrame = _readyActor?.Frame;
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Period, Pressed = true });
+        await NextFrameAsync();
+        if (_readyActor?.Frame == pausedFrame || !_status.Text.Contains("Frame:", StringComparison.Ordinal))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        Input.ParseInputEvent(new InputEventKey { Keycode = Key.Comma, Pressed = true });
+        await NextFrameAsync();
+        if (_readyActor?.Frame != pausedFrame || _readyActorInput.MapX != callerInput.MapX || _readyActorInput.MapY != callerInput.MapY
+            || _readyActorInput.CameraOriginX != callerInput.CameraOriginX || _readyActorInput.CameraOriginY != callerInput.CameraOriginY
+            || _readyActorInput.InstanceOffsetX != callerInput.InstanceOffsetX || _readyActorInput.InstanceOffsetY != callerInput.InstanceOffsetY)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        GD.Print("ARC-RENDER-005 actor native controls=PASS idle-walk=PASS facings=8 mirror=PASS pause-step=PASS hud=PASS stationary-caller-input=PASS");
+    }
+
+    private async Task AssertActorRasterAsync(TerrainLoadResult result, ActorDiagnosticDrawCommand actor)
+    {
+        if (!result.ActorTextures.TryGetValue(actor.TextureKey, out var decoded)
+            || !TryFindOpaqueDecodedPixel(decoded.Width, decoded.Height, decoded.Rgba, new TerrainRect(0, 0, decoded.Width, decoded.Height), out var sourcePixel))
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorDecode));
+        var viewport = new SubViewport { Size = new Vector2I(actor.Destination.Width + 12, actor.Destination.Height + 12), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas { Position = new Vector2(6 - actor.Destination.X, 6 - actor.Destination.Y) };
+        viewport.AddChild(canvas); AddChild(viewport);
+        canvas.Publish(DiagnosticScenePlan.Create(result.Plan.Isolate(result.Plan.Commands[0].Ordinal), null, _readyActorPlan!), _cache);
+        await NextFrameAsync();
+        await NextFrameAsync();
+        using var image = viewport.GetTexture().GetImage();
+        var sourceX = actor.FlipX ? actor.Destination.Width - 1 - sourcePixel.X : sourcePixel.X;
+        var rgba = image.GetPixel(6 + sourceX, 6 + sourcePixel.Y);
+        var anchor = new Vector2I(6 + (int)(actor.AnchorX - actor.Destination.X), 6 + (int)(actor.AnchorY - actor.Destination.Y));
+        viewport.QueueFree();
+        var spriteMatches = Math.Abs(Math.Round(rgba.R * 255) - sourcePixel.R) <= 1 && Math.Abs(Math.Round(rgba.G * 255) - sourcePixel.G) <= 1
+            && Math.Abs(Math.Round(rgba.B * 255) - sourcePixel.B) <= 1;
+        var yellowGuide = HasGuideColor(image, anchor, true);
+        var magentaOutline = HasGuideColor(image, new Vector2I(6, 6), false);
+        if (!spriteMatches || !yellowGuide || !magentaOutline)
+        {
+            GD.Print($"ARC-RENDER-005 actor native raster requested={actor.RequestedFacing} sprite={spriteMatches} guide={yellowGuide} outline={magentaOutline}");
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+        }
+    }
+
+    private static bool HasGuideColor(Image image, Vector2I center, bool yellow)
+    {
+        for (var y = center.Y - 5; y <= center.Y + 5; y++)
+        {
+            for (var x = center.X - 5; x <= center.X + 5; x++)
+            {
+                if (x < 0 || y < 0 || x >= image.GetWidth() || y >= image.GetHeight()) continue;
+                var pixel = image.GetPixel(x, y);
+                if (yellow ? pixel.R > .9f && pixel.G > .9f && pixel.B < .2f : pixel.R > .9f && pixel.G < .2f && pixel.B > .9f)
+                    return true;
+            }
+        }
+        return false;
     }
 
     private static bool TryFindOpaqueDecodedPixel(DecodedTerrainTexture texture, TerrainRect source, out TerrainTexturePixel pixel)

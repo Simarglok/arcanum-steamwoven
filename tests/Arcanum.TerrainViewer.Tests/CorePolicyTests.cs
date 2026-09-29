@@ -42,7 +42,7 @@ public sealed class CorePolicyTests
     {
         var expected = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
         CollectionAssert.AreEqual(expected, Enumerable.Range(0, 8).Select(facing => (ActorDiagnosticScenePlan.MapFacing(facing).Group, ActorDiagnosticScenePlan.MapFacing(facing).FlipX)).ToArray());
-        AssertViewerFailure(() => ActorDiagnosticScenePlan.MapFacing(8), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.MapFacing(8), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
         var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 7, 1, 1), 7, 5, 2, 3, 11, -4, 8, 15);
         var baseInput = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Walk, 1, 1, 7, 5, 2, 3, 11, -4);
         var command = ActorDiagnosticScenePlan.Place(baseInput, frame);
@@ -54,10 +54,62 @@ public sealed class CorePolicyTests
         Assert.AreEqual(11, command.SourceOffsetX);
         Assert.AreEqual(new TerrainRect(235, 235, 7, 5), ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = -999, ArtOffsetY = 999 }, frame).Destination,
             "ART offsets remain metadata and are never a second placement translation.");
-        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ScalePercent = 99 }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorPlan);
-        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ScalePercent = 99 }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { MapX = long.MinValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
         AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = int.MinValue }, frame with { ArtOffsetX = int.MinValue }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_has_literal_facing_geometry_guides_and_safe_failures()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 0, 0, 1), 7, 5, 2, 3, 11, -4, 1, 15);
+        var input = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Walk, 0, 0, 7, 5, 2, 3, 11, -4);
+        // Literal independent outcomes: anchor=(239,238); mirrored hotspot=4,
+        // ordinary hotspot=2. No expectation is calculated by production code.
+        var expected = new[] { (0, false, 237), (7, true, 235), (6, true, 235), (5, true, 235),
+            (4, false, 237), (5, false, 237), (6, false, 237), (7, false, 237) };
+        foreach (var (facing, group, mirrored, left) in expected.Select((item, facing) => (facing, item.Item1, item.Item2, item.Item3)))
+        {
+            var command = ActorDiagnosticScenePlan.Place(input with { Facing = facing }, frame with { TextureKey = frame.TextureKey with { PhysicalGroup = group } });
+            Assert.AreEqual(group, command.PhysicalGroup);
+            Assert.AreEqual(mirrored, command.FlipX);
+            Assert.AreEqual(new TerrainRect(left, 235, 7, 5), command.Destination);
+            Assert.AreEqual(239L, command.AnchorX);
+            Assert.AreEqual(238L, command.AnchorY);
+        }
+
+        var plan = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        var bounds = plan.AdmittedBounds.Single();
+        Assert.AreEqual(235, bounds.X, "Mirrored sprite is leftmost.");
+        Assert.AreEqual(234, bounds.Y, "Anchor cross extends one pixel above this sprite.");
+        Assert.AreEqual(9, bounds.Width, "Cross expands right edge through anchor + 4.");
+        Assert.AreEqual(9, bounds.Height, "Cross expands bottom edge through anchor + 4.");
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapX = null }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Action = (ActorDiagnosticAction)99 }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 8 }, frame), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Frame = 1 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame with { TextureKey = frame.TextureKey with { Palette = 0 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_rejects_projection_anchor_extent_and_draw_domain_overflow()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 2, 2, 0, 0, 0, 0, 1, 8);
+        var valid = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 2, 2, 0, 0, 0, 0);
+        var overflowInputs = new[]
+        {
+            valid with { MapX = long.MinValue }, valid with { MapY = long.MaxValue },
+            valid with { CameraOriginX = long.MaxValue }, valid with { CameraOriginY = long.MaxValue },
+            valid with { InstanceOffsetX = int.MaxValue, CameraOriginX = long.MaxValue - 39 },
+            valid with { InstanceOffsetY = int.MaxValue, CameraOriginY = long.MaxValue - 19 }
+        };
+        foreach (var input in overflowInputs)
+            AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(valid with { CameraOriginX = (long)int.MaxValue + 1 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(valid with { Width = int.MaxValue, CameraOriginX = 1 }, frame with { Width = int.MaxValue, Height = 2 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
     }
 
     [TestMethod]

@@ -35,7 +35,10 @@ public sealed class ActorDiagnosticScenePlan
 
     public IReadOnlyDictionary<(ActorDiagnosticAction Action, int Group, int Frame), ActorDiagnosticFrame> Catalog { get; }
     public ActorDiagnosticDrawCommand Current { get; }
-    /// <summary>Every frame rectangle at the fixed caller anchor; used to stabilize camera fitting.</summary>
+    /// <summary>
+    /// Every visible actor primitive at the fixed caller anchor, including the
+    /// magenta rectangle and yellow anchor cross, used to stabilize camera fit.
+    /// </summary>
     public IReadOnlyList<TerrainRect> AdmittedBounds { get; }
 
     /// <summary>Rebuilds only the selected draw command from the immutable caller anchor and decoded catalogue.</summary>
@@ -72,10 +75,10 @@ public sealed class ActorDiagnosticScenePlan
             var frameInput = input with { Action = ActionFor(item.TextureKey.Selector), Frame = item.TextureKey.Frame,
                 Facing = item.TextureKey.PhysicalGroup, Width = item.Width, Height = item.Height, HotX = item.HotX, HotY = item.HotY,
                 ArtOffsetX = item.ArtOffsetX, ArtOffsetY = item.ArtOffsetY };
-            all.Add(Place(frameInput, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, false)).Destination);
+            all.Add(VisibleGuideBounds(Place(frameInput, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, false))));
             var mirroredRequest = item.TextureKey.PhysicalGroup switch { 7 => 1, 6 => 2, 5 => 3, _ => -1 };
             if (mirroredRequest >= 0)
-                all.Add(Place(frameInput with { Facing = mirroredRequest }, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, true)).Destination);
+                all.Add(VisibleGuideBounds(Place(frameInput with { Facing = mirroredRequest }, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, true))));
         }
         return new ActorDiagnosticScenePlan(lookup, current, Array.AsReadOnly(all.ToArray()));
     }
@@ -90,8 +93,12 @@ public sealed class ActorDiagnosticScenePlan
             throw Failure(TerrainViewerErrorCode.ActorInput);
         if (input.RenderBranch != ActorDiagnosticRenderBranch.NormalUncached || input.ScalePercent != 100 || input.Shrunk != false)
             throw Failure(TerrainViewerErrorCode.ActorRenderState);
-        if (!Enum.IsDefined(input.Action) || input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Width != frame.Width || input.Height != frame.Height ||
-            input.Width <= 0 || input.Height <= 0 || frame.TextureKey.Palette != 1 || facing.Group != frame.TextureKey.PhysicalGroup)
+        if (!Enum.IsDefined(input.Action))
+            throw Failure(TerrainViewerErrorCode.ActorInput);
+        if (frame.TextureKey.Palette != 1 || facing.Group != frame.TextureKey.PhysicalGroup)
+            throw Failure(TerrainViewerErrorCode.ActorMetadata);
+        if (input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Width != frame.Width || input.Height != frame.Height ||
+            input.Width <= 0 || input.Height <= 0)
             throw Failure(TerrainViewerErrorCode.ActorFrame);
         try
         {
@@ -103,9 +110,15 @@ public sealed class ActorDiagnosticScenePlan
             var effectiveOffsetX = facing.FlipX ? checked(-frame.ArtOffsetX) : frame.ArtOffsetX;
             var left = checked(anchorX - effectiveHotX);
             var top = checked(anchorY - frame.HotY);
-            _ = checked(left + frame.Width);
-            _ = checked(top + frame.Height);
-            return new ActorDiagnosticDrawCommand(frame.TextureKey, new TerrainRect(checked((int)left), checked((int)top), frame.Width, frame.Height),
+            // Drawing uses integer Rect2 coordinates.  Validate and narrow all
+            // four extrema before constructing the command, rather than merely
+            // proving the right/bottom in widened arithmetic.
+            var narrowLeft = checked((int)left);
+            var narrowTop = checked((int)top);
+            var right = checked((int)checked(left + frame.Width));
+            var bottom = checked((int)checked(top + frame.Height));
+            return new ActorDiagnosticDrawCommand(frame.TextureKey, new TerrainRect(narrowLeft, narrowTop,
+                checked(right - narrowLeft), checked(bottom - narrowTop)),
                 anchorX, anchorY, input.Action, input.Facing, facing.Group, facing.FlipX, frame.ArtOffsetX, frame.ArtOffsetY,
                 effectiveOffsetX, frame.ArtOffsetY, input.Frame, frame.FramesPerAction, frame.RawFramesPerSecond);
         }
@@ -121,6 +134,25 @@ public sealed class ActorDiagnosticScenePlan
         4 => new(4, false), 5 => new(5, false), 6 => new(6, false), 7 => new(7, false), _ => throw Failure(TerrainViewerErrorCode.ActorFacing)
     };
 
+    private static TerrainRect VisibleGuideBounds(ActorDiagnosticDrawCommand command)
+    {
+        try
+        {
+            // DrawRect's one-pixel outline is contained by the draw rectangle.
+            // DrawLine endpoints make the anchor cross visible from -4 through
+            // +4 inclusive, which is represented by an exclusive +5 edge.
+            var left = Math.Min(command.Destination.X, checked((int)checked(command.AnchorX - 4)));
+            var top = Math.Min(command.Destination.Y, checked((int)checked(command.AnchorY - 4)));
+            var right = Math.Max(checked(command.Destination.X + command.Destination.Width), checked((int)checked(command.AnchorX + 5)));
+            var bottom = Math.Max(checked(command.Destination.Y + command.Destination.Height), checked((int)checked(command.AnchorY + 5)));
+            return new TerrainRect(left, top, checked(right - left), checked(bottom - top));
+        }
+        catch (OverflowException)
+        {
+            throw Failure(TerrainViewerErrorCode.ActorPlan);
+        }
+    }
+
     // Synthetic catalogues use the documented selector action bit and production keeps action explicit.
     private static ActorDiagnosticAction ActionFor(uint selector) => selector switch
     {
@@ -128,7 +160,16 @@ public sealed class ActorDiagnosticScenePlan
         ActorDiagnosticSource.WalkSelector => ActorDiagnosticAction.Walk,
         _ => throw Failure(TerrainViewerErrorCode.ActorMetadata)
     };
-    private static TerrainViewerException Failure(TerrainViewerErrorCode code) => new(new TerrainViewerError(code, Stage: TerrainViewerFailureStage.ActorPlan));
+    private static TerrainViewerException Failure(TerrainViewerErrorCode code) => new(new TerrainViewerError(code, Stage: code switch
+    {
+        TerrainViewerErrorCode.ActorFacing => TerrainViewerFailureStage.ActorFacing,
+        TerrainViewerErrorCode.ActorInput => TerrainViewerFailureStage.ActorInput,
+        TerrainViewerErrorCode.ActorRenderState => TerrainViewerFailureStage.ActorRenderState,
+        TerrainViewerErrorCode.ActorMetadata => TerrainViewerFailureStage.ActorMetadata,
+        TerrainViewerErrorCode.ActorFrame => TerrainViewerFailureStage.ActorFrame,
+        TerrainViewerErrorCode.ActorDecode => TerrainViewerFailureStage.ActorDecode,
+        _ => TerrainViewerFailureStage.ActorPlan
+    }));
 }
 
 public readonly record struct ActorPhysicalFacing(int Group, bool FlipX);

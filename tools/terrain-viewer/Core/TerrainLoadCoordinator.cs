@@ -273,20 +273,21 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         // never consults the terrain resource.
                         _actorResource = DatArchive.Open(arguments.ActorResourcePath!, BoundedDatOptions());
                         cancellationToken.ThrowIfCancellationRequested();
-                        var actor = ActorDiagnosticSource.Create(_module, _actorResource, arguments.ActorInput!);
+                        var actor = ActorDiagnosticSource.Create(_module, _actorResource, arguments.ActorInput!, textures.Count, checkedBytes, cancellationToken);
                         if (actor.Textures.Count != TerrainCachePolicy.MaxActorDistinctKeys)
                             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorMetadata, Stage: TerrainViewerFailureStage.ActorMetadata, Progress: progress));
-                        foreach (var item in actor.Textures)
-                        {
-                            cancellationToken.ThrowIfCancellationRequested();
-                            checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count + actorTextures.Count, item.Value.Width, item.Value.Height);
-                            actorTextures.Add(item.Key, item.Value);
-                        }
+                        checkedBytes = actor.CheckedRgbaBytes;
+                        foreach (var item in actor.Textures) actorTextures.Add(item.Key, item.Value);
                         actorPlan = actor.Plan;
                     }
                     catch (TerrainViewerException exception)
                     {
                         throw new TerrainViewerException(exception.Error with { Progress = exception.Error.Progress ?? progress });
+                    }
+                    catch (IOException)
+                    {
+                        throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint,
+                            Stage: TerrainViewerFailureStage.ActorFingerprint, Progress: progress));
                     }
                 }
                 cancellationToken.ThrowIfCancellationRequested();

@@ -23,6 +23,7 @@ public static class TerrainViewerSelfTest
             cache.UploadActor(CreateActorTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
             AssertStaticUploadOwnership(frame);
+            AssertActorUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
 
@@ -357,6 +358,32 @@ public static class TerrainViewerSelfTest
         if (disposals != 1) throw new InvalidOperationException("Repeated static cache clear disposed an already rolled-back texture.");
     }
 
+    private static void AssertActorUploadOwnership(ArtFrame frame)
+    {
+        var first = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 0, 0, 1);
+        var second = new ActorDiagnosticTextureKey(ActorDiagnosticSource.WalkResourceOrdinal, ActorDiagnosticSource.WalkSelector, 0, 0, 1);
+        var attempts = 0;
+        var disposals = 0;
+        using var cache = new TerrainTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 2) throw new InvalidOperationException("injected actor upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, _ => disposals++);
+        try
+        {
+            cache.UploadActor(new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>
+            {
+                [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
+                [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
+            });
+        }
+        catch (InvalidOperationException) { }
+        if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial actor texture upload was not rolled back exactly once.");
+        cache.Clear();
+        if (disposals != 1) throw new InvalidOperationException("Repeated actor cache clear disposed an already rolled-back texture.");
+    }
+
     private static void AssertReloadAndExitTextureOwnership(ArtFrame frame)
     {
         var first = new TerrainTextureKey("synthetic", 100, 0, 1, "reload-first", 0, 0, 0);
@@ -385,19 +412,26 @@ public static class TerrainViewerSelfTest
         {
             [staticKey] = new(staticKey, frame.Width, frame.Height, frame.Rgba.ToArray())
         };
+        var actorKey = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 0, 0, 1);
+        var actorTextures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>
+        {
+            [actorKey] = new(actorKey, frame.Width, frame.Height, frame.Rgba.ToArray())
+        };
         using (var reloadCache = new TerrainTextureCache(create, dispose))
         {
             reloadCache.Upload(textures);
             reloadCache.UploadStatic(staticTextures);
+            reloadCache.UploadActor(actorTextures);
             var firstGeneration = created.ToArray();
             reloadCache.Clear();
             if (firstGeneration.Any(texture => disposals[texture] != 1) || reloadCache.Count != 0)
                 throw new InvalidOperationException("Reload did not dispose each replaced texture exactly once.");
             reloadCache.Upload(textures);
             reloadCache.UploadStatic(staticTextures);
+            reloadCache.UploadActor(actorTextures);
             var secondGeneration = created.Skip(firstGeneration.Length).ToArray();
             reloadCache.Clear();
-            if (secondGeneration.Length != 3 || secondGeneration.Any(texture => disposals[texture] != 1))
+            if (secondGeneration.Length != 4 || secondGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Reload replacement textures were not disposed exactly once.");
         }
 
@@ -406,9 +440,10 @@ public static class TerrainViewerSelfTest
             var beforeExit = created.Count;
             exitCache.Upload(textures);
             exitCache.UploadStatic(staticTextures);
+            exitCache.UploadActor(actorTextures);
             var exitGeneration = created.Skip(beforeExit).ToArray();
             exitCache.Dispose();
-            if (exitCache.Count != 0 || exitGeneration.Length != 3 || exitGeneration.Any(texture => disposals[texture] != 1))
+            if (exitCache.Count != 0 || exitGeneration.Length != 4 || exitGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Exit did not dispose each live texture exactly once.");
         }
     }
@@ -426,7 +461,7 @@ public static class TerrainViewerSelfTest
 
     private static bool ReferencesDecodedTexture(Type type)
     {
-        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(byte[])) return true;
+        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(DecodedActorTexture) || type == typeof(byte[])) return true;
         if (type.IsArray) return ReferencesDecodedTexture(type.GetElementType()!);
         return type.IsGenericType && type.GetGenericArguments().Any(ReferencesDecodedTexture);
     }
