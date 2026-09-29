@@ -4,6 +4,10 @@ using Godot;
 namespace GamepadLab;
 public partial class SyntheticCourtyard : Node2D
 {
+    // Camera bounds are deliberately larger than the obstacle courtyard so a normal
+    // 1280x800 viewport can follow the initial actor before the map-edge clamp is
+    // reached. The lab still has no claim about original Arcanum camera bounds.
+    public static readonly Rect2 CameraMapBounds = new(-200, -200, 2000, 2000);
     private static readonly Rect2[] Obstacles = [new(675, 430, 34, 170), new(800, 260, 150, 30), new(800, 260, 30, 120), new(900, 520, 30, 120), new(970, 520, 30, 120)];
     private readonly (string Id, string Kind, Vector2 Point, int Cycle)[] _objects =
     {
@@ -24,9 +28,9 @@ public partial class SyntheticCourtyard : Node2D
     public void RecenterActor() { _actor = new Vector2(460, 610); _heading = Vector2.Right; _goal = null; QueueRedraw(); }
     public override void _Draw()
     {
-        DrawRect(new Rect2(180, 160, 900, 560), new Color("18354c"));
-        for (var x = 200; x <= 1060; x += 60) DrawLine(new Vector2(x, 180), new Vector2(x, 700), new Color("31546a"));
-        for (var y = 180; y <= 700; y += 40) DrawLine(new Vector2(200, y), new Vector2(1060, y), new Color("31546a"));
+        DrawRect(CameraMapBounds, new Color("18354c"));
+        for (var x = -180; x <= 1780; x += 60) DrawLine(new Vector2(x, -180), new Vector2(x, 1780), new Color("31546a"));
+        for (var y = -180; y <= 1780; y += 40) DrawLine(new Vector2(-180, y), new Vector2(1780, y), new Color("31546a"));
         DrawCircle(new Vector2(635, 475), 52, new Color("455c43")); DrawCircle(new Vector2(605, 445), 28, new Color("70806b"));
         foreach (var o in _objects)
         {

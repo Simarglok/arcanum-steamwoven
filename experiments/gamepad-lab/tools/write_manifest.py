@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Bind ARC-GPAD-002's ignored local export and evidence to one clean commit."""
+"""Bind ARC-GPAD-003's ignored local export and evidence to one clean commit."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -9,7 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-TASK = "ARC-GPAD-002"
+TASK = "ARC-GPAD-003"
 REQUIRED_LOGS = (
     "sdk-info.log", "locked-restore.log", "locked-tests-restore.log", "release-build.log",
     "core-harness.log", "editor-import.log", "debug-build.log", "godot-self-test.log",
