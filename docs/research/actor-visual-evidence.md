@@ -11,8 +11,10 @@ neither an original-runtime observation nor renderer readiness; ART metadata
 alone remains insufficient and the runtime/parity gate stays closed.
 
 This is research tooling, not a production MOB/PRO parser, composite-equipment
-system, renderer, movement system, collision rule, or archive-precedence
-implementation. It opens exactly one caller-provided module DAT, resource DAT,
+system, general renderer, movement system, collision rule, or archive-precedence
+implementation. ARC-RENDER-005 later authorizes a separate fixed-profile,
+caller-labelled diagnostic presentation consumer; it does not alter this
+record's original-runtime readiness boundary. The probe opens exactly one caller-provided module DAT, resource DAT,
 and prototype directory; it never searches loose, PATCH, or alternative archive
 sources. Original paths, entry names, directory strings, textual payloads,
 payload hashes, bytes, pixels, images, and screenshots are neither printed nor
@@ -191,13 +193,13 @@ prototype ART resolution; single-layer monster filtering; Stand/Walk resource
 resolution; all admitted group/flip/palette/frame geometry inspection; and the
 metadata-only evidence above.
 
-Not implemented: a production MOB/PRO parser; actor renderer; actor world
-anchor; composite equipment; runtime scheduler; movement; collision;
+Not implemented: a production MOB/PRO parser; generalized actor renderer; actor
+world anchor; composite equipment; runtime scheduler; movement; collision;
 pathfinding; archive precedence; a Godot scene; or a claim of original-runtime
 parity.
 
 Remaining work: acquire the discriminating actor-specific original-runtime
 observation specified in [actor placement evidence](actor-placement-evidence.md)
-(and only then decide a separate reviewed presentation consumer). Cadence
+before any expanded consumer or original-runtime compatibility claim. Cadence
 remains `SourceScheduler` for runtime timing authority, with raw ART FPS
 preserved and no movement-speed conclusion.

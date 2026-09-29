@@ -23,6 +23,41 @@ public sealed class CorePolicyTests
         Assert.AreEqual("p", combined.PrototypePath);
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture"]));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "terrain-only", "--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture", "--prototypes", "p"]));
+        var actor = TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--actor-resource", "actor-r", "--prototypes", "p", "--source-id", "fixture",
+            "--actor-map-x", "-2", "--actor-map-y", "3", "--actor-camera-origin-x", "100", "--actor-camera-origin-y", "-50", "--actor-offset-x", "7", "--actor-offset-y", "-9",
+            "--actor-render-branch", "normal-uncached", "--actor-scale-percent", "100", "--actor-shrunk", "false", "--actor-action", "walk", "--actor-facing", "2", "--actor-frame", "1", "--expect-actor-resource-sha256", new string('B', 64)]);
+        Assert.AreEqual(TerrainViewerMode.ActorDiagnostic, actor.Mode);
+        Assert.AreEqual(ActorDiagnosticAction.Walk, actor.ActorInput!.Action);
+        Assert.IsTrue(actor.ActorResourcePath == "actor-r", "Actor resource must retain the caller-selected role.");
+        Assert.IsTrue(actor.ExpectedActorResourceSha256 == new string('b', 64), "Actor hash must normalize to lowercase.");
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--actor-map-x", "0"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--actor-resource", "a", "--actor-resource", "b", "--prototypes", "p", "--source-id", "fixture", "--actor-map-x", "0"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--actor-resource", "a"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--expect-actor-resource-sha256", new string('a', 64)]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--actor-frame", "0"]));
+    }
+
+    [TestMethod]
+    public void Actor_geometry_maps_every_facing_mirrors_hotspot_and_does_not_translate_by_frame_offset()
+    {
+        var expected = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
+        CollectionAssert.AreEqual(expected, Enumerable.Range(0, 8).Select(facing => (ActorDiagnosticScenePlan.MapFacing(facing).Group, ActorDiagnosticScenePlan.MapFacing(facing).FlipX)).ToArray());
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.MapFacing(8), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorPlan);
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 7, 1, 1), 7, 5, 2, 3, 11, -4, 8, 15);
+        var baseInput = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Walk, 1, 1, 7, 5, 2, 3, 11, -4);
+        var command = ActorDiagnosticScenePlan.Place(baseInput, frame);
+        Assert.AreEqual(239L, command.AnchorX);
+        Assert.AreEqual(238L, command.AnchorY);
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), command.Destination, "Mirrored effective hotspot is 7 - 2 - 1 = 4.");
+        Assert.AreEqual(-11, command.EffectiveOffsetX);
+        Assert.AreEqual(-4, command.EffectiveOffsetY);
+        Assert.AreEqual(11, command.SourceOffsetX);
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = -999, ArtOffsetY = 999 }, frame).Destination,
+            "ART offsets remain metadata and are never a second placement translation.");
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ScalePercent = 99 }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { MapX = long.MinValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = int.MinValue }, frame with { ArtOffsetX = int.MinValue }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
     }
 
     [TestMethod]
@@ -103,7 +138,7 @@ public sealed class CorePolicyTests
         Assert.AreEqual(317, staticDecode.SafeProgress.StaticCensus);
         Assert.AreEqual(5, staticDecode.SafeProgress.StaticAdmitted);
         Assert.AreEqual(312, staticDecode.SafeProgress.StaticOutsideScope);
-        CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "Plan", "Upload", "Readback" },
+        CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "ActorFingerprint", "ActorMetadata", "ActorInput", "ActorRenderState", "ActorFacing", "ActorFrame", "ActorDecode", "ActorPlan", "Plan", "Upload", "Readback" },
             Enum.GetNames<TerrainViewerFailureStage>());
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(-1));
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4097));

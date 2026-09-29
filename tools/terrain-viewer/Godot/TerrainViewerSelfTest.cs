@@ -20,6 +20,7 @@ public static class TerrainViewerSelfTest
             using var cache = new TerrainTextureCache();
             cache.Upload(CreateTextures(keys, frame));
             cache.UploadStatic(CreateStaticTextures(frame));
+            cache.UploadActor(CreateActorTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
             AssertStaticUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
@@ -30,7 +31,8 @@ public static class TerrainViewerSelfTest
                 await AssertCanvasOraclesAsync(host, cache, keys);
                 await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
                 await AssertStaticRasterPoliciesAsync(host, cache, keys.Red);
-                GD.Print("ARC-RENDER-004 self-test PASS combined production-canvas pixel oracle");
+                await AssertActorCanvasOracleAsync(host, cache, keys.Red);
+                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor production-canvas pixel oracle");
             }
             else
             {
@@ -38,7 +40,8 @@ public static class TerrainViewerSelfTest
                 // source constants are still constructed, but no pixels are claimed.
                 AssertPlanConstants(keys.Tile, keys.Facade);
                 AssertCombinedPlan();
-                GD.Print("ARC-RENDER-004 self-test PASS combined structural plan; graphical readback NOT_VERIFIED headless");
+                AssertActorPlan();
+                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor structural plan; graphical readback NOT_VERIFIED headless");
             }
             host.GetTree().Quit(0);
         }
@@ -79,6 +82,12 @@ public static class TerrainViewerSelfTest
     {
         var key = new StaticSceneryTextureKey(new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64)), 0, 0, 0);
         return new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
+    }
+
+    private static Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture> CreateActorTextures(ArtFrame frame)
+    {
+        var key = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1);
+        return new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
     }
 
     private static async Task AssertCanvasOraclesAsync(Node host, TerrainTextureCache cache,
@@ -145,6 +154,25 @@ public static class TerrainViewerSelfTest
         using var image = viewport.GetTexture().GetImage();
         AssertPixel(image, 20, 20, 255, 0, 0, 255);
         AssertPixel(image, 21, 20, 0, 0, 255, 255);
+        viewport.QueueFree();
+    }
+
+    private static async Task AssertActorCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
+    {
+        var terrain = Plan(new TerrainRect(0, 0, 200, 100), [Input(51, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
+            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2, 1, ActorDiagnosticSource.IdleFps);
+        var input = new ActorDiagnosticPlacementInput(0, 0, 100, 20, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 1, 0, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2);
+        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        var viewport = new SubViewport { Size = new Vector2I(200, 100), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas();
+        viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, null, actor), cache);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        using var image = viewport.GetTexture().GetImage();
+        AssertPixel(image, 98, 42, 255, 0, 0, 255); // asymmetric source x=2 reflects to width-1-2.
+        AssertPixel(image, 100, 39, 255, 255, 0, 255); // anchor guide paints last.
         viewport.QueueFree();
     }
 
@@ -216,6 +244,16 @@ public static class TerrainViewerSelfTest
         var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
         var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false)]);
         if (statics.Commands.Single().Destination != new TerrainRect(20, 20, 3, 3)) throw new InvalidOperationException("Combined static geometry differs from literal oracle.");
+    }
+
+    private static void AssertActorPlan()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
+            3, 2, 0, 0, 8, -1, 1, ActorDiagnosticSource.IdleFps);
+        var plan = ActorDiagnosticScenePlan.CreateSynthetic(new ActorDiagnosticPlacementInput(0, 0, 10, 20, 0, 0,
+            ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Idle, 1, 0, 3, 2, 0, 0, 8, -1), [frame]);
+        if (!plan.Current.FlipX || plan.Current.Destination != new TerrainRect(8, 40, 3, 2) || plan.Current.EffectiveOffsetX != -8)
+            throw new InvalidOperationException("Actor mirror geometry differs from literal structural oracle.");
     }
 
     private static TerrainScenePlan FullTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(10, key, TerrainKind.Tile, 0, 0, 0)]);

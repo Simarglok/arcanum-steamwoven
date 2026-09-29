@@ -9,8 +9,12 @@ public static class CrashSiteProfile
     public const string FacadeMesEntry = "art\\facade\\facadename.mes";
     public const long ModuleSize = 355_938_305;
     public const long ResourceSize = 147_991_122;
+    public const long ActorResourceSize = 447_470_816;
     public const string ModuleSha256 = "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f";
     public const string ResourceSha256 = "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d";
+    public const string ActorResourceSha256 = "6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576";
+    public const long ActorPrototypeAggregateSize = 949_341;
+    public const string ActorPrototypeAggregateSha256 = "1741dec3e542e2717a130c8162a4d739c82edf0a14866905d2b85a070d5ec33c";
     public const int CellCount = 4096;
     public const int TileCount = 3033;
     public const int FacadeCount = 1063;
@@ -24,14 +28,15 @@ public static class CrashSiteProfile
 public enum TerrainViewerErrorCode
 {
     Usage, InputUnavailable, FingerprintMismatch, InvalidSector, IncompleteSector, ResourceLimit, DecodeFailure, RenderFailure,
-    StaticFingerprint, StaticCensus, StaticResource, StaticDecode, StaticPlan, Cancelled
+    StaticFingerprint, StaticCensus, StaticResource, StaticDecode, StaticPlan,
+    ActorFingerprint, ActorMetadata, ActorInput, ActorRenderState, ActorFacing, ActorFrame, ActorDecode, ActorPlan, Cancelled
 }
 
 /// <summary>Safe, explicit load boundary. Never infer this from an error code.</summary>
 public enum TerrainViewerFailureStage
 {
     Arguments, Fingerprint, TerrainCensus, TerrainDecode, StaticFingerprint,
-    StaticCensus, StaticResource, StaticDecode, Plan, Upload, Readback
+    StaticCensus, StaticResource, StaticDecode, ActorFingerprint, ActorMetadata, ActorInput, ActorRenderState, ActorFacing, ActorFrame, ActorDecode, ActorPlan, Plan, Upload, Readback
 }
 
 /// <summary>Immutable aggregate values that are safe to show after a completed boundary.</summary>

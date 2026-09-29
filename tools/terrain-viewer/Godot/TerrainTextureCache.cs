@@ -8,6 +8,7 @@ public sealed class TerrainTextureCache : IDisposable
 {
     private readonly Dictionary<TerrainTextureKey, ImageTexture> _textures = new();
     private readonly Dictionary<StaticSceneryTextureKey, ImageTexture> _staticTextures = new();
+    private readonly Dictionary<ActorDiagnosticTextureKey, ImageTexture> _actorTextures = new();
     private readonly Func<Image, ImageTexture> _createTexture;
     private readonly Action<ImageTexture> _disposeTexture;
 
@@ -22,7 +23,7 @@ public sealed class TerrainTextureCache : IDisposable
         _disposeTexture = disposeTexture ?? (texture => texture.Dispose());
     }
 
-    public int Count => _textures.Count + _staticTextures.Count;
+    public int Count => _textures.Count + _staticTextures.Count + _actorTextures.Count;
     public int CreatedCount { get; private set; }
     public int DisposedCount { get; private set; }
 
@@ -55,6 +56,7 @@ public sealed class TerrainTextureCache : IDisposable
 
     public bool TryGet(TerrainTextureKey key, out ImageTexture texture) => _textures.TryGetValue(key, out texture!);
     public bool TryGet(StaticSceneryTextureKey key, out ImageTexture texture) => _staticTextures.TryGetValue(key, out texture!);
+    public bool TryGet(ActorDiagnosticTextureKey key, out ImageTexture texture) => _actorTextures.TryGetValue(key, out texture!);
 
     public bool TryFindOpaquePixel(StaticSceneryTextureKey key, out TerrainTexturePixel pixel)
         => TryFindOpaquePixel(key, static _ => true, out pixel);
@@ -107,6 +109,29 @@ public sealed class TerrainTextureCache : IDisposable
         }
     }
 
+    public void UploadActor(IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> decoded)
+    {
+        ArgumentNullException.ThrowIfNull(decoded);
+        var uploaded = new List<ActorDiagnosticTextureKey>();
+        try
+        {
+            foreach (var item in decoded)
+            {
+                if (_actorTextures.ContainsKey(item.Key)) continue;
+                using var image = Image.CreateFromData(item.Value.Width, item.Value.Height, false, Image.Format.Rgba8, item.Value.Rgba);
+                var texture = _createTexture(image);
+                CreatedCount++;
+                _actorTextures.Add(item.Key, texture);
+                uploaded.Add(item.Key);
+            }
+        }
+        catch
+        {
+            foreach (var key in uploaded) { DisposeTexture(_actorTextures[key]); _actorTextures.Remove(key); }
+            throw;
+        }
+    }
+
     public bool TryFindOpaquePixel(TerrainTextureKey key, TerrainRect source, out TerrainTexturePixel pixel)
     {
         pixel = default;
@@ -130,8 +155,10 @@ public sealed class TerrainTextureCache : IDisposable
     {
         foreach (var texture in _textures.Values) DisposeTexture(texture);
         foreach (var texture in _staticTextures.Values) DisposeTexture(texture);
+        foreach (var texture in _actorTextures.Values) DisposeTexture(texture);
         _textures.Clear();
         _staticTextures.Clear();
+        _actorTextures.Clear();
     }
 
     public void Dispose() => Clear();

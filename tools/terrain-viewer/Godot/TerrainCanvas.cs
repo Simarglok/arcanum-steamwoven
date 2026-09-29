@@ -7,6 +7,7 @@ public partial class TerrainCanvas : Node2D
 {
     private TerrainScenePlan? _plan;
     private StaticSceneryScenePlan? _staticPlan;
+    private ActorDiagnosticScenePlan? _actorPlan;
     private TerrainTextureCache? _textures;
     private bool _showStatics = true;
 
@@ -15,7 +16,7 @@ public partial class TerrainCanvas : Node2D
         TextureFilter = TextureFilterEnum.Nearest;
     }
 
-    public int CommandCount => (_plan?.Commands.Count ?? 0) + (_staticPlan?.Commands.Count ?? 0);
+    public int CommandCount => (_plan?.Commands.Count ?? 0) + (_staticPlan?.Commands.Count ?? 0) + (_actorPlan is null ? 0 : 1);
 
     /// <summary>Stable, content-free geometry snapshot used by camera smoke checks.</summary>
     public string GeometrySignature => _plan is null
@@ -76,6 +77,7 @@ public partial class TerrainCanvas : Node2D
     {
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = null;
+        _actorPlan = null;
         _textures = textures ?? throw new ArgumentNullException(nameof(textures));
         QueueRedraw();
     }
@@ -84,6 +86,7 @@ public partial class TerrainCanvas : Node2D
     {
         _plan = plan?.Terrain ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = plan.Statics;
+        _actorPlan = plan.Actor;
         _textures = textures ?? throw new ArgumentNullException(nameof(textures));
         QueueRedraw();
     }
@@ -92,6 +95,7 @@ public partial class TerrainCanvas : Node2D
     {
         _plan = null;
         _staticPlan = null;
+        _actorPlan = null;
         _textures = null;
         QueueRedraw();
     }
@@ -119,6 +123,25 @@ public partial class TerrainCanvas : Node2D
             else
             {
                 DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
+            }
+        }
+        if (_actorPlan is not null)
+        {
+            var actor = _actorPlan.Current;
+            if (_textures.TryGet(actor.TextureKey, out var texture))
+            {
+                var destination = new Rect2(actor.Destination.X, actor.Destination.Y, actor.Destination.Width, actor.Destination.Height);
+                var source = new Rect2(0, 0, actor.Destination.Width, actor.Destination.Height);
+                if (actor.FlipX)
+                {
+                    DrawSetTransform(new Vector2(actor.Destination.X + actor.Destination.Width, actor.Destination.Y), 0, new Vector2(-1, 1));
+                    DrawTextureRectRegion(texture, new Rect2(0, 0, actor.Destination.Width, actor.Destination.Height), source);
+                    DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+                }
+                else DrawTextureRectRegion(texture, destination, source);
+                DrawRect(destination, Colors.Magenta, false, 1f);
+                DrawLine(new Vector2((float)actor.AnchorX - 4, (float)actor.AnchorY), new Vector2((float)actor.AnchorX + 4, (float)actor.AnchorY), Colors.Yellow, 1f);
+                DrawLine(new Vector2((float)actor.AnchorX, (float)actor.AnchorY - 4), new Vector2((float)actor.AnchorX, (float)actor.AnchorY + 4), Colors.Yellow, 1f);
             }
         }
         if (_staticPlan is null || !_showStatics) return;
