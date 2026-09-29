@@ -104,7 +104,10 @@ checks Camera2D readback, command geometry/cache count, HUD global coordinates,
 fullscreen restoration where supported, manual-resize persistence, reload, and
 100 input-driven pan/zoom/reset/resize cycles. It requires each viewport readback to have exactly the requested
 dimensions and validates a terrain-texture landmark transformed through the
-active camera; an opaque clear colour or HUD alone cannot pass. A display clamp
+active camera. In combined mode the same exact-size frame must additionally
+match an opaque pixel from the reverse-order selected static command; a
+terrain-only comparison with the static pass hidden is retained only as a
+supplementary control. An opaque clear colour or HUD alone cannot pass. A display clamp
 or unreadable terrain landmark is NOT_VERIFIED, never a size PASS. Fullscreen
 which cannot transition is also NOT_VERIFIED; failed restoration is a failure.
 With

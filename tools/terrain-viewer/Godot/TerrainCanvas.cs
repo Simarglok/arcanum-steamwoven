@@ -45,19 +45,11 @@ public partial class TerrainCanvas : Node2D
     {
         landmark = default;
         if (_plan is null || _staticPlan is null || _textures is null) return false;
-        // Choose a static source pixel whose destination is outside terrain's
-        // diagnostic bounds. Its full-scene readback cannot be confused with
-        // an underlying terrain colour or alpha blend.
-        var terrainBounds = _plan.WorldBounds;
-        foreach (var command in _staticPlan.Commands)
+        // Reverse diagnostic draw order selects the last static command first,
+        // so no later static command can obscure the chosen opaque pixel.
+        foreach (var command in _staticPlan.Commands.Reverse())
         {
-            if (!_textures.TryFindOpaquePixel(command.TextureKey, (x, y) =>
-            {
-                var worldX = command.Destination.X + (command.FlipX ? command.Destination.Width - 1 - x : x);
-                var worldY = command.Destination.Y + y;
-                return worldX < terrainBounds.X || worldX >= terrainBounds.X + terrainBounds.Width
-                    || worldY < terrainBounds.Y || worldY >= terrainBounds.Y + terrainBounds.Height;
-            }, out var pixel)) continue;
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, out var pixel)) continue;
             var offsetX = command.FlipX ? command.Destination.Width - 1 - pixel.X : pixel.X;
             landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y,
                 pixel.R, pixel.G, pixel.B, pixel.A, command.SourceIndex);

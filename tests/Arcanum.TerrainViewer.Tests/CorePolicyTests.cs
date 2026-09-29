@@ -54,6 +54,27 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public void Failure_diagnostics_preserve_explicit_stage_and_safe_reached_aggregates()
+    {
+        var terrainComplete = new TerrainViewerProgress(4096, 3033, 1063);
+        var staticComplete = terrainComplete with { StaticCensus = 317, StaticAdmitted = 5, StaticOutsideScope = 312 };
+        var terrainDecode = new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure, Stage: TerrainViewerFailureStage.TerrainDecode, Progress: terrainComplete);
+        var staticFingerprint = new TerrainViewerError(TerrainViewerErrorCode.StaticFingerprint, Stage: TerrainViewerFailureStage.StaticFingerprint, Progress: terrainComplete);
+        var staticDecode = new TerrainViewerError(TerrainViewerErrorCode.StaticDecode, Stage: TerrainViewerFailureStage.StaticDecode, Progress: staticComplete);
+        Assert.AreEqual(TerrainViewerFailureStage.TerrainDecode, terrainDecode.Stage);
+        Assert.AreEqual(4096, terrainDecode.SafeProgress.TerrainResolved);
+        Assert.AreEqual(0, terrainDecode.SafeProgress.StaticCensus);
+        Assert.AreEqual(TerrainViewerFailureStage.StaticFingerprint, staticFingerprint.Stage);
+        Assert.AreEqual(3033, staticFingerprint.SafeProgress.TerrainTiles);
+        Assert.AreEqual(TerrainViewerFailureStage.StaticDecode, staticDecode.Stage);
+        Assert.AreEqual(317, staticDecode.SafeProgress.StaticCensus);
+        Assert.AreEqual(5, staticDecode.SafeProgress.StaticAdmitted);
+        Assert.AreEqual(312, staticDecode.SafeProgress.StaticOutsideScope);
+        CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "Plan", "Upload", "Readback" },
+            Enum.GetNames<TerrainViewerFailureStage>());
+    }
+
+    [TestMethod]
     public void Camera_fit_manual_pan_zoom_and_resize_preserve_declared_contract_at_both_sizes()
     {
         foreach (var viewport in new[] { (1280d, 800d), (1920d, 1080d) })
@@ -269,6 +290,28 @@ public sealed class CorePolicyTests
         var replacement = await coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
         Assert.AreEqual(1, waiting.DisposeCount, "The queued operation must remain available after a waiting cancellation.");
         Assert.IsTrue(coordinator.TryPublish(replacement.Generation, () => { }));
+    }
+
+    [TestMethod]
+    public async Task Coordinator_exit_cancels_active_and_waiting_loads_drains_before_gate_disposal_and_rejects_later_loads()
+    {
+        var active = new CancellableBarrierOperation();
+        var waiting = new ImmediateArchiveOperation();
+        var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(active, waiting));
+        var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+        var activeGeneration = coordinator.BeginGeneration();
+        var activeLoad = coordinator.LoadAsync(activeGeneration, arguments);
+        await active.Entered.Task;
+        var waitingLoad = coordinator.LoadAsync(coordinator.BeginGeneration(), arguments);
+
+        await Task.Run(coordinator.Dispose);
+        await AssertThrowsAsync<OperationCanceledException>(activeLoad);
+        await AssertThrowsAsync<OperationCanceledException>(waitingLoad);
+        Assert.AreEqual(1, active.DisposeCount, "Exit must dispose the created operation once after cancellation.");
+        Assert.AreEqual(0, waiting.DisposeCount, "A queued load must not create an operation while exit drains.");
+        Assert.IsFalse(coordinator.TryPublish(activeGeneration, () => Assert.Fail("Exit must suppress publication.")));
+        await AssertThrowsAsync<ObjectDisposedException>(coordinator.LoadAsync(coordinator.BeginGeneration(), arguments));
+        coordinator.Dispose();
     }
 
     private sealed class QueueArchiveOperationFactory : ITerrainLoadOperationFactory

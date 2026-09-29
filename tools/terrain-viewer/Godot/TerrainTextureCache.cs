@@ -70,7 +70,10 @@ public sealed class TerrainTextureCache : IDisposable
             for (var x = 0; x < image.GetWidth(); x++)
             {
                 var color = image.GetPixel(x, y);
-                if (color.A == 0 || !accept(x, y)) continue;
+                // A full-scene landmark must be fully opaque: a merely
+                // translucent ART pixel is correctly blended with terrain and
+                // cannot be compared to its decoded straight-RGBA value.
+                if (color.A < 1f || !accept(x, y)) continue;
                 pixel = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
                     (byte)Math.Round(color.B * 255), (byte)Math.Round(color.A * 255));
                 return true;

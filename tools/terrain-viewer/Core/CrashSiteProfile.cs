@@ -27,7 +27,23 @@ public enum TerrainViewerErrorCode
     StaticFingerprint, StaticCensus, StaticResource, StaticDecode, StaticPlan, Cancelled
 }
 
-public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0)
+/// <summary>Safe, explicit load boundary. Never infer this from an error code.</summary>
+public enum TerrainViewerFailureStage
 {
-    public override string ToString() => $"{Code} (resolved={ResolvedCount}, issues={IssueCount})";
+    Arguments, Fingerprint, TerrainCensus, TerrainDecode, StaticFingerprint,
+    StaticCensus, StaticResource, StaticDecode, Plan, Upload, Readback
+}
+
+/// <summary>Aggregate values that are safe to show after a completed boundary.</summary>
+public sealed record TerrainViewerProgress(int TerrainResolved = 0, int TerrainTiles = 0, int TerrainFacades = 0,
+    int StaticCensus = 0, int StaticAdmitted = 0, int StaticOutsideScope = 0)
+{
+    public static readonly TerrainViewerProgress Empty = new();
+}
+
+public sealed record TerrainViewerError(TerrainViewerErrorCode Code, int ResolvedCount = 0, int IssueCount = 0,
+    TerrainViewerFailureStage Stage = TerrainViewerFailureStage.Arguments, TerrainViewerProgress? Progress = null)
+{
+    public TerrainViewerProgress SafeProgress => Progress ?? TerrainViewerProgress.Empty;
+    public override string ToString() => $"{Code} stage={Stage} (resolved={ResolvedCount}, issues={IssueCount})";
 }
