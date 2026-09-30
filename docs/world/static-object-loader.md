@@ -15,6 +15,13 @@ Caller-owned archives remain caller-owned; the result owns copies of parsed
 values only. `DatArchive.ReadEntry` serializes its seek/read/decompression
 operation, so concurrent callers cannot corrupt a shared seek-based archive.
 
+ARC-RES-012 consumes the existing `Inspect` records in its bounded research
+probe to assess one ordinary-static-scenery destination-cell component. That
+consumer does not widen this loader, add collision/navigation API surface, or
+turn `IsStatic` into a general collision verdict. See the separate
+[static-obstruction contract](static-obstruction-contract.md) and
+[evidence](../research/static-obstruction-evidence.md).
+
 ## API
 
 ```csharp

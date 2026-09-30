@@ -41,12 +41,13 @@ CellOccupancyAssessment
   components:
     serializedBlockMask: coverage + disposition + provenance
     tileFacadeName: coverage + disposition + provenance
-    staticObjects: coverage + disposition + provenance
+    ordinaryStaticScenery: supportedness + applicability + disposition + provenance
+    otherStaticAndDynamicObjects: coverage + disposition + provenance
     dynamicAndContext: coverage + disposition + provenance
   combined: coverage + disposition + reason/provenance codes
 ```
 
-For this candidate, a set serialized block bit may report `Supported + Blocked` for that component because the CE trace tests it before later tile branches. A clear bit does **not** report Open. Facade bit 0 is a raw-word component only; tile-class records additionally require an ART/MES/name rule. The static component remains `Unknown + null`: local record locations, five metadata samples, a type-3 census, a non-`OF_DYNAMIC` predicate, frame geometry, hotspots, alpha, pixels, and source index do not establish a traversal footprint or all contributors.
+For this candidate, a set serialized block bit may report `Supported + Blocked` for that component because the CE trace tests it before later tile branches. A clear bit does **not** report Open. Facade bit 0 is a raw-word component only; tile-class records additionally require an ART/MES/name rule. The named ordinary static-scenery destination-cell component is now separately evidenced by [ARC-RES-012](static-obstruction-contract.md): it can report its own supportedness/applicability/nullable Blocker-or-NoBlock result in the fixed context. It does not establish a general static-object component: dynamic objects, other states/types, visual geometry, source-cell/edge effects, and all unadmitted contributors remain unknown. `otherStaticAndDynamicObjects` therefore remains `Unknown + null`.
 
 The combined cell assessment is therefore `Unknown + null` in the present candidate, even when a component contains a useful blocking fact. Component visibility prevents a future consumer from silently treating a clear/unknown component as Open.
 
@@ -63,7 +64,7 @@ StepTraversalAssessment
   combined: coverage + disposition + reason/provenance codes
 ```
 
-Same-cell and non-adjacent requests are `Unsupported + null`; they are not route-search requests. A cardinal step remains `Unknown + null` until its source/destination terrain components, all relevant object contributors, actor capability/context, and source-proven edge semantics are admitted. Diagonal steps are `Unknown + null` in-profile because the CE source has recursive shoulder/object behavior but this contract has not established all required corner/cross-cell semantics. It must not invent a diagonal corner policy.
+Same-cell and non-adjacent requests are `Unsupported + null`; they are not route-search requests. A cardinal step remains `Unknown + null` until its source/destination terrain components, other relevant object contributors, actor capability/context, and source-proven edge semantics are admitted. The ARC-RES-012 ordinary-static component is destination-cell-only and must not be promoted into source/edge semantics. Diagonal steps are `Unknown + null` in-profile because the CE source has recursive shoulder/object behavior but this contract has not established all required corner/cross-cell semantics. It must not invent a diagonal corner policy.
 
 A step that leaves the 64×64 sector is `Unsupported + null` with `CROSS_SECTOR_DATA_ABSENT`. The proposal deliberately does not load or infer a neighbor. Other sector IDs, source versions, profiles, `.dif`/PATCH/loose precedence, generalized dynamic objects, and unsupported actor/state categories are likewise `Unsupported + null`.
 
@@ -82,12 +83,12 @@ A static combined result may become implementation-ready only when all of the fo
 1. the exact base input and coordinate profile are fingerprinted and fixed;
 2. block-mask shape, ordinal mapping, bit order, and polarity are proven;
 3. each explicit tile/facade/name rule is resolved from admitted source data;
-4. every relevant selected static object is completely enumerated and its spatial contribution is proven;
+4. every relevant static, dynamic, and stateful object contributor is completely enumerated and its spatial contribution is proven beyond the ARC-RES-012 ordinary-static subset;
 5. every direct/prototype field needed by traversal is resolved to an exact serialized slot/default;
 6. actor/context and state inputs are declared with no omitted dynamic override; and
 7. the cardinal edge and any admitted diagonal/corner rule are source-proven.
 
-If any condition fails, terrain-only component facts can be useful, but combined occupancy and step traversal remain unknown. The current candidate fails conditions 3 through 7, and specifically does not promote the 317-record static census to collision semantics.
+If any condition fails, component facts can be useful, but combined occupancy and step traversal remain unknown. The current candidate fails conditions 3 through 7. It does not promote the 317-record census or the ARC-RES-012 static subset into total collision semantics.
 
 ## Non-goals
 
