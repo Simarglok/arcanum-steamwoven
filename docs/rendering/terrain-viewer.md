@@ -197,7 +197,7 @@ shell. Do not place those paths in a manifest, commit, or issue.
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --mode actor-diagnostic --module "$MODULE" --resource "$RESOURCE" --actor-resource "$ACTOR_RESOURCE" --prototypes "$PROTOTYPES" --source-id "$SOURCE_ID" --actor-map-x 0 --actor-map-y 0 --actor-camera-origin-x 0 --actor-camera-origin-y 0 --actor-offset-x 0 --actor-offset-y 0 --actor-render-branch normal-uncached --actor-scale-percent 100 --actor-shrunk false --actor-action idle --actor-facing 0 --actor-frame 0
 
-After committing the source candidate, export it to the ignored
+After committing the source candidate, configure the ignored artifact root with `tools/arcanum-local configure add-artifact-root --id ID PATH` and use `ARCANUM_LOCAL_ROOT_ID=ID tools/terrain-viewer/Godot/tools/validate-macos.sh` for the bounded exact-head ARC-DEV-001 endpoint. It acquires the candidate lease before export and registers only after the complete export/self-test/codesign/v2 inventory evidence sequence succeeds. ART remains next-export-only; this endpoint is Terrain-only. The manual ARC-RENDER-005 commands below remain historical diagnostic detail, not a substitute for that registration path. They export to the ignored
 `artifacts/builds/ARC-RENDER-005/<commit>/ArcanumTerrainViewer.app`, run its
 headless and non-headless `--self-test`, then each terrain-only, combined, and
 actor-diagnostic `--native-smoke` plus the ordinary actor launch with the same

@@ -129,7 +129,8 @@ def _bound_payload_inventory(payload: dict[str, Any], candidate: Path, app_path:
     total = 0
     seen: set[str] = set()
     for entry in inventory:
-        if not isinstance(entry, dict) or not isinstance(entry.get("relativePath"), str) or not isinstance(entry.get("bytes"), int):
+        if (not isinstance(entry, dict) or not isinstance(entry.get("relativePath"), str)
+                or not isinstance(entry.get("bytes"), int) or not isinstance(entry.get("sha256"), str)):
             raise ValueError("payload inventory is invalid")
         item = candidate / entry["relativePath"]
         try:
@@ -137,13 +138,49 @@ def _bound_payload_inventory(payload: dict[str, Any], candidate: Path, app_path:
         except ValueError as error:
             raise ValueError("payload inventory entry escapes package") from error
         if (entry["relativePath"] in seen or config._has_symlink_component(item.absolute()) or not item.is_file()
-                or item.is_symlink() or item.stat().st_size != entry["bytes"]):
+                or item.is_symlink() or item.stat().st_size != entry["bytes"] or sha256(item) != entry["sha256"]):
             raise ValueError("payload inventory does not bind the on-disk export")
         seen.add(entry["relativePath"])
         total += entry["bytes"]
     if _tree_bytes(app_path) != total:
         raise ValueError("payload inventory omits package bytes")
     return total
+
+
+def _bound_evidence(payload: dict[str, Any], candidate: Path) -> None:
+    """Prove every immutable evidence record names an unchanged local regular file."""
+    evidence = payload.get("evidence")
+    if not isinstance(evidence, list) or not evidence:
+        raise ValueError("export evidence is missing")
+    seen: set[str] = set()
+    for entry in evidence:
+        if not isinstance(entry, dict):
+            raise ValueError("export evidence is invalid")
+        relative, size, digest = entry.get("relativePath"), entry.get("bytes"), entry.get("sha256")
+        if (not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts
+                or not isinstance(size, int) or size < 0 or not isinstance(digest, str) or len(digest) != 64):
+            raise ValueError("export evidence is invalid")
+        path = candidate / relative
+        if (relative in seen or config._has_symlink_component(path.absolute()) or not path.is_file()
+                or path.is_symlink() or path.stat().st_size != size or sha256(path) != digest):
+            raise ValueError("export evidence does not bind an on-disk file")
+        seen.add(relative)
+
+
+def _matching_intent(intent: dict[str, Any], item: dict[str, Any], accepted_id: str) -> bool:
+    return (intent.get("schema") == "prune-intent-v1" and intent.get("id") == accepted_id
+            and intent.get("relativePayload") == item.get("payloadRelativePath")
+            and intent.get("priorIdentity") == item.get("payloadIdentity")
+            and intent.get("manifestSha256") == item.get("manifestSha256")
+            and intent.get("reason") == item.get("reason"))
+
+
+def _matching_receipt(receipt: dict[str, Any], item: dict[str, Any], accepted_id: str) -> bool:
+    return (receipt.get("schema") == "payload-pruned-v1" and receipt.get("planId") == accepted_id
+            and receipt.get("relativePayload") == item.get("payloadRelativePath")
+            and receipt.get("priorIdentity") == item.get("payloadIdentity")
+            and receipt.get("reason") == item.get("reason") and isinstance(receipt.get("prunedAt"), str)
+            and bool(receipt["prunedAt"]))
 
 
 def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: bool = False) -> list[dict[str, Any]]:
@@ -309,22 +346,27 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             raise ValueError("artifact root changed since planning")
         receipt = candidate / "payload-pruned-v1.json"
         intent = candidate / "prune-intent-v1.json"
+        existing_receipt = None
         if receipt.exists():
             if receipt.is_symlink():
                 raise ValueError("candidate prune receipt is unsafe")
-            existing = json.loads(receipt.read_text(encoding="utf-8"))
-            if existing.get("planId") != accepted_id:
+            try:
+                existing_receipt = json.loads(receipt.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise ValueError("candidate prune receipt is invalid") from error
+            if not isinstance(existing_receipt, dict) or not _matching_receipt(existing_receipt, item, accepted_id):
                 raise ValueError("candidate already has a different prune receipt")
-            removed.append(candidate_id)
-            continue
         existing_intent = None
         if intent.exists():
             if intent.is_symlink():
                 raise ValueError("candidate prune intent is unsafe")
-            existing_intent = json.loads(intent.read_text(encoding="utf-8"))
-            if existing_intent.get("id") != accepted_id or existing_intent.get("relativePayload") != item.get("payloadRelativePath"):
+            try:
+                existing_intent = json.loads(intent.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as error:
+                raise ValueError("candidate prune intent is invalid") from error
+            if not isinstance(existing_intent, dict) or not _matching_intent(existing_intent, item, accepted_id):
                 raise ValueError("candidate has a different prune intent")
-        if existing_intent is None and _identity(candidate) != item.get("candidateIdentity"):
+        if existing_intent is None and existing_receipt is None and _identity(candidate) != item.get("candidateIdentity"):
             raise ValueError("candidate changed since planning")
         manifest = candidate / "manifest.json"
         pointer_hashes = item.get("pointerHashes", {})
@@ -359,12 +401,18 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             raise ValueError("candidate is leased by launcher or exporter")
         payload = _safe_payload(candidate, manifest)
         try:
+            removed_path = candidate / item["payloadRelativePath"]
+            if existing_receipt is not None:
+                if (payload is not None or removed_path.exists() or removed_path.is_symlink()
+                        or config._has_symlink_component(removed_path.absolute())):
+                    raise ValueError("prune receipt exists while payload remains")
+                removed.append(candidate_id)
+                continue
             if payload is None:
                 # A crash after removal leaves the intent but not the receipt.
                 # Finalization requires the exact immutable manifest, all fresh
                 # authority facts, pointer absence/presence bindings, and a
                 # complete matching intent—not merely an absent payload.
-                removed_path = candidate / item["payloadRelativePath"]
                 if (existing_intent is None or existing_intent.get("priorIdentity") != item["payloadIdentity"]
                         or existing_intent.get("manifestSha256") != item["manifestSha256"]
                         or removed_path.exists() or removed_path.is_symlink()
@@ -422,7 +470,7 @@ def retire(registry: dict[str, Any], candidate_id: str) -> None:
     registry.setdefault("builds", {}).setdefault(candidate_id, {})["lifecycle"] = "retired"
 
 
-def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, manifest: Path) -> None:
+def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, manifest: Path, lease_held: bool = False) -> None:
     """Record only an already complete local export; this never accepts it for launch."""
     if tool not in SUPPORTED_TOOLS or not manifest.is_file() or manifest.is_symlink():
         raise ValueError("register-export requires a supported tool and regular manifest")
@@ -441,13 +489,17 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
     executable = manifest.parent / app["executableRelativePath"]
     try:
         measured_inventory = _bound_payload_inventory(payload, manifest.parent, app_path)
+        _bound_evidence(payload, manifest.parent)
     except (OSError, ValueError) as error:
-        raise ValueError("payload inventory does not bind the on-disk export") from error
+        raise ValueError("payload inventory or evidence does not bind the on-disk export") from error
+    budget = payload.get("exportBudget", {})
+    if budget.get("outputBytes") != measured_inventory:
+        raise ValueError("export budget output bytes do not match measured package inventory")
     if (not app_path.is_dir() or app_path.is_symlink() or not executable.is_file() or executable.is_symlink()
             or launch.exact_executable_in_use(executable)):
         raise ValueError("register-export requires a complete, inactive package payload")
-    lease = _try_exclusive(manifest.parent / ".export-lease.lock")
-    if lease is None:
+    lease = None if lease_held else _try_exclusive(manifest.parent / ".export-lease.lock")
+    if not lease_held and lease is None:
         raise ValueError("register-export candidate is already exporting")
     try:
         registry.setdefault("builds", {})[candidate_id] = {"lifecycle": "exported", "tool": tool, "rootId": root_id,

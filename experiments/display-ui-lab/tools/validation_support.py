@@ -55,6 +55,12 @@ def write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 
+def file_inventory(root: Path, prefix: str) -> list[dict[str, object]]:
+    return [{"relativePath": f"{prefix}/{item.relative_to(root).as_posix()}",
+             "bytes": item.stat().st_size, "sha256": sha256(item)}
+            for item in sorted(root.rglob("*")) if item.is_file() and not item.is_symlink()]
+
+
 def required_tool(entries: list[dict], name: str) -> dict:
     for entry in entries:
         if entry.get("tool") == name and PROJECT in entry.get("projects", []):
@@ -204,6 +210,9 @@ def write_manifest(args: argparse.Namespace) -> None:
     build_root = Path(args.build_root).resolve()
     candidate_root = Path(args.candidate_root).resolve()
     main_root = Path(args.main_root).resolve()
+    root_id = os.environ.get("ARCANUM_LOCAL_ROOT_ID")
+    if not root_id:
+        raise SystemExit("ARCANUM_LOCAL_ROOT_ID is required for v2 local export registration")
     toolchain = json.loads(Path(args.toolchain_report).read_text(encoding="utf-8"))
     head = run(["git", "rev-parse", "HEAD"], cwd=candidate_root).strip()
     base = run(["git", "merge-base", "HEAD", "origin/main"], cwd=candidate_root).strip()
@@ -231,7 +240,7 @@ def write_manifest(args: argparse.Namespace) -> None:
     ordinary_diff = subprocess.check_output(["git", "diff", "--no-ext-diff", base, head], cwd=candidate_root)
     checks = [{"name": path.removeprefix("evidence/").removesuffix(".log").removesuffix(".json").replace("-", "_"),
                "status": "PASS", "evidence": path} for path in REQUIRED_EVIDENCE]
-    payload = {
+    legacy_validation_payload = {
         "schemaVersion": 1, "task": TASK, "generatedAt": datetime.now(timezone.utc).isoformat(),
         "candidate": {"baseCommit": base, "commit": head, "branch": branch,
                       "ordinaryDiffSha256": hashlib.sha256(ordinary_diff).hexdigest(), "changedFiles": changed, "gitStatus": "clean"},
@@ -251,17 +260,27 @@ def write_manifest(args: argparse.Namespace) -> None:
                          "deferred": ["Windows", "Linux", "controller/handheld", "performance"]},
         "delivery": {"status": "verified-local-candidate; exact-head review pending"},
     }
-    validate_manifest(payload, build_root)
-    manifest = build_root / "manifest.json"
-    write_json(manifest, payload)
-    pointer = main_root / "artifacts/builds/ARC-UI-001/current.json"
-    pointer_payload = {"schemaVersion": 1, "task": TASK, "updatedAt": datetime.now(timezone.utc).isoformat(),
-                       "commit": head, "ordinaryDiffSha256": payload["candidate"]["ordinaryDiffSha256"],
-                       "manifest": str(manifest), "app": str(build_root / "DisplayUiLab.app"),
-                       "status": "verified-local-candidate; exact-head review pending"}
-    temporary = pointer.with_name(f".{pointer.name}.{os.getpid()}.tmp")
-    write_json(temporary, pointer_payload)
-    os.replace(temporary, pointer)
+    validate_manifest(legacy_validation_payload, build_root)
+    payload_inventory = file_inventory(build_root / "DisplayUiLab.app", "DisplayUiLab.app")
+    payload_bytes = sum(item.stat().st_size for item in (build_root / "DisplayUiLab.app").rglob("*") if item.is_file() and not item.is_symlink())
+    evidence_paths = [*REQUIRED_EVIDENCE, *(f"evidence/screenshots/{name}" for name, *_ in SCREENSHOTS)]
+    evidence_inventory = [{"relativePath": relative, "bytes": (build_root / relative).stat().st_size,
+                           "sha256": sha256(build_root / relative)} for relative in evidence_paths]
+    gates = {"locked-build": "evidence/locked-build.log", "source-layout-matrix": "evidence/layout-matrix.json",
+             "export": "evidence/export.log", "exported-layout-matrix": "evidence/exported-layout-matrix.json",
+             "exported-native-smoke": "evidence/exported-native-smoke.log", "codesign-deep-strict": "evidence/codesign.log"}
+    payload = {
+        "schema": "arcanum-build-manifest-v2", "project": PROJECT, "logicalTool": "display", "rootId": root_id,
+        "task": TASK, "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "candidate": {"baseCommit": base, "commit": head, "tree": run(["git", "rev-parse", "HEAD^{tree}"], cwd=candidate_root).strip(), "branch": branch},
+        "app": {"relativePath": "DisplayUiLab.app", "executableRelativePath": "DisplayUiLab.app/Contents/MacOS/Display UI Lab"},
+        "payloadInventory": payload_inventory, "evidence": evidence_inventory,
+        "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": evidence} for name, evidence in gates.items()],
+        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": 0},
+        "acceptance": "not-accepted",
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalDisplayReadability": "NOT_VERIFIED"},
+    }
+    write_json(build_root / "manifest.json", payload)
 
 
 def self_test(_: argparse.Namespace) -> None:

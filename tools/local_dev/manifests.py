@@ -99,17 +99,19 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
     inventory = manifest.get("payloadInventory")
     evidence = manifest.get("evidence")
     budget = manifest.get("exportBudget")
-    if not isinstance(inventory, list) or not inventory or not isinstance(evidence, list) or not isinstance(budget, dict) or manifest.get("acceptance") != "not-accepted":
+    if not isinstance(inventory, list) or not inventory or not isinstance(evidence, list) or not evidence or not isinstance(budget, dict) or manifest.get("acceptance") != "not-accepted":
         raise ValueError("v2 manifest lacks immutable inventory, evidence, budget, or acceptance binding")
     for entry in inventory:
-        if not isinstance(entry, dict) or not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0:
+        if (not isinstance(entry, dict) or not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0
+                or not isinstance(entry.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])):
             raise ValueError("v2 payload inventory is invalid")
         _root_relative(entry.get("relativePath"), field="payload inventory path")
     for entry in evidence:
         if not isinstance(entry, dict):
             raise ValueError("v2 evidence entry is invalid")
         _root_relative(entry.get("relativePath"), field="evidence path")
-        if not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0:
+        if (not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0
+                or not isinstance(entry.get("sha256"), str) or not re.fullmatch(r"[0-9a-f]{64}", entry["sha256"])):
             raise ValueError("v2 evidence entry lacks measured bytes")
     for key in ("outputBytes", "temporaryLowWaterBytes"):
         if not isinstance(budget.get(key), int) or budget[key] < 0:

@@ -10,6 +10,13 @@ head=$(git rev-parse HEAD)
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/builds/ARC-GPAD-003/$head"}
 case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-003/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be exact-head ARC-GPAD-003 root.' >&2; exit 2 ;; esac
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before validating.' >&2; exit 2; fi
+if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
+  : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
+  cd "$candidate_root"
+  exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
+    --tool gamepad --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-GPAD-003 --candidate "$head" \
+    --manifest "$build_root/manifest.json" -- /bin/sh "$0"
+fi
 
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
 DOTNET="$DOTNET_ROOT/dotnet"
