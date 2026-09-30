@@ -301,15 +301,25 @@ public static class TerrainViewerSelfTest
     private static async Task AssertResponsiveHudAsync(Node host, SubViewport viewport, TerrainViewerApp app)
     {
         var hud = app.GetNode<TerrainDiagnosticHud>("Hud");
+        var invariant = app.GetSelfTestSnapshot();
         foreach (var size in new[] { new Vector2I(480, 320), new Vector2I(640, 360), new Vector2I(800, 500), new Vector2I(1280, 800) })
         {
             viewport.Size = size;
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            if (hud.GlobalPosition.X < 16 || hud.GlobalPosition.Y < 16 || hud.Height > (size.Y * 0.35f) + 1)
+            var rect = hud.Rect;
+            if (hud.GlobalPosition.X < 16 || hud.GlobalPosition.Y < 16 || hud.Height > (size.Y * 0.35f) + 1
+                || rect.Position.X < 0 || rect.Position.Y < 0 || rect.End.X > size.X || rect.End.Y > size.Y)
                 throw new InvalidOperationException($"Diagnostic HUD escaped its 16px/35% viewport bounds at {size}.");
             if (!hud.IsScrollable || !hud.Text.Contains("AUTOMATED TEST MODE", StringComparison.Ordinal)
-                || !hud.Text.Contains("DIAGNOSTIC — not gameplay/original parity", StringComparison.Ordinal))
+                || !hud.Text.Contains("Mode: actor-diagnostic", StringComparison.Ordinal)
+                || !hud.Text.Contains("Original placement parity: NOT VERIFIED", StringComparison.Ordinal)
+                || !hud.StickyVisible || hud.HasHorizontalClipping)
                 throw new InvalidOperationException("Diagnostic HUD lost its sticky limits or scrollable detail contract.");
+            var after = app.GetSelfTestSnapshot();
+            if (after.Actor != invariant.Actor || !HasStationaryCallerInput(after.Input, invariant.Input!)
+                || after.CacheCount != invariant.CacheCount || after.CameraX != invariant.CameraX
+                || after.CameraY != invariant.CameraY || after.CameraZoom != invariant.CameraZoom)
+                throw new InvalidOperationException("Viewport resize mutated renderer, actor input, or published scene state.");
         }
     }
 

@@ -794,7 +794,9 @@ public partial class TerrainViewerApp : Node
 
     private void HandleViewportSizeChanged()
     {
-        _camera?.Resize(GetViewport().GetVisibleRect().Size);
+        // A diagnostic resize reflows only the HUD.  Camera fitting is an
+        // explicit user action (R/F); silently refitting here would alter the
+        // renderer/camera observation while testing readability.
         RefreshReadyStatus();
     }
 

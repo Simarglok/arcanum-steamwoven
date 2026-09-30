@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import tempfile
 from typing import Any
+import fcntl
+from contextlib import contextmanager
 
 CONFIG_SCHEMA = "arcanum-local-config-v1"
 REGISTRY_SCHEMA = "build-registry-v1"
@@ -96,14 +98,51 @@ def digest(value: dict[str, Any]) -> str:
 
 
 def canonical_existing(path_text: str, *, directory: bool | None = None) -> Path:
-    path = Path(path_text).expanduser()
-    if not path.exists() or path.is_symlink():
+    path = Path(path_text).expanduser().absolute()
+    if not path.exists() or path.is_symlink() or _has_symlink_component(path):
         raise ValueError("path must exist and must not be a symlink")
     if directory is True and not path.is_dir():
         raise ValueError("path must be a directory")
     if directory is False and not path.is_file():
         raise ValueError("path must be a regular file")
     return path.resolve(strict=True)
+
+
+def _has_symlink_component(path: Path) -> bool:
+    """Reject every supplied path component, not merely a symlink leaf."""
+    current = Path(path.anchor)
+    for component in path.parts[1:]:
+        current /= component
+        try:
+            # macOS exposes /var as the documented alias of /private/var.
+            # It is not a caller-controlled hop; preserve it while rejecting
+            # every subsequent supplied component.
+            if current.is_symlink() and current != Path("/var"):
+                return True
+        except OSError:
+            return True
+    return False
+
+
+def regular_file(path: Path) -> Path:
+    """Return a non-symlink file whose supplied path has no symlink hop."""
+    return canonical_existing(str(path), directory=False)
+
+
+@contextmanager
+def registry_lock() -> Any:
+    """Serialize lifecycle mutations with an owner-only local lock file."""
+    lock_path = home() / "build-registry-v1.lock"
+    lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+    os.chmod(lock_path.parent, 0o700)
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        os.fchmod(descriptor, 0o600)
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        yield
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
 
 
 def safe_source_id(value: str) -> str:

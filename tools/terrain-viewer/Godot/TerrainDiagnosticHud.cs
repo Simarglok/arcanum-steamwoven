@@ -11,11 +11,16 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     private PanelContainer? _panel;
     private Label? _sticky;
     private Label? _detail;
+    private ScrollContainer? _scroll;
 
     internal string Text => $"{_sticky?.Text}\n{_detail?.Text}";
     internal Vector2 GlobalPosition => _panel?.GlobalPosition ?? Vector2.Zero;
     internal float Height => _panel?.Size.Y ?? 0;
-    internal bool IsScrollable => true;
+    internal bool IsScrollable => _scroll is not null && _scroll.HorizontalScrollMode == ScrollContainer.ScrollMode.Disabled
+        && _scroll.VerticalScrollMode == ScrollContainer.ScrollMode.Auto;
+    internal Rect2 Rect => _panel?.GetGlobalRect() ?? new Rect2();
+    internal bool HasHorizontalClipping => _detail is null || _scroll is null || _detail.GetCombinedMinimumSize().X > _scroll.Size.X + 1;
+    internal bool StickyVisible => _sticky?.IsVisibleInTree() == true && _sticky.GetGlobalRect().Size.X > 0;
 
     public override void _Ready()
     {
@@ -35,20 +40,23 @@ public partial class TerrainDiagnosticHud : CanvasLayer
             Text = "DIAGNOSTIC — not gameplay/original parity",
         };
         contents.AddChild(_sticky);
-        var scroll = new ScrollContainer { Name = "DiagnosticDetails", SizeFlagsVertical = Control.SizeFlags.ExpandFill };
-        contents.AddChild(scroll);
+        _scroll = new ScrollContainer { Name = "DiagnosticDetails", SizeFlagsVertical = Control.SizeFlags.ExpandFill,
+            HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, VerticalScrollMode = ScrollContainer.ScrollMode.Auto };
+        contents.AddChild(_scroll);
         _detail = new Label { Name = "DiagnosticDetail", AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        scroll.AddChild(_detail);
+        _detail.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        _scroll.AddChild(_detail);
         GetViewport().SizeChanged += ResizeForViewport;
         ResizeForViewport();
     }
 
     internal void SetDiagnosticText(string detail, bool automatedTestMode)
     {
+        var mode = detail.Contains("Diagnostic mode actor-diagnostic", StringComparison.Ordinal) ? "actor-diagnostic"
+            : detail.Contains("Diagnostic mode combined", StringComparison.Ordinal) ? "combined" : "terrain-only";
+        var limitation = mode == "actor-diagnostic" ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
         if (_sticky is not null)
-            _sticky.Text = automatedTestMode
-                ? "AUTOMATED TEST MODE\nDIAGNOSTIC — not gameplay/original parity"
-                : "DIAGNOSTIC — not gameplay/original parity";
+            _sticky.Text = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";
         if (_detail is not null) _detail.Text = detail;
     }
 

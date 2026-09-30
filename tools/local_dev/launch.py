@@ -7,6 +7,8 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
+from . import config
+
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
 
@@ -80,8 +82,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
         raise ValueError("configure explicit terrain input roles before launch")
 
     def local_file(role: str) -> str:
-        path = Path(inputs[role]).expanduser()
-        if not path.is_file() or path.is_symlink():
+        path = Path(inputs[role]).expanduser().absolute()
+        if not path.is_file() or path.is_symlink() or config._has_symlink_component(path):
             raise ValueError("configured terrain input is unavailable or unsafe")
         return str(path.resolve(strict=True))
 
@@ -106,16 +108,19 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
 
 
 def exact_executable_in_use(executable: Path) -> bool:
-    """Compare the executable token exactly; no broad process-name matching or killing."""
-    completed = subprocess.run(["ps", "-axo", "pid=,command="], check=True, text=True, capture_output=True)
+    """Use ps' executable column, preserving macOS bundle paths with spaces."""
+    completed = subprocess.run(["ps", "-axo", "pid=,comm="], check=True, text=True, capture_output=True)
     target = str(executable.resolve())
     for line in completed.stdout.splitlines():
         fields = line.strip().split(maxsplit=1)
         if len(fields) != 2:
             continue
-        command = fields[1]
-        first = command.split(maxsplit=1)[0]
-        if first == target:
+        executable_path = fields[1].strip()
+        try:
+            observed = str(Path(executable_path).resolve(strict=True))
+        except OSError:
+            continue
+        if observed == target:
             return True
     return False
 
@@ -132,7 +137,8 @@ def lock_for(root: Path, tool: str) -> Any:
     return handle
 
 
-def start(executable: Path, arguments: list[str], *, allow_duplicate: bool, lock_root: Path, tool: str, dry_run: bool) -> dict[str, Any]:
+def start(executable: Path, arguments: list[str], *, allow_duplicate: bool, lock_root: Path, tool: str, dry_run: bool,
+          show_paths: bool = False) -> dict[str, Any]:
     executable = executable.resolve(strict=True)
     if not executable.is_file() or executable.is_symlink():
         raise ValueError("manifest executable is not a safe regular file")
@@ -141,7 +147,15 @@ def start(executable: Path, arguments: list[str], *, allow_duplicate: bool, lock
         raise ValueError("exact configured executable is already in use; pass --allow-duplicate to opt in")
     argv = [str(executable), *arguments]
     if dry_run:
-        return {"argv": argv, "started": False}
+        result: dict[str, Any] = {"started": False, "tool": tool, "argumentCount": len(arguments)}
+        if show_paths:
+            result["argv"] = argv
+        return result
+    # Explicit opt-in deliberately bypasses both duplicate barriers.  It is
+    # still shell-free and never affects another process.
+    if allow_duplicate:
+        process = subprocess.Popen(argv, close_fds=True, start_new_session=True)
+        return {"started": True, "pid": process.pid, "tool": tool}
     handle = lock_for(lock_root, tool)
     try:
         # The child retains the advisory lock for its entire lifetime.  The
@@ -152,4 +166,7 @@ def start(executable: Path, arguments: list[str], *, allow_duplicate: bool, lock
         handle.close()
         raise
     handle.close()
-    return {"argv": argv, "started": True, "pid": process.pid}
+    result = {"started": True, "pid": process.pid, "tool": tool}
+    if show_paths:
+        result["argv"] = argv
+    return result
