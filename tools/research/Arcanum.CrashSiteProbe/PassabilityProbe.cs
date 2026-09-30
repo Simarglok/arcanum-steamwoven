@@ -274,6 +274,7 @@ internal static class PassabilityProbe
         AssertStatic(AggregateStaticCell([knownBlocker, knownNoBlock]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "same-cell blocker wins");
         AssertStatic(AggregateStaticCell([knownNoBlock, new StaticContribution(inheritedNoBlock, destination, AssessStatic(inheritedNoBlock, TraversalContext.NormalCardinalZeroFlags))]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "same-cell all no-block");
         AssertStatic(AggregateStaticCell([unresolved]), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "same-cell unresolved");
+        AssertStatic(AggregateStaticCell([knownBlocker, unresolved]), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "same-cell unresolved contributor preserves unknown");
         AssertStatic(AggregateStaticCell([]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "empty admitted static subset");
         var multiplicity = Enumerable.Repeat(knownNoBlock, 317).ToArray();
         if (multiplicity.Length != 317) throw new InvalidOperationException("Static contributor cap fixture changed.");
@@ -338,10 +339,10 @@ internal static class PassabilityProbe
 
     private static StaticAssessment AggregateStaticCell(IReadOnlyList<StaticContribution> contributions)
     {
-        if (contributions.Any(contribution => contribution.Assessment.Disposition == StaticDisposition.Blocker))
-            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "same-cell-blocker");
         if (contributions.Any(contribution => contribution.Assessment.Supportedness == StaticSupportedness.Unknown || contribution.Assessment.Applicability == StaticApplicability.Unknown))
             return new StaticAssessment(StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "same-cell-unresolved");
+        if (contributions.Any(contribution => contribution.Assessment.Disposition == StaticDisposition.Blocker))
+            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "same-cell-blocker");
         return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "all-admitted-static-contributors-no-block");
     }
 
