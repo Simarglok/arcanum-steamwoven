@@ -163,12 +163,7 @@ def _write_current(candidate: Path, manifest: Path) -> None:
 
 
 def _snapshot(path: Path) -> bytes | None:
-    if path.is_symlink():
-        raise ValueError("export endpoint publication target must not be a symlink")
-    try:
-        return path.read_bytes()
-    except FileNotFoundError:
-        return None
+    return config.optional_authority_bytes(path)
 
 
 def _restore_publication(pointer: Path, pointer_snapshot: bytes | None,

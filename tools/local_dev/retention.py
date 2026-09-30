@@ -447,23 +447,21 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             raise ValueError("artifact root changed since planning")
         receipt = candidate / "payload-pruned-v1.json"
         intent = candidate / "prune-intent-v1.json"
+        receipt_bytes = config.optional_authority_bytes(receipt)
+        intent_bytes = config.optional_authority_bytes(intent)
         existing_receipt = None
-        if receipt.exists():
-            if receipt.is_symlink():
-                raise ValueError("candidate prune receipt is unsafe")
+        if receipt_bytes is not None:
             try:
-                existing_receipt = json.loads(receipt.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as error:
+                existing_receipt = json.loads(receipt_bytes)
+            except (UnicodeError, json.JSONDecodeError) as error:
                 raise ValueError("candidate prune receipt is invalid") from error
             if not isinstance(existing_receipt, dict) or not _matching_receipt(existing_receipt, item, accepted_id):
                 raise ValueError("candidate already has a different prune receipt")
         existing_intent = None
-        if intent.exists():
-            if intent.is_symlink():
-                raise ValueError("candidate prune intent is unsafe")
+        if intent_bytes is not None:
             try:
-                existing_intent = json.loads(intent.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as error:
+                existing_intent = json.loads(intent_bytes)
+            except (UnicodeError, json.JSONDecodeError) as error:
                 raise ValueError("candidate prune intent is invalid") from error
             if not isinstance(existing_intent, dict) or not _matching_intent(existing_intent, item, accepted_id):
                 raise ValueError("candidate has a different prune intent")
@@ -503,8 +501,14 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
         if launch_lease is None or export_lease is None:
             _release(launch_lease); _release(export_lease)
             raise ValueError("candidate is leased by launcher or exporter")
-        payload = _safe_payload(candidate, manifest)
         try:
+            payload = _safe_payload(candidate, manifest)
+            def recheck_records() -> None:
+                if (config.optional_authority_bytes(receipt) != receipt_bytes
+                        or config.optional_authority_bytes(intent) != intent_bytes):
+                    raise ValueError("candidate prune records changed before payload mutation")
+
+            recheck_records()
             fresh_protection = protection_snapshot(conf, registry)
             if fresh_protection != plan["protectionBindings"]:
                 raise ValueError("current pointer changed since planning")
@@ -527,6 +531,7 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
                         or config._has_symlink_component(removed_path.absolute())):
                     raise ValueError("manifest or payload changed since planning")
                 _recheck_protection(plan, conf, registry, tool, candidate_id)
+                recheck_records()
                 config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
                                              "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
                                              "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
@@ -544,9 +549,13 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
                               "priorIdentity": item["payloadIdentity"], "manifestSha256": item["manifestSha256"], "reason": item["reason"]}
             if existing_intent is None:
                 _recheck_protection(plan, conf, registry, tool, candidate_id)
+                recheck_records()
                 config.write_atomic(intent, intent_payload)
+                intent_bytes = (json.dumps(intent_payload, indent=2, sort_keys=True) + "\n").encode("utf-8")
             _recheck_protection(plan, conf, registry, tool, candidate_id)
+            recheck_records()
             shutil.rmtree(payload)
+            recheck_records()
             config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
                                           "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
                                           "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})

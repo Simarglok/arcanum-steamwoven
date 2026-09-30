@@ -345,6 +345,243 @@ class LocalDevTests(unittest.TestCase):
                 unsafe.unlink()
                 if kind.endswith("leaf"): parent.rmdir()
 
+    def prune_authority_fixture(self, *, recovery: bool = False) -> tuple[Path, dict]:
+        count = getattr(self, "prune_fixture_count", 0) + 1
+        self.prune_fixture_count = count
+        manifest, digest = self.v2_manifest(name=f"{count:040x}")
+        candidate = manifest.parent
+        identity = f"test:ARC-GPAD-003:{candidate.name}"
+        registry = config.default_registry()
+        registry["builds"][identity] = {"lifecycle": "retired", "tool": "gamepad", "rootId": "test",
+            "task": "ARC-GPAD-003", "commit": candidate.name, "manifestSha256": digest}
+        config.save_config(self.conf()); config.save_registry(registry)
+        # Precreate ordinary leases so exact no-mutation oracles include them.
+        for path in (config.home() / "build-registry-v1.lock", config.home() / "locks/gamepad.lock", candidate / ".export-lease.lock"):
+            lease = retention._try_exclusive(path); self.assertIsNotNone(lease); retention._release(lease)
+        conf, registry = config.load_config(), config.load_registry()
+        plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
+        self.assertEqual(len(plan["payloads"]), 1)
+        item = plan["payloads"][0]
+        if recovery:
+            config.write_atomic(candidate / "prune-intent-v1.json", {"schema": "prune-intent-v1", "id": plan["id"],
+                "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
+                "manifestSha256": item["manifestSha256"], "reason": item["reason"]})
+            shutil.rmtree(candidate / "GamepadLab.app")
+        return candidate, plan
+
+    def prune_cli(self, plan: dict) -> subprocess.CompletedProcess:
+        path = self.root / "plan.json"
+        path.write_text(json.dumps(plan), encoding="utf-8")
+        cli = Path(__file__).resolve().parents[1] / "arcanum-local"
+        return subprocess.run([sys.executable, "-B", str(cli), "builds", "apply", "--plan", str(path),
+            "--accept-plan", plan["id"]], capture_output=True, text=True, timeout=3)
+
+    def unsafe_node(self, path: Path, kind: str) -> socket.socket | None:
+        if kind == "dangling": path.symlink_to(self.root / "missing-sentinel")
+        elif kind == "link": path.symlink_to(self.root / "sentinel")
+        elif kind == "loop": path.symlink_to(path.name)
+        elif kind == "directory": path.mkdir()
+        elif kind == "fifo": os.mkfifo(path)
+        elif kind == "socket":
+            server = socket.socket(socket.AF_UNIX)
+            previous = Path.cwd()
+            try:
+                os.chdir(path.parent); server.bind(path.name)
+            finally:
+                os.chdir(previous)
+            return server
+        elif kind == "unreadable":
+            self.assertNotEqual(os.geteuid(), 0)
+            path.write_bytes(b"{}"); path.chmod(0)
+        elif kind == "invalid-json": path.write_bytes(b"{")
+        elif kind == "invalid-unicode": path.write_bytes(b"\xff")
+        elif kind == "not-object": path.write_bytes(b"[]")
+        else: self.fail("unknown synthetic node kind")
+        return None
+
+    def assert_prune_leases_released(self, candidate: Path) -> None:
+        for path in (config.home() / "build-registry-v1.lock", config.home() / "locks/gamepad.lock", candidate / ".export-lease.lock"):
+            descriptor = retention._try_exclusive(path)
+            self.assertIsNotNone(descriptor); retention._release(descriptor)
+
+    def test_prune_record_unsafe_types_actual_cli_present_and_recovery(self) -> None:
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        for recovery in (False, True):
+            for name in ("payload-pruned-v1.json", "prune-intent-v1.json"):
+                for kind in ("dangling", "link", "loop", "directory", "fifo", "socket", "unreadable",
+                             "invalid-json", "invalid-unicode", "not-object"):
+                    with self.subTest(recovery=recovery, name=name, kind=kind):
+                        candidate, plan = self.prune_authority_fixture(recovery=recovery)
+                        path = candidate / name
+                        if path.exists(): path.unlink()
+                        server = self.unsafe_node(path, kind)
+                        (self.root / "plan.json").write_text(json.dumps(plan), encoding="utf-8")
+                        before = self.authority_snapshot()
+                        try:
+                            result = self.prune_cli(plan)
+                            self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                            self.assertEqual(result.stdout, ""); self.assertNotIn(str(self.root), result.stderr)
+                            self.assertEqual(self.authority_snapshot(), before)
+                            self.assert_prune_leases_released(candidate)
+                            self.assertEqual(self.authority_snapshot(), before)
+                        finally:
+                            if server: server.close()
+                            if kind == "directory": path.rmdir()
+                            else: path.unlink()
+
+    def test_prune_record_absence_recovery_and_idempotence_actual_cli(self) -> None:
+        for recovery in (False, True):
+            with self.subTest(recovery=recovery):
+                candidate, plan = self.prune_authority_fixture(recovery=recovery)
+                immutable = {p.relative_to(candidate).as_posix(): p.read_bytes() for p in candidate.rglob("*")
+                             if p.is_file() and (p.name == "manifest.json" or "evidence" in p.parts)}
+                conf_bytes, registry_bytes = config.config_path().read_bytes(), config.registry_path().read_bytes()
+                result = self.prune_cli(plan)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(json.loads(result.stdout)["status"], "applied")
+                self.assertFalse((candidate / "GamepadLab.app").exists())
+                receipt = candidate / "payload-pruned-v1.json"
+                self.assertEqual(stat.S_IMODE(receipt.stat().st_mode), 0o600)
+                record = json.loads(receipt.read_bytes())
+                self.assertEqual((record["schema"], record["planId"], record["relativePayload"]),
+                                 ("payload-pruned-v1", plan["id"], "GamepadLab.app"))
+                before = self.authority_snapshot()
+                self.assertEqual(self.prune_cli(plan).returncode, 0)
+                self.assertEqual(self.authority_snapshot(), before)
+                self.assertEqual(config.config_path().read_bytes(), conf_bytes)
+                self.assertEqual(config.registry_path().read_bytes(), registry_bytes)
+                for name, encoded in immutable.items(): self.assertEqual((candidate / name).read_bytes(), encoded)
+                self.assert_prune_leases_released(candidate)
+
+    def test_prune_record_substitution_and_descriptor_release(self) -> None:
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        for recovery in (False, True):
+            for name in ("payload-pruned-v1.json", "prune-intent-v1.json"):
+                for stage in ("open", "lease", "mutation"):
+                    with self.subTest(recovery=recovery, name=name, stage=stage):
+                        candidate, plan = self.prune_authority_fixture(recovery=recovery)
+                        path = candidate / name
+                        if stage == "open" and not path.exists(): path.write_bytes(b"{}")
+                        real_open, real_close = os.open, os.close
+                        real_lease, real_recheck = retention._try_exclusive, retention._recheck_protection
+                        held = set(); injected = []
+                        def substitute():
+                            if not injected:
+                                if path.exists(): path.unlink()
+                                path.symlink_to(sentinel)
+                                injected.append(self.authority_snapshot())
+                        def opening(node, flags, *args, **kwargs):
+                            if stage == "open" and node == name: substitute()
+                            fd = real_open(node, flags, *args, **kwargs); held.add(fd); return fd
+                        # ps subprocess pipes are not created through os.open;
+                        # still close them without counting them as reader fds.
+                        def closing(fd): held.discard(fd); real_close(fd)
+                        def leasing(node):
+                            fd = real_lease(node)
+                            if stage == "lease" and node.name == ".export-lease.lock": substitute()
+                            return fd
+                        def rechecking(*args):
+                            real_recheck(*args)
+                            if stage == "mutation": substitute()
+                        with patch.object(config.os, "open", side_effect=opening), patch.object(config.os, "close", side_effect=closing), \
+                             patch.object(retention, "_try_exclusive", side_effect=leasing), \
+                             patch.object(retention, "_recheck_protection", side_effect=rechecking), \
+                             patch.object(config, "write_atomic") as write, patch.object(retention.shutil, "rmtree") as remove:
+                            with self.assertRaises(ValueError):
+                                retention.apply_plan(plan, config.load_config(), config.load_registry(), accepted_id=plan["id"])
+                            write.assert_not_called(); remove.assert_not_called()
+                        self.assertEqual(len(injected), 1); self.assertEqual(held, set())
+                        self.assertEqual(self.authority_snapshot(), injected[0])
+                        self.assert_prune_leases_released(candidate)
+                        path.unlink()
+
+    def test_prune_record_drift_after_intent_or_removal_is_not_overwritten(self) -> None:
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        for stage in ("intent", "removal"):
+            with self.subTest(stage=stage):
+                candidate, plan = self.prune_authority_fixture()
+                intent, receipt = candidate / "prune-intent-v1.json", candidate / "payload-pruned-v1.json"
+                real_write, real_remove = config.write_atomic, shutil.rmtree
+                injected = []
+                def write(path, value):
+                    real_write(path, value)
+                    if stage == "intent" and path == intent:
+                        path.write_bytes(b'{"replaced":true}')
+                        injected.append(self.authority_snapshot())
+                def remove(path):
+                    real_remove(path)
+                    if stage == "removal":
+                        receipt.symlink_to(sentinel)
+                        injected.append(self.authority_snapshot())
+                with patch.object(config, "write_atomic", side_effect=write), patch.object(retention.shutil, "rmtree", side_effect=remove):
+                    with self.assertRaises(ValueError):
+                        retention.apply_plan(plan, config.load_config(), config.load_registry(), accepted_id=plan["id"])
+                self.assertEqual(len(injected), 1); self.assertEqual(self.authority_snapshot(), injected[0])
+                self.assertEqual((candidate / "GamepadLab.app").is_dir(), stage == "intent")
+                self.assert_prune_leases_released(candidate)
+                if stage == "removal":
+                    self.assertEqual(self.prune_cli(plan).returncode, 2)
+                    receipt.unlink()
+                    self.assertEqual(self.prune_cli(plan).returncode, 0)
+
+    def test_publication_snapshot_unsafe_types_and_parent_actual_subprocess(self) -> None:
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        parent = self.root / "publication"; parent.mkdir()
+        path = parent / "current.json"
+        probe = self.root / "snapshot-probe.py"
+        probe.write_text("from pathlib import Path\nimport sys\nfrom tools.local_dev.export_endpoint import _snapshot\n"
+                         "try: value = _snapshot(Path(sys.argv[1]))\n"
+                         "except ValueError: sys.exit(2)\n"
+                         "print('ABSENT' if value is None else value.decode())\n", encoding="utf-8")
+        env = {**os.environ, "PYTHONPATH": str(Path(__file__).resolve().parents[2])}
+        def check(expected: int):
+            before = self.authority_snapshot()
+            result = subprocess.run([sys.executable, "-B", str(probe), str(path)], capture_output=True, text=True, env=env, timeout=3)
+            self.assertEqual(result.returncode, expected, result.stderr)
+            self.assertEqual(before, self.authority_snapshot())
+            return result
+        self.assertEqual(check(0).stdout, "ABSENT\n")
+        path.write_bytes(b"original"); self.assertEqual(check(0).stdout, "original\n"); path.unlink()
+        for kind in ("dangling", "link", "loop", "directory", "fifo", "socket", "unreadable"):
+            with self.subTest(kind=kind):
+                server = self.unsafe_node(path, kind)
+                try: self.assertEqual(check(2).stdout, "")
+                finally:
+                    if server: server.close()
+                    if kind == "directory": path.rmdir()
+                    else: path.unlink()
+        moved = self.root / "moved-publication"; parent.rename(moved)
+        for kind in ("link", "dangling", "fifo", "unreadable"):
+            with self.subTest(parent=kind):
+                if kind == "link": parent.symlink_to(moved, target_is_directory=True)
+                elif kind == "dangling": parent.symlink_to(self.root / "missing-parent", target_is_directory=True)
+                elif kind == "fifo": os.mkfifo(parent)
+                else: parent.mkdir(); parent.chmod(0)
+                try: check(2)
+                finally:
+                    if kind == "unreadable": parent.chmod(0o700); parent.rmdir()
+                    else: parent.unlink()
+        moved.rename(parent)
+
+    def test_publication_snapshot_fifo_rejects_real_positive_finalizer_without_publication(self) -> None:
+        args = self.synthetic_endpoint()
+        pointer = Path(args.manifest).parent.parent / "current.json"
+        os.mkfifo(pointer)
+        config.save_registry(config.default_registry())
+        before_registry = config.registry_path().read_bytes()
+        result = subprocess.run([sys.executable, "-B", "-m", "tools.local_dev.export_endpoint", "--tool", "gamepad",
+            "--root-id", "test", "--task", "ARC-GPAD-003", "--candidate", args.candidate, "--manifest", args.manifest,
+            "--temporary-root", args.temporary_root, "--output-bytes", "7", "--estimate-manifest", args.estimate_manifest,
+            "--", *args.command], capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertTrue(stat.S_ISFIFO(pointer.lstat().st_mode))
+        self.assertEqual(config.registry_path().read_bytes(), before_registry)
+        self.assertTrue(Path(args.manifest).is_file(), "real finalize path must execute before snapshot")
+        candidate = Path(args.manifest).parent
+        self.assertTrue((candidate / "GamepadLab.app").is_dir())
+        descriptor = retention._try_exclusive(candidate / ".export-lease.lock")
+        self.assertIsNotNone(descriptor); retention._release(descriptor)
+
     def test_atomic_local_files_are_owner_only(self) -> None:
         value = config.default_config()
         config.save_config(value)
