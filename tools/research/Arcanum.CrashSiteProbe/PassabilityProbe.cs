@@ -253,7 +253,6 @@ internal static class PassabilityProbe
         AssertStatic(AssessStatic(inheritedBlocker, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "prototype blocker");
         AssertStatic(AssessStatic(inheritedNoBlock, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "prototype no-block");
         AssertStatic(AssessStatic(new StaticCandidate(11, 3, OfNoBlock, false, blocker.Location, AdjacentSpellFlags: OfDynamic), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "slot-19 sentinel has no effect");
-        AssertStatic(AssessStatic(new StaticCandidate(12, 3, OfNoBlock, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "direct override opposite prototype");
         AssertStatic(AssessStatic(new StaticCandidate(13, 3, null, true, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "missing duplicate or mismatched prototype flags remain unknown");
         AssertStatic(AssessStatic(new StaticCandidate(14, 3, 0, false, null), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "missing location");
         AssertStatic(AssessStatic(new StaticCandidate(15, 3, 0, false, blocker.Location, LocationMalformed: true), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "malformed location");
@@ -279,6 +278,38 @@ internal static class PassabilityProbe
         var multiplicity = Enumerable.Repeat(knownNoBlock, 317).ToArray();
         if (multiplicity.Length != 317) throw new InvalidOperationException("Static contributor cap fixture changed.");
         AssertStatic(AggregateStaticCell(multiplicity), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "same-cell terminal-cap multiplicity");
+
+        AssertStaticRow(FirstRecordRow([blocker, inheritedBlocker], [knownBlocker.Assessment, AssessStatic(inheritedBlocker, TraversalContext.NormalCardinalZeroFlags)], StaticDisposition.Blocker, direct: true),
+            new StaticRow(7, 2, 3, "direct", StaticDisposition.Blocker, 1), "first direct blocker row");
+        AssertStaticRow(FirstRecordRow([blocker, inheritedBlocker], [knownBlocker.Assessment, AssessStatic(inheritedBlocker, TraversalContext.NormalCardinalZeroFlags)], StaticDisposition.Blocker, direct: false),
+            new StaticRow(9, 4, 5, "prototype", StaticDisposition.Blocker, 1), "first prototype blocker row");
+
+        var singletonBlocker = new StaticGroup(new Local(1, 1), [knownBlocker]);
+        var multiBlocker = new StaticGroup(new Local(2, 1), [
+            new StaticContribution(new StaticCandidate(24, 3, 0, false, PackedWorld(OriginX + 2, OriginY + 1)), new Local(2, 1), AssessStatic(new StaticCandidate(24, 3, 0, false, PackedWorld(OriginX + 2, OriginY + 1)), TraversalContext.NormalCardinalZeroFlags)),
+            new StaticContribution(new StaticCandidate(25, 3, OfNoBlock, true, PackedWorld(OriginX + 2, OriginY + 1)), new Local(2, 1), AssessStatic(new StaticCandidate(25, 3, OfNoBlock, true, PackedWorld(OriginX + 2, OriginY + 1)), TraversalContext.NormalCardinalZeroFlags)),
+        ]);
+        var multiNoBlock = new StaticGroup(new Local(3, 1), [
+            new StaticContribution(new StaticCandidate(26, 3, OfNoBlock, false, PackedWorld(OriginX + 3, OriginY + 1)), new Local(3, 1), AssessStatic(new StaticCandidate(26, 3, OfNoBlock, false, PackedWorld(OriginX + 3, OriginY + 1)), TraversalContext.NormalCardinalZeroFlags)),
+            new StaticContribution(new StaticCandidate(27, 3, OfNoBlock, true, PackedWorld(OriginX + 3, OriginY + 1)), new Local(3, 1), AssessStatic(new StaticCandidate(27, 3, OfNoBlock, true, PackedWorld(OriginX + 3, OriginY + 1)), TraversalContext.NormalCardinalZeroFlags)),
+        ]);
+        AssertStaticRow(FirstGroupRow([singletonBlocker, multiBlocker, multiNoBlock], requireBlocker: true),
+            new StaticRow(24, 2, 1, "mixed", StaticDisposition.Blocker, 2), "same-cell blocker row skips singleton");
+        AssertStaticRow(FirstGroupRow([singletonBlocker, multiBlocker, multiNoBlock], requireBlocker: false),
+            new StaticRow(26, 3, 1, "mixed", StaticDisposition.NoBlock, 2), "same-cell all-no-block row");
+        AssertStaticRow(FirstGroupRow([singletonBlocker], requireBlocker: true),
+            new StaticRow(0, 0, 0, "none", null, 0), "absent same-cell blocker row");
+        AssertStaticRow(FirstGroupRow([singletonBlocker, multiBlocker], requireBlocker: false),
+            new StaticRow(0, 0, 0, "none", null, 0), "absent same-cell all-no-block row");
+    }
+
+    internal static void AssertResolvedDirectOverride(uint resolvedDirectFlags, uint oppositePrototypeFlags)
+    {
+        if (resolvedDirectFlags == oppositePrototypeFlags)
+            throw new InvalidOperationException("Synthetic direct and prototype flag fixtures must be opposite.");
+        var candidate = new StaticCandidate(12, 3, resolvedDirectFlags, false, PackedWorld(OriginX + 2, OriginY + 3));
+        AssertStatic(AssessStatic(candidate, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported,
+            StaticApplicability.Applicable, StaticDisposition.NoBlock, "resolver direct slot-18 override over opposite prototype default");
     }
 
     private static StaticAssessment AssessStatic(StaticCandidate candidate, TraversalContext context)
@@ -329,9 +360,10 @@ internal static class PassabilityProbe
     {
         foreach (var group in groups)
         {
+            if (group.Contributions.Length < 2) continue;
             var assessment = AggregateStaticCell(group.Contributions);
             if ((requireBlocker && assessment.Disposition != StaticDisposition.Blocker) ||
-                (!requireBlocker && (assessment.Disposition != StaticDisposition.NoBlock || group.Contributions.Length < 2))) continue;
+                (!requireBlocker && assessment.Disposition != StaticDisposition.NoBlock)) continue;
             var first = group.Contributions[0].Candidate;
             var kind = group.Contributions.All(item => !item.Candidate.FlagsInherited) ? "direct" :
                 group.Contributions.All(item => item.Candidate.FlagsInherited) ? "prototype" : "mixed";
@@ -373,6 +405,11 @@ internal static class PassabilityProbe
     {
         if (actual.Supportedness != supportedness || actual.Applicability != applicability || actual.Disposition != disposition)
             throw new InvalidOperationException($"Synthetic static-obstruction assessment '{label}' changed.");
+    }
+
+    private static void AssertStaticRow(StaticRow actual, StaticRow expected, string label)
+    {
+        if (actual != expected) throw new InvalidOperationException($"Synthetic static-obstruction row '{label}' changed.");
     }
 
     private static void EmitCell(ReadOnlySpan<byte> sectorBytes, int tileStart, ReadOnlySpan<byte> mask, int ordinal)

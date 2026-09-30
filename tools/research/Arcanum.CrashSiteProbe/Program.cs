@@ -319,6 +319,19 @@ internal static class Program
             throw new InvalidOperationException("Direct literal object-flags slots were not distinguished from adjacent spell flags in the static predicate.");
         }
 
+        const uint NoBlockFlag = 0x00000400;
+        var directNoBlock = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, true, true,
+            currentAid: 75, flags: NoBlockFlag, spellFlags: 0), 1)[0];
+        var oppositeBlockerPrototype = ObjectWire.ParsePrototype(ObjectWire.CreateSyntheticPrototype(3, prototypeId,
+            currentAid: 75, flags: 0, spellFlags: 0));
+        var directOverride = ObjectWire.ResolveEffectiveInstances([directNoBlock], [oppositeBlockerPrototype])[0];
+        if (directNoBlock.DirectFlags != NoBlockFlag || oppositeBlockerPrototype.Flags != 0 ||
+            directOverride.EffectiveFlags != NoBlockFlag || directOverride.CurrentAidInherited)
+        {
+            throw new InvalidOperationException("Direct slot-18 flags did not override an opposite matching prototype default.");
+        }
+        PassabilityProbe.AssertResolvedDirectOverride(directOverride.EffectiveFlags, oppositeBlockerPrototype.Flags);
+
         var inherited = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: 0), 1)[0];
         var staticPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: 0);
         var dynamicPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 74, flags: 0, spellFlags: 0);

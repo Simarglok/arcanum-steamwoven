@@ -101,7 +101,8 @@ count was 317; every identity check before and after use passed.
 
 The probe emits exactly six rows, in this fixed order: first direct Blocker,
 first inherited Blocker, first direct NoBlock, first inherited NoBlock, first
-same-cell group containing a Blocker, and first same-cell all-NoBlock group.
+same-cell group with at least two contributors containing a Blocker, and first
+same-cell all-NoBlock group with at least two contributors.
 Only source index, local coordinate, direct-vs-prototype source, disposition,
 and contributor count are emitted:
 
@@ -111,7 +112,7 @@ and contributor count are emitted:
 | 7 | 38 / 2 | prototype | Blocker | 1 |
 | 166 | 19 / 34 | direct | NoBlock | 1 |
 | 0 | 50 / 0 | prototype | NoBlock | 1 |
-| 1 | 5 / 1 | direct | Blocker | 1 |
+| 15 | 59 / 4 | mixed | Blocker | 2 |
 | 2 | 6 / 1 | prototype | NoBlock | 2 |
 
 These aggregates do not show that NoBlock means a walkable cell or step. They
@@ -121,12 +122,15 @@ profile.
 ## Synthetic matrix and reproducibility
 
 `--self-test` independently asserts direct and prototype Blocker/NoBlock,
-direct override over an opposite prototype, slot-19 sentinel non-effect,
+direct slot-18 override over an opposite matching prototype default through the
+existing resolver and assessment paths, slot-19 sentinel non-effect,
 unresolved flags from missing/duplicate/type-mismatched prototype edges,
 missing/malformed/out-of-range and checked-overflow locations, type/DYNAMIC/
 INVENTORY/OFF/DESTROYED distinctions, every excluded traversal context,
 source-to-destination mapping, same-cell blocker/no-block/unresolved/empty
-aggregation, terminal 317 contributor multiplicity, and the pre-existing
+aggregation, row selection that skips singleton groups, selects each eligible
+multi-contributor category, and returns the zero/none row when absent, terminal
+317 contributor multiplicity, and the pre-existing
 framing, field-mask/count, array/string-cap, slot-18/19, prototype, and mask
 checks. The assertions use authored expected outcomes rather than a
 self-comparison oracle.
