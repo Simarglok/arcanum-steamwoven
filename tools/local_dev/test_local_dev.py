@@ -48,6 +48,36 @@ class LocalDevTests(unittest.TestCase):
             launch.assert_ordinary(["--self-test"])
         self.assertNotIn("export", launch.argv_from_manifest({"app": {"executable": "/bin/true"}})[1])
 
+    def test_terrain_args_use_explicit_inputs_and_actor_defaults(self) -> None:
+        inputs = {}
+        for role in ("module", "terrainResource", "actorResource", "prototypes"):
+            path = self.root / f"{role} input"
+            path.write_bytes(b"fixture")
+            inputs[role] = str(path)
+        inputs["sourceId"] = "synthetic-local"
+        combined = launch.terrain_arguments(inputs, "combined")
+        self.assertEqual(combined[:2], ["--mode", "combined"])
+        self.assertIn("--prototypes", combined)
+        actor = launch.terrain_arguments(inputs, "actor-diagnostic")
+        self.assertIn("--actor-resource", actor)
+        self.assertEqual(actor[actor.index("--actor-render-branch") + 1], "normal-uncached")
+        self.assertEqual(actor[actor.index("--actor-scale-percent") + 1], "100")
+        self.assertNotIn("--self-test", actor)
+        _, base = launch.argv_from_manifest({"app": {"executable": "/bin/true", "engineArgs": ["--rendering-driver", "gl_compatibility"], "ordinaryArgs": ["--ignored"]}})
+        argv = [*base[:base.index("--") + 1], *actor]
+        self.assertEqual(argv[2], "--")
+        self.assertEqual(argv[3:5], ["--mode", "actor-diagnostic"])
+        self.assertNotIn("--ignored", argv)
+
+    def test_terrain_args_fail_closed_for_missing_role_or_symlink(self) -> None:
+        with self.assertRaisesRegex(ValueError, "explicit terrain"):
+            launch.terrain_arguments({}, "terrain-only")
+        target = self.root / "target"; target.write_bytes(b"fixture")
+        linked = self.root / "linked"; linked.symlink_to(target)
+        inputs = {"module": str(linked), "terrainResource": str(target), "actorResource": str(target), "prototypes": str(target), "sourceId": "fixture"}
+        with self.assertRaisesRegex(ValueError, "unavailable or unsafe"):
+            launch.terrain_arguments(inputs, "terrain-only")
+
     def test_v2_pointer_requires_manifest_hash_and_containment(self) -> None:
         root = self.root / "artifacts"; current = root / "ARC-GPAD-003" / "current-v2.json"
         manifest, digest = self.manifest(); bound = root / "ARC-GPAD-003" / "candidate" / "manifest.json"

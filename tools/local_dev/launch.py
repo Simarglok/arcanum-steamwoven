@@ -31,6 +31,44 @@ def argv_from_manifest(manifest: dict[str, Any]) -> tuple[Path, list[str]]:
     return Path(executable), [*engine, "--", *user]
 
 
+def terrain_arguments(inputs: dict[str, Any], mode: str) -> list[str]:
+    """Build the complete, explicit ordinary terrain diagnostic argument set.
+
+    Inputs are revalidated on every launch because local configuration is not a
+    trust boundary.  The actor values are the documented diagnostic defaults,
+    never recovered world state.
+    """
+    if mode not in {"terrain-only", "combined", "actor-diagnostic"}:
+        raise ValueError("unsupported terrain diagnostic mode")
+    required = ("module", "terrainResource", "actorResource", "prototypes", "sourceId")
+    if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
+        raise ValueError("configure explicit terrain input roles before launch")
+
+    def local_file(role: str) -> str:
+        path = Path(inputs[role]).expanduser()
+        if not path.is_file() or path.is_symlink():
+            raise ValueError("configured terrain input is unavailable or unsafe")
+        return str(path.resolve(strict=True))
+
+    source_id = inputs["sourceId"]
+    if not source_id or len(source_id) > 80 or any(character in source_id for character in "/\\\n\r\t"):
+        raise ValueError("configured source-id is unsafe")
+    arguments = ["--mode", mode, "--module", local_file("module"), "--resource", local_file("terrainResource"), "--source-id", source_id]
+    if mode in {"combined", "actor-diagnostic"}:
+        arguments.extend(("--prototypes", local_file("prototypes")))
+    if mode == "actor-diagnostic":
+        arguments.extend((
+            "--actor-resource", local_file("actorResource"),
+            "--actor-map-x", "0", "--actor-map-y", "0",
+            "--actor-camera-origin-x", "0", "--actor-camera-origin-y", "0",
+            "--actor-offset-x", "0", "--actor-offset-y", "0",
+            "--actor-render-branch", "normal-uncached", "--actor-scale-percent", "100",
+            "--actor-shrunk", "false", "--actor-action", "idle", "--actor-facing", "0", "--actor-frame", "0",
+        ))
+    assert_ordinary(arguments)
+    return arguments
+
+
 def exact_executable_in_use(executable: Path) -> bool:
     """Compare the executable token exactly; no broad process-name matching or killing."""
     completed = subprocess.run(["ps", "-axo", "pid=,command="], check=True, text=True, capture_output=True)
@@ -70,11 +108,12 @@ def start(executable: Path, arguments: list[str], *, allow_duplicate: bool, lock
         return {"argv": argv, "started": False}
     handle = lock_for(lock_root, tool)
     try:
-        process = subprocess.Popen(argv, close_fds=True, start_new_session=True)
+        # The child retains the advisory lock for its entire lifetime.  The
+        # exact-executable check remains the cross-process fallback; neither
+        # mechanism broad-matches or terminates a process.
+        process = subprocess.Popen(argv, close_fds=True, pass_fds=(handle.fileno(),), start_new_session=True)
     except Exception:
         handle.close()
         raise
-    # Keep the lock descriptor with the child only if it inherited it (it does not);
-    # a running process is independently detected by exact executable identity.
     handle.close()
     return {"argv": argv, "started": True, "pid": process.pid}

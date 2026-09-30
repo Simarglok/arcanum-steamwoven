@@ -60,6 +60,9 @@ def command_launch(args: argparse.Namespace) -> None:
     root = selected_root(conf, tool)
     _, manifest, _ = manifests.resolve_current(root, tool)
     executable, argv = launch.argv_from_manifest(manifest)
+    if tool == "terrain":
+        separator = argv.index("--")
+        argv = [*argv[:separator + 1], *launch.terrain_arguments(conf.get("inputs", {}), args.mode or "terrain-only")]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool, dry_run=args.dry_run))
 
 
