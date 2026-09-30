@@ -9,11 +9,12 @@ from pathlib import Path
 import secrets
 import shutil
 import re
+import stat
 from typing import Any
 
 from . import config
 from . import launch
-from .manifests import SUPPORTED_TOOLS, _manifest, manifest_candidate, resolve_pointer, sha256
+from .manifests import SUPPORTED_TOOLS, _manifest, _root_relative, manifest_candidate, resolve_pointer, sha256
 
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
 REQUIRED_SUCCESS_GATES = {
@@ -29,15 +30,17 @@ def _tool_for_task(task: str) -> str | None:
 
 def _try_exclusive(path: Path) -> int | None:
     """Return a held lease descriptor, or None if another actor holds it."""
-    path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+    descriptor = config.open_lock_file(path)
     try:
-        os.fchmod(descriptor, 0o600)
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.fchmod(descriptor, 0o600)
         return descriptor
     except BlockingIOError:
         os.close(descriptor)
         return None
+    except BaseException:
+        os.close(descriptor)
+        raise
 
 
 def _release(descriptor: int | None) -> None:
@@ -128,7 +131,8 @@ def _safe_payload(candidate: Path, manifest: Path) -> Path | None:
 
 
 def _bound_payload_inventory(payload: dict[str, Any], candidate: Path, app_path: Path) -> int:
-    """Prove every declared payload byte is a regular in-package on-disk file."""
+    """Prove an exact canonical file set, including zero-byte package files."""
+    config.canonical_existing(str(app_path), directory=True)
     inventory = payload.get("payloadInventory")
     if not isinstance(inventory, list) or not inventory:
         raise ValueError("payload inventory is missing")
@@ -138,18 +142,30 @@ def _bound_payload_inventory(payload: dict[str, Any], candidate: Path, app_path:
         if (not isinstance(entry, dict) or not isinstance(entry.get("relativePath"), str)
                 or not isinstance(entry.get("bytes"), int) or not isinstance(entry.get("sha256"), str)):
             raise ValueError("payload inventory is invalid")
-        item = candidate / entry["relativePath"]
+        relative = _root_relative(entry["relativePath"], field="payload inventory path")
+        item = candidate / relative
         try:
             item.relative_to(app_path)
         except ValueError as error:
             raise ValueError("payload inventory entry escapes package") from error
-        if (entry["relativePath"] in seen or config._has_symlink_component(item.absolute()) or not item.is_file()
+        if (relative in seen or config._has_symlink_component(item.absolute()) or not item.is_file()
                 or item.is_symlink() or item.stat().st_size != entry["bytes"] or sha256(item) != entry["sha256"]):
             raise ValueError("payload inventory does not bind the on-disk export")
-        seen.add(entry["relativePath"])
+        seen.add(relative)
         total += entry["bytes"]
-    if _tree_bytes(app_path) != total:
-        raise ValueError("payload inventory omits package bytes")
+    actual: set[str] = set()
+    def unreadable(error: OSError) -> None:
+        raise error
+    for directory, directories, files in os.walk(app_path, followlinks=False, onerror=unreadable):
+        for name in directories + files:
+            item = Path(directory) / name
+            mode = item.lstat().st_mode
+            if stat.S_ISREG(mode):
+                actual.add(item.relative_to(candidate).as_posix())
+            elif not stat.S_ISDIR(mode):
+                raise ValueError("payload inventory contains unsafe package node")
+    if actual != seen:
+        raise ValueError("payload inventory omits or duplicates package files")
     return total
 
 
@@ -163,6 +179,7 @@ def _bound_evidence(payload: dict[str, Any], candidate: Path) -> None:
         if not isinstance(entry, dict):
             raise ValueError("export evidence is invalid")
         relative, size, digest = entry.get("relativePath"), entry.get("bytes"), entry.get("sha256")
+        relative = _root_relative(relative, field="evidence path")
         if (not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts
                 or not isinstance(size, int) or size < 0 or not isinstance(digest, str) or len(digest) != 64):
             raise ValueError("export evidence is invalid")
@@ -483,7 +500,11 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
                 != ("retired", tool, bound_root, bound_task, candidate_commit, digest)):
             raise ValueError("candidate authority changed since planning")
         launch_lease = _try_exclusive(config.home() / "locks" / f"{tool}.lock")
-        export_lease = _try_exclusive(candidate / ".export-lease.lock")
+        try:
+            export_lease = _try_exclusive(candidate / ".export-lease.lock")
+        except BaseException:
+            _release(launch_lease)
+            raise
         if launch_lease is None or export_lease is None:
             _release(launch_lease); _release(export_lease)
             raise ValueError("candidate is leased by launcher or exporter")

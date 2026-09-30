@@ -52,8 +52,10 @@ def _contained(root: Path, candidate: Path) -> Path:
 
 def _manifest(path: Path, expected_tool: str, expected_digest: str | None = None) -> tuple[Path, dict[str, Any]]:
     manifest = _json(path)
-    if expected_digest and sha256(path) != expected_digest:
-        raise ValueError("manifest hash mismatch")
+    if expected_digest is not None:
+        _required_digest(expected_digest)
+        if sha256(path) != expected_digest:
+            raise ValueError("manifest hash mismatch")
     schema = manifest.get("schema")
     schema_version = manifest.get("schemaVersion")
     is_v1 = schema is None and schema_version == 1
@@ -72,9 +74,17 @@ def _manifest(path: Path, expected_tool: str, expected_digest: str | None = None
     return path, manifest
 
 
+def _required_digest(value: object) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
+        raise ValueError("manifest hash must be a full lowercase SHA256")
+    return value
+
+
 def _root_relative(value: object, *, field: str) -> str:
-    if not isinstance(value, str) or not value or Path(value).is_absolute() or ".." in Path(value).parts:
-        raise ValueError(f"v2 {field} must be root-relative")
+    if (not isinstance(value, str) or not value or Path(value).is_absolute()
+            or any(part in ("", ".", "..") for part in value.split("/"))
+            or "\\" in value or "\x00" in value or Path(value).as_posix() != value):
+        raise ValueError(f"v2 {field} must be canonical root-relative")
     return value
 
 
@@ -170,8 +180,8 @@ def resolve_pointer(root: Path, pointer_path: Path, tool: str, *, root_id: str |
     schema, schema_version = pointer.get("schema"), pointer.get("schemaVersion")
     if schema == "arcanum-build-current-v2" and schema_version is None:
         relative = pointer.get("manifestRelativePath")
-        expected_digest = pointer.get("manifestSha256")
-        if not isinstance(relative, str) or not isinstance(expected_digest, str):
+        expected_digest = _required_digest(pointer.get("manifestSha256"))
+        if not isinstance(relative, str):
             raise ValueError("v2 pointer lacks manifest binding")
         manifest_path = _contained(root, pointer_path.parent / relative)
     elif schema is None and schema_version == 1 and tool in {"art", "display"}:
@@ -181,19 +191,19 @@ def resolve_pointer(root: Path, pointer_path: Path, tool: str, *, root_id: str |
         if not isinstance(raw, str) or not Path(raw).is_absolute():
             raise ValueError("legacy ART/UI pointer requires an absolute manifest path")
         manifest_path = _contained(root, Path(raw).expanduser())
-        expected_digest = None
+        # Only an ABSENT hash is admitted as intentionally hashless legacy.
+        expected_digest = _required_digest(pointer["manifestSha256"]) if "manifestSha256" in pointer else None
     elif schema is None and schema_version == 1 and tool == "gamepad":
-        raw, expected_digest = pointer.get("manifestRelativePath"), pointer.get("manifestSha256")
-        if not isinstance(raw, str) or Path(raw).is_absolute() or not isinstance(expected_digest, str):
+        raw, expected_digest = pointer.get("manifestRelativePath"), _required_digest(pointer.get("manifestSha256"))
+        if not isinstance(raw, str) or Path(raw).is_absolute():
             raise ValueError("legacy Gamepad pointer requires relative manifest and hash")
         manifest_path = _contained(root, pointer_path.parent / raw)
     elif tool == "terrain" and schema == "ARC-RENDER-005-v1" and schema_version is None:
         raw = pointer.get("manifestRelativePath")
-        expected_digest = pointer.get("manifestSha256")
-        if not isinstance(raw, str) or Path(raw).is_absolute() or not isinstance(expected_digest, str):
+        expected_digest = _required_digest(pointer.get("manifestSha256"))
+        if not isinstance(raw, str) or Path(raw).is_absolute():
             raise ValueError("ARC-RENDER-005 pointer lacks manifest path")
         manifest_path = _contained(root, pointer_path.parent / raw)
-        expected_digest = pointer.get("manifestSha256")
     else:
         raise ValueError("unsupported or mixed pointer schema")
     manifest_path, manifest = _manifest(manifest_path, tool, expected_digest)

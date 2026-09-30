@@ -150,6 +150,9 @@ def _reject_existing(candidate: Path, candidate_id: str, tool: str, conf: dict, 
     allowed = {".export-lease.lock"}
     if candidate.exists() and any(path.name not in allowed for path in candidate.iterdir()):
         raise ValueError("ambiguous partial candidate cannot be overwritten")
+    lease_path = candidate / ".export-lease.lock"
+    if lease_path.exists() or lease_path.is_symlink():
+        config.validate_lock_file(lease_path)
 
 
 def _write_current(candidate: Path, manifest: Path) -> None:
@@ -202,7 +205,8 @@ def run_export(args: argparse.Namespace) -> int:
         preflight = retention.export_preflight(registry, args.tool, getattr(args, "output_bytes", None),
                     getattr(args, "temporary_bytes", None), conf=conf, destinations=paths,
                     estimate_manifest=Path(args.estimate_manifest) if getattr(args, "estimate_manifest", None) else None)
-    candidate.mkdir(mode=0o700, parents=True, exist_ok=True)
+    # The shared no-follow opener creates/pins missing parents; mkdir on the
+    # original pathname would follow a concurrently introduced parent symlink.
     lease = retention._try_exclusive(candidate / ".export-lease.lock")
     if lease is None:
         raise ValueError("candidate is already exporting")

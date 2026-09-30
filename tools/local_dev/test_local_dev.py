@@ -804,6 +804,214 @@ else:
         for thread in __import__("threading").enumerate():
             self.assertNotEqual(thread.name, "export-capacity-sampler", "sampler must stop even when freezing observation fails")
 
+    def test_required_pointer_hashes_fail_closed_through_resolver_cli_and_protection(self) -> None:
+        source = Path(__file__).resolve().parents[2]
+        missing = object()
+        fixtures = (("gamepad", "ARC-GPAD-003", "v2"), ("gamepad", "ARC-GPAD-001", "legacy"),
+                    ("terrain", "ARC-RENDER-005", "terrain"), ("art", "ARC-RENDER-001", "absolute"),
+                    ("display", "ARC-UI-001", "absolute"))
+        for tool, task, schema in fixtures:
+            with self.subTest(tool=tool, schema=schema):
+                root = self.root / schema / task; candidate = root / task / ("a" * 40)
+                candidate.mkdir(parents=True)
+                executable = candidate / "Tool.app/Contents/MacOS/Tool"
+                executable.parent.mkdir(parents=True); executable.write_bytes(b"fixture")
+                path = candidate / "manifest.json"
+                if schema == "v2":
+                    original, _ = self.v2_manifest()
+                    shutil.copytree(original.parent, candidate, dirs_exist_ok=True)
+                    path = candidate / "manifest.json"
+                else:
+                    payload: dict = {"task": task, "candidate": {"commit": "a" * 40},
+                               "app": {"executableRelativePath": "Tool.app/Contents/MacOS/Tool"}}
+                    payload.update({"schema": "ARC-RENDER-005-v1"} if schema == "terrain" else {"schemaVersion": 1})
+                    path.write_text(json.dumps(payload))
+                digest = manifests.sha256(path)
+                pointer: dict = {"schema": "arcanum-build-current-v2"} if schema == "v2" else (
+                    {"schema": "ARC-RENDER-005-v1"} if schema == "terrain" else {"schemaVersion": 1})
+                pointer.update({"manifest": str(path)} if schema == "absolute" else
+                               {"manifestRelativePath": f"{'a' * 40}/manifest.json"})
+                current = candidate.parent / "current.json"
+                conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
+                conf["launchSelection"] = {tool: f"test:{task}:{'a' * 40}"}
+                conf["inputs"] = {"module": str(executable), "terrainResource": str(executable), "sourceId": "synthetic"}
+                config.save_config(conf)
+                # Valid controls genuinely reach dry-run; hashless ART/UI is admitted only on absence.
+                pointer["manifestSha256"] = digest
+                current.write_text(json.dumps(pointer))
+                result = subprocess.run([sys.executable, "-B", str(source / "tools/arcanum-local"), "launch", tool, "--dry-run"], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertFalse(json.loads(result.stdout)["started"])
+                for invalid in (missing, None, "", "a" * 63, "g" * 64, "A" * 64, "0" * 64):
+                    if invalid is missing:
+                        pointer.pop("manifestSha256", None)
+                    else:
+                        pointer["manifestSha256"] = invalid
+                    current.write_text(json.dumps(pointer))
+                    if invalid is missing and schema == "absolute":
+                        manifests.resolve_current(root, tool)
+                        continue
+                    with self.assertRaises(ValueError):
+                        manifests.resolve_current(root, tool)
+                    result = subprocess.run([sys.executable, "-B", str(source / "tools/arcanum-local"), "launch", tool, "--dry-run"], capture_output=True, text=True)
+                    self.assertEqual(result.returncode, 2, result.stdout)
+                    self.assertNotIn(str(root), result.stderr)
+                    snapshot = retention.protection_snapshot(conf, config.default_registry())
+                    self.assertIn(["test", tool], snapshot["blockedDomains"])
+                    self.assertEqual(retention.create_plan(conf, config.default_registry(), retention.inventory(conf, config.default_registry()))["payloads"], [])
+        manifest, _ = self.v2_manifest(name="e" * 40)
+        with self.assertRaisesRegex(ValueError, "full lowercase SHA256"):
+            manifests._manifest(manifest, "gamepad", "")
+
+    def test_payload_inventory_requires_exact_canonical_file_set_for_all_consumers(self) -> None:
+        for index, flaw in enumerate(("dot-alias", "separator-alias", "duplicate", "zero-omitted", "equal-omitted")):
+            with self.subTest(flaw=flaw):
+                name = f"{index + 1:040x}"
+                manifest, _ = self.v2_manifest(name=name)
+                registry, identity = self.retired(manifest); conf = self.conf()
+                plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
+                self.assertEqual(len(plan["payloads"]), 1)
+                payload = json.loads(manifest.read_text())
+                payload["checks"] = [{"name": gate, "outcome": "PASS"} for gate in
+                    ("core-harness", "godot-self-test", "export", "exported-smoke", "codesign-deep-strict")]
+                extra = manifest.parent / "GamepadLab.app/Contents/MacOS/unknown"
+                extra.write_bytes(b"" if flaw == "zero-omitted" else b"UNKNOWN")
+                if flaw in ("dot-alias", "separator-alias", "duplicate"):
+                    entry = dict(payload["payloadInventory"][0])
+                    if flaw == "dot-alias": entry["relativePath"] = "GamepadLab.app/Contents/MacOS/./GamepadLab"
+                    if flaw == "separator-alias": entry["relativePath"] = "GamepadLab.app//Contents/MacOS/GamepadLab"
+                    payload["payloadInventory"].append(entry)
+                payload["exportBudget"]["outputBytes"] = 7 if flaw == "zero-omitted" else 14
+                manifest.write_text(json.dumps(payload))
+                registry, identity = self.retired(manifest)
+                before = config.digest(registry)
+                with self.assertRaises(ValueError):
+                    retention._bound_payload_inventory(payload, manifest.parent, manifest.parent / "GamepadLab.app")
+                with self.assertRaises(ValueError):
+                    retention.register_export(registry, conf=conf, tool="gamepad", candidate_id=identity, manifest=manifest)
+                with self.assertRaises(ValueError):
+                    retention.register_export(config.default_registry(), conf=conf, tool="gamepad", candidate_id=identity, manifest=manifest)
+                self.assertEqual(config.digest(registry), before)
+                with self.assertRaises(ValueError):
+                    retention.export_preflight({}, "gamepad", payload["exportBudget"]["outputBytes"], None, conf=conf,
+                        destinations={"export": manifest.parent, "temporary": self.root}, estimate_manifest=manifest)
+                self.assertFalse(any(entry["eligible"] for entry in retention.inventory(conf, registry)))
+                # Even a forged refreshed plan cannot authorize incomplete payload proof.
+                plan["registrySha256"] = config.digest(registry)
+                item = plan["payloads"][0]
+                item["manifestSha256"] = manifests.sha256(manifest)
+                item["candidateIdentity"] = retention._identity(manifest.parent)
+                item["payloadIdentity"] = retention._identity(manifest.parent / "GamepadLab.app")
+                with self.assertRaises(ValueError):
+                    retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
+                self.assertTrue(extra.exists())
+                self.assertFalse((manifest.parent / "prune-intent-v1.json").exists())
+        # Independent complete control includes both equal-sized sibling and empty file.
+        manifest, _ = self.v2_manifest(name="f" * 40); payload = json.loads(manifest.read_text())
+        for relative, data in (("GamepadLab.app/extra", b"UNKNOWN"), ("GamepadLab.app/empty", b"")):
+            path = manifest.parent / relative; path.write_bytes(data)
+            payload["payloadInventory"].append({"relativePath": relative, "bytes": len(data), "sha256": manifests.sha256(path)})
+        payload["exportBudget"]["outputBytes"] = 14
+        payload["checks"] = [{"name": gate, "outcome": "PASS"} for gate in
+            ("core-harness", "godot-self-test", "export", "exported-smoke", "codesign-deep-strict")]
+        manifest.write_text(json.dumps(payload)); registry = config.default_registry()
+        self.assertEqual(retention._bound_payload_inventory(payload, manifest.parent, manifest.parent / "GamepadLab.app"), 14)
+        retention.register_export(registry, conf=self.conf(), tool="gamepad", candidate_id="test:ARC-GPAD-003:" + "f" * 40, manifest=manifest)
+        self.assertEqual(registry["builds"]["test:ARC-GPAD-003:" + "f" * 40]["payloadBytes"], 14)
+
+    def test_unsafe_export_lock_only_candidates_reject_before_child_and_all_writes(self) -> None:
+        estimate, _ = self.v2_manifest(); config.save_config(self.conf())
+        sentinel = self.root / "outside-sentinel"; sentinel.write_bytes(b"UNCHANGED"); sentinel.chmod(0o644)
+        before_config = config.config_path().read_bytes()
+        for index, kind in enumerate(("symlink", "dangling", "fifo", "directory", "hardlink")):
+            with self.subTest(kind=kind):
+                commit = f"{index + 16:040x}"
+                candidate = estimate.parent.parent / commit; candidate.mkdir()
+                lock = candidate / ".export-lease.lock"
+                if kind == "symlink": lock.symlink_to(sentinel)
+                elif kind == "dangling": lock.symlink_to(self.root / "absent-sentinel")
+                elif kind == "fifo": os.mkfifo(lock, 0o644)
+                elif kind == "directory": lock.mkdir()
+                else: os.link(sentinel, lock)
+                args = argparse.Namespace(tool="gamepad", root_id="test", task="ARC-GPAD-003", candidate=commit,
+                    manifest=str(candidate / "manifest.json"), temporary_root=str(self.root), output_bytes=7,
+                    estimate_manifest=str(estimate), command=["/usr/bin/false"])
+                before = lock.lstat()
+                with patch("tools.local_dev.export_endpoint.subprocess.run") as child, patch("tools.local_dev.retention.export_preflight") as preflight:
+                    with self.assertRaises((OSError, ValueError)):
+                        export_endpoint.run_export(args)
+                    child.assert_not_called(); preflight.assert_not_called()
+                self.assertEqual(set(path.name for path in candidate.iterdir()), {".export-lease.lock"})
+                self.assertEqual((lock.lstat().st_ino, lock.lstat().st_mode), (before.st_ino, before.st_mode))
+                self.assertEqual(sentinel.read_bytes(), b"UNCHANGED")
+                self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o644)
+                self.assertFalse((self.root / "absent-sentinel").exists())
+                self.assertEqual(config.config_path().read_bytes(), before_config)
+                self.assertFalse(config.registry_path().exists())
+                if kind == "hardlink": lock.unlink()
+
+    def test_shared_lock_paths_reject_unsafe_nodes_and_parent_hops(self) -> None:
+        sentinel = self.root / "outside"; sentinel.write_bytes(b"UNCHANGED"); sentinel.chmod(0o644)
+        for family in ("export", "launch", "registry"):
+            for kind in ("symlink", "dangling", "fifo", "directory", "hardlink", "parent"):
+                with self.subTest(family=family, kind=kind):
+                    root = self.root / f"{family}-{kind}"; root.mkdir()
+                    outside = root
+                    os.environ["ARCANUM_LOCAL_HOME"] = str(root)
+                    lock = root / ("locks/gamepad.lock" if family == "launch" else "build-registry-v1.lock" if family == "registry" else ".export-lease.lock")
+                    lock.parent.mkdir(exist_ok=True)
+                    if kind == "parent":
+                        outside = self.root / f"parent-outside-{family}"; outside.mkdir()
+                        linked = root / "linked"; linked.symlink_to(outside, target_is_directory=True)
+                        if family == "launch": root = linked; lock = root / "locks/gamepad.lock"
+                        elif family == "registry": os.environ["ARCANUM_LOCAL_HOME"] = str(linked); lock = linked / "build-registry-v1.lock"
+                        else: lock = linked / ".export-lease.lock"
+                    elif kind == "symlink": lock.symlink_to(sentinel)
+                    elif kind == "dangling": lock.symlink_to(self.root / "absent")
+                    elif kind == "fifo": os.mkfifo(lock)
+                    elif kind == "directory": lock.mkdir()
+                    else: os.link(sentinel, lock)
+                    with self.assertRaises((OSError, ValueError)):
+                        if family == "export": retention._try_exclusive(lock)
+                        elif family == "launch": launch.lock_for(root, "gamepad")
+                        else:
+                            with config.registry_lock(): self.fail("unsafe registry lease was acquired")
+                    self.assertEqual(sentinel.read_bytes(), b"UNCHANGED")
+                    self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o644)
+                    self.assertFalse((self.root / "absent").exists())
+                    if kind == "parent": self.assertEqual(list(outside.iterdir()), [])
+                    if kind == "hardlink": lock.unlink()
+
+    def test_regular_leases_preserve_duplicate_guard_and_release_after_failed_acquisition(self) -> None:
+        root = self.root / "locks-control"
+        handle = launch.lock_for(root, "gamepad")
+        try:
+            self.assertEqual(stat.S_IMODE((root / "locks/gamepad.lock").stat().st_mode), 0o600)
+            with self.assertRaisesRegex(ValueError, "already active"):
+                launch.lock_for(root, "gamepad")
+            self.assertIsNone(retention._try_exclusive(root / "locks/gamepad.lock"))
+        finally:
+            handle.close()
+        lease = retention._try_exclusive(root / "locks/gamepad.lock")
+        self.assertIsNotNone(lease); retention._release(lease)
+
+    def test_lock_leaf_replacement_rejects_without_mutating_target(self) -> None:
+        lock = self.root / "raced.lock"; lock.write_bytes(b"prior"); lock.chmod(0o644)
+        sentinel = self.root / "outside"; sentinel.write_bytes(b"UNCHANGED"); sentinel.chmod(0o644)
+        actual_open = os.open
+        def raced_open(path, flags, *args, **kwargs):
+            if path == "raced.lock":
+                lock.unlink(); lock.symlink_to(sentinel)
+            return actual_open(path, flags, *args, **kwargs)
+        with patch("tools.local_dev.config.os.open", side_effect=raced_open):
+            with self.assertRaises(OSError):
+                retention._try_exclusive(lock)
+        self.assertEqual(sentinel.read_bytes(), b"UNCHANGED")
+        self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o644)
+
+    def test_export_endpoint_new_registration_failure_preserves_old_publication(self) -> None:
+        self.publication_failure("tools.local_dev.export_endpoint.retention.register_export")
+
     def test_export_endpoint_rejects_traversal_candidate_before_command_or_mutation(self) -> None:
         root = self.root / "artifacts"; root.mkdir()
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)

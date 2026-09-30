@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 import re
+import stat
 from typing import Any
 import fcntl
 from contextlib import contextmanager
@@ -175,16 +176,76 @@ def candidate_path(conf: dict[str, Any], tool: str, candidate_id: str) -> Path:
     return candidate
 
 
+def _validate_lock_stat(node: os.stat_result) -> None:
+    if not stat.S_ISREG(node.st_mode) or node.st_nlink != 1 or node.st_uid != os.geteuid():
+        raise ValueError("lock must be an owned, non-linked regular file")
+
+
+def validate_lock_file(path: Path) -> None:
+    """Read-only admission check, including dangling links and special nodes."""
+    if _has_symlink_component(path.absolute()):
+        raise ValueError("lock path must not traverse a symlink")
+    _validate_lock_stat(path.lstat())
+
+
+def open_lock_file(path: Path) -> int:
+    """Open without following any caller-controlled hop or mutating a target.
+
+    Directory-relative opens keep every ancestor pinned while creating missing
+    private directories. No chmod occurs until the caller holds the lock.
+    """
+    path = path.expanduser().absolute()
+    if ".." in path.parts or _has_symlink_component(path):
+        raise ValueError("lock path must not traverse a symlink")
+    # Admit only macOS's documented /var alias, as canonical_existing does.
+    if path.parts[:2] == ("/", "var"):
+        path = Path("/private/var").joinpath(*path.parts[2:])
+    parent = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    descriptor = None
+    try:
+        for component in path.parts[1:-1]:
+            try:
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            except FileNotFoundError:
+                try:
+                    os.mkdir(component, 0o700, dir_fd=parent)
+                except FileExistsError:
+                    pass
+                child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            os.close(parent)
+            parent = child
+        try:
+            before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            before = None
+        if before is not None:
+            _validate_lock_stat(before)
+        descriptor = os.open(path.name, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK,
+                             0o600, dir_fd=parent)
+        opened = os.fstat(descriptor)
+        _validate_lock_stat(opened)
+        current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        _validate_lock_stat(current)
+        if ((opened.st_dev, opened.st_ino) != (current.st_dev, current.st_ino)
+                or (before is not None and (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino))):
+            raise ValueError("lock identity changed during acquisition")
+        return descriptor
+    except BaseException:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise
+    finally:
+        os.close(parent)
+
+
 @contextmanager
 def registry_lock() -> Any:
     """Serialize lifecycle mutations with an owner-only local lock file."""
     lock_path = home() / "build-registry-v1.lock"
-    lock_path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
-    os.chmod(lock_path.parent, 0o700)
-    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    descriptor = open_lock_file(lock_path)
     try:
-        os.fchmod(descriptor, 0o600)
         fcntl.flock(descriptor, fcntl.LOCK_EX)
+        os.fchmod(descriptor, 0o600)
         yield
     finally:
         fcntl.flock(descriptor, fcntl.LOCK_UN)

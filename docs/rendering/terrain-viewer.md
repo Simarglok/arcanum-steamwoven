@@ -117,8 +117,8 @@ fit/reset, and resize. The initial view fits the complete diagnostic bounds
 with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
 resets initial Fit, `F` recomputes Fit, and `L` reloads through the same
-generation-aware load route. Resize recomputes Fit only while in
-Fit mode; manual pan/zoom survives resize. F11 toggles normal fullscreen and
+generation-aware load route. Resize changes HUD layout only; the camera's
+current Fit or manual pan/zoom transform survives resize. F11 toggles normal fullscreen and
 Escape restores windowed mode. The resizable default is 1280x800. There is no
 controller behavior. A responsive synthetic HUD matrix checks containment,
 sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,

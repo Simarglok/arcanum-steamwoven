@@ -126,14 +126,18 @@ def exact_executable_in_use(executable: Path) -> bool:
 
 
 def lock_for(root: Path, tool: str) -> Any:
-    locks = root / "locks"
-    locks.mkdir(mode=0o700, parents=True, exist_ok=True)
-    handle = (locks / f"{tool}.lock").open("a+", encoding="utf-8")
+    if tool not in {"art", "terrain", "gamepad", "display"}:
+        raise ValueError("unsupported launch lock tool")
+    handle = os.fdopen(config.open_lock_file(root / "locks" / f"{tool}.lock"), "a+", encoding="utf-8")
     try:
         fcntl.flock(handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        os.fchmod(handle.fileno(), 0o600)
     except BlockingIOError as error:
         handle.close()
         raise ValueError("an ordinary launch for this tool is already active") from error
+    except BaseException:
+        handle.close()
+        raise
     return handle
 
 
