@@ -12,10 +12,14 @@ case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-003/"$head") ;; *) 
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before validating.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
+  estimate_root="$main_root/artifacts/builds/ARC-GPAD-003"
+  if test ! -d "$estimate_root"; then estimate_root=$lab_root; fi
+  set -- $(/usr/bin/du -sk "$estimate_root")
+  estimated_output_bytes=$(( $1 * 1024 ))
   cd "$candidate_root"
   exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
     --tool gamepad --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-GPAD-003 --candidate "$head" \
-    --manifest "$build_root/manifest.json" -- /bin/sh "$0"
+    --manifest "$build_root/manifest.json" --output-bytes "$estimated_output_bytes" -- /bin/sh "$0"
 fi
 
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
@@ -54,11 +58,11 @@ run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/ex
 run_log persistence-write.log "$app" --headless -- --persistence write "$build_root/evidence/persistence-write.json"
 run_log persistence-verify-nondefault.log "$app" --headless -- --persistence verify-nondefault "$build_root/evidence/persistence-verify-nondefault.json"
 run_log persistence-verify-default.log "$app" --headless -- --persistence verify-default "$build_root/evidence/persistence-verify-default.json"
-# This intentionally does not use --headless: the exported macOS application
-# performs its bounded capture/layout path, writes a PNG, and quits itself.
-run_log ordinary-launch.log /usr/bin/python3 "$lab_root/tools/run_with_timeout.py" 30 "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
-test -s "$build_root/evidence/ordinary-launch.png"
-if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/ordinary-launch.log"; then printf '%s\n' 'Ordinary exported-app launch logged an engine error.' >&2; exit 1; fi
+# This bounded non-headless capture is automated evidence, not ordinary launch.
+run_log automated-capture.log /usr/bin/python3 "$lab_root/tools/run_with_timeout.py" 30 "$app" -- --capture 1280x800 "$build_root/evidence/automated-capture.png"
+test -s "$build_root/evidence/automated-capture.png"
+if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/automated-capture.log"; then printf '%s\n' 'Automated exported-app capture logged an engine error.' >&2; exit 1; fi
+printf '%s\n' '{"schema":"arcanum-ordinary-launch-v1","outcome":"NOT_VERIFIED","reason":"bounded capture uses --capture and is not ordinary-launch evidence"}' >"$build_root/evidence/ordinary-launch-not-verified.json"
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/GamepadLab.app"
 # The isolated settings file is validation-only state, never durable evidence.

@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import secrets
 import shutil
+import re
 from typing import Any
 
 from . import config
@@ -51,14 +52,16 @@ def _registered_manifest(*, tool: str, candidate_id: str, manifest: Path) -> tup
     if len(parts) != 3 or not all(parts):
         raise ValueError("candidate id must bind root, task, and candidate")
     root_id, task, candidate_name = parts
-    if task not in SUPPORTED_TOOLS.get(tool, ()) or manifest.name != "manifest.json" or manifest.parent.name != candidate_name:
+    if (task not in SUPPORTED_TOOLS.get(tool, ()) or manifest.name != "manifest.json"
+            or manifest.parent.name != candidate_name or not re.fullmatch(r"[0-9a-f]{40}", candidate_name)):
         raise ValueError("candidate id does not match manifest location or tool")
     _, payload = _manifest(manifest, tool)
     candidate = payload.get("candidate", {})
     digest = sha256(manifest)
     if (payload.get("schema") != "arcanum-build-manifest-v2" or payload.get("rootId") != root_id
             or payload.get("task") != task or not isinstance(candidate, dict)
-            or not isinstance(candidate.get("commit"), str) or len(candidate["commit"]) != 40):
+            or not isinstance(candidate.get("commit"), str) or not re.fullmatch(r"[0-9a-f]{40}", candidate["commit"])
+            or candidate["commit"] != candidate_name):
         raise ValueError("candidate manifest lacks exact v2 root/task/commit binding")
     return payload, root_id, task, digest
 
@@ -238,10 +241,13 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
                         _, parsed = _manifest(manifest, tool)
                         manifest_digest = sha256(manifest)
                         candidate = parsed.get("candidate", {})
+                        candidate_commit = candidate.get("commit") if isinstance(candidate, dict) else None
                         ownership_proven = (
                             parsed.get("schema") == "arcanum-build-manifest-v2"
                             and parsed.get("rootId") == root_id
                             and isinstance(candidate, dict)
+                            and re.fullmatch(r"[0-9a-f]{40}", candidate_commit or "") is not None
+                            and candidate_dir.name == candidate_commit
                             and isinstance(state, dict)
                             and state.get("rootId") == root_id
                             and state.get("task") == task_dir.name
@@ -493,7 +499,15 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
     except (OSError, ValueError) as error:
         raise ValueError("payload inventory or evidence does not bind the on-disk export") from error
     budget = payload.get("exportBudget", {})
-    if budget.get("outputBytes") != measured_inventory:
+    preflight = budget.get("preflight") if isinstance(budget, dict) else None
+    preflight_path = manifest.parent / "evidence" / "export-preflight.json"
+    try:
+        recorded_preflight = json.loads(preflight_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("register-export requires bound export preflight evidence") from error
+    if (budget.get("outputBytes") != measured_inventory or not isinstance(preflight, dict)
+            or recorded_preflight != preflight or preflight.get("candidateId") != candidate_id
+            or preflight.get("candidateCommit") != payload["candidate"]["commit"]):
         raise ValueError("export budget output bytes do not match measured package inventory")
     if (not app_path.is_dir() or app_path.is_symlink() or not executable.is_file() or executable.is_symlink()
             or launch.exact_executable_in_use(executable)):
@@ -505,6 +519,8 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
         registry.setdefault("builds", {})[candidate_id] = {"lifecycle": "exported", "tool": tool, "rootId": root_id,
             "task": task, "commit": payload["candidate"]["commit"], "manifestSha256": digest,
             "payloadBytes": measured_inventory, "registeredAt": datetime.now(timezone.utc).isoformat()}
+        if preflight.get("temporaryBasis") == "measured-low-water":
+            registry.setdefault("measurements", {}).setdefault(tool, {})["temporaryLowWaterBytes"] = preflight["temporaryBytes"]
     finally:
         _release(lease)
 
@@ -524,7 +540,12 @@ def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | No
         raise ValueError("no trusted output measurement/estimate; provide --output-bytes")
     measurements = registry.get("measurements", {}).get(tool, {}) if isinstance(registry.get("measurements", {}), dict) else {}
     low_water = measurements.get("temporaryLowWaterBytes") if isinstance(measurements, dict) else None
-    temporary = temporary_bytes if temporary_bytes and temporary_bytes > 0 else low_water if isinstance(low_water, int) and low_water > 0 else output * 2
+    if temporary_bytes is not None and temporary_bytes > 0:
+        temporary, temporary_basis = temporary_bytes, "explicit-estimate"
+    elif isinstance(low_water, int) and low_water > 0:
+        temporary, temporary_basis = low_water, "measured-low-water"
+    else:
+        temporary, temporary_basis = output * 2, "fallback-two-times-output"
     reserve = max(2 * 1024**3, output)
     required = output + temporary + reserve
     config.home().mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -532,4 +553,5 @@ def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | No
     if free < required:
         raise ValueError("observed free space is below the measured export budget")
     return {"tool": tool, "outputBytes": output, "temporaryBytes": temporary, "reserveBytes": reserve,
-            "requiredBytes": required, "observedFreeBytes": free, "outputBasis": "accepted-measurement-plus-10-percent" if measured else "explicit-estimate"}
+            "requiredBytes": required, "observedFreeBytes": free, "outputBasis": "accepted-measurement-plus-10-percent" if measured else "explicit-estimate",
+            "temporaryBasis": temporary_basis}

@@ -28,8 +28,8 @@ SCREENSHOTS = (
 REQUIRED_EVIDENCE = (
     "evidence/toolchain.json", "evidence/locked-restore.log", "evidence/locked-build.log",
     "evidence/editor-bridge.log", "evidence/layout-matrix.json", "evidence/capture-evidence.log",
-    "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
-    "evidence/native-smoke.json", "evidence/exported-ordinary-launch.log", "evidence/plist-lint.log",
+    "evidence/export-preflight.json", "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
+    "evidence/native-smoke.json", "evidence/ordinary-launch-not-verified.json", "evidence/plist-lint.log",
     "evidence/plist-values.log", "evidence/architecture.txt", "evidence/codesign.log",
     "evidence/root-locked-restore.log", "evidence/root-locked-build.log", "evidence/data-tests.log",
     "evidence/presentation-tests.log", "evidence/hygiene.json",
@@ -39,7 +39,7 @@ REQUIRED_EVIDENCE = (
 # change. Keep that authority explicit: changes outside this finite set must
 # still fail the Display endpoint hygiene gate.
 AUTHORITATIVE_FULL_CARD_SCOPE = frozenset((
-    ".gitignore", "README.md", "docs/Arcanum.Godot.md", "docs/README.md",
+    ".gitignore", "README.md", "docs/Arcanum.Godot.md", "docs/README.md", "docs/input/display-ui-validation.md",
     "docs/project/status.md", "docs/rendering/terrain-viewer.md",
     "docs/workflow/local-development.md", "docs/workflow/toolchain.md",
     "experiments/display-ui-lab/README.md",
@@ -269,6 +269,15 @@ def write_manifest(args: argparse.Namespace) -> None:
     missing = [str(path.relative_to(build_root)) for path in required if not path.is_file()]
     if missing:
         raise SystemExit(f"required evidence is missing: {', '.join(missing)}")
+    try:
+        preflight = json.loads((build_root / "evidence/export-preflight.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"invalid export preflight evidence: {error}") from error
+    expected_candidate_id = f"{os.environ.get('ARCANUM_LOCAL_ROOT_ID')}:{TASK}:{head}"
+    if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
+            or preflight.get("tool") != "display" or preflight.get("candidateId") != expected_candidate_id
+            or preflight.get("candidateCommit") != head):
+        raise SystemExit("export preflight evidence is not bound to this candidate")
     if evidence_status(build_root / "evidence/layout-matrix.json") != "PASS" or evidence_status(build_root / "evidence/exported-layout-matrix.json") != "PASS" or evidence_status(build_root / "evidence/native-smoke.json") != "PASS":
         raise SystemExit("matrix or native evidence did not pass")
     hygiene_payload = json.loads((build_root / "evidence/hygiene.json").read_text(encoding="utf-8"))
@@ -320,9 +329,9 @@ def write_manifest(args: argparse.Namespace) -> None:
         "app": {"relativePath": "DisplayUiLab.app", "executableRelativePath": "DisplayUiLab.app/Contents/MacOS/Display UI Lab"},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": evidence} for name, evidence in gates.items()],
-        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": 0},
+        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": preflight["temporaryBytes"], "preflight": preflight},
         "acceptance": "not-accepted",
-        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalDisplayReadability": "NOT_VERIFIED"},
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalDisplayReadability": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; native smoke is automated evidence"},
     }
     write_json(build_root / "manifest.json", payload)
 

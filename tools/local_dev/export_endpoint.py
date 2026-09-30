@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Sequence
@@ -19,6 +20,8 @@ def _candidate_path(root_id: str, task: str, candidate: str) -> tuple[Path, str]
     if (Path(candidate).is_absolute() or candidate in (".", "..")
             or "/" in candidate or "\\" in candidate):
         raise ValueError("export endpoint candidate must be one safe path component")
+    if not re.fullmatch(r"[0-9a-f]{40}", candidate):
+        raise ValueError("export endpoint candidate must be a full lowercase-hex commit")
     conf = config.load_config()
     roots = conf.get("artifactRoots")
     root_text = roots.get(root_id) if isinstance(roots, dict) else None
@@ -85,6 +88,14 @@ def run_export(args: argparse.Namespace) -> int:
     if lease is None:
         raise ValueError("candidate is already exporting")
     try:
+        with config.registry_lock():
+            preflight = retention.export_preflight(config.load_registry(), args.tool,
+                                                    getattr(args, "output_bytes", None),
+                                                    getattr(args, "temporary_bytes", None))
+        preflight = {"schema": "arcanum-export-preflight-v1", **preflight,
+                     "candidateId": candidate_id, "candidateCommit": args.candidate}
+        evidence = candidate / "evidence" / "export-preflight.json"
+        config.write_atomic(evidence, preflight)
         completed = subprocess.run(args.command, check=False)
         if completed.returncode:
             return completed.returncode
@@ -123,6 +134,10 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--task", required=True)
     result.add_argument("--candidate", required=True)
     result.add_argument("--manifest", required=True)
+    result.add_argument("--output-bytes", type=int, required=True,
+                        help="explicit measured output estimate when no accepted measurement exists")
+    result.add_argument("--temporary-bytes", type=int,
+                        help="optional explicit measured temporary low-water estimate")
     result.add_argument("command", nargs=argparse.REMAINDER)
     return result
 

@@ -15,12 +15,12 @@ REQUIRED_LOGS = (
     "sdk-info.log", "locked-restore.log", "locked-tests-restore.log", "release-build.log",
     "core-harness.log", "editor-import.log", "debug-build.log", "godot-self-test.log",
     "export.log", "exported-smoke.log", "persistence-write.log",
-    "persistence-verify-nondefault.log", "persistence-verify-default.log", "ordinary-launch.log",
+    "persistence-verify-nondefault.log", "persistence-verify-default.log", "automated-capture.log",
     "plist-lint.log", "codesign.log",
 )
 REQUIRED_REPORTS = (
     "exported-smoke.json", "persistence-write.json", "persistence-verify-nondefault.json",
-    "persistence-verify-default.json", "ordinary-launch.png",
+    "persistence-verify-default.json", "automated-capture.png", "ordinary-launch-not-verified.json", "export-preflight.json",
 )
 GATES = {
     "core-harness": "core-harness.log", "godot-self-test": "godot-self-test.log", "export": "export.log",
@@ -75,10 +75,19 @@ def main() -> None:
         raise SystemExit("build root or exported app is not the exact candidate package")
     evidence = build_root / "evidence"
     missing = [name for name in (*REQUIRED_LOGS, *REQUIRED_REPORTS) if not (evidence / name).is_file()]
-    if missing or not (evidence / "ordinary-launch.png").stat().st_size:
+    if missing or not (evidence / "automated-capture.png").stat().st_size:
         raise SystemExit(f"missing or empty durable evidence: {missing}")
-    for report in REQUIRED_REPORTS[:-1]:
+    for report in ("exported-smoke.json", "persistence-write.json", "persistence-verify-nondefault.json", "persistence-verify-default.json"):
         validate_report(evidence / report)
+    try:
+        preflight = json.loads((evidence / "export-preflight.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"invalid export preflight evidence: {error}") from error
+    expected_candidate_id = f"{root_id}:{TASK}:{head}"
+    if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
+            or preflight.get("tool") != "gamepad" or preflight.get("candidateId") != expected_candidate_id
+            or preflight.get("candidateCommit") != head):
+        raise SystemExit("export preflight evidence is not bound to this candidate")
     base = git(candidate_root, "merge-base", "HEAD", "origin/main")
     tree = git(candidate_root, "rev-parse", "HEAD^{tree}")
     payload_inventory = inventory(build_root / "GamepadLab.app", "GamepadLab.app")
@@ -91,9 +100,9 @@ def main() -> None:
         "app": {"relativePath": "GamepadLab.app", "executableRelativePath": app.relative_to(build_root).as_posix()},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in GATES.items()],
-        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": 0},
+        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": preflight["temporaryBytes"], "preflight": preflight},
         "acceptance": "not-accepted",
-        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalXboxBluetooth": "NOT_VERIFIED", "signingNotarization": "NOT_VERIFIED"},
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalXboxBluetooth": "NOT_VERIFIED", "signingNotarization": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; --capture evidence is automated"},
     }
     write_json(build_root / "manifest.json", manifest)
 

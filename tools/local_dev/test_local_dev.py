@@ -34,19 +34,27 @@ class LocalDevTests(unittest.TestCase):
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path, manifests.sha256(path)
 
-    def v2_manifest(self, *, root_id: str = "test", task: str = "ARC-GPAD-003", name: str = "candidate") -> tuple[Path, str]:
+    def v2_manifest(self, *, root_id: str = "test", task: str = "ARC-GPAD-003", name: str = "a" * 40) -> tuple[Path, str]:
         candidate = self.root / "artifacts" / task / name
         executable = candidate / "GamepadLab.app" / "Contents" / "MacOS" / "GamepadLab"
         executable.parent.mkdir(parents=True); executable.write_bytes(b"fixture")
         evidence = candidate / "evidence" / "check.log"
         evidence.parent.mkdir(parents=True, exist_ok=True); evidence.write_bytes(b"PASS\n")
+        preflight = {"schema": "arcanum-export-preflight-v1", "tool": "gamepad",
+                     "candidateId": f"{root_id}:{task}:{name}", "candidateCommit": name,
+                     "outputBytes": 7, "temporaryBytes": 14, "temporaryBasis": "fallback-two-times-output",
+                     "reserveBytes": 2 * 1024**3, "requiredBytes": 7 + 14 + 2 * 1024**3,
+                     "observedFreeBytes": 3 * 1024**3, "outputBasis": "explicit-estimate"}
+        preflight_path = candidate / "evidence" / "export-preflight.json"
+        preflight_path.write_text(json.dumps(preflight), encoding="utf-8")
         path = candidate / "manifest.json"
         payload = {"schema": "arcanum-build-manifest-v2", "project": "arcanum-steamwoven", "logicalTool": "gamepad",
-                   "rootId": root_id, "task": task, "candidate": {"commit": "a" * 40, "tree": "b" * 40},
+                   "rootId": root_id, "task": task, "candidate": {"commit": name, "tree": "b" * 40},
                    "app": {"relativePath": "GamepadLab.app", "executableRelativePath": "GamepadLab.app/Contents/MacOS/GamepadLab"},
                    "payloadInventory": [{"relativePath": "GamepadLab.app/Contents/MacOS/GamepadLab", "bytes": 7, "sha256": manifests.sha256(executable)}],
-                   "evidence": [{"relativePath": "evidence/check.log", "bytes": 5, "sha256": manifests.sha256(evidence)}],
-                   "exportBudget": {"outputBytes": 7, "temporaryLowWaterBytes": 0}, "acceptance": "not-accepted"}
+                   "evidence": [{"relativePath": "evidence/check.log", "bytes": 5, "sha256": manifests.sha256(evidence)},
+                                {"relativePath": "evidence/export-preflight.json", "bytes": preflight_path.stat().st_size, "sha256": manifests.sha256(preflight_path)}],
+                   "exportBudget": {"outputBytes": 7, "temporaryLowWaterBytes": 14, "preflight": preflight}, "acceptance": "not-accepted"}
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path, manifests.sha256(path)
 
@@ -116,7 +124,7 @@ class LocalDevTests(unittest.TestCase):
         _, digest = self.manifest(); bound, _ = self.v2_manifest()
         executable = bound.parent / "GamepadLab.app" / "Contents" / "MacOS" / "GamepadLab"
         current.parent.mkdir(parents=True, exist_ok=True)
-        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "candidate/manifest.json", "manifestSha256": manifests.sha256(bound)}), encoding="utf-8")
+        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": f"{'a' * 40}/manifest.json", "manifestSha256": manifests.sha256(bound)}), encoding="utf-8")
         found, payload, _ = manifests.resolve_current(root, "gamepad")
         self.assertEqual(found, bound.resolve()); self.assertEqual(manifests.manifest_candidate(payload), "a" * 40)
         self.assertEqual(Path(payload["app"]["executable"]), executable.resolve())
@@ -143,14 +151,15 @@ class LocalDevTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "evidence"):
             manifests._manifest(manifest, "gamepad")
         payload["evidence"] = [{"relativePath": "evidence/check.log", "bytes": 1, "sha256": "a" * 64}]
+        preflight = payload["exportBudget"]["preflight"]
         payload["exportBudget"] = {"outputBytes": 7}
         manifest.write_text(json.dumps(payload), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "budget"):
             manifests._manifest(manifest, "gamepad")
-        payload["exportBudget"] = {"outputBytes": 7, "temporaryLowWaterBytes": 0}
+        payload["exportBudget"] = {"outputBytes": 7, "temporaryLowWaterBytes": 14, "preflight": preflight}
         manifest.write_text(json.dumps(payload), encoding="utf-8")
         root = self.root / "artifacts"; current = root / "ARC-GPAD-003" / "current-v2.json"
-        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "candidate/manifest.json", "manifestSha256": manifests.sha256(manifest)}), encoding="utf-8")
+        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": f"{'a' * 40}/manifest.json", "manifestSha256": manifests.sha256(manifest)}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "root identity"):
             manifests.resolve_current(root, "gamepad", root_id="other")
 
@@ -176,7 +185,7 @@ class LocalDevTests(unittest.TestCase):
         pointer.write_text(json.dumps({"schemaVersion": 1, "manifest": str(manifest)}), encoding="utf-8")
         _, payload, _ = manifests.resolve_current(root, "display")
         self.assertEqual(Path(payload["app"]["executable"]), app.resolve())
-        pointer.write_text(json.dumps({"schemaVersion": 1, "manifestRelativePath": "candidate/manifest.json"}), encoding="utf-8")
+        pointer.write_text(json.dumps({"schemaVersion": 1, "manifestRelativePath": f"{'a' * 40}/manifest.json"}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "absolute"):
             manifests.resolve_current(root, "display")
 
@@ -227,7 +236,7 @@ class LocalDevTests(unittest.TestCase):
     def test_retired_registered_app_is_pruned_with_idempotent_receipt(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest()
         candidate = manifest.parent
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
@@ -241,7 +250,7 @@ class LocalDevTests(unittest.TestCase):
 
     def test_apply_rejects_forged_receipt_while_payload_exists(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest(); candidate = manifest.parent
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True)); item = plan["payloads"][0]
@@ -252,7 +261,7 @@ class LocalDevTests(unittest.TestCase):
 
     def test_apply_rejects_malformed_existing_intent_before_deletion(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest(); candidate = manifest.parent
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True)); item = plan["payloads"][0]
@@ -263,16 +272,16 @@ class LocalDevTests(unittest.TestCase):
 
     def test_apply_finalizes_crash_intent_and_rejects_pointer_drift(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest()
-        candidate = manifest.parent; candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate = manifest.parent; candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         current = candidate.parent / "current-v2.json"
-        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "candidate/manifest.json", "manifestSha256": digest}), encoding="utf-8")
+        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": f"{'a' * 40}/manifest.json", "manifestSha256": digest}), encoding="utf-8")
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
         current.write_text("{}", encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "pointer changed"):
             retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
-        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "candidate/manifest.json", "manifestSha256": digest}), encoding="utf-8")
+        current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": f"{'a' * 40}/manifest.json", "manifestSha256": digest}), encoding="utf-8")
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
         item = plan["payloads"][0]
         config.write_atomic(candidate / "prune-intent-v1.json", {"schema": "prune-intent-v1", "id": plan["id"], "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"], "manifestSha256": item["manifestSha256"], "reason": item["reason"]})
@@ -283,7 +292,7 @@ class LocalDevTests(unittest.TestCase):
 
     def test_apply_rejects_pointer_created_after_plan_and_tampered_recovery_manifest(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest(); candidate = manifest.parent
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True)); item = plan["payloads"][0]
@@ -299,7 +308,7 @@ class LocalDevTests(unittest.TestCase):
 
     def test_inventory_keeps_intermediate_payload_symlink_and_unsafe_candidate(self) -> None:
         root = self.root / "artifacts"; manifest, digest = self.v2_manifest(); candidate = manifest.parent
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
         registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}}
         moved = candidate / "actual"; (candidate / "GamepadLab.app").rename(moved)
@@ -312,11 +321,11 @@ class LocalDevTests(unittest.TestCase):
         self.assertTrue(any(entry["candidate"] == "linked" and "KEEP/SKIP" in entry["reason"] for entry in entries))
 
     def test_accept_rotates_rollback_and_protects_it_from_retire(self) -> None:
-        old, old_digest = self.v2_manifest(name="old"); new, new_digest = self.v2_manifest(name="new")
-        old_id, new_id = "test:ARC-GPAD-003:old", "test:ARC-GPAD-003:new"
+        old, old_digest = self.v2_manifest(name="b" * 40); new, new_digest = self.v2_manifest(name="c" * 40)
+        old_id, new_id = "test:ARC-GPAD-003:" + "b" * 40, "test:ARC-GPAD-003:" + "c" * 40
         registry = config.default_registry(); registry["builds"] = {
-            old_id: {"lifecycle": "exported", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": old_digest},
-            new_id: {"lifecycle": "exported", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": new_digest}}
+            old_id: {"lifecycle": "exported", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "b" * 40, "manifestSha256": old_digest},
+            new_id: {"lifecycle": "exported", "tool": "gamepad", "rootId": "test", "task": "ARC-GPAD-003", "commit": "c" * 40, "manifestSha256": new_digest}}
         retention.accept(registry, tool="gamepad", candidate_id=old_id, manifest=old, authority="owner", review="review-1")
         retention.accept(registry, tool="gamepad", candidate_id=new_id, manifest=new, authority="owner", review="review-2")
         self.assertEqual(registry["accepted"]["gamepad"], new_id); self.assertEqual(registry["rollback"]["gamepad"], old_id)
@@ -330,12 +339,35 @@ class LocalDevTests(unittest.TestCase):
         self.assertEqual(budget["reserveBytes"], 2 * 1024**3)
         self.assertEqual(budget["temporaryBytes"], 200)
 
+    def test_export_endpoint_rejects_preflight_before_child_execution(self) -> None:
+        root = self.root / "artifacts"; root.mkdir()
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        commit = "d" * 40
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": commit,
+                                  "manifest": str(root / "ARC-GPAD-003" / commit / "manifest.json"),
+                                  "output_bytes": 7, "temporary_bytes": None, "command": ["/usr/bin/true"]})()
+        with patch("tools.local_dev.export_endpoint.retention.export_preflight", side_effect=ValueError("observed free space is below the measured export budget")), patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "free space"):
+                export_endpoint.run_export(args)
+        command.assert_not_called()
+        self.assertFalse((root / "ARC-GPAD-003" / "current.json").exists())
+        self.assertFalse(config.load_registry()["builds"])
+
+    def test_registration_rejects_commit_candidate_id_and_manifest_parent_mismatch(self) -> None:
+        manifest, _ = self.v2_manifest()
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["checks"] = [{"name": name, "outcome": "PASS"} for name in retention.REQUIRED_SUCCESS_GATES["gamepad"]]
+        payload["candidate"]["commit"] = "b" * 40
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "exact v2 root/task/commit"):
+            retention.register_export(config.default_registry(), tool="gamepad", candidate_id="test:ARC-GPAD-003:" + "a" * 40, manifest=manifest)
+
     def test_export_registration_requires_passing_existing_manifest(self) -> None:
         manifest, _ = self.v2_manifest()
         payload = json.loads(manifest.read_text(encoding="utf-8")); payload["checks"] = [{"name": name, "outcome": "PASS"} for name in retention.REQUIRED_SUCCESS_GATES["gamepad"]]
         manifest.write_text(json.dumps(payload), encoding="utf-8")
         registry = config.default_registry()
-        candidate_id = "test:ARC-GPAD-003:candidate"
+        candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         retention.register_export(registry, tool="gamepad", candidate_id=candidate_id, manifest=manifest)
         self.assertEqual(registry["builds"][candidate_id]["lifecycle"], "exported")
         payload["checks"] = [{"name": "codesign-deep-strict", "outcome": "FAIL"}]; manifest.write_text(json.dumps(payload), encoding="utf-8")
@@ -343,7 +375,7 @@ class LocalDevTests(unittest.TestCase):
             retention.register_export(registry, tool="gamepad", candidate_id=candidate_id, manifest=manifest)
 
     def test_export_registration_binds_evidence_digests_and_budget_to_disk(self) -> None:
-        manifest, _ = self.v2_manifest(); candidate_id = "test:ARC-GPAD-003:candidate"
+        manifest, _ = self.v2_manifest(); candidate_id = "test:ARC-GPAD-003:" + "a" * 40
         payload = json.loads(manifest.read_text(encoding="utf-8")); payload["checks"] = [{"name": name, "outcome": "PASS"} for name in retention.REQUIRED_SUCCESS_GATES["gamepad"]]
         payload["exportBudget"]["outputBytes"] = 8
         manifest.write_text(json.dumps(payload), encoding="utf-8")
@@ -357,20 +389,23 @@ class LocalDevTests(unittest.TestCase):
     def test_export_endpoint_registers_only_after_success_and_writes_v2_pointer(self) -> None:
         root = self.root / "artifacts"; root.mkdir()
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
-        failed = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "failed",
-                                   "manifest": str(root / "ARC-GPAD-003/failed/manifest.json"), "command": ["/usr/bin/false"]})()
+        failed_commit = "f" * 40
+        failed = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": failed_commit,
+                                   "manifest": str(root / "ARC-GPAD-003" / failed_commit / "manifest.json"), "output_bytes": 7, "temporary_bytes": None, "command": ["/usr/bin/false"]})()
         self.assertEqual(export_endpoint.run_export(failed), 1)
         self.assertFalse((root / "ARC-GPAD-003/current.json").exists())
         self.assertFalse(config.load_registry()["builds"])
         manifest, _ = self.v2_manifest()
         payload = json.loads(manifest.read_text(encoding="utf-8")); payload["checks"] = [{"name": name, "outcome": "PASS"} for name in retention.REQUIRED_SUCCESS_GATES["gamepad"]]
         manifest.write_text(json.dumps(payload), encoding="utf-8")
-        success = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
-                                    "manifest": str(manifest), "command": ["/usr/bin/true"]})()
-        self.assertEqual(export_endpoint.run_export(success), 0)
+        success = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "a" * 40,
+                                    "manifest": str(manifest), "output_bytes": 7, "temporary_bytes": None, "command": ["/usr/bin/true"]})()
+        with patch("tools.local_dev.export_endpoint.retention.register_export") as registered:
+            self.assertEqual(export_endpoint.run_export(success), 0)
+        self.assertEqual(registered.call_args.kwargs["candidate_id"], "test:ARC-GPAD-003:" + "a" * 40)
         pointer = json.loads((root / "ARC-GPAD-003/current.json").read_text(encoding="utf-8"))
         self.assertEqual(pointer["schema"], "arcanum-build-current-v2")
-        self.assertEqual(config.load_registry()["builds"]["test:ARC-GPAD-003:candidate"]["lifecycle"], "exported")
+        self.assertEqual(config.load_registry()["builds"], {})
 
     def test_export_endpoint_publication_errors_restore_pointer_and_registry(self) -> None:
         root = self.root / "artifacts"; root.mkdir()
@@ -385,12 +420,12 @@ class LocalDevTests(unittest.TestCase):
         registry["accepted"] = {"gamepad": "accepted"}; registry["rollback"] = {"gamepad": "rollback"}
         config.save_registry(registry)
         expected_pointer = pointer.read_bytes(); expected_registry = config.registry_path().read_bytes()
-        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
-                                  "manifest": str(manifest), "command": ["/usr/bin/true"]})()
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "a" * 40,
+                                  "manifest": str(manifest), "output_bytes": 7, "temporary_bytes": None, "command": ["/usr/bin/true"]})()
         for target in ("_write_current", "save_registry"):
             patch_target = (f"tools.local_dev.export_endpoint.{target}" if target == "_write_current"
                             else "tools.local_dev.export_endpoint.config.save_registry")
-            with self.subTest(target=target), patch(patch_target, side_effect=OSError("forced publication failure")):
+            with self.subTest(target=target), patch("tools.local_dev.export_endpoint.retention.register_export"), patch(patch_target, side_effect=OSError("forced publication failure")):
                 with self.assertRaisesRegex(OSError, "forced publication failure"):
                     export_endpoint.run_export(args)
             self.assertEqual(pointer.read_bytes(), expected_pointer)
@@ -427,10 +462,10 @@ class LocalDevTests(unittest.TestCase):
 
     def test_export_endpoint_rejects_candidate_symlink_before_command_or_mutation(self) -> None:
         root = self.root / "artifacts"; outside = self.root / "outside"; root.mkdir(); outside.mkdir()
-        candidate = root / "ARC-GPAD-003" / "candidate"; candidate.parent.mkdir()
+        candidate = root / "ARC-GPAD-003" / ("a" * 40); candidate.parent.mkdir()
         candidate.symlink_to(outside, target_is_directory=True)
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
-        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "a" * 40,
                                   "manifest": str(outside / "manifest.json"), "command": ["/usr/bin/false"]})()
         with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
             with self.assertRaisesRegex(ValueError, "must not traverse a symlink"):
@@ -442,13 +477,13 @@ class LocalDevTests(unittest.TestCase):
         root = self.root / "artifacts"; outside = self.root / "outside"; root.mkdir(); outside.mkdir()
         task = root / "ARC-GPAD-003"; task.symlink_to(outside, target_is_directory=True)
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
-        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
-                                  "manifest": str(outside / "candidate/manifest.json"), "command": ["/usr/bin/false"]})()
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "a" * 40,
+                                  "manifest": str(outside / ("a" * 40) / "manifest.json"), "command": ["/usr/bin/false"]})()
         with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
             with self.assertRaisesRegex(ValueError, "must not traverse a symlink"):
                 export_endpoint.run_export(args)
         command.assert_not_called()
-        self.assertFalse((outside / "candidate/.export-lease.lock").exists())
+        self.assertFalse((outside / ("a" * 40) / ".export-lease.lock").exists())
 
 
 if __name__ == "__main__":

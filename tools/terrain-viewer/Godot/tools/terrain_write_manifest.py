@@ -49,9 +49,18 @@ def main() -> None:
     if build_root != main_root / "artifacts" / "builds" / TASK / head or not app.is_file() or not app.is_relative_to(build_root / "ArcanumTerrainViewer.app"):
         raise SystemExit("build root or exported app is not the exact candidate package")
     evidence = build_root / "evidence"
-    missing = [name for name in GATES.values() if not (evidence / name).is_file()]
+    missing = [name for name in (*GATES.values(), "export-preflight.json") if not (evidence / name).is_file()]
     if missing:
         raise SystemExit(f"missing durable success-gate evidence: {missing}")
+    try:
+        preflight = json.loads((evidence / "export-preflight.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"invalid export preflight evidence: {error}") from error
+    expected_candidate_id = f"{root_id}:{TASK}:{head}"
+    if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
+            or preflight.get("tool") != "terrain" or preflight.get("candidateId") != expected_candidate_id
+            or preflight.get("candidateCommit") != head):
+        raise SystemExit("export preflight evidence is not bound to this candidate")
     payload_inventory = inventory(build_root / "ArcanumTerrainViewer.app", "ArcanumTerrainViewer.app")
     evidence_inventory = inventory(evidence, "evidence")
     payload_bytes = sum(file.stat().st_size for file in (build_root / "ArcanumTerrainViewer.app").rglob("*") if file.is_file() and not file.is_symlink())
@@ -63,7 +72,7 @@ def main() -> None:
         "app": {"relativePath": "ArcanumTerrainViewer.app", "executableRelativePath": app.relative_to(build_root).as_posix()},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in GATES.items()],
-        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": 0},
+        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": preflight["temporaryBytes"], "preflight": preflight},
         "acceptance": "not-accepted",
         "delivery": {"status": "verified-local-candidate; exact-head review pending", "originalInputModes": "NOT_VERIFIED unless separately configured"},
     }

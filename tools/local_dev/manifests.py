@@ -116,6 +116,22 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
     for key in ("outputBytes", "temporaryLowWaterBytes"):
         if not isinstance(budget.get(key), int) or budget[key] < 0:
             raise ValueError("v2 export budget lacks measured byte fields")
+    preflight = budget.get("preflight")
+    if not isinstance(preflight, dict):
+        raise ValueError("v2 export budget lacks immutable preflight observation")
+    required_preflight = ("schema", "tool", "candidateId", "candidateCommit", "outputBytes",
+                          "temporaryBytes", "temporaryBasis", "reserveBytes", "requiredBytes",
+                          "observedFreeBytes", "outputBasis")
+    if (preflight.get("schema") != "arcanum-export-preflight-v1"
+            or preflight.get("tool") != expected_tool
+            or any(key not in preflight for key in required_preflight)
+            or any(not isinstance(preflight[key], int) or preflight[key] < 0
+                   for key in ("outputBytes", "temporaryBytes", "reserveBytes", "requiredBytes", "observedFreeBytes"))
+            or preflight.get("temporaryBasis") not in {"measured-low-water", "fallback-two-times-output", "explicit-estimate"}
+            or preflight.get("outputBasis") not in {"accepted-measurement-plus-10-percent", "explicit-estimate"}
+            or preflight["requiredBytes"] != preflight["outputBytes"] + preflight["temporaryBytes"] + preflight["reserveBytes"]
+            or budget["temporaryLowWaterBytes"] != preflight["temporaryBytes"]):
+        raise ValueError("v2 export preflight observation is invalid")
 
 
 def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
@@ -163,6 +179,8 @@ def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tup
     manifest_path, manifest = _manifest(manifest_path, tool, expected_digest)
     if root_id is not None and manifest.get("schema") == "arcanum-build-manifest-v2" and manifest.get("rootId") != root_id:
         raise ValueError("v2 manifest root identity does not match configured artifact root")
+    if manifest.get("schema") == "arcanum-build-manifest-v2" and manifest_path.parent.name != manifest_candidate(manifest):
+        raise ValueError("v2 manifest candidate commit does not match its directory")
     app = manifest["app"]
     executable = app.get("executableRelativePath") or app.get("executable")
     if not isinstance(executable, str) or not executable:
@@ -180,6 +198,6 @@ def manifest_candidate(manifest: dict[str, Any]) -> str:
     candidate = manifest.get("candidate")
     if isinstance(candidate, dict):
         candidate = candidate.get("commit")
-    if not isinstance(candidate, str) or not candidate:
-        raise ValueError("manifest lacks immutable candidate identity")
+    if not isinstance(candidate, str) or not re.fullmatch(r"[0-9a-f]{40}", candidate):
+        raise ValueError("manifest requires a full lowercase-hex candidate identity")
     return candidate
