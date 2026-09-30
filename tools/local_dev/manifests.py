@@ -26,11 +26,12 @@ def sha256(path: Path) -> str:
 
 
 def _json(path: Path) -> dict[str, Any]:
-    if not path.is_file() or path.is_symlink() or config._has_symlink_component(path.absolute()):
+    encoded = config.optional_authority_bytes(path)
+    if encoded is None:
         raise ValueError("pointer or manifest must be a non-symlink regular file")
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        value = json.loads(encoded)
+    except (UnicodeError, json.JSONDecodeError) as error:
         raise ValueError("invalid pointer or manifest JSON") from error
     if not isinstance(value, dict):
         raise ValueError("pointer or manifest must be an object")
@@ -167,7 +168,7 @@ def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tup
     candidates = []
     for task in SUPPORTED_TOOLS[tool]:
         candidates.extend((root / task / "current.json", root / task / "current-v2.json"))
-    pointers = [candidate for candidate in candidates if candidate.exists()]
+    pointers = [candidate for candidate in candidates if config.optional_authority_bytes(candidate) is not None]
     if len(pointers) != 1:
         raise ValueError("expected exactly one supported current pointer")
     return resolve_pointer(root, pointers[0], tool, root_id=root_id)

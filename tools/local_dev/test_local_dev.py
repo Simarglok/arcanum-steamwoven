@@ -10,6 +10,9 @@ import tempfile
 import unittest
 import sys
 import argparse
+import hashlib
+import runpy
+import socket
 from unittest.mock import patch
 
 from tools.local_dev import config, export_endpoint, launch, manifests, retention
@@ -74,6 +77,273 @@ class LocalDevTests(unittest.TestCase):
                    "exportBudget": {"outputBytes": 7, "temporaryLowWaterBytes": 0, "preflight": preflight, "observation": observation}, "acceptance": "not-accepted"}
         path.write_text(json.dumps(payload), encoding="utf-8")
         return path, manifests.sha256(path)
+
+    def authority_snapshot(self) -> dict:
+        """Independent lstat/byte oracle: never follow links or read special nodes."""
+        result = {}
+        def visit(path: Path) -> None:
+            node = path.lstat()
+            record: list[int | str] = [stat.S_IFMT(node.st_mode), stat.S_IMODE(node.st_mode)]
+            if stat.S_ISLNK(node.st_mode):
+                record.append(os.readlink(path))
+            elif stat.S_ISREG(node.st_mode):
+                try:
+                    record.append(hashlib.sha256(path.read_bytes()).hexdigest())
+                except PermissionError:
+                    record.append("unreadable")
+            result[path.relative_to(self.root).as_posix()] = record
+            if stat.S_ISDIR(node.st_mode):
+                try:
+                    children = sorted(path.iterdir())
+                except PermissionError:
+                    return
+                for child in children:
+                    visit(child)
+        visit(self.root)
+        return result
+
+    def authority_fixture(self, name: str = "current.json", task: str = "ARC-GPAD-003", tool: str = "gamepad") -> Path:
+        manifest = self.root / "artifacts" / task / ("a" * 40) / "manifest.json"
+        if not manifest.exists():
+            manifest, _ = self.v2_manifest(task=task)
+        payload = json.loads(manifest.read_bytes())
+        payload["logicalTool"] = tool
+        payload["exportBudget"]["preflight"]["tool"] = tool
+        payload["exportBudget"]["observation"]["tool"] = tool
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        pointer = manifest.parent.parent / name
+        pointer.write_text(json.dumps({"schema": "arcanum-build-current-v2",
+            "manifestRelativePath": "a" * 40 + "/manifest.json",
+            "manifestSha256": hashlib.sha256(manifest.read_bytes()).hexdigest()}), encoding="utf-8")
+        conf = self.conf()
+        conf["launchSelection"] = {tool: f"test:{task}:" + "a" * 40}
+        config.save_config(conf)
+        config.save_registry(config.default_registry())
+        return pointer
+
+    def assert_authority_rejection(self, tool: str = "gamepad") -> None:
+        before = self.authority_snapshot()
+        with self.assertRaises(ValueError):
+            manifests.resolve_current(self.root / "artifacts", tool, root_id="test")
+        cli = Path(__file__).resolve().parents[1] / "arcanum-local"
+        result = subprocess.run([sys.executable, "-B", str(cli), "launch", tool, "--dry-run"],
+                                capture_output=True, text=True, timeout=5)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertNotIn(str(self.root), result.stderr)
+        # Non-dry-run and duplicate opt-in must never reach launch/lock/Popen.
+        module = runpy.run_path(str(cli))
+        for duplicate in (False, True):
+            args = module["parser"]().parse_args(["launch", tool] + (["--allow-duplicate"] if duplicate else []))
+            with patch.object(launch, "start") as start, patch.object(config, "open_lock_file") as lock, patch.object(launch.subprocess, "Popen") as child:
+                with self.assertRaises(ValueError):
+                    module["command_launch"](args)
+                start.assert_not_called(); lock.assert_not_called(); child.assert_not_called()
+        self.assertEqual(self.authority_snapshot(), before)
+
+    def test_authority_dangling_sibling_four_cli_variants(self) -> None:
+        for good, bad in (("current.json", "current-v2.json"), ("current-v2.json", "current.json")):
+            for task in ("ARC-GPAD-003", "ARC-GPAD-002"):
+                with self.subTest(good=good, task=task):
+                    pointer = self.authority_fixture(good)
+                    unsafe = self.root / "artifacts" / task / bad
+                    unsafe.parent.mkdir(exist_ok=True)
+                    unsafe.symlink_to(self.root / "missing-sentinel")
+                    self.assert_authority_rejection()
+                    snapshot = retention.protection_snapshot(config.load_config(), config.load_registry())
+                    self.assertIn(["test", "gamepad"], snapshot["blockedDomains"])
+                    self.assertEqual(snapshot["pointers"][f"test:{task}:{bad}"], "unsafe-pointer")
+                    self.assertEqual(retention.create_plan(config.load_config(), config.load_registry(),
+                        retention.inventory(config.load_config(), config.load_registry(), show_paths=True))["payloads"], [])
+                    unsafe.unlink(); pointer.unlink()
+
+    def test_authority_all_literal_tasks_and_names_are_inspected(self) -> None:
+        # Literal contract, deliberately not generated from SUPPORTED_TOOLS.
+        groups = {"art": ("ARC-RENDER-001", "ARC-RENDER-002"),
+                  "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001"),
+                  "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003"), "display": ("ARC-UI-001",)}
+        for tool, tasks in groups.items():
+            for task in tasks:
+                for good, bad in (("current.json", "current-v2.json"), ("current-v2.json", "current.json")):
+                    with self.subTest(tool=tool, task=task, good=good):
+                        pointer = self.authority_fixture(good, task, tool)
+                        found, payload, _ = manifests.resolve_current(self.root / "artifacts", tool, root_id="test")
+                        self.assertEqual(found, pointer.parent / ("a" * 40) / "manifest.json")
+                        self.assertEqual(payload["task"], task)
+                        unsafe = pointer.parent / bad
+                        unsafe.symlink_to(self.root / "missing")
+                        self.assert_authority_rejection(tool)
+                        unsafe.unlink(); pointer.unlink()
+
+    def test_authority_leaf_and_parent_types_cli_and_retention(self) -> None:
+        pointer = self.authority_fixture()
+        unsafe = pointer.parent / "current-v2.json"
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        for kind in ("existing-link", "loop", "directory", "fifo", "socket", "unreadable"):
+            with self.subTest(kind=kind):
+                server = None
+                if kind == "existing-link": unsafe.symlink_to(sentinel)
+                elif kind == "loop": unsafe.symlink_to(unsafe.name)
+                elif kind == "directory": unsafe.mkdir()
+                elif kind == "fifo": os.mkfifo(unsafe)
+                elif kind == "socket":
+                    server = socket.socket(socket.AF_UNIX)
+                    previous = Path.cwd()
+                    try:
+                        os.chdir(unsafe.parent); server.bind(unsafe.name)
+                    finally:
+                        os.chdir(previous)
+                else:
+                    self.assertNotEqual(os.geteuid(), 0, "permission oracle requires nonprivileged uid")
+                    unsafe.write_bytes(b"{}"); unsafe.chmod(0)
+                try:
+                    self.assert_authority_rejection()
+                    self.assertIn(["test", "gamepad"], retention.protection_snapshot(config.load_config(), config.load_registry())["blockedDomains"])
+                finally:
+                    if server: server.close()
+                    if kind == "directory": unsafe.rmdir()
+                    else: unsafe.unlink()
+        parent = self.root / "artifacts/ARC-GPAD-001"
+        target = self.root / "target-dir"; target.mkdir()
+        for kind in ("link", "dangling", "file", "fifo", "unreadable"):
+            with self.subTest(parent=kind):
+                if kind == "link": parent.symlink_to(target, target_is_directory=True)
+                elif kind == "dangling": parent.symlink_to(self.root / "missing-dir", target_is_directory=True)
+                elif kind == "file": parent.write_bytes(b"not-directory")
+                elif kind == "fifo": os.mkfifo(parent)
+                else: parent.mkdir(); parent.chmod(0)
+                try:
+                    self.assert_authority_rejection()
+                    proof = retention.protection_snapshot(config.load_config(), config.load_registry())
+                    self.assertIn(["test", "gamepad"], proof["blockedDomains"])
+                    for name in ("current.json", "current-v2.json"):
+                        self.assertEqual(proof["pointers"][f"test:ARC-GPAD-001:{name}"], "unsafe-pointer")
+                finally:
+                    if kind == "unreadable": parent.chmod(0o700); parent.rmdir()
+                    else: parent.unlink()
+        self.assertEqual(sentinel.read_bytes(), b"outside"); self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o644)
+
+    def test_authority_absence_valid_and_ambiguous_cli_controls(self) -> None:
+        pointer = self.authority_fixture()
+        cli = Path(__file__).resolve().parents[1] / "arcanum-local"
+        before = self.authority_snapshot()
+        control = subprocess.run([sys.executable, "-B", str(cli), "launch", "gamepad", "--dry-run"], capture_output=True, text=True, timeout=5)
+        self.assertEqual(control.returncode, 0); self.assertFalse(json.loads(control.stdout)["started"])
+        self.assertEqual(before, self.authority_snapshot())
+        sibling = pointer.parent / "current-v2.json"
+        for encoded in (pointer.read_bytes(), b"{", b'{"schema":"unknown"}'):
+            sibling.write_bytes(encoded)
+            self.assert_authority_rejection()
+            sibling.unlink()
+        other = self.root / "artifacts/ARC-GPAD-001"
+        other.mkdir(); (other / "current.json").write_bytes(pointer.read_bytes())
+        self.assert_authority_rejection()
+        (other / "current.json").unlink(); other.rmdir()
+        pointer.unlink(); self.assert_authority_rejection()
+
+    def test_optional_state_authority_cli_and_no_stale_fallback(self) -> None:
+        self.assertEqual(config.load_config(), config.default_config())
+        self.assertFalse(config.home().exists(), "read must not create missing home")
+        self.authority_fixture()
+        cli = Path(__file__).resolve().parents[1] / "arcanum-local"
+        for path, loader in ((config.config_path(), config.load_config), (config.registry_path(), config.load_registry)):
+            original = path.read_bytes()
+            for kind in ("dangling", "fifo", "unreadable"):
+                path.unlink()
+                if kind == "dangling": path.symlink_to(self.root / "missing-state")
+                elif kind == "fifo": os.mkfifo(path)
+                else: path.write_bytes(original); path.chmod(0)
+                before = self.authority_snapshot()
+                with self.assertRaises(ValueError): loader()
+                for command in (["launch", "gamepad", "--dry-run"], ["builds", "inventory"]):
+                    result = subprocess.run([sys.executable, "-B", str(cli), *command], capture_output=True, text=True, timeout=5)
+                    self.assertEqual(result.returncode, 2); self.assertEqual(result.stdout, "")
+                    self.assertNotIn(str(self.root), result.stderr)
+                with patch.object(config, "registry_lock"):
+                    with self.assertRaises(ValueError):
+                        retention.apply_plan({}, self.conf(), config.default_registry(), accepted_id="test")
+                with self.assertRaises(ValueError):
+                    retention._recheck_protection({}, self.conf(), config.default_registry(), "gamepad", "test:ARC-GPAD-003:" + "a" * 40)
+                self.assertEqual(before, self.authority_snapshot())
+                path.unlink(); path.write_bytes(original); path.chmod(0o600)
+        local = config.home(); moved = self.root / "moved-local"; local.rename(moved)
+        for kind in ("link", "dangling", "file"):
+            if kind == "link": local.symlink_to(moved, target_is_directory=True)
+            elif kind == "dangling": local.symlink_to(self.root / "missing-home", target_is_directory=True)
+            else: local.write_bytes(b"not-directory")
+            before = self.authority_snapshot()
+            with self.assertRaises(ValueError): config.load_config()
+            result = subprocess.run([sys.executable, "-B", str(cli), "builds", "inventory"], capture_output=True, text=True, timeout=5)
+            self.assertEqual(result.returncode, 2); self.assertEqual(before, self.authority_snapshot())
+            local.unlink()
+        moved.rename(local)
+
+    def test_optional_reader_races_errors_and_descriptor_release(self) -> None:
+        parent = self.root / "reader"; parent.mkdir()
+        path = parent / "authority"; path.write_bytes(b"original")
+        sentinel = self.root / "sentinel"; sentinel.write_bytes(b"outside"); sentinel.chmod(0o644)
+        real_open, real_close = os.open, os.close
+        for swap in ("leaf", "parent"):
+            held = set()
+            def opening(name, flags, *args, **kwargs):
+                if name == "authority":
+                    if swap == "leaf": path.unlink(); path.symlink_to(sentinel)
+                    else:
+                        parent.rename(self.root / "old-reader"); parent.symlink_to(self.root / "missing-parent", target_is_directory=True)
+                descriptor = real_open(name, flags, *args, **kwargs); held.add(descriptor); return descriptor
+            def closing(descriptor): held.remove(descriptor); real_close(descriptor)
+            with patch.object(config.os, "open", side_effect=opening), patch.object(config.os, "close", side_effect=closing):
+                with self.assertRaises(ValueError): config.optional_authority_bytes(path)
+            self.assertEqual(held, set())
+            if swap == "leaf": path.unlink(); path.write_bytes(b"original")
+            else: parent.unlink(); (self.root / "old-reader").rename(parent)
+        real_stat = os.stat
+        for error in (PermissionError(), NotADirectoryError(), OSError("inspection failed")):
+            def denied(name, *args, **kwargs):
+                if name == "authority": raise error
+                return real_stat(name, *args, **kwargs)
+            with patch.object(config.os, "stat", side_effect=denied):
+                with self.assertRaises(ValueError): config.optional_authority_bytes(path)
+        self.assertEqual(config.optional_authority_bytes(path), b"original")
+        self.assertIsNone(config.optional_authority_bytes(parent / "missing" / "authority"))
+        self.assertEqual(sentinel.read_bytes(), b"outside"); self.assertEqual(stat.S_IMODE(sentinel.stat().st_mode), 0o644)
+
+    def test_unsafe_authority_drift_blocks_apply_recovery_and_retire(self) -> None:
+        manifest, digest = self.v2_manifest()
+        identity = "test:ARC-GPAD-003:" + "a" * 40
+        conf, registry = self.conf(), config.default_registry()
+        registry["builds"][identity] = {"lifecycle": "retired", "tool": "gamepad", "rootId": "test",
+            "task": "ARC-GPAD-003", "commit": "a" * 40, "manifestSha256": digest}
+        config.save_config(conf); config.save_registry(registry)
+        with config.registry_lock(): pass
+        plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
+        self.assertEqual(len(plan["payloads"]), 1)
+        for recovery in (False, True):
+            if recovery:
+                item = plan["payloads"][0]
+                config.write_atomic(manifest.parent / "prune-intent-v1.json", {"schema": "prune-intent-v1", "id": plan["id"],
+                    "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
+                    "manifestSha256": item["manifestSha256"], "reason": item["reason"]})
+                shutil.rmtree(manifest.parent / item["payloadRelativePath"])
+            for kind in ("dangling-leaf", "fifo-leaf", "file-parent", "dangling-parent"):
+                parent = self.root / "artifacts/ARC-GPAD-001"
+                if kind.endswith("leaf"):
+                    parent.mkdir(); unsafe = parent / "current-v2.json"
+                    if kind == "dangling-leaf": unsafe.symlink_to(self.root / "missing")
+                    else: os.mkfifo(unsafe)
+                else:
+                    unsafe = parent
+                    if kind == "file-parent": parent.write_bytes(b"not-directory")
+                    else: parent.symlink_to(self.root / "missing-dir", target_is_directory=True)
+                before = self.authority_snapshot(); prior_registry = json.dumps(registry, sort_keys=True)
+                with self.assertRaises(ValueError): retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
+                with self.assertRaises(ValueError): retention.retire(registry, identity, conf=conf)
+                self.assertEqual(json.dumps(registry, sort_keys=True), prior_registry)
+                self.assertEqual(self.authority_snapshot(), before)
+                self.assertFalse((manifest.parent / "payload-pruned-v1.json").exists())
+                if not recovery: self.assertFalse((manifest.parent / "prune-intent-v1.json").exists())
+                unsafe.unlink()
+                if kind.endswith("leaf"): parent.rmdir()
 
     def test_atomic_local_files_are_owner_only(self) -> None:
         value = config.default_config()

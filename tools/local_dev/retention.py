@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import fcntl
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -227,12 +228,11 @@ def protection_snapshot(conf: dict[str, Any], registry: dict[str, Any]) -> dict[
                     pointer = root / task / name
                     key = f"{root_id}:{task}:{name}"
                     try:
-                        if config._has_symlink_component(pointer):
-                            raise ValueError("unsafe pointer authority")
-                        if not pointer.exists():
+                        encoded = config.optional_authority_bytes(pointer)
+                        if encoded is None:
                             bindings[key] = None
                             continue
-                        bindings[key] = sha256(pointer)
+                        bindings[key] = hashlib.sha256(encoded).hexdigest()
                         manifest, _, _ = resolve_pointer(root, pointer, tool, root_id=root_id)
                         relative = manifest.relative_to(root)
                         if len(relative.parts) != 3 or relative.parts[0] not in tasks:
@@ -394,12 +394,8 @@ def create_plan(conf: dict[str, Any], registry: dict[str, Any], entries: list[di
         payload = path / entry["payloadRelativePath"]
         pointer_hashes: dict[str, str | None] = {}
         for pointer in (path.parent / "current.json", path.parent / "current-v2.json"):
-            if pointer.exists() and pointer.is_file() and not pointer.is_symlink():
-                pointer_hashes[pointer.name] = sha256(pointer)
-            else:
-                # Absence is authority too: a current pointer added after the
-                # plan must be treated as drift, never silently ignored.
-                pointer_hashes[pointer.name] = None
+            encoded = config.optional_authority_bytes(pointer)
+            pointer_hashes[pointer.name] = hashlib.sha256(encoded).hexdigest() if encoded is not None else None
         payloads.append({"candidateId": entry["candidateId"], "path": str(path), "candidateIdentity": _identity(path),
                          "rootIdentity": _node_identity(path.parents[1]), "payloadRelativePath": entry["payloadRelativePath"],
                          "payloadIdentity": _identity(payload), "manifestSha256": entry["manifestSha256"], "pointerHashes": pointer_hashes,
@@ -415,8 +411,8 @@ def apply_plan(plan: dict[str, Any], conf: dict[str, Any], registry: dict[str, A
     with config.registry_lock():
         # CLI callers have persisted authorities; tests may use in-memory
         # fixtures, so retain those only when no local authority exists yet.
-        fresh_conf = config.load_config() if config.config_path().exists() else conf
-        fresh_registry = config.load_registry() if config.registry_path().exists() else registry
+        fresh_conf = config._read(config.config_path(), config.CONFIG_SCHEMA, lambda: conf)
+        fresh_registry = config._read(config.registry_path(), config.REGISTRY_SCHEMA, lambda: registry)
         return _apply_plan_locked(plan, fresh_conf, fresh_registry, accepted_id=accepted_id)
 
 
@@ -481,10 +477,9 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             pointer = candidate.parent / name
             if not isinstance(name, str) or name not in {"current.json", "current-v2.json"}:
                 raise ValueError("current pointer changed since planning")
-            if digest is None:
-                if pointer.exists() or pointer.is_symlink():
-                    raise ValueError("current pointer changed since planning")
-            elif not isinstance(digest, str) or not pointer.is_file() or pointer.is_symlink() or sha256(pointer) != digest:
+            encoded = config.optional_authority_bytes(pointer)
+            actual_digest = hashlib.sha256(encoded).hexdigest() if encoded is not None else None
+            if actual_digest != digest:
                 raise ValueError("current pointer changed since planning")
         task = candidate_id.split(":", 2)
         tool = _tool_for_task(task[1]) if len(task) == 3 else None
@@ -562,8 +557,8 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
 
 
 def _recheck_protection(plan: dict[str, Any], conf: dict[str, Any], registry: dict[str, Any], tool: str, candidate_id: str) -> None:
-    fresh_conf = config.load_config() if config.config_path().exists() else conf
-    fresh_registry = config.load_registry() if config.registry_path().exists() else registry
+    fresh_conf = config._read(config.config_path(), config.CONFIG_SCHEMA, lambda: conf)
+    fresh_registry = config._read(config.registry_path(), config.REGISTRY_SCHEMA, lambda: registry)
     if config.digest(fresh_conf) != plan["configSha256"] or config.digest(fresh_registry) != plan["registrySha256"]:
         raise ValueError("config or registry changed before payload mutation")
     snapshot = protection_snapshot(fresh_conf, fresh_registry)

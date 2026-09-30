@@ -37,14 +37,84 @@ def default_registry() -> dict[str, Any]:
     return {"schema": REGISTRY_SCHEMA, "generation": 0, "builds": {}, "accepted": {}, "rollback": {}}
 
 
-def _read(path: Path, schema: str, factory: Any) -> dict[str, Any]:
-    if not path.exists():
-        return factory()
-    if path.is_symlink():
-        raise ValueError(f"local configuration is a symlink: {path.name}")
+def optional_authority_bytes(path: Path) -> bytes | None:
+    """Read a pinned regular authority; only proved missing components are absent.
+
+    No directories/locks are created. Never follow caller-controlled links or
+    open special nodes. Keep ancestors pinned and recheck their identities so
+    detected replacement/disappearance is unsafe, not an absent authority.
+    """
+    path = path.expanduser().absolute()
+    if ".." in path.parts:
+        raise ValueError("unsafe local authority")
+    # Preserve only the documented system alias, not arbitrary symlink hops.
+    if path.parts[:2] == ("/", "var"):
+        path = Path("/private/var").joinpath(*path.parts[2:])
+    descriptors: list[int] = []
+    bindings: list[tuple[int, str, os.stat_result]] = []
+    leaf = None
+
+    def recheck() -> None:
+        for parent, name, admitted in bindings:
+            current = os.stat(name, dir_fd=parent, follow_symlinks=False)
+            if (current.st_dev, current.st_ino, current.st_mode) != (admitted.st_dev, admitted.st_ino, admitted.st_mode):
+                raise ValueError("local authority changed during inspection")
+
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        parent = os.open(path.anchor, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+        descriptors.append(parent)
+        for component in path.parts[1:-1]:
+            try:
+                before = os.stat(component, dir_fd=parent, follow_symlinks=False)
+            except FileNotFoundError:
+                recheck()
+                return None
+            if not stat.S_ISDIR(before.st_mode):
+                raise ValueError("unsafe local authority parent")
+            child = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+            descriptors.append(child)
+            opened = os.fstat(child)
+            if (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+                raise ValueError("local authority parent changed during inspection")
+            bindings.append((parent, component, before))
+            parent = child
+        try:
+            before = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        except FileNotFoundError:
+            recheck()
+            return None
+        if not stat.S_ISREG(before.st_mode):
+            raise ValueError("local authority must be a non-symlink regular file")
+        leaf = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=parent)
+        opened = os.fstat(leaf)
+        if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino):
+            raise ValueError("local authority changed during inspection")
+        chunks = []
+        while chunk := os.read(leaf, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(leaf)
+        current = os.stat(path.name, dir_fd=parent, follow_symlinks=False)
+        identity = lambda node: (node.st_dev, node.st_ino, node.st_mode, node.st_size, node.st_mtime_ns, node.st_ctime_ns)
+        if identity(before) != identity(opened) or identity(opened) != identity(after) or identity(after) != identity(current):
+            raise ValueError("local authority changed during inspection")
+        recheck()
+        return b"".join(chunks)
+    except OSError as error:
+        raise ValueError("local authority is unsafe or unreadable") from error
+    finally:
+        if leaf is not None:
+            os.close(leaf)
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def _read(path: Path, schema: str, factory: Any) -> dict[str, Any]:
+    encoded = optional_authority_bytes(path)
+    if encoded is None:
+        return factory()
+    try:
+        value = json.loads(encoded)
+    except (UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(f"invalid local configuration: {path.name}") from error
     if not isinstance(value, dict) or value.get("schema") != schema or not isinstance(value.get("generation"), int):
         raise ValueError(f"unsupported local configuration schema: {path.name}")
