@@ -13,7 +13,7 @@ from typing import Any
 
 from . import config
 from . import launch
-from .manifests import SUPPORTED_TOOLS, _manifest, manifest_candidate, sha256
+from .manifests import SUPPORTED_TOOLS, _manifest, manifest_candidate, resolve_pointer, sha256
 
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
 REQUIRED_SUCCESS_GATES = {
@@ -46,12 +46,15 @@ def _release(descriptor: int | None) -> None:
         os.close(descriptor)
 
 
-def _registered_manifest(*, tool: str, candidate_id: str, manifest: Path) -> tuple[dict[str, Any], str, str, str]:
+def _registered_manifest(*, conf: dict[str, Any], tool: str, candidate_id: str, manifest: Path) -> tuple[dict[str, Any], str, str, str]:
     """Prove exact root/task/commit/digest ownership before lifecycle mutation."""
+    configured = config.candidate_path(conf, tool, candidate_id)
     parts = candidate_id.split(":", 2)
     if len(parts) != 3 or not all(parts):
         raise ValueError("candidate id must bind root, task, and candidate")
     root_id, task, candidate_name = parts
+    if manifest.absolute() != configured / "manifest.json":
+        raise ValueError("manifest is not the exact configured candidate")
     if (task not in SUPPORTED_TOOLS.get(tool, ()) or manifest.name != "manifest.json"
             or manifest.parent.name != candidate_name or not re.fullmatch(r"[0-9a-f]{40}", candidate_name)):
         raise ValueError("candidate id does not match manifest location or tool")
@@ -186,19 +189,91 @@ def _matching_receipt(receipt: dict[str, Any], item: dict[str, Any], accepted_id
             and bool(receipt["prunedAt"]))
 
 
+def protection_snapshot(conf: dict[str, Any], registry: dict[str, Any]) -> dict[str, Any]:
+    """Bind every pointer, including absence, without resolving ambiguity away."""
+    protected: set[str] = set()
+    blocked: set[tuple[str, str]] = set()
+    bindings: dict[str, Any] = {}
+    roots = conf.get("artifactRoots", {})
+    if not isinstance(roots, dict):
+        raise ValueError("invalid artifact roots")
+    for root_id, text in sorted(roots.items()):
+        for tool, tasks in SUPPORTED_TOOLS.items():
+            try:
+                root = config.canonical_existing(text, directory=True)
+            except (OSError, ValueError):
+                blocked.add((root_id, tool))
+                bindings[f"{root_id}:{tool}"] = "unsafe-root"
+                continue
+            for task in tasks:
+                for name in ("current.json", "current-v2.json"):
+                    pointer = root / task / name
+                    key = f"{root_id}:{task}:{name}"
+                    try:
+                        if config._has_symlink_component(pointer):
+                            raise ValueError("unsafe pointer authority")
+                        if not pointer.exists():
+                            bindings[key] = None
+                            continue
+                        bindings[key] = sha256(pointer)
+                        manifest, _, _ = resolve_pointer(root, pointer, tool, root_id=root_id)
+                        relative = manifest.relative_to(root)
+                        if len(relative.parts) != 3 or relative.parts[0] not in tasks:
+                            raise ValueError("pointer candidate mapping is ambiguous")
+                        protected.add(f"{root_id}:{relative.parts[0]}:{relative.parts[1]}")
+                    except (OSError, ValueError):
+                        bindings.setdefault(key, "unsafe-pointer")
+                        blocked.add((root_id, tool))
+    for field in ("accepted", "rollback"):
+        values = registry.get(field, {})
+        if not isinstance(values, dict) or any(not isinstance(value, str) for value in values.values()):
+            blocked.update((root_id, tool) for root_id in roots for tool in SUPPORTED_TOOLS)
+        else:
+            protected.update(values.values())
+            for tool, selected in values.items():
+                try:
+                    config.candidate_path(conf, tool, selected)
+                except (OSError, ValueError):
+                    blocked.update((root_id, name) for root_id in roots for name in SUPPORTED_TOOLS
+                                   if tool not in SUPPORTED_TOOLS or name == tool)
+    selections = conf.get("launchSelection", {})
+    if not isinstance(selections, dict):
+        blocked.update((root_id, tool) for root_id in roots for tool in SUPPORTED_TOOLS)
+    else:
+        for tool, selected in selections.items():
+            parts = selected.split(":") if isinstance(selected, str) else []
+            if (tool not in SUPPORTED_TOOLS or len(parts) != 3 or not all(parts)
+                    or parts[0] not in roots or parts[1] not in SUPPORTED_TOOLS[tool]
+                    or "/" in parts[2] or "\\" in parts[2] or parts[2] in (".", "..")):
+                blocked.update((root_id, name) for root_id in roots for name in SUPPORTED_TOOLS
+                               if tool not in SUPPORTED_TOOLS or name == tool)
+            else:
+                protected.add(selected)
+    return {"pointers": bindings, "selectionSha256": config.digest({"selection": selections}),
+            "protected": sorted(value for value in protected if isinstance(value, str)),
+            "blockedDomains": [list(value) for value in sorted(blocked)]}
+
+
+def _assert_unprotected(snapshot: dict[str, Any], tool: str, candidate_id: str) -> None:
+    if (candidate_id in snapshot["protected"]
+            or [candidate_id.split(":", 1)[0], tool] in snapshot["blockedDomains"]):
+        raise ValueError("candidate is current/selected/rollback or has ambiguous pointer authority")
+
+
 def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: bool = False) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     roots = conf.get("artifactRoots", {})
     if not isinstance(roots, dict):
         raise ValueError("invalid artifact roots")
-    protected = set(registry.get("accepted", {}).values()) | set(registry.get("rollback", {}).values())
+    protection = protection_snapshot(conf, registry)
+    protected = set(protection["protected"])
     builds = registry.get("builds", {})
     for root_id, root_text in sorted(roots.items()):
-        root = config.canonical_existing(root_text, directory=True)
         known_tasks = {task for tasks in SUPPORTED_TOOLS.values() for task in tasks}
         try:
+            root = config.canonical_existing(root_text, directory=True)
             task_dirs = sorted(root.iterdir())
-        except OSError:
+        except (OSError, ValueError):
             results.append({"rootId": root_id, "task": None, "candidate": None, "candidateId": None,
                             "bytes": None, "reason": "KEEP/SKIP: artifact root is unreadable", "eligible": False,
                             "manifestSha256": None})
@@ -250,6 +325,8 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
                             and candidate_dir.name == candidate_commit
                             and isinstance(state, dict)
                             and state.get("rootId") == root_id
+                            and state.get("tool") == tool
+                            and parsed.get("task") == task_dir.name
                             and state.get("task") == task_dir.name
                             and state.get("commit") == candidate.get("commit")
                             and state.get("manifestSha256") == manifest_digest
@@ -267,7 +344,9 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
                 if lifecycle in {"open-review", "unmerged", "accepted", "exported"}:
                     reason = f"KEEP: lifecycle {lifecycle}"
                 if candidate_id in protected:
-                    reason = "KEEP: accepted current or rollback"
+                    reason, eligible = "KEEP: current, explicit selection, accepted or rollback", False
+                if [root_id, tool] in protection["blockedDomains"]:
+                    reason, eligible = "KEEP/SKIP: ambiguous current pointer or selection authority", False
                 candidate_bytes = _safe_tree_bytes(candidate_dir)
                 if candidate_bytes is None:
                     reason, eligible, payload = "KEEP/SKIP: candidate is unsafe or unreadable", False, None
@@ -310,7 +389,8 @@ def create_plan(conf: dict[str, Any], registry: dict[str, Any], entries: list[di
                          "reason": entry["reason"]})
     return {"schema": "arcanum-prune-plan-v1", "id": secrets.token_urlsafe(18), "createdAt": datetime.now(timezone.utc).isoformat(),
             "configGeneration": conf["generation"], "registryGeneration": registry["generation"], "configSha256": config.digest(conf),
-            "registrySha256": config.digest(registry), "payloads": payloads, "dryRun": True}
+            "registrySha256": config.digest(registry), "protectionBindings": protection_snapshot(conf, registry),
+            "payloads": payloads, "dryRun": True}
 
 
 def apply_plan(plan: dict[str, Any], conf: dict[str, Any], registry: dict[str, Any], *, accepted_id: str) -> dict[str, Any]:
@@ -330,6 +410,8 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
         raise ValueError("config or registry changed since planning")
     if plan.get("configSha256") != config.digest(conf) or plan.get("registrySha256") != config.digest(registry):
         raise ValueError("config or registry digest changed since planning")
+    if plan.get("protectionBindings") != protection_snapshot(conf, registry):
+        raise ValueError("current pointer changed or protection proof missing; replan")
     roots = conf.get("artifactRoots", {})
     removed = []
     for item in plan.get("payloads", []):
@@ -393,7 +475,7 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             raise ValueError("candidate task is unknown")
         if sha256(manifest) != item.get("manifestSha256"):
             raise ValueError("manifest changed since planning")
-        parsed, bound_root, bound_task, digest = _registered_manifest(tool=tool, candidate_id=candidate_id, manifest=manifest)
+        parsed, bound_root, bound_task, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=candidate_id, manifest=manifest)
         state = registry.get("builds", {}).get(candidate_id, {})
         candidate_commit = parsed["candidate"]["commit"]
         if (bound_root != root_id or bound_task != task[1] or not isinstance(state, dict)
@@ -407,6 +489,10 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             raise ValueError("candidate is leased by launcher or exporter")
         payload = _safe_payload(candidate, manifest)
         try:
+            fresh_protection = protection_snapshot(conf, registry)
+            if fresh_protection != plan["protectionBindings"]:
+                raise ValueError("current pointer changed since planning")
+            _assert_unprotected(fresh_protection, tool, candidate_id)
             removed_path = candidate / item["payloadRelativePath"]
             if existing_receipt is not None:
                 if (payload is not None or removed_path.exists() or removed_path.is_symlink()
@@ -424,6 +510,7 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
                         or removed_path.exists() or removed_path.is_symlink()
                         or config._has_symlink_component(removed_path.absolute())):
                     raise ValueError("manifest or payload changed since planning")
+                _recheck_protection(plan, conf, registry, tool, candidate_id)
                 config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
                                              "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
                                              "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
@@ -440,7 +527,9 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
             intent_payload = {"schema": "prune-intent-v1", "id": accepted_id, "relativePayload": item["payloadRelativePath"],
                               "priorIdentity": item["payloadIdentity"], "manifestSha256": item["manifestSha256"], "reason": item["reason"]}
             if existing_intent is None:
+                _recheck_protection(plan, conf, registry, tool, candidate_id)
                 config.write_atomic(intent, intent_payload)
+            _recheck_protection(plan, conf, registry, tool, candidate_id)
             shutil.rmtree(payload)
             config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
                                           "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
@@ -451,10 +540,21 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
     return {"planId": accepted_id, "status": "applied" if removed else "no-op-safe", "removed": removed}
 
 
-def accept(registry: dict[str, Any], *, tool: str, candidate_id: str, manifest: Path, authority: str, review: str) -> None:
+def _recheck_protection(plan: dict[str, Any], conf: dict[str, Any], registry: dict[str, Any], tool: str, candidate_id: str) -> None:
+    fresh_conf = config.load_config() if config.config_path().exists() else conf
+    fresh_registry = config.load_registry() if config.registry_path().exists() else registry
+    if config.digest(fresh_conf) != plan["configSha256"] or config.digest(fresh_registry) != plan["registrySha256"]:
+        raise ValueError("config or registry changed before payload mutation")
+    snapshot = protection_snapshot(fresh_conf, fresh_registry)
+    if snapshot != plan["protectionBindings"]:
+        raise ValueError("current pointer changed before payload mutation")
+    _assert_unprotected(snapshot, tool, candidate_id)
+
+
+def accept(registry: dict[str, Any], *, conf: dict[str, Any], tool: str, candidate_id: str, manifest: Path, authority: str, review: str) -> None:
     if tool not in SUPPORTED_TOOLS or not authority or not review:
         raise ValueError("acceptance requires supported tool, authority, and review reference")
-    payload, root_id, task, digest = _registered_manifest(tool=tool, candidate_id=candidate_id, manifest=manifest)
+    payload, root_id, task, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=candidate_id, manifest=manifest)
     existing = registry.get("builds", {}).get(candidate_id)
     candidate = payload["candidate"]
     if not isinstance(existing, dict) or (existing.get("tool"), existing.get("rootId"), existing.get("task"),
@@ -470,17 +570,35 @@ def accept(registry: dict[str, Any], *, tool: str, candidate_id: str, manifest: 
         "authority": authority, "review": review}
 
 
-def retire(registry: dict[str, Any], candidate_id: str) -> None:
-    if candidate_id in set(registry.get("accepted", {}).values()) | set(registry.get("rollback", {}).values()):
-        raise ValueError("accepted current or rollback cannot be retired")
-    registry.setdefault("builds", {}).setdefault(candidate_id, {})["lifecycle"] = "retired"
+def retire(registry: dict[str, Any], candidate_id: str, *, conf: dict[str, Any]) -> None:
+    existing = registry.get("builds", {}).get(candidate_id)
+    if not isinstance(existing, dict):
+        raise ValueError("retire requires an existing registered candidate")
+    tool = existing.get("tool")
+    if not isinstance(tool, str) or tool not in SUPPORTED_TOOLS:
+        raise ValueError("retire requires supported registered tool")
+    manifest = config.candidate_path(conf, tool, candidate_id) / "manifest.json"
+    payload, root_id, task, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=candidate_id, manifest=manifest)
+    if (existing.get("rootId"), existing.get("task"), existing.get("commit"), existing.get("manifestSha256")) != (
+            root_id, task, payload["candidate"]["commit"], digest):
+        raise ValueError("retire requires exact registered immutable identity")
+    _assert_unprotected(protection_snapshot(conf, registry), tool, candidate_id)
+    existing["lifecycle"] = "retired"
 
 
-def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, manifest: Path, lease_held: bool = False) -> None:
+def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str, candidate_id: str, manifest: Path, lease_held: bool = False) -> None:
     """Record only an already complete local export; this never accepts it for launch."""
     if tool not in SUPPORTED_TOOLS or not manifest.is_file() or manifest.is_symlink():
         raise ValueError("register-export requires a supported tool and regular manifest")
-    payload, root_id, task, digest = _registered_manifest(tool=tool, candidate_id=candidate_id, manifest=manifest)
+    payload, root_id, task, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=candidate_id, manifest=manifest)
+    existing = registry.get("builds", {}).get(candidate_id)
+    if existing is not None:
+        if not isinstance(existing, dict) or (existing.get("tool"), existing.get("rootId"), existing.get("task"),
+                existing.get("commit"), existing.get("manifestSha256")) != (tool, root_id, task, payload["candidate"]["commit"], digest):
+            raise ValueError("registered candidate has conflicting immutable identity")
+        _bound_evidence(payload, manifest.parent)
+        _bound_payload_inventory(payload, manifest.parent, manifest.parent / payload["app"]["relativePath"])
+        return
     checks = payload.get("checks")
     app = payload.get("app")
     if not isinstance(checks, list) or not checks or not isinstance(app, dict):
@@ -509,6 +627,12 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
             or recorded_preflight != preflight or preflight.get("candidateId") != candidate_id
             or preflight.get("candidateCommit") != payload["candidate"]["commit"]):
         raise ValueError("export budget output bytes do not match measured package inventory")
+    from .export_endpoint import bound_budget
+    if budget != bound_budget(manifest.parent, tool, candidate_id, measured_inventory):
+        raise ValueError("export observation does not bind immutable budget")
+    if not {"evidence/export-preflight.json", "evidence/export-observation.json"}.issubset(
+            entry["relativePath"] for entry in payload["evidence"]):
+        raise ValueError("export observation evidence digest is missing")
     if (not app_path.is_dir() or app_path.is_symlink() or not executable.is_file() or executable.is_symlink()
             or launch.exact_executable_in_use(executable)):
         raise ValueError("register-export requires a complete, inactive package payload")
@@ -519,39 +643,131 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
         registry.setdefault("builds", {})[candidate_id] = {"lifecycle": "exported", "tool": tool, "rootId": root_id,
             "task": task, "commit": payload["candidate"]["commit"], "manifestSha256": digest,
             "payloadBytes": measured_inventory, "registeredAt": datetime.now(timezone.utc).isoformat()}
-        if preflight.get("temporaryBasis") == "measured-low-water":
-            registry.setdefault("measurements", {}).setdefault(tool, {})["temporaryLowWaterBytes"] = preflight["temporaryBytes"]
+        observation = budget["observation"]
+        if observation["temporaryMeasurementStatus"] == "qualified":
+            registry.setdefault("measurements", {})[tool] = {
+                "temporaryLowWaterBytes": observation["observedTemporaryBytes"],
+                "candidateId": candidate_id, "manifestSha256": digest,
+                "observationSha256": sha256(manifest.parent / "evidence/export-observation.json")}
     finally:
         _release(lease)
 
 
-def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | None, temporary_bytes: int | None) -> dict[str, Any]:
+def destination_proof(path: Path) -> tuple[Path, dict[str, int]]:
+    """Prove the actual destination's existing canonical ancestor, not config home."""
+    path = path.expanduser().absolute()
+    if ".." in path.parts or config._has_symlink_component(path):
+        raise ValueError("unsafe export write destination")
+    ancestor = path
+    distance = 0
+    while not ancestor.exists():
+        ancestor = ancestor.parent
+        distance += 1
+    ancestor = config.canonical_existing(str(ancestor), directory=True)
+    return ancestor, {**_node_identity(ancestor), "ancestorDistance": distance}
+
+
+def verify_destinations(paths: dict[str, Path], proofs: dict[str, tuple[Path, dict[str, int]]]) -> None:
+    for role, path in paths.items():
+        ancestor, proof = proofs[role]
+        if (config._has_symlink_component(path.absolute()) or not ancestor.is_dir()
+                or _node_identity(ancestor) != {key: proof[key] for key in ("device", "inode")}
+                or path.resolve(strict=False) != path.absolute()):
+            raise ValueError("export write destination changed during export")
+        # Mounts introduced beneath the original ancestor must not change device.
+        if destination_proof(path)[1]["device"] != proof["device"]:
+            raise ValueError("export write destination device changed during export")
+
+
+def _verified_output(conf: dict[str, Any], tool: str, candidate_id: str, expected_digest: str | None = None) -> int:
+    path = config.candidate_path(conf, tool, candidate_id) / "manifest.json"
+    payload, _, _, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=candidate_id, manifest=path)
+    if expected_digest is not None and expected_digest != digest:
+        raise ValueError("output estimate manifest digest changed")
+    _bound_evidence(payload, path.parent)
+    return _bound_payload_inventory(payload, path.parent, path.parent / payload["app"]["relativePath"])
+
+
+def export_preflight(registry: dict[str, Any], tool: str, output_bytes: int | None, temporary_bytes: int | None,
+                     *, conf: dict[str, Any], destinations: dict[str, Path], estimate_manifest: Path | None = None) -> dict[str, Any]:
     if tool not in SUPPORTED_TOOLS:
         raise ValueError("unknown tool")
-    accepted = {value for key, value in registry.get("accepted", {}).items() if key == tool}
-    measured_outputs: list[int] = [int(state["payloadBytes"]) for candidate, state in registry.get("builds", {}).items()
-                                   if candidate in accepted and isinstance(state, dict) and isinstance(state.get("payloadBytes"), int) and state["payloadBytes"] > 0]
+    if output_bytes is not None and (type(output_bytes) is not int or output_bytes <= 0):
+        raise ValueError("output estimate must be a positive integer")
+    if temporary_bytes is not None and (type(temporary_bytes) is not int or temporary_bytes < 0):
+        raise ValueError("temporary estimate must be a nonnegative integer")
+    if not {"export", "temporary"}.issubset(destinations):
+        raise ValueError("export and temporary destinations are required")
+    measured_outputs = []
+    references = set()
+    accepted = registry.get("accepted", {}).get(tool)
+    if isinstance(accepted, str):
+        references.add(accepted)
+    snapshot = protection_snapshot(conf, registry)
+    for root_id, root_text in conf.get("artifactRoots", {}).items():
+        root = config.canonical_existing(root_text, directory=True)
+        for task in SUPPORTED_TOOLS[tool]:
+            for name in ("current.json", "current-v2.json"):
+                pointer = root / task / name
+                if pointer.exists() and [root_id, tool] not in snapshot["blockedDomains"]:
+                    manifest, _, _ = resolve_pointer(root, pointer, tool, root_id=root_id)
+                    relative = manifest.relative_to(root)
+                    references.add(f"{root_id}:{relative.parts[0]}:{relative.parts[1]}")
+    for candidate_id in references:
+        try:
+            state = registry.get("builds", {}).get(candidate_id, {})
+            measured_outputs.append(_verified_output(conf, tool, candidate_id, state.get("manifestSha256")))
+        except (OSError, ValueError):
+            continue
     measured = max(measured_outputs, default=0)
     if measured:
         output = (measured * 110 + 99) // 100
-    elif output_bytes is not None and output_bytes > 0:
+    elif output_bytes is not None and output_bytes > 0 and estimate_manifest is not None:
+        # Explicit estimate is of ONE complete immutable payload, not history/source du.
+        _, payload = _manifest(estimate_manifest, tool)
+        candidate_id = f"{payload.get('rootId')}:{payload.get('task')}:{manifest_candidate(payload)}"
+        if config.regular_file(estimate_manifest) != config.candidate_path(conf, tool, candidate_id) / "manifest.json":
+            raise ValueError("estimate must be the exact configured immutable payload manifest")
+        if output_bytes != _verified_output(conf, tool, candidate_id, sha256(estimate_manifest)):
+            raise ValueError("explicit estimate must equal one verified complete payload")
         output = output_bytes
     else:
-        raise ValueError("no trusted output measurement/estimate; provide --output-bytes")
-    measurements = registry.get("measurements", {}).get(tool, {}) if isinstance(registry.get("measurements", {}), dict) else {}
-    low_water = measurements.get("temporaryLowWaterBytes") if isinstance(measurements, dict) else None
-    if temporary_bytes is not None and temporary_bytes > 0:
+        raise ValueError("no trusted output measurement/estimate; provide --output-bytes and --estimate-manifest")
+    measurements = registry.get("measurements", {}).get(tool, {})
+    low_water = None
+    if isinstance(measurements, dict) and isinstance(measurements.get("candidateId"), str):
+        try:
+            path = config.candidate_path(conf, tool, measurements["candidateId"]) / "manifest.json"
+            payload, _, _, digest = _registered_manifest(conf=conf, tool=tool, candidate_id=measurements["candidateId"], manifest=path)
+            _bound_evidence(payload, path.parent)
+            observation = payload["exportBudget"]["observation"]
+            if (digest == measurements.get("manifestSha256")
+                    and sha256(path.parent / "evidence/export-observation.json") == measurements.get("observationSha256")
+                    and observation.get("temporaryMeasurementStatus") == "qualified"
+                    and observation.get("observedTemporaryBytes") == measurements.get("temporaryLowWaterBytes")):
+                low_water = observation["observedTemporaryBytes"]
+        except (OSError, ValueError, KeyError):
+            pass
+    if temporary_bytes is not None and temporary_bytes >= 0:
         temporary, temporary_basis = temporary_bytes, "explicit-estimate"
-    elif isinstance(low_water, int) and low_water > 0:
-        temporary, temporary_basis = low_water, "measured-low-water"
+    elif isinstance(low_water, int) and low_water >= 0:
+        temporary, temporary_basis = low_water, "qualified-history-estimate"
     else:
         temporary, temporary_basis = output * 2, "fallback-two-times-output"
     reserve = max(2 * 1024**3, output)
     required = output + temporary + reserve
-    config.home().mkdir(mode=0o700, parents=True, exist_ok=True)
-    free = shutil.disk_usage(config.home()).free
-    if free < required:
-        raise ValueError("observed free space is below the measured export budget")
+    observations = []
+    capacities: dict[int, int] = {}
+    for role, path in sorted(destinations.items()):
+        ancestor, proof = destination_proof(path)
+        device = proof["device"]
+        if device not in capacities:
+            capacities[device] = shutil.disk_usage(ancestor).free
+        free = capacities[device]
+        if free < required:
+            raise ValueError("observed destination free space is below the measured export budget")
+        observations.append({"role": role, **proof, "observedFreeBytes": free, "requiredBytes": required})
     return {"tool": tool, "outputBytes": output, "temporaryBytes": temporary, "reserveBytes": reserve,
-            "requiredBytes": required, "observedFreeBytes": free, "outputBasis": "accepted-measurement-plus-10-percent" if measured else "explicit-estimate",
+            "requiredBytes": required, "observedFreeBytes": min(capacities.values()), "destinations": observations,
+            "outputBasis": "accepted-measurement-plus-10-percent" if measured else "explicit-estimate",
             "temporaryBasis": temporary_basis}

@@ -12,15 +12,25 @@ case "$build_root" in "$main_root"/artifacts/builds/ARC-DEV-001/"$head") ;; *) p
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
-  estimate_root="$main_root/artifacts/builds/ARC-DEV-001"
-  if test ! -d "$estimate_root"; then estimate_root=$project_root; fi
-  set -- $(/usr/bin/du -sk "$estimate_root")
-  estimated_output_bytes=$(( $1 * 1024 ))
+  : "${TMPDIR:?TMPDIR must identify the effective temporary destination}"
+  set --
+  if test -n "${ARCANUM_OUTPUT_BYTES:-}"; then
+    : "${ARCANUM_ESTIMATE_MANIFEST:?a single complete measured payload manifest is required}"
+    set -- --output-bytes "$ARCANUM_OUTPUT_BYTES" --estimate-manifest "$ARCANUM_ESTIMATE_MANIFEST"
+  fi
   cd "$candidate_root"
   exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
     --tool terrain --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-DEV-001 --candidate "$head" \
-    --manifest "$build_root/manifest.json" --output-bytes "$estimated_output_bytes" -- /bin/sh "$0"
+    --manifest "$build_root/manifest.json" --temporary-root "$TMPDIR" \
+    --write-root "$candidate_root" --write-root "$HOME/.nuget/packages" \
+    --write-root "$HOME/Library/Application Support/Godot" "$@" -- /bin/sh "$0"
 fi
+case "${ARCANUM_EXPORT_PHASE:-}" in
+  finalize)
+    exec /usr/bin/python3 -B "$project_root/tools/terrain_write_manifest.py" "$candidate_root" "$main_root" "$build_root" "$head" "$build_root/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer" ;;
+  validate) ;;
+  *) printf '%s\n' 'Endpoint validate/finalize phase required.' >&2; exit 2 ;;
+esac
 
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
 DOTNET="$DOTNET_ROOT/dotnet"
@@ -49,5 +59,4 @@ run_log exported-headless.log "$app" --headless -- --self-test
 run_log exported-graphical.log "$app" -- --self-test
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/ArcanumTerrainViewer.app"
 cleanup_candidate
-/usr/bin/python3 "$project_root/tools/terrain_write_manifest.py" "$candidate_root" "$main_root" "$build_root" "$head" "$app"
-printf '%s\n' "Validated and registered $head in $build_root"
+printf '%s\n' "Validated $head; observation and manifest finalization pending."

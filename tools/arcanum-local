@@ -128,21 +128,29 @@ def command_builds(args: argparse.Namespace) -> None:
     elif args.builds == "accept":
         with config.registry_lock():
             registry = config.load_registry()
-            retention.accept(registry, tool=args.tool, candidate_id=args.candidate, manifest=config.regular_file(Path(args.manifest)), authority=args.authority, review=args.review)
+            retention.accept(registry, conf=config.load_config(), tool=args.tool, candidate_id=args.candidate, manifest=config.regular_file(Path(args.manifest)), authority=args.authority, review=args.review)
             config.save_registry(registry)
         emit({"accepted": args.candidate, "tool": args.tool})
     elif args.builds == "retire":
         with config.registry_lock():
             registry = config.load_registry()
-            retention.retire(registry, args.candidate)
+            retention.retire(registry, args.candidate, conf=config.load_config())
             config.save_registry(registry)
         emit({"retired": args.candidate})
     elif args.builds == "export-preflight":
-        emit(retention.export_preflight(registry, args.tool, args.output_bytes, args.temporary_bytes))
+        roots = conf.get("artifactRoots", {})
+        if args.root_id not in roots:
+            raise ValueError("preflight requires an explicitly configured --root-id")
+        destinations = {"export": config.canonical_existing(roots[args.root_id], directory=True),
+                        "temporary": config.canonical_existing(args.temporary_root, directory=True)}
+        destinations.update({f"build-cache-{index}": Path(path) for index, path in enumerate(args.write_root)})
+        emit(retention.export_preflight(registry, args.tool, args.output_bytes, args.temporary_bytes,
+             conf=conf, destinations=destinations,
+             estimate_manifest=config.regular_file(Path(args.estimate_manifest)) if args.estimate_manifest else None))
     else:
         with config.registry_lock():
             registry = config.load_registry()
-            retention.register_export(registry, tool=args.tool, candidate_id=args.candidate, manifest=config.regular_file(Path(args.manifest)))
+            retention.register_export(registry, conf=config.load_config(), tool=args.tool, candidate_id=args.candidate, manifest=config.regular_file(Path(args.manifest)))
             config.save_registry(registry)
         emit({"exported": args.candidate, "tool": args.tool})
 
@@ -168,6 +176,8 @@ def parser() -> argparse.ArgumentParser:
     accept = build_sub.add_parser("accept"); accept.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); accept.add_argument("--candidate", required=True); accept.add_argument("--manifest", required=True); accept.add_argument("--authority", required=True); accept.add_argument("--review", required=True)
     retire = build_sub.add_parser("retire"); retire.add_argument("--candidate", required=True)
     preflight = build_sub.add_parser("export-preflight"); preflight.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); preflight.add_argument("--output-bytes", type=int); preflight.add_argument("--temporary-bytes", type=int)
+    preflight.add_argument("--root-id", required=True); preflight.add_argument("--temporary-root", required=True)
+    preflight.add_argument("--estimate-manifest"); preflight.add_argument("--write-root", action="append", default=[])
     register = build_sub.add_parser("register-export"); register.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); register.add_argument("--candidate", required=True); register.add_argument("--manifest", required=True)
     builds.set_defaults(func=command_builds)
     return result

@@ -127,11 +127,26 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
             or any(key not in preflight for key in required_preflight)
             or any(not isinstance(preflight[key], int) or preflight[key] < 0
                    for key in ("outputBytes", "temporaryBytes", "reserveBytes", "requiredBytes", "observedFreeBytes"))
-            or preflight.get("temporaryBasis") not in {"measured-low-water", "fallback-two-times-output", "explicit-estimate"}
+            or preflight.get("temporaryBasis") not in {"measured-low-water", "qualified-history-estimate", "fallback-two-times-output", "explicit-estimate"}
             or preflight.get("outputBasis") not in {"accepted-measurement-plus-10-percent", "explicit-estimate"}
             or preflight["requiredBytes"] != preflight["outputBytes"] + preflight["temporaryBytes"] + preflight["reserveBytes"]
-            or budget["temporaryLowWaterBytes"] != preflight["temporaryBytes"]):
+            or ("observation" not in budget and budget["temporaryLowWaterBytes"] != preflight["temporaryBytes"])):
         raise ValueError("v2 export preflight observation is invalid")
+    # Old v2 remains read-only compatible, never trusted as observed history.
+    if "observation" in budget:
+        observed = budget["observation"]
+        identity = f"{manifest['rootId']}:{task}:{candidate['commit']}"
+        if (not isinstance(observed, dict) or observed.get("schema") != "arcanum-export-observation-v1"
+                or observed.get("candidateId") != identity or observed.get("candidateCommit") != candidate["commit"]
+                or observed.get("tool") != expected_tool or observed.get("successfulValidation") is not True
+                or observed.get("temporaryMeasurementStatus") not in {"qualified", "unavailable"}):
+            raise ValueError("v2 export observation identity is invalid")
+        temporary = observed.get("observedTemporaryBytes")
+        qualified = observed["temporaryMeasurementStatus"] == "qualified"
+        if ((qualified and (type(temporary) is not int or temporary < 0))
+                or (not qualified and temporary is not None)
+                or budget["temporaryLowWaterBytes"] != (temporary if qualified else 0)):
+            raise ValueError("v2 export observation attribution is invalid")
 
 
 def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
@@ -145,7 +160,12 @@ def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tup
     pointers = [candidate for candidate in candidates if candidate.exists()]
     if len(pointers) != 1:
         raise ValueError("expected exactly one supported current pointer")
-    pointer_path = _contained(root, pointers[0])
+    return resolve_pointer(root, pointers[0], tool, root_id=root_id)
+
+
+def resolve_pointer(root: Path, pointer_path: Path, tool: str, *, root_id: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+    """Validate one authority independently; retention protects their union."""
+    pointer_path = _contained(root, pointer_path)
     pointer = _json(pointer_path)
     schema, schema_version = pointer.get("schema"), pointer.get("schemaVersion")
     if schema == "arcanum-build-current-v2" and schema_version is None:

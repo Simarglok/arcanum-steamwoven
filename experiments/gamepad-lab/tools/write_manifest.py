@@ -69,6 +69,10 @@ def main() -> None:
     candidate_root, main_root, build_root, head_path, app_path = map(Path, sys.argv[1:])
     candidate_root = candidate_root.resolve(); main_root = main_root.resolve(); build_root = build_root.resolve()
     head = str(head_path); app = app_path.resolve()
+    if (build_root / "manifest.json").exists():
+        raise SystemExit("immutable candidate manifest already exists")
+    sys.path.insert(0, str(candidate_root))
+    from tools.local_dev.export_endpoint import bound_budget
     if git(candidate_root, "rev-parse", "HEAD") != head or git(candidate_root, "status", "--porcelain"):
         raise SystemExit("manifest requires the current clean candidate HEAD")
     if build_root != main_root / "artifacts" / "builds" / TASK / head or not app.is_file() or not app.is_relative_to(build_root / "GamepadLab.app"):
@@ -100,7 +104,7 @@ def main() -> None:
         "app": {"relativePath": "GamepadLab.app", "executableRelativePath": app.relative_to(build_root).as_posix()},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in GATES.items()],
-        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": preflight["temporaryBytes"], "preflight": preflight},
+        "exportBudget": bound_budget(build_root, "gamepad", expected_candidate_id, payload_bytes),
         "acceptance": "not-accepted",
         "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalXboxBluetooth": "NOT_VERIFIED", "signingNotarization": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; --capture evidence is automated"},
     }

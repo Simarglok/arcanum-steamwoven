@@ -28,7 +28,7 @@ SCREENSHOTS = (
 REQUIRED_EVIDENCE = (
     "evidence/toolchain.json", "evidence/locked-restore.log", "evidence/locked-build.log",
     "evidence/editor-bridge.log", "evidence/layout-matrix.json", "evidence/capture-evidence.log",
-    "evidence/export-preflight.json", "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
+    "evidence/export-preflight.json", "evidence/export-observation.json", "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
     "evidence/native-smoke.json", "evidence/ordinary-launch-not-verified.json", "evidence/plist-lint.log",
     "evidence/plist-values.log", "evidence/architecture.txt", "evidence/codesign.log",
     "evidence/root-locked-restore.log", "evidence/root-locked-build.log", "evidence/data-tests.log",
@@ -263,6 +263,10 @@ def write_manifest(args: argparse.Namespace) -> None:
     branch = run(["git", "branch", "--show-current"], cwd=candidate_root).strip()
     if build_root.name != head or build_root.parent != main_root / "artifacts/builds/ARC-UI-001":
         raise SystemExit("build root must be this task's main-repository root keyed by exact HEAD")
+    if (build_root / "manifest.json").exists():
+        raise SystemExit("immutable candidate manifest already exists")
+    sys.path.insert(0, str(candidate_root))
+    from tools.local_dev.export_endpoint import bound_budget
     if run(["git", "status", "--porcelain"], cwd=candidate_root).strip():
         raise SystemExit("candidate became dirty before manifest creation")
     required = [build_root / entry for entry in REQUIRED_EVIDENCE]
@@ -329,7 +333,7 @@ def write_manifest(args: argparse.Namespace) -> None:
         "app": {"relativePath": "DisplayUiLab.app", "executableRelativePath": "DisplayUiLab.app/Contents/MacOS/Display UI Lab"},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": evidence} for name, evidence in gates.items()],
-        "exportBudget": {"outputBytes": payload_bytes, "temporaryLowWaterBytes": preflight["temporaryBytes"], "preflight": preflight},
+        "exportBudget": bound_budget(build_root, "display", expected_candidate_id, payload_bytes),
         "acceptance": "not-accepted",
         "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalDisplayReadability": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; native smoke is automated evidence"},
     }

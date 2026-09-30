@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import tempfile
+import re
 from typing import Any
 import fcntl
 from contextlib import contextmanager
@@ -147,6 +148,31 @@ def _has_symlink_component(path: Path) -> bool:
 def regular_file(path: Path) -> Path:
     """Return a non-symlink file whose supplied path has no symlink hop."""
     return canonical_existing(str(path), directory=False)
+
+
+def candidate_path(conf: dict[str, Any], tool: str, candidate_id: str) -> Path:
+    """Prove the complete configured tuple before any candidate mutation."""
+    from .manifests import SUPPORTED_TOOLS
+    if not isinstance(tool, str) or not isinstance(candidate_id, str):
+        raise ValueError("candidate requires supported tool and string identity")
+    parts = candidate_id.split(":")
+    if len(parts) != 3:
+        raise ValueError("candidate id must bind root, task, and candidate")
+    root_id, task, commit = parts
+    if (not re.fullmatch(r"[A-Za-z0-9_-]+", root_id) or task not in SUPPORTED_TOOLS.get(tool, ())
+            or not re.fullmatch(r"[0-9a-f]{40}", commit)):
+        raise ValueError("candidate requires supported tool/task and full lowercase-hex commit")
+    roots = conf.get("artifactRoots", {})
+    if not isinstance(roots, dict) or not isinstance(roots.get(root_id), str):
+        raise ValueError("candidate root is not explicitly configured")
+    root = canonical_existing(roots[root_id], directory=True)
+    candidate = root / task / commit
+    if _has_symlink_component(candidate):
+        raise ValueError("candidate path must not traverse a symlink")
+    for node in (candidate.parent, candidate):
+        if node.exists() and not node.is_dir():
+            raise ValueError("candidate path must be a directory")
+    return candidate
 
 
 @contextmanager

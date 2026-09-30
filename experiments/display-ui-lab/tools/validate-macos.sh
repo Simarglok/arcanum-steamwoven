@@ -22,15 +22,25 @@ if test -n "$(git status --porcelain)"; then
 fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
-  estimate_root="$main_root/artifacts/builds/ARC-UI-001"
-  if test ! -d "$estimate_root"; then estimate_root=$lab_root; fi
-  set -- $(/usr/bin/du -sk "$estimate_root")
-  estimated_output_bytes=$(( $1 * 1024 ))
+  : "${TMPDIR:?TMPDIR must identify the effective temporary destination}"
+  set --
+  if test -n "${ARCANUM_OUTPUT_BYTES:-}"; then
+    : "${ARCANUM_ESTIMATE_MANIFEST:?a single complete measured payload manifest is required}"
+    set -- --output-bytes "$ARCANUM_OUTPUT_BYTES" --estimate-manifest "$ARCANUM_ESTIMATE_MANIFEST"
+  fi
   cd "$candidate_root"
   exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
     --tool display --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-UI-001 --candidate "$head" \
-    --manifest "$build_root/manifest.json" --output-bytes "$estimated_output_bytes" -- /bin/sh "$0"
+    --manifest "$build_root/manifest.json" --temporary-root "$TMPDIR" \
+    --write-root "$candidate_root" --write-root "$HOME/.nuget/packages" \
+    --write-root "$HOME/Library/Application Support/Godot" "$@" -- /bin/sh "$0"
 fi
+case "${ARCANUM_EXPORT_PHASE:-}" in
+  finalize)
+    exec /usr/bin/python3 -B "$lab_root/tools/validation_support.py" write-manifest --candidate-root "$candidate_root" --main-root "$main_root" --build-root "$build_root" --toolchain-report "$build_root/evidence/toolchain.json" ;;
+  validate) ;;
+  *) printf '%s\n' 'Endpoint validate/finalize phase required.' >&2; exit 2 ;;
+esac
 
 export DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
 DOTNET="$DOTNET_ROOT/dotnet"
@@ -118,7 +128,5 @@ run_log data-tests.log "$DOTNET" test "$candidate_root/tests/Arcanum.Data.Tests/
 run_log presentation-tests.log "$DOTNET" test "$candidate_root/tests/Arcanum.Presentation.Tests/Arcanum.Presentation.Tests.csproj" --no-build --filter 'TestCategory!=RealData'
 "/usr/bin/python3" "$SUPPORT" hygiene --candidate-root "$candidate_root" --output "$build_root/evidence/hygiene.json"
 
-# validation_support rechecks clean status, reports, all exact screenshot paths,
-# classifications, and hygiene before atomically updating only ARC-UI-001/current.json.
-"/usr/bin/python3" "$SUPPORT" write-manifest --candidate-root "$candidate_root" --main-root "$main_root" --build-root "$build_root" --toolchain-report "$build_root/evidence/toolchain.json"
-printf '%s\n' "Validated $head in $build_root"
+# Endpoint freezes observation, then invokes ONLY the manifest writer.
+printf '%s\n' "Validated $head; observation and manifest finalization pending."
