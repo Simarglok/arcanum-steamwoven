@@ -72,6 +72,12 @@ def _manifest(path: Path, expected_tool: str, expected_digest: str | None = None
     return path, manifest
 
 
+def _root_relative(value: object, *, field: str) -> str:
+    if not isinstance(value, str) or not value or Path(value).is_absolute() or ".." in Path(value).parts:
+        raise ValueError(f"v2 {field} must be root-relative")
+    return value
+
+
 def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
     """Validate every immutable v2 ownership/binding field before use."""
     if manifest.get("project") != "arcanum-steamwoven" or manifest.get("logicalTool") != expected_tool:
@@ -89,22 +95,28 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
     if not isinstance(app, dict) or not isinstance(app.get("relativePath"), str) or not isinstance(app.get("executableRelativePath"), str):
         raise ValueError("v2 manifest app binding is invalid")
     for key in ("relativePath", "executableRelativePath"):
-        value = app[key]
-        if Path(value).is_absolute() or not value or ".." in Path(value).parts:
-            raise ValueError("v2 manifest app path must be root-relative")
+        _root_relative(app[key], field="app path")
     inventory = manifest.get("payloadInventory")
     evidence = manifest.get("evidence")
     budget = manifest.get("exportBudget")
     if not isinstance(inventory, list) or not inventory or not isinstance(evidence, list) or not isinstance(budget, dict) or manifest.get("acceptance") != "not-accepted":
         raise ValueError("v2 manifest lacks immutable inventory, evidence, budget, or acceptance binding")
     for entry in inventory:
-        if not isinstance(entry, dict) or not isinstance(entry.get("relativePath"), str) or not isinstance(entry.get("bytes"), int):
+        if not isinstance(entry, dict) or not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0:
             raise ValueError("v2 payload inventory is invalid")
-        if Path(entry["relativePath"]).is_absolute() or ".." in Path(entry["relativePath"]).parts:
-            raise ValueError("v2 payload inventory escapes its candidate")
+        _root_relative(entry.get("relativePath"), field="payload inventory path")
+    for entry in evidence:
+        if not isinstance(entry, dict):
+            raise ValueError("v2 evidence entry is invalid")
+        _root_relative(entry.get("relativePath"), field="evidence path")
+        if not isinstance(entry.get("bytes"), int) or entry["bytes"] < 0:
+            raise ValueError("v2 evidence entry lacks measured bytes")
+    for key in ("outputBytes", "temporaryLowWaterBytes"):
+        if not isinstance(budget.get(key), int) or budget[key] < 0:
+            raise ValueError("v2 export budget lacks measured byte fields")
 
 
-def resolve_current(root: Path, tool: str) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
     """Resolve only recognized current pointers; never use timestamps or directory order."""
     if tool not in SUPPORTED_TOOLS:
         raise ValueError("unknown logical tool")
@@ -147,6 +159,8 @@ def resolve_current(root: Path, tool: str) -> tuple[Path, dict[str, Any], dict[s
     else:
         raise ValueError("unsupported or mixed pointer schema")
     manifest_path, manifest = _manifest(manifest_path, tool, expected_digest)
+    if root_id is not None and manifest.get("schema") == "arcanum-build-manifest-v2" and manifest.get("rootId") != root_id:
+        raise ValueError("v2 manifest root identity does not match configured artifact root")
     app = manifest["app"]
     executable = app.get("executableRelativePath") or app.get("executable")
     if not isinstance(executable, str) or not executable:

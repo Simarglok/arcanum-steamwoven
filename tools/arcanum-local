@@ -41,7 +41,8 @@ def command_configure(args: argparse.Namespace) -> None:
         }
         for relative, (expected_size, expected_sha256) in known.items():
             candidate = root / relative
-            if candidate.is_file() and not candidate.is_symlink() and candidate.stat().st_size == expected_size and manifests.sha256(candidate) == expected_sha256:
+            if (candidate.is_file() and not candidate.is_symlink() and not config._has_symlink_component(candidate.absolute())
+                    and candidate.stat().st_size == expected_size and manifests.sha256(candidate) == expected_sha256):
                 found.append(relative)
         conf["preferences"]["discoveredGameRoot"] = str(root)
         config.save_config(conf)
@@ -53,29 +54,38 @@ def command_configure(args: argparse.Namespace) -> None:
                           "prototypes": str(config.canonical_existing(args.prototypes, directory=False)),
                           "sourceId": config.safe_source_id(args.source_id or "local-input")}
         config.save_config(conf); emit({"configured": sorted(conf["inputs"])})
-    else:
+    elif args.configure == "add-artifact-root":
         root = config.canonical_existing(args.path, directory=True)
         if not args.id.replace("-", "").replace("_", "").isalnum():
             raise ValueError("artifact root id must be alphanumeric, dash, or underscore")
         conf["artifactRoots"][args.id] = str(root)
         config.save_config(conf); emit({"artifactRoot": args.id})
+    else:
+        selection = conf.setdefault("launchSelection", {})
+        if not isinstance(selection, dict):
+            raise ValueError("launch selection configuration is invalid")
+        parts = args.candidate.split(":", 2)
+        if len(parts) != 3 or not all(parts) or args.tool not in manifests.SUPPORTED_TOOLS or parts[1] not in manifests.SUPPORTED_TOOLS[args.tool]:
+            raise ValueError("launch selection must bind an allowed root, task, and candidate")
+        selection[args.tool] = args.candidate
+        config.save_config(conf); emit({"launchSelection": {args.tool: args.candidate}})
 
 
 def selected_root(conf: dict, registry: dict, tool: str) -> Path:
     roots = conf.get("artifactRoots", {})
     if not isinstance(roots, dict) or not roots:
         raise ValueError("configure an artifact root before launch")
-    accepted = registry.get("accepted", {}).get(tool)
+    selection = conf.get("launchSelection", {}).get(tool) if isinstance(conf.get("launchSelection"), dict) else None
+    if not isinstance(selection, str):
+        raise ValueError("configure an explicit launch selection before launch")
     matches: list[Path] = []
     for root_id, root_text in roots.items():
         if not isinstance(root_id, str) or not isinstance(root_text, str):
             continue
         try:
-            manifest_path, manifest, _ = manifests.resolve_current(config.canonical_existing(root_text, directory=True), tool)
-            candidate = manifests.manifest_candidate(manifest)
-            state = registry.get("builds", {}).get(accepted, {}) if isinstance(accepted, str) else {}
-            if len(roots) == 1 or (isinstance(state, dict) and accepted.startswith(root_id + ":")
-                                   and state.get("commit") == candidate and state.get("manifestSha256") == manifests.sha256(manifest_path)):
+            manifest_path, manifest, _ = manifests.resolve_current(config.canonical_existing(root_text, directory=True), tool, root_id=root_id)
+            selected_id = f"{root_id}:{manifest.get('task') or manifest.get('taskId')}:{manifest_path.parent.name}"
+            if selected_id == selection:
                 matches.append(config.canonical_existing(root_text, directory=True))
         except (OSError, ValueError):
             continue
@@ -122,7 +132,11 @@ def command_builds(args: argparse.Namespace) -> None:
             config.save_registry(registry)
         emit({"accepted": args.candidate, "tool": args.tool})
     elif args.builds == "retire":
-        retention.retire(registry, args.candidate); config.save_registry(registry); emit({"retired": args.candidate})
+        with config.registry_lock():
+            registry = config.load_registry()
+            retention.retire(registry, args.candidate)
+            config.save_registry(registry)
+        emit({"retired": args.candidate})
     elif args.builds == "export-preflight":
         emit(retention.export_preflight(registry, args.tool, args.output_bytes, args.temporary_bytes))
     else:
@@ -141,6 +155,7 @@ def parser() -> argparse.ArgumentParser:
     discover = configure_sub.add_parser("discover"); discover.add_argument("--game-root", required=True)
     inputs = configure_sub.add_parser("inputs"); inputs.add_argument("--module", required=True); inputs.add_argument("--terrain-resource", required=True); inputs.add_argument("--actor-resource", required=True); inputs.add_argument("--prototypes", required=True); inputs.add_argument("--source-id")
     artifact = configure_sub.add_parser("add-artifact-root"); artifact.add_argument("--id", required=True); artifact.add_argument("path")
+    selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)
     launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
     for option in launch.ACTOR_DEFAULTS:

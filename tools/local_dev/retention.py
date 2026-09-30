@@ -15,6 +15,11 @@ from . import launch
 from .manifests import SUPPORTED_TOOLS, _manifest, manifest_candidate, sha256
 
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
+REQUIRED_SUCCESS_GATES = {
+    "gamepad": {"core-harness", "godot-self-test", "export", "exported-smoke", "codesign-deep-strict"},
+    "display": {"locked-build", "source-layout-matrix", "export", "exported-layout-matrix", "exported-native-smoke", "codesign-deep-strict"},
+    "terrain": {"locked-build", "source-headless", "source-graphical", "export", "exported-headless", "exported-graphical", "codesign-deep-strict"},
+}
 
 
 def _tool_for_task(task: str) -> str | None:
@@ -68,6 +73,14 @@ def _tree_bytes(path: Path) -> int:
     return total
 
 
+def _safe_tree_bytes(path: Path) -> int | None:
+    """Inventory is advisory: unsafe/unreadable nodes are protected, not fatal."""
+    try:
+        return _tree_bytes(path)
+    except (OSError, ValueError):
+        return None
+
+
 def _identity(path: Path) -> dict[str, int]:
     if path.is_symlink():
         raise ValueError("candidate identity is a symlink")
@@ -94,13 +107,43 @@ def _safe_payload(candidate: Path, manifest: Path) -> Path | None:
         return None
     path = candidate / raw
     try:
+        # resolve() only tells us where the final target lands.  It cannot make
+        # an intermediate symlink safe, including one introduced after plan.
+        if config._has_symlink_component(path.absolute()):
+            return None
         resolved = path.resolve(strict=True)
         resolved.relative_to(candidate.resolve(strict=True))
     except (OSError, ValueError):
         return None
-    if resolved.is_symlink() or not resolved.is_dir() or resolved.suffix != ".app":
+    if (resolved.is_symlink() or config._has_symlink_component(resolved) or not resolved.is_dir()
+            or resolved.suffix != ".app"):
         return None
     return resolved
+
+
+def _bound_payload_inventory(payload: dict[str, Any], candidate: Path, app_path: Path) -> int:
+    """Prove every declared payload byte is a regular in-package on-disk file."""
+    inventory = payload.get("payloadInventory")
+    if not isinstance(inventory, list) or not inventory:
+        raise ValueError("payload inventory is missing")
+    total = 0
+    seen: set[str] = set()
+    for entry in inventory:
+        if not isinstance(entry, dict) or not isinstance(entry.get("relativePath"), str) or not isinstance(entry.get("bytes"), int):
+            raise ValueError("payload inventory is invalid")
+        item = candidate / entry["relativePath"]
+        try:
+            item.relative_to(app_path)
+        except ValueError as error:
+            raise ValueError("payload inventory entry escapes package") from error
+        if (entry["relativePath"] in seen or config._has_symlink_component(item.absolute()) or not item.is_file()
+                or item.is_symlink() or item.stat().st_size != entry["bytes"]):
+            raise ValueError("payload inventory does not bind the on-disk export")
+        seen.add(entry["relativePath"])
+        total += entry["bytes"]
+    if _tree_bytes(app_path) != total:
+        raise ValueError("payload inventory omits package bytes")
+    return total
 
 
 def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: bool = False) -> list[dict[str, Any]]:
@@ -113,15 +156,37 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
     for root_id, root_text in sorted(roots.items()):
         root = config.canonical_existing(root_text, directory=True)
         known_tasks = {task for tasks in SUPPORTED_TOOLS.values() for task in tasks}
-        for task_dir in sorted(root.iterdir()):
+        try:
+            task_dirs = sorted(root.iterdir())
+        except OSError:
+            results.append({"rootId": root_id, "task": None, "candidate": None, "candidateId": None,
+                            "bytes": None, "reason": "KEEP/SKIP: artifact root is unreadable", "eligible": False,
+                            "manifestSha256": None})
+            continue
+        for task_dir in task_dirs:
             if task_dir.name not in known_tasks:
                 continue
-            if not task_dir.is_dir() or task_dir.is_symlink():
+            if not task_dir.is_dir() or task_dir.is_symlink() or config._has_symlink_component(task_dir.absolute()):
+                results.append({"rootId": root_id, "task": task_dir.name, "candidate": None, "candidateId": None,
+                                "bytes": None, "reason": "KEEP/SKIP: unsafe task directory", "eligible": False,
+                                "manifestSha256": None})
                 continue
-            for candidate_dir in sorted(task_dir.iterdir()):
-                if not candidate_dir.is_dir() or candidate_dir.is_symlink():
-                    continue
+            try:
+                candidate_dirs = sorted(task_dir.iterdir())
+            except OSError:
+                results.append({"rootId": root_id, "task": task_dir.name, "candidate": None, "candidateId": None,
+                                "bytes": None, "reason": "KEEP/SKIP: task directory is unreadable", "eligible": False,
+                                "manifestSha256": None})
+                continue
+            for candidate_dir in candidate_dirs:
                 candidate_id = f"{root_id}:{task_dir.name}:{candidate_dir.name}"
+                if (not candidate_dir.is_dir() or candidate_dir.is_symlink()
+                        or config._has_symlink_component(candidate_dir.absolute())):
+                    results.append({"rootId": root_id, "task": task_dir.name, "candidate": candidate_dir.name,
+                                    "candidateId": candidate_id, "bytes": None,
+                                    "reason": "KEEP/SKIP: candidate directory is unsafe", "eligible": False,
+                                    "manifestSha256": None})
+                    continue
                 state = builds.get(candidate_id, {}) if isinstance(builds, dict) else {}
                 lifecycle = state.get("lifecycle") if isinstance(state, dict) else None
                 reason = "KEEP: unknown ownership or lifecycle"
@@ -148,8 +213,11 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
                         )
                         if ownership_proven:
                             payload = _safe_payload(candidate_dir, manifest)
+                            if payload is not None:
+                                _bound_payload_inventory(parsed, candidate_dir, payload)
                     except (OSError, ValueError):
                         reason = "KEEP/SKIP: unsupported, unsafe, or unproven manifest ownership"
+                        payload = None
                 if lifecycle == "retired" and candidate_id not in protected and ownership_proven and payload is not None:
                     reason = "eligible retired registered v2 package payload; manifests/evidence retained"
                     eligible = True
@@ -157,12 +225,19 @@ def inventory(conf: dict[str, Any], registry: dict[str, Any], *, show_paths: boo
                     reason = f"KEEP: lifecycle {lifecycle}"
                 if candidate_id in protected:
                     reason = "KEEP: accepted current or rollback"
+                candidate_bytes = _safe_tree_bytes(candidate_dir)
+                if candidate_bytes is None:
+                    reason, eligible, payload = "KEEP/SKIP: candidate is unsafe or unreadable", False, None
                 entry = {"rootId": root_id, "task": task_dir.name, "candidate": candidate_dir.name,
-                         "candidateId": candidate_id, "bytes": _tree_bytes(candidate_dir), "reason": reason, "eligible": eligible,
+                         "candidateId": candidate_id, "bytes": candidate_bytes, "reason": reason, "eligible": eligible,
                          "manifestSha256": manifest_digest}
                 if payload is not None:
                     entry["payloadRelativePath"] = str(payload.relative_to(candidate_dir))
-                    entry["payloadBytes"] = _tree_bytes(payload)
+                    payload_bytes = _safe_tree_bytes(payload)
+                    if payload_bytes is None:
+                        entry["reason"], entry["eligible"] = "KEEP/SKIP: payload is unsafe or unreadable", False
+                    else:
+                        entry["payloadBytes"] = payload_bytes
                 if show_paths:
                     entry["path"] = str(candidate_dir)
                 results.append(entry)
@@ -178,10 +253,14 @@ def create_plan(conf: dict[str, Any], registry: dict[str, Any], entries: list[di
         if path is None:
             continue
         payload = path / entry["payloadRelativePath"]
-        pointer_hashes = {}
+        pointer_hashes: dict[str, str | None] = {}
         for pointer in (path.parent / "current.json", path.parent / "current-v2.json"):
             if pointer.exists() and pointer.is_file() and not pointer.is_symlink():
                 pointer_hashes[pointer.name] = sha256(pointer)
+            else:
+                # Absence is authority too: a current pointer added after the
+                # plan must be treated as drift, never silently ignored.
+                pointer_hashes[pointer.name] = None
         payloads.append({"candidateId": entry["candidateId"], "path": str(path), "candidateIdentity": _identity(path),
                          "rootIdentity": _node_identity(path.parents[1]), "payloadRelativePath": entry["payloadRelativePath"],
                          "payloadIdentity": _identity(payload), "manifestSha256": entry["manifestSha256"], "pointerHashes": pointer_hashes,
@@ -247,57 +326,74 @@ def _apply_plan_locked(plan: dict[str, Any], conf: dict[str, Any], registry: dic
                 raise ValueError("candidate has a different prune intent")
         if existing_intent is None and _identity(candidate) != item.get("candidateIdentity"):
             raise ValueError("candidate changed since planning")
-        if registry.get("builds", {}).get(candidate_id, {}).get("lifecycle") != "retired":
-            raise ValueError("candidate is no longer explicitly retired")
         manifest = candidate / "manifest.json"
         pointer_hashes = item.get("pointerHashes", {})
-        if not isinstance(pointer_hashes, dict):
+        if not isinstance(pointer_hashes, dict) or set(pointer_hashes) != {"current.json", "current-v2.json"}:
             raise ValueError("plan pointer bindings are invalid")
         for name, digest in pointer_hashes.items():
             pointer = candidate.parent / name
-            if (not isinstance(name, str) or name not in {"current.json", "current-v2.json"} or not isinstance(digest, str)
-                    or not pointer.is_file() or pointer.is_symlink() or sha256(pointer) != digest):
+            if not isinstance(name, str) or name not in {"current.json", "current-v2.json"}:
                 raise ValueError("current pointer changed since planning")
-        payload = _safe_payload(candidate, manifest)
-        if payload is None:
-            # A crash after removal leaves the intent but not the receipt.
-            # Finalizing the same intent is idempotent; any other absence is
-            # unsafe and never treated as a successful prune.
-            if existing_intent is None or (candidate / item["payloadRelativePath"]).exists():
-                raise ValueError("manifest or payload changed since planning")
-            config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
-                                         "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
-                                         "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
-            removed.append(candidate_id)
-            continue
-        if sha256(manifest) != item.get("manifestSha256") or str(payload.relative_to(candidate)) != item.get("payloadRelativePath"):
-            raise ValueError("manifest or payload changed since planning")
-        if _identity(payload) != item.get("payloadIdentity"):
-            raise ValueError("payload changed since planning")
-        tool = _tool_for_task(candidate_id.split(":", 2)[1])
+            if digest is None:
+                if pointer.exists() or pointer.is_symlink():
+                    raise ValueError("current pointer changed since planning")
+            elif not isinstance(digest, str) or not pointer.is_file() or pointer.is_symlink() or sha256(pointer) != digest:
+                raise ValueError("current pointer changed since planning")
+        task = candidate_id.split(":", 2)
+        tool = _tool_for_task(task[1]) if len(task) == 3 else None
         if tool is None:
             raise ValueError("candidate task is unknown")
+        if sha256(manifest) != item.get("manifestSha256"):
+            raise ValueError("manifest changed since planning")
+        parsed, bound_root, bound_task, digest = _registered_manifest(tool=tool, candidate_id=candidate_id, manifest=manifest)
+        state = registry.get("builds", {}).get(candidate_id, {})
+        candidate_commit = parsed["candidate"]["commit"]
+        if (bound_root != root_id or bound_task != task[1] or not isinstance(state, dict)
+                or (state.get("lifecycle"), state.get("tool"), state.get("rootId"), state.get("task"), state.get("commit"), state.get("manifestSha256"))
+                != ("retired", tool, bound_root, bound_task, candidate_commit, digest)):
+            raise ValueError("candidate authority changed since planning")
         launch_lease = _try_exclusive(config.home() / "locks" / f"{tool}.lock")
         export_lease = _try_exclusive(candidate / ".export-lease.lock")
         if launch_lease is None or export_lease is None:
             _release(launch_lease); _release(export_lease)
             raise ValueError("candidate is leased by launcher or exporter")
+        payload = _safe_payload(candidate, manifest)
         try:
-            app = json.loads(manifest.read_text(encoding="utf-8")).get("app", {})
-            executable = candidate / app.get("executableRelativePath", "")
-            if not executable.is_file() or launch.exact_executable_in_use(executable):
+            if payload is None:
+                # A crash after removal leaves the intent but not the receipt.
+                # Finalization requires the exact immutable manifest, all fresh
+                # authority facts, pointer absence/presence bindings, and a
+                # complete matching intent—not merely an absent payload.
+                removed_path = candidate / item["payloadRelativePath"]
+                if (existing_intent is None or existing_intent.get("priorIdentity") != item["payloadIdentity"]
+                        or existing_intent.get("manifestSha256") != item["manifestSha256"]
+                        or removed_path.exists() or removed_path.is_symlink()
+                        or config._has_symlink_component(removed_path.absolute())):
+                    raise ValueError("manifest or payload changed since planning")
+                config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
+                                             "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
+                                             "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
+                removed.append(candidate_id)
+                continue
+            if (str(payload.relative_to(candidate)) != item.get("payloadRelativePath")
+                    or _bound_payload_inventory(parsed, candidate, payload) != item["payloadIdentity"].get("bytes")
+                    or _identity(payload) != item.get("payloadIdentity")):
+                raise ValueError("payload changed since planning")
+            executable = candidate / parsed["app"].get("executableRelativePath", "")
+            if (config._has_symlink_component(executable.absolute()) or not executable.is_file()
+                    or executable.is_symlink() or launch.exact_executable_in_use(executable)):
                 raise ValueError("candidate executable is in use or unsafe")
+            intent_payload = {"schema": "prune-intent-v1", "id": accepted_id, "relativePayload": item["payloadRelativePath"],
+                              "priorIdentity": item["payloadIdentity"], "manifestSha256": item["manifestSha256"], "reason": item["reason"]}
+            if existing_intent is None:
+                config.write_atomic(intent, intent_payload)
+            shutil.rmtree(payload)
+            config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
+                                          "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
+                                          "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
+            removed.append(candidate_id)
         finally:
             _release(launch_lease); _release(export_lease)
-        intent_payload = {"schema": "prune-intent-v1", "id": accepted_id, "relativePayload": item["payloadRelativePath"],
-                          "priorIdentity": item["payloadIdentity"], "reason": item["reason"]}
-        if existing_intent is None:
-            config.write_atomic(intent, intent_payload)
-        shutil.rmtree(payload)
-        config.write_atomic(receipt, {"schema": "payload-pruned-v1", "planId": accepted_id,
-                                      "relativePayload": item["payloadRelativePath"], "priorIdentity": item["payloadIdentity"],
-                                      "reason": item["reason"], "prunedAt": datetime.now(timezone.utc).isoformat()})
-        removed.append(candidate_id)
     return {"planId": accepted_id, "status": "applied" if removed else "no-op-safe", "removed": removed}
 
 
@@ -335,12 +431,20 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
     app = payload.get("app")
     if not isinstance(checks, list) or not checks or not isinstance(app, dict):
         raise ValueError("register-export requires a complete app manifest")
-    outcomes = [entry.get("outcome", entry.get("status")) for entry in checks if isinstance(entry, dict)]
-    if len(outcomes) != len(checks) or any(outcome != "PASS" for outcome in outcomes):
-        raise ValueError("register-export requires all existing verification checks to pass")
+    named_outcomes = {entry.get("name"): entry.get("outcome", entry.get("status")) for entry in checks if isinstance(entry, dict)}
+    if len(named_outcomes) != len(checks) or any(outcome != "PASS" for outcome in named_outcomes.values()):
+        raise ValueError("register-export requires all named verification checks to pass")
+    required = REQUIRED_SUCCESS_GATES.get(tool, set())
+    if not required.issubset(named_outcomes):
+        raise ValueError("register-export requires the complete tool-specific success gates")
     app_path = manifest.parent / app["relativePath"]
     executable = manifest.parent / app["executableRelativePath"]
-    if not app_path.is_dir() or not executable.is_file() or launch.exact_executable_in_use(executable):
+    try:
+        measured_inventory = _bound_payload_inventory(payload, manifest.parent, app_path)
+    except (OSError, ValueError) as error:
+        raise ValueError("payload inventory does not bind the on-disk export") from error
+    if (not app_path.is_dir() or app_path.is_symlink() or not executable.is_file() or executable.is_symlink()
+            or launch.exact_executable_in_use(executable)):
         raise ValueError("register-export requires a complete, inactive package payload")
     lease = _try_exclusive(manifest.parent / ".export-lease.lock")
     if lease is None:
@@ -348,7 +452,7 @@ def register_export(registry: dict[str, Any], *, tool: str, candidate_id: str, m
     try:
         registry.setdefault("builds", {})[candidate_id] = {"lifecycle": "exported", "tool": tool, "rootId": root_id,
             "task": task, "commit": payload["candidate"]["commit"], "manifestSha256": digest,
-            "registeredAt": datetime.now(timezone.utc).isoformat()}
+            "payloadBytes": measured_inventory, "registeredAt": datetime.now(timezone.utc).isoformat()}
     finally:
         _release(lease)
 

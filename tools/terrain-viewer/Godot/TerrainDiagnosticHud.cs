@@ -18,9 +18,32 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     internal float Height => _panel?.Size.Y ?? 0;
     internal bool IsScrollable => _scroll is not null && _scroll.HorizontalScrollMode == ScrollContainer.ScrollMode.Disabled
         && _scroll.VerticalScrollMode == ScrollContainer.ScrollMode.Auto;
+    internal bool HasVerticalOverflow => _scroll is not null && _scroll.GetVScrollBar().MaxValue > _scroll.GetVScrollBar().Page;
+    internal bool DetailWraps => _detail is not null && _detail.GetLineCount() > 1;
+    internal float VerticalScrollValue => (float)(_scroll?.GetVScrollBar().Value ?? 0);
+    internal float VerticalScrollMaximum => (float)(_scroll?.GetVScrollBar().MaxValue ?? 0);
+    internal float VerticalScrollPage => (float)(_scroll?.GetVScrollBar().Page ?? 0);
     internal Rect2 Rect => _panel?.GetGlobalRect() ?? new Rect2();
     internal bool HasHorizontalClipping => _detail is null || _scroll is null || _detail.GetCombinedMinimumSize().X > _scroll.Size.X + 1;
     internal bool StickyVisible => _sticky?.IsVisibleInTree() == true && _sticky.GetGlobalRect().Size.X > 0;
+
+    internal void MoveVerticalScroll()
+    {
+        if (_scroll is null) return;
+        var bar = _scroll.GetVScrollBar();
+        _scroll.SetVScroll(Mathf.IsEqualApprox(bar.Value, 0) ? (int)bar.MaxValue : 0);
+    }
+
+    internal void AddOverflowProbeForSelfTest()
+    {
+        if (_detail is null) return;
+        // Exercise the production label/container range with real wrapped
+        // content. This is self-test-only diagnostic text, never a normal
+        // launch claim or source-data observation.
+        for (var line = 0; line < 48; line++)
+            _detail.Text += $"\nWrapped diagnostic overflow probe {line}: viewport layout must preserve the sticky policy summary.";
+        _detail.CustomMinimumSize = new Vector2(0, 2000);
+    }
 
     public override void _Ready()
     {
