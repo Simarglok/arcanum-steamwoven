@@ -333,6 +333,75 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public void Actor_public_planning_seam_has_one_literal_overflow_vector_for_every_checked_geometry_and_union_path()
+    {
+        // Each call names one checked production path.  Inputs and expected
+        // classification are literals; no expected coordinate is delegated to
+        // MapFacing, Place, or a geometry helper under test.
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 2, 2, 0, 0, 0, 0, 15, 8);
+        var input = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 2, 2, 0, 0, 0, 0);
+
+        // X: map subtraction, subtract-one, multiply, and origin add.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 0, MapX = long.MinValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MinValue, MapX = 0 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MaxValue, MapX = 0 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 2, CameraOriginX = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Y: map add, multiply, and origin add.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MaxValue, MapX = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 500_000_000_000_000_000L, MapX = 500_000_000_000_000_000L }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginY = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Caller offsets and the explicit (+40,+20) diagnostic anchor adds.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 40, InstanceOffsetX = int.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 20, InstanceOffsetY = int.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 39 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 19 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Mirror-specific hotspot subtraction and source-offset negation.
+        var mirroredHotspot = frame with { TextureKey = frame.TextureKey with { PhysicalGroup = 7 }, Width = int.MaxValue, HotX = -1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 1, Width = int.MaxValue, HotX = -1 }, mirroredHotspot), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var mirroredOffset = frame with { TextureKey = frame.TextureKey with { PhysicalGroup = 7 }, ArtOffsetX = int.MinValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 1, ArtOffsetX = int.MinValue }, mirroredOffset), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Widened left/top/right/bottom edges, then their checked int narrowing.
+        var wideHotX = frame with { HotX = int.MaxValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MinValue, HotX = int.MaxValue }, wideHotX), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var wideHotY = frame with { HotY = int.MaxValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MinValue, HotY = int.MaxValue }, wideHotY), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var wideExtent = frame with { Width = 2, Height = 2 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 40 }, wideExtent), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 20 }, wideExtent), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = (long)int.MinValue - 41 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = (long)int.MinValue - 21 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = (long)int.MaxValue - 40, Width = 1 }, frame with { Width = 1 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = (long)int.MaxValue - 20, Height = 1 }, frame with { Height = 1 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // The guide cross narrows anchor-4 and anchor+5 independently.
+        var crossLeft = frame with { Width = 1, Height = 1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { MapY = 1, CameraOriginX = (long)int.MinValue - 40, Width = 1, Height = 1 }, [crossLeft]), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var crossRight = frame with { Width = 1, Height = 1, HotX = 1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { MapY = 1, CameraOriginX = (long)int.MaxValue - 40, Width = 1, Height = 1, HotX = 1 }, [crossRight]), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // WorldBounds unions include terrain and every admitted actor guide.
+        // These two cases separately overflow union width and union height.
+        var terrainKey = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(-40, 0, 100, 100),
+            [new TerrainPlanInput(0, terrainKey, TerrainKind.Tile, 0, 0, 0, 1, 1, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        var unionWidthFirst = frame with { Width = 1, Height = 1, HotX = int.MaxValue - 5 };
+        var unionWidthSecond = frame with { TextureKey = frame.TextureKey with { Frame = 1 }, Width = int.MaxValue - 4, Height = 1, HotX = 0 };
+        var unionWidthInput = input with { Width = 1, Height = 1, HotX = int.MaxValue - 5 };
+        var widthActor = ActorDiagnosticScenePlan.CreateSynthetic(unionWidthInput, [unionWidthFirst, unionWidthSecond]);
+        AssertViewerFailure(() => DiagnosticScenePlan.Create(terrain, null, widthActor), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var unionHeightFirst = frame with { Width = 1, Height = 1, HotY = int.MaxValue - 5 };
+        var unionHeightSecond = frame with { TextureKey = frame.TextureKey with { Frame = 1 }, Width = 1, Height = int.MaxValue - 4, HotY = 0 };
+        var unionHeightInput = input with { CameraOriginY = -20, Width = 1, Height = 1, HotY = int.MaxValue - 5 };
+        var heightActor = ActorDiagnosticScenePlan.CreateSynthetic(unionHeightInput, [unionHeightFirst, unionHeightSecond]);
+        AssertViewerFailure(() => DiagnosticScenePlan.Create(terrain, null, heightActor), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+    }
+
+    [TestMethod]
     public void Static_scenery_geometry_uses_checked_projection_hotspot_and_not_art_offset()
     {
         var identity = new Arcanum.Data.StaticObjects.StaticObjectResourceIdentity(7, 3, 99, new string('a', 64));

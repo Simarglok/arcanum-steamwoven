@@ -530,7 +530,7 @@ public partial class TerrainViewerApp : Node
     private async Task AssertActorRasterAsync(TerrainLoadResult result, ActorDiagnosticDrawCommand actor)
     {
         if (!result.ActorTextures.TryGetValue(actor.TextureKey, out var decoded)
-            || !TryFindOpaqueDecodedPixel(decoded.Width, decoded.Height, decoded.Rgba, new TerrainRect(0, 0, decoded.Width, decoded.Height), out var sourcePixel))
+            || !TryFindActorRasterPixel(decoded, actor, out var sourcePixel))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorDecode));
         var viewport = new SubViewport { Size = new Vector2I(actor.Destination.Width + 12, actor.Destination.Height + 12), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var canvas = new TerrainCanvas { Position = new Vector2(6 - actor.Destination.X, 6 - actor.Destination.Y) };
@@ -574,6 +574,36 @@ public partial class TerrainViewerApp : Node
 
     private static bool TryFindOpaqueDecodedPixel(DecodedStaticTexture texture, TerrainRect source, out TerrainTexturePixel pixel)
         => TryFindOpaqueDecodedPixel(texture.Width, texture.Height, texture.Rgba, source, out pixel);
+
+    /// <summary>
+    /// Original-data native smoke derives one opaque actor texel only after
+    /// excluding the diagnostic rectangle and anchor-cross pixels that paint
+    /// later than the sprite. This preserves an actual sprite/reflection
+    /// readback for each path instead of accidentally sampling a guide.
+    /// </summary>
+    private static bool TryFindActorRasterPixel(DecodedActorTexture texture, ActorDiagnosticDrawCommand actor, out TerrainTexturePixel pixel)
+    {
+        for (var y = 0; y < texture.Height; y++)
+        {
+            for (var x = 0; x < texture.Width; x++)
+            {
+                var offset = ((y * texture.Width) + x) * 4;
+                if (texture.Rgba[offset + 3] == 0) continue;
+                var destinationX = actor.FlipX ? actor.Destination.Width - 1 - x : x;
+                var worldX = actor.Destination.X + destinationX;
+                var worldY = actor.Destination.Y + y;
+                var onOutline = worldX == actor.Destination.X || worldX == actor.Destination.X + actor.Destination.Width - 1
+                    || worldY == actor.Destination.Y || worldY == actor.Destination.Y + actor.Destination.Height - 1;
+                var onAnchorCross = (worldX == actor.AnchorX && Math.Abs(worldY - actor.AnchorY) <= 4)
+                    || (worldY == actor.AnchorY && Math.Abs(worldX - actor.AnchorX) <= 4);
+                if (onOutline || onAnchorCross) continue;
+                pixel = new TerrainTexturePixel(x, y, texture.Rgba[offset], texture.Rgba[offset + 1], texture.Rgba[offset + 2], texture.Rgba[offset + 3]);
+                return true;
+            }
+        }
+        pixel = default;
+        return false;
+    }
 
     private static bool TryFindOpaqueDecodedPixel(int width, int height, byte[] rgba, TerrainRect source, out TerrainTexturePixel pixel)
     {
