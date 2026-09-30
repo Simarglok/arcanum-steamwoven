@@ -188,14 +188,8 @@ public static class TerrainViewerSelfTest
             for (var requested = 0; requested < 8; requested++)
             {
                 var snapshot = app.GetSelfTestSnapshot();
-                var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
-                if (actor.Action != actionCase.Item2 || actor.RequestedFacing != requested || actor.PhysicalGroup != expectedFacings[requested].Item1
-                    || actor.FlipX != expectedFacings[requested].Item2 || actor.Frame != 0 || actor.FrameCount != actionCase.Item3
-                    || actor.RawFramesPerSecond != actionCase.Item4 || snapshot.Playing || snapshot.CacheCount != 185
-                    || !HasStationaryCallerInput(snapshot.Input, callerInput) || snapshot.HudPosition != new Vector2(16, 16)
-                    || !HasCompleteActorHud(snapshot, actionCase.Item2, requested, expectedFacings[requested].Item1,
-                        expectedFacings[requested].Item2, actionCase.Item3, actionCase.Item4, frame: 0, playing: false))
-                    throw new InvalidOperationException("Synthetic app actor state diverges from the literal action/facing policy.");
+                AssertActorControlTransitionSnapshot(snapshot, callerInput, actionCase.Item2, requested, expectedFacings[requested].Item1,
+                    expectedFacings[requested].Item2, actionCase.Item3, actionCase.Item4, frame: 0, playing: false);
                 if (DisplayServer.GetName() != "headless")
                 {
                     await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -209,17 +203,22 @@ public static class TerrainViewerSelfTest
         // Walk's real input/timeline policy: step, play/advance, pause, then
         // switch reset to Idle. The immutable caller input stays unchanged.
         app._Input(new InputEventKey { Keycode = Key.Period, Pressed = true });
-        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Walk step did not pause at frame one.");
+        var forwardStep = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(forwardStep, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: false);
         app._Input(new InputEventKey { Keycode = Key.Comma, Pressed = true });
-        if (app.GetSelfTestSnapshot().Actor?.Frame != 0) throw new InvalidOperationException("Walk reverse step did not return to frame zero.");
+        var reverseStep = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(reverseStep, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 0, playing: false);
         app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
         app._Process(0.1);
-        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || !app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Walk playback did not advance through AnimationTimeline.");
+        var playbackAdvance = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(playbackAdvance, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: true);
         app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
         app._Process(1.0);
-        if (app.GetSelfTestSnapshot().Actor?.Frame != 1 || app.GetSelfTestSnapshot().Playing) throw new InvalidOperationException("Paused timeline advanced unexpectedly.");
+        var pausedNonAdvance = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(pausedNonAdvance, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: false);
         app._Input(new InputEventKey { Keycode = Key.Key1, Pressed = true });
-        if (app.GetSelfTestSnapshot().Actor?.Frame != 0 || app.GetSelfTestSnapshot().Actor?.FrameCount != 15) throw new InvalidOperationException("Idle selection did not reset the timeline.");
+        var idleReset = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(idleReset, callerInput, ActorDiagnosticAction.Idle, 7, 7, false, 15, 8, frame: 0, playing: false);
 
         var beforeCamera = app.GetSelfTestSnapshot();
         app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
@@ -227,7 +226,8 @@ public static class TerrainViewerSelfTest
         app._Input(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
         app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
         var afterCamera = app.GetSelfTestSnapshot();
-        if (!HasStationaryCallerInput(afterCamera.Input, callerInput) || afterCamera.Actor?.AnchorX != beforeCamera.Actor?.AnchorX || afterCamera.Actor?.AnchorY != beforeCamera.Actor?.AnchorY
+        AssertActorControlTransitionSnapshot(afterCamera, callerInput, ActorDiagnosticAction.Idle, 7, 7, false, 15, 8, frame: 0, playing: false);
+        if (afterCamera.Actor?.AnchorX != beforeCamera.Actor?.AnchorX || afterCamera.Actor?.AnchorY != beforeCamera.Actor?.AnchorY
             || (afterCamera.CameraX, afterCamera.CameraY, afterCamera.CameraZoom) == (beforeCamera.CameraX, beforeCamera.CameraY, beforeCamera.CameraZoom)
             || afterCamera.CanvasTransform == beforeCamera.CanvasTransform)
             throw new InvalidOperationException("Inspection camera mutated stationary caller input or failed to update the canvas transform.");
@@ -313,11 +313,31 @@ public static class TerrainViewerSelfTest
         return required.All(item => snapshot.Hud.Contains(item, StringComparison.Ordinal));
     }
 
+    /// <summary>
+    /// One post-transition production snapshot must independently prove the
+    /// complete HUD policy and fixed caller/world placement. These literals are
+    /// deliberately not derived from the production planner or HUD formatter.
+    /// </summary>
+    private static void AssertActorControlTransitionSnapshot(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticPlacementInput callerInput,
+        ActorDiagnosticAction action, int facing, int group, bool mirrored, int frameCount, int fps, int frame, bool playing)
+    {
+        var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
+        if (actor.Action != action || actor.RequestedFacing != facing || actor.PhysicalGroup != group || actor.FlipX != mirrored
+            || actor.Frame != frame || actor.FrameCount != frameCount || actor.RawFramesPerSecond != fps || snapshot.Playing != playing
+            || snapshot.CacheCount != 185 || snapshot.HudPosition != new Vector2(16, 16)
+            || !HasStationaryCallerInput(snapshot.Input, callerInput)
+            || actor.Destination != new TerrainRect(96, 57, 9, 7) || actor.AnchorX != 100 || actor.AnchorY != 60
+            || !HasCompleteActorHud(snapshot, action, facing, group, mirrored, frameCount, fps, frame, playing))
+            throw new InvalidOperationException("Synthetic app control transition diverges from the literal HUD or stationary-placement policy.");
+    }
+
     private static bool HasStationaryCallerInput(ActorDiagnosticPlacementInput? actual, ActorDiagnosticPlacementInput expected)
         => actual is not null && actual.MapX == expected.MapX && actual.MapY == expected.MapY
             && actual.CameraOriginX == expected.CameraOriginX && actual.CameraOriginY == expected.CameraOriginY
             && actual.InstanceOffsetX == expected.InstanceOffsetX && actual.InstanceOffsetY == expected.InstanceOffsetY
-            && actual.RenderBranch == expected.RenderBranch && actual.ScalePercent == expected.ScalePercent && actual.Shrunk == expected.Shrunk;
+            && actual.RenderBranch == expected.RenderBranch && actual.ScalePercent == expected.ScalePercent && actual.Shrunk == expected.Shrunk
+            && actual.Width == expected.Width && actual.Height == expected.Height && actual.HotX == expected.HotX && actual.HotY == expected.HotY
+            && actual.ArtOffsetX == expected.ArtOffsetX && actual.ArtOffsetY == expected.ArtOffsetY;
 
     private static void AssertSyntheticActorPixels(Image image, TerrainViewerSelfTestSnapshot snapshot,
         (byte R, byte G, byte B) leftExpected, (byte R, byte G, byte B) rightExpected)
