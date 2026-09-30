@@ -16,13 +16,32 @@ from .manifests import SUPPORTED_TOOLS, sha256
 def _candidate_path(root_id: str, task: str, candidate: str) -> tuple[Path, str]:
     if not root_id or not task or not candidate:
         raise ValueError("export endpoint requires root, task, and candidate identity")
+    if (Path(candidate).is_absolute() or candidate in (".", "..")
+            or "/" in candidate or "\\" in candidate):
+        raise ValueError("export endpoint candidate must be one safe path component")
     conf = config.load_config()
     roots = conf.get("artifactRoots")
     root_text = roots.get(root_id) if isinstance(roots, dict) else None
     if not isinstance(root_text, str):
         raise ValueError("export endpoint root is not explicitly configured")
     root = config.canonical_existing(root_text, directory=True)
-    return root / task / candidate, f"{root_id}:{task}:{candidate}"
+    task_root = root / task
+    candidate_path = task_root / candidate
+    if (task_root.is_symlink() or candidate_path.is_symlink()
+            or config._has_symlink_component(task_root.absolute())
+            or config._has_symlink_component(candidate_path.absolute())):
+        raise ValueError("export endpoint candidate path must not traverse a symlink")
+    if task_root.exists() and not task_root.is_dir():
+        raise ValueError("export endpoint task path must be a directory")
+    if candidate_path.exists() and not candidate_path.is_dir():
+        raise ValueError("export endpoint candidate path must be a directory")
+    canonical_task_root = task_root.resolve(strict=False)
+    canonical_candidate = candidate_path.resolve(strict=False)
+    try:
+        canonical_candidate.relative_to(canonical_task_root)
+    except ValueError as error:
+        raise ValueError("export endpoint candidate escapes configured task root") from error
+    return canonical_candidate, f"{root_id}:{task}:{candidate}"
 
 
 def _write_current(candidate: Path, manifest: Path) -> None:

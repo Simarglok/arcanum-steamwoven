@@ -372,6 +372,57 @@ class LocalDevTests(unittest.TestCase):
         self.assertEqual(pointer["schema"], "arcanum-build-current-v2")
         self.assertEqual(config.load_registry()["builds"]["test:ARC-GPAD-003:candidate"]["lifecycle"], "exported")
 
+    def test_export_endpoint_rejects_traversal_candidate_before_command_or_mutation(self) -> None:
+        root = self.root / "artifacts"; root.mkdir()
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        escaped = self.root / "escaped-candidate"
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "../../escaped-candidate",
+                                  "manifest": str(escaped / "manifest.json"), "command": ["/usr/bin/false"]})()
+        with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "one safe path component"):
+                export_endpoint.run_export(args)
+        command.assert_not_called()
+        self.assertFalse((escaped / ".export-lease.lock").exists())
+        self.assertFalse(escaped.exists())
+
+    def test_export_endpoint_rejects_absolute_candidate_before_command_or_mutation(self) -> None:
+        root = self.root / "artifacts"; root.mkdir()
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        escaped = self.root / "escaped-candidate"
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": str(escaped),
+                                  "manifest": str(escaped / "manifest.json"), "command": ["/usr/bin/false"]})()
+        with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "one safe path component"):
+                export_endpoint.run_export(args)
+        command.assert_not_called()
+        self.assertFalse((escaped / ".export-lease.lock").exists())
+        self.assertFalse(escaped.exists())
+
+    def test_export_endpoint_rejects_candidate_symlink_before_command_or_mutation(self) -> None:
+        root = self.root / "artifacts"; outside = self.root / "outside"; root.mkdir(); outside.mkdir()
+        candidate = root / "ARC-GPAD-003" / "candidate"; candidate.parent.mkdir()
+        candidate.symlink_to(outside, target_is_directory=True)
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
+                                  "manifest": str(outside / "manifest.json"), "command": ["/usr/bin/false"]})()
+        with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "must not traverse a symlink"):
+                export_endpoint.run_export(args)
+        command.assert_not_called()
+        self.assertFalse((outside / ".export-lease.lock").exists())
+
+    def test_export_endpoint_rejects_task_symlink_before_command_or_mutation(self) -> None:
+        root = self.root / "artifacts"; outside = self.root / "outside"; root.mkdir(); outside.mkdir()
+        task = root / "ARC-GPAD-003"; task.symlink_to(outside, target_is_directory=True)
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
+                                  "manifest": str(outside / "candidate/manifest.json"), "command": ["/usr/bin/false"]})()
+        with patch("tools.local_dev.export_endpoint.subprocess.run") as command:
+            with self.assertRaisesRegex(ValueError, "must not traverse a symlink"):
+                export_endpoint.run_export(args)
+        command.assert_not_called()
+        self.assertFalse((outside / "candidate/.export-lease.lock").exists())
+
 
 if __name__ == "__main__":
     unittest.main()
