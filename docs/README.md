@@ -28,6 +28,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Static-scene contract: bounded Crash Site candidate](world/static-scene-contract.md)
 - [Terrain loader](world/terrain-loader.md)
 - [Bounded terrain obstruction components](world/terrain-obstruction-components.md)
+- [Ordinary static-scenery obstruction contract — bounded component only](world/static-obstruction-contract.md)
 - [Proposed selected-sector passability contract — NOT READY](world/passability-contract.md)
 
 ## Rendering, input and scripting
@@ -54,6 +55,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Crash Site: frozen initial sector](research/crash-site-slice.md)
 - [Crash Site terrain identifier resolution (ARC-RES-004)](research/crash-site-terrain-resolution.md)
 - [Selected Crash Site sector passability evidence (ARC-RES-011)](research/sector-passability-evidence.md)
+- [Static-obstruction evidence (ARC-RES-012)](research/static-obstruction-evidence.md)
 - [Terrain obstruction component evidence (ARC-DATA-006)](research/terrain-obstruction-components-evidence.md)
 - [DAT R1 evidence record](research/dat-evidence.md)
 - [ARC-RES-005 dialogue evidence record](research/dialog-evidence.md)

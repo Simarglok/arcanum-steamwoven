@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
@@ -18,6 +19,94 @@ internal static class PassabilityProbe
     private enum NameRule { NotApplicable, Clear, Blocked, Unknown, Unsupported }
     private readonly record struct Assessment(Coverage Coverage, Disposition? Disposition, string Reason);
     private readonly record struct Local(int X, int Y);
+
+    private const uint OfDestroyed = 0x00000001;
+    private const uint OfOff = 0x00000002;
+    private const uint OfNoBlock = 0x00000400;
+    private const uint OfInventory = 0x00001000;
+    private const uint OfDynamic = 0x00002000;
+
+    private enum StaticSupportedness { Supported, Unknown, Unsupported }
+    private enum StaticApplicability { Applicable, NotApplicable, Unknown }
+    private enum StaticDisposition { Blocker, NoBlock }
+    private enum TraversalContext
+    {
+        NormalCardinalZeroFlags,
+        Projectile,
+        Sound,
+        SkipObjects,
+        IgnoreCritters,
+        Wall,
+        Portal,
+        Critter,
+        Diagonal,
+        SameCell,
+        NonAdjacent,
+        CrossSector,
+    }
+
+    private readonly record struct StaticCandidate(int SourceIndex, int ObjectType, uint? EffectiveFlags,
+        bool FlagsInherited, long? Location, uint? AdjacentSpellFlags = null, bool LocationMalformed = false);
+    private readonly record struct StaticAssessment(StaticSupportedness Supportedness, StaticApplicability Applicability,
+        StaticDisposition? Disposition, string Reason);
+    private readonly record struct StaticContribution(StaticCandidate Candidate, Local Destination, StaticAssessment Assessment);
+    private readonly record struct StaticGroup(Local Destination, StaticContribution[] Contributions);
+    private readonly record struct StaticRow(int SourceIndex, int LocalX, int LocalY, string DirectVsPrototype,
+        StaticDisposition? Disposition, int ContributorCount);
+
+    internal static void EmitStaticObstruction(TerrainObstructionSectorReport terrain, StaticObjectInspection inspection)
+    {
+        ArgumentNullException.ThrowIfNull(terrain);
+        ArgumentNullException.ThrowIfNull(inspection);
+        if (inspection.TerminalRecordCount != 317 || inspection.Records.Count != 317)
+            throw new InvalidDataException("The bounded static-obstruction report requires exactly 317 terminal records.");
+
+        // Keep the existing terrain-only component aggregate distinct from the new
+        // object subset; neither is a combined passability answer.
+        Emit(terrain, inspection.TerminalRecordCount);
+
+        var candidates = inspection.Records.Select(record => new StaticCandidate(record.SourceIndex, record.ObjectType,
+            record.EffectiveFlags, record.FlagsInherited, record.Location)).ToArray();
+        var assessments = candidates.Select(candidate => AssessStatic(candidate, TraversalContext.NormalCardinalZeroFlags)).ToArray();
+        var contributions = candidates.Zip(assessments).Where(pair => TryDestination(pair.First, out _))
+            .Select(pair => new StaticContribution(pair.First, Destination(pair.First), pair.Second)).ToArray();
+        var admitted = contributions.Where(contribution => contribution.Assessment.Supportedness != StaticSupportedness.Unsupported &&
+            contribution.Assessment.Applicability != StaticApplicability.NotApplicable).ToArray();
+        var groups = admitted.GroupBy(contribution => contribution.Destination).OrderBy(group => group.Key.Y).ThenBy(group => group.Key.X)
+            .Select(group => new StaticGroup(group.Key, group.OrderBy(item => item.Candidate.SourceIndex).ToArray())).ToArray();
+        if (groups.Any(group => group.Contributions.Length > inspection.TerminalRecordCount))
+            throw new InvalidDataException("Static-obstruction contributor multiplicity exceeded the terminal record cap.");
+
+        var flagsResolved = candidates.Count(candidate => candidate.ObjectType == 3 && candidate.EffectiveFlags.HasValue);
+        var directFlags = candidates.Count(candidate => candidate.ObjectType == 3 && candidate.EffectiveFlags.HasValue && !candidate.FlagsInherited);
+        var inheritedFlags = candidates.Count(candidate => candidate.ObjectType == 3 && candidate.EffectiveFlags.HasValue && candidate.FlagsInherited);
+        var locationPresent = candidates.Count(candidate => candidate.ObjectType == 3 && candidate.Location.HasValue);
+        var locationInRange = candidates.Count(candidate => candidate.ObjectType == 3 && TryDestination(candidate, out _));
+        var typeThree = candidates.Count(candidate => candidate.ObjectType == 3);
+        var blockerCount = assessments.Count(assessment => assessment.Disposition == StaticDisposition.Blocker);
+        var noBlockCount = assessments.Count(assessment => assessment.Disposition == StaticDisposition.NoBlock);
+        var unknownCount = assessments.Count(assessment => assessment.Supportedness == StaticSupportedness.Unknown);
+        var dynamicExcluded = candidates.Count(candidate => candidate.EffectiveFlags is uint flags && (flags & OfDynamic) != 0);
+        var inventoryExcluded = candidates.Count(candidate => candidate.EffectiveFlags is uint flags && (flags & OfInventory) != 0);
+        var offExcluded = candidates.Count(candidate => candidate.EffectiveFlags is uint flags && (flags & OfOff) != 0);
+        var destroyedExcluded = candidates.Count(candidate => candidate.EffectiveFlags is uint flags && (flags & OfDestroyed) != 0);
+        var sameCellGroups = groups.Count(group => group.Contributions.Length > 1);
+        var maxMultiplicity = groups.Length == 0 ? 0 : groups.Max(group => group.Contributions.Length);
+
+        Console.WriteLine($"static-obstruction aggregate terminal_records={inspection.TerminalRecordCount} resolved_flags={flagsResolved} type3={typeThree} direct_flags={directFlags} inherited_flags={inheritedFlags} location_present={locationPresent} location_in_range={locationInRange} dynamic_excluded={dynamicExcluded} inventory_excluded={inventoryExcluded} off_not_applicable={offExcluded} destroyed_not_applicable={destroyedExcluded} blocker={blockerCount} no_block={noBlockCount} unknown={unknownCount} distinct_occupied_cells={groups.Length} same_cell_groups={sameCellGroups} maximum_multiplicity={maxMultiplicity} full_passability=unknown");
+
+        var rows = new[]
+        {
+            FirstRecordRow(candidates, assessments, StaticDisposition.Blocker, direct: true),
+            FirstRecordRow(candidates, assessments, StaticDisposition.Blocker, direct: false),
+            FirstRecordRow(candidates, assessments, StaticDisposition.NoBlock, direct: true),
+            FirstRecordRow(candidates, assessments, StaticDisposition.NoBlock, direct: false),
+            FirstGroupRow(groups, requireBlocker: true),
+            FirstGroupRow(groups, requireBlocker: false),
+        };
+        foreach (var row in rows)
+            Console.WriteLine($"static-obstruction row source_index={row.SourceIndex} local_x={row.LocalX} local_y={row.LocalY} direct_vs_prototype={row.DirectVsPrototype} disposition={RenderStatic(row.Disposition)} contributor_count={row.ContributorCount}");
+    }
 
     internal static void Emit(TerrainObstructionSectorReport report, int staticCensusCount)
     {
@@ -150,6 +239,140 @@ internal static class PassabilityProbe
         AssertAssessment(AssessStep(new Local(30, 32), new Local(30, 32), open, open, open, open, open), Coverage.Unsupported, null, "same-cell step");
         AssertAssessment(AssessStep(new Local(30, 32), new Local(32, 32), open, open, open, open, open), Coverage.Unsupported, null, "non-adjacent step");
         AssertAssessment(AssessStep(new Local(63, 63), new Local(64, 63), open, open, open, open, open), Coverage.Unsupported, null, "sector-edge step");
+        StaticObstructionSelfTest();
+    }
+
+    private static void StaticObstructionSelfTest()
+    {
+        var blocker = new StaticCandidate(7, 3, 0, false, PackedWorld(OriginX + 2, OriginY + 3));
+        var noBlock = new StaticCandidate(8, 3, OfNoBlock, false, PackedWorld(OriginX + 2, OriginY + 3));
+        var inheritedBlocker = new StaticCandidate(9, 3, 0, true, PackedWorld(OriginX + 4, OriginY + 5));
+        var inheritedNoBlock = new StaticCandidate(10, 3, OfNoBlock, true, PackedWorld(OriginX + 4, OriginY + 5));
+        AssertStatic(AssessStatic(blocker, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "direct blocker");
+        AssertStatic(AssessStatic(noBlock, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "direct no-block");
+        AssertStatic(AssessStatic(inheritedBlocker, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "prototype blocker");
+        AssertStatic(AssessStatic(inheritedNoBlock, TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "prototype no-block");
+        AssertStatic(AssessStatic(new StaticCandidate(11, 3, OfNoBlock, false, blocker.Location, AdjacentSpellFlags: OfDynamic), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "slot-19 sentinel has no effect");
+        AssertStatic(AssessStatic(new StaticCandidate(12, 3, OfNoBlock, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "direct override opposite prototype");
+        AssertStatic(AssessStatic(new StaticCandidate(13, 3, null, true, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "missing duplicate or mismatched prototype flags remain unknown");
+        AssertStatic(AssessStatic(new StaticCandidate(14, 3, 0, false, null), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "missing location");
+        AssertStatic(AssessStatic(new StaticCandidate(15, 3, 0, false, blocker.Location, LocationMalformed: true), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "malformed location");
+        AssertStatic(AssessStatic(new StaticCandidate(16, 3, 0, false, PackedWorld(OriginX + Width, OriginY)), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "out-of-range location");
+        if (TryDestination(new StaticCandidate(17, 3, 0, false, PackedWorld(int.MinValue, int.MaxValue)), out _)) throw new InvalidOperationException("Checked local-coordinate overflow was accepted.");
+        AssertStatic(AssessStatic(new StaticCandidate(18, 2, 0, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, "type mismatch");
+        AssertStatic(AssessStatic(new StaticCandidate(19, 3, OfDynamic, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, "dynamic exclusion");
+        AssertStatic(AssessStatic(new StaticCandidate(20, 3, OfInventory, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "inventory exclusion");
+        AssertStatic(AssessStatic(new StaticCandidate(21, 3, OfOff, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "off exclusion");
+        AssertStatic(AssessStatic(new StaticCandidate(22, 3, OfDestroyed, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags), StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "destroyed exclusion");
+        foreach (var context in Enum.GetValues<TraversalContext>().Where(context => context != TraversalContext.NormalCardinalZeroFlags))
+            AssertStatic(AssessStatic(blocker, context), StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, $"unsupported {context}");
+        if (!TryDestination(blocker, out var destination) || destination != new Local(2, 3)) throw new InvalidOperationException("Static source-to-destination coordinate mapping regressed.");
+
+        var knownBlocker = new StaticContribution(blocker, destination, AssessStatic(blocker, TraversalContext.NormalCardinalZeroFlags));
+        var knownNoBlock = new StaticContribution(noBlock, destination, AssessStatic(noBlock, TraversalContext.NormalCardinalZeroFlags));
+        var unresolved = new StaticContribution(new StaticCandidate(23, 3, null, false, blocker.Location), destination,
+            AssessStatic(new StaticCandidate(23, 3, null, false, blocker.Location), TraversalContext.NormalCardinalZeroFlags));
+        AssertStatic(AggregateStaticCell([knownBlocker, knownNoBlock]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "same-cell blocker wins");
+        AssertStatic(AggregateStaticCell([knownNoBlock, new StaticContribution(inheritedNoBlock, destination, AssessStatic(inheritedNoBlock, TraversalContext.NormalCardinalZeroFlags))]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "same-cell all no-block");
+        AssertStatic(AggregateStaticCell([unresolved]), StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "same-cell unresolved");
+        AssertStatic(AggregateStaticCell([]), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "empty admitted static subset");
+        var multiplicity = Enumerable.Repeat(knownNoBlock, 317).ToArray();
+        if (multiplicity.Length != 317) throw new InvalidOperationException("Static contributor cap fixture changed.");
+        AssertStatic(AggregateStaticCell(multiplicity), StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "same-cell terminal-cap multiplicity");
+    }
+
+    private static StaticAssessment AssessStatic(StaticCandidate candidate, TraversalContext context)
+    {
+        if (context != TraversalContext.NormalCardinalZeroFlags)
+            return new StaticAssessment(StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, "traversal-context-unsupported");
+        if (candidate.ObjectType != 3)
+            return new StaticAssessment(StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, "not-type-3-scenery");
+        if (!candidate.EffectiveFlags.HasValue)
+            return new StaticAssessment(StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "object-flags-unresolved");
+        var flags = candidate.EffectiveFlags.Value;
+        if ((flags & OfDynamic) != 0)
+            return new StaticAssessment(StaticSupportedness.Unsupported, StaticApplicability.Unknown, null, "dynamic-scenery-excluded");
+        if (!TryDestination(candidate, out _))
+            return new StaticAssessment(StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "direct-location-unresolved-or-out-of-range");
+        if ((flags & OfInventory) != 0)
+            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "inventory-object-not-in-sector-cell-list");
+        if ((flags & OfDestroyed) != 0)
+            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "destroyed-object-not-applicable");
+        if ((flags & OfOff) != 0)
+            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.NotApplicable, null, "off-object-not-applicable");
+        return (flags & OfNoBlock) != 0
+            ? new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "object-no-block")
+            : new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "object-blocker");
+    }
+
+    private static StaticAssessment AggregateStaticCell(IReadOnlyList<StaticContribution> contributions)
+    {
+        if (contributions.Any(contribution => contribution.Assessment.Disposition == StaticDisposition.Blocker))
+            return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.Blocker, "same-cell-blocker");
+        if (contributions.Any(contribution => contribution.Assessment.Supportedness == StaticSupportedness.Unknown || contribution.Assessment.Applicability == StaticApplicability.Unknown))
+            return new StaticAssessment(StaticSupportedness.Unknown, StaticApplicability.Unknown, null, "same-cell-unresolved");
+        return new StaticAssessment(StaticSupportedness.Supported, StaticApplicability.Applicable, StaticDisposition.NoBlock, "all-admitted-static-contributors-no-block");
+    }
+
+    private static StaticRow FirstRecordRow(IReadOnlyList<StaticCandidate> candidates, IReadOnlyList<StaticAssessment> assessments,
+        StaticDisposition disposition, bool direct)
+    {
+        for (var index = 0; index < candidates.Count; index++)
+        {
+            if (assessments[index].Disposition != disposition || candidates[index].FlagsInherited == direct || !TryDestination(candidates[index], out var destination)) continue;
+            return new StaticRow(candidates[index].SourceIndex, destination.X, destination.Y, direct ? "direct" : "prototype", disposition, 1);
+        }
+        return new StaticRow(0, 0, 0, "none", null, 0);
+    }
+
+    private static StaticRow FirstGroupRow(IReadOnlyList<StaticGroup> groups, bool requireBlocker)
+    {
+        foreach (var group in groups)
+        {
+            var assessment = AggregateStaticCell(group.Contributions);
+            if ((requireBlocker && assessment.Disposition != StaticDisposition.Blocker) ||
+                (!requireBlocker && (assessment.Disposition != StaticDisposition.NoBlock || group.Contributions.Length < 2))) continue;
+            var first = group.Contributions[0].Candidate;
+            var kind = group.Contributions.All(item => !item.Candidate.FlagsInherited) ? "direct" :
+                group.Contributions.All(item => item.Candidate.FlagsInherited) ? "prototype" : "mixed";
+            return new StaticRow(first.SourceIndex, group.Destination.X, group.Destination.Y, kind, assessment.Disposition, group.Contributions.Length);
+        }
+        return new StaticRow(0, 0, 0, "none", null, 0);
+    }
+
+    private static bool TryDestination(StaticCandidate candidate, out Local destination)
+    {
+        destination = default;
+        if (!candidate.Location.HasValue || candidate.LocationMalformed) return false;
+        try
+        {
+            var worldX = unchecked((int)(uint)candidate.Location.Value);
+            var worldY = unchecked((int)(candidate.Location.Value >> 32));
+            var localX = checked(worldX - OriginX);
+            var localY = checked(worldY - OriginY);
+            if ((uint)localX >= Width || (uint)localY >= Width) return false;
+            destination = new Local(localX, localY);
+            return true;
+        }
+        catch (OverflowException) { return false; }
+    }
+
+    private static Local Destination(StaticCandidate candidate)
+    {
+        if (!TryDestination(candidate, out var destination)) throw new InvalidDataException("Static destination was not admitted.");
+        return destination;
+    }
+
+    private static long PackedWorld(int worldX, int worldY)
+        => unchecked((long)((ulong)(uint)worldX | ((ulong)(uint)worldY << 32)));
+
+    private static string RenderStatic(StaticDisposition? disposition) => disposition?.ToString() ?? "null";
+
+    private static void AssertStatic(StaticAssessment actual, StaticSupportedness supportedness, StaticApplicability applicability,
+        StaticDisposition? disposition, string label)
+    {
+        if (actual.Supportedness != supportedness || actual.Applicability != applicability || actual.Disposition != disposition)
+            throw new InvalidOperationException($"Synthetic static-obstruction assessment '{label}' changed.");
     }
 
     private static void EmitCell(ReadOnlySpan<byte> sectorBytes, int tileStart, ReadOnlySpan<byte> mask, int ordinal)

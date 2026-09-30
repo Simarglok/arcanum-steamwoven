@@ -3,6 +3,7 @@ using System.IO.Compression;
 using System.Numerics;
 using System.Security.Cryptography;
 using Arcanum.Data;
+using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
@@ -114,6 +115,28 @@ internal static class Program
         var typeCounts = string.Join(',', instances.GroupBy(instance => instance.Type).OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
         var staticScenery = resolved.Where(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0).ToArray();
         using var resource = DatArchive.Open(resourcePath, BoundedOptions());
+        if (passability)
+        {
+            var inspection = StaticObjectLoader.Inspect(
+                new StaticObjectSource(archive, SectorEntryName, resource),
+                new StaticObjectPrototypeSource(prototypeRoot));
+            var selector = new TerrainSectorSelector(SectorEntryName, "Arcanum1-024-fixed", 1452, 1290, 86_570_436_012, 92_928, 82_560, 64, 64,
+                new TerrainEntryExpectation(ExpectedSectorOrdinal, 0x00000002, ExpectedSectorDecodedBytes));
+            var source = new TerrainTileNameSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+            var report = TerrainObstructionInspector.InspectSector(archive, "arcanum-module", selector, source, new TerrainLoaderOptions
+            {
+                MaxSectorDecodedEntryBytes = MaxDecodedSectorBytes,
+                MaxMesDecodedEntryBytes = MaxDecodedSectorBytes,
+            });
+            PassabilityProbe.EmitStaticObstruction(report, inspection);
+            var passabilityAfter = InputFingerprint.Create(path);
+            var passabilityResourceAfter = InputFingerprint.Create(resourcePath);
+            if (passabilityAfter != before || passabilityResourceAfter != resourceBefore)
+                throw new InvalidDataException("An immutable probe input changed during the read-only passability check.");
+            ObjectWire.VerifyExpectedPrototypeManifest(prototypeRead, ExpectedPrototypeFingerprints, requireUnchanged: true);
+            Console.WriteLine("integrity before_after_match=true");
+            return;
+        }
         var artExamples = ObjectArt.ResolveExamples(resource, staticScenery.Take(5).ToArray());
 
         Console.WriteLine($"input bytes={before.Bytes} sha256={before.Sha256}");
@@ -146,18 +169,6 @@ internal static class Program
             var anchor = placement is null ? "absent" : $"{placement.Value.AnchorX},{placement.Value.AnchorY}";
             var topLeft = placement is null ? "absent" : $"{placement.Value.TopLeftX},{placement.Value.TopLeftY}";
             Console.WriteLine($"object_example source_index={example.Object.SourceIndex} prototype_aid={example.Object.Instance.PrototypeId.AidValue()} local={localX},{localY} direct_offset_x={offsetX} direct_offset_y={offsetY} diagnostic_anchor={anchor} diagnostic_top_left={topLeft} current_aid=0x{unchecked((uint)example.Object.CurrentAid):x8} current_aid_source={(example.Object.CurrentAidInherited ? "prototype" : "instance")} art_type={example.ArtType} scenery_category={example.SceneryCategory} art_number={example.ArtNumber} rotation_group={example.RotationGroup} frame={example.Frame} palette={example.Palette} frame_width={example.Width} frame_height={example.Height} frame_hotspot={example.HotX},{example.HotY} frame_offset={example.ArtOffsetX},{example.ArtOffsetY}");
-        }
-        if (passability)
-        {
-            var selector = new TerrainSectorSelector(SectorEntryName, "Arcanum1-024-fixed", 1452, 1290, 86_570_436_012, 92_928, 82_560, 64, 64,
-                new TerrainEntryExpectation(ExpectedSectorOrdinal, 0x00000002, ExpectedSectorDecodedBytes));
-            var source = new TerrainTileNameSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
-            var report = TerrainObstructionInspector.InspectSector(archive, "arcanum-module", selector, source, new TerrainLoaderOptions
-            {
-                MaxSectorDecodedEntryBytes = MaxDecodedSectorBytes,
-                MaxMesDecodedEntryBytes = MaxDecodedSectorBytes,
-            });
-            PassabilityProbe.Emit(report, staticScenery.Length);
         }
         var after = InputFingerprint.Create(path);
         if (after != before)
