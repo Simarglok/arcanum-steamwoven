@@ -372,6 +372,33 @@ class LocalDevTests(unittest.TestCase):
         self.assertEqual(pointer["schema"], "arcanum-build-current-v2")
         self.assertEqual(config.load_registry()["builds"]["test:ARC-GPAD-003:candidate"]["lifecycle"], "exported")
 
+    def test_export_endpoint_publication_errors_restore_pointer_and_registry(self) -> None:
+        root = self.root / "artifacts"; root.mkdir()
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)
+        manifest, _ = self.v2_manifest()
+        payload = json.loads(manifest.read_text(encoding="utf-8"))
+        payload["checks"] = [{"name": name, "outcome": "PASS"} for name in retention.REQUIRED_SUCCESS_GATES["gamepad"]]
+        manifest.write_text(json.dumps(payload), encoding="utf-8")
+        pointer = root / "ARC-GPAD-003" / "current.json"; pointer.parent.mkdir(parents=True, exist_ok=True)
+        pointer.write_text('{"prior":"pointer"}\n', encoding="utf-8")
+        registry = config.default_registry()
+        registry["accepted"] = {"gamepad": "accepted"}; registry["rollback"] = {"gamepad": "rollback"}
+        config.save_registry(registry)
+        expected_pointer = pointer.read_bytes(); expected_registry = config.registry_path().read_bytes()
+        args = type("Args", (), {"tool": "gamepad", "root_id": "test", "task": "ARC-GPAD-003", "candidate": "candidate",
+                                  "manifest": str(manifest), "command": ["/usr/bin/true"]})()
+        for target in ("_write_current", "save_registry"):
+            patch_target = (f"tools.local_dev.export_endpoint.{target}" if target == "_write_current"
+                            else "tools.local_dev.export_endpoint.config.save_registry")
+            with self.subTest(target=target), patch(patch_target, side_effect=OSError("forced publication failure")):
+                with self.assertRaisesRegex(OSError, "forced publication failure"):
+                    export_endpoint.run_export(args)
+            self.assertEqual(pointer.read_bytes(), expected_pointer)
+            self.assertEqual(config.registry_path().read_bytes(), expected_registry)
+            restored = config.load_registry()
+            self.assertEqual(restored["accepted"], {"gamepad": "accepted"})
+            self.assertEqual(restored["rollback"], {"gamepad": "rollback"})
+
     def test_export_endpoint_rejects_traversal_candidate_before_command_or_mutation(self) -> None:
         root = self.root / "artifacts"; root.mkdir()
         conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}; config.save_config(conf)

@@ -35,6 +35,37 @@ REQUIRED_EVIDENCE = (
     "evidence/presentation-tests.log", "evidence/hygiene.json",
 )
 
+# ARC-DEV-001 is one reviewed full-card candidate, rather than a Display-only
+# change. Keep that authority explicit: changes outside this finite set must
+# still fail the Display endpoint hygiene gate.
+AUTHORITATIVE_FULL_CARD_SCOPE = frozenset((
+    ".gitignore", "README.md", "docs/Arcanum.Godot.md", "docs/README.md",
+    "docs/project/status.md", "docs/rendering/terrain-viewer.md",
+    "docs/workflow/local-development.md", "docs/workflow/toolchain.md",
+    "experiments/display-ui-lab/README.md",
+    "experiments/display-ui-lab/tools/validate-macos.sh",
+    "experiments/display-ui-lab/tools/validation_support.py",
+    "experiments/gamepad-lab/README.md",
+    "experiments/gamepad-lab/tools/validate-macos.sh",
+    "experiments/gamepad-lab/tools/write_manifest.py", "tools/arcanum-local",
+    "tools/local_dev/__init__.py", "tools/local_dev/config.py",
+    "tools/local_dev/export_endpoint.py", "tools/local_dev/launch.py",
+    "tools/local_dev/manifests.py", "tools/local_dev/retention.py",
+    "tools/local_dev/test_local_dev.py",
+    "tools/terrain-viewer/Godot/TerrainDiagnosticHud.cs",
+    "tools/terrain-viewer/Godot/TerrainViewerApp.cs",
+    "tools/terrain-viewer/Godot/TerrainViewerSelfTest.cs",
+    "tools/terrain-viewer/Godot/tools/terrain_write_manifest.py",
+    "tools/terrain-viewer/Godot/tools/validate-macos.sh",
+))
+
+# These are the fixed documented discovery candidates. The exception is by
+# both file and literal: an unrelated original-data name remains a failure.
+DOCUMENTED_DISCOVERY_LITERALS = {
+    "tools/arcanum-local": frozenset((("arcanum" "1.dat"), ("arcanum" "2.dat"))),
+    "docs/workflow/local-development.md": frozenset((("arcanum" "1.dat"), ("arcanum" "2.dat"))),
+}
+
 
 def run(command: list[str], *, cwd: Path | None = None) -> str:
     completed = subprocess.run(command, cwd=cwd, text=True, stdout=subprocess.PIPE,
@@ -53,6 +84,30 @@ def sha256(path: Path) -> str:
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def hygiene_policy(changed: list[str], contents: dict[str, str]) -> tuple[list[str], dict[str, list[str]]]:
+    """Apply the bounded full-card scope and privacy policy to changed text."""
+    disallowed = sorted(set(changed) - AUTHORITATIVE_FULL_CARD_SCOPE)
+    patterns = {
+        "secret": ("gh" "p_", "github" "_pat_", "AK" "IA", "BEGIN " "PRIVATE KEY"),
+        "privateKey": ("BEGIN " "PRIVATE KEY", "BEGIN " "OPENSSH PRIVATE KEY"),
+        "originalData": (("arcanum" "1.dat"), ("arcanum" "2.dat"),
+                         ("arcanum" "3.dat"), ("vorman" "town.dat")),
+    }
+    hits = {name: [] for name in patterns}
+    for relative, content in contents.items():
+        lowered = content.lower()
+        for name, needles in patterns.items():
+            for needle in needles:
+                if needle.lower() not in lowered:
+                    continue
+                if (name == "originalData"
+                        and needle in DOCUMENTED_DISCOVERY_LITERALS.get(relative, frozenset())):
+                    continue
+                hits[name].append(relative)
+                break
+    return disallowed, hits
 
 
 def file_inventory(root: Path, prefix: str) -> list[dict[str, object]]:
@@ -127,29 +182,18 @@ def hygiene(args: argparse.Namespace) -> None:
     base = run(["git", "merge-base", "HEAD", "origin/main"], cwd=root).strip()
     head = run(["git", "rev-parse", "HEAD"], cwd=root).strip()
     changed = run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=root).splitlines()
-    disallowed = [item for item in changed if not (item.startswith("experiments/display-ui-lab/") or item == "docs/input/display-ui-validation.md")]
     staged = run(["git", "diff", "--cached", "--name-only"], cwd=root).splitlines()
     status = run(["git", "status", "--porcelain"], cwd=root).splitlines()
     diff_check = subprocess.run(["git", "diff", "--check", f"{base}..{head}"], cwd=root,
                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     tracked = [root / name for name in changed if (root / name).is_file()]
-    # Compose signatures so the checker does not flag its own documented
-    # detection rules while still scanning every changed candidate file for the
-    # complete values.
-    patterns = {
-        "secret": ("gh" "p_", "github" "_pat_", "AK" "IA", "BEGIN " "PRIVATE KEY"),
-        "privateKey": ("BEGIN " "PRIVATE KEY", "BEGIN " "OPENSSH PRIVATE KEY"),
-        "originalData": ("arcanum" "1.dat", "arcanum" "2.dat", "arcanum" "3.dat", "vorman" "town.dat"),
-    }
-    hits = {name: [] for name in patterns}
+    contents: dict[str, str] = {}
     for file in tracked:
         try:
-            content = file.read_text(encoding="utf-8")
+            contents[str(file.relative_to(root))] = file.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        for name, needles in patterns.items():
-            if any(needle.lower() in content.lower() for needle in needles):
-                hits[name].append(str(file.relative_to(root)))
+    disallowed, hits = hygiene_policy(changed, contents)
     binary = [str(file.relative_to(root)) for file in tracked if file.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".ttf", ".otf", ".woff", ".woff2", ".app", ".zip"}]
     ignored = subprocess.run(["git", "check-ignore", "artifacts/builds/ARC-UI-001/probe"], cwd=root,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).returncode == 0
@@ -301,6 +345,19 @@ def self_test(_: argparse.Namespace) -> None:
                    "evidence": {"nativeReport": "evidence/native-smoke.json", "screenshots": [{"path": f"evidence/screenshots/{name}", "viewport": {"width": width, "height": height}, "uiScale": scale, "panel": panel, "diagnosticsVisible": diagnostics, "classification": "simulated-layout", "visualInspection": "NOT_VERIFIED"} for name, width, height, scale, panel, diagnostics in SCREENSHOTS]},
                    "verification": {"actual": ["a"], "simulated": ["a"], "notVerified": ["a"], "deferred": ["a"]}, "delivery": {}}
         validate_manifest(payload, root)
+    permitted_scope, permitted_hits = hygiene_policy(
+        sorted(AUTHORITATIVE_FULL_CARD_SCOPE),
+        {"tools/arcanum-local": "arcanum1.dat arcanum2.dat",
+         "docs/workflow/local-development.md": "arcanum1.dat arcanum2.dat"},
+    )
+    if permitted_scope or permitted_hits["originalData"]:
+        raise AssertionError("documented discovery literals must pass the bounded full-card policy")
+    rejected_scope, rejected_hits = hygiene_policy(
+        ["tools/arcanum-local", "unrelated/private.txt"],
+        {"tools/arcanum-local": "arcanum3.dat"},
+    )
+    if rejected_scope != ["unrelated/private.txt"] or rejected_hits["originalData"] != ["tools/arcanum-local"]:
+        raise AssertionError("hygiene must reject scope expansion and undocumented original-data literals")
     print("validation-support self-test: PASS")
 
 

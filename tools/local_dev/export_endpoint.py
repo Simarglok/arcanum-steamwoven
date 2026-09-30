@@ -51,6 +51,28 @@ def _write_current(candidate: Path, manifest: Path) -> None:
                                   "manifestSha256": sha256(manifest)})
 
 
+def _snapshot(path: Path) -> bytes | None:
+    if path.is_symlink():
+        raise ValueError("export endpoint publication target must not be a symlink")
+    try:
+        return path.read_bytes()
+    except FileNotFoundError:
+        return None
+
+
+def _restore_publication(pointer: Path, pointer_snapshot: bytes | None,
+                         registry_snapshot: bytes | None) -> None:
+    """Return both published bindings to their exact pre-endpoint snapshots."""
+    restore_error: OSError | None = None
+    for path, snapshot in ((config.registry_path(), registry_snapshot), (pointer, pointer_snapshot)):
+        try:
+            config.restore_atomic_bytes(path, snapshot)
+        except OSError as error:
+            restore_error = error
+    if restore_error is not None:
+        raise RuntimeError("export endpoint publication recovery failed") from restore_error
+
+
 def run_export(args: argparse.Namespace) -> int:
     if args.tool not in SUPPORTED_TOOLS or args.task not in SUPPORTED_TOOLS[args.tool]:
         raise ValueError("export endpoint tool/task mapping is unsupported")
@@ -74,10 +96,21 @@ def run_export(args: argparse.Namespace) -> int:
             if verified_candidate != candidate or verified_id != candidate_id:
                 raise ValueError("configured export root changed during export")
             registry = config.load_registry()
+            registry_snapshot = _snapshot(config.registry_path())
+            pointer = candidate.parent / "current.json"
+            pointer_snapshot = _snapshot(pointer)
             retention.register_export(registry, tool=args.tool, candidate_id=candidate_id,
                                       manifest=manifest, lease_held=True)
-            config.save_registry(registry)
-            _write_current(candidate, manifest)
+            try:
+                # A pointer failure must not publish the new lifecycle. If
+                # persisting the registry subsequently fails, restore both
+                # exact snapshots while the registry lock and candidate lease
+                # are still held.
+                _write_current(candidate, manifest)
+                config.save_registry(registry)
+            except (OSError, ValueError):
+                _restore_publication(pointer, pointer_snapshot, registry_snapshot)
+                raise
         return 0
     finally:
         retention._release(lease)

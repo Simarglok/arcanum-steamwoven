@@ -57,10 +57,10 @@ def load_registry() -> dict[str, Any]:
     return _read(registry_path(), REGISTRY_SCHEMA, default_registry)
 
 
-def write_atomic(path: Path, value: dict[str, Any]) -> None:
+def write_atomic_bytes(path: Path, encoded: bytes) -> None:
+    """Atomically replace an owner-only local file with already serialized bytes."""
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     os.chmod(path.parent, 0o700)
-    encoded = (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8")
     descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
     temporary = Path(temporary_name)
     try:
@@ -79,6 +79,26 @@ def write_atomic(path: Path, value: dict[str, Any]) -> None:
     finally:
         if temporary.exists():
             temporary.unlink()
+
+
+def restore_atomic_bytes(path: Path, encoded: bytes | None) -> None:
+    """Restore a file snapshot, including an originally absent pointer."""
+    if encoded is not None:
+        write_atomic_bytes(path, encoded)
+        return
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
+def write_atomic(path: Path, value: dict[str, Any]) -> None:
+    write_atomic_bytes(path, (json.dumps(value, indent=2, sort_keys=True) + "\n").encode("utf-8"))
 
 
 def save_config(value: dict[str, Any]) -> None:
