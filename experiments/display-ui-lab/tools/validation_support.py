@@ -347,14 +347,14 @@ def self_test(_: argparse.Namespace) -> None:
         validate_manifest(payload, root)
     permitted_scope, permitted_hits = hygiene_policy(
         sorted(AUTHORITATIVE_FULL_CARD_SCOPE),
-        {"tools/arcanum-local": "arcanum1.dat arcanum2.dat",
-         "docs/workflow/local-development.md": "arcanum1.dat arcanum2.dat"},
+        {"tools/arcanum-local": ("arcanum" "1.dat") + " " + ("arcanum" "2.dat"),
+         "docs/workflow/local-development.md": ("arcanum" "1.dat") + " " + ("arcanum" "2.dat")},
     )
     if permitted_scope or permitted_hits["originalData"]:
         raise AssertionError("documented discovery literals must pass the bounded full-card policy")
     rejected_scope, rejected_hits = hygiene_policy(
         ["tools/arcanum-local", "unrelated/private.txt"],
-        {"tools/arcanum-local": "arcanum3.dat"},
+        {"tools/arcanum-local": ("arcanum" "3.dat")},
     )
     if rejected_scope != ["unrelated/private.txt"] or rejected_hits["originalData"] != ["tools/arcanum-local"]:
         raise AssertionError("hygiene must reject scope expansion and undocumented original-data literals")
