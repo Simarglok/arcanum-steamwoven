@@ -31,7 +31,38 @@ def argv_from_manifest(manifest: dict[str, Any]) -> tuple[Path, list[str]]:
     return Path(executable), [*engine, "--", *user]
 
 
-def terrain_arguments(inputs: dict[str, Any], mode: str) -> list[str]:
+ACTOR_DEFAULTS: dict[str, str] = {
+    "actor_map_x": "0", "actor_map_y": "0", "actor_camera_origin_x": "0", "actor_camera_origin_y": "0",
+    "actor_offset_x": "0", "actor_offset_y": "0", "actor_render_branch": "normal-uncached",
+    "actor_scale_percent": "100", "actor_shrunk": "false", "actor_action": "idle",
+    "actor_facing": "0", "actor_frame": "0",
+}
+
+
+def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
+    values = dict(ACTOR_DEFAULTS)
+    for key, value in (overrides or {}).items():
+        if value is not None:
+            values[key] = str(value)
+    integer_keys = ("actor_map_x", "actor_map_y", "actor_camera_origin_x", "actor_camera_origin_y",
+                    "actor_offset_x", "actor_offset_y", "actor_scale_percent", "actor_facing", "actor_frame")
+    try:
+        parsed = {key: int(values[key]) for key in integer_keys}
+    except (KeyError, ValueError) as error:
+        raise ValueError("actor diagnostic preview values must be integers") from error
+    if values["actor_render_branch"] != "normal-uncached" or parsed["actor_scale_percent"] != 100 or values["actor_shrunk"] != "false":
+        raise ValueError("actor diagnostic only supports the fixed normal-uncached, scale-100, non-shrunk profile")
+    if values["actor_action"] not in {"idle", "walk"} or not 0 <= parsed["actor_facing"] <= 7 or parsed["actor_frame"] < 0:
+        raise ValueError("actor diagnostic action, facing, or frame is outside the fixed profile")
+    # The fixed source profile has 15 idle and 8 walk frames.  Rejecting a
+    # syntactically nonnegative but unavailable frame here avoids handing the
+    # viewer an invalid caller policy.
+    if parsed["actor_frame"] >= (15 if values["actor_action"] == "idle" else 8):
+        raise ValueError("actor diagnostic frame is invalid for the chosen action")
+    return values
+
+
+def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
     Inputs are revalidated on every launch because local configuration is not a
@@ -40,7 +71,11 @@ def terrain_arguments(inputs: dict[str, Any], mode: str) -> list[str]:
     """
     if mode not in {"terrain-only", "combined", "actor-diagnostic"}:
         raise ValueError("unsupported terrain diagnostic mode")
-    required = ("module", "terrainResource", "actorResource", "prototypes", "sourceId")
+    required = ("module", "terrainResource", "sourceId")
+    if mode in {"combined", "actor-diagnostic"}:
+        required += ("prototypes",)
+    if mode == "actor-diagnostic":
+        required += ("actorResource",)
     if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
         raise ValueError("configure explicit terrain input roles before launch")
 
@@ -57,13 +92,14 @@ def terrain_arguments(inputs: dict[str, Any], mode: str) -> list[str]:
     if mode in {"combined", "actor-diagnostic"}:
         arguments.extend(("--prototypes", local_file("prototypes")))
     if mode == "actor-diagnostic":
+        actor = _actor_preview(overrides)
         arguments.extend((
             "--actor-resource", local_file("actorResource"),
-            "--actor-map-x", "0", "--actor-map-y", "0",
-            "--actor-camera-origin-x", "0", "--actor-camera-origin-y", "0",
-            "--actor-offset-x", "0", "--actor-offset-y", "0",
-            "--actor-render-branch", "normal-uncached", "--actor-scale-percent", "100",
-            "--actor-shrunk", "false", "--actor-action", "idle", "--actor-facing", "0", "--actor-frame", "0",
+            "--actor-map-x", actor["actor_map_x"], "--actor-map-y", actor["actor_map_y"],
+            "--actor-camera-origin-x", actor["actor_camera_origin_x"], "--actor-camera-origin-y", actor["actor_camera_origin_y"],
+            "--actor-offset-x", actor["actor_offset_x"], "--actor-offset-y", actor["actor_offset_y"],
+            "--actor-render-branch", actor["actor_render_branch"], "--actor-scale-percent", actor["actor_scale_percent"],
+            "--actor-shrunk", actor["actor_shrunk"], "--actor-action", actor["actor_action"], "--actor-facing", actor["actor_facing"], "--actor-frame", actor["actor_frame"],
         ))
     assert_ordinary(arguments)
     return arguments

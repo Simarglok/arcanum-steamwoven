@@ -69,6 +69,21 @@ class LocalDevTests(unittest.TestCase):
         self.assertEqual(argv[3:5], ["--mode", "actor-diagnostic"])
         self.assertNotIn("--ignored", argv)
 
+    def test_actor_preview_overrides_are_bounded_and_action_frame_aware(self) -> None:
+        inputs = {}
+        for role in ("module", "terrainResource", "actorResource", "prototypes"):
+            path = self.root / role
+            path.write_bytes(b"fixture")
+            inputs[role] = str(path)
+        inputs["sourceId"] = "synthetic"
+        actor = launch.terrain_arguments(inputs, "actor-diagnostic", {"actor_action": "walk", "actor_facing": 7, "actor_frame": 7})
+        self.assertEqual(actor[actor.index("--actor-action") + 1], "walk")
+        self.assertEqual(actor[actor.index("--actor-facing") + 1], "7")
+        with self.assertRaisesRegex(ValueError, "invalid for the chosen action"):
+            launch.terrain_arguments(inputs, "actor-diagnostic", {"actor_action": "walk", "actor_frame": 8})
+        with self.assertRaisesRegex(ValueError, "fixed normal-uncached"):
+            launch.terrain_arguments(inputs, "actor-diagnostic", {"actor_scale_percent": 101})
+
     def test_terrain_args_fail_closed_for_missing_role_or_symlink(self) -> None:
         with self.assertRaisesRegex(ValueError, "explicit terrain"):
             launch.terrain_arguments({}, "terrain-only")
@@ -80,15 +95,34 @@ class LocalDevTests(unittest.TestCase):
 
     def test_v2_pointer_requires_manifest_hash_and_containment(self) -> None:
         root = self.root / "artifacts"; current = root / "ARC-GPAD-003" / "current-v2.json"
-        manifest, digest = self.manifest(); bound = root / "ARC-GPAD-003" / "candidate" / "manifest.json"
-        bound.parent.mkdir(parents=True); bound.write_bytes(manifest.read_bytes())
+        _, digest = self.manifest(); bound = root / "ARC-GPAD-003" / "candidate" / "manifest.json"
+        executable = bound.parent / "GamepadLab.app" / "Contents" / "MacOS" / "GamepadLab"
+        executable.parent.mkdir(parents=True); executable.write_bytes(b"fixture")
+        bound.write_text(json.dumps({"schemaVersion": 1, "task": "ARC-GPAD-003", "candidate": {"commit": "a" * 40},
+                                     "app": {"executableRelativePath": "GamepadLab.app/Contents/MacOS/GamepadLab", "engineArgs": [], "ordinaryArgs": []}}), encoding="utf-8")
         current.parent.mkdir(parents=True, exist_ok=True)
         current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "candidate/manifest.json", "manifestSha256": manifests.sha256(bound)}), encoding="utf-8")
         found, payload, _ = manifests.resolve_current(root, "gamepad")
         self.assertEqual(found, bound.resolve()); self.assertEqual(manifests.manifest_candidate(payload), "a" * 40)
+        self.assertEqual(Path(payload["app"]["executable"]), executable.resolve())
         current.write_text(json.dumps({"schema": "arcanum-build-current-v2", "manifestRelativePath": "../../manifest.json", "manifestSha256": digest}), encoding="utf-8")
         with self.assertRaisesRegex(ValueError, "escapes"):
             manifests.resolve_current(root, "gamepad")
+
+    def test_legacy_pointer_schemas_are_tool_specific(self) -> None:
+        root = self.root / "artifacts"
+        app = root / "ARC-UI-001" / "candidate" / "Display.app" / "Contents" / "MacOS" / "Display"
+        app.parent.mkdir(parents=True); app.write_bytes(b"fixture")
+        manifest = app.parents[3] / "manifest.json"
+        manifest.write_text(json.dumps({"schemaVersion": 1, "task": "ARC-UI-001", "candidate": {"commit": "b" * 40},
+                                        "app": {"executableRelativePath": "Display.app/Contents/MacOS/Display"}}), encoding="utf-8")
+        pointer = root / "ARC-UI-001" / "current.json"
+        pointer.write_text(json.dumps({"schemaVersion": 1, "manifest": str(manifest)}), encoding="utf-8")
+        _, payload, _ = manifests.resolve_current(root, "display")
+        self.assertEqual(Path(payload["app"]["executable"]), app.resolve())
+        pointer.write_text(json.dumps({"schemaVersion": 1, "manifestRelativePath": "candidate/manifest.json"}), encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "absolute"):
+            manifests.resolve_current(root, "display")
 
     def test_missing_mixed_and_stale_pointer_fail_closed(self) -> None:
         root = self.root / "root"; root.mkdir()
@@ -126,6 +160,24 @@ class LocalDevTests(unittest.TestCase):
         conf["generation"] += 1
         with self.assertRaisesRegex(ValueError, "changed"):
             retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
+
+    def test_retired_registered_app_is_pruned_with_idempotent_receipt(self) -> None:
+        root = self.root / "artifacts"; candidate = root / "ARC-GPAD-003" / "candidate"
+        app = candidate / "GamepadLab.app" / "Contents" / "MacOS"
+        app.mkdir(parents=True); (app / "GamepadLab").write_bytes(b"fixture")
+        manifest = candidate / "manifest.json"
+        manifest.write_text(json.dumps({"schemaVersion": 1, "task": "ARC-GPAD-003", "app": {"relativePath": "GamepadLab.app"}}), encoding="utf-8")
+        candidate_id = "test:ARC-GPAD-003:candidate"
+        conf = config.default_config(); conf["artifactRoots"] = {"test": str(root)}
+        registry = config.default_registry(); registry["builds"] = {candidate_id: {"lifecycle": "retired"}}
+        plan = retention.create_plan(conf, registry, retention.inventory(conf, registry, show_paths=True))
+        self.assertEqual(len(plan["payloads"]), 1)
+        result = retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])
+        self.assertEqual(result["status"], "applied")
+        self.assertFalse((candidate / "GamepadLab.app").exists())
+        self.assertTrue((candidate / "manifest.json").exists())
+        self.assertTrue((candidate / "payload-pruned-v1.json").is_file())
+        self.assertEqual(retention.apply_plan(plan, conf, registry, accepted_id=plan["id"])["removed"], [candidate_id])
 
     def test_accept_rotates_rollback_and_protects_it_from_retire(self) -> None:
         manifest, _ = self.manifest()

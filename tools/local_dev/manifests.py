@@ -50,7 +50,9 @@ def _manifest(path: Path, expected_tool: str, expected_digest: str | None = None
     if expected_digest and sha256(path) != expected_digest:
         raise ValueError("manifest hash mismatch")
     schema = manifest.get("schema") or manifest.get("schemaVersion")
-    if schema not in ("arcanum-build-manifest-v2", 1, "*-v1"):
+    is_v1 = schema == 1
+    is_terrain_v1 = expected_tool == "terrain" and isinstance(schema, str) and schema.endswith("-v1")
+    if schema != "arcanum-build-manifest-v2" and not is_v1 and not is_terrain_v1:
         raise ValueError("unsupported manifest schema")
     tool = manifest.get("logicalTool") or manifest.get("task") or manifest.get("taskId")
     if tool and tool not in SUPPORTED_TOOLS[expected_tool]:
@@ -81,23 +83,39 @@ def resolve_current(root: Path, tool: str) -> tuple[Path, dict[str, Any], dict[s
         if not isinstance(relative, str) or not isinstance(expected_digest, str):
             raise ValueError("v2 pointer lacks manifest binding")
         manifest_path = _contained(root, pointer_path.parent / relative)
-    elif schema == 1:
-        # Observed ART/UI uses an absolute local pointer; Gamepad uses a root-relative pointer.
-        raw = pointer.get("manifest") or pointer.get("manifestRelativePath")
-        if not isinstance(raw, str):
-            raise ValueError("legacy pointer lacks manifest path")
-        candidate = Path(raw).expanduser() if Path(raw).is_absolute() else pointer_path.parent / raw
-        manifest_path = _contained(root, candidate)
-        expected_digest = pointer.get("manifestSha256")
-    elif schema == "*-v1":
+    elif schema == 1 and tool in {"art", "display"}:
+        # Observed ART/UI pointers bind an absolute, local manifest path.  Do
+        # not accept a relative lookalike here: schema mixing is unsafe.
+        raw = pointer.get("manifest")
+        if not isinstance(raw, str) or not Path(raw).is_absolute():
+            raise ValueError("legacy ART/UI pointer requires an absolute manifest path")
+        manifest_path = _contained(root, Path(raw).expanduser())
+        expected_digest = None
+    elif schema == 1 and tool == "gamepad":
+        raw, expected_digest = pointer.get("manifestRelativePath"), pointer.get("manifestSha256")
+        if not isinstance(raw, str) or Path(raw).is_absolute() or not isinstance(expected_digest, str):
+            raise ValueError("legacy Gamepad pointer requires relative manifest and hash")
+        manifest_path = _contained(root, pointer_path.parent / raw)
+    elif tool == "terrain" and isinstance(schema, str) and schema.endswith("-v1"):
         raw = pointer.get("manifestRelativePath")
-        if not isinstance(raw, str):
+        expected_digest = pointer.get("manifestSha256")
+        if not isinstance(raw, str) or Path(raw).is_absolute() or not isinstance(expected_digest, str):
             raise ValueError("ARC-RENDER-005 pointer lacks manifest path")
         manifest_path = _contained(root, pointer_path.parent / raw)
         expected_digest = pointer.get("manifestSha256")
     else:
         raise ValueError("unsupported or mixed pointer schema")
     manifest_path, manifest = _manifest(manifest_path, tool, expected_digest)
+    app = manifest["app"]
+    executable = app.get("executableRelativePath") or app.get("executable")
+    if not isinstance(executable, str) or not executable:
+        raise ValueError("manifest lacks executable")
+    executable_path = Path(executable).expanduser()
+    if not executable_path.is_absolute():
+        executable_path = manifest_path.parent / executable_path
+    # Pass a resolved local executable to the launcher rather than allowing a
+    # relative path to depend on the caller's working directory.
+    app["executable"] = str(_contained(root, executable_path))
     return manifest_path, manifest, pointer
 
 

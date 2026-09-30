@@ -11,7 +11,7 @@ The only persistent files are owner-only (0600), atomically replaced JSON docume
 
 They have schemas `arcanum-local-config-v1` and `build-registry-v1`. They hold registered artifact-root identifiers, explicit original-input roles, a safe non-path source label, preferences, selection, and acceptance lifecycle records. They never belong in Git. Test runs may set `ARCANUM_LOCAL_HOME` to an owned temporary directory.
 
-Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the three known candidates `modules/Arcanum.dat`, `arcanum1.dat`, and `arcanum2.dat`, without following symlinks. `configure inputs` needs each original role explicitly. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
+Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the three known candidates `modules/Arcanum.dat`, `arcanum1.dat`, and `arcanum2.dat`, without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate. `configure inputs` needs each original role explicitly. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
 
     tools/arcanum-local list [--json]
     tools/arcanum-local configure discover --game-root PATH
@@ -29,7 +29,7 @@ The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER
 
 Launch uses a process argv, never a shell: engine arguments, literal `--`, then application arguments. Its macOS equivalent is `open APP --args [engine flags] -- [application flags]`. Ordinary launch rejects smoke/self-test/matrix/capture/automated resize/input/fullscreen flags and cannot build or export. A per-tool advisory lock and exact configured executable check reject duplication by default; `--allow-duplicate` is the sole opt-in. It never kills processes or uses broad process-name matching.
 
-Terrain actor diagnostic defaults are deliberately caller-labelled zero map/camera/offset anchors, `normal-uncached`, scale 100, shrunk false, Idle, facing 0, frame 0. This is diagnostic policy, not inferred world state or original-placement parity.
+Terrain actor diagnostic defaults are deliberately caller-labelled zero map/camera/offset anchors, `normal-uncached`, scale 100, shrunk false, Idle, facing 0, frame 0. In actor-diagnostic mode only, callers may explicitly provide `--actor-map-x`, `--actor-map-y`, `--actor-camera-origin-x`, `--actor-camera-origin-y`, `--actor-offset-x`, `--actor-offset-y`, `--actor-render-branch`, `--actor-scale-percent`, `--actor-shrunk`, `--actor-action`, `--actor-facing`, and `--actor-frame`. The launcher accepts only the viewer's fixed normal-uncached/100/non-shrunk profile, Idle/Walk, facing 0..7, and an action-valid frame; terrain-only and combined reject these options. This is diagnostic policy, not inferred world state or original-placement parity.
 
 ## Retention lifecycle
 
@@ -43,7 +43,7 @@ Terrain actor diagnostic defaults are deliberately caller-labelled zero map/came
     tools/arcanum-local builds accept --tool terrain --candidate ID --manifest MANIFEST.json --authority REF --review REF
     tools/arcanum-local builds retire --candidate ID
 
-A plan binds config/registry generations and digests. Apply validates the exact accepted ID and is deliberately no-op-safe until each payload has separately proven manifest-level ownership; it never deletes a candidate, manifest, evidence, worktree, toolkit, original install, SDK, cache, temporary directory, or unrelated path. Export registration requires an existing manifest with all recorded checks passing and creates lifecycle `exported`; it is not acceptance. Acceptance requires an exact manifest digest plus authority and review references, then atomically records the accepted candidate and one rollback. Accepted current/rollback entries cannot be retired.
+A plan binds config/registry generations and digests plus registered-root, candidate and payload identities and manifest hash. Apply validates the exact accepted ID and every binding again. It can remove only a revalidated explicitly retired registered `.app` payload and writes an owner-only `prune-intent-v1.json` followed by an idempotent `payload-pruned-v1.json` receipt; it never deletes a candidate, manifest, evidence, worktree, toolkit, original install, SDK, cache, temporary directory, or unrelated path. Export registration requires an existing manifest with all recorded checks passing and creates lifecycle `exported`; it is not acceptance. Acceptance requires an exact manifest digest plus authority and review references, then atomically records the accepted candidate and one rollback. Accepted current/rollback entries cannot be retired.
 
 Preflight requires a measured/trusted output estimate and reserves output + temporary + `max(2 GiB, one output)`. Without a trusted measurement it fails safely. This records only preflight; existing component validation remains responsible for exports, manifests, codesign, and all source/export checks.
 
