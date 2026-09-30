@@ -1,4 +1,6 @@
 using System.Security.Cryptography;
+using System.Buffers.Binary;
+using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
@@ -16,6 +18,12 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public StaticSceneryScenePlan? StaticPlan { get; init; }
     public DiagnosticScenePlan? DiagnosticPlan { get; init; }
     public IReadOnlyDictionary<StaticSceneryTextureKey, DecodedStaticTexture> StaticTextures { get; init; } = new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>();
+    public ActorDiagnosticScenePlan? ActorPlan { get; init; }
+    public IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> ActorTextures { get; init; } = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
+    public InputFingerprint? ActorResourceFingerprint { get; init; }
+    public InputFingerprint? ActorResourceFingerprintAfter { get; init; }
+    public InputFingerprint? ActorPrototypeFingerprint { get; init; }
+    public InputFingerprint? ActorPrototypeFingerprintAfter { get; init; }
     public int StaticCensusCount { get; init; }
     public int StaticOutsideScopeCount { get; init; }
 }
@@ -150,6 +158,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
     {
         private DatArchive? _module;
         private DatArchive? _resource;
+        private ActorDiagnosticSourceOperation? _actorOperation;
         private int _disposed;
 
         public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
@@ -165,10 +174,22 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
                 Verify(moduleBefore, CrashSiteProfile.ModuleSize, CrashSiteProfile.ModuleSha256, arguments.ExpectedModuleSha256);
                 Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
+                InputFingerprint? actorResourceBefore = null;
+                InputFingerprint? prototypeBefore = null;
+                if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                {
+                    actorResourceBefore = FingerprintActorFile(arguments.ActorResourcePath!);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    prototypeBefore = FingerprintActorPrototypeRoot(arguments.PrototypePath!);
+                    ActorDiagnosticSource.VerifyIdentity(actorResourceBefore, CrashSiteProfile.ActorResourceSize, CrashSiteProfile.ActorResourceSha256, arguments.ExpectedActorResourceSha256);
+                    ActorDiagnosticSource.VerifyIdentity(prototypeBefore, CrashSiteProfile.ActorPrototypeAggregateSize, CrashSiteProfile.ActorPrototypeAggregateSha256, null);
+                }
                 TerrainLoadReport report;
                 Dictionary<TerrainTextureKey, DecodedTerrainTexture> textures;
                 StaticSceneryScenePlan? staticPlan = null;
                 var staticTextures = new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture>();
+                ActorDiagnosticScenePlan? actorPlan = null;
+                var actorTextures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
                 var staticCensus = 0;
                 var staticOutsideScope = 0;
                 _module = DatArchive.Open(arguments.ModulePath, BoundedDatOptions());
@@ -242,10 +263,42 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         throw new TerrainViewerException(new TerrainViewerError(exception.Stage == StaticObjectFailureStage.FingerprintInput ? TerrainViewerErrorCode.StaticFingerprint : TerrainViewerErrorCode.StaticResource, Stage: stage, Progress: progress));
                     }
                 }
+                else if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                {
+                    try
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        // This archive has a deliberately separate authenticated role:
+                        // terrain resolution never consults it, and actor ordinal lookup
+                        // never consults the terrain resource.
+                        _actorOperation = new ActorDiagnosticSourceOperation(() => DatArchive.Open(arguments.ActorResourcePath!, BoundedDatOptions()));
+                        var actor = _actorOperation.Execute(_module, arguments.ActorInput!, textures.Count, checkedBytes, progress, cancellationToken);
+                        if (actor.Textures.Count != TerrainCachePolicy.MaxActorDistinctKeys)
+                            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorMetadata, Stage: TerrainViewerFailureStage.ActorMetadata, Progress: progress));
+                        checkedBytes = actor.CheckedRgbaBytes;
+                        foreach (var item in actor.Textures) actorTextures.Add(item.Key, item.Value);
+                        actorPlan = actor.Plan;
+                    }
+                    catch (TerrainViewerException exception)
+                    {
+                        throw new TerrainViewerException(exception.Error with { Progress = exception.Error.Progress ?? progress });
+                    }
+
+                }
                 cancellationToken.ThrowIfCancellationRequested();
                 var moduleAfter = Fingerprint(arguments.ModulePath);
                 cancellationToken.ThrowIfCancellationRequested();
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
+                InputFingerprint? actorResourceAfter = null;
+                InputFingerprint? prototypeAfter = null;
+                if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                {
+                    actorResourceAfter = FingerprintActorFile(arguments.ActorResourcePath!);
+                    prototypeAfter = FingerprintActorPrototypeRoot(arguments.PrototypePath!);
+                }
+                if (actorResourceBefore is not null && (actorResourceBefore != actorResourceAfter || prototypeBefore != prototypeAfter))
+                    throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint,
+                        Stage: TerrainViewerFailureStage.ActorFingerprint, Progress: progress));
                 if (moduleBefore != moduleAfter || resourceBefore != resourceAfter)
                     throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch,
                         Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress));
@@ -254,8 +307,14 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     resourceAfter, checkedBytes, Environment.TickCount64 - started, 0)
                 {
                     StaticPlan = staticPlan,
-                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan, progress),
+                    ActorPlan = actorPlan,
+                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan, actorPlan, progress),
                     StaticTextures = staticTextures,
+                    ActorTextures = actorTextures,
+                    ActorResourceFingerprint = actorResourceBefore,
+                    ActorResourceFingerprintAfter = actorResourceAfter,
+                    ActorPrototypeFingerprint = prototypeBefore,
+                    ActorPrototypeFingerprintAfter = prototypeAfter,
                     StaticCensusCount = staticCensus,
                     StaticOutsideScopeCount = staticOutsideScope
                 };
@@ -279,6 +338,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
         public void Dispose()
         {
             if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _actorOperation?.Dispose();
             _resource?.Dispose();
             _module?.Dispose();
         }
@@ -295,6 +355,55 @@ public sealed class TerrainLoadCoordinator : IDisposable
         if (actual.Size != expectedSize || !string.Equals(actual.Sha256, expectedSha256, StringComparison.Ordinal)
             || (requestedSha256 is not null && !string.Equals(actual.Sha256, requestedSha256, StringComparison.Ordinal)))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.FingerprintMismatch, Stage: TerrainViewerFailureStage.Fingerprint));
+    }
+
+    private static InputFingerprint FingerprintActorFile(string path)
+    {
+        try { return Fingerprint(path); }
+        catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+        catch (DirectoryNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+        catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+    }
+    private static InputFingerprint FingerprintActorPrototypeRoot(string root)
+    {
+        try
+        {
+            if (!Directory.Exists(root)) throw new IOException();
+            using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            long total = 0;
+            Span<byte> leafLength = stackalloc byte[4];
+            Span<byte> selectorBytes = stackalloc byte[4];
+            Span<byte> length = stackalloc byte[8];
+            foreach (var path in Directory.EnumerateFiles(root, "*.pro", SearchOption.TopDirectoryOnly).Order(StringComparer.Ordinal))
+            {
+                var info = new FileInfo(path);
+                if (info.Length is <= 0 or > 1024 * 1024) throw new IOException();
+                var leaf = Encoding.UTF8.GetBytes(Path.GetFileName(path));
+                BinaryPrimitives.WriteInt32LittleEndian(leafLength, leaf.Length);
+                hash.AppendData(leafLength); hash.AppendData(leaf);
+                var selector = CanonicalPrototypeSelector(Path.GetFileName(path));
+                hash.AppendData([selector is null ? (byte)0 : (byte)1]);
+                if (selector is int aid)
+                {
+                    BinaryPrimitives.WriteInt32LittleEndian(selectorBytes, aid);
+                    hash.AppendData(selectorBytes);
+                }
+                var fingerprint = Fingerprint(path);
+                total = checked(total + fingerprint.Size);
+                if (total > 256L * 1024 * 1024) throw new IOException();
+                BinaryPrimitives.WriteInt64LittleEndian(length, fingerprint.Size);
+                hash.AppendData(length); hash.AppendData(Convert.FromHexString(fingerprint.Sha256));
+            }
+            return new InputFingerprint(total, Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant());
+        }
+        catch (IOException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+        catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+        catch (OverflowException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint)); }
+    }
+    private static int? CanonicalPrototypeSelector(string leaf)
+    {
+        if (leaf.Length < 10 || leaf[6] != ' ' || leaf[7] != '-' || leaf[8] != ' ' || !leaf[..6].All(char.IsAsciiDigit)) return null;
+        return int.TryParse(leaf.AsSpan(0, 6), out var aid) ? aid : null;
     }
     private void UpdateMaximum(int active)
     {

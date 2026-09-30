@@ -2,16 +2,18 @@
 
 ## Status
 
-This is a **later typed contract**, not a production API. The bounded research
-chain now identifies one direct, single-layer monster's source selector, both
+This is a **bounded typed contract**, not a general actor API. The bounded research
+chain identifies one direct, single-layer monster's source selector, both
 actions, resource ordinals, group/flip bindings, palettes, frames, geometry,
 and raw ART FPS. The exact pinned-source actor route now has a documented,
 state-dependent placement relation in
 [actor placement evidence](../research/actor-placement-evidence.md), while this
 contract remains `NOT READY` because original-runtime placement has not been
 observed.
-A future caller may render only a fully supported contract; every unknown is
-typed unsupported, never filled by a default.
+The owner-authorized terrain viewer consumes only this exact profile through a
+separate caller-selected, fixed-authenticated actor archive. Every unknown is
+typed unsupported, never filled by a default; this does not change runtime
+readiness or authorize a generalized `Arcanum.Data` actor interface.
 
 ## Types
 
@@ -121,14 +123,20 @@ override is explicit; no frame rate inference is allowed.
 
 ## Implemented / not implemented / remaining work
 
-Implemented: this documentation-only shape, fail-closed readiness semantics,
-and a source-recorded bounded Direct/SingleLayer proof for one Monster action
-pair. It is not a runtime API.
+Implemented: the fixed-profile terrain-viewer diagnostic consumes this bounded
+shape with an explicit caller anchor/state, all admitted frames, and raw-FPS
+preview controls. It remains a diagnostic presentation subset, not a runtime
+API or placement-parity result.
 
-Not implemented: these types in `Arcanum.Data`, Presentation, Godot, a scene,
-or gameplay; any MOB/PRO runtime parser; actor rendering; composite equipment;
-source scheduler; movement; collision; pathfinding; archive precedence.
+Not implemented: these types in `Arcanum.Data`; a general actor parser;
+composite equipment; source scheduler; movement; collision; pathfinding;
+archive precedence; or gameplay.
+
+Owner authorization now permits a separately bounded fixed-profile diagnostic
+consumer that labels all anchor/render state as caller policy and preserves
+`NOT READY` original-runtime parity. It is not a general actor API or a
+replacement for the independent original-runtime placement observation.
 
 Remaining work: obtain the minimal independent original-runtime placement
-observation listed in the [placement evidence](../research/actor-placement-evidence.md),
-then implement a separately reviewed consumer only for a complete contract.
+observation listed in the [placement evidence](../research/actor-placement-evidence.md)
+before any compatibility/readiness claim or expanded consumer.

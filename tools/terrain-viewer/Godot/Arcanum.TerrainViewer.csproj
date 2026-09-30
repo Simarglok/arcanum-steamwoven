@@ -7,5 +7,6 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Core/Arcanum.TerrainViewer.Core.csproj" />
+    <ProjectReference Include="../../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
   </ItemGroup>
 </Project>

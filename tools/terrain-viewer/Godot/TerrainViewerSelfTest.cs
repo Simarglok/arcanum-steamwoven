@@ -20,17 +20,20 @@ public static class TerrainViewerSelfTest
             using var cache = new TerrainTextureCache();
             cache.Upload(CreateTextures(keys, frame));
             cache.UploadStatic(CreateStaticTextures(frame));
+            cache.UploadActor(CreateActorTextures(frame));
             AssertUploadOwnership(frame, keys.Tile);
             AssertStaticUploadOwnership(frame);
+            AssertActorUploadOwnership(frame);
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
+            await AssertSyntheticProductionAppAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {
                 await AssertCanvasOraclesAsync(host, cache, keys);
                 await AssertCombinedCanvasOracleAsync(host, cache, keys.Red);
                 await AssertStaticRasterPoliciesAsync(host, cache, keys.Red);
-                GD.Print("ARC-RENDER-004 self-test PASS combined production-canvas pixel oracle");
+                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor production-app pixel oracle");
             }
             else
             {
@@ -38,7 +41,8 @@ public static class TerrainViewerSelfTest
                 // source constants are still constructed, but no pixels are claimed.
                 AssertPlanConstants(keys.Tile, keys.Facade);
                 AssertCombinedPlan();
-                GD.Print("ARC-RENDER-004 self-test PASS combined structural plan; graphical readback NOT_VERIFIED headless");
+                AssertActorPlan();
+                GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor structural plan; graphical readback NOT_VERIFIED headless");
             }
             host.GetTree().Quit(0);
         }
@@ -79,6 +83,12 @@ public static class TerrainViewerSelfTest
     {
         var key = new StaticSceneryTextureKey(new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64)), 0, 0, 0);
         return new Dictionary<StaticSceneryTextureKey, DecodedStaticTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
+    }
+
+    private static Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture> CreateActorTextures(ArtFrame frame)
+    {
+        var key = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1);
+        return new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture> { [key] = new(key, frame.Width, frame.Height, frame.Rgba.ToArray()) };
     }
 
     private static async Task AssertCanvasOraclesAsync(Node host, TerrainTextureCache cache,
@@ -145,6 +155,258 @@ public static class TerrainViewerSelfTest
         using var image = viewport.GetTexture().GetImage();
         AssertPixel(image, 20, 20, 255, 0, 0, 255);
         AssertPixel(image, 21, 20, 0, 0, 255, 255);
+        viewport.QueueFree();
+    }
+
+    /// <summary>
+    /// Drives a bootstrapped real TerrainViewerApp through its production ready
+    /// publication, input and timeline paths. Expected state/pixel tables are
+    /// literals, independent of the placement/facing implementation.
+    /// </summary>
+    private static async Task AssertSyntheticProductionAppAsync(Node host)
+    {
+        var viewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var app = new TerrainViewerApp { SelfTestBootstrap = true };
+        viewport.AddChild(app);
+        host.AddChild(viewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var fixture = SyntheticActorFixture.Create();
+        app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var expectedFacings = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
+        var callerInput = fixture.Arguments.ActorInput!;
+        foreach (var actionCase in new[]
+        {
+            (Key.Key1, ActorDiagnosticAction.Idle, 15, 8, SyntheticActorFixture.IdleLeftPixel, SyntheticActorFixture.IdleRightPixel),
+            (Key.Key2, ActorDiagnosticAction.Walk, 8, 15, SyntheticActorFixture.WalkLeftPixel, SyntheticActorFixture.WalkRightPixel)
+        })
+        {
+            app._Input(new InputEventKey { Keycode = actionCase.Item1, Pressed = true });
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            for (var turns = 0; turns < 8 && app.GetSelfTestSnapshot().Actor?.RequestedFacing != 0; turns++)
+                app._Input(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            for (var requested = 0; requested < 8; requested++)
+            {
+                var snapshot = app.GetSelfTestSnapshot();
+                AssertActorControlTransitionSnapshot(snapshot, callerInput, actionCase.Item2, requested, expectedFacings[requested].Item1,
+                    expectedFacings[requested].Item2, actionCase.Item3, actionCase.Item4, frame: 0, playing: false);
+                if (DisplayServer.GetName() != "headless")
+                {
+                    await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                    using var image = viewport.GetTexture().GetImage();
+                    AssertSyntheticActorPixels(image, snapshot, actionCase.Item5, actionCase.Item6);
+                }
+                if (requested < 7) app._Input(new InputEventKey { Keycode = Key.Bracketright, Pressed = true });
+            }
+        }
+
+        // Walk's real input/timeline policy: step, play/advance, pause, then
+        // switch reset to Idle. The immutable caller input stays unchanged.
+        app._Input(new InputEventKey { Keycode = Key.Period, Pressed = true });
+        var forwardStep = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(forwardStep, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: false);
+        app._Input(new InputEventKey { Keycode = Key.Comma, Pressed = true });
+        var reverseStep = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(reverseStep, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 0, playing: false);
+        app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        app._Process(0.1);
+        var playbackAdvance = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(playbackAdvance, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: true);
+        app._Input(new InputEventKey { Keycode = Key.Space, Pressed = true });
+        app._Process(1.0);
+        var pausedNonAdvance = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(pausedNonAdvance, callerInput, ActorDiagnosticAction.Walk, 7, 7, false, 8, 15, frame: 1, playing: false);
+        app._Input(new InputEventKey { Keycode = Key.Key1, Pressed = true });
+        var idleReset = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(idleReset, callerInput, ActorDiagnosticAction.Idle, 7, 7, false, 15, 8, frame: 0, playing: false);
+
+        var beforeCamera = app.GetSelfTestSnapshot();
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true });
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
+        app._Input(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
+        app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false });
+        var afterCamera = app.GetSelfTestSnapshot();
+        AssertActorControlTransitionSnapshot(afterCamera, callerInput, ActorDiagnosticAction.Idle, 7, 7, false, 15, 8, frame: 0, playing: false);
+        if (afterCamera.Actor?.AnchorX != beforeCamera.Actor?.AnchorX || afterCamera.Actor?.AnchorY != beforeCamera.Actor?.AnchorY
+            || (afterCamera.CameraX, afterCamera.CameraY, afterCamera.CameraZoom) == (beforeCamera.CameraX, beforeCamera.CameraY, beforeCamera.CameraZoom)
+            || afterCamera.CanvasTransform == beforeCamera.CanvasTransform)
+            throw new InvalidOperationException("Inspection camera mutated stationary caller input or failed to update the canvas transform.");
+        // The app-level lifecycle must use normal publication/clearing rather
+        // than the cache in isolation: 1 terrain + 184 decoded actor textures.
+        if (afterCamera.CacheCount != 185 || afterCamera.CreatedTextures != 185 || afterCamera.DisposedTextures != 0)
+            throw new InvalidOperationException("Initial production-app texture ownership differs from the 185-texture fixture.");
+        app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        var republished = app.GetSelfTestSnapshot();
+        if (republished.CacheCount != 185 || republished.CreatedTextures != 370 || republished.DisposedTextures != 185)
+            throw new InvalidOperationException("Production-app republish did not replace exactly 185 textures.");
+        app.PublishSyntheticFailureForSelfTest(TerrainViewerMode.ActorDiagnostic,
+            new TerrainViewerError(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
+        var cleared = app.GetSelfTestSnapshot();
+        if (cleared.CacheCount != 0 || cleared.DisposedTextures != 370 || !cleared.Hud.Contains("failure stage=Upload code=RenderFailure", StringComparison.Ordinal))
+            throw new InvalidOperationException("Production-app load failure did not clear its live 185 textures once.");
+        app.ClearSyntheticForSelfTest();
+        if (app.GetSelfTestSnapshot().DisposedTextures != 370)
+            throw new InvalidOperationException("Repeated production-app clear double-disposed textures.");
+        viewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // Force an actor upload after terrain and one actor texture exist. The
+        // normal PublishReadyResult failure path must roll both back through
+        // PublishFailure without retaining an alternate test implementation.
+        var failingViewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var failingApp = new TerrainViewerApp { SelfTestBootstrap = true };
+        var attempts = 0;
+        failingApp.ConfigureSelfTestTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 3) throw new InvalidOperationException("injected actor upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, texture => texture.Dispose());
+        failingViewport.AddChild(failingApp); host.AddChild(failingViewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        try { failingApp.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result); }
+        catch (InvalidOperationException) { }
+        var failedUpload = failingApp.GetSelfTestSnapshot();
+        if (failedUpload.CacheCount != 0 || failedUpload.CreatedTextures != 2 || failedUpload.DisposedTextures != 2)
+            throw new InvalidOperationException("Production-app partial actor upload did not roll back exactly once.");
+        failingApp.ClearSyntheticForSelfTest();
+        if (failingApp.GetSelfTestSnapshot().DisposedTextures != 2)
+            throw new InvalidOperationException("Repeated production failure clear double-disposed textures.");
+        failingViewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+
+        // Exercise live _ExitTree ownership before any clear; a second call is
+        // idempotent and must not double-dispose the 185 textures.
+        var exitViewport = new SubViewport { Size = new Vector2I(512, 300), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var exitApp = new TerrainViewerApp { SelfTestBootstrap = true };
+        exitViewport.AddChild(exitApp); host.AddChild(exitViewport);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        exitApp.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        exitApp._ExitTree();
+        var exited = exitApp.GetSelfTestSnapshot();
+        if (exited.CacheCount != 0 || exited.CreatedTextures != 185 || exited.DisposedTextures != 185)
+            throw new InvalidOperationException("Live production _ExitTree did not dispose exactly 185 textures.");
+        exitApp._ExitTree();
+        if (exitApp.GetSelfTestSnapshot().DisposedTextures != 185)
+            throw new InvalidOperationException("Repeated production _ExitTree double-disposed textures.");
+        exitViewport.QueueFree();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static bool HasCompleteActorHud(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticAction action, int facing, int group,
+        bool mirrored, int frameCount, int fps, int frame, bool playing)
+    {
+        var actionName = action == ActorDiagnosticAction.Idle ? "Idle" : "Walk";
+        var actionNumber = action == ActorDiagnosticAction.Idle ? 0 : 1;
+        var playback = playing ? "playing" : "paused";
+        var mirror = mirrored ? "yes" : "no";
+        var required = new[]
+        {
+            "Diagnostic mode actor-diagnostic", "terrain 4096/3033/1063", "static not requested", "source-id synthetic", "zoom ",
+            "terrain decoded 1", "static decoded 0", "cache 185", "Actor anchor policy: caller-selected diagnostic",
+            "Actor render state: caller-supplied normal-uncached | scale 100 | shrunk false", $"Actor: {actionName} (source action {actionNumber})",
+            $"Facing: requested {facing} -> physical group {group} | mirror {mirror}", $"Frame: {frame}/{frameCount}",
+            $"Playback: {playback} | raw ART FPS preview {fps} (not source scheduler/gameplay)", "World position: stationary",
+            "Layering: diagnostic terrain -> actor -> guides", "Original placement parity: NOT VERIFIED",
+            "Controls: 1 Idle | 2 Walk | [ ] facing | Space play/pause | , . step"
+        };
+        return required.All(item => snapshot.Hud.Contains(item, StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// One post-transition production snapshot must independently prove the
+    /// complete HUD policy and fixed caller/world placement. These literals are
+    /// deliberately not derived from the production planner or HUD formatter.
+    /// </summary>
+    private static void AssertActorControlTransitionSnapshot(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticPlacementInput callerInput,
+        ActorDiagnosticAction action, int facing, int group, bool mirrored, int frameCount, int fps, int frame, bool playing)
+    {
+        var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
+        if (actor.Action != action || actor.RequestedFacing != facing || actor.PhysicalGroup != group || actor.FlipX != mirrored
+            || actor.Frame != frame || actor.FrameCount != frameCount || actor.RawFramesPerSecond != fps || snapshot.Playing != playing
+            || snapshot.CacheCount != 185 || snapshot.HudPosition != new Vector2(16, 16)
+            || !HasStationaryCallerInput(snapshot.Input, callerInput)
+            || actor.Destination != new TerrainRect(96, 57, 9, 7) || actor.AnchorX != 100 || actor.AnchorY != 60
+            || !HasCompleteActorHud(snapshot, action, facing, group, mirrored, frameCount, fps, frame, playing))
+            throw new InvalidOperationException("Synthetic app control transition diverges from the literal HUD or stationary-placement policy.");
+    }
+
+    private static bool HasStationaryCallerInput(ActorDiagnosticPlacementInput? actual, ActorDiagnosticPlacementInput expected)
+        => actual is not null && actual.MapX == expected.MapX && actual.MapY == expected.MapY
+            && actual.CameraOriginX == expected.CameraOriginX && actual.CameraOriginY == expected.CameraOriginY
+            && actual.InstanceOffsetX == expected.InstanceOffsetX && actual.InstanceOffsetY == expected.InstanceOffsetY
+            && actual.RenderBranch == expected.RenderBranch && actual.ScalePercent == expected.ScalePercent && actual.Shrunk == expected.Shrunk
+            && actual.Width == expected.Width && actual.Height == expected.Height && actual.HotX == expected.HotX && actual.HotY == expected.HotY
+            && actual.ArtOffsetX == expected.ArtOffsetX && actual.ArtOffsetY == expected.ArtOffsetY;
+
+    private static void AssertSyntheticActorPixels(Image image, TerrainViewerSelfTestSnapshot snapshot,
+        (byte R, byte G, byte B) leftExpected, (byte R, byte G, byte B) rightExpected)
+    {
+        // Fixture literals do not read the produced command to establish actor
+        // placement: caller input fixes destination (96,57), anchor (100,60),
+        // and source pixels (1,1)/(7,1) for the decoded 9x7 ART.
+        var actor = snapshot.Actor ?? throw new InvalidOperationException("Synthetic app did not publish an actor command.");
+        if (actor.Destination != new TerrainRect(96, 57, 9, 7) || actor.AnchorX != 100 || actor.AnchorY != 60)
+            throw new InvalidOperationException("Synthetic actor placement differs from the literal fixture oracle.");
+        AssertTransformedPixel(image, snapshot.CanvasTransform, actor.FlipX ? 103 : 97, 58, leftExpected);
+        AssertTransformedPixel(image, snapshot.CanvasTransform, actor.FlipX ? 97 : 103, 58, rightExpected);
+        AssertTransformedPixel(image, snapshot.CanvasTransform, 10, 10, (41, 82, 143));
+        AssertGuideAt(image, snapshot.CanvasTransform, 96, 57, false);
+        AssertGuideAt(image, snapshot.CanvasTransform, 100, 60, true);
+    }
+
+    private static void AssertTransformedPixel(Image image, Transform2D transform, int worldX, int worldY, (byte R, byte G, byte B) expected)
+    {
+        var point = transform * new Vector2(worldX, worldY);
+        var x = (int)Math.Round(point.X);
+        var y = (int)Math.Round(point.Y);
+        for (var sampleY = y - 1; sampleY <= y + 1; sampleY++)
+        for (var sampleX = x - 1; sampleX <= x + 1; sampleX++)
+        {
+            if (sampleX < 0 || sampleY < 0 || sampleX >= image.GetWidth() || sampleY >= image.GetHeight()) continue;
+            var pixel = image.GetPixel(sampleX, sampleY);
+            if (Math.Abs(Math.Round(pixel.R * 255) - expected.R) <= 1 && Math.Abs(Math.Round(pixel.G * 255) - expected.G) <= 1
+                && Math.Abs(Math.Round(pixel.B * 255) - expected.B) <= 1 && Math.Round(pixel.A * 255) == 255) return;
+        }
+        throw new InvalidOperationException("Synthetic literal pixel oracle failed.");
+    }
+
+    private static void AssertGuideAt(Image image, Transform2D transform, int worldX, int worldY, bool yellow)
+    {
+        var point = transform * new Vector2(worldX, worldY);
+        if (!HasSyntheticGuideColor(image, new Vector2I((int)Math.Round(point.X), (int)Math.Round(point.Y)), yellow))
+            throw new InvalidOperationException(yellow ? "Synthetic yellow anchor oracle failed." : "Synthetic magenta rectangle oracle failed.");
+    }
+
+    private static bool HasSyntheticGuideColor(Image image, Vector2I center, bool yellow)
+    {
+        for (var y = center.Y - 5; y <= center.Y + 5; y++)
+        for (var x = center.X - 5; x <= center.X + 5; x++)
+        {
+            if (x < 0 || y < 0 || x >= image.GetWidth() || y >= image.GetHeight()) continue;
+            var pixel = image.GetPixel(x, y);
+            if (yellow ? pixel.R > .9f && pixel.G > .9f && pixel.B < .2f : pixel.R > .9f && pixel.G < .2f && pixel.B > .9f)
+                return true;
+        }
+        return false;
+    }
+
+    private static async Task AssertActorCanvasOracleAsync(Node host, TerrainTextureCache cache, TerrainTextureKey terrainKey)
+    {
+        var terrain = Plan(new TerrainRect(0, 0, 200, 100), [Input(51, terrainKey, TerrainKind.Tile, 0, 0, 0)]);
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
+            SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2, ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps);
+        var input = new ActorDiagnosticPlacementInput(0, 0, 100, 20, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 1, 0, SyntheticTerrainFixture.Width, SyntheticTerrainFixture.Height, 0, 0, 3, -2);
+        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        var viewport = new SubViewport { Size = new Vector2I(200, 100), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas();
+        viewport.AddChild(canvas); host.AddChild(viewport); canvas.Publish(DiagnosticScenePlan.Create(terrain, null, actor), cache);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        using var image = viewport.GetTexture().GetImage();
+        AssertPixel(image, 98, 42, 255, 0, 0, 255); // asymmetric source x=2 reflects to width-1-2.
+        AssertPixel(image, 100, 39, 255, 255, 0, 255); // anchor guide paints last.
         viewport.QueueFree();
     }
 
@@ -216,6 +478,16 @@ public static class TerrainViewerSelfTest
         var identity = new StaticObjectResourceIdentity(9, 0, 1, new string('c', 64));
         var statics = StaticSceneryScenePlan.CreateSynthetic([new StaticSceneryPlanInput(4, 0, 0, 20, 20, identity, 0, 0, 0, 3, 3, 0, 0, 0, 0, false)]);
         if (statics.Commands.Single().Destination != new TerrainRect(20, 20, 3, 3)) throw new InvalidOperationException("Combined static geometry differs from literal oracle.");
+    }
+
+    private static void AssertActorPlan()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 7, 0, 1),
+            3, 2, 0, 0, 8, -1, ActorDiagnosticSource.IdleFrames, ActorDiagnosticSource.IdleFps);
+        var plan = ActorDiagnosticScenePlan.CreateSynthetic(new ActorDiagnosticPlacementInput(0, 0, 10, 20, 0, 0,
+            ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Idle, 1, 0, 3, 2, 0, 0, 8, -1), [frame]);
+        if (!plan.Current.FlipX || plan.Current.Destination != new TerrainRect(8, 40, 3, 2) || plan.Current.EffectiveOffsetX != -8)
+            throw new InvalidOperationException("Actor mirror geometry differs from literal structural oracle.");
     }
 
     private static TerrainScenePlan FullTile(TerrainTextureKey key) => Plan(new TerrainRect(0, 0, 100, 60), [Input(10, key, TerrainKind.Tile, 0, 0, 0)]);
@@ -319,6 +591,32 @@ public static class TerrainViewerSelfTest
         if (disposals != 1) throw new InvalidOperationException("Repeated static cache clear disposed an already rolled-back texture.");
     }
 
+    private static void AssertActorUploadOwnership(ArtFrame frame)
+    {
+        var first = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 0, 0, 1);
+        var second = new ActorDiagnosticTextureKey(ActorDiagnosticSource.WalkResourceOrdinal, ActorDiagnosticSource.WalkSelector, 0, 0, 1);
+        var attempts = 0;
+        var disposals = 0;
+        using var cache = new TerrainTextureCache(image =>
+        {
+            attempts++;
+            if (attempts == 2) throw new InvalidOperationException("injected actor upload failure");
+            return ImageTexture.CreateFromImage(image);
+        }, _ => disposals++);
+        try
+        {
+            cache.UploadActor(new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>
+            {
+                [first] = new(first, frame.Width, frame.Height, frame.Rgba.ToArray()),
+                [second] = new(second, frame.Width, frame.Height, frame.Rgba.ToArray())
+            });
+        }
+        catch (InvalidOperationException) { }
+        if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial actor texture upload was not rolled back exactly once.");
+        cache.Clear();
+        if (disposals != 1) throw new InvalidOperationException("Repeated actor cache clear disposed an already rolled-back texture.");
+    }
+
     private static void AssertReloadAndExitTextureOwnership(ArtFrame frame)
     {
         var first = new TerrainTextureKey("synthetic", 100, 0, 1, "reload-first", 0, 0, 0);
@@ -347,19 +645,26 @@ public static class TerrainViewerSelfTest
         {
             [staticKey] = new(staticKey, frame.Width, frame.Height, frame.Rgba.ToArray())
         };
+        var actorKey = new ActorDiagnosticTextureKey(ActorDiagnosticSource.IdleResourceOrdinal, ActorDiagnosticSource.IdleSelector, 0, 0, 1);
+        var actorTextures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>
+        {
+            [actorKey] = new(actorKey, frame.Width, frame.Height, frame.Rgba.ToArray())
+        };
         using (var reloadCache = new TerrainTextureCache(create, dispose))
         {
             reloadCache.Upload(textures);
             reloadCache.UploadStatic(staticTextures);
+            reloadCache.UploadActor(actorTextures);
             var firstGeneration = created.ToArray();
             reloadCache.Clear();
             if (firstGeneration.Any(texture => disposals[texture] != 1) || reloadCache.Count != 0)
                 throw new InvalidOperationException("Reload did not dispose each replaced texture exactly once.");
             reloadCache.Upload(textures);
             reloadCache.UploadStatic(staticTextures);
+            reloadCache.UploadActor(actorTextures);
             var secondGeneration = created.Skip(firstGeneration.Length).ToArray();
             reloadCache.Clear();
-            if (secondGeneration.Length != 3 || secondGeneration.Any(texture => disposals[texture] != 1))
+            if (secondGeneration.Length != 4 || secondGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Reload replacement textures were not disposed exactly once.");
         }
 
@@ -368,9 +673,10 @@ public static class TerrainViewerSelfTest
             var beforeExit = created.Count;
             exitCache.Upload(textures);
             exitCache.UploadStatic(staticTextures);
+            exitCache.UploadActor(actorTextures);
             var exitGeneration = created.Skip(beforeExit).ToArray();
             exitCache.Dispose();
-            if (exitCache.Count != 0 || exitGeneration.Length != 3 || exitGeneration.Any(texture => disposals[texture] != 1))
+            if (exitCache.Count != 0 || exitGeneration.Length != 4 || exitGeneration.Any(texture => disposals[texture] != 1))
                 throw new InvalidOperationException("Exit did not dispose each live texture exactly once.");
         }
     }
@@ -388,7 +694,7 @@ public static class TerrainViewerSelfTest
 
     private static bool ReferencesDecodedTexture(Type type)
     {
-        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(byte[])) return true;
+        if (type == typeof(DecodedTerrainTexture) || type == typeof(DecodedStaticTexture) || type == typeof(DecodedActorTexture) || type == typeof(byte[])) return true;
         if (type.IsArray) return ReferencesDecodedTexture(type.GetElementType()!);
         return type.IsGenericType && type.GetGenericArguments().Any(ReferencesDecodedTexture);
     }

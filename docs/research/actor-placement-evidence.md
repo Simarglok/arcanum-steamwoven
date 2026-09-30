@@ -8,7 +8,9 @@ closes the previously unknown relationship for the bounded direct, single-layer
 monster Idle/Walk chain only when its cached-render branch is inactive, at the
 exact pinned `arcanum-ce` source level. It does not claim that the original
 executable was observed, that the CE implementation is an independent oracle,
-or that a production actor renderer is authorized.
+or that a general production actor renderer is authorized. ARC-RENDER-005 later
+authorizes only a fixed-profile, caller-labelled diagnostic consumer; that
+prospective exception does not establish original placement parity.
 
 The candidate remains the chain recorded by
 [actor visual evidence](actor-visual-evidence.md): module ordinal 643, direct
@@ -166,8 +168,9 @@ source-line references.
 
 The conditional normal-branch relation is sufficient only as a
 **pinned-source-derived research rule**. It is not sufficient to mark the
-proposed actor contract `Ready`, implement a presentation consumer, or claim
-original-runtime parity. The cached-render state must remain unsupported until
+actor contract `Ready`, authorize an expanded/general presentation consumer, or
+claim original-runtime parity. The fixed ARC-RENDER-005 diagnostic exception
+still labels caller policy and remains outside runtime readiness. The cached-render state must remain unsupported until
 an actor-specific invariant or independent evidence establishes it.
 
 A future authorized original-runtime observation must bind the same fingerprinted
@@ -195,9 +198,10 @@ uses location projection, instance offsets, effective hotspot, and the
 admitted reflection path; classified evidence/provenance; and repeatable,
 privacy-safe selected-chain checks.
 
-Not implemented: a production actor API, parser expansion, renderer, Godot
+Not implemented: a production actor API, parser expansion, generalized renderer, Godot
 scene, movement/collision/pathfinding behavior, scheduler, composite actor
 support, runtime capture, or original-runtime parity.
 
 Remaining work: the minimal independent original-runtime observation above,
-then a separately scoped and reviewed decision on any future consumer.
+then a separately scoped and reviewed decision on any expanded consumer or
+compatibility/readiness claim.

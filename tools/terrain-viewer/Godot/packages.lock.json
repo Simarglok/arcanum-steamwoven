@@ -29,6 +29,9 @@
           "SharpZipLib": "[1.4.2, )"
         }
       },
+      "arcanum.presentation": {
+        "type": "Project"
+      },
       "arcanum.terrainviewer.core": {
         "type": "Project",
         "dependencies": {

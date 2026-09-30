@@ -33,8 +33,8 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 ## Rendering, input and scripting
 
 - [Static-scenery diagnostic contract (ARC-RES-008)](rendering/static-scenery-contract.md)
-- [Terrain and five-object diagnostic viewer (ARC-RENDER-003/004)](rendering/terrain-viewer.md)
-- [Proposed actor visual contract — NOT READY](rendering/actor-visual-contract.md)
+- [Terrain, static and bounded actor diagnostic viewer (ARC-RENDER-003/004/005)](rendering/terrain-viewer.md)
+- [Bounded actor visual contract — original-runtime parity NOT READY](rendering/actor-visual-contract.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)
@@ -47,6 +47,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [ART decoder CE-source-derived specification record](research/art-ce-spec.md)
 - [ART research evidence record](research/art-evidence.md)
 - [Actor visual evidence and anchor readiness gap (ARC-RES-009)](research/actor-visual-evidence.md)
+- [Actor world-anchor placement evidence (ARC-RES-010)](research/actor-placement-evidence.md)
 - [Crash Site evidence ledger](research/crash-site-evidence.md)
 - [Crash Site sector framing: R3 correction](research/crash-site-framing.md)
 - [Crash Site selected-sector objects](research/crash-site-objects.md)

@@ -1,4 +1,4 @@
-# Terrain viewer (ARC-RENDER-003 / ARC-RENDER-004)
+# Terrain, static and bounded actor diagnostic viewer (ARC-RENDER-003 / ARC-RENDER-004 / ARC-RENDER-005)
 
 `tools/terrain-viewer` is a standalone macOS Godot diagnostic viewer for exactly
 one fixed Crash Site terrain sector. It is not a game renderer: 4,096 resolved
@@ -25,6 +25,30 @@ tiles then diagnostic facades then the five static commands sorted by
 It does not establish original object order, occlusion, facade/wall/roof,
 lighting, palette, or overall visual parity.
 
+`--mode actor-diagnostic` is a separate, mutually exclusive fixed-profile
+diagnostic. It retains terrain but never adds the five static commands. It
+requires the terrain `--resource`, a separate `--actor-resource`, `--prototypes`,
+and every caller-selected actor field:
+`--actor-map-x`, `--actor-map-y`, `--actor-camera-origin-x`,
+`--actor-camera-origin-y`, `--actor-offset-x`, `--actor-offset-y`,
+`--actor-render-branch normal-uncached`, `--actor-scale-percent 100`,
+`--actor-shrunk false`, `--actor-action idle|walk`, `--actor-facing 0..7`, and
+`--actor-frame`. These fields are diagnostic caller policy, not recovered
+original state. Missing, duplicate, cached, scaled, shrunk, unknown, or
+out-of-range values fail closed. The actor route uses only the bounded
+source-derived normal branch and draws terrain, then actor, then its magenta
+rectangle and yellow anchor cross. That is diagnostic layering, not original
+occlusion or placement parity.
+
+The two resource paths have fixed non-interchangeable roles: `--resource` is
+the authenticated terrain archive and `--actor-resource` is the authenticated
+actor archive. The latter is required exactly once only for actor diagnostic
+mode; `--expect-actor-resource-sha256` is an optional actor-mode-only additive
+constraint. Terrain-only and combined reject both actor-resource options. The
+viewer has no archive list, lookup precedence, or fallback: actor ordinals are
+never attempted in the terrain archive, and terrain resolution never consults
+the actor archive.
+
 It validates the fixed Crash Site profile before and after its read: fixed
 module/resource sizes and SHA-256 values, sector selector, all 4,096 outcomes,
 zero issues, the 3033/1063 kind split, and the 457 recovered cells / 86
@@ -36,8 +60,9 @@ archive bytes, and sampled colours are deliberately not shown.
 ## Diagnostic rendering contract
 
 Core is Godot-independent. Each coordinator request creates one caller-owned,
-idempotently disposable archive operation owning both seek-based `DatArchive`
-objects. The coordinator serializes inspection, selected-frame decoding,
+idempotently disposable archive operation owning two seek-based `DatArchive`
+objects normally and, only in actor mode, the separately authenticated third
+actor `DatArchive`. The coordinator serializes inspection, selected-frame decoding,
 pre/post fingerprints, and per-load success/failure disposal before releasing
 its gate, and records maximum observed archive concurrency.
 It atomically publishes only after all records and deduplicated selected frames
@@ -45,7 +70,8 @@ succeed. The exact selected-frame identity is the source label, DAT ordinal,
 flags, declared size, normalized logical-name hash, group, frame, and requested
 palette.
 The cache preflights terrain frames against 4,096 identities, static frames
-against 5 identities (4,101 total), and 256 MiB
+against 5 identities (4,101 combined total), or actor frames against exactly
+184 identities (4,280 actor-mode total), and the unchanged 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
 that cache. After successful upload, the app retains only the safe source label
 and scalar decoded-count/load-time HUD metrics: neither the completed load
@@ -57,6 +83,10 @@ the app field types to prove they cannot retain decoded texture data; it makes
 no nondeterministic GC claim. Focused barrier tests prove per-load archive
 lifetime, serialization, and delayed stale success/failure cannot mutate a
 newer scene or HUD.
+Actor archive opening is a separate disposable production operation. It maps
+only DAT-format/limit hierarchy failures, I/O hierarchy failures, and access
+denials at that boundary to the path-free actor fingerprint category; caller
+cancellation and unrelated programmer failures remain control flow/errors.
 
 `TerrainGeometry.Place` is the only owner of projection, the one-pixel X anchor,
 tile 78x40 / facade 80x40 footprint, crop, and raw tile flip. The adapter draws
@@ -97,6 +127,22 @@ A non-headless Godot run reads the `SubViewport` pixels; the dummy headless
 renderer cannot read a `ViewportTexture`, so its output explicitly records
 `graphical readback NOT_VERIFIED` rather than claiming rendered pixels.
 
+The same self-test also builds two public synthetic asymmetric actor ART inputs
+(Idle and Walk), decodes all 184 group/frame textures through `ArtDecoder`,
+then bootstraps a second real `TerrainViewerApp` in a fixed synthetic
+`SubViewport` and publishes them through the exact ready-publication method
+used by loads. It drives `1`/`2`, facing selection, step, play/pause and
+timeline advance for Idle and Walk across all eight requested facings. The
+non-headless matrix uses fixture-literal placement and two asymmetric pixels
+per reflection state, plus literal terrain and guide colors; it verifies HUD,
+cache, camera-transform and stationary caller-input policy. It also republishes
+and exercises shared load-failure clearing, a deterministic partial actor-upload
+rollback, and live `_ExitTree` through the normal production paths, proving
+ownership of exactly 185 textures (one terrain plus 184 actor), exact
+replacement disposal, and no double-clear/double-exit disposal. The headless run executes the same
+structural matrix but reports pixels `NOT_VERIFIED`; it never turns the
+structural result into a pixel claim.
+
 `--native-smoke` uses explicit original inputs, validates seven fixed
 representative ordinals through isolated production canvases, then drives the production scene at
 1280x800 and 1920x1080, injects keyboard/wheel/drag/reset/fit/F11/Escape events,
@@ -116,10 +162,10 @@ and actual dimensions. These game-graphics screenshots
 remain local and ignored.
 
 The previously retained blank source/export PNGs are failed historical evidence,
-not smoke passes. Current exact-head ARC-RENDER-004 local build evidence lives below
-`artifacts/builds/ARC-RENDER-004/<commit>/` with the app and `manifest.json`;
+not smoke passes. Current exact-head ARC-RENDER-005 local build evidence lives below
+`artifacts/builds/ARC-RENDER-005/<commit>/` with the app and `manifest.json`;
 an optional local screenshot directory is created only when a smoke invocation
-requests it. `artifacts/builds/ARC-RENDER-004/current.json` points to the exact
+requests it. `artifacts/builds/ARC-RENDER-005/current.json` points to the exact
 commit-bound manifest/app. The artifact tree is ignored and must not be committed
 or attached. Evidence distinguishes synthetic checks, original automated checks,
 original visual inspection, and physical/readability. Only the first two are
@@ -129,7 +175,7 @@ explicitly NOT_VERIFIED unless a human records them.
 ## Reproducible local verification
 
 Initialize `DOTNET`, `GODOT` and `godot_canonical` from the shared toolchain, and provide the
-caller-selected `MODULE`, `RESOURCE`, and safe `SOURCE_ID` only in the local
+caller-selected `MODULE`, terrain `RESOURCE`, actor `ACTOR_RESOURCE`, and safe `SOURCE_ID` only in the local
 shell. Do not place those paths in a manifest, commit, or issue.
 
     "$DOTNET" restore tools/terrain-viewer/Godot/Arcanum.TerrainViewer.sln --locked-mode
@@ -138,10 +184,13 @@ shell. Do not place those paths in a manifest, commit, or issue.
     godot_canonical --headless --path tools/terrain-viewer/Godot -- --self-test
     godot_canonical --path tools/terrain-viewer/Godot -- --self-test
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
+    godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --mode actor-diagnostic --module "$MODULE" --resource "$RESOURCE" --actor-resource "$ACTOR_RESOURCE" --prototypes "$PROTOTYPES" --source-id "$SOURCE_ID" --actor-map-x 0 --actor-map-y 0 --actor-camera-origin-x 0 --actor-camera-origin-y 0 --actor-offset-x 0 --actor-offset-y 0 --actor-render-branch normal-uncached --actor-scale-percent 100 --actor-shrunk false --actor-action idle --actor-facing 0 --actor-frame 0
 
 After committing the source candidate, export it to the ignored
-`artifacts/builds/ARC-RENDER-004/<commit>/ArcanumTerrainViewer.app`, run its
-`--self-test` and `--native-smoke` with the same local arguments, then run
+`artifacts/builds/ARC-RENDER-005/<commit>/ArcanumTerrainViewer.app`, run its
+headless and non-headless `--self-test`, then each terrain-only, combined, and
+actor-diagnostic `--native-smoke` plus the ordinary actor launch with the same
+local arguments, then run
 `codesign --verify --deep --strict --verbose=2` on that app. Record source and
 export results, requested/actual dimensions, measured load milliseconds,
 distinct texture count, checked RGBA bytes, maximum concurrency, and pre/post
@@ -152,7 +201,7 @@ For the macOS export, keep the SDK selection process-local. This avoids an
 editor-configured alternate SDK without changing global Godot or .NET settings:
 
     SOURCE_HEAD=$(git rev-parse HEAD)
-    BUILD_ROOT="artifacts/builds/ARC-RENDER-004/$SOURCE_HEAD"
+    BUILD_ROOT="artifacts/builds/ARC-RENDER-005/$SOURCE_HEAD"
     env -i HOME="$HOME" USER="$USER" TMPDIR="$TMPDIR" LANG="${LANG:-en_US.UTF-8}" \
       PATH="$HOME/.local/share/dotnet:/usr/bin:/bin:/usr/sbin:/sbin" \
       DOTNET_ROOT="$HOME/.local/share/dotnet" DOTNET_HOST_PATH="$HOME/.local/share/dotnet/dotnet" \
@@ -185,3 +234,11 @@ payloads remain local. The viewer implements only its authenticated finite
 five-object `combined` diagnostic policy, not general scenery, roofs, collision,
 navigation, gameplay, dialogue, controller UX, archive precedence, or original
 scene/visual parity.
+
+The actor diagnostic uses the owner-authorized fixed Direct/SingleLayer
+Idle/Walk profile described by [actor visual evidence](../research/actor-visual-evidence.md).
+Raw ART FPS is only a preview clock; it does not establish a source scheduler,
+movement speed, world movement, collision, passability, or gameplay. Its HUD
+labels the caller-selected anchor/render policy and **Original placement parity:
+NOT VERIFIED**. This authorized presentation subset does not revise the
+historical NOT READY conclusion for original-runtime parity.

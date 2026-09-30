@@ -14,7 +14,12 @@ public static class TerrainCachePolicy
 {
     public const int MaxDistinctKeys = 4096;
     public const int MaxStaticDistinctKeys = 5;
-    public const int MaxTotalDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys;
+    public const int MaxActorDistinctKeys = 184;
+    // The two diagnostic extensions are mode-exclusive.  Reserve only the
+    // selected extension alongside terrain rather than combining both caps.
+    public const int MaxCombinedDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys;
+    public const int MaxActorModeDistinctKeys = MaxDistinctKeys + MaxActorDistinctKeys;
+    public const int MaxTotalDistinctKeys = MaxActorModeDistinctKeys;
     public const long MaxRgbaBytes = 256L * 1024 * 1024;
 
     public static long CheckedRgbaBytes(int width, int height) => checked((long)width * height * 4);

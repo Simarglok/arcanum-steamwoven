@@ -23,6 +23,382 @@ public sealed class CorePolicyTests
         Assert.AreEqual("p", combined.PrototypePath);
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture"]));
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "terrain-only", "--mode", "combined", "--module", "m", "--resource", "r", "--source-id", "fixture", "--prototypes", "p"]));
+        var actor = TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--actor-resource", "actor-r", "--prototypes", "p", "--source-id", "fixture",
+            "--actor-map-x", "-2", "--actor-map-y", "3", "--actor-camera-origin-x", "100", "--actor-camera-origin-y", "-50", "--actor-offset-x", "7", "--actor-offset-y", "-9",
+            "--actor-render-branch", "normal-uncached", "--actor-scale-percent", "100", "--actor-shrunk", "false", "--actor-action", "walk", "--actor-facing", "2", "--actor-frame", "1", "--expect-actor-resource-sha256", new string('B', 64)]);
+        Assert.AreEqual(TerrainViewerMode.ActorDiagnostic, actor.Mode);
+        Assert.AreEqual(ActorDiagnosticAction.Walk, actor.ActorInput!.Action);
+        Assert.IsTrue(actor.ActorResourcePath == "actor-r", "Actor resource must retain the caller-selected role.");
+        Assert.IsTrue(actor.ExpectedActorResourceSha256 == new string('b', 64), "Actor hash must normalize to lowercase.");
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--actor-map-x", "0"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "actor-diagnostic", "--module", "m", "--resource", "r", "--actor-resource", "a", "--actor-resource", "b", "--prototypes", "p", "--source-id", "fixture", "--actor-map-x", "0"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--actor-resource", "a"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--expect-actor-resource-sha256", new string('a', 64)]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "combined", "--module", "m", "--resource", "r", "--prototypes", "p", "--source-id", "fixture", "--actor-frame", "0"]));
+    }
+
+    [TestMethod]
+    public void Actor_geometry_maps_every_facing_mirrors_hotspot_and_does_not_translate_by_frame_offset()
+    {
+        var expected = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
+        CollectionAssert.AreEqual(expected, Enumerable.Range(0, 8).Select(facing => (ActorDiagnosticScenePlan.MapFacing(facing).Group, ActorDiagnosticScenePlan.MapFacing(facing).FlipX)).ToArray());
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.MapFacing(8), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 7, 1, 1), 7, 5, 2, 3, 11, -4, 8, 15);
+        var baseInput = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Walk, 1, 1, 7, 5, 2, 3, 11, -4);
+        var command = ActorDiagnosticScenePlan.Place(baseInput, frame);
+        Assert.AreEqual(239L, command.AnchorX);
+        Assert.AreEqual(238L, command.AnchorY);
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), command.Destination, "Mirrored effective hotspot is 7 - 2 - 1 = 4.");
+        Assert.AreEqual(-11, command.EffectiveOffsetX);
+        Assert.AreEqual(-4, command.EffectiveOffsetY);
+        Assert.AreEqual(11, command.SourceOffsetX);
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = -999, ArtOffsetY = 999 }, frame).Destination,
+            "ART offsets remain metadata and are never a second placement translation.");
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ScalePercent = 99 }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { MapX = long.MinValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(baseInput with { ArtOffsetX = int.MinValue }, frame with { ArtOffsetX = int.MinValue }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_has_literal_facing_geometry_guides_and_safe_failures()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 0, 0, 1), 7, 5, 2, 3, 11, -4, 8, 15);
+        var input = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Walk, 0, 0, 7, 5, 2, 3, 11, -4);
+        // Literal independent outcomes: anchor=(239,238); mirrored hotspot=4,
+        // ordinary hotspot=2. No expectation is calculated by production code.
+        var expected = new[] { (0, false, 237), (7, true, 235), (6, true, 235), (5, true, 235),
+            (4, false, 237), (5, false, 237), (6, false, 237), (7, false, 237) };
+        foreach (var (facing, group, mirrored, left) in expected.Select((item, facing) => (facing, item.Item1, item.Item2, item.Item3)))
+        {
+            var command = ActorDiagnosticScenePlan.Place(input with { Facing = facing }, frame with { TextureKey = frame.TextureKey with { PhysicalGroup = group } });
+            Assert.AreEqual(group, command.PhysicalGroup);
+            Assert.AreEqual(mirrored, command.FlipX);
+            Assert.AreEqual(new TerrainRect(left, 235, 7, 5), command.Destination);
+            Assert.AreEqual(239L, command.AnchorX);
+            Assert.AreEqual(238L, command.AnchorY);
+        }
+
+        var plan = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        var bounds = plan.AdmittedBounds.Single();
+        Assert.AreEqual(235, bounds.X, "Mirrored sprite is leftmost.");
+        Assert.AreEqual(234, bounds.Y, "Anchor cross extends one pixel above this sprite.");
+        Assert.AreEqual(9, bounds.Width, "Cross expands right edge through anchor + 4.");
+        Assert.AreEqual(9, bounds.Height, "Cross expands bottom edge through anchor + 4.");
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapX = null }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Action = (ActorDiagnosticAction)99 }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 8 }, frame), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Frame = 8 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame with { TextureKey = frame.TextureKey with { Palette = 0 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+
+        // Select/CreateSynthetic are public production entry points. Their
+        // closed input failures must precede an absent catalogue lookup.
+        var planWithAbsentSelection = ActorDiagnosticScenePlan.CreateSynthetic(input, [frame]);
+        AssertViewerFailure(() => planWithAbsentSelection.Select(input with { Action = (ActorDiagnosticAction)99 }), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { Action = (ActorDiagnosticAction)99 }, [frame]), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => planWithAbsentSelection.Select(input with { RenderBranch = ActorDiagnosticRenderBranch.Unknown }), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_has_literal_signed_deltas_offsets_and_multiframe_guide_union()
+    {
+        var first = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 0, 0, 1), 7, 5, 2, 3, 11, -4, 8, 15);
+        var second = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4754, 0xc9001850, 7, 0, 1), 11, 9, -2, 7, -13, 6, 8, 15);
+        var input = new ActorDiagnosticPlacementInput(2, 6, 100, 50, -21, 8, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Walk, 0, 0, 7, 5, 2, 3, 11, -4);
+        Assert.AreEqual(new TerrainRect(237, 235, 7, 5), ActorDiagnosticScenePlan.Place(input, first).Destination);
+        Assert.AreEqual(new TerrainRect(197, 255, 7, 5), ActorDiagnosticScenePlan.Place(input with { MapX = 3 }, first).Destination);
+        Assert.AreEqual(new TerrainRect(277, 255, 7, 5), ActorDiagnosticScenePlan.Place(input with { MapY = 7 }, first).Destination);
+        Assert.AreEqual(new TerrainRect(224, 235, 7, 5), ActorDiagnosticScenePlan.Place(input with { CameraOriginX = 87 }, first).Destination);
+        Assert.AreEqual(new TerrainRect(237, 252, 7, 5), ActorDiagnosticScenePlan.Place(input with { CameraOriginY = 67 }, first).Destination);
+        Assert.AreEqual(new TerrainRect(228, 235, 7, 5), ActorDiagnosticScenePlan.Place(input with { InstanceOffsetX = -30 }, first).Destination);
+        Assert.AreEqual(new TerrainRect(237, 247, 7, 5), ActorDiagnosticScenePlan.Place(input with { InstanceOffsetY = 20 }, first).Destination);
+        var mirroredFirst = ActorDiagnosticScenePlan.Place(input with { Facing = 1 }, first with { TextureKey = first.TextureKey with { PhysicalGroup = 7 } });
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), mirroredFirst.Destination);
+        Assert.AreEqual(-11, mirroredFirst.EffectiveOffsetX);
+        var changedOffset = ActorDiagnosticScenePlan.Place(input with { Facing = 1, ArtOffsetX = -9, ArtOffsetY = 6 },
+            first with { TextureKey = first.TextureKey with { PhysicalGroup = 7 }, ArtOffsetX = -9, ArtOffsetY = 6 });
+        Assert.AreEqual(new TerrainRect(235, 235, 7, 5), changedOffset.Destination, "Frame offsets are retained metadata, not another placement translation.");
+        Assert.AreEqual(9, changedOffset.EffectiveOffsetX);
+        Assert.AreEqual(6, changedOffset.EffectiveOffsetY);
+
+        var secondUnmirrored = ActorDiagnosticScenePlan.Place(input with { Facing = 7, Width = 11, Height = 9, HotX = -2, HotY = 7, ArtOffsetX = -13, ArtOffsetY = 6 }, second);
+        var secondMirrored = ActorDiagnosticScenePlan.Place(input with { Facing = 1, Width = 11, Height = 9, HotX = -2, HotY = 7, ArtOffsetX = -13, ArtOffsetY = 6 }, second);
+        Assert.AreEqual(new TerrainRect(241, 231, 11, 9), secondUnmirrored.Destination);
+        Assert.AreEqual(new TerrainRect(227, 231, 11, 9), secondMirrored.Destination);
+        Assert.AreEqual(13, secondMirrored.EffectiveOffsetX);
+        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, [first, second]);
+        var terrainKey = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(227, 231, 25, 12),
+            [new TerrainPlanInput(0, terrainKey, TerrainKind.Tile, 3, 9, 0, 1, 1, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        Assert.AreEqual(new TerrainRect(227, 231, 25, 12), DiagnosticScenePlan.Create(terrain, null, actor).WorldBounds);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_rejects_each_closed_input_and_catalogue_metadata_mismatch()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 1, 1, 0, 0, 0, 0, 15, 8);
+        var input = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 1, 1, 0, 0, 0, 0);
+        foreach (var absent in new ActorDiagnosticPlacementInput[]
+        {
+            input with { MapX = null }, input with { MapY = null }, input with { CameraOriginX = null }, input with { CameraOriginY = null },
+            input with { InstanceOffsetX = null }, input with { InstanceOffsetY = null }, input with { Shrunk = null }
+        }) AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(absent, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        foreach (var render in new[]
+        {
+            input with { RenderBranch = ActorDiagnosticRenderBranch.CachedUnsupported }, input with { RenderBranch = ActorDiagnosticRenderBranch.Unknown },
+            input with { ScalePercent = 99 }, input with { ScalePercent = 101 }, input with { Shrunk = true }
+        }) AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(render, frame), TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Action = (ActorDiagnosticAction)2 }, frame), TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = -1 }, frame), TerrainViewerErrorCode.ActorFacing, TerrainViewerFailureStage.ActorFacing);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Frame = -1 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Width = 0 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Height = -1 }, frame), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame with { TextureKey = frame.TextureKey with { Palette = 0 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input, [frame, frame]), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input, [frame with { TextureKey = frame.TextureKey with { Selector = 0 } }]), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_binds_literal_two_resource_selector_action_and_timing_profile()
+    {
+        var idle = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 3, 2, 0, 0, 0, 0, 15, 8);
+        var idleInput = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 3, 2, 0, 0, 0, 0);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(idleInput, []), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput with { Frame = 15 }, idle), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput, idle with { TextureKey = idle.TextureKey with { ResourceOrdinal = 4754 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput, idle with { TextureKey = idle.TextureKey with { Selector = 0xc9001850 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput, idle with { FramesPerAction = 14 }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput, idle with { RawFramesPerSecond = 7 }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput, idle with { TextureKey = idle.TextureKey with { PhysicalGroup = 1 } }), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput with { Action = ActorDiagnosticAction.Walk }, idle), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput with { Width = 2 }, idle), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(idleInput with { Height = 3 }, idle), TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
+    }
+
+    [TestMethod]
+    public void Actor_archive_open_boundary_maps_only_authorized_input_failures_and_identity_is_path_free()
+    {
+        var input = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 1, 1, 0, 0, 0, 0);
+        var progress = new TerrainViewerProgress(1, 1, 0);
+        foreach (var exception in new Exception[]
+        {
+            new DatException("private"), new DatFormatException("private"), new DatUnsupportedFormatException("private"),
+            new DatLimitExceededException("private"), new DatUnsupportedEntryException("private"), new IOException("private"),
+            new FileNotFoundException("private"), new DirectoryNotFoundException("private"), new UnauthorizedAccessException("private")
+        })
+        {
+            using var operation = new ActorDiagnosticSourceOperation(() => throw exception);
+            AssertViewerFailure(() => operation.Execute(null!, input, 0, 0, progress, CancellationToken.None), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        }
+        using (var programmer = new ActorDiagnosticSourceOperation(() => throw new InvalidOperationException("sentinel")))
+            AssertThrows<InvalidOperationException>(() => programmer.Execute(null!, input, 0, 0, progress, CancellationToken.None));
+        using (var cancelled = new ActorDiagnosticSourceOperation(() => throw new OperationCanceledException()))
+            AssertThrows<OperationCanceledException>(() => cancelled.Execute(null!, input, 0, 0, progress, CancellationToken.None));
+        ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "abc", "abc");
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(6, "abc"), 7, "abc", null), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "def", null), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+        AssertViewerFailure(() => ActorDiagnosticSource.VerifyIdentity(new InputFingerprint(7, "abc"), 7, "abc", "def"), TerrainViewerErrorCode.ActorFingerprint, TerrainViewerFailureStage.ActorFingerprint);
+    }
+
+    [TestMethod]
+    public void Actor_source_operation_decodes_real_synthetic_dat_and_art_catalogue_with_checked_retention_and_disposal()
+    {
+        using var fixture = SyntheticActorSourceFixture.Create();
+        using var operation = fixture.CreateOperation();
+        var load = operation.Execute(fixture.Module, fixture.Input(ActorDiagnosticAction.Walk, facing: 1, frame: 7), 0, 0,
+            TerrainViewerProgress.Empty, CancellationToken.None);
+        Assert.AreEqual(184, load.Textures.Count);
+        Assert.AreEqual(184, load.Plan.Catalog.Count);
+        Assert.AreEqual(120, load.Textures.Keys.Count(key => key.ResourceOrdinal == 4753));
+        Assert.AreEqual(64, load.Textures.Keys.Count(key => key.ResourceOrdinal == 4754));
+        Assert.AreEqual(736L, load.CheckedRgbaBytes);
+        Assert.AreEqual(new ActorDiagnosticTextureKey(4754, 0xc9001850, 7, 7, 1), load.Plan.Current.TextureKey);
+        Assert.AreEqual(7, load.Plan.Current.PhysicalGroup);
+        Assert.IsTrue(load.Plan.Current.FlipX);
+        operation.Dispose();
+        Assert.AreEqual(1, fixture.ResourceDisposeCount, "Actor archive must be disposed exactly once with its production operation.");
+
+        using var byteCapFixture = SyntheticActorSourceFixture.Create();
+        using var byteCapOperation = byteCapFixture.CreateOperation();
+        var retainedBeforeByteCap = 0;
+        AssertViewerFailure(() => byteCapOperation.Execute(byteCapFixture.Module, byteCapFixture.Input(), 0,
+            TerrainCachePolicy.MaxRgbaBytes - 4, TerrainViewerProgress.Empty, CancellationToken.None,
+            retained => retainedBeforeByteCap = retained), TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
+        Assert.AreEqual(1, retainedBeforeByteCap, "The second 1x1 frame must fail before its RGBA copy is retained.");
+
+        using var countCapFixture = SyntheticActorSourceFixture.Create();
+        using var countCapOperation = countCapFixture.CreateOperation();
+        var retainedBeforeCountCap = 0;
+        AssertViewerFailure(() => countCapOperation.Execute(countCapFixture.Module, countCapFixture.Input(), TerrainCachePolicy.MaxTotalDistinctKeys - 1,
+            0, TerrainViewerProgress.Empty, CancellationToken.None, retained => retainedBeforeCountCap = retained),
+            TerrainViewerErrorCode.ResourceLimit, TerrainViewerFailureStage.ActorDecode);
+        Assert.AreEqual(1, retainedBeforeCountCap, "The aggregate key limit must be checked before retaining the second actor frame.");
+    }
+
+    [TestMethod]
+    public void Actor_source_operation_cancellation_and_substituted_real_fixture_failures_are_actor_specific()
+    {
+        using var cancellationFixture = SyntheticActorSourceFixture.Create();
+        using var cancellationOperation = cancellationFixture.CreateOperation();
+        using var cancellation = new CancellationTokenSource();
+        var checkpoint = 0;
+        AssertThrows<OperationCanceledException>(() => cancellationOperation.Execute(cancellationFixture.Module, cancellationFixture.Input(), 0, 0,
+            TerrainViewerProgress.Empty, cancellation.Token, retained => { checkpoint = retained; if (retained == 17) cancellation.Cancel(); }));
+        Assert.AreEqual(17, checkpoint, "Cancellation must occur after the seventeenth retained frame and before frame eighteen.");
+        cancellationOperation.Dispose();
+        Assert.AreEqual(1, cancellationFixture.ResourceDisposeCount);
+
+        using var missingResource = SyntheticActorSourceFixture.Create(missingIdle: true);
+        using var missingOperation = missingResource.CreateOperation();
+        AssertViewerFailure(() => missingOperation.Execute(missingResource.Module, missingResource.Input(), 0, 0,
+            TerrainViewerProgress.Empty, CancellationToken.None), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+
+        using var malformedResource = SyntheticActorSourceFixture.Create(invalidIdleArt: true);
+        using var malformedOperation = malformedResource.CreateOperation();
+        AssertViewerFailure(() => malformedOperation.Execute(malformedResource.Module, malformedResource.Input(), 0, 0,
+            TerrainViewerProgress.Empty, CancellationToken.None), TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode);
+
+        using var metadataMismatch = SyntheticActorSourceFixture.Create(idleFrames: 14);
+        using var metadataOperation = metadataMismatch.CreateOperation();
+        AssertViewerFailure(() => metadataOperation.Execute(metadataMismatch.Module, metadataMismatch.Input(), 0, 0,
+            TerrainViewerProgress.Empty, CancellationToken.None), TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+    }
+
+    [TestMethod]
+    public void Actor_source_operation_real_dat_art_matrix_rejects_each_fixed_profile_substitution_and_disposes_once()
+    {
+        // Every case writes a real 1TAD/ART byte fixture and invokes the
+        // production ActorDiagnosticSourceOperation.  Expected classifications
+        // are literal; this test does not replace decoding with a fake result.
+        var metadataCases = new Func<SyntheticActorSourceFixture>[]
+        {
+            () => SyntheticActorSourceFixture.Create(moduleEntryCount: 643),
+            () => SyntheticActorSourceFixture.Create(missingWalk: true),
+            () => SyntheticActorSourceFixture.Create(swapActionPayloads: true),
+            () => SyntheticActorSourceFixture.Create(physicalGroupCount: 1),
+            () => SyntheticActorSourceFixture.Create(idleFrames: 14),
+            () => SyntheticActorSourceFixture.Create(walkFrames: 7),
+            () => SyntheticActorSourceFixture.Create(idleFps: 7),
+            () => SyntheticActorSourceFixture.Create(walkFps: 14),
+            () => SyntheticActorSourceFixture.Create(absentPalette: true),
+            () => SyntheticActorSourceFixture.Create(substituteIdleResourceOrdinal: 4752)
+        };
+        foreach (var create in metadataCases)
+        {
+            using var fixture = create();
+            using var operation = fixture.CreateOperation();
+            AssertViewerFailure(() => operation.Execute(fixture.Module, fixture.Input(), 0, 0, TerrainViewerProgress.Empty, CancellationToken.None),
+                TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+            operation.Dispose();
+            Assert.AreEqual(1, fixture.ResourceDisposeCount);
+        }
+
+        foreach (var create in new Func<SyntheticActorSourceFixture>[]
+        {
+            () => SyntheticActorSourceFixture.Create(invalidPalette: true),
+            () => SyntheticActorSourceFixture.Create(resourceOptions: new DatReaderOptions { MaxStoredEntryBytes = 1, MaxDecodedEntryBytes = 1 })
+        })
+        {
+            using var fixture = create();
+            using var operation = fixture.CreateOperation();
+            AssertViewerFailure(() => operation.Execute(fixture.Module, fixture.Input(), 0, 0, TerrainViewerProgress.Empty, CancellationToken.None),
+                TerrainViewerErrorCode.ActorDecode, TerrainViewerFailureStage.ActorDecode);
+            operation.Dispose();
+            Assert.AreEqual(1, fixture.ResourceDisposeCount);
+        }
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_rejects_projection_anchor_extent_and_draw_domain_overflow()
+    {
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 2, 2, 0, 0, 0, 0, 15, 8);
+        var valid = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 2, 2, 0, 0, 0, 0);
+        var overflowInputs = new[]
+        {
+            valid with { MapX = long.MinValue }, valid with { MapY = long.MaxValue },
+            valid with { CameraOriginX = long.MaxValue }, valid with { CameraOriginY = long.MaxValue },
+            valid with { InstanceOffsetX = int.MaxValue, CameraOriginX = long.MaxValue - 39 },
+            valid with { InstanceOffsetY = int.MaxValue, CameraOriginY = long.MaxValue - 19 }
+        };
+        foreach (var input in overflowInputs)
+            AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(valid with { CameraOriginX = (long)int.MaxValue + 1 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(valid with { Width = int.MaxValue, CameraOriginX = 1 }, frame with { Width = int.MaxValue, Height = 2 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+    }
+
+    [TestMethod]
+    public void Actor_public_planning_seam_has_one_literal_overflow_vector_for_every_checked_geometry_and_union_path()
+    {
+        // Each call names one checked production path.  Inputs and expected
+        // classification are literals; no expected coordinate is delegated to
+        // MapFacing, Place, or a geometry helper under test.
+        var frame = new ActorDiagnosticFrame(new ActorDiagnosticTextureKey(4753, 0xc9001810, 0, 0, 1), 2, 2, 0, 0, 0, 0, 15, 8);
+        var input = new ActorDiagnosticPlacementInput(0, 0, 0, 0, 0, 0, ActorDiagnosticRenderBranch.NormalUncached, 100, false,
+            ActorDiagnosticAction.Idle, 0, 0, 2, 2, 0, 0, 0, 0);
+
+        // X: map subtraction, subtract-one, multiply, and origin add.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 0, MapX = long.MinValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MinValue, MapX = 0 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MaxValue, MapX = 0 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 2, CameraOriginX = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Y: map add, multiply, and origin add.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = long.MaxValue, MapX = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 500_000_000_000_000_000L, MapX = 500_000_000_000_000_000L }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginY = long.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Caller offsets and the explicit (+40,+20) diagnostic anchor adds.
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 40, InstanceOffsetX = int.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 20, InstanceOffsetY = int.MaxValue }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 39 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 19 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Mirror-specific hotspot subtraction and source-offset negation.
+        var mirroredHotspot = frame with { TextureKey = frame.TextureKey with { PhysicalGroup = 7 }, Width = int.MaxValue, HotX = -1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 1, Width = int.MaxValue, HotX = -1 }, mirroredHotspot), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var mirroredOffset = frame with { TextureKey = frame.TextureKey with { PhysicalGroup = 7 }, ArtOffsetX = int.MinValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { Facing = 1, ArtOffsetX = int.MinValue }, mirroredOffset), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // Widened left/top/right/bottom edges, then their checked int narrowing.
+        var wideHotX = frame with { HotX = int.MaxValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MinValue, HotX = int.MaxValue }, wideHotX), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var wideHotY = frame with { HotY = int.MaxValue };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MinValue, HotY = int.MaxValue }, wideHotY), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var wideExtent = frame with { Width = 2, Height = 2 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = long.MaxValue - 40 }, wideExtent), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = long.MaxValue - 20 }, wideExtent), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = (long)int.MinValue - 41 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = (long)int.MinValue - 21 }, frame), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { MapY = 1, CameraOriginX = (long)int.MaxValue - 40, Width = 1 }, frame with { Width = 1 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.Place(input with { CameraOriginY = (long)int.MaxValue - 20, Height = 1 }, frame with { Height = 1 }), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // The guide cross narrows anchor-4 and anchor+5 independently.
+        var crossLeft = frame with { Width = 1, Height = 1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { MapY = 1, CameraOriginX = (long)int.MinValue - 40, Width = 1, Height = 1 }, [crossLeft]), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var crossRight = frame with { Width = 1, Height = 1, HotX = 1 };
+        AssertViewerFailure(() => ActorDiagnosticScenePlan.CreateSynthetic(input with { MapY = 1, CameraOriginX = (long)int.MaxValue - 40, Width = 1, Height = 1, HotX = 1 }, [crossRight]), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+
+        // WorldBounds unions include terrain and every admitted actor guide.
+        // These two cases separately overflow union width and union height.
+        var terrainKey = new TerrainTextureKey("fixture", 1, 0, 1, "fixture", 0, 0, 0);
+        var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(-40, 0, 100, 100),
+            [new TerrainPlanInput(0, terrainKey, TerrainKind.Tile, 0, 0, 0, 1, 1, new TerrainDiagnosticOrderKey(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
+        var unionWidthFirst = frame with { Width = 1, Height = 1, HotX = int.MaxValue - 5 };
+        var unionWidthSecond = frame with { TextureKey = frame.TextureKey with { Frame = 1 }, Width = int.MaxValue - 4, Height = 1, HotX = 0 };
+        var unionWidthInput = input with { Width = 1, Height = 1, HotX = int.MaxValue - 5 };
+        var widthActor = ActorDiagnosticScenePlan.CreateSynthetic(unionWidthInput, [unionWidthFirst, unionWidthSecond]);
+        AssertViewerFailure(() => DiagnosticScenePlan.Create(terrain, null, widthActor), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
+        var unionHeightFirst = frame with { Width = 1, Height = 1, HotY = int.MaxValue - 5 };
+        var unionHeightSecond = frame with { TextureKey = frame.TextureKey with { Frame = 1 }, Width = 1, Height = int.MaxValue - 4, HotY = 0 };
+        var unionHeightInput = input with { CameraOriginY = -20, Width = 1, Height = 1, HotY = int.MaxValue - 5 };
+        var heightActor = ActorDiagnosticScenePlan.CreateSynthetic(unionHeightInput, [unionHeightFirst, unionHeightSecond]);
+        AssertViewerFailure(() => DiagnosticScenePlan.Create(terrain, null, heightActor), TerrainViewerErrorCode.ActorPlan, TerrainViewerFailureStage.ActorPlan);
     }
 
     [TestMethod]
@@ -103,7 +479,7 @@ public sealed class CorePolicyTests
         Assert.AreEqual(317, staticDecode.SafeProgress.StaticCensus);
         Assert.AreEqual(5, staticDecode.SafeProgress.StaticAdmitted);
         Assert.AreEqual(312, staticDecode.SafeProgress.StaticOutsideScope);
-        CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "Plan", "Upload", "Readback" },
+        CollectionAssert.AreEqual(new[] { "Arguments", "Fingerprint", "TerrainCensus", "TerrainDecode", "StaticFingerprint", "StaticCensus", "StaticResource", "StaticDecode", "ActorFingerprint", "ActorMetadata", "ActorInput", "ActorRenderState", "ActorFacing", "ActorFrame", "ActorDecode", "ActorPlan", "Plan", "Upload", "Readback" },
             Enum.GetNames<TerrainViewerFailureStage>());
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(-1));
         AssertThrows<ArgumentOutOfRangeException>(() => new TerrainViewerProgress(4097));
@@ -306,6 +682,58 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public async Task Coordinator_stale_success_and_actor_failure_use_the_real_actor_source_operation()
+    {
+        // The adapter supplies only the minimal synthetic terrain wrapper that
+        // ITerrainLoadOperation requires. Actor success/failure is always
+        // produced by ActorDiagnosticSourceOperation over real 1TAD/ART bytes.
+        var delayedFixture = SyntheticActorSourceFixture.Create();
+        var currentFixture = SyntheticActorSourceFixture.Create();
+        var delayed = new ActorSourceOperationAdapter(delayedFixture, pauseAtRetainedFrame: 184);
+        var current = new ActorSourceOperationAdapter(currentFixture);
+        using (var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(delayed, current)))
+        {
+            var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+            var staleGeneration = coordinator.BeginGeneration();
+            var staleLoad = coordinator.LoadAsync(staleGeneration, arguments);
+            await delayed.Entered.Task;
+            var currentGeneration = coordinator.BeginGeneration();
+            var currentLoad = coordinator.LoadAsync(currentGeneration, arguments);
+            delayed.Release.TrySetResult();
+            var stale = await staleLoad;
+            var published = "new-generation-loading";
+            Assert.IsFalse(coordinator.TryPublish(stale.Generation, () => published = "stale-ready"));
+            var replacement = await currentLoad;
+            Assert.IsTrue(coordinator.TryPublish(replacement.Generation, () => published = "replacement-ready"));
+            Assert.AreEqual("replacement-ready", published);
+        }
+        Assert.AreEqual(1, delayedFixture.ResourceDisposeCount);
+        Assert.AreEqual(1, currentFixture.ResourceDisposeCount);
+
+        var failingFixture = SyntheticActorSourceFixture.Create(missingWalk: true);
+        var replacementFixture = SyntheticActorSourceFixture.Create();
+        var failing = new ActorSourceOperationAdapter(failingFixture, pauseAtRetainedFrame: 120);
+        var replacementOperation = new ActorSourceOperationAdapter(replacementFixture);
+        using (var coordinator = new TerrainLoadCoordinator(new QueueArchiveOperationFactory(failing, replacementOperation)))
+        {
+            var arguments = TerrainViewerArguments.Parse(["--module", "synthetic-module", "--resource", "synthetic-resource", "--source-id", "fixture"]);
+            var staleGeneration = coordinator.BeginGeneration();
+            var failedLoad = coordinator.LoadAsync(staleGeneration, arguments);
+            await failing.Entered.Task;
+            var replacementGeneration = coordinator.BeginGeneration();
+            var replacementLoad = coordinator.LoadAsync(replacementGeneration, arguments);
+            failing.Release.TrySetResult();
+            await AssertThrowsAsync<TerrainViewerException>(failedLoad);
+            var errorHud = "new-generation-loading";
+            Assert.IsFalse(coordinator.TryPublish(staleGeneration, () => errorHud = "stale-error"));
+            await replacementLoad;
+            Assert.AreEqual("new-generation-loading", errorHud);
+        }
+        Assert.AreEqual(1, failingFixture.ResourceDisposeCount);
+        Assert.AreEqual(1, replacementFixture.ResourceDisposeCount);
+    }
+
+    [TestMethod]
     public async Task Coordinator_propagates_safe_operation_failure_and_disposes_failure_path()
     {
         var operation = new ThrowingArchiveOperation();
@@ -409,6 +837,43 @@ public sealed class CorePolicyTests
 
         public QueueArchiveOperationFactory(params ITerrainLoadOperation[] operations) => _operations = new Queue<ITerrainLoadOperation>(operations);
         public ITerrainLoadOperation Create() => _operations.Dequeue();
+    }
+
+    private sealed class ActorSourceOperationAdapter : ITerrainLoadOperation
+    {
+        private readonly SyntheticActorSourceFixture _fixture;
+        private readonly ActorDiagnosticSourceOperation _operation;
+        private readonly int? _pauseAtRetainedFrame;
+        private int _disposed;
+
+        public ActorSourceOperationAdapter(SyntheticActorSourceFixture fixture, int? pauseAtRetainedFrame = null)
+        {
+            _fixture = fixture;
+            _operation = fixture.CreateOperation();
+            _pauseAtRetainedFrame = pauseAtRetainedFrame;
+        }
+
+        public TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
+        {
+            var actor = _operation.Execute(_fixture.Module, _fixture.Input(), 0, 0, TerrainViewerProgress.Empty, cancellationToken,
+                retained =>
+                {
+                    if (_pauseAtRetainedFrame != retained) return;
+                    Entered.TrySetResult();
+                    Release.Task.Wait(cancellationToken);
+                });
+            return Result(generation) with { ActorPlan = actor.Plan, ActorTextures = actor.Textures };
+        }
+
+        public void Dispose()
+        {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            _operation.Dispose();
+            _fixture.Dispose();
+        }
     }
 
     private sealed class BarrierArchiveDecodeOperation : ITerrainLoadOperation
