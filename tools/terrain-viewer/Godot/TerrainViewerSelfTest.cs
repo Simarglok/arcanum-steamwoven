@@ -173,6 +173,11 @@ public static class TerrainViewerSelfTest
         var fixture = SyntheticActorFixture.Create();
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await AssertResponsiveHudAsync(host, viewport, app);
+        // The HUD matrix above validates its actual production overlay. Hide
+        // that overlay only for later actor-pixel probes so a deliberately
+        // top-anchored diagnostic panel cannot cover their world landmarks.
+        app.GetNode<TerrainDiagnosticHud>("Hud").Visible = false;
         var expectedFacings = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
         var callerInput = fixture.Arguments.ActorInput!;
         foreach (var actionCase in new[]
@@ -291,6 +296,21 @@ public static class TerrainViewerSelfTest
             throw new InvalidOperationException("Repeated production _ExitTree double-disposed textures.");
         exitViewport.QueueFree();
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+    }
+
+    private static async Task AssertResponsiveHudAsync(Node host, SubViewport viewport, TerrainViewerApp app)
+    {
+        var hud = app.GetNode<TerrainDiagnosticHud>("Hud");
+        foreach (var size in new[] { new Vector2I(480, 320), new Vector2I(640, 360), new Vector2I(800, 500), new Vector2I(1280, 800) })
+        {
+            viewport.Size = size;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            if (hud.GlobalPosition.X < 16 || hud.GlobalPosition.Y < 16 || hud.Height > (size.Y * 0.35f) + 1)
+                throw new InvalidOperationException($"Diagnostic HUD escaped its 16px/35% viewport bounds at {size}.");
+            if (!hud.IsScrollable || !hud.Text.Contains("AUTOMATED TEST MODE", StringComparison.Ordinal)
+                || !hud.Text.Contains("DIAGNOSTIC — not gameplay/original parity", StringComparison.Ordinal))
+                throw new InvalidOperationException("Diagnostic HUD lost its sticky limits or scrollable detail contract.");
+        }
     }
 
     private static bool HasCompleteActorHud(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticAction action, int facing, int group,

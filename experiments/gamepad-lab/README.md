@@ -48,6 +48,10 @@ It builds the ignored exact-head app at `artifacts/builds/ARC-GPAD-003/<head>/Ga
 
 ## Owner checklist
 
+On 2026-09-29 the owner said the controller movement/camera scheme matched the
+request. This is a bounded human observation, not verification of Bluetooth
+reconnect, drift, all axes/settings, exhaustive stability, or original parity.
+
 Connect an Xbox Bluetooth controller; verify both default inversion axes and each independent toggle; move/pan concurrently; test drift, modal/focus/disconnect/reconnect safety; walk into the wall/corner/narrow passage and use F2 recenter; compare movement modes; then confirm targeting, cycling, keyboard/mouse fallback, and that left-stick movement has no interaction side effect. Physical axes/buttons, disconnect/reconnect, drift, glyph correctness, and comfort are **Not verified** until that session.
 
 Official version-pinned references: [controllers](https://docs.godotengine.org/en/4.7/tutorials/inputs/controllers_gamepads_joysticks.html), [NavigationAgent usage](https://docs.godotengine.org/en/4.7/tutorials/navigation/navigation_using_navigationagents.html), [AStarGrid2D](https://docs.godotengine.org/en/4.7/classes/class_astargrid2d.html), [CharacterBody2D](https://docs.godotengine.org/en/4.7/classes/class_characterbody2d.html).

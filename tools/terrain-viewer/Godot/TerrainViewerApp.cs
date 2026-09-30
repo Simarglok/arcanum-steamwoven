@@ -12,7 +12,7 @@ public partial class TerrainViewerApp : Node
     private TerrainTextureCache _cache = new();
     private TerrainCanvas? _canvas;
     private TerrainCameraController? _camera;
-    private Label? _status;
+    private TerrainDiagnosticHud? _hud;
     private long _generation;
     private bool _dragging;
     private bool _nativeSmoke;
@@ -47,11 +47,9 @@ public partial class TerrainViewerApp : Node
         AddChild(cameraNode);
         _camera = new TerrainCameraController(cameraNode);
         GetViewport().SizeChanged += HandleViewportSizeChanged;
-        var layer = new CanvasLayer { Name = "Hud" };
-        var status = new Label { Position = new Vector2(16, 16), Text = "Editor diagnostic order | loading" };
-        layer.AddChild(status);
-        AddChild(layer);
-        _status = status;
+        _hud = new TerrainDiagnosticHud { Name = "Hud" };
+        AddChild(_hud);
+        _hud.SetDiagnosticText("Editor diagnostic order | loading", automatedTestMode: false);
 
         if (SelfTestBootstrap) return;
 
@@ -216,8 +214,8 @@ public partial class TerrainViewerApp : Node
     }
 
     internal TerrainViewerSelfTestSnapshot GetSelfTestSnapshot()
-        => new(_readyActor, _readyActorInput, _actorTimeline?.IsPlaying ?? false, _cache.Count, _cache.CreatedCount, _cache.DisposedCount, _status?.Text ?? string.Empty,
-            _status?.GlobalPosition ?? Vector2.Zero, _camera?.State.X ?? 0, _camera?.State.Y ?? 0, _camera?.State.Zoom ?? 0,
+        => new(_readyActor, _readyActorInput, _actorTimeline?.IsPlaying ?? false, _cache.Count, _cache.CreatedCount, _cache.DisposedCount, _hud?.Text ?? string.Empty,
+            _hud?.GlobalPosition ?? Vector2.Zero, _camera?.State.X ?? 0, _camera?.State.Y ?? 0, _camera?.State.Zoom ?? 0,
             _canvas?.GetGlobalTransformWithCanvas() ?? Transform2D.Identity);
 
     private static (bool Enabled, string? ScreenshotPath) TakeNativeSmokeArguments(List<string> args)
@@ -244,7 +242,7 @@ public partial class TerrainViewerApp : Node
         await NextFrameAsync();
         var initial = _camera!.State;
         var initialCameraPosition = _camera.Camera.Position;
-        var initialHudPosition = _status!.GlobalPosition;
+        var initialHudPosition = _hud!.GlobalPosition;
         GD.Print("ARC-RENDER-004 native-smoke stage=initial-readback");
         if (!await CaptureAndValidateSmokeFrameAsync(new Vector2I(1280, 800), commandCount, textureCount))
         {
@@ -264,7 +262,7 @@ public partial class TerrainViewerApp : Node
         GD.Print("ARC-RENDER-004 native-smoke stage=input-wheel-frame");
         if (_camera.State.FitMode || _camera.State.Zoom <= initial.Zoom || afterKeyboard.Y >= initial.Y
             || _camera.Camera.Position == initialCameraPosition || _camera.Camera.Zoom.X <= initial.Zoom
-            || _status.GlobalPosition != initialHudPosition || !HasReadyHudContent(textureCount)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
+            || _hud.GlobalPosition != initialHudPosition || !HasReadyHudContent(textureCount)) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         var beforeDrag = _camera.State;
         Input.ParseInputEvent(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true });
         Input.ParseInputEvent(new InputEventMouseMotion { Relative = new Vector2(20, -10) });
@@ -350,7 +348,7 @@ public partial class TerrainViewerApp : Node
             var expectedFit = CameraPolicy.Fit(diagnosticBounds.X, diagnosticBounds.Y, diagnosticBounds.Width,
                 diagnosticBounds.Height, actualViewport.X, actualViewport.Y);
             var cycleValid = _camera.State.FitMode && _camera.Camera.Position == new Vector2((float)_camera.State.X, (float)_camera.State.Y)
-                && _camera.Camera.Zoom == Vector2.One * (float)_camera.State.Zoom && _status!.GlobalPosition == initialHudPosition
+                && _camera.Camera.Zoom == Vector2.One * (float)_camera.State.Zoom && _hud!.GlobalPosition == initialHudPosition
                 && _camera.State.Zoom == expectedFit.Zoom && _canvas.CommandCount == commandCount && _cache.Count == textureCount && HasReadyHudContent(textureCount)
                 && _canvas.GeometrySignature == geometrySignature && afterPan != _camera.State;
             if (!cycleValid)
@@ -457,7 +455,7 @@ public partial class TerrainViewerApp : Node
         GD.Print("ARC-RENDER-005 actor native stage=idle-control");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key1, Pressed = true });
         await NextFrameAsync();
-        if (_readyActor?.Action != ActorDiagnosticAction.Idle || !_status!.Text.Contains("Actor: Idle", StringComparison.Ordinal))
+        if (_readyActor?.Action != ActorDiagnosticAction.Idle || !_hud!.Text.Contains("Actor: Idle", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         for (var turn = 0; turn < 8 && _readyActor?.RequestedFacing != 0; turn++)
         {
@@ -481,7 +479,7 @@ public partial class TerrainViewerApp : Node
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Key2, Pressed = true });
         await NextFrameAsync();
         GD.Print("ARC-RENDER-005 actor native stage=walk-raster");
-        if (_readyActor?.Action != ActorDiagnosticAction.Walk || !_status!.Text.Contains("Actor: Walk", StringComparison.Ordinal))
+        if (_readyActor?.Action != ActorDiagnosticAction.Walk || !_hud!.Text.Contains("Actor: Walk", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         for (var turn = 0; turn < 8 && _readyActor?.RequestedFacing != 0; turn++)
         {
@@ -507,16 +505,16 @@ public partial class TerrainViewerApp : Node
         GD.Print("ARC-RENDER-005 actor native stage=walk-timeline");
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Space, Pressed = true });
         await NextFrameAsync();
-        if (!_actorTimeline.IsPlaying || !_status.Text.Contains("Playback: playing", StringComparison.Ordinal))
+        if (!_actorTimeline.IsPlaying || !_hud!.Text.Contains("Playback: playing", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Space, Pressed = true });
         await NextFrameAsync();
-        if (_actorTimeline.IsPlaying || !_status.Text.Contains("Playback: paused", StringComparison.Ordinal))
+        if (_actorTimeline.IsPlaying || !_hud!.Text.Contains("Playback: paused", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         var pausedFrame = _readyActor?.Frame;
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Period, Pressed = true });
         await NextFrameAsync();
-        if (_readyActor?.Frame == pausedFrame || !_status.Text.Contains("Frame:", StringComparison.Ordinal))
+        if (_readyActor?.Frame == pausedFrame || !_hud!.Text.Contains("Frame:", StringComparison.Ordinal))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         Input.ParseInputEvent(new InputEventKey { Keycode = Key.Comma, Pressed = true });
         await NextFrameAsync();
@@ -665,7 +663,7 @@ public partial class TerrainViewerApp : Node
             return false;
         }
         var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
-        var hudReadable = !string.IsNullOrWhiteSpace(_status?.Text) && _status.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
+        var hudReadable = !string.IsNullOrWhiteSpace(_hud?.Text) && _hud.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
         var terrainLandmarkFound = _canvas.TryGetOpaqueLandmark(out var terrainLandmark);
         var terrainLandmarkMatches = terrainLandmarkFound && TryAssertLandmark(screenshot, terrainLandmark);
         TerrainCanvasLandmark staticLandmark = default;
@@ -831,8 +829,8 @@ public partial class TerrainViewerApp : Node
     }
 
     private bool HasReadyHudContent(int textureCount)
-        => _status?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
-            && _status.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
+        => _hud?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
+            && _hud.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
     private static string ModeName(TerrainViewerMode mode) => mode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : mode == TerrainViewerMode.ActorDiagnostic ? "actor-diagnostic" : "terrain-only";
     private void SelectActorAction(ActorDiagnosticAction action)
@@ -878,7 +876,7 @@ public partial class TerrainViewerApp : Node
         ShowStatus($"Diagnostic mode {ModeName(mode)} | failure stage={error.Stage} code={error.Code} | terrain {progress.TerrainResolved}/{progress.TerrainTiles}/{progress.TerrainFacades} | static census {progress.StaticCensus}/admitted {progress.StaticAdmitted}/outside-scope {progress.StaticOutsideScope}");
     }
     private static string FormatZoom(double zoom) => zoom.ToString("0.###", CultureInfo.InvariantCulture);
-    private void ShowStatus(string text) { if (_status is not null) _status.Text = text; }
+    private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);
     public override void _ExitTree()
     {
         _exiting = true;
