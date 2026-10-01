@@ -109,7 +109,7 @@ public partial class TerrainViewerApp
         if (!intent.Accepted) return;
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
-        if (intent.MenuDirection != 0) _worldPanel?.Navigate(intent.MenuDirection);
+        if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
         var analogDirection = Math.Abs(intent.MenuAnalog) >= .6 ? Math.Sign(intent.MenuAnalog) : 0;
         if (analogDirection != 0 && analogDirection != _worldMenuAnalogDirection) _worldPanel?.Navigate(analogDirection);
         _worldMenuAnalogDirection = analogDirection;
@@ -141,6 +141,19 @@ public partial class TerrainViewerApp
     /// not cached neutral; ordinary input always comes from the pinned OS APIs above.</summary>
     private void ApplyWorldObservedFrame(double delta, bool complete, RawInputFrame keyboard, IReadOnlyList<RawInputFrame> controllers, string provenance)
     {
+        // Admit completeness before timing or UI reduction. Cached/partial input
+        // must not leave Walk, drag, or Manual-return eligibility latched.
+        var observedActive = _worldReducer.ActiveDevice;
+        static bool Valid(RawInputFrame raw) => raw.Focused && raw.Connected
+            && double.IsFinite(raw.LeftStick.X) && double.IsFinite(raw.LeftStick.Y)
+            && double.IsFinite(raw.RightStick.X) && double.IsFinite(raw.RightStick.Y)
+            && double.IsFinite(raw.KeyboardActor.X) && double.IsFinite(raw.KeyboardActor.Y)
+            && double.IsFinite(raw.KeyboardCamera.X) && double.IsFinite(raw.KeyboardCamera.Y);
+        if (!complete || !_worldFocused || !double.IsFinite(delta) || delta < 0 || !Valid(keyboard)
+            || controllers.Any(raw => !Valid(raw))
+            || (observedActive is int device && !controllers.Any(raw => raw.DeviceId == device)))
+        { QuarantineWorld(); RefreshReadyStatus(); return; }
+        keyboard = WorldKeyboardRouting(keyboard);
         var context = WorldContext(delta, true);
         var priorActive = _worldReducer.ActiveDevice;
         // Timing belongs to exactly one selected sample per frame, never every
@@ -190,10 +203,15 @@ public partial class TerrainViewerApp
     private void InputWorld(InputEvent input)
     {
         var wasModal = WorldModal;
-        HandleWorldPulse(_worldReducer.Reduce(_worldAdapter.Map(input, _worldFocused), WorldContext()));
+        var raw = _worldAdapter.Map(input, _worldFocused);
+        if (raw.DeviceId < 0) raw = WorldKeyboardRouting(raw);
+        HandleWorldPulse(_worldReducer.Reduce(raw, WorldContext()));
         // Semantic keyboard/controller modal routing is owned above; do not
         // also let focused native controls toggle/navigate the same event.
-        if ((wasModal || WorldModal) && input is InputEventKey or InputEventJoypadButton or InputEventJoypadMotion)
+        var semanticKey = input is InputEventKey keyEvent &&
+            (keyEvent.Keycode is Key.F1 or Key.Escape or Key.Up or Key.Down or Key.W or Key.S
+            || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.Space or Key.Backspace or Key.Q or Key.E));
+        if ((wasModal || WorldModal) && (semanticKey || input is InputEventJoypadButton or InputEventJoypadMotion))
             GetViewport().SetInputAsHandled();
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
         var overHud = input is InputEventMouse mouse && _hud?.Rect.HasPoint(mouse.Position) == true;
@@ -219,6 +237,14 @@ public partial class TerrainViewerApp
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Simulation requires an explicit test launch.");
         ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)");
+    }
+    private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)
+    {
+        // The native numeric editor owns text, Enter, Backspace and Tab. Only
+        // explicit Escape cancels here; do not reinterpret Backspace as Cancel.
+        if (WorldModal && GetViewport().GuiGetFocusOwner() is LineEdit)
+            return raw with { Confirm = false, Cancel = _worldAdapter.IsKeyHeld(Key.Escape), Previous = false, Next = false };
+        return raw;
     }
     internal DiagnosticActorState WorldStateForSelfTest => _worldActor.State;
     internal CameraFollowState WorldFollowForSelfTest => _camera!.FollowState;

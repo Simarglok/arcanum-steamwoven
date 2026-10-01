@@ -64,23 +64,32 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         ((CheckButton)_controls[5]).ButtonPressed = Settings.InvertCameraY;
         _binding = false;
     }
-    public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; _controls[0].GrabFocus(); }
+    public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; ((SpinBox)_controls[0]).GetLineEdit().GrabFocus(); }
     public void SetSaveStatus(bool saved) => _status.Text = saved ? "Preferences saved locally." : "Preferences save failed.";
     public void Navigate(int direction)
     {
+        SynchronizeSelection();
         _selected = Math.Clamp(_selected + direction, 0, _controls.Count - 1);
         var control = _controls[_selected];
         if (control is SpinBox spin) spin.GetLineEdit().GrabFocus(); else control.GrabFocus();
     }
     public void Confirm()
     {
+        SynchronizeSelection();
         if (_controls[_selected] is CheckButton check) check.ButtonPressed = !check.ButtonPressed;
         else if (_selected == 6) ResetRequested?.Invoke();
         else if (_selected == 7) CloseRequested?.Invoke();
     }
     public void Adjust(int direction)
     {
+        SynchronizeSelection();
         if (_controls[_selected] is SpinBox spin) spin.Value += direction * spin.Step;
+    }
+    private void SynchronizeSelection()
+    {
+        var focus = GetViewport().GuiGetFocusOwner();
+        var selected = _controls.FindIndex(control => control == focus || (focus is not null && control.IsAncestorOf(focus)));
+        if (selected >= 0) _selected = selected;
     }
     private void ResizePanel()
     {

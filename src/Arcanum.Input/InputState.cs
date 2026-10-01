@@ -27,6 +27,8 @@ public sealed record IntentFrame(
 {
     public bool ActorActive { get; init; }
     public bool CameraActive { get; init; }
+    // MenuDirection remains a level for the lab's timed repeat policy.
+    public int MenuPressedDirection { get; init; }
 }
 
 public sealed class InputStateReducer
@@ -135,6 +137,7 @@ public sealed class InputStateReducer
         var result = new IntentFrame(camera, actor, confirm, cancel, inspect, previous, next, contextPulse, settings,
             raw.MenuUp ? -1 : raw.MenuDown ? 1 : 0, raw.LeftStick.Y, Method, true, provenance)
         {
+            MenuPressedDirection = menuUp ? -1 : menuDown ? 1 : 0,
             ActorActive = left.Length > 0 || raw.KeyboardActorHeld || raw.KeyboardActor.Length > 0,
             CameraActive = right.Length > 0 || raw.KeyboardCameraHeld || raw.KeyboardCamera.Length > 0
         };

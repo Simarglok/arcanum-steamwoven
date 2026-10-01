@@ -42,6 +42,7 @@ public partial class TerrainViewerApp
         _camera!.ZoomWorld(4, WorldAnchor, WorldViewport);
         WorldControlMatrixForSelfTest();
         WorldLifecycleMatrixForSelfTest();
+        await WorldModalRoutingMatrixForSelfTestAsync();
         GD.Print("ARC-WORLD-001 native-smoke stage=actor-rasters");
         // Every admitted physical facing/action selection, on the actual original
         // catalogue/cache and canvas, after motion rather than preview hotkeys.

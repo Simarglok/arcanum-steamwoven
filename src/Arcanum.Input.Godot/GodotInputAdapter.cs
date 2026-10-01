@@ -59,6 +59,7 @@ public sealed class GodotInputAdapter
     // Held keyboard levels are sampled for pan/menu routing, but they are not
     // fresh keyboard input-method events. Only Map(InputEventKey) marks one.
     public RawInputFrame SampleKeyboard(bool focused) => KeyboardFrame(focused, false, false);
+    public bool IsKeyHeld(Key key) => _keys.Contains(key);
     public void ForgetDevice(int device) => _devices.Remove(device);
     public void ClearKeyboard() => _keys.Clear();
     public void Clear() { _keys.Clear(); _devices.Clear(); }

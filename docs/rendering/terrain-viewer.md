@@ -175,7 +175,11 @@ reset/reload/failure/exit stop animation and quarantine stale input. Inactive
 disconnect preserves scene. Rearm requires two complete observed-neutral frame
 samples of every mapped keyboard and active-controller level; cached/event or
 opposing-key cancellation is not neutral proof. Live sampling uses pinned
-Godot APIs, not simulated levels.
+Godot APIs, not simulated levels. An incomplete, missing-active-controller or
+invalid observation quarantines **before** reducer timing or UI actions: Idle
+frame 0, cleared drag/navigation and Manual-return arm, with last valid actor
+position and bounded camera center preserved. Held input on recovery cannot
+substitute for those two complete neutral frames.
 
 F1/Start or the HUD button opens bounded settings: independent camera X/Y
 inversion (both true by default, image right/down), independent actor/camera
@@ -183,6 +187,10 @@ deadzones and sensitivities, reset and close. Common engine-free v1 settings
 codec is shared with the lab, but WORLD stores only
 `user://world_diagnostic_input_v1.json`, never the lab file. Isolated automated
 restart tests do not overwrite ordinary preferences.
+Modal digital navigation is single-press edge driven, not render/event-rate
+repeat; held keys, D-pad, echo and unrelated mouse events do not advance it.
+Focused numeric editors retain native digit/edit/Enter/Tab input. Semantic
+navigation is consumed once, while world movement and Follow remain stopped.
 
 Paint is terrain → diagnostic facades → five sorted statics → actor → guides
 → HUD. The persistent label says free diagnostic movement, collision not
@@ -192,7 +200,14 @@ Shared `src/Arcanum.Input` owns project input/Follow/Vec2; historical
 does not reference the experiment assembly, targeting or obstacle algorithms.
 
 WORLD self-tests exercise the actual integrated app with public synthetic
-pixels and complete-level **SIMULATION** lifecycle frames. Original graphical
+pixels, viewport-dispatched modal/numeric events and complete-level
+**SIMULATION** lifecycle frames, including incomplete-observation recovery.
+Engine-free wire fixtures execute the production integrated WORLD load with
+real DAT/ART/sector/static-chain parsers under a narrow identity authenticator:
+per-domain/union/exact-byte retention limits, static-to-actor and partial-actor
+cancellation, all-role post-load mutation, stale success/failure, serialized
+disposal and exit drain. These are not original payload or physical-device
+observations. Original graphical
 native checks separately authenticate immutable module/terrain/actor/prototype
 roles, terrain 4096/3033/1063 with zero issues and normalization 457/86,
 static census 317/5/312, all 184 actor frames, motion/selection/readback,

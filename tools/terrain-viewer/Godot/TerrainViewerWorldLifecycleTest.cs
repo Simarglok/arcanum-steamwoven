@@ -83,7 +83,121 @@ public partial class TerrainViewerApp
         var beforeInvalid = adapter.SampleController(3,true);
         Require(!adapter.RefreshControllerLevels(3,_ => float.NaN,_ => false) && adapter.SampleController(3,true) == beforeInvalid, "invalid level observation committed");
         Require(adapter.RefreshControllerLevels(3,_ => 0,_ => false) && !InputStateReducer.HasAnyLevel(adapter.SampleController(3,true)!,new()), "full neutral observation");
+        WorldIncompleteObservationMatrixForSelfTest();
         ResetWorldScene(); Neutral();
-        GD.Print("ARC-WORLD-001 lifecycle matrix PASS SIMULATION active/inactive disconnect/reconnect/opposing-levels/drag/HUD/zoom/Fit/reset/complete adapter levels; physical NOT_READY");
+        GD.Print("ARC-WORLD-001 lifecycle matrix PASS SIMULATION active/inactive disconnect/reconnect/opposing-levels/drag/HUD/zoom/Fit/reset/complete adapter levels/incomplete quarantine; physical NOT_READY");
+    }
+
+    private void WorldIncompleteObservationMatrixForSelfTest()
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD incomplete observation: " + why); }
+        var none = new RawInputFrame(-1, default);
+        var moving = none with { KeyboardActor = new(1,0), KeyboardActorHeld = true };
+        var pad = new RawInputFrame(3, default);
+        foreach (var manual in new[] { false, true })
+        foreach (var failure in new[] { "incomplete", "missing-active", "invalid-pad", "invalid-keyboard", "unfocused", "invalid-delta" })
+        {
+            _worldReducer.SetStartupDevices(new[] { 3 }); ResetWorldScene();
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
+            _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
+            WorldFrameForSelfTest(moving, new[] { pad }, .37);
+            Require(_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Walk, "precondition moving");
+            if (manual)
+            {
+                WorldFrameForSelfTest(moving with { KeyboardCamera = new(1,0), KeyboardCameraHeld = true }, new[] { pad }, .1);
+                WorldFrameForSelfTest(none, new[] { pad }, .1);
+                Require(_camera.FollowState.Mode == CameraMode.Manual && _camera.FollowState.RecenterArmed, "precondition armed Manual");
+            }
+            var position = _worldActor.State.Position; var center = _camera.State;
+            _worldDrag = new(100,100); _dragging = true; _worldMenuAnalogDirection = 1;
+            WorldFrameForSelfTest(failure == "invalid-keyboard" ? moving with { KeyboardActor = new(double.NaN,0), Settings = true }
+                : failure == "unfocused" ? moving with { Focused = false, Settings = true } : moving with { Settings = true },
+                failure == "missing-active" ? Array.Empty<RawInputFrame>()
+                : new[] { failure == "invalid-pad" ? pad with { LeftStick = new(double.NaN,0) } : pad },
+                failure == "invalid-delta" ? double.NaN : 2, failure != "incomplete");
+            Require(_worldActor.State.Position == position && _camera.State == center && !WorldModal
+                && !_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Idle && _worldActor.CurrentFrame == 0
+                && !_camera.FollowState.RecenterArmed && !_worldGate.IsOpen && !_dragging && _worldDrag == default && _worldMenuAnalogDirection == 0,
+                failure + " did not stop/quarantine before actions");
+            WorldFrameForSelfTest(moving, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            Require(_worldActor.State.Position == position && _camera.State == center && !_worldGate.IsOpen, "held or single neutral reopened");
+            WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(none, new[] { pad }, .1);
+            Require(_worldGate.IsOpen && _worldActor.State.Position == position, "two full neutral frames required");
+            WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            Require(_worldActor.State.Position != position, "fresh activation did not recover");
+        }
+        _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
+    }
+
+    internal async Task WorldModalRoutingMatrixForSelfTestAsync()
+    {
+        if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD modal routing: " + why); }
+        var oldPath = OS.GetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH");
+        var owned = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "world-modal-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(owned);
+        OS.SetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH", System.IO.Path.Combine(owned,"owned.json"));
+        var preferences = _worldSettings;
+        var none = new RawInputFrame(-1, default);
+        void Frame(RawInputFrame keys, double dt = .1, params RawInputFrame[] pads) => WorldFrameForSelfTest(keys, pads, dt);
+        void KeyEvent(Key key, bool down, bool echo = false, uint unicode = 0) => GetViewport().PushInput(new InputEventKey { Keycode = key, Pressed = down, Echo = echo, Unicode = unicode });
+        try
+        {
+            _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
+            Frame(none); Frame(none); Frame(none);
+            KeyEvent(Key.F1,true); KeyEvent(Key.F1,false);
+            Require(WorldModal, "actual F1 did not open"); Frame(none); Frame(none); Frame(none);
+            var spins = _worldPanel!.FindChildren("*","SpinBox",true,false).Cast<SpinBox>().ToArray();
+            Require(spins.Length == 4 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
+            var position = _worldActor.State.Position; var center = _camera!.State;
+            KeyEvent(Key.Down,true);
+            Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "digital press must navigate exactly one");
+            foreach (var dt in new[] { 0d, .001, .1, 2d })
+            {
+                for (var i = 0; i < 4; i++) Frame(none with { MenuDown = true, KeyboardCameraHeld = true },dt);
+                KeyEvent(Key.Down,true,true);
+                GetViewport().PushInput(new InputEventMouseMotion { Position = new(799,599), Relative = new(1,0) });
+                Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "held/echo/unrelated event repeated navigation");
+            }
+            KeyEvent(Key.Down,false); Frame(none); KeyEvent(Key.Down,true); KeyEvent(Key.Down,false);
+            Require(GetViewport().GuiGetFocusOwner() == spins[2].GetLineEdit(), "release/repress must navigate once");
+            // Real native editor receives digits, Backspace, Enter and Tab via
+            // the viewport dispatch, not a direct Text/property replacement.
+            var editor = spins[2].GetLineEdit(); editor.SelectAll();
+            KeyEvent(Key.Key1,true,unicode:49); KeyEvent(Key.Key1,false);
+            KeyEvent(Key.Period,true,unicode:46); KeyEvent(Key.Period,false);
+            KeyEvent(Key.Key6,true,unicode:54); KeyEvent(Key.Key6,false);
+            KeyEvent(Key.Backspace,true); KeyEvent(Key.Backspace,false);
+            KeyEvent(Key.Key7,true,unicode:55); KeyEvent(Key.Key7,false);
+            Require(editor.Text == "1.7" && WorldModal, "digits/edit keys swallowed or Backspace cancelled");
+            KeyEvent(Key.Enter,true); KeyEvent(Key.Enter,false);
+            await NextFrameAsync();
+            Require(Math.Abs(spins[2].Value - 1.7) < 1e-9 && Math.Abs(_worldSettings.CameraSensitivity - 1.7) < 1e-9, "native numeric commit");
+            KeyEvent(Key.Tab,true); KeyEvent(Key.Tab,false);
+            Require(GetViewport().GuiGetFocusOwner() != editor, "Tab swallowed");
+            Require(_worldActor.State.Position == position && _camera.State == center && !_worldActor.IsPlaying && !_worldGate.IsOpen
+                && !_camera.FollowState.RecenterArmed, "UI ownership moved world or armed Follow");
+            // Controller digital navigation uses the SAME aggregation/pulse seam.
+            _worldPanel.Open(_worldSettings); _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld();
+            var pad = new RawInputFrame(3,default);
+            Frame(none,.1,pad); Frame(none,.1,pad); Frame(none,.1,pad);
+            Frame(none,.1,pad with { MenuDown = true });
+            Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "D-pad press");
+            foreach(var dt in new[] { 0d,.001,.1,2d }) Frame(none,dt,pad with { MenuDown = true });
+            Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "D-pad held repeat");
+            Frame(none,.1,pad); Frame(none,.1,pad with { MenuDown = true });
+            Require(GetViewport().GuiGetFocusOwner() == spins[2].GetLineEdit(), "D-pad release/repress");
+            GD.Print("ARC-WORLD-001 modal production viewport routing PASS single-edge/held-dt/echo/mouse/repress/D-pad/native numeric Backspace Enter Tab; SIMULATION not physical evidence");
+        }
+        finally
+        {
+            if(WorldModal) ToggleWorldSettings();
+            _worldSettings = preferences; _worldPanel!.Bind(preferences);
+            OS.SetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH",oldPath);
+            System.IO.Directory.Delete(owned,true);
+            _worldAdapter.Clear(); _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
+            Frame(none); Frame(none); Frame(none);
+        }
     }
 }
