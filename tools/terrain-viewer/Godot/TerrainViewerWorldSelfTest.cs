@@ -38,6 +38,7 @@ public static partial class TerrainViewerSelfTest
         app.WorldControlMatrixForSelfTest();
         app.WorldLifecycleMatrixForSelfTest();
         await app.WorldModalRoutingMatrixForSelfTestAsync();
+        await app.WorldMouseSettingsMatrixForSelfTestAsync();
         var snapshot = app.GetSelfTestSnapshot();
         if (app.WorldStateForSelfTest.Position != new DiagnosticSectorPosition(30,32) || snapshot.CacheCount != 190
             || snapshot.Actor?.AnchorX != 80 || snapshot.Actor.AnchorY != 1260

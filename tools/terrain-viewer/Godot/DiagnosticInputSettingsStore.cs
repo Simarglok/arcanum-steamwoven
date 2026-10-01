@@ -1,4 +1,5 @@
 using Arcanum.Input;
+using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -12,14 +13,14 @@ public sealed class DiagnosticInputSettingsStore
     public bool UsesIsolatedTestStorage => !string.IsNullOrWhiteSpace(OS.GetEnvironment(TestVariable));
     public InputSettings Load()
     {
-        if (!global::Godot.FileAccess.FileExists(StoragePath)) return InputSettings.Default;
+        if (!global::Godot.FileAccess.FileExists(StoragePath)) return DiagnosticWorldPolicy.DefaultInputSettings;
         using var file = global::Godot.FileAccess.Open(StoragePath, global::Godot.FileAccess.ModeFlags.Read);
-        return file is null ? InputSettings.Default : InputSettingsCodec.DeserializeOrDefault(file.GetAsText());
+        return file is null ? DiagnosticWorldPolicy.DefaultInputSettings : InputSettingsCodec.DeserializeOrDefault(file.GetAsText(), DiagnosticWorldPolicy.DefaultInputSettings);
     }
     public void Save(InputSettings settings)
     {
         using var file = global::Godot.FileAccess.Open(StoragePath, global::Godot.FileAccess.ModeFlags.Write);
         if (file is null) throw new InvalidOperationException("Diagnostic preferences could not be saved.");
-        file.StoreString(InputSettingsCodec.Serialize(settings));
+        file.StoreString(InputSettingsCodec.Serialize(settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings)));
     }
 }

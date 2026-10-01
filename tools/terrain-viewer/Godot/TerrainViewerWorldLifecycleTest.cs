@@ -130,6 +130,162 @@ public partial class TerrainViewerApp
         _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
     }
 
+    internal async Task WorldMouseSettingsMatrixForSelfTestAsync()
+    {
+        if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD mouse settings: " + why); }
+        var oldPath = OS.GetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH");
+        var owned = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "world-click-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(owned);
+        OS.SetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH", System.IO.Path.Combine(owned, "owned.json"));
+        var preferences = _worldSettings;
+        var none = new RawInputFrame(-1, default);
+        var changes = 0;
+        var resets = 0;
+        void Changed(InputSettings _) => changes++;
+        void ResetRequested() => resets++;
+        _worldPanel!.Changed += Changed;
+        _worldPanel.ResetRequested += ResetRequested;
+        async Task ClickAsync(Control control)
+        {
+            var point = control.GetGlobalRect().GetCenter();
+            GetViewport().PushInput(new InputEventMouseMotion { Position = point });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point });
+            GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = point });
+            await NextFrameAsync();
+        }
+        try
+        {
+            _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
+            if (!WorldModal) ToggleWorldSettings();
+            var toggles = _worldPanel.FindChildren("*", "CheckButton", true, false).Cast<CheckButton>().ToArray();
+            Require(toggles.Length == 2, "two independent controls required");
+            foreach (var x in new[] { false, true }) foreach (var y in new[] { false, true })
+            foreach (var axis in new[] { 0, 1 })
+            {
+                var initial = new InputSettings(InvertCameraX: x, InvertCameraY: y);
+                SaveWorldSettings(initial); _worldPanel.Bind(initial);
+                // Deliberately focus the OTHER axis: native clicks must not also
+                // invoke semantic Confirm on this previously focused control.
+                toggles[1 - axis].GrabFocus();
+                for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+                await NextFrameAsync();
+                var position = _worldActor.State.Position; var center = _camera!.State;
+                changes = 0;
+                await ClickAsync(toggles[axis]);
+                var expected = initial with { InvertCameraX = axis == 0 ? !x : x, InvertCameraY = axis == 1 ? !y : y };
+                Require(_worldSettings == expected && toggles[0].ButtonPressed == expected.InvertCameraX
+                    && toggles[1].ButtonPressed == expected.InvertCameraY && changes == 1 && _worldStore.Load() == expected,
+                    $"native click axis={axis} from={x}/{y} actual={_worldSettings.InvertCameraX}/{_worldSettings.InvertCameraY} changes={changes}");
+                Require(_worldActor.State.Position == position && _camera.State == center && !_worldActor.IsPlaying
+                    && !_worldGate.IsOpen && !_camera.FollowState.RecenterArmed, "mouse UI moved world/armed Follow");
+                ToggleWorldSettings(); ToggleWorldSettings(); await NextFrameAsync();
+                Require(_worldSettings == expected && _worldPanel.Settings == expected, "close/reopen changed preferences");
+            }
+            GD.Print("ARC-WORLD-001 native checkbox clicks PASS all four starting combinations/two axes/one change/persist/reopen/world stopped; SIMULATION not physical evidence");
+            // Native semantic activation is consumed once, even with an echo,
+            // held frame, unrelated pointer event and subsequent release.
+            SaveWorldSettings(new InputSettings(InvertCameraX: false, InvertCameraY: false)); _worldPanel.Bind(_worldSettings);
+            toggles[0].GrabFocus();
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+            changes = 0;
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = true });
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = true, Echo = true });
+            WorldFrameForSelfTest(none with { Confirm = true }, Array.Empty<RawInputFrame>(), 2);
+            GetViewport().PushInput(new InputEventMouseMotion { Position = new(799, 599) });
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = false });
+            await NextFrameAsync();
+            Require(_worldSettings.InvertCameraX && !_worldSettings.InvertCameraY && changes == 1, "keyboard/native activation duplicated");
+            _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld(); toggles[1].GrabFocus();
+            var pad = new RawInputFrame(3, default);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
+            changes = 0;
+            GetViewport().PushInput(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true });
+            WorldFrameForSelfTest(none, new[] { pad with { Confirm = true } }, 2);
+            GetViewport().PushInput(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false });
+            await NextFrameAsync();
+            Require(_worldSettings.InvertCameraX && _worldSettings.InvertCameraY && changes == 1, "controller/native activation duplicated");
+            _worldReducer.SetStartupDevices(Array.Empty<int>()); QuarantineWorld();
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+            // Reset is a real native button click, not a default-property oracle.
+            var reset = _worldPanel.FindChildren("*", "Button", true, false).Cast<Button>().Single(b => b.Text == "Reset defaults and scene");
+            reset.GrabFocus(); await NextFrameAsync();
+            changes = 0; resets = 0; await ClickAsync(reset);
+            Require(_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false) && changes == 0 && resets == 1
+                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(30, 32), "native Reset WORLD defaults");
+            GD.Print("ARC-WORLD-001 settings activation PASS native keyboard/controller once/native Reset false-false; lab default unchanged");
+            await AssertWorldSettingsOpacityAsync();
+        }
+        finally
+        {
+            _worldPanel.Changed -= Changed;
+            _worldPanel.ResetRequested -= ResetRequested;
+            if (WorldModal) ToggleWorldSettings();
+            _worldSettings = preferences; _worldPanel.Bind(preferences);
+            OS.SetEnvironment("WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH", oldPath);
+            System.IO.Directory.Delete(owned, true);
+            _worldAdapter.Clear(); _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+        }
+    }
+
+    private async Task AssertWorldSettingsOpacityAsync()
+    {
+        var viewport = GetViewport();
+        var originalSize = new Vector2I((int)WorldViewport.X, (int)WorldViewport.Y);
+        var probe = new CanvasLayer { Layer = 2 };
+        var backdrop = new ColorRect { MouseFilter = Control.MouseFilterEnum.Ignore };
+        probe.AddChild(backdrop); AddChild(probe);
+        var panel = _worldPanel!.GetChildren().OfType<PanelContainer>().Single();
+        var header = _worldPanel.FindChild("WorldSettingsLimitation", true, false) as Label;
+        var actor = _worldActor.State;
+        try
+        {
+            foreach (var size in new[] { new Vector2I(480, 320), new(800, 600), new(1280, 800), new(1440, 900) })
+            {
+                if (viewport is SubViewport sub) sub.Size = size; else DisplayServer.WindowSetSize(size);
+                backdrop.Size = size; await NextFrameAsync();
+                var rect = panel.GetGlobalRect();
+                if (WorldViewport != new Vector2(size.X, size.Y) || rect.Position.X < 0 || rect.Position.Y < 0
+                    || rect.End.X > size.X || rect.End.Y > size.Y || header is null || !header.IsVisibleInTree()
+                    || !header.Text.Contains("collision not evaluated", StringComparison.Ordinal) || !header.Text.Contains("NOT VERIFIED", StringComparison.Ordinal)
+                    || _worldActor.State != actor)
+                    throw new InvalidOperationException("WORLD settings containment/limitations changed.");
+                if (DisplayServer.GetName() == "headless") continue;
+                foreach (var color in new[] { new Color(1, 0, 1, 1), new Color(0, 1, 1, 1) })
+                {
+                    backdrop.Color = color; await NextFrameAsync();
+                    using var image = viewport.GetTexture().GetImage();
+                    if (image.GetWidth() != size.X || image.GetHeight() != size.Y) throw new InvalidOperationException("WORLD settings readback size mismatch.");
+                    foreach (var point in new[] { rect.Position + new Vector2(3, 3), rect.Position + new Vector2(3, rect.Size.Y / 2), rect.End - new Vector2(3, 3) })
+                    {
+                        var pixel = image.GetPixel((int)point.X, (int)point.Y);
+                        if (Math.Abs(pixel.R * 255 - 16) > 1 || Math.Abs(pixel.G * 255 - 20) > 1 || Math.Abs(pixel.B * 255 - 28) > 1 || pixel.A < .99)
+                            throw new InvalidOperationException("WORLD settings opaque literal background failed.");
+                    }
+                    // Text must actually render over the opaque surface, not
+                    // just exist in a Label while being clipped or invisible.
+                    var textRect = header.GetGlobalRect(); var bright = 0;
+                    for (var y = (int)textRect.Position.Y; y < (int)textRect.End.Y; y++)
+                    for (var x = (int)textRect.Position.X; x < (int)textRect.End.X; x++)
+                    {
+                        var pixel = image.GetPixel(x, y);
+                        if (pixel.R > .6 && pixel.G > .6 && pixel.B > .6) bright++;
+                    }
+                    if (bright < 20) throw new InvalidOperationException("WORLD settings limitation text not rendered.");
+                }
+                GD.Print($"ARC-WORLD-001 settings opacity pixels PASS requested=actual {size.X}x{size.Y} literal16/20/28/255 over magenta/cyan; limitation text rendered");
+            }
+            if (DisplayServer.GetName() == "headless") GD.Print("ARC-WORLD-001 settings opacity pixels NOT_VERIFIED headless; containment PASS");
+        }
+        finally
+        {
+            probe.QueueFree();
+            if (viewport is SubViewport sub) sub.Size = originalSize; else DisplayServer.WindowSetSize(originalSize);
+            await NextFrameAsync();
+        }
+    }
+
     internal async Task WorldModalRoutingMatrixForSelfTestAsync()
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");

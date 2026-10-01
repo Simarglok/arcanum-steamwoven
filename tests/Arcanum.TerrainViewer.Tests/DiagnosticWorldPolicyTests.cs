@@ -222,6 +222,29 @@ public sealed class DiagnosticWorldPolicyTests
     }
 
     [TestMethod]
+    public void WorldDefaultsAndHostFallbackDoNotChangeSharedSavedAxes()
+    {
+        var world = new InputSettings(InvertCameraX: false, InvertCameraY: false);
+        Assert.AreEqual(world, DiagnosticWorldPolicy.DefaultInputSettings);
+        Assert.IsTrue(InputSettings.Default.InvertCameraX); Assert.IsTrue(InputSettings.Default.InvertCameraY);
+        foreach (var json in new[] { null, "", "invalid", "null", "[]", "{\"version\":2}", "{\"cameraDeadzone\":\"bad\"}" })
+        {
+            Assert.AreEqual(world, InputSettingsCodec.DeserializeOrDefault(json, world));
+            Assert.AreEqual(InputSettings.Default, InputSettingsCodec.DeserializeOrDefault(json));
+        }
+        Assert.AreEqual(world, InputSettingsCodec.DeserializeOrDefault("{}", world));
+        Assert.AreEqual(world with { InvertCameraX = true }, InputSettingsCodec.DeserializeOrDefault("{\"invertCameraX\":true}", world));
+        foreach (var x in new[] { false, true }) foreach (var y in new[] { false, true })
+        {
+            var stored = new InputSettings(CameraDeadzone: .31, InvertCameraX: x, InvertCameraY: y);
+            Assert.AreEqual(stored, InputSettingsCodec.DeserializeOrDefault(InputSettingsCodec.Serialize(stored), world));
+        }
+        foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
+            Assert.AreEqual(world, new InputSettings(CameraSensitivity: invalid).Validated(world));
+        Assert.AreEqual(world, new InputSettings(Version: 2).Validated(world));
+    }
+
+    [TestMethod]
     public void AcceptedActivityNeutralGateAndSharedSettingsAreIndependentOfNetMotion()
     {
         var reducer = new InputStateReducer();

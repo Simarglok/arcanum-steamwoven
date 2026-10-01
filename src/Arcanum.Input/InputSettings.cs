@@ -7,10 +7,11 @@ public sealed record InputSettings(int Version = 1, double CameraDeadzone = .20,
     double CameraSensitivity = 1, double ActorSensitivity = 1, bool InvertCameraX = true, bool InvertCameraY = true)
 {
     public static InputSettings Default => new();
-    public InputSettings Validated()
+    public InputSettings Validated() => Validated(Default);
+    public InputSettings Validated(InputSettings fallback)
     {
         if (Version != 1 || !double.IsFinite(CameraDeadzone) || !double.IsFinite(ActorDeadzone)
-            || !double.IsFinite(CameraSensitivity) || !double.IsFinite(ActorSensitivity)) return Default;
+            || !double.IsFinite(CameraSensitivity) || !double.IsFinite(ActorSensitivity)) return fallback;
         return this with
         {
             CameraDeadzone = Math.Clamp(CameraDeadzone, .05, .45), ActorDeadzone = Math.Clamp(ActorDeadzone, .05, .45),
@@ -23,9 +24,24 @@ public static class InputSettingsCodec
 {
     private static readonly JsonSerializerOptions Options = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     public static string Serialize(InputSettings settings) => JsonSerializer.Serialize(settings.Validated(), Options);
-    public static InputSettings DeserializeOrDefault(string? json)
+    public static InputSettings DeserializeOrDefault(string? json) => DeserializeOrDefault(json, InputSettings.Default);
+    public static InputSettings DeserializeOrDefault(string? json, InputSettings fallback)
     {
-        try { return JsonSerializer.Deserialize<InputSettings>(json ?? string.Empty, Options)?.Validated() ?? InputSettings.Default; }
-        catch (JsonException) { return InputSettings.Default; }
+        try
+        {
+            using var document = JsonDocument.Parse(json ?? string.Empty);
+            var settings = document.RootElement.Deserialize<InputSettings>(Options);
+            if (settings is null) return fallback;
+            // Hosts may choose different first-launch axes. Explicit saved
+            // booleans always win; absent axes use the host's policy, not the
+            // historical shared constructor defaults.
+            settings = settings with
+            {
+                InvertCameraX = document.RootElement.TryGetProperty("invertCameraX", out _) ? settings.InvertCameraX : fallback.InvertCameraX,
+                InvertCameraY = document.RootElement.TryGetProperty("invertCameraY", out _) ? settings.InvertCameraY : fallback.InvertCameraY
+            };
+            return settings.Validated(fallback);
+        }
+        catch (JsonException) { return fallback; }
     }
 }

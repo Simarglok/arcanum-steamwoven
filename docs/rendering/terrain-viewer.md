@@ -182,15 +182,24 @@ position and bounded camera center preserved. Held input on recovery cannot
 substitute for those two complete neutral frames.
 
 F1/Start or the HUD button opens bounded settings: independent camera X/Y
-inversion (both true by default, image right/down), independent actor/camera
-deadzones and sensitivities, reset and close. Common engine-free v1 settings
-codec is shared with the lab, but WORLD stores only
-`user://world_diagnostic_input_v1.json`, never the lab file. Isolated automated
+inversion, independent actor/camera deadzones and sensitivities, reset and close.
+WORLD first launch and Reset use **false/false**: stick right/down moves the
+camera right/down (world image left/up). True reverses only the selected
+camera axis; actor and menu directions are unchanged. Explicit saved values,
+including true/true and both mixed combinations, survive reload. The standalone
+lab retains its historical true/true default. Common engine-free v1 settings
+codec supports the host fallback, but WORLD stores only
+`user://world_diagnostic_input_v1.json`, never the lab file. Missing, unreadable,
+corrupt or unsupported settings fall back to WORLD defaults; isolated automated
 restart tests do not overwrite ordinary preferences.
 Modal digital navigation is single-press edge driven, not render/event-rate
 repeat; held keys, D-pad, echo and unrelated mouse events do not advance it.
-Focused numeric editors retain native digit/edit/Enter/Tab input. Semantic
-navigation is consumed once, while world movement and Follow remain stopped.
+Focused numeric editors retain native digit/edit/Enter/Tab input. Mouse clicks
+belong to native GUI dispatch, not semantic Confirm on the previously focused
+control. Keyboard/controller activation and navigation are consumed once,
+while world movement and Follow remain stopped. The bounded scrollable panel
+uses an opaque background; free-movement/collision/parity limitations remain
+visible in a fixed header even when the settings rows scroll.
 
 Paint is terrain → diagnostic facades → five sorted statics → actor → guides
 → HUD. The persistent label says free diagnostic movement, collision not
@@ -200,14 +209,20 @@ Shared `src/Arcanum.Input` owns project input/Follow/Vec2; historical
 does not reference the experiment assembly, targeting or obstacle algorithms.
 
 WORLD self-tests exercise the actual integrated app with public synthetic
-pixels, viewport-dispatched modal/numeric events and complete-level
+pixels, viewport-dispatched modal/numeric and native checkbox press/release
+events (all four axis combinations, one persisted change per click), native
+keyboard/controller activation and Reset, and complete-level
 **SIMULATION** lifecycle frames, including incomplete-observation recovery.
 Engine-free wire fixtures execute the production integrated WORLD load with
 real DAT/ART/sector/static-chain parsers under a narrow identity authenticator:
 per-domain/union/exact-byte retention limits, static-to-actor and partial-actor
 cancellation, all-role post-load mutation, stale success/failure, serialized
 disposal and exit drain. These are not original payload or physical-device
-observations. Original graphical
+observations. Non-headless settings checks independently read literal opaque
+background pixels over two contrasting underlays and rendered header text at
+actual 480x320, 800x600, 1280x800 and 1440x900 viewports. Isolated process-restart
+checks cover missing-file first launch, each explicit axis combination and
+Reset. Headless containment checks do not establish opacity. Original graphical
 native checks separately authenticate immutable module/terrain/actor/prototype
 roles, terrain 4096/3033/1063 with zero issues and normalization 457/86,
 static census 317/5/312, all 184 actor frames, motion/selection/readback,

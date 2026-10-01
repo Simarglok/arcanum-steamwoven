@@ -15,10 +15,23 @@ public partial class TerrainViewerApp
         var nondefault = new InputSettings(CameraDeadzone: .31, ActorDeadzone: .27, CameraSensitivity: 1.3, ActorSensitivity: .8,
             InvertCameraX: false, InvertCameraY: true);
         var stage = arguments[1]; var passed = false;
-        if (stage == "write") { store.Save(nondefault); passed = store.Load() == nondefault; }
+        if (stage == "first-launch")
+        {
+            passed = store.Load() == new InputSettings(InvertCameraX: false, InvertCameraY: false);
+            InitializeWorld(); passed &= _worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false);
+        }
+        else if (stage.StartsWith("write-", StringComparison.Ordinal) || stage.StartsWith("read-", StringComparison.Ordinal))
+        {
+            var bits = stage[(stage.IndexOf('-') + 1)..];
+            if (bits is not ("00" or "01" or "10" or "11")) throw new ArgumentException("Usage");
+            var stored = nondefault with { InvertCameraX = bits[0] == '1', InvertCameraY = bits[1] == '1' };
+            if (stage.StartsWith("write-", StringComparison.Ordinal)) store.Save(stored);
+            InitializeWorld(); passed = store.Load() == stored && _worldSettings == stored;
+        }
+        else if (stage == "write") { store.Save(nondefault); passed = store.Load() == nondefault; }
         else if (stage == "read") passed = store.Load() == nondefault;
-        else if (stage == "reset") { store.Save(InputSettings.Default); passed = store.Load() == InputSettings.Default; }
-        else if (stage == "defaults") passed = store.Load() == InputSettings.Default;
+        else if (stage == "reset") { store.Save(DiagnosticWorldPolicy.DefaultInputSettings); passed = store.Load() == new InputSettings(InvertCameraX: false, InvertCameraY: false); }
+        else if (stage == "defaults") passed = store.Load() == new InputSettings(InvertCameraX: false, InvertCameraY: false);
         if (!passed) { GD.Print("ARC-WORLD-001 settings-test FAIL"); GetTree().Quit(1); }
         else { GD.Print($"ARC-WORLD-001 settings-test PASS {stage}"); GetTree().Quit(0); }
         return true;
@@ -43,6 +56,7 @@ public partial class TerrainViewerApp
         WorldControlMatrixForSelfTest();
         WorldLifecycleMatrixForSelfTest();
         await WorldModalRoutingMatrixForSelfTestAsync();
+        await WorldMouseSettingsMatrixForSelfTestAsync();
         GD.Print("ARC-WORLD-001 native-smoke stage=actor-rasters");
         // Every admitted physical facing/action selection, on the actual original
         // catalogue/cache and canvas, after motion rather than preview hotkeys.
@@ -142,7 +156,7 @@ public partial class TerrainViewerApp
             Require((x ? now.X < old.X : now.X > old.X) && (y ? now.Y < old.Y : now.Y > old.Y), "independent image inversion axes");
         }
         Require(_worldActor.State.Position == actorBeforeCamera.Position && _readyDiagnosticPlan.WorldBounds == bounds && _cache.Count == _readyDecodedCount + _readyStaticDecodedCount + 184, "camera/selection changed actor, bounds or cache");
-        _worldSettings = InputSettings.Default; ResetWorldScene(); Frame(none); Frame(none); Frame(none);
+        _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings; ResetWorldScene(); Frame(none); Frame(none); Frame(none);
         GD.Print("ARC-WORLD-001 control matrix PASS SIMULATION Manual/Follow/activity/neutral/focus/modal/inversion/bounds/cache; physical usability NOT_READY");
     }
 }

@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
     private readonly DiagnosticActorController _worldActor = new();
     private readonly DiagnosticInputSettingsStore _worldStore = new();
     private DiagnosticInputSettingsPanel? _worldPanel;
-    private InputSettings _worldSettings = InputSettings.Default;
+    private InputSettings _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
     private Vec2 _worldDrag;
     private bool _worldFocused = true;
     private bool _worldInitialized;
@@ -75,13 +75,13 @@ public partial class TerrainViewerApp
     }
     private void SaveWorldSettings(InputSettings settings)
     {
-        _worldSettings = settings.Validated(); QuarantineWorld();
+        _worldSettings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); QuarantineWorld();
         try { _worldStore.Save(_worldSettings); _worldPanel?.SetSaveStatus(true); }
         catch (InvalidOperationException) { _worldPanel?.SetSaveStatus(false); }
     }
     private void ResetWorldSettings()
     {
-        SaveWorldSettings(InputSettings.Default); _worldPanel?.Bind(_worldSettings); ResetWorldScene();
+        SaveWorldSettings(DiagnosticWorldPolicy.DefaultInputSettings); _worldPanel?.Bind(_worldSettings); ResetWorldScene();
     }
     private void WorldConnectionChanged(long id, bool connected)
     {
@@ -204,8 +204,18 @@ public partial class TerrainViewerApp
     {
         var wasModal = WorldModal;
         var raw = _worldAdapter.Map(input, _worldFocused);
+        if (input is InputEventMouseButton)
+        {
+            // The shared adapter's mouse Confirm/Cancel is historical lab
+            // behavior. WORLD mouse controls belong to native GUI dispatch;
+            // retain real keyboard levels/provenance, never counterfeit a
+            // semantic activation on the previously focused control.
+            var keyboard = _worldAdapter.SampleKeyboard(_worldFocused);
+            raw = raw with { Confirm = keyboard.Confirm, Cancel = keyboard.Cancel };
+        }
         if (raw.DeviceId < 0) raw = WorldKeyboardRouting(raw);
-        HandleWorldPulse(_worldReducer.Reduce(raw, WorldContext()));
+        var intent = _worldReducer.Reduce(raw, WorldContext());
+        if (input is not InputEventMouse) HandleWorldPulse(intent);
         // Semantic keyboard/controller modal routing is owned above; do not
         // also let focused native controls toggle/navigate the same event.
         var semanticKey = input is InputEventKey keyEvent &&

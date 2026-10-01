@@ -1,4 +1,5 @@
 using Arcanum.Input;
+using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
@@ -15,18 +16,31 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action<InputSettings>? Changed;
     public event Action? ResetRequested;
     public event Action? CloseRequested;
-    public InputSettings Settings { get; private set; } = InputSettings.Default;
+    public InputSettings Settings { get; private set; } = DiagnosticWorldPolicy.DefaultInputSettings;
     public bool IsOpen => Visible;
     public override void _Ready()
     {
         Layer = 3;
         _panel = new PanelContainer { MouseFilter = Control.MouseFilterEnum.Stop };
+        _panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+        {
+            BgColor = new Color(16 / 255f, 20 / 255f, 28 / 255f, 1),
+            ContentMarginLeft = 12, ContentMarginRight = 12,
+            ContentMarginTop = 12, ContentMarginBottom = 12
+        });
         AddChild(_panel);
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled };
-        _panel.AddChild(scroll);
+        var contents = new VBoxContainer(); _panel.AddChild(contents);
+        contents.AddChild(new Label
+        {
+            Name = "WorldSettingsLimitation",
+            Text = "Diagnostic input settings — world paused\nDiagnostic free movement — collision not evaluated\nOriginal parity NOT VERIFIED",
+            AutowrapMode = TextServer.AutowrapMode.WordSmart
+        });
+        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        contents.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(_rows);
-        _rows.AddChild(new Label { Text = "Diagnostic input settings — world paused", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+
         AddNumber("Camera deadzone", .05, .45, .01, s => s.CameraDeadzone, (s, v) => s with { CameraDeadzone = v });
         AddNumber("Actor deadzone", .05, .45, .01, s => s.ActorDeadzone, (s, v) => s with { ActorDeadzone = v });
         AddNumber("Camera sensitivity", .5, 2, .1, s => s.CameraSensitivity, (s, v) => s with { CameraSensitivity = v });
@@ -54,10 +68,10 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         check.Toggled += value => { if (!_binding) Apply(set(Settings, value)); };
         _rows.AddChild(check); _controls.Add(check);
     }
-    private void Apply(InputSettings settings) { Settings = settings.Validated(); Changed?.Invoke(Settings); }
+    private void Apply(InputSettings settings) { Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); Changed?.Invoke(Settings); }
     public void Bind(InputSettings settings)
     {
-        Settings = settings.Validated(); _binding = true;
+        Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); _binding = true;
         var numbers = new[] { Settings.CameraDeadzone, Settings.ActorDeadzone, Settings.CameraSensitivity, Settings.ActorSensitivity };
         for (var i = 0; i < numbers.Length; i++) ((SpinBox)_controls[i]).Value = numbers[i];
         ((CheckButton)_controls[4]).ButtonPressed = Settings.InvertCameraX;

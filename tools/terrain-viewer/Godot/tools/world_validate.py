@@ -51,6 +51,7 @@ def main() -> int:
                PATH=str(Path.home() / ".local/share/dotnet") + ":/usr/bin:/bin:/usr/sbin:/sbin")
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
     began = datetime.now(timezone.utc).isoformat(); start = time.monotonic()
+    stage_results = []
     if args.kind == "original":
         if args.headless:
             raise ValueError("original readback requires graphical rendering")
@@ -67,9 +68,11 @@ def main() -> int:
         with tempfile.TemporaryDirectory(prefix="world-persistence-", dir=os.environ.get("TMPDIR")) as directory:
             env["WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH"] = str(Path(directory) / "owned.json")
             passed = True; code = 0
-            for stage in ("write", "read", "reset", "defaults"):
+            for stage in ("first-launch", "write-00", "read-00", "write-01", "read-01",
+                          "write-10", "read-10", "write-11", "read-11", "reset", "defaults"):
                 code, output = run_child(prefix + ["--", "--world-settings-test", stage], env, min(args.timeout, 30))
                 passed &= code == 0 and f"ARC-WORLD-001 settings-test PASS {stage}" in output
+                stage_results.append({"stage": stage, "exitCode": code, "outcome": "PASS" if passed else "FAIL"})
                 if not passed:
                     break
     # No raw output, argv, input path, pixel or protected content in durable logs.
@@ -77,6 +80,7 @@ def main() -> int:
                "candidateCommit": head, "host": "exported" if args.app else "source", "startedAt": began,
                "elapsedSeconds": round(time.monotonic() - start, 3), "exitCode": code,
                "graphical": not args.headless, "outcome": "PASS" if passed else "FAIL",
+               "stages": stage_results,
                "diagnostics": [line for line in output.splitlines() if line.startswith(("ARC-WORLD-001", "ARC-RENDER-003 self-test FAIL", "ARC-RENDER-004 native-smoke failure", "ARC-RENDER-004 native-smoke readback", "ARC-RENDER-005 actor native raster"))]}
     print(json.dumps(summary, sort_keys=True))
     return 0 if passed else 1

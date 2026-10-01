@@ -9,6 +9,7 @@ public static class DiagnosticWorldPolicy
     public const int IdleFramesPerSecond = 6;
     public const int WalkFramesPerSecond = 10;
     public static DiagnosticSectorPosition InitialPosition => new(30, 32);
+    public static Arcanum.Input.InputSettings DefaultInputSettings => new(InvertCameraX: false, InvertCameraY: false);
     public const string Limitation = "Diagnostic free movement — collision not evaluated";
     public const string FacingLimitation = "Facing mapping: project diagnostic octants; source facing numbers opaque";
 }
