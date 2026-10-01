@@ -18,6 +18,8 @@ godot_canonical --verbose --headless --path src/Arcanum.Godot --editor --build-s
 
 Before export, verify the verbose editor bridge selected the canonical SDK/executable as described in the shared toolchain. Keep the following viewer-specific export and evidence requirements.
 
+The bounded Terrain diagnostic export is invoked through `tools/terrain-viewer/Godot/tools/validate-macos.sh`, not a bare editor export. After `ARCANUM_LOCAL_ROOT_ID` names the configured ignored artifact root, it holds the exact candidate export lease from export through source/exported self-tests, deep/strict codesign, immutable v2 evidence/inventory manifest validation, local `exported` registry registration, and the atomic v2 current pointer. This remains local-only and never accepts, publishes, or merges the candidate; a failed command leaves registry/current state unchanged.
+
 ## Viewer behavior and boundary
 
 Open one DAT through the native file dialog. The viewer indexes only that archive and lists ART candidates whose raw names end in ASCII case-insensitive `.art\0`. Display names remove only the terminal NUL, render printable ASCII literally and every other byte as `\xHH`, and always include the original decimal ordinal. This preserves duplicate identity without guessing a code page or implementing archive precedence.

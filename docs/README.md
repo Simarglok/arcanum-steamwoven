@@ -12,6 +12,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 ## Development
 
 - [Toolchain and verification entry points](workflow/toolchain.md)
+- [Private local diagnostic launch and build retention](workflow/local-development.md)
 - [Hermes project workflow](workflow/hermes.md)
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)

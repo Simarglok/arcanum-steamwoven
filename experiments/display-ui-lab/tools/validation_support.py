@@ -28,12 +28,43 @@ SCREENSHOTS = (
 REQUIRED_EVIDENCE = (
     "evidence/toolchain.json", "evidence/locked-restore.log", "evidence/locked-build.log",
     "evidence/editor-bridge.log", "evidence/layout-matrix.json", "evidence/capture-evidence.log",
-    "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
-    "evidence/native-smoke.json", "evidence/exported-ordinary-launch.log", "evidence/plist-lint.log",
+    "evidence/export-preflight.json", "evidence/export-observation.json", "evidence/export.log", "evidence/exported-layout-matrix.json", "evidence/exported-native-smoke.log",
+    "evidence/native-smoke.json", "evidence/ordinary-launch-not-verified.json", "evidence/plist-lint.log",
     "evidence/plist-values.log", "evidence/architecture.txt", "evidence/codesign.log",
     "evidence/root-locked-restore.log", "evidence/root-locked-build.log", "evidence/data-tests.log",
     "evidence/presentation-tests.log", "evidence/hygiene.json",
 )
+
+# ARC-DEV-001 is one reviewed full-card candidate, rather than a Display-only
+# change. Keep that authority explicit: changes outside this finite set must
+# still fail the Display endpoint hygiene gate.
+AUTHORITATIVE_FULL_CARD_SCOPE = frozenset((
+    ".gitignore", "README.md", "docs/Arcanum.Godot.md", "docs/README.md", "docs/input/display-ui-validation.md",
+    "docs/project/status.md", "docs/rendering/terrain-viewer.md",
+    "docs/workflow/local-development.md", "docs/workflow/toolchain.md",
+    "experiments/display-ui-lab/README.md",
+    "experiments/display-ui-lab/tools/validate-macos.sh",
+    "experiments/display-ui-lab/tools/validation_support.py",
+    "experiments/gamepad-lab/README.md",
+    "experiments/gamepad-lab/tools/validate-macos.sh",
+    "experiments/gamepad-lab/tools/write_manifest.py", "tools/arcanum-local",
+    "tools/local_dev/__init__.py", "tools/local_dev/config.py",
+    "tools/local_dev/export_endpoint.py", "tools/local_dev/launch.py",
+    "tools/local_dev/manifests.py", "tools/local_dev/retention.py",
+    "tools/local_dev/test_local_dev.py",
+    "tools/terrain-viewer/Godot/TerrainDiagnosticHud.cs",
+    "tools/terrain-viewer/Godot/TerrainViewerApp.cs",
+    "tools/terrain-viewer/Godot/TerrainViewerSelfTest.cs",
+    "tools/terrain-viewer/Godot/tools/terrain_write_manifest.py",
+    "tools/terrain-viewer/Godot/tools/validate-macos.sh",
+))
+
+# These are the fixed documented discovery candidates. The exception is by
+# both file and literal: an unrelated original-data name remains a failure.
+DOCUMENTED_DISCOVERY_LITERALS = {
+    "tools/arcanum-local": frozenset((("arcanum" "1.dat"), ("arcanum" "2.dat"))),
+    "docs/workflow/local-development.md": frozenset((("arcanum" "1.dat"), ("arcanum" "2.dat"))),
+}
 
 
 def run(command: list[str], *, cwd: Path | None = None) -> str:
@@ -53,6 +84,36 @@ def sha256(path: Path) -> str:
 def write_json(path: Path, value: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def hygiene_policy(changed: list[str], contents: dict[str, str]) -> tuple[list[str], dict[str, list[str]]]:
+    """Apply the bounded full-card scope and privacy policy to changed text."""
+    disallowed = sorted(set(changed) - AUTHORITATIVE_FULL_CARD_SCOPE)
+    patterns = {
+        "secret": ("gh" "p_", "github" "_pat_", "AK" "IA", "BEGIN " "PRIVATE KEY"),
+        "privateKey": ("BEGIN " "PRIVATE KEY", "BEGIN " "OPENSSH PRIVATE KEY"),
+        "originalData": (("arcanum" "1.dat"), ("arcanum" "2.dat"),
+                         ("arcanum" "3.dat"), ("vorman" "town.dat")),
+    }
+    hits = {name: [] for name in patterns}
+    for relative, content in contents.items():
+        lowered = content.lower()
+        for name, needles in patterns.items():
+            for needle in needles:
+                if needle.lower() not in lowered:
+                    continue
+                if (name == "originalData"
+                        and needle in DOCUMENTED_DISCOVERY_LITERALS.get(relative, frozenset())):
+                    continue
+                hits[name].append(relative)
+                break
+    return disallowed, hits
+
+
+def file_inventory(root: Path, prefix: str) -> list[dict[str, object]]:
+    return [{"relativePath": f"{prefix}/{item.relative_to(root).as_posix()}",
+             "bytes": item.stat().st_size, "sha256": sha256(item)}
+            for item in sorted(root.rglob("*")) if item.is_file() and not item.is_symlink()]
 
 
 def required_tool(entries: list[dict], name: str) -> dict:
@@ -121,29 +182,18 @@ def hygiene(args: argparse.Namespace) -> None:
     base = run(["git", "merge-base", "HEAD", "origin/main"], cwd=root).strip()
     head = run(["git", "rev-parse", "HEAD"], cwd=root).strip()
     changed = run(["git", "diff", "--name-only", f"{base}..{head}"], cwd=root).splitlines()
-    disallowed = [item for item in changed if not (item.startswith("experiments/display-ui-lab/") or item == "docs/input/display-ui-validation.md")]
     staged = run(["git", "diff", "--cached", "--name-only"], cwd=root).splitlines()
     status = run(["git", "status", "--porcelain"], cwd=root).splitlines()
     diff_check = subprocess.run(["git", "diff", "--check", f"{base}..{head}"], cwd=root,
                                 text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
     tracked = [root / name for name in changed if (root / name).is_file()]
-    # Compose signatures so the checker does not flag its own documented
-    # detection rules while still scanning every changed candidate file for the
-    # complete values.
-    patterns = {
-        "secret": ("gh" "p_", "github" "_pat_", "AK" "IA", "BEGIN " "PRIVATE KEY"),
-        "privateKey": ("BEGIN " "PRIVATE KEY", "BEGIN " "OPENSSH PRIVATE KEY"),
-        "originalData": ("arcanum" "1.dat", "arcanum" "2.dat", "arcanum" "3.dat", "vorman" "town.dat"),
-    }
-    hits = {name: [] for name in patterns}
+    contents: dict[str, str] = {}
     for file in tracked:
         try:
-            content = file.read_text(encoding="utf-8")
+            contents[str(file.relative_to(root))] = file.read_text(encoding="utf-8")
         except UnicodeDecodeError:
             continue
-        for name, needles in patterns.items():
-            if any(needle.lower() in content.lower() for needle in needles):
-                hits[name].append(str(file.relative_to(root)))
+    disallowed, hits = hygiene_policy(changed, contents)
     binary = [str(file.relative_to(root)) for file in tracked if file.suffix.lower() in {".png", ".jpg", ".jpeg", ".gif", ".ttf", ".otf", ".woff", ".woff2", ".app", ".zip"}]
     ignored = subprocess.run(["git", "check-ignore", "artifacts/builds/ARC-UI-001/probe"], cwd=root,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True).returncode == 0
@@ -204,18 +254,34 @@ def write_manifest(args: argparse.Namespace) -> None:
     build_root = Path(args.build_root).resolve()
     candidate_root = Path(args.candidate_root).resolve()
     main_root = Path(args.main_root).resolve()
+    root_id = os.environ.get("ARCANUM_LOCAL_ROOT_ID")
+    if not root_id:
+        raise SystemExit("ARCANUM_LOCAL_ROOT_ID is required for v2 local export registration")
     toolchain = json.loads(Path(args.toolchain_report).read_text(encoding="utf-8"))
     head = run(["git", "rev-parse", "HEAD"], cwd=candidate_root).strip()
     base = run(["git", "merge-base", "HEAD", "origin/main"], cwd=candidate_root).strip()
     branch = run(["git", "branch", "--show-current"], cwd=candidate_root).strip()
     if build_root.name != head or build_root.parent != main_root / "artifacts/builds/ARC-UI-001":
         raise SystemExit("build root must be this task's main-repository root keyed by exact HEAD")
+    if (build_root / "manifest.json").exists():
+        raise SystemExit("immutable candidate manifest already exists")
+    sys.path.insert(0, str(candidate_root))
+    from tools.local_dev.export_endpoint import bound_budget
     if run(["git", "status", "--porcelain"], cwd=candidate_root).strip():
         raise SystemExit("candidate became dirty before manifest creation")
     required = [build_root / entry for entry in REQUIRED_EVIDENCE]
     missing = [str(path.relative_to(build_root)) for path in required if not path.is_file()]
     if missing:
         raise SystemExit(f"required evidence is missing: {', '.join(missing)}")
+    try:
+        preflight = json.loads((build_root / "evidence/export-preflight.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise SystemExit(f"invalid export preflight evidence: {error}") from error
+    expected_candidate_id = f"{os.environ.get('ARCANUM_LOCAL_ROOT_ID')}:{TASK}:{head}"
+    if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
+            or preflight.get("tool") != "display" or preflight.get("candidateId") != expected_candidate_id
+            or preflight.get("candidateCommit") != head):
+        raise SystemExit("export preflight evidence is not bound to this candidate")
     if evidence_status(build_root / "evidence/layout-matrix.json") != "PASS" or evidence_status(build_root / "evidence/exported-layout-matrix.json") != "PASS" or evidence_status(build_root / "evidence/native-smoke.json") != "PASS":
         raise SystemExit("matrix or native evidence did not pass")
     hygiene_payload = json.loads((build_root / "evidence/hygiene.json").read_text(encoding="utf-8"))
@@ -231,7 +297,7 @@ def write_manifest(args: argparse.Namespace) -> None:
     ordinary_diff = subprocess.check_output(["git", "diff", "--no-ext-diff", base, head], cwd=candidate_root)
     checks = [{"name": path.removeprefix("evidence/").removesuffix(".log").removesuffix(".json").replace("-", "_"),
                "status": "PASS", "evidence": path} for path in REQUIRED_EVIDENCE]
-    payload = {
+    legacy_validation_payload = {
         "schemaVersion": 1, "task": TASK, "generatedAt": datetime.now(timezone.utc).isoformat(),
         "candidate": {"baseCommit": base, "commit": head, "branch": branch,
                       "ordinaryDiffSha256": hashlib.sha256(ordinary_diff).hexdigest(), "changedFiles": changed, "gitStatus": "clean"},
@@ -251,17 +317,27 @@ def write_manifest(args: argparse.Namespace) -> None:
                          "deferred": ["Windows", "Linux", "controller/handheld", "performance"]},
         "delivery": {"status": "verified-local-candidate; exact-head review pending"},
     }
-    validate_manifest(payload, build_root)
-    manifest = build_root / "manifest.json"
-    write_json(manifest, payload)
-    pointer = main_root / "artifacts/builds/ARC-UI-001/current.json"
-    pointer_payload = {"schemaVersion": 1, "task": TASK, "updatedAt": datetime.now(timezone.utc).isoformat(),
-                       "commit": head, "ordinaryDiffSha256": payload["candidate"]["ordinaryDiffSha256"],
-                       "manifest": str(manifest), "app": str(build_root / "DisplayUiLab.app"),
-                       "status": "verified-local-candidate; exact-head review pending"}
-    temporary = pointer.with_name(f".{pointer.name}.{os.getpid()}.tmp")
-    write_json(temporary, pointer_payload)
-    os.replace(temporary, pointer)
+    validate_manifest(legacy_validation_payload, build_root)
+    payload_inventory = file_inventory(build_root / "DisplayUiLab.app", "DisplayUiLab.app")
+    payload_bytes = sum(item.stat().st_size for item in (build_root / "DisplayUiLab.app").rglob("*") if item.is_file() and not item.is_symlink())
+    evidence_paths = [*REQUIRED_EVIDENCE, *(f"evidence/screenshots/{name}" for name, *_ in SCREENSHOTS)]
+    evidence_inventory = [{"relativePath": relative, "bytes": (build_root / relative).stat().st_size,
+                           "sha256": sha256(build_root / relative)} for relative in evidence_paths]
+    gates = {"locked-build": "evidence/locked-build.log", "source-layout-matrix": "evidence/layout-matrix.json",
+             "export": "evidence/export.log", "exported-layout-matrix": "evidence/exported-layout-matrix.json",
+             "exported-native-smoke": "evidence/exported-native-smoke.log", "codesign-deep-strict": "evidence/codesign.log"}
+    payload = {
+        "schema": "arcanum-build-manifest-v2", "project": PROJECT, "logicalTool": "display", "rootId": root_id,
+        "task": TASK, "generatedAt": datetime.now(timezone.utc).isoformat(),
+        "candidate": {"baseCommit": base, "commit": head, "tree": run(["git", "rev-parse", "HEAD^{tree}"], cwd=candidate_root).strip(), "branch": branch},
+        "app": {"relativePath": "DisplayUiLab.app", "executableRelativePath": "DisplayUiLab.app/Contents/MacOS/Display UI Lab"},
+        "payloadInventory": payload_inventory, "evidence": evidence_inventory,
+        "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": evidence} for name, evidence in gates.items()],
+        "exportBudget": bound_budget(build_root, "display", expected_candidate_id, payload_bytes),
+        "acceptance": "not-accepted",
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalDisplayReadability": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; native smoke is automated evidence"},
+    }
+    write_json(build_root / "manifest.json", payload)
 
 
 def self_test(_: argparse.Namespace) -> None:
@@ -282,6 +358,19 @@ def self_test(_: argparse.Namespace) -> None:
                    "evidence": {"nativeReport": "evidence/native-smoke.json", "screenshots": [{"path": f"evidence/screenshots/{name}", "viewport": {"width": width, "height": height}, "uiScale": scale, "panel": panel, "diagnosticsVisible": diagnostics, "classification": "simulated-layout", "visualInspection": "NOT_VERIFIED"} for name, width, height, scale, panel, diagnostics in SCREENSHOTS]},
                    "verification": {"actual": ["a"], "simulated": ["a"], "notVerified": ["a"], "deferred": ["a"]}, "delivery": {}}
         validate_manifest(payload, root)
+    permitted_scope, permitted_hits = hygiene_policy(
+        sorted(AUTHORITATIVE_FULL_CARD_SCOPE),
+        {"tools/arcanum-local": ("arcanum" "1.dat") + " " + ("arcanum" "2.dat"),
+         "docs/workflow/local-development.md": ("arcanum" "1.dat") + " " + ("arcanum" "2.dat")},
+    )
+    if permitted_scope or permitted_hits["originalData"]:
+        raise AssertionError("documented discovery literals must pass the bounded full-card policy")
+    rejected_scope, rejected_hits = hygiene_policy(
+        ["tools/arcanum-local", "unrelated/private.txt"],
+        {"tools/arcanum-local": ("arcanum" "3.dat")},
+    )
+    if rejected_scope != ["unrelated/private.txt"] or rejected_hits["originalData"] != ["tools/arcanum-local"]:
+        raise AssertionError("hygiene must reject scope expansion and undocumented original-data literals")
     print("validation-support self-test: PASS")
 
 

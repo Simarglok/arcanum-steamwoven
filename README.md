@@ -20,6 +20,7 @@ Players provide their own legally acquired copy. Original game assets, third-par
 - [Documentation index](docs/README.md)
 - [Project vision](docs/project/vision.md) and [dependency roadmap](docs/project/roadmap.md)
 - [Toolchain and checks](docs/workflow/toolchain.md)
+- [Private local diagnostic launch and build retention](docs/workflow/local-development.md)
 - [Architecture decisions](docs/architecture/decisions.md)
 - [Research method and R1 boundary](docs/research/method.md)
 - [DAT format boundary](docs/formats/dat.md)

@@ -7,6 +7,12 @@ coverage, not the full Crash Site and not original visual parity.
 
 ## Inputs and launch
 
+`tools/arcanum-local` can retain caller-selected local input roles and prepare an
+ordinary diagnostic launch without exposing those paths in repository data. Its
+terrain actor defaults are explicitly labelled zero anchors/camera/offset,
+`normal-uncached`, scale 100, shrunk false, Idle/facing 0/frame 0; these are
+not inferred world state. See [local development](../workflow/local-development.md).
+
 Use the `godot_canonical` function from the [shared toolchain](../workflow/toolchain.md), after restoring/building the viewer solution below. Launch the Godot project through the engine; its C# project is not a `dotnet run` executable.
 
 The viewer has no picker, archive discovery, precedence, PATCH/dif/loose-file
@@ -98,20 +104,25 @@ transparent. Paint order is explicitly **Editor diagnostic order**: tiles before
 facades, then local Y, local X, and ordinal; later commands win. That is a
 project diagnostic policy, not a claim about original facade/scenery occlusion.
 
-## Controls and window behavior
+## Controls, window behavior, and diagnostic HUD
 
-The world canvas is viewport-independent under `Camera2D`; the status HUD is a
-separate `CanvasLayer`. The fixed-screen ready HUD displays diagnostic mode,
+The world canvas is viewport-independent under `Camera2D`; `TerrainDiagnosticHud`
+is a separate top-anchored `CanvasLayer` with 16px margins. Its sticky summary
+always says `DIAGNOSTIC — not gameplay/original parity` (and self-tests visibly
+say `AUTOMATED TEST MODE`); wrapped WordSmart detail scrolls within a sensible
+110–360px/~35%-viewport bound. The ready HUD displays diagnostic mode,
 aggregate counts, safe source label, current bounded zoom, decoded count,
 explicit cache count, and load milliseconds; it refreshes after pan, zoom,
 fit/reset, and resize. The initial view fits the complete diagnostic bounds
 with 32-pixel margins. Zoom is bounded to 0.125–8.0 with nearest 1/1024 fit
 rounding. Arrow/WASD pans, wheel and `+`/`-` zoom, and left drag pans. `R`
 resets initial Fit, `F` recomputes Fit, and `L` reloads through the same
-generation-aware load route. Resize recomputes Fit only while in
-Fit mode; manual pan/zoom survives resize. F11 toggles normal fullscreen and
+generation-aware load route. Resize changes HUD layout only; the camera's
+current Fit or manual pan/zoom transform survives resize. F11 toggles normal fullscreen and
 Escape restores windowed mode. The resizable default is 1280x800. There is no
-controller behavior.
+controller behavior. A responsive synthetic HUD matrix checks containment,
+sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
+800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
 ## Verification and evidence status
 
@@ -186,7 +197,7 @@ shell. Do not place those paths in a manifest, commit, or issue.
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --module "$MODULE" --resource "$RESOURCE" --source-id "$SOURCE_ID"
     godot_canonical --path tools/terrain-viewer/Godot -- --native-smoke --mode actor-diagnostic --module "$MODULE" --resource "$RESOURCE" --actor-resource "$ACTOR_RESOURCE" --prototypes "$PROTOTYPES" --source-id "$SOURCE_ID" --actor-map-x 0 --actor-map-y 0 --actor-camera-origin-x 0 --actor-camera-origin-y 0 --actor-offset-x 0 --actor-offset-y 0 --actor-render-branch normal-uncached --actor-scale-percent 100 --actor-shrunk false --actor-action idle --actor-facing 0 --actor-frame 0
 
-After committing the source candidate, export it to the ignored
+After committing the source candidate, configure the ignored artifact root with `tools/arcanum-local configure add-artifact-root --id ID PATH` and use `ARCANUM_LOCAL_ROOT_ID=ID tools/terrain-viewer/Godot/tools/validate-macos.sh` with effective `TMPDIR` for the bounded exact-head ARC-DEV-001 endpoint. It proves/checks actual export/temp/build/cache devices, leases the candidate, validates source/export/runtime/codesign WITHOUT a manifest, freezes sampled observation, then runs manifest-only finalization and success-only registration/publication. Budget uses verified accepted/current output +10% or one complete configured payload estimate (`ARCANUM_OUTPUT_BYTES`/`ARCANUM_ESTIMATE_MANIFEST`), never aggregate history/source size. Godot/.NET temporary cache coverage is incomplete: `observedTemporaryBytes=null`/unavailable is distinct from both fallback estimates and measured zero. Finalized/ambiguous partial same-head candidates reject intact; review their artifacts read-only. See [local workflow](../workflow/local-development.md). ART remains next-export-only; this endpoint is Terrain-only. The manual ARC-RENDER-005 commands below remain historical diagnostic detail, not a substitute for that registration path. They export to the ignored
 `artifacts/builds/ARC-RENDER-005/<commit>/ArcanumTerrainViewer.app`, run its
 headless and non-headless `--self-test`, then each terrain-only, combined, and
 actor-diagnostic `--native-smoke` plus the ordinary actor launch with the same
@@ -223,6 +234,11 @@ separate ignored screenshot bases and record requested and actual readback
 dimensions. A clamped display remains `NOT_VERIFIED`, not a 1920x1080 pass.
 
 ## Provenance and limitations
+
+On 2026-09-29 the owner said the combined terrain/five-object image looked
+normal. This is a bounded human observation only; it does not establish
+original parity, exhaustive stability, controller behavior, Bluetooth
+reconnect, drift, or all axes/settings.
 
 This uses the project's independently authored Data APIs (`DatArchive`,
 `TerrainLoader`, `TerrainGeometry`, and `ArtDecoder`). The documented diagnostic

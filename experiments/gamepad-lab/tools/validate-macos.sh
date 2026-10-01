@@ -10,6 +10,28 @@ head=$(git rev-parse HEAD)
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/builds/ARC-GPAD-003/$head"}
 case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-003/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be exact-head ARC-GPAD-003 root.' >&2; exit 2 ;; esac
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before validating.' >&2; exit 2; fi
+if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
+  : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
+  : "${TMPDIR:?TMPDIR must identify the effective temporary destination}"
+  set --
+  if test -n "${ARCANUM_OUTPUT_BYTES:-}"; then
+    : "${ARCANUM_ESTIMATE_MANIFEST:?a single complete measured payload manifest is required}"
+    set -- --output-bytes "$ARCANUM_OUTPUT_BYTES" --estimate-manifest "$ARCANUM_ESTIMATE_MANIFEST"
+  fi
+  cd "$candidate_root"
+  exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
+    --tool gamepad --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-GPAD-003 --candidate "$head" \
+    --manifest "$build_root/manifest.json" --temporary-root "$TMPDIR" \
+    --write-root "$candidate_root" --write-root "$HOME/.nuget/packages" \
+    --write-root "$HOME/Library/Application Support/Godot" "$@" -- /bin/sh "$0"
+fi
+case "${ARCANUM_EXPORT_PHASE:-}" in
+  finalize)
+    executable=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleExecutable' "$build_root/GamepadLab.app/Contents/Info.plist")
+    exec /usr/bin/python3 -B "$lab_root/tools/write_manifest.py" "$candidate_root" "$main_root" "$build_root" "$head" "$build_root/GamepadLab.app/Contents/MacOS/$executable" ;;
+  validate) ;;
+  *) printf '%s\n' 'Endpoint validate/finalize phase required.' >&2; exit 2 ;;
+esac
 
 DOTNET_ROOT=${DOTNET_ROOT:-"$HOME/.local/share/dotnet"}
 DOTNET="$DOTNET_ROOT/dotnet"
@@ -47,11 +69,11 @@ run_log exported-smoke.log "$app" --headless -- --smoke "$build_root/evidence/ex
 run_log persistence-write.log "$app" --headless -- --persistence write "$build_root/evidence/persistence-write.json"
 run_log persistence-verify-nondefault.log "$app" --headless -- --persistence verify-nondefault "$build_root/evidence/persistence-verify-nondefault.json"
 run_log persistence-verify-default.log "$app" --headless -- --persistence verify-default "$build_root/evidence/persistence-verify-default.json"
-# This intentionally does not use --headless: the exported macOS application
-# performs its bounded capture/layout path, writes a PNG, and quits itself.
-run_log ordinary-launch.log /usr/bin/python3 "$lab_root/tools/run_with_timeout.py" 30 "$app" -- --capture 1280x800 "$build_root/evidence/ordinary-launch.png"
-test -s "$build_root/evidence/ordinary-launch.png"
-if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/ordinary-launch.log"; then printf '%s\n' 'Ordinary exported-app launch logged an engine error.' >&2; exit 1; fi
+# This bounded non-headless capture is automated evidence, not ordinary launch.
+run_log automated-capture.log /usr/bin/python3 "$lab_root/tools/run_with_timeout.py" 30 "$app" -- --capture 1280x800 "$build_root/evidence/automated-capture.png"
+test -s "$build_root/evidence/automated-capture.png"
+if /usr/bin/grep -q '^ERROR:' "$build_root/evidence/automated-capture.log"; then printf '%s\n' 'Automated exported-app capture logged an engine error.' >&2; exit 1; fi
+printf '%s\n' '{"schema":"arcanum-ordinary-launch-v1","outcome":"NOT_VERIFIED","reason":"bounded capture uses --capture and is not ordinary-launch evidence"}' >"$build_root/evidence/ordinary-launch-not-verified.json"
 run_log plist-lint.log /usr/bin/plutil -lint "$build_root/GamepadLab.app/Contents/Info.plist"
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/GamepadLab.app"
 # The isolated settings file is validation-only state, never durable evidence.
@@ -59,5 +81,4 @@ run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$bu
 rm -f "$settings_test_path"
 if test -e "$settings_test_path"; then printf '%s\n' 'Isolated settings cleanup failed.' >&2; exit 1; fi
 git diff --check
-/usr/bin/python3 "$lab_root/tools/write_manifest.py" "$candidate_root" "$main_root" "$build_root" "$head" "$app"
-printf '%s\n' "Validated $head in $build_root"
+printf '%s\n' "Validated $head; endpoint will freeze observation before manifest finalization."

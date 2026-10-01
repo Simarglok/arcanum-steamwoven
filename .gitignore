@@ -19,6 +19,7 @@
 # Future .NET / Godot generated output
 **/bin/
 **/obj/
+__pycache__/
 .godot/
 .godot.before-self-test/
 TestResults/

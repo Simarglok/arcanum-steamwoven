@@ -173,6 +173,11 @@ public static class TerrainViewerSelfTest
         var fixture = SyntheticActorFixture.Create();
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        await AssertResponsiveHudAsync(host, viewport, app);
+        // The HUD matrix above validates its actual production overlay. Hide
+        // that overlay only for later actor-pixel probes so a deliberately
+        // top-anchored diagnostic panel cannot cover their world landmarks.
+        app.GetNode<TerrainDiagnosticHud>("Hud").Visible = false;
         var expectedFacings = new[] { (0, false), (7, true), (6, true), (5, true), (4, false), (5, false), (6, false), (7, false) };
         var callerInput = fixture.Arguments.ActorInput!;
         foreach (var actionCase in new[]
@@ -292,6 +297,46 @@ public static class TerrainViewerSelfTest
         exitViewport.QueueFree();
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
     }
+
+    private static async Task AssertResponsiveHudAsync(Node host, SubViewport viewport, TerrainViewerApp app)
+    {
+        var hud = app.GetNode<TerrainDiagnosticHud>("Hud");
+        hud.AddOverflowProbeForSelfTest();
+        await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+        var invariant = app.GetSelfTestSnapshot();
+        foreach (var size in new[] { new Vector2I(480, 320), new Vector2I(640, 360), new Vector2I(800, 500), new Vector2I(1280, 800) })
+        {
+            viewport.Size = size;
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var rect = hud.Rect;
+            if (hud.GlobalPosition.X < 16 || hud.GlobalPosition.Y < 16 || hud.Height > (size.Y * 0.35f) + 1
+                || rect.Position.X < 0 || rect.Position.Y < 0 || rect.End.X > size.X || rect.End.Y > size.Y)
+                throw new InvalidOperationException($"Diagnostic HUD escaped its 16px/35% viewport bounds at {size}.");
+            var scrollBefore = hud.VerticalScrollValue;
+            hud.MoveVerticalScroll();
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var scrollMoved = !Mathf.IsEqualApprox(scrollBefore, hud.VerticalScrollValue);
+            if (!hud.IsScrollable || !hud.HasVerticalOverflow || !scrollMoved || !hud.DetailWraps
+                || !hud.Text.Contains("AUTOMATED TEST MODE", StringComparison.Ordinal)
+                || !hud.Text.Contains("Mode: actor-diagnostic", StringComparison.Ordinal)
+                || !hud.Text.Contains("Original placement parity: NOT VERIFIED", StringComparison.Ordinal)
+                || !hud.StickyVisible || hud.HasHorizontalClipping)
+                throw new InvalidOperationException($"Diagnostic HUD lost its sticky limits or scrollable detail contract at {size}: configured={hud.IsScrollable} overflow={hud.HasVerticalOverflow} moved={scrollMoved} scroll={scrollBefore}/{hud.VerticalScrollValue}/{hud.VerticalScrollMaximum}/{hud.VerticalScrollPage} wraps={hud.DetailWraps} sticky={hud.StickyVisible} clip={hud.HasHorizontalClipping}.");
+            var after = app.GetSelfTestSnapshot();
+            var expectedCanvas = new Transform2D(invariant.CanvasTransform.X, invariant.CanvasTransform.Y,
+                invariant.CanvasTransform.Origin + new Vector2((size.X - 512) / 2f, (size.Y - 300) / 2f));
+            if (after.Actor != invariant.Actor || !HasStationaryCallerInput(after.Input, invariant.Input!)
+                || after.CacheCount != invariant.CacheCount || after.CameraX != invariant.CameraX
+                || after.CameraY != invariant.CameraY || after.CameraZoom != invariant.CameraZoom
+                || !SameTransform(after.CanvasTransform, expectedCanvas))
+                throw new InvalidOperationException("Viewport resize mutated renderer, actor input, or published scene state.");
+        }
+    }
+
+    private static bool SameTransform(Transform2D actual, Transform2D expected)
+        => Mathf.IsEqualApprox(actual.X.X, expected.X.X) && Mathf.IsEqualApprox(actual.X.Y, expected.X.Y)
+            && Mathf.IsEqualApprox(actual.Y.X, expected.Y.X) && Mathf.IsEqualApprox(actual.Y.Y, expected.Y.Y)
+            && Mathf.IsEqualApprox(actual.Origin.X, expected.Origin.X) && Mathf.IsEqualApprox(actual.Origin.Y, expected.Origin.Y);
 
     private static bool HasCompleteActorHud(TerrainViewerSelfTestSnapshot snapshot, ActorDiagnosticAction action, int facing, int group,
         bool mirrored, int frameCount, int fps, int frame, bool playing)
