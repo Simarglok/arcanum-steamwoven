@@ -2,7 +2,7 @@ using Arcanum.Data.Terrain;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>One diagnostic composition: terrain commands first, static commands last.</summary>
+/// <summary>Explicit diagnostic composition; WORLD retains statics and the foreground actor.</summary>
 public sealed class DiagnosticScenePlan
 {
     private DiagnosticScenePlan(TerrainScenePlan terrain, StaticSceneryScenePlan? statics, ActorDiagnosticScenePlan? actor, TerrainRect bounds)
@@ -15,9 +15,28 @@ public sealed class DiagnosticScenePlan
 
     public TerrainScenePlan Terrain { get; }
     public StaticSceneryScenePlan? Statics { get; }
-    /// <summary>Optional fixed-profile actor. It is mutually exclusive with static diagnostic commands.</summary>
+    /// <summary>Optional fixed-profile actor; only explicit WORLD composition may also retain statics.</summary>
     public ActorDiagnosticScenePlan? Actor { get; }
     public TerrainRect WorldBounds { get; }
+    public bool IsWorldDiagnostic => Statics is not null && Actor is not null;
+
+    public static DiagnosticScenePlan CreateWorldDiagnostic(TerrainScenePlan terrain, StaticSceneryScenePlan statics,
+        ActorDiagnosticScenePlan actor, TerrainRect stableBounds, TerrainViewerProgress? progress = null)
+    {
+        ArgumentNullException.ThrowIfNull(terrain);
+        ArgumentNullException.ThrowIfNull(statics);
+        ArgumentNullException.ThrowIfNull(actor);
+        if (!statics.Commands.Select(command => command.SourceIndex).Order().SequenceEqual(new[] { 0, 1, 2, 3, 4 })
+            || stableBounds.Width <= 0 || stableBounds.Height <= 0)
+            throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorPlan, Progress: progress));
+        return new(terrain, statics, actor, stableBounds);
+    }
+
+    public DiagnosticScenePlan WithWorldActor(ActorDiagnosticScenePlan actor)
+    {
+        if (!IsWorldDiagnostic) throw new InvalidOperationException("Not an integrated world diagnostic.");
+        return CreateWorldDiagnostic(Terrain, Statics!, actor, WorldBounds);
+    }
 
     public static DiagnosticScenePlan Create(TerrainScenePlan terrain, StaticSceneryScenePlan? statics,
         TerrainViewerProgress? progress = null) => Create(terrain, statics, null, progress);

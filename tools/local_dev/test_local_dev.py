@@ -160,7 +160,7 @@ class LocalDevTests(unittest.TestCase):
     def test_authority_all_literal_tasks_and_names_are_inspected(self) -> None:
         # Literal contract, deliberately not generated from SUPPORTED_TOOLS.
         groups = {"art": ("ARC-RENDER-001", "ARC-RENDER-002"),
-                  "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001"),
+                  "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001", "ARC-WORLD-001"),
                   "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003"), "display": ("ARC-UI-001",)}
         for tool, tasks in groups.items():
             for task in tasks:
@@ -602,7 +602,7 @@ class LocalDevTests(unittest.TestCase):
         inputs = {}
         for role in ("module", "terrainResource", "actorResource", "prototypes"):
             path = self.root / f"{role} input"
-            path.write_bytes(b"fixture")
+            path.mkdir() if role == "prototypes" else path.write_bytes(b"fixture")
             inputs[role] = str(path)
         inputs["sourceId"] = "synthetic-local"
         combined = launch.terrain_arguments(inputs, "combined")
@@ -623,7 +623,7 @@ class LocalDevTests(unittest.TestCase):
         inputs = {}
         for role in ("module", "terrainResource", "actorResource", "prototypes"):
             path = self.root / role
-            path.write_bytes(b"fixture")
+            path.mkdir() if role == "prototypes" else path.write_bytes(b"fixture")
             inputs[role] = str(path)
         inputs["sourceId"] = "synthetic"
         actor = launch.terrain_arguments(inputs, "actor-diagnostic", {"actor_action": "walk", "actor_facing": 7, "actor_frame": 7})

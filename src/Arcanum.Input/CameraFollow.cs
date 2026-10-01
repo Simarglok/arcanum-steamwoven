@@ -47,9 +47,12 @@ public sealed class CameraFollowEngine
         previous with { Mode = CameraMode.Follow, RecenterArmed = false, TrackingActor = false };
 
     public CameraFollowStep Update(CameraFollowState previous, Vec2 actorPosition, Vec2 currentCenter, Vec2 actorInput, Vec2 worldImagePan, CameraBounds bounds)
+        => Update(previous, actorPosition, currentCenter, actorInput, worldImagePan, bounds, actorInput.Length > 0, worldImagePan.Length > 0);
+
+    /// <summary>Accepted activity is independent of delta, cancellation and clamped displacement.</summary>
+    public CameraFollowStep Update(CameraFollowState previous, Vec2 actorPosition, Vec2 currentCenter, Vec2 actorInput, Vec2 worldImagePan,
+        CameraBounds bounds, bool actorActive, bool manualActive)
     {
-        var actorActive = actorInput.Length > 0;
-        var panActive = worldImagePan.Length > 0;
         // The reducer already divides image translation by zoom. WorldRoot's Canvas
         // transform scales that translation back to the same visual pan speed, so
         // its inverse center adjustment remains in unscaled world coordinates.
@@ -57,7 +60,7 @@ public sealed class CameraFollowEngine
 
         // Pan always wins a simultaneous edge. It never changes actor intent, and
         // neither an old neutral sample nor a held actor stick may immediately undo it.
-        if (panActive)
+        if (manualActive)
             return new(new CameraFollowState(CameraMode.Manual, false, false), manualCenter, "manual pan has priority");
 
         if (previous.Mode == CameraMode.Follow)

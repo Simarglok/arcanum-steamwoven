@@ -8,7 +8,11 @@ public sealed record RawInputFrame(
     bool Confirm = false, bool Cancel = false, bool Inspect = false, bool Previous = false, bool Next = false,
     bool Context = false, bool Settings = false, bool MenuUp = false, bool MenuDown = false,
     bool Focused = true, bool Connected = true, bool Keyboard = false, bool MouseButton = false,
-    double MouseLogicalDistance = 0, bool Echo = false, Vec2 KeyboardActor = default, Vec2 KeyboardCamera = default);
+    double MouseLogicalDistance = 0, bool Echo = false, Vec2 KeyboardActor = default, Vec2 KeyboardCamera = default)
+{
+    public bool KeyboardActorHeld { get; init; }
+    public bool KeyboardCameraHeld { get; init; }
+}
 
 /// <summary>Frame-owned timing and per-domain policy. The two stick deadzones are never applied twice.</summary>
 public sealed record InputContext(
@@ -19,7 +23,11 @@ public sealed record InputContext(
 
 public sealed record IntentFrame(
     Vec2 CameraPan, Vec2 Movement, bool Confirm, bool Cancel, bool Inspect, bool Previous, bool Next, bool Context, bool Settings,
-    int MenuDirection, double MenuAnalog, InputMethod Method, bool Accepted, string Provenance);
+    int MenuDirection, double MenuAnalog, InputMethod Method, bool Accepted, string Provenance)
+{
+    public bool ActorActive { get; init; }
+    public bool CameraActive { get; init; }
+}
 
 public sealed class InputStateReducer
 {
@@ -125,8 +133,12 @@ public sealed class InputStateReducer
         // This is camera-only: actor and modal directions are calculated above.
         camera = new Vec2(context.InvertCameraX ? camera.X : -camera.X, context.InvertCameraY ? camera.Y : -camera.Y);
         var result = new IntentFrame(camera, actor, confirm, cancel, inspect, previous, next, contextPulse, settings,
-            raw.MenuUp ? -1 : raw.MenuDown ? 1 : 0, raw.LeftStick.Y, Method, true, provenance);
-        return context.Modal ? result with { CameraPan = default, Movement = default } : result;
+            raw.MenuUp ? -1 : raw.MenuDown ? 1 : 0, raw.LeftStick.Y, Method, true, provenance)
+        {
+            ActorActive = left.Length > 0 || raw.KeyboardActorHeld || raw.KeyboardActor.Length > 0,
+            CameraActive = right.Length > 0 || raw.KeyboardCameraHeld || raw.KeyboardCamera.Length > 0
+        };
+        return context.Modal ? result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false } : result;
     }
 
     private static Vec2 Normalize(Vec2 value) => value.Length > 0 ? value.Normalized() : default;
@@ -137,6 +149,9 @@ public sealed class InputStateReducer
     }
     private static bool Digital(RawInputFrame r) => r.Confirm || r.Cancel || r.Inspect || r.Previous || r.Next || r.Context || r.Settings || r.MenuUp || r.MenuDown;
     private static bool Meaningful(RawInputFrame r, InputContext c) => Digital(r) || Vec2.CircularDeadzone(r.LeftStick, c.ActorDeadzone).Length >= .25 || Vec2.CircularDeadzone(r.RightStick, c.CameraDeadzone).Length >= .25;
-    private static bool AnyLevel(RawInputFrame r, Vec2 left, Vec2 right) => Digital(r) || left.Length > 0 || right.Length > 0 || r.KeyboardActor.Length > 0 || r.KeyboardCamera.Length > 0;
+    public static bool HasAnyLevel(RawInputFrame raw, InputContext context) => AnyLevel(raw,
+        Vec2.CircularDeadzone(raw.LeftStick, context.ActorDeadzone), Vec2.CircularDeadzone(raw.RightStick, context.CameraDeadzone));
+    private static bool AnyLevel(RawInputFrame r, Vec2 left, Vec2 right) => Digital(r) || left.Length > 0 || right.Length > 0
+        || r.KeyboardActorHeld || r.KeyboardCameraHeld || r.KeyboardActor.Length > 0 || r.KeyboardCamera.Length > 0;
     private IntentFrame Empty(string provenance) => new(default, default, false, false, false, false, false, false, false, 0, 0, Method, false, provenance);
 }

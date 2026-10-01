@@ -21,7 +21,7 @@ Configuration does not scan a machine. `configure discover --game-root PATH` exa
 
 ## Ordinary diagnostics launch
 
-The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005` and `ARC-DEV-001`, Gamepad `ARC-GPAD-001/002/003`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or more than one current pointer fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
+The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005`, `ARC-DEV-001` and `ARC-WORLD-001`, Gamepad `ARC-GPAD-001/002/003`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or more than one current pointer fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
 
     tools/arcanum-local launch art --dry-run
     tools/arcanum-local launch gamepad --dry-run
@@ -35,6 +35,22 @@ Launch selection is an explicit local `launchSelection` record, separate from `a
 Terrain actor diagnostic defaults are deliberately caller-labelled zero map/camera/offset anchors, `normal-uncached`, scale 100, shrunk false, Idle, facing 0, frame 0. In actor-diagnostic mode only, callers may explicitly provide `--actor-map-x`, `--actor-map-y`, `--actor-camera-origin-x`, `--actor-camera-origin-y`, `--actor-offset-x`, `--actor-offset-y`, `--actor-render-branch`, `--actor-scale-percent`, `--actor-shrunk`, `--actor-action`, `--actor-facing`, and `--actor-frame`. The launcher accepts only the viewer's fixed normal-uncached/100/non-shrunk profile, Idle/Walk, facing 0..7, and an action-valid frame; terrain-only and combined reject these options. This is diagnostic policy, not inferred world state or original-placement parity.
 
 ## Retention lifecycle
+
+WORLD uses the same terrain logical tool and immutable v2 authority, with a
+separate ignored configured `artifacts/world-builds` root. Do not delete legacy
+current pointers or relax ambiguity checks to select it. Configure only an
+owned home when task isolation is required, explicit authenticated input roles
+(prototypes is a directory), then select `ROOT_ID:ARC-WORLD-001:<full-head>`.
+Ordinary invocation is explicitly `launch terrain --mode world-diagnostic`;
+default stays terrain-only, preview overrides and legacy-artifact WORLD mode
+reject. Manifest `app.ordinaryArgs` is metadata, not an implicit CLI default.
+The closed `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-001` endpoint adds focused
+tests and original source/export WORLD gates to the existing seven terrain
+gates. Missing/failed/unverified original input gates prevent registration.
+One final-head export follows source corrections and resource proof. Later
+ordinary logs and manifest/payload digest equality are recorded outside the
+sealed artifact, without automated input/capture or owner-interaction kills.
+See [integrated WORLD policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy).
 
 `builds inventory` is conservative and dry-run by default. It reports only configured roots and known candidate directories. A candidate is kept for unknown ownership, current/rollback/active/open-review/unmerged lifecycle, in-use state, symlink ambiguity, or any missing proof. A candidate is eligible only when containment, supported ownership, and explicit retired/disposable state are all proved.
 

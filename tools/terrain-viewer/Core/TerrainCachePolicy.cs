@@ -15,11 +15,12 @@ public static class TerrainCachePolicy
     public const int MaxDistinctKeys = 4096;
     public const int MaxStaticDistinctKeys = 5;
     public const int MaxActorDistinctKeys = 184;
-    // The two diagnostic extensions are mode-exclusive.  Reserve only the
-    // selected extension alongside terrain rather than combining both caps.
+    // Standalone modes retain their exclusive extension caps. WORLD explicitly
+    // reserves all three domains; the legacy overload remains actor-only.
     public const int MaxCombinedDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys;
     public const int MaxActorModeDistinctKeys = MaxDistinctKeys + MaxActorDistinctKeys;
     public const int MaxTotalDistinctKeys = MaxActorModeDistinctKeys;
+    public const int MaxWorldDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys + MaxActorDistinctKeys;
     public const long MaxRgbaBytes = 256L * 1024 * 1024;
 
     public static long CheckedRgbaBytes(int width, int height) => checked((long)width * height * 4);
@@ -38,8 +39,14 @@ public static class TerrainCachePolicy
 
     /// <summary>Checks a frame before its bytes are retained, preventing unbounded failed loads.</summary>
     public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height)
+        => AddCheckedFrame(currentBytes, currentCount, width, height, TerrainViewerMode.ActorDiagnostic);
+
+    public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height, TerrainViewerMode mode)
     {
-        if (currentCount >= MaxTotalDistinctKeys) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
+        var limit = mode switch { TerrainViewerMode.WorldDiagnostic => MaxWorldDistinctKeys, TerrainViewerMode.TerrainOnly => MaxDistinctKeys,
+            TerrainViewerMode.CombinedStaticDiagnostic => MaxCombinedDistinctKeys, TerrainViewerMode.ActorDiagnostic => MaxActorModeDistinctKeys,
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)) };
+        if (currentCount < 0 || currentBytes < 0 || currentCount >= limit) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));
         if (width <= 0 || height <= 0) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.DecodeFailure));
         var total = checked(currentBytes + CheckedRgbaBytes(width, height));
         if (total > MaxRgbaBytes) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));

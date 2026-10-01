@@ -29,6 +29,14 @@ Godot references: [C# prerequisites](https://docs.godotengine.org/en/stable/tuto
 
 ## Root solution synthetic checks
 
+ARC-WORLD-001 uses the terrain endpoint with
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-001`, a separate configured ignored
+`artifacts/world-builds` root and explicit WORLD selection. It retains the
+seven terrain gates plus focused tests and graphical original source/export
+integration gates. Source corrections precede the one exact-head export;
+later ordinary evidence stays outside the sealed bundle. See the
+[WORLD policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy).
+
 Run from repository root:
 
 ```sh

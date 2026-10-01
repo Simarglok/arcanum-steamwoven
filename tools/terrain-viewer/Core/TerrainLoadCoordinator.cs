@@ -176,7 +176,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 Verify(resourceBefore, CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256, arguments.ExpectedResourceSha256);
                 InputFingerprint? actorResourceBefore = null;
                 InputFingerprint? prototypeBefore = null;
-                if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                if (arguments.Mode is TerrainViewerMode.ActorDiagnostic or TerrainViewerMode.WorldDiagnostic)
                 {
                     actorResourceBefore = FingerprintActorFile(arguments.ActorResourcePath!);
                     cancellationToken.ThrowIfCancellationRequested();
@@ -221,10 +221,10 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     var key = TerrainTextureKey.FromRecord(record);
                     if (textures.ContainsKey(key)) continue;
                     var frame = TerrainLoader.DecodeSelectedFrame(_resource, record, new TerrainLoaderOptions().ArtOptions);
-                    checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count, frame.Width, frame.Height);
+                    checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count, frame.Width, frame.Height, TerrainViewerMode.TerrainOnly);
                     textures.Add(key, new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()));
                 }
-                if (arguments.Mode == TerrainViewerMode.CombinedStaticDiagnostic)
+                if (arguments.Mode is TerrainViewerMode.CombinedStaticDiagnostic or TerrainViewerMode.WorldDiagnostic)
                 {
                     try
                     {
@@ -245,7 +245,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                             try { frame = StaticObjectLoader.DecodeSelectedFrame(_resource, record, new StaticObjectLoaderOptions().ArtOptions); }
                             catch (StaticObjectException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode, Stage: TerrainViewerFailureStage.StaticDecode, Progress: progress)); }
                             cancellationToken.ThrowIfCancellationRequested();
-                            checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count + staticTextures.Count, frame.Width, frame.Height);
+                            checkedBytes = TerrainCachePolicy.AddCheckedFrame(checkedBytes, textures.Count + staticTextures.Count, frame.Width, frame.Height, TerrainViewerMode.CombinedStaticDiagnostic);
                             staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, frame.Rgba.ToArray()));
                         }
                         if (staticTextures.Count > TerrainCachePolicy.MaxStaticDistinctKeys)
@@ -263,7 +263,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         throw new TerrainViewerException(new TerrainViewerError(exception.Stage == StaticObjectFailureStage.FingerprintInput ? TerrainViewerErrorCode.StaticFingerprint : TerrainViewerErrorCode.StaticResource, Stage: stage, Progress: progress));
                     }
                 }
-                else if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                if (arguments.Mode is TerrainViewerMode.ActorDiagnostic or TerrainViewerMode.WorldDiagnostic)
                 {
                     try
                     {
@@ -272,7 +272,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         // terrain resolution never consults it, and actor ordinal lookup
                         // never consults the terrain resource.
                         _actorOperation = new ActorDiagnosticSourceOperation(() => DatArchive.Open(arguments.ActorResourcePath!, BoundedDatOptions()));
-                        var actor = _actorOperation.Execute(_module, arguments.ActorInput!, textures.Count, checkedBytes, progress, cancellationToken);
+                        var actor = _actorOperation.Execute(_module, arguments.ActorInput!, textures.Count + staticTextures.Count, checkedBytes, progress, cancellationToken, mode: arguments.Mode);
                         if (actor.Textures.Count != TerrainCachePolicy.MaxActorDistinctKeys)
                             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorMetadata, Stage: TerrainViewerFailureStage.ActorMetadata, Progress: progress));
                         checkedBytes = actor.CheckedRgbaBytes;
@@ -291,7 +291,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 var resourceAfter = Fingerprint(arguments.ResourcePath);
                 InputFingerprint? actorResourceAfter = null;
                 InputFingerprint? prototypeAfter = null;
-                if (arguments.Mode == TerrainViewerMode.ActorDiagnostic)
+                if (arguments.Mode is TerrainViewerMode.ActorDiagnostic or TerrainViewerMode.WorldDiagnostic)
                 {
                     actorResourceAfter = FingerprintActorFile(arguments.ActorResourcePath!);
                     prototypeAfter = FingerprintActorPrototypeRoot(arguments.PrototypePath!);
@@ -308,7 +308,9 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 {
                     StaticPlan = staticPlan,
                     ActorPlan = actorPlan,
-                    DiagnosticPlan = DiagnosticScenePlan.Create(plan, staticPlan, actorPlan, progress),
+                    DiagnosticPlan = arguments.Mode == TerrainViewerMode.WorldDiagnostic
+                        ? DiagnosticScenePlan.CreateWorldDiagnostic(plan, staticPlan!, actorPlan!, DiagnosticWorldBounds.Create(plan, staticPlan!, actorPlan!), progress)
+                        : DiagnosticScenePlan.Create(plan, staticPlan, actorPlan, progress),
                     StaticTextures = staticTextures,
                     ActorTextures = actorTextures,
                     ActorResourceFingerprint = actorResourceBefore,

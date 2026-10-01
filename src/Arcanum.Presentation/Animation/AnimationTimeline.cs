@@ -14,6 +14,9 @@ public sealed class AnimationTimeline
     private bool _isPlaying;
     private bool _isCompleted;
 
+    /// <summary>Independent snapshot for a host's transactional selection preflight.</summary>
+    public AnimationTimeline Snapshot() => (AnimationTimeline)MemberwiseClone();
+
     /// <summary>Creates a paused timeline positioned at frame zero.</summary>
     public AnimationTimeline(int frameCount, int sourceFramesPerSecond)
     {

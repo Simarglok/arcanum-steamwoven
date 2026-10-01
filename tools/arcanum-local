@@ -51,7 +51,7 @@ def command_configure(args: argparse.Namespace) -> None:
         conf["inputs"] = {"module": str(config.canonical_existing(args.module, directory=False)),
                           "terrainResource": str(config.canonical_existing(args.terrain_resource, directory=False)),
                           "actorResource": str(config.canonical_existing(args.actor_resource, directory=False)),
-                          "prototypes": str(config.canonical_existing(args.prototypes, directory=False)),
+                          "prototypes": str(config.canonical_existing(args.prototypes, directory=True)),
                           "sourceId": config.safe_source_id(args.source_id or "local-input")}
         config.save_config(conf); emit({"configured": sorted(conf["inputs"])})
     elif args.configure == "add-artifact-root":
@@ -104,6 +104,8 @@ def command_launch(args: argparse.Namespace) -> None:
         raise ValueError("actor preview options are valid only for terrain actor-diagnostic mode")
     root = selected_root(conf, registry, tool)
     _, manifest, _ = manifests.resolve_current(root, tool)
+    if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) != "ARC-WORLD-001":
+        raise ValueError("world-diagnostic requires an ARC-WORLD-001 artifact")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
@@ -165,7 +167,7 @@ def parser() -> argparse.ArgumentParser:
     artifact = configure_sub.add_parser("add-artifact-root"); artifact.add_argument("--id", required=True); artifact.add_argument("path")
     selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)
-    launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
+    launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic", "world-diagnostic")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
     for option in launch.ACTOR_DEFAULTS:
         launcher.add_argument("--" + option.replace("_", "-"))
     launcher.set_defaults(func=command_launch)

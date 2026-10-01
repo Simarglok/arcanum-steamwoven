@@ -1,6 +1,6 @@
 namespace Arcanum.TerrainViewer.Core;
 
-public enum TerrainViewerMode { TerrainOnly, CombinedStaticDiagnostic, ActorDiagnostic }
+public enum TerrainViewerMode { TerrainOnly, CombinedStaticDiagnostic, ActorDiagnostic, WorldDiagnostic }
 
 public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string ModulePath, string ResourcePath, string SourceId,
     string? PrototypePath, string? ExpectedModuleSha256, string? ExpectedResourceSha256, string? ActorResourcePath,
@@ -27,7 +27,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--mode":
                     if (modeSpecified) throw new ArgumentException("Usage");
                     modeSpecified = true;
-                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, _ => throw new ArgumentException("Usage") };
+                    mode = value switch { "terrain-only" => TerrainViewerMode.TerrainOnly, "combined" => TerrainViewerMode.CombinedStaticDiagnostic, "actor-diagnostic" => TerrainViewerMode.ActorDiagnostic, "world-diagnostic" => TerrainViewerMode.WorldDiagnostic, _ => throw new ArgumentException("Usage") };
                     break;
                 case "--module": module = Unique(module, value); break;
                 case "--resource": resource = Unique(resource, value); break;
@@ -58,7 +58,8 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         var actorArchiveSpecified = actorResource is not null || actorResourceHash is not null;
         if ((mode == TerrainViewerMode.TerrainOnly && (prototypes is not null || actorSpecified || actorArchiveSpecified))
             || (mode == TerrainViewerMode.CombinedStaticDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || actorSpecified || actorArchiveSpecified))
-            || (mode == TerrainViewerMode.ActorDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || !actorSpecified)))
+            || (mode == TerrainViewerMode.ActorDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || !actorSpecified))
+            || (mode == TerrainViewerMode.WorldDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || actorSpecified)))
             throw new ArgumentException("Usage");
         ActorDiagnosticPlacementInput? actor = null;
         if (mode == TerrainViewerMode.ActorDiagnostic)
@@ -68,6 +69,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new ActorDiagnosticPlacementInput(actorMapX, actorMapY, actorOriginX, actorOriginY, actorOffsetX, actorOffsetY,
                 actorBranch.Value, actorScale.Value, actorShrunk, actorAction.Value, actorFacing.Value, actorFrame.Value, 0, 0, 0, 0, 0, 0);
         }
+        if (mode == TerrainViewerMode.WorldDiagnostic) actor = DiagnosticActorMotion.ToPlacement(new DiagnosticActorMotion().Reset(), 0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor);
     }
 

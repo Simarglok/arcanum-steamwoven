@@ -6,6 +6,8 @@ using System.Globalization;
 
 namespace Arcanum.TerrainViewer;
 
+using Input = global::Godot.Input;
+
 public partial class TerrainViewerApp : Node
 {
     private readonly TerrainLoadCoordinator _coordinator = new();
@@ -54,6 +56,7 @@ public partial class TerrainViewerApp : Node
         if (SelfTestBootstrap) return;
 
         var args = OS.GetCmdlineUserArgs().ToList();
+        if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
             TerrainViewerSelfTest.Run(this);
@@ -63,6 +66,8 @@ public partial class TerrainViewerApp : Node
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
             _arguments = TerrainViewerArguments.Parse(args);
+            _hud.SetMode(_arguments.Mode);
+            if (IsWorld) InitializeWorld();
             _lastLoad = StartLoadAsync(_arguments);
         }
         catch (ArgumentException)
@@ -76,6 +81,8 @@ public partial class TerrainViewerApp : Node
     private async Task StartLoadAsync(TerrainViewerArguments arguments, bool orchestrateSmoke = true)
     {
         if (_exiting) return;
+        _hud?.SetMode(arguments.Mode);
+        if (arguments.Mode == TerrainViewerMode.WorldDiagnostic) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
         var priorCancellation = Interlocked.Exchange(ref _loadCancellation, new CancellationTokenSource());
         priorCancellation?.Cancel();
@@ -157,8 +164,17 @@ public partial class TerrainViewerApp : Node
         _actorTimeline = result.ActorPlan is null ? null : new AnimationTimeline(result.ActorPlan.Current.FrameCount, result.ActorPlan.Current.RawFramesPerSecond);
         if (_actorTimeline is not null && result.ActorPlan!.Current.Frame != 0) _actorTimeline.Seek(result.ActorPlan.Current.Frame);
         _readyMode = arguments.Mode;
+        _hud!.SetMode(arguments.Mode);
+        if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
+        {
+            InitializeWorld(); _actorTimeline = null;
+            _worldActor.Reset(); QuarantineWorld();
+            _camera.ResetWorld(WorldAnchor, WorldViewport);
+        }
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         RefreshReadyStatus();
+        if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
+            GD.Print($"ARC-WORLD-001 ready terrain={result.ResolvedCount}/{result.TileCount}/{result.FacadeCount} static={_readyStaticAdmittedCount} actor-textures={result.ActorTextures.Count} viewport={WorldViewport.X}x{WorldViewport.Y} display={DisplayServer.GetName()} test={SelfTestBootstrap || _nativeSmoke} collision=not-evaluated parity=NOT_VERIFIED");
     }
 
     private void ClearPublishedScene()
@@ -171,6 +187,8 @@ public partial class TerrainViewerApp : Node
     /// <summary>Sole failure publication route for normal loads and self-test injection.</summary>
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
+        if (mode == TerrainViewerMode.WorldDiagnostic) QuarantineWorld();
+        _hud?.SetMode(mode);
         ClearPublishedScene();
         ShowFailureStatus(mode, error);
     }
@@ -232,6 +250,7 @@ public partial class TerrainViewerApp : Node
 
     private async Task RunNativeSmokeAsync(TerrainLoadResult result)
     {
+        if (_readyMode == TerrainViewerMode.WorldDiagnostic) { await RunWorldNativeSmokeAsync(result); return; }
         var commandCount = _canvas!.CommandCount;
         var textureCount = _cache.Count;
         var geometrySignature = _canvas.GeometrySignature;
@@ -664,26 +683,32 @@ public partial class TerrainViewerApp : Node
         }
         var stableCounts = _canvas!.CommandCount == commandCount && _cache.Count == textureCount;
         var hudReadable = !string.IsNullOrWhiteSpace(_hud?.Text) && _hud.GlobalPosition == new Vector2(16, 16) && HasReadyHudContent(textureCount);
-        var terrainLandmarkFound = _canvas.TryGetOpaqueLandmark(out var terrainLandmark);
+        // At fitted zoom a particular edge texel can be downsampled away.
+        // WORLD requires an opaque decoded texel surviving the actual window,
+        // just as the static oracle does; never infer pixels from dimensions.
+        var terrainLandmarkFound = _readyMode == TerrainViewerMode.WorldDiagnostic
+            ? _canvas.TryGetOpaqueLandmark(candidate => TryAssertLandmark(screenshot, candidate), out var terrainLandmark)
+            : _canvas.TryGetOpaqueLandmark(out terrainLandmark);
         var terrainLandmarkMatches = terrainLandmarkFound && TryAssertLandmark(screenshot, terrainLandmark);
         TerrainCanvasLandmark staticLandmark = default;
         // Camera Fit can downsample an arbitrary source texel away. Choose an
         // opaque pixel of the final static command that survives the actual
         // exact-size production screenshot, then assert its decoded RGBA.
-        var staticLandmarkFound = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic
+        var requiresStatics = _readyMode is TerrainViewerMode.CombinedStaticDiagnostic or TerrainViewerMode.WorldDiagnostic;
+        var staticLandmarkFound = !requiresStatics
             || _canvas.TryGetOpaqueStaticLandmark(candidate => TryAssertLandmark(screenshot, candidate), out staticLandmark);
         // The exact-size production frame itself must carry both semantic
         // landmarks. The pass-difference check below is only a supplementary
         // control, not a substitute for the selected static pixel oracle.
-        var staticLandmarkMatches = _readyMode != TerrainViewerMode.CombinedStaticDiagnostic
+        var staticLandmarkMatches = !requiresStatics
             || (staticLandmarkFound && TryAssertLandmark(screenshot, staticLandmark));
         // Difference is an independent control only.  It is deliberately not
         // used as a proxy for the selected RGBA landmark assertion above.
-        var staticPassDiffers = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic
+        var staticPassDiffers = requiresStatics
             && staticLandmarkMatches && await HasStaticDifferenceInFullSceneAsync(screenshot, staticLandmark);
         GD.Print($"ARC-RENDER-004 native-smoke readback stable={stableCounts} hud={hudReadable} terrain={terrainLandmarkMatches} static={staticLandmarkMatches} static-landmark={staticLandmarkFound} static-index={staticLandmark.Ordinal} static-difference={staticPassDiffers}");
         if (!stableCounts || !hudReadable || !terrainLandmarkMatches || !staticLandmarkMatches
-            || (_readyMode == TerrainViewerMode.CombinedStaticDiagnostic && !staticLandmarkFound))
+            || (requiresStatics && !staticLandmarkFound))
             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.RenderFailure));
         return true;
     }
@@ -749,6 +774,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
+        if (IsWorld) { ProcessWorld(delta); return; }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);
         var before = _camera?.State;
         if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up)) _camera?.Pan(new Vector2(0, -step));
@@ -761,6 +787,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Input(InputEvent @event)
     {
+        if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)
         {
@@ -794,6 +821,7 @@ public partial class TerrainViewerApp : Node
 
     private void HandleViewportSizeChanged()
     {
+        if (IsWorld && _readyActorPlan is not null) _camera?.ResizeWorld(WorldAnchor, WorldViewport);
         // A diagnostic resize reflows only the HUD.  Camera fitting is an
         // explicit user action (R/F); silently refitting here would alter the
         // renderer/camera observation while testing readability.
@@ -803,14 +831,14 @@ public partial class TerrainViewerApp : Node
     private void RefreshReadyStatus()
     {
         if (_readySourceId is null || _camera is null) return;
-        var mode = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : _readyMode == TerrainViewerMode.ActorDiagnostic ? "actor-diagnostic" : "terrain-only";
-        var staticStatus = _readyMode == TerrainViewerMode.CombinedStaticDiagnostic
+        var mode = ModeName(_readyMode);
+        var staticStatus = _readyMode is TerrainViewerMode.CombinedStaticDiagnostic or TerrainViewerMode.WorldDiagnostic
             ? $"static census {_readyStaticCensus}/admitted {_readyStaticAdmittedCount}/outside-scope {_readyStaticOutsideScope}"
             : "static not requested";
         var actorStatus = _readyActor is ActorDiagnosticDrawCommand actor
             ? $" | Actor anchor policy: caller-selected diagnostic | Actor render state: caller-supplied normal-uncached | scale 100 | shrunk false | Actor: {actor.Action} (source action {(actor.Action == ActorDiagnosticAction.Idle ? 0 : 1)}) | Facing: requested {actor.RequestedFacing} -> physical group {actor.PhysicalGroup} | mirror {(actor.FlipX ? "yes" : "no")} | Frame: {actor.Frame}/{actor.FrameCount} | Playback: {(_actorTimeline?.IsPlaying == true ? "playing" : "paused")} | raw ART FPS preview {actor.RawFramesPerSecond} (not source scheduler/gameplay) | World position: stationary | Layering: diagnostic terrain -> actor -> guides | Original placement parity: NOT VERIFIED | Controls: 1 Idle | 2 Walk | [ ] facing | Space play/pause | , . step"
             : string.Empty;
-        ShowStatus($"Diagnostic mode {mode} | terrain 4096/3033/1063 | {staticStatus} | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | terrain decoded {_readyDecodedCount} | static decoded {_readyStaticDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms{actorStatus}");
+        ShowStatus($"Diagnostic mode {mode} | terrain 4096/3033/1063 | {staticStatus} | source-id {_readySourceId} | zoom {FormatZoom(_camera.State.Zoom)} | terrain decoded {_readyDecodedCount} | static decoded {_readyStaticDecodedCount} | cache {_cache.Count} | {_readyElapsedMilliseconds}ms{(_readyMode == TerrainViewerMode.WorldDiagnostic ? WorldStatus() : actorStatus)}");
     }
 
     private void ClearReadyMetrics()
@@ -834,7 +862,7 @@ public partial class TerrainViewerApp : Node
         => _hud?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
             && _hud.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
-    private static string ModeName(TerrainViewerMode mode) => mode == TerrainViewerMode.CombinedStaticDiagnostic ? "combined" : mode == TerrainViewerMode.ActorDiagnostic ? "actor-diagnostic" : "terrain-only";
+    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
     private void SelectActorAction(ActorDiagnosticAction action)
     {
         if (_readyActorInput is null || _readyActorPlan is null) return;
@@ -882,6 +910,8 @@ public partial class TerrainViewerApp : Node
     public override void _ExitTree()
     {
         _exiting = true;
+        ExitWorld();
+        GetViewport().SizeChanged -= HandleViewportSizeChanged;
         _generation = _coordinator.BeginGeneration();
         var cancellation = Interlocked.Exchange(ref _loadCancellation, null);
         cancellation?.Cancel();

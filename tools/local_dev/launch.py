@@ -71,19 +71,21 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     trust boundary.  The actor values are the documented diagnostic defaults,
     never recovered world state.
     """
-    if mode not in {"terrain-only", "combined", "actor-diagnostic"}:
+    if mode not in {"terrain-only", "combined", "actor-diagnostic", "world-diagnostic"}:
         raise ValueError("unsupported terrain diagnostic mode")
+    if mode == "world-diagnostic" and any(value is not None for value in (overrides or {}).values()):
+        raise ValueError("world diagnostic rejects actor preview overrides")
     required = ("module", "terrainResource", "sourceId")
-    if mode in {"combined", "actor-diagnostic"}:
+    if mode in {"combined", "actor-diagnostic", "world-diagnostic"}:
         required += ("prototypes",)
-    if mode == "actor-diagnostic":
+    if mode in {"actor-diagnostic", "world-diagnostic"}:
         required += ("actorResource",)
     if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
         raise ValueError("configure explicit terrain input roles before launch")
 
-    def local_file(role: str) -> str:
+    def local_file(role: str, *, directory: bool = False) -> str:
         path = Path(inputs[role]).expanduser().absolute()
-        if not path.is_file() or path.is_symlink() or config._has_symlink_component(path):
+        if not (path.is_dir() if directory else path.is_file()) or path.is_symlink() or config._has_symlink_component(path):
             raise ValueError("configured terrain input is unavailable or unsafe")
         return str(path.resolve(strict=True))
 
@@ -91,8 +93,10 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if not source_id or len(source_id) > 80 or any(character in source_id for character in "/\\\n\r\t"):
         raise ValueError("configured source-id is unsafe")
     arguments = ["--mode", mode, "--module", local_file("module"), "--resource", local_file("terrainResource"), "--source-id", source_id]
-    if mode in {"combined", "actor-diagnostic"}:
-        arguments.extend(("--prototypes", local_file("prototypes")))
+    if mode in {"combined", "actor-diagnostic", "world-diagnostic"}:
+        arguments.extend(("--prototypes", local_file("prototypes", directory=True)))
+    if mode == "world-diagnostic":
+        arguments.extend(("--actor-resource", local_file("actorResource")))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

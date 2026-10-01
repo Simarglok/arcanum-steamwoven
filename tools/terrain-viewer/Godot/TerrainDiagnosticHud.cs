@@ -1,4 +1,5 @@
 using Godot;
+using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer;
 
@@ -12,6 +13,10 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     private Label? _sticky;
     private Label? _detail;
     private ScrollContainer? _scroll;
+    private TerrainViewerMode _mode;
+    private Button? _settings;
+    public event Action? SettingsRequested;
+    public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode == TerrainViewerMode.WorldDiagnostic; }
 
     internal string Text => $"{_sticky?.Text}\n{_detail?.Text}";
     internal Vector2 GlobalPosition => _panel?.GlobalPosition ?? Vector2.Zero;
@@ -56,6 +61,9 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 
         var contents = new VBoxContainer { Name = "DiagnosticContents" };
         _panel.AddChild(contents);
+        _settings = new Button { Text = "Input settings (F1 / Start)", Visible = false };
+        _settings.Pressed += () => SettingsRequested?.Invoke();
+        contents.AddChild(_settings);
         _sticky = new Label
         {
             Name = "DiagnosticSticky",
@@ -75,9 +83,11 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 
     internal void SetDiagnosticText(string detail, bool automatedTestMode)
     {
-        var mode = detail.Contains("Diagnostic mode actor-diagnostic", StringComparison.Ordinal) ? "actor-diagnostic"
-            : detail.Contains("Diagnostic mode combined", StringComparison.Ordinal) ? "combined" : "terrain-only";
-        var limitation = mode == "actor-diagnostic" ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
+        var mode = _mode switch { TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
+            TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
+        var limitation = _mode == TerrainViewerMode.WorldDiagnostic
+            ? "\nDiagnostic free movement — collision not evaluated\nOriginal placement/movement/visual parity: NOT VERIFIED"
+            : _mode == TerrainViewerMode.ActorDiagnostic ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
         if (_sticky is not null)
             _sticky.Text = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";
         if (_detail is not null) _detail.Text = detail;
@@ -87,7 +97,8 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     {
         if (_panel is null) return;
         var viewportHeight = GetViewport().GetVisibleRect().Size.Y;
-        var boundedHeight = Mathf.Clamp(viewportHeight * 0.35f, 110f, 360f);
+        var boundedHeight = Math.Min(Math.Max(1, viewportHeight - 32), Mathf.Clamp(viewportHeight * 0.35f, 110f, 360f));
         _panel.OffsetBottom = 16 + boundedHeight;
     }
+    public override void _ExitTree() => GetViewport().SizeChanged -= ResizeForViewport;
 }
