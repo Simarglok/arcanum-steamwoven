@@ -31,7 +31,14 @@ public static class ActorDiagnosticSource
     /// so actor mode shares the unchanged aggregate cap.
     /// </summary>
     public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
-        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint = null)
+        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint = null,
+        TerrainViewerMode mode = TerrainViewerMode.ActorDiagnostic)
+        => CreateWithBudget(module, resource, input, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken,
+            TerrainLoadBudget.Default, point => retainedFrameCheckpoint?.Invoke(point.RetainedCount), mode);
+
+    internal static ActorDiagnosticLoad CreateWithBudget(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
+        int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, TerrainLoadBudget budget,
+        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
     {
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(resource);
@@ -46,9 +53,9 @@ public static class ActorDiagnosticSource
         var catalog = new List<ActorDiagnosticFrame>(PhysicalGroups * (IdleFrames + WalkFrames));
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
         var checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Idle, IdleSelector, IdleResourceOrdinal, IdleFps, IdleFrames,
-            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken, retainedFrameCheckpoint);
+            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
         checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Walk, WalkSelector, WalkResourceOrdinal, WalkFps, WalkFrames,
-            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, retainedFrameCheckpoint);
+            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
         if (textures.Count != TerrainCachePolicy.MaxActorDistinctKeys || catalog.Count != TerrainCachePolicy.MaxActorDistinctKeys)
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
         ActorPhysicalFacing physical;
@@ -65,7 +72,7 @@ public static class ActorDiagnosticSource
 
     private static long DecodeAction(DatArchive resource, ActorDiagnosticAction action, uint selector, int ordinal, int fps, int expectedFrames,
         ICollection<ActorDiagnosticFrame> catalog, IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures, int alreadyRetainedCount,
-        long checkedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint)
+        long checkedRgbaBytes, CancellationToken cancellationToken, TerrainLoadBudget budget, Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
     {
         var entries = resource.Entries.Where(candidate => candidate.Ordinal == ordinal).ToArray();
         if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
@@ -92,14 +99,14 @@ public static class ActorDiagnosticSource
                     // frame's RGBA array in this load-local texture catalogue.
                     try
                     {
-                        checkedRgbaBytes = TerrainCachePolicy.AddCheckedFrame(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), decoded.Width, decoded.Height);
+                        checkedRgbaBytes = budget.Add(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), textures.Count, budget.Actor, decoded.Width, decoded.Height, mode);
                     }
                     catch (TerrainViewerException exception) when (exception.Error.Code is TerrainViewerErrorCode.ResourceLimit or TerrainViewerErrorCode.DecodeFailure)
                     {
                         throw Failure(exception.Error.Code, TerrainViewerFailureStage.ActorDecode);
                     }
                     textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
-                    retainedFrameCheckpoint?.Invoke(textures.Count);
+                    retainedFrameCheckpoint?.Invoke(new("actor", textures.Count, alreadyRetainedCount + textures.Count, checkedRgbaBytes));
                     cancellationToken.ThrowIfCancellationRequested();
                 }
             }
@@ -139,7 +146,13 @@ public sealed class ActorDiagnosticSourceOperation : IDisposable
 
     public ActorDiagnosticLoad Execute(DatArchive module, ActorDiagnosticPlacementInput input, int alreadyRetainedCount,
         long alreadyCheckedRgbaBytes, TerrainViewerProgress progress, CancellationToken cancellationToken,
-        Action<int>? retainedFrameCheckpoint = null)
+        Action<int>? retainedFrameCheckpoint = null, TerrainViewerMode mode = TerrainViewerMode.ActorDiagnostic)
+        => ExecuteWithBudget(module, input, alreadyRetainedCount, alreadyCheckedRgbaBytes, progress, cancellationToken,
+            TerrainLoadBudget.Default, point => retainedFrameCheckpoint?.Invoke(point.RetainedCount), mode);
+
+    internal ActorDiagnosticLoad ExecuteWithBudget(DatArchive module, ActorDiagnosticPlacementInput input, int alreadyRetainedCount,
+        long alreadyCheckedRgbaBytes, TerrainViewerProgress progress, CancellationToken cancellationToken, TerrainLoadBudget budget,
+        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
     {
         cancellationToken.ThrowIfCancellationRequested();
         try { _archive ??= _openArchive(); }
@@ -147,8 +160,8 @@ public sealed class ActorDiagnosticSourceOperation : IDisposable
         catch (IOException) { throw OpenFailure(progress); }
         catch (UnauthorizedAccessException) { throw OpenFailure(progress); }
         ArgumentNullException.ThrowIfNull(module);
-        return ActorDiagnosticSource.Create(module, _archive, input, alreadyRetainedCount, alreadyCheckedRgbaBytes,
-            cancellationToken, retainedFrameCheckpoint);
+        return ActorDiagnosticSource.CreateWithBudget(module, _archive, input, alreadyRetainedCount, alreadyCheckedRgbaBytes,
+            cancellationToken, budget, retainedFrameCheckpoint, mode);
     }
 
     public void Dispose()

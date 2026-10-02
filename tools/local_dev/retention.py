@@ -18,6 +18,9 @@ from . import launch
 from .manifests import SUPPORTED_TOOLS, _manifest, _root_relative, manifest_candidate, resolve_pointer, sha256
 
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
+REQUIRED_TASK_SUCCESS_GATES = {
+    "ARC-WORLD-001": {"focused-tests", "source-world-original", "exported-world-original"},
+}
 REQUIRED_SUCCESS_GATES = {
     "gamepad": {"core-harness", "godot-self-test", "export", "exported-smoke", "codesign-deep-strict"},
     "display": {"locked-build", "source-layout-matrix", "export", "exported-layout-matrix", "exported-native-smoke", "codesign-deep-strict"},
@@ -631,9 +634,11 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
     named_outcomes = {entry.get("name"): entry.get("outcome", entry.get("status")) for entry in checks if isinstance(entry, dict)}
     if len(named_outcomes) != len(checks) or any(outcome != "PASS" for outcome in named_outcomes.values()):
         raise ValueError("register-export requires all named verification checks to pass")
-    required = REQUIRED_SUCCESS_GATES.get(tool, set())
+    required = REQUIRED_SUCCESS_GATES.get(tool, set()) | REQUIRED_TASK_SUCCESS_GATES.get(task, set())
     if not required.issubset(named_outcomes):
         raise ValueError("register-export requires the complete tool-specific success gates")
+    if task == "ARC-WORLD-001" and payload.get("delivery", {}).get("originalInputModes") != "PASS":
+        raise ValueError("world export requires verified original integrated inputs")
     app_path = manifest.parent / app["relativePath"]
     executable = manifest.parent / app["executableRelativePath"]
     try:

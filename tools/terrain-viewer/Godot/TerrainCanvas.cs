@@ -25,6 +25,9 @@ public partial class TerrainCanvas : Node2D
             .Concat((_staticPlan?.Commands ?? Array.Empty<StaticSceneryDrawCommand>()).Select(command => $"static:{command.SourceIndex}:{command.TextureKey.ResourceIdentity.DatOrdinal},{command.TextureKey.Group},{command.TextureKey.Frame},{command.TextureKey.Palette}:{command.AnchorX},{command.AnchorY}:{command.Destination.X},{command.Destination.Y},{command.Destination.Width},{command.Destination.Height}:{command.FlipX}")));
 
     public bool TryGetOpaqueLandmark(out TerrainCanvasLandmark landmark)
+        => TryGetOpaqueLandmark(null, out landmark);
+
+    public bool TryGetOpaqueLandmark(Func<TerrainCanvasLandmark, bool>? accept, out TerrainCanvasLandmark landmark)
     {
         landmark = default;
         if (_plan is null || _textures is null) return false;
@@ -32,7 +35,14 @@ public partial class TerrainCanvas : Node2D
         // for a full-scene landmark that cannot be obscured by this canvas.
         foreach (var command in _plan.Commands.Reverse())
         {
-            if (!_textures.TryFindOpaquePixel(command.TextureKey, command.Source, out var pixel)) continue;
+            if (!_textures.TryFindOpaquePixel(command.TextureKey, command.Source, pixel =>
+                {
+                    var x = pixel.X - command.Source.X;
+                    if (command.FlipX) x = command.Source.Width - 1 - x;
+                    var candidate = new TerrainCanvasLandmark(command.Destination.X + x, command.Destination.Y + pixel.Y - command.Source.Y,
+                        pixel.R, pixel.G, pixel.B, pixel.A, command.Ordinal);
+                    return accept is null || accept(candidate);
+                }, out var pixel)) continue;
             var offsetX = pixel.X - command.Source.X;
             if (command.FlipX) offsetX = command.Source.Width - 1 - offsetX;
             landmark = new TerrainCanvasLandmark(command.Destination.X + offsetX, command.Destination.Y + pixel.Y - command.Source.Y,
@@ -125,7 +135,13 @@ public partial class TerrainCanvas : Node2D
                 DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
             }
         }
-        if (_actorPlan is not null)
+        DrawStatics();
+        DrawActor();
+    }
+
+    private void DrawActor()
+    {
+        if (_actorPlan is not null && _textures is not null)
         {
             var actor = _actorPlan.Current;
             if (_textures.TryGet(actor.TextureKey, out var texture))
@@ -144,7 +160,11 @@ public partial class TerrainCanvas : Node2D
                 DrawLine(new Vector2((float)actor.AnchorX, (float)actor.AnchorY - 4), new Vector2((float)actor.AnchorX, (float)actor.AnchorY + 4), Colors.Yellow, 1f);
             }
         }
-        if (_staticPlan is null || !_showStatics) return;
+    }
+
+    private void DrawStatics()
+    {
+        if (_staticPlan is null || !_showStatics || _textures is null) return;
         foreach (var command in _staticPlan.Commands)
         {
             if (!_textures.TryGet(command.TextureKey, out var texture)) continue;

@@ -23,8 +23,14 @@
           "GodotSharp": "4.7.2"
         }
       },
-      "gamepadlab.core": {
+      "arcanum.input": {
         "type": "Project"
+      },
+      "gamepadlab.core": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Input": "[1.0.0, )"
+        }
       }
     }
   }

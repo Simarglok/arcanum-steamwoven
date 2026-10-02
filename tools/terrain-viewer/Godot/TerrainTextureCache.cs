@@ -133,8 +133,12 @@ public sealed class TerrainTextureCache : IDisposable
     }
 
     public bool TryFindOpaquePixel(TerrainTextureKey key, TerrainRect source, out TerrainTexturePixel pixel)
+        => TryFindOpaquePixel(key, source, static _ => true, out pixel);
+
+    public bool TryFindOpaquePixel(TerrainTextureKey key, TerrainRect source, Func<TerrainTexturePixel, bool> accept, out TerrainTexturePixel pixel)
     {
         pixel = default;
+        ArgumentNullException.ThrowIfNull(accept);
         if (!TryGet(key, out var texture)) return false;
         using var image = texture.GetImage();
         for (var y = source.Y; y < source.Y + source.Height; y++)
@@ -142,9 +146,11 @@ public sealed class TerrainTextureCache : IDisposable
             for (var x = source.X; x < source.X + source.Width; x++)
             {
                 var color = image.GetPixel(x, y);
-                if (color.A <= 0) continue;
-                pixel = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
+                if (color.A < 1f) continue;
+                var candidate = new TerrainTexturePixel(x, y, (byte)Math.Round(color.R * 255), (byte)Math.Round(color.G * 255),
                     (byte)Math.Round(color.B * 255), (byte)Math.Round(color.A * 255));
+                if (!accept(candidate)) continue;
+                pixel = candidate;
                 return true;
             }
         }

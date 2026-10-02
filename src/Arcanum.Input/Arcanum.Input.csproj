@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Input</AssemblyName>
+    <RootNamespace>Arcanum.Input</RootNamespace>
+  </PropertyGroup>
+</Project>

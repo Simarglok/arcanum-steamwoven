@@ -17,6 +17,13 @@ readiness or authorize a generalized `Arcanum.Data` actor interface.
 
 ## Types
 
+ARC-WORLD-001's integrated diagnostic consumer reuses this same fixed admitted
+profile and checked normal placement. Sector-local free motion, screen-octant
+facing numbers and Idle 6/Walk 10 FPS are **project diagnostic policies**,
+not source compass/scheduler/speed or original movement/collision claims.
+See [WORLD policy](terrain-viewer.md#integrated-world-diagnostic-policy).
+The historical original-runtime `NOT READY` conclusion above is unchanged.
+
 ```text
 ActorSelector
   safeSourceId, moduleFingerprint(length, sha256), moduleDatOrdinal,

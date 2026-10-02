@@ -19,12 +19,14 @@ public sealed record LabSettings(
     {
         if (Version != 1 || !Enum.IsDefined(MovementMode) || !double.IsFinite(CameraDeadzone) || !double.IsFinite(ActorDeadzone)
             || !double.IsFinite(CameraSensitivity) || !double.IsFinite(ActorSensitivity)) return Default;
+        var common = new Arcanum.Input.InputSettings(Version, CameraDeadzone, ActorDeadzone,
+            CameraSensitivity, ActorSensitivity, InvertCameraX, InvertCameraY).Validated();
         return this with
         {
-            CameraDeadzone = Math.Clamp(CameraDeadzone, .05, .45),
-            ActorDeadzone = Math.Clamp(ActorDeadzone, .05, .45),
-            CameraSensitivity = Math.Clamp(CameraSensitivity, .5, 2),
-            ActorSensitivity = Math.Clamp(ActorSensitivity, .5, 2)
+            CameraDeadzone = common.CameraDeadzone,
+            ActorDeadzone = common.ActorDeadzone,
+            CameraSensitivity = common.CameraSensitivity,
+            ActorSensitivity = common.ActorSensitivity
         };
     }
 }

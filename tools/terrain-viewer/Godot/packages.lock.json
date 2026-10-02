@@ -29,13 +29,18 @@
           "SharpZipLib": "[1.4.2, )"
         }
       },
+      "arcanum.input": {
+        "type": "Project"
+      },
       "arcanum.presentation": {
         "type": "Project"
       },
       "arcanum.terrainviewer.core": {
         "type": "Project",
         "dependencies": {
-          "Arcanum.Data": "[1.0.0, )"
+          "Arcanum.Data": "[1.0.0, )",
+          "Arcanum.Input": "[1.0.0, )",
+          "Arcanum.Presentation": "[1.0.0, )"
         }
       },
       "SharpZipLib": {

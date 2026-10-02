@@ -160,7 +160,7 @@ class LocalDevTests(unittest.TestCase):
     def test_authority_all_literal_tasks_and_names_are_inspected(self) -> None:
         # Literal contract, deliberately not generated from SUPPORTED_TOOLS.
         groups = {"art": ("ARC-RENDER-001", "ARC-RENDER-002"),
-                  "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001"),
+                  "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001", "ARC-WORLD-001"),
                   "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003"), "display": ("ARC-UI-001",)}
         for tool, tasks in groups.items():
             for task in tasks:
@@ -374,7 +374,7 @@ class LocalDevTests(unittest.TestCase):
         path.write_text(json.dumps(plan), encoding="utf-8")
         cli = Path(__file__).resolve().parents[1] / "arcanum-local"
         return subprocess.run([sys.executable, "-B", str(cli), "builds", "apply", "--plan", str(path),
-            "--accept-plan", plan["id"]], capture_output=True, text=True, timeout=3)
+            "--accept-plan=" + plan["id"]], capture_output=True, text=True, timeout=3)
 
     def unsafe_node(self, path: Path, kind: str) -> socket.socket | None:
         if kind == "dangling": path.symlink_to(self.root / "missing-sentinel")
@@ -432,7 +432,10 @@ class LocalDevTests(unittest.TestCase):
     def test_prune_record_absence_recovery_and_idempotence_actual_cli(self) -> None:
         for recovery in (False, True):
             with self.subTest(recovery=recovery):
-                candidate, plan = self.prune_authority_fixture(recovery=recovery)
+                # URL-safe IDs may start with '-'. Bind an option value with '='
+                # instead of letting argparse mistake the token for an option.
+                with patch.object(retention.secrets, "token_urlsafe", return_value="-fixture-plan-token"):
+                    candidate, plan = self.prune_authority_fixture(recovery=recovery)
                 immutable = {p.relative_to(candidate).as_posix(): p.read_bytes() for p in candidate.rglob("*")
                              if p.is_file() and (p.name == "manifest.json" or "evidence" in p.parts)}
                 conf_bytes, registry_bytes = config.config_path().read_bytes(), config.registry_path().read_bytes()
@@ -602,7 +605,7 @@ class LocalDevTests(unittest.TestCase):
         inputs = {}
         for role in ("module", "terrainResource", "actorResource", "prototypes"):
             path = self.root / f"{role} input"
-            path.write_bytes(b"fixture")
+            path.mkdir() if role == "prototypes" else path.write_bytes(b"fixture")
             inputs[role] = str(path)
         inputs["sourceId"] = "synthetic-local"
         combined = launch.terrain_arguments(inputs, "combined")
@@ -623,7 +626,7 @@ class LocalDevTests(unittest.TestCase):
         inputs = {}
         for role in ("module", "terrainResource", "actorResource", "prototypes"):
             path = self.root / role
-            path.write_bytes(b"fixture")
+            path.mkdir() if role == "prototypes" else path.write_bytes(b"fixture")
             inputs[role] = str(path)
         inputs["sourceId"] = "synthetic"
         actor = launch.terrain_arguments(inputs, "actor-diagnostic", {"actor_action": "walk", "actor_facing": 7, "actor_frame": 7})

@@ -7,7 +7,7 @@ using System.Reflection;
 
 namespace Arcanum.TerrainViewer;
 
-public static class TerrainViewerSelfTest
+public static partial class TerrainViewerSelfTest
 {
     public static async void Run(Node host)
     {
@@ -27,6 +27,7 @@ public static class TerrainViewerSelfTest
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
             await AssertSyntheticProductionAppAsync(host);
+            await AssertSyntheticWorldAppAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {
@@ -45,6 +46,7 @@ public static class TerrainViewerSelfTest
                 GD.Print("ARC-RENDER-005 self-test PASS terrain/static/actor structural plan; graphical readback NOT_VERIFIED headless");
             }
             host.GetTree().Quit(0);
+            GD.Print("ARC-WORLD-001 self-test PASS combined scene/control/lifecycle; physical usability NOT_READY");
         }
         catch (Exception exception)
         {
@@ -413,7 +415,7 @@ public static class TerrainViewerSelfTest
             if (Math.Abs(Math.Round(pixel.R * 255) - expected.R) <= 1 && Math.Abs(Math.Round(pixel.G * 255) - expected.G) <= 1
                 && Math.Abs(Math.Round(pixel.B * 255) - expected.B) <= 1 && Math.Round(pixel.A * 255) == 255) return;
         }
-        throw new InvalidOperationException("Synthetic literal pixel oracle failed.");
+        throw new InvalidOperationException($"Synthetic literal pixel oracle failed at world=({worldX},{worldY}) screen=({x},{y}) expected={expected} actual={image.GetPixel(Math.Clamp(x,0,image.GetWidth()-1),Math.Clamp(y,0,image.GetHeight()-1))}.");
     }
 
     private static void AssertGuideAt(Image image, Transform2D transform, int worldX, int worldY, bool yellow)
