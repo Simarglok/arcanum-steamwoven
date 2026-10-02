@@ -39,6 +39,13 @@ The same file contains `wmap_path_make` and a separate 16×16 sector search (`pa
 
 No claim is made about undocumented flags, all animation call paths, source-to-original fidelity, target interpretation, original terrain/collision data, movement animation timing, or path quality under real game content.
 
+ARC-RES-013 separately records a [grid movement contract](../world/grid-movement-contract.md)
+and [pinned motion evidence](../research/grid-movement-evidence.md). Its directed
+entry/commit, smooth-return/finish and timing law are Project policy, not conclusions
+from this route search. The normal move trace also qualifies universal Stand-at-end
+claims: the inspected ordinary update restores the previous animation. Neither study
+establishes original-runtime movement or turns the returned-segment cap into a global limit.
+
 ## Comparison with the synthetic Gamepad Lab
 
 ARC-GPAD-002/003's default is direct semantic desired direction; its optional Nearby Goal mode stores a 96 px actor-relative synthetic point, refreshes only under explicit cadence/hysteresis conditions, and stops on the procedural occupancy callback. It neither runs CE code nor reproduces CE locations, flags, eight rotations, traversal costs, NPC budgets, or the CE fallback search.
