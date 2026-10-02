@@ -138,7 +138,9 @@ public sealed class ValidationTests
             initial.Descriptor with{NextEventOrdinal=long.MaxValue},
             initial.Descriptor with{NextEventOrdinal=long.MaxValue-3},
             missing.Descriptor with{NextOpportunityId=long.MaxValue,LastOpportunity=Key(long.MaxValue-1)},
-            missing.Descriptor with{NextStepId=long.MaxValue,NextOpportunityId=long.MaxValue,LastOpportunity=Key(long.MaxValue-1,long.MaxValue-1)}
+            // An exhausted admitted receipt consumed its proposed step; a denial did not.
+            missing.Descriptor with{NextStepId=long.MaxValue,NextOpportunityId=long.MaxValue,
+                LastOpportunity=Key(long.MaxValue-1,long.MaxValue-1),LastOpportunityDisposition="Admitted"}
         })
         {
             var state=MovementState.FromDescriptor(descriptor);Assert.IsTrue(MovementValidation.IsValidState(state));

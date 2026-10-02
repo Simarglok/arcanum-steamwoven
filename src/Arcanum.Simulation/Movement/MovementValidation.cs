@@ -70,18 +70,33 @@ internal static class MovementValidation
         Require(s.MaterialIntentKey is null || (s.LatestInputKey is { } latest &&
             Compare(s.MaterialIntentKey.Value, latest) <= 0), MovementFailureKind.InvalidState);
         Require(!s.LatestIntent.Active || s.MaterialIntentKey is not null, MovementFailureKind.InvalidState);
+        // A revision is consumed only by a timestamped reassessment input.
+        Require(s.EvidenceRevision == 0 || s.LatestInputKey is not null, MovementFailureKind.InvalidState);
         Require((s.LastOpportunity is null) == (s.LastOpportunityDisposition is null), MovementFailureKind.InvalidState);
         if (s.LastOpportunity is { } last)
+        {
             Require(KeyShape(last) && last.Binding == s.Binding && last.OpportunityId == s.NextOpportunityId - 1 &&
-                last.ProposedStepId <= s.NextStepId && last.StartTime.Value <= s.Time.Value &&
+                last.ProposedStepId <= last.OpportunityId && last.StartTime.Value <= s.Time.Value &&
                 last.EvidenceRevision <= s.EvidenceRevision &&
                 s.LastOpportunityDisposition is "Admitted" or "MissingAssessment" or "Denied", MovementFailureKind.InvalidState);
+            // The latest receipt determines whether that opportunity consumed a step.
+            // Subtract from the validated next counter instead of incrementing a raw key.
+            Require(last.ProposedStepId == (s.LastOpportunityDisposition == "Admitted" ? s.NextStepId - 1 : s.NextStepId),
+                MovementFailureKind.InvalidState);
+            Require(s.MaterialIntentKey is { } currentMaterial && Compare(last.MaterialIntentKey, currentMaterial) <= 0 &&
+                (last.MaterialIntentKey != currentMaterial || s.LatestIntent == ActorIntent.Toward(last.Direction)),
+                MovementFailureKind.InvalidState);
+        }
         else Require(s.NextOpportunityId == 1 && s.NextStepId == 1, MovementFailureKind.InvalidState);
 
         if (s.Phase == MovementPhase.Settled)
         {
             Require(s.Segment is null && s.Anchor == MovementGeometry.Center(s.CommittedCell) &&
                 s.Action == MovementAction.Idle, MovementFailureKind.InvalidState);
+            if (s.LastOpportunity is { } settledLast)
+                Require(s.CommittedCell == settledLast.From ||
+                    (s.LastOpportunityDisposition == "Admitted" && s.CommittedCell == settledLast.To),
+                    MovementFailureKind.InvalidState);
             return;
         }
         Require(s.Segment is not null && s.Action == MovementAction.Walk, MovementFailureKind.InvalidState);
@@ -91,7 +106,7 @@ internal static class MovementValidation
         Require(AssessmentShape(segment.Assessment) && segment.Assessment.Coverage == AssessmentCoverage.Supported &&
             segment.Assessment.Disposition == AssessmentDisposition.Open && k.Binding == s.Binding &&
             k.ProposedStepId == s.NextStepId - 1 && k.OpportunityId < s.NextOpportunityId &&
-            k.EvidenceRevision <= s.EvidenceRevision && segment.StartTime.Value <= s.Time.Value &&
+            k.EvidenceRevision == s.EvidenceRevision && segment.StartTime.Value <= s.Time.Value &&
             s.Time.Value < segment.EndTime.Value && s.LastOpportunity == k && s.LastOpportunityDisposition == "Admitted" &&
             s.MaterialIntentKey is { } material && Compare(k.MaterialIntentKey, material) <= 0,
             MovementFailureKind.InvalidState);
@@ -100,14 +115,16 @@ internal static class MovementValidation
         {
             Require(segment.ReleaseTime is { } r && r.IsValid && segment.StartTime.Value < r.Value &&
                 r.Value < segment.EntryTime.Value && r.Value <= s.Time.Value && s.CommittedCell == segment.From &&
+                s.MaterialIntentKey!.Value.Time.Value >= r.Value &&
                 s.Facing == MovementGeometry.Reverse(segment.Direction), MovementFailureKind.InvalidState);
         }
         else
         {
             Require(segment.ReleaseTime is null && s.Facing == segment.Direction, MovementFailureKind.InvalidState);
             Require(s.Phase == MovementPhase.OutboundBeforeEntry
-                ? s.Time.Value < segment.EntryTime.Value && s.CommittedCell == segment.From
-                : s.Time.Value >= segment.EntryTime.Value && s.CommittedCell == segment.To,
+                ? s.Time.Value < segment.EntryTime.Value && s.CommittedCell == segment.From && s.LatestIntent.Active
+                : s.Time.Value >= segment.EntryTime.Value && s.CommittedCell == segment.To &&
+                    (s.LatestIntent.Active || s.MaterialIntentKey!.Value.Time.Value >= segment.EntryTime.Value),
                 MovementFailureKind.InvalidState);
         }
     }

@@ -106,6 +106,17 @@ facing. Initial settled press+release in one batch emits no events. The internal
 friend-test setup is checked by the same production validator; it is not a
 public restore API or permission to append a closed timestamp.
 
+State validation also checks transition/receipt consistency: before-entry
+outbound requires active intent; a neutral post-entry finish must record its
+material release at or after entry; returning material input cannot predate the
+latched release. Active evidence revision equals the frozen admitted revision.
+An Admitted receipt consumed its proposed step, whereas Denied/MissingAssessment
+receipts did not. Receipt material keys cannot exceed the current material key;
+unchanged material retains its admitted/attempted direction. Settled ownership
+must match the last denied source or an admitted source/destination. Nonzero
+revision requires a timestamped input key. Invalid descriptors are refused, not
+normalized; these checks do not introduce a public restore or history API.
+
 ## Explicit admission, opportunities and ownership
 
 `ActorBinding` contains exact ordinal, nonempty bounded identities: ChartId,
