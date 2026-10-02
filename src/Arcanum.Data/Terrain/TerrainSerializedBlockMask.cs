@@ -17,6 +17,8 @@ public sealed class TerrainSerializedBlockMask
 
     private TerrainSerializedBlockMask(uint[] words) => _words = words;
 
+    internal uint[] CopyWords() => _words.ToArray();
+
     /// <summary>Parses exactly 128 little-endian UInt32 words and owns the resulting snapshot.</summary>
     public static TerrainSerializedBlockMask Parse(ReadOnlySpan<byte> bytes)
     {

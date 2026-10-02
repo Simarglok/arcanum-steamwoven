@@ -282,6 +282,14 @@ unless stated. The worksheet checks full literal event lists, not only final cel
 
 ## Real traversal readiness frontier
 
+ARC-DATA-008's [production cardinal assessment](cardinal-traversal-assessment.md)
+now supplies immutable, fully bound Data evidence for the fixed isolated context
+and x4..8/y0..3 rectangle. This narrow implementation does not rewrite the
+historical classifications below, implement movement, or admit other cardinal
+contexts/diagonals. WORLD003 still requires an authenticated original binding,
+independent actor/context mapping and its own opportunity/timing contract after
+reviewed delivery and observed owner merge.
+
 Classifications in this table are explicit; “required next” is **Project policy**
 for future bounded work, not authorization to implement it now. Result vocabulary
 and precedence remain those of the [passability contract](passability-contract.md).

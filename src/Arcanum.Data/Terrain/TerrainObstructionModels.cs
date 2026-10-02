@@ -94,7 +94,8 @@ public sealed class TerrainObstructionSectorReport
 
     internal TerrainObstructionSectorReport(TerrainSectorSelector selector, uint[] tileWords, TerrainSerializedBlockMask? blockMask,
         TerrainTileNameRuleTable? tileNameRules, TerrainObstructionComponentResult tileSourceFailure,
-        TerrainObstructionProvenance moduleProvenance)
+        TerrainObstructionProvenance moduleProvenance, TerrainEntryExpectation? selectedNameEntry = null,
+        int tileScriptCount = 0, int sectorScriptBytes = 0, int terminalRecordCount = 0)
     {
         _sector = new TerrainObstructionSectorIdentity(moduleProvenance.EntryOrdinal ?? throw new ArgumentException("Selected module provenance requires an entry ordinal.", nameof(moduleProvenance)),
             selector.OriginX, selector.OriginY, selector.Width, selector.Height);
@@ -103,7 +104,17 @@ public sealed class TerrainObstructionSectorReport
         _tileNameRules = tileNameRules;
         _tileSourceFailure = tileSourceFailure;
         _moduleProvenance = moduleProvenance;
+        SelectedNameEntry = selectedNameEntry;
+        TileScriptCount = tileScriptCount; SectorScriptBytes = sectorScriptBytes; TerminalRecordCount = terminalRecordCount;
     }
+
+    internal TerrainEntryExpectation? SelectedNameEntry { get; }
+    internal int TileScriptCount { get; }
+    internal int SectorScriptBytes { get; }
+    internal int TerminalRecordCount { get; }
+    internal uint[] CopyTileWords() => _tileWords.ToArray();
+    internal uint[]? CopyBlockWords() => _blockMask?.CopyWords();
+    internal int? SelectedNameKey(int ordinal) => _tileWords[ordinal] >> 28 == 0 ? _tileNameRules?.Key(_tileWords[ordinal]) : null;
 
     public TerrainObstructionSectorIdentity Sector => _sector;
     public TerrainCellObstructionComponents GetCell(int localX, int localY, TileNameRuleMode tileNameRuleMode = TileNameRuleMode.Apply)

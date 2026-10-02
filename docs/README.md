@@ -29,6 +29,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Static-scene contract: bounded Crash Site candidate](world/static-scene-contract.md)
 - [Terrain loader](world/terrain-loader.md)
 - [Bounded terrain obstruction components](world/terrain-obstruction-components.md)
+- [Bounded production cardinal traversal assessment](world/cardinal-traversal-assessment.md)
 - [Ordinary static-scenery obstruction contract — bounded component only](world/static-obstruction-contract.md)
 - [Proposed selected-sector passability contract — NOT READY](world/passability-contract.md)
 

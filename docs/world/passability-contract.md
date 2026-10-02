@@ -9,6 +9,11 @@ with [admitted original-data rows](../research/cardinal-traversal-evidence.md) i
 explicit isolated PC/current-CRITTER-ART context and connected rectangle. It does
 not change this general occupancy proposal or the public component contracts.
 
+ARC-DATA-008 separately implements the [production cardinal assessment](cardinal-traversal-assessment.md)
+for that exact fixed rectangle/context using owned complete evidence. This is not
+a general occupancy grid, actor permission or runtime movement integration;
+the proposal and historical Unknown frontier below remain unchanged.
+
 It applies only to the immutable base-sector profile `(1452,1290)`, origin `(92928,82560)`, extent 64×64, module selector and identities recorded in the evidence document. A caller must supply the version/profile, base-input identity, coordinate, and the declared actor/context boundary. It does not choose archive, `.dif`, PATCH, or loose-file precedence.
 
 ## Result vocabulary

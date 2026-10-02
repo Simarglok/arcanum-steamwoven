@@ -22,6 +22,7 @@ public static class TerrainObstructionInspector
         var moduleProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.SerializedSector, moduleSourceId, entry.Ordinal);
 
         TerrainTileNameRuleTable? table = null;
+        TerrainEntryExpectation? nameEntry = null;
         TerrainObstructionComponentResult unavailable;
         if (tileNameSource is null)
         {
@@ -34,6 +35,7 @@ public static class TerrainObstructionInspector
             {
                 var selectedMesEntry = TerrainLoader.SelectSelected(tileNameSource.Archive, tileNameSource.MesEntryPath, "tile-name MES", limits.MaxMesDecodedEntryBytes);
                 var sourceProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId, selectedMesEntry.Ordinal);
+                nameEntry = new(selectedMesEntry.Ordinal, selectedMesEntry.Flags, selectedMesEntry.DeclaredOutputSize);
                 var bytes = tileNameSource.Archive.ReadEntry(selectedMesEntry);
                 var records = TerrainLoader.ParseMes(bytes, limits, allowObservedTileInterstitialText: true);
                 table = TerrainTileNameRuleTable.Create(records, sourceProvenance);
@@ -45,17 +47,19 @@ public static class TerrainObstructionInspector
                     new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId));
             }
         }
-        return new TerrainObstructionSectorReport(selector, sector.Words, sector.BlockMask, table, unavailable, moduleProvenance);
+        return new TerrainObstructionSectorReport(selector, sector.Words, sector.BlockMask, table, unavailable, moduleProvenance,
+            nameEntry, sector.Framing.TileScriptCount, sector.Framing[TerrainSection.SectorScript].Length,
+            sector.Framing.ObjectWindow.TerminalObjectCount);
     }
 }
 
 /// <summary>Internal projection of the existing bounded MES parser; it is not a general MES API.</summary>
 internal sealed class TerrainTileNameRuleTable
 {
-    private readonly string[][] _categories;
+    private readonly KeyValuePair<int, string>[][] _categories;
     private readonly TerrainObstructionProvenance _provenance;
 
-    private TerrainTileNameRuleTable(string[][] categories, TerrainObstructionProvenance provenance)
+    private TerrainTileNameRuleTable(KeyValuePair<int, string>[][] categories, TerrainObstructionProvenance provenance)
     {
         _categories = categories;
         _provenance = provenance;
@@ -66,10 +70,10 @@ internal sealed class TerrainTileNameRuleTable
         ArgumentNullException.ThrowIfNull(records);
         var categories = new[]
         {
-            records.Where(pair => pair.Key is >= 0 and <= 99).Select(pair => pair.Value).ToArray(),
-            records.Where(pair => pair.Key is >= 100 and <= 199).Select(pair => pair.Value).ToArray(),
-            records.Where(pair => pair.Key is >= 200 and <= 299).Select(pair => pair.Value).ToArray(),
-            records.Where(pair => pair.Key is >= 300 and <= 399).Select(pair => pair.Value).ToArray(),
+            records.Where(pair => pair.Key is >= 0 and <= 99).ToArray(),
+            records.Where(pair => pair.Key is >= 100 and <= 199).ToArray(),
+            records.Where(pair => pair.Key is >= 200 and <= 299).ToArray(),
+            records.Where(pair => pair.Key is >= 300 and <= 399).ToArray(),
         };
         return new TerrainTileNameRuleTable(categories, provenance);
     }
@@ -88,8 +92,20 @@ internal sealed class TerrainTileNameRuleTable
         var firstMaterial = checked((int)((rawId >> 22) & 63));
         if (firstMaterial >= _categories[category].Length)
             return TerrainObstructionSectorReport.Unknown("TILE_NAME_MAPPING_UNRESOLVED", _provenance);
-        return Interpret(_categories[category][firstMaterial]);
+        return Interpret(_categories[category][firstMaterial].Value);
     }
+
+    internal int? Key(uint rawId)
+    {
+        var category = CategoryIndex(rawId);
+        var material = (int)((rawId >> 22) & 63);
+        return material < _categories[category].Length ? _categories[category][material].Key : null;
+    }
+
+    internal static int CategoryIndex(uint rawId) => (rawId & 0x180) switch
+    {
+        0x180 => 0, 0x100 => 1, 0x80 => 2, _ => 3
+    };
 
     private TerrainObstructionComponentResult Interpret(string value)
     {
