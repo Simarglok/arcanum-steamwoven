@@ -36,6 +36,11 @@ seven terrain gates plus focused tests and graphical original source/export
 integration gates. Source corrections precede the one exact-head export;
 later ordinary evidence stays outside the sealed bundle. See the
 [WORLD policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy).
+ARC-GPAD-004 uses that same closed terrain endpoint with literal task
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-GPAD-004`, never the gamepad-lab endpoint.
+It additionally requires source/exported WORLD persistence and dual-hostfxr
+gates, with isolated input and zoom paths; the task/root/head v2 binding,
+capacity/lease/frozen-observation and finalized-rerun rejection are unchanged.
 
 Run from repository root:
 

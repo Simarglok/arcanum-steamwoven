@@ -8,7 +8,7 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
 if test "$build_root" != "$main_root/artifacts/$artifact_dir/$task/$head"; then printf '%s\n' 'Build root must bind the closed exact-head terrain task.' >&2; exit 2; fi
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
@@ -45,21 +45,22 @@ cleanup_candidate() {
     tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
   /bin/rm -f "$project_root/SyntheticActorFixture.cs.uid" "$project_root/TerrainDiagnosticHud.cs.uid" \
     "$project_root/DiagnosticInputSettingsStore.cs.uid" "$project_root/DiagnosticInputSettingsPanel.cs.uid" "$project_root/TerrainViewerWorld.cs.uid" \
-    "$project_root/TerrainViewerWorldLifecycleTest.cs.uid" "$project_root/TerrainViewerWorldSelfTest.cs.uid" "$project_root/TerrainViewerWorldValidation.cs.uid"
+    "$project_root/TerrainViewerWorldLifecycleTest.cs.uid" "$project_root/TerrainViewerWorldSelfTest.cs.uid" "$project_root/TerrainViewerWorldValidation.cs.uid" \
+    "$project_root/DiagnosticZoomSettingsStore.cs.uid" "$project_root/TerrainViewerWorldZoomTest.cs.uid"
 }
 trap cleanup_candidate EXIT HUP INT TERM
 run_log() { name=$1; shift; "$@" >"$build_root/evidence/$name" 2>&1; }
 run_log locked-restore.log "$DOTNET" restore "$project_root/Arcanum.TerrainViewer.sln" --locked-mode
 run_log locked-build.log "$DOTNET" build "$project_root/Arcanum.TerrainViewer.sln" --no-restore
 run_log tests.log "$DOTNET" test "$candidate_root/tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj" --no-build
-if test "$task" = ARC-WORLD-001; then
+if test "$task" != ARC-DEV-001; then
   run_log source-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic --headless
   run_log source-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind synthetic
 else
   run_log source-headless.log "$GODOT" --headless --path "$project_root" -- --self-test
   run_log source-graphical.log "$GODOT" --path "$project_root" -- --self-test
 fi
-if test "$task" = ARC-WORLD-001; then
+if test "$task" != ARC-DEV-001; then
   run_log source-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root"
   run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence
 fi
@@ -68,14 +69,14 @@ run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export
 /usr/bin/grep -F '8.0.425' "$build_root/evidence/export.log" >/dev/null
 app="$build_root/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer"
 test -x "$app"
-if test "$task" = ARC-WORLD-001; then
+if test "$task" != ARC-DEV-001; then
   run_log exported-headless.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic --headless
   run_log exported-graphical.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind synthetic
 else
   run_log exported-headless.log "$app" --headless -- --self-test
   run_log exported-graphical.log "$app" -- --self-test
 fi
-if test "$task" = ARC-WORLD-001; then
+if test "$task" != ARC-DEV-001; then
   run_log exported-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app"
   run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence
   run_log hostfxr.log /usr/bin/python3 -B "$project_root/tools/hostfxr_validate.py" "$build_root/ArcanumTerrainViewer.app"

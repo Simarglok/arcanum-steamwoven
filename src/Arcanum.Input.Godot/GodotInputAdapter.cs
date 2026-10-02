@@ -6,7 +6,7 @@ namespace Arcanum.Input.Godot;
 /// <summary>Godot event adapter. Every joypad keeps separate state so active-device filtering is meaningful.</summary>
 public sealed class GodotInputAdapter
 {
-    private sealed class DeviceState { public Vector2 LeftStick; public Vector2 RightStick; public readonly HashSet<JoyButton> Buttons = new(); }
+    private sealed class DeviceState { public Vector2 LeftStick; public Vector2 RightStick; public float LeftTrigger; public float RightTrigger; public readonly HashSet<JoyButton> Buttons = new(); }
     private readonly Dictionary<int, DeviceState> _devices = new();
     private readonly HashSet<Key> _keys = new();
     private Vector2 _mouse;
@@ -22,6 +22,8 @@ public sealed class GodotInputAdapter
             if (motion.Axis == JoyAxis.LeftY) state.LeftStick.Y = motion.AxisValue;
             if (motion.Axis == JoyAxis.RightX) state.RightStick.X = motion.AxisValue;
             if (motion.Axis == JoyAxis.RightY) state.RightStick.Y = motion.AxisValue;
+            if (motion.Axis == JoyAxis.TriggerLeft) state.LeftTrigger = motion.AxisValue;
+            if (motion.Axis == JoyAxis.TriggerRight) state.RightTrigger = motion.AxisValue;
             return FromDevice(motion.Device, focused);
         }
         if (input is InputEventJoypadButton joy)
@@ -71,7 +73,8 @@ public sealed class GodotInputAdapter
         return new RawInputFrame(device, ToCore(state.LeftStick), ToCore(state.RightStick),
             Confirm: Has(JoyButton.A), Cancel: Has(JoyButton.B), Inspect: Has(JoyButton.X), Context: Has(JoyButton.Y),
             Previous: Has(JoyButton.LeftShoulder), Next: Has(JoyButton.RightShoulder), Settings: Has(JoyButton.Start),
-            MenuUp: Has(JoyButton.DpadUp), MenuDown: Has(JoyButton.DpadDown), Focused: focused);
+            MenuUp: Has(JoyButton.DpadUp), MenuDown: Has(JoyButton.DpadDown), Focused: focused)
+        { LeftTrigger = state.LeftTrigger, RightTrigger = state.RightTrigger };
     }
     private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo)
     {
@@ -99,13 +102,16 @@ public sealed class GodotInputAdapter
         var held = MappedKeys.Where(readKey).ToArray();
         _keys.Clear(); foreach (var key in held) _keys.Add(key);
     }
-    public bool RefreshControllerLevels(int device, Func<JoyAxis, float> readAxis, Func<JoyButton, bool> readButton)
+    public bool RefreshControllerLevels(int device, Func<JoyAxis, float> readAxis, Func<JoyButton, bool> readButton, bool worldZoom = false)
     {
         var left = new Vector2(readAxis(JoyAxis.LeftX), readAxis(JoyAxis.LeftY));
         var right = new Vector2(readAxis(JoyAxis.RightX), readAxis(JoyAxis.RightY));
+        var lt = worldZoom ? readAxis(JoyAxis.TriggerLeft) : 0;
+        var rt = worldZoom ? readAxis(JoyAxis.TriggerRight) : 0;
+        if (!InputStateReducer.ValidTrigger(lt) || !InputStateReducer.ValidTrigger(rt)) return false;
         if (!float.IsFinite(left.X) || !float.IsFinite(left.Y) || !float.IsFinite(right.X) || !float.IsFinite(right.Y)) return false;
         var buttons = MappedButtons.Where(readButton).ToArray();
-        var replacement = new DeviceState { LeftStick = left, RightStick = right };
+        var replacement = new DeviceState { LeftStick = left, RightStick = right, LeftTrigger = lt, RightTrigger = rt };
         foreach (var button in buttons) replacement.Buttons.Add(button);
         _devices[device] = replacement;
         return true;

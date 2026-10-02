@@ -11,6 +11,7 @@ import signal
 import subprocess
 import sys
 import time
+import tempfile
 
 
 def run_child(argv: list[str], env: dict[str, str], timeout: int) -> tuple[int, str]:
@@ -47,6 +48,10 @@ def main() -> int:
     if args.headless:
         prefix += ["--headless"]
     env = dict(os.environ)
+    # Every child (including original/synthetic) is isolated before initialization.
+    owned = tempfile.TemporaryDirectory(prefix="world-validation-", dir=os.environ.get("TMPDIR"))
+    env["WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH"] = str(Path(owned.name) / "input.json")
+    env["WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"] = str(Path(owned.name) / "zoom.json")
     env.update(__GODOT_SHELL_ENV_SET="1", DOTNET_ROOT=str(Path.home() / ".local/share/dotnet"),
                PATH=str(Path.home() / ".local/share/dotnet") + ":/usr/bin:/bin:/usr/sbin:/sbin")
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
@@ -64,9 +69,9 @@ def main() -> int:
         passed = code == 0 and "ARC-WORLD-001 self-test PASS" in output
     else:
         # This file is created by this runner alone, never ordinary preferences.
-        import tempfile
         with tempfile.TemporaryDirectory(prefix="world-persistence-", dir=os.environ.get("TMPDIR")) as directory:
             env["WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH"] = str(Path(directory) / "owned.json")
+            env["WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"] = str(Path(directory) / "zoom.json")
             passed = True; code = 0
             for stage in ("first-launch", "write-00", "read-00", "write-01", "read-01",
                           "write-10", "read-10", "write-11", "read-11", "reset", "defaults"):
@@ -75,14 +80,38 @@ def main() -> int:
                 stage_results.append({"stage": stage, "exitCode": code, "outcome": "PASS" if passed else "FAIL"})
                 if not passed:
                     break
+            if passed:
+                def zoom_stage(stage: str, label: str | None = None) -> bool:
+                    nonlocal code, output
+                    code, output = run_child(prefix + ["--", "--world-settings-test", stage], env, min(args.timeout, 30))
+                    ok = code == 0 and f"ARC-GPAD-004 settings-test PASS {stage}" in output
+                    stage_results.append({"stage": label or stage, "exitCode": code, "outcome": "PASS" if ok else "FAIL"})
+                    return ok
+                for stage in ("zoom-first", "zoom-write", "zoom-read", "zoom-reset", "zoom-defaults", "zoom-pending", "zoom-read-pending", "zoom-reset"):
+                    passed = zoom_stage(stage)
+                    if not passed:
+                        break
+                malformed = ("broken", "null", "[]", "{}", '{"zoom":3}', '{"version":2,"zoom":3}',
+                             '{"version":"1","zoom":3}', '{"version":1,"zoom":"3"}',
+                             '{"version":1,"zoom":null}', '{"version":1,"zoom":0.124}',
+                             '{"version":1,"zoom":8.001}', '{"version":1,"zoom":1e999}')
+                for index, value in enumerate(malformed):
+                    if not passed:
+                        break
+                    Path(env["WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"]).write_text(value, encoding="utf-8")
+                    passed = zoom_stage("zoom-malformed", f"zoom-malformed-{index}")
+                if passed:
+                    env["WORLD_DIAGNOSTIC_ZOOM_TEST_PATH"] = str(Path(directory) / "missing-parent" / "zoom.json")
+                    passed = zoom_stage("zoom-failure")
     # No raw output, argv, input path, pixel or protected content in durable logs.
     summary = {"schema": "arcanum-world-validation-v1", "kind": args.kind,
                "candidateCommit": head, "host": "exported" if args.app else "source", "startedAt": began,
                "elapsedSeconds": round(time.monotonic() - start, 3), "exitCode": code,
                "graphical": not args.headless, "outcome": "PASS" if passed else "FAIL",
                "stages": stage_results,
-               "diagnostics": [line for line in output.splitlines() if line.startswith(("ARC-WORLD-001", "ARC-RENDER-003 self-test FAIL", "ARC-RENDER-004 native-smoke failure", "ARC-RENDER-004 native-smoke readback", "ARC-RENDER-005 actor native raster"))]}
+               "diagnostics": [line for line in output.splitlines() if line.startswith(("ARC-GPAD-004", "ARC-WORLD-001", "ARC-RENDER-003 self-test FAIL", "ARC-RENDER-004 native-smoke failure", "ARC-RENDER-004 native-smoke readback", "ARC-RENDER-005 actor native raster"))]}
     print(json.dumps(summary, sort_keys=True))
+    owned.cleanup()
     return 0 if passed else 1
 
 

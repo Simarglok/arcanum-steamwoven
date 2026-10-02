@@ -14,6 +14,8 @@ public sealed class TerrainCameraController
     private CameraFollowState _followState = new();
     private Vec2 _center;
     private bool _world;
+    public Vec2 WantedCenter { get; private set; }
+    public bool BoundLimited => WantedCenter != _center;
     public CameraFollowState FollowState => _followState;
 
     public TerrainCameraController(Camera2D camera)
@@ -43,6 +45,7 @@ public sealed class TerrainCameraController
         var bounds = _bounds.Value;
         _state = CameraPolicy.Fit(bounds.X, bounds.Y, bounds.Width, bounds.Height, viewport.X, viewport.Y);
         _center = new(_state.X, _state.Y);
+        WantedCenter = _center;
         if (_world) _followState = new(CameraMode.Manual, false, false);
         Apply();
     }
@@ -58,11 +61,12 @@ public sealed class TerrainCameraController
         var b = _bounds!.Value;
         return new(new(b.X, b.Y), new((double)b.X + b.Width, (double)b.Y + b.Height), new(viewport.X, viewport.Y), _state.Zoom);
     }
-    public void ResetWorld(Vec2 actor, Vector2 viewport)
+    public void ResetWorld(Vec2 actor, Vector2 viewport, double zoom = 2)
     {
-        Fit(viewport);
+        _state = _state with { Zoom = WorldZoomPolicy.Absolute(_state.Zoom, zoom), FitMode = false };
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
         var step = _follow.ResetCentered(actor, Bounds(viewport));
+        WantedCenter = actor;
         _followState = step.State; _center = step.Center; ApplyWorld();
     }
     public void SafetyResetWorld() => _followState = _follow.SafetyReset(_followState);
@@ -70,18 +74,24 @@ public sealed class TerrainCameraController
     {
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
         var step = _follow.Update(_followState, actor, _center, actorIntent, pan, Bounds(viewport), actorActive, manualActive);
+        WantedCenter = step.State.Mode == CameraMode.Follow && step.State.TrackingActor ? actor : _center - pan;
         _followState = step.State; _center = step.Center; ApplyWorld();
     }
     public void ResizeWorld(Vec2 actor, Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 0 || viewport.Y <= 0) return;
-        _center = Bounds(viewport).ClampCenter(_followState.Mode == CameraMode.Follow && _followState.TrackingActor ? actor : _center);
+        WantedCenter = _followState.Mode == CameraMode.Follow && _followState.TrackingActor ? actor : _center;
+        _center = Bounds(viewport).ClampCenter(WantedCenter);
         ApplyWorld();
     }
     public void ZoomWorld(double factor, Vec2 actor, Vector2 viewport)
     {
-        if (!double.IsFinite(factor) || factor <= 0) return;
-        _state = _state with { Zoom = Math.Clamp(_state.Zoom * factor, .125, 8), FitMode = false };
+        SetWorldZoom(WorldZoomPolicy.Step(_state.Zoom, factor), actor, viewport);
+    }
+    public void SetWorldZoom(double zoom, Vec2 actor, Vector2 viewport)
+    {
+        if (!double.IsFinite(zoom)) return;
+        _state = _state with { Zoom = WorldZoomPolicy.Absolute(_state.Zoom, zoom), FitMode = false };
         ResizeWorld(actor, viewport);
     }
     private void ApplyWorld()

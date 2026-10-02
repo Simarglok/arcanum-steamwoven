@@ -12,6 +12,8 @@ public sealed record RawInputFrame(
 {
     public bool KeyboardActorHeld { get; init; }
     public bool KeyboardCameraHeld { get; init; }
+    public double LeftTrigger { get; init; }
+    public double RightTrigger { get; init; }
 }
 
 /// <summary>Frame-owned timing and per-domain policy. The two stick deadzones are never applied twice.</summary>
@@ -19,7 +21,10 @@ public sealed record InputContext(
     double CameraDeadzone = .2, double ActorDeadzone = .2,
     double CameraSensitivity = 1, double ActorSensitivity = 1,
     double Delta = 1d / 60, double Zoom = 1, bool InvertCameraX = true, bool InvertCameraY = true,
-    bool Modal = false, bool AdvanceTime = false);
+    bool Modal = false, bool AdvanceTime = false)
+{
+    public bool WorldZoomEnabled { get; init; }
+}
 
 public sealed record IntentFrame(
     Vec2 CameraPan, Vec2 Movement, bool Confirm, bool Cancel, bool Inspect, bool Previous, bool Next, bool Context, bool Settings,
@@ -29,6 +34,7 @@ public sealed record IntentFrame(
     public bool CameraActive { get; init; }
     // MenuDirection remains a level for the lab's timed repeat policy.
     public int MenuPressedDirection { get; init; }
+    public double ZoomDrive { get; init; }
 }
 
 public sealed class InputStateReducer
@@ -67,7 +73,7 @@ public sealed class InputStateReducer
 
     public IntentFrame Reduce(RawInputFrame raw, InputContext context, string provenance = "LIVE OS EVENT (not physical usability proof)")
     {
-        if (!raw.Focused || !raw.Connected) { Quarantine(); return Empty(provenance); }
+        if (!raw.Focused || !raw.Connected || (context.WorldZoomEnabled && (!ValidTrigger(raw.LeftTrigger) || !ValidTrigger(raw.RightTrigger)))) { Quarantine(); return Empty(provenance); }
         var isJoy = raw.DeviceId >= 0;
         if (isJoy && _activeDevice is null)
         {
@@ -81,7 +87,7 @@ public sealed class InputStateReducer
         var freshStickQualification = false;
         if (context.AdvanceTime)
         {
-            if (isJoy && Math.Max(left.Length, right.Length) >= .25)
+            if (isJoy && (Math.Max(left.Length, right.Length) >= .25 || TriggerHeld(raw, context)))
             {
                 _gamepadMotionSeconds += context.Delta;
                 if (!_gamepadStickQualified && _gamepadMotionSeconds >= .1) { _gamepadStickQualified = true; freshStickQualification = true; }
@@ -96,7 +102,7 @@ public sealed class InputStateReducer
         if (!_armed)
         {
             if (_requiresActiveNeutral && (!isJoy || raw.DeviceId != _activeDevice)) return Empty(provenance);
-            if (!AnyLevel(raw, left, right))
+            if (!AnyLevel(raw, left, right, context))
             {
                 if (_neutralSeen) { _armed = true; _requiresActiveNeutral = false; } else _neutralSeen = true;
             }
@@ -139,9 +145,11 @@ public sealed class InputStateReducer
         {
             MenuPressedDirection = menuUp ? -1 : menuDown ? 1 : 0,
             ActorActive = left.Length > 0 || raw.KeyboardActorHeld || raw.KeyboardActor.Length > 0,
-            CameraActive = right.Length > 0 || raw.KeyboardCameraHeld || raw.KeyboardCamera.Length > 0
+            CameraActive = right.Length > 0 || raw.KeyboardCameraHeld || raw.KeyboardCamera.Length > 0,
+            ZoomDrive = context.WorldZoomEnabled && isJoy && context.AdvanceTime
+                ? EffectiveTrigger(raw.RightTrigger) - EffectiveTrigger(raw.LeftTrigger) : 0
         };
-        return context.Modal ? result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false } : result;
+        return context.Modal ? result with { CameraPan = default, Movement = default, ActorActive = false, CameraActive = false, ZoomDrive = 0 } : result;
     }
 
     private static Vec2 Normalize(Vec2 value) => value.Length > 0 ? value.Normalized() : default;
@@ -151,10 +159,13 @@ public sealed class InputStateReducer
         return combined.Length > 1 ? combined.Normalized() : combined;
     }
     private static bool Digital(RawInputFrame r) => r.Confirm || r.Cancel || r.Inspect || r.Previous || r.Next || r.Context || r.Settings || r.MenuUp || r.MenuDown;
-    private static bool Meaningful(RawInputFrame r, InputContext c) => Digital(r) || Vec2.CircularDeadzone(r.LeftStick, c.ActorDeadzone).Length >= .25 || Vec2.CircularDeadzone(r.RightStick, c.CameraDeadzone).Length >= .25;
+    public static bool ValidTrigger(double value) => double.IsFinite(value) && value >= 0 && value <= 1;
+    public static double EffectiveTrigger(double value) => ValidTrigger(value) && value > .10 ? (value - .10) / .90 : 0;
+    private static bool TriggerHeld(RawInputFrame r, InputContext c) => c.WorldZoomEnabled && (EffectiveTrigger(r.LeftTrigger) > 0 || EffectiveTrigger(r.RightTrigger) > 0);
+    private static bool Meaningful(RawInputFrame r, InputContext c) => Digital(r) || TriggerHeld(r, c) || Vec2.CircularDeadzone(r.LeftStick, c.ActorDeadzone).Length >= .25 || Vec2.CircularDeadzone(r.RightStick, c.CameraDeadzone).Length >= .25;
     public static bool HasAnyLevel(RawInputFrame raw, InputContext context) => AnyLevel(raw,
-        Vec2.CircularDeadzone(raw.LeftStick, context.ActorDeadzone), Vec2.CircularDeadzone(raw.RightStick, context.CameraDeadzone));
-    private static bool AnyLevel(RawInputFrame r, Vec2 left, Vec2 right) => Digital(r) || left.Length > 0 || right.Length > 0
+        Vec2.CircularDeadzone(raw.LeftStick, context.ActorDeadzone), Vec2.CircularDeadzone(raw.RightStick, context.CameraDeadzone), context);
+    private static bool AnyLevel(RawInputFrame r, Vec2 left, Vec2 right, InputContext context) => Digital(r) || TriggerHeld(r, context) || left.Length > 0 || right.Length > 0
         || r.KeyboardActorHeld || r.KeyboardCameraHeld || r.KeyboardActor.Length > 0 || r.KeyboardCamera.Length > 0;
     private IntentFrame Empty(string provenance) => new(default, default, false, false, false, false, false, false, false, 0, 0, Method, false, provenance);
 }

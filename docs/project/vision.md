@@ -12,9 +12,10 @@ Early graphics use the original sprites. Later upscale original assets one-to-on
 
 ## Accepted controller direction
 
-Keyboard/mouse and first-class gamepad are product goals. The accepted target is an Xbox Series controller over Bluetooth: left stick moves the actor, right stick controls the camera. Both right-stick camera axes are inverted by default, with configurable inversion. Manual camera movement cancels actor follow. Once camera and actor movement have stopped, subsequent actor-only movement resumes recentering/follow.
+Keyboard/mouse and first-class gamepad are product goals. The accepted target is an Xbox Series controller over Bluetooth: left stick moves the actor, right stick controls the camera. Historical lab defaults invert both right-stick axes; current integrated WORLD uses separately persisted false/false defaults with independent inversion toggles. Manual camera movement cancels actor follow. Once camera and actor movement have stopped, subsequent actor-only movement resumes recentering/follow. WORLD-only LT-out/RT-in zoom changes camera ratio, not actor simulation, asset size or UI/display scale.
 
 ARC-GPAD-002/003 implement this direction in the [synthetic gamepad lab](../../experiments/gamepad-lab/README.md), including configurable inversion, direct movement intent and the neutral-then-actor-only Follow transition. The lab uses procedural obstacles and synthetic map bounds; it is not connected to the original terrain or a production character. Physical Xbox Bluetooth behavior and comfort remain unverified. See the [merged status](status.md) and lab owner checklist for the evidence boundary.
+The [integrated WORLD viewer](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy) is a separate bounded diagnostic route; it does not establish collision, original placement/movement parity, or physical device comfort. Its initial zoom 2.00 is an assessable-actor hypothesis, not an ideal-QHD or physical 1:1 claim.
 
 ## Authority and evidence
 

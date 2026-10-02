@@ -45,6 +45,27 @@ The following official 4.7 URLs returned HTTP 200 when checked on 2026-09-28; th
 
 Navigation agents calculate/follow navigation paths but do not themselves move actors; repeated target replacement would therefore require explicit cadence and jitter controls. `AStarGrid2D` could support a later synthetic grid comparison. `CharacterBody2D` could provide a later Godot physics adapter. Neither proves original Arcanum behavior, and neither is authoritative in this lab: `Core/Movement.cs` remains engine independent and collision is a replaceable adapter callback.
 
-## Remaining uncertainty
+## Integrated WORLD zoom boundary (ARC-GPAD-004)
+
+The terrain viewer, not the standalone lab, opts into trigger levels. Godot 4.7
+maps `JoyAxis.TriggerLeft`/`TriggerRight` as 0..1 levels (see the pinned
+[controller reference](https://docs.godotengine.org/en/4.7/tutorials/inputs/controllers_gamepads_joysticks.html)).
+LT zooms out and RT in: each level <=0.10 has zero effect, otherwise
+`(level-0.10)/0.90`; RT minus LT drives one octave/second at full effort.
+The production complete-frame seam advances log2 zoom once per admitted frame,
+bounded to 0.125..8 before exponentiation. Opposite triggers cancel zoom but
+remain individually nonneutral for acquisition, method qualification and safety.
+Events do not independently advance held zoom. Modal, focus, incomplete samples
+and device lifecycle quarantine require neutral recovery and fresh input.
+
+Zoom is independent of actor intent, speed, facing, action, animation and world
+geometry. Follow tracks the continuous actor anchor subject to existing bounds;
+zoom alone is not pan and does not arm Manual return. WORLD defaults false/false
+are separate from historical lab true/true and its unchanged input-v1 codec.
+Native GUI and simulated complete controller frames are distinct evidence from
+physical Xbox/Bluetooth drift or comfort. Camera ratio 1.00 is not physical 1:1
+without framebuffer/backing proof; headless output cannot establish QHD comfort.
+
+## Remaining physical uncertainty
 
 No physical Xbox Bluetooth session was used for this build. No claim is made about drift, controller mapping quality, comfort, analog walk/run scaling, real-game collision, original navigation, party behavior, combat, or terrain. The local app labels all injected checks `SIMULATION`.

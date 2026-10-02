@@ -20,6 +20,7 @@ from .manifests import SUPPORTED_TOOLS, _manifest, _root_relative, manifest_cand
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
 REQUIRED_TASK_SUCCESS_GATES = {
     "ARC-WORLD-001": {"focused-tests", "source-world-original", "exported-world-original"},
+    "ARC-GPAD-004": {"focused-tests", "source-world-original", "exported-world-original", "source-world-persistence", "exported-world-persistence", "dual-hostfxr"},
 }
 REQUIRED_SUCCESS_GATES = {
     "gamepad": {"core-harness", "godot-self-test", "export", "exported-smoke", "codesign-deep-strict"},
@@ -637,7 +638,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
     required = REQUIRED_SUCCESS_GATES.get(tool, set()) | REQUIRED_TASK_SUCCESS_GATES.get(task, set())
     if not required.issubset(named_outcomes):
         raise ValueError("register-export requires the complete tool-specific success gates")
-    if task == "ARC-WORLD-001" and payload.get("delivery", {}).get("originalInputModes") != "PASS":
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004") and payload.get("delivery", {}).get("originalInputModes") != "PASS":
         raise ValueError("world export requires verified original integrated inputs")
     app_path = manifest.parent / app["relativePath"]
     executable = manifest.parent / app["executableRelativePath"]

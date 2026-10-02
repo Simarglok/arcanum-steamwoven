@@ -104,8 +104,8 @@ def command_launch(args: argparse.Namespace) -> None:
         raise ValueError("actor preview options are valid only for terrain actor-diagnostic mode")
     root = selected_root(conf, registry, tool)
     _, manifest, _ = manifests.resolve_current(root, tool)
-    if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) != "ARC-WORLD-001":
-        raise ValueError("world-diagnostic requires an ARC-WORLD-001 artifact")
+    if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004"):
+        raise ValueError("world-diagnostic requires an ARC-WORLD-001 or ARC-GPAD-004 artifact")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
