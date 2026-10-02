@@ -1,0 +1,252 @@
+# Предметы и экономика — функциональные требования
+
+**Срез исследования:** 2026-10-02. **Объём:** предметы как принадлежащие актёрам или контейнерам объекты, инвентарь, экипировка, переносимые ресурсы, использование и состояние предметов, written objects, торговля, кража, ловушки-устройства и технологическая сборка. Это доменный раздел полного каталога, а не аудит всех систем игры.
+
+**Границы домена.** Здесь фиксируются предметные последствия и связи между подсистемами. Формулы характеристик, навыков, aptitude и обучения относятся к [персонажу и навыкам](characters-skills.md); расчёты урона, расход боеприпасов при атаке, spell effects и боевые действия — к [бою, магии и технологиям](combat-magic-tech.md); реакция NPC, фракции и социальные последствия — к [истории и социальным системам](story-social-ai.md). Требования ниже ссылаются на эти домены там, где предметная операция от них зависит, не дублируя их формулы.
+
+**Уровни утверждений.** «Наблюдение CE» — только прочитанные тела функций и callers в `arcanum-ce` на `a7ff41b300ef712f0e7d088183a3d08957110cdd`, не независимое подтверждение оригинального executable. «Предложение проекта» — подлежащая обсуждению политика независимой реализации. «Неизвестно» сохраняет область, где CE, ограниченное чтение данных или отсутствие runtime не дают основания для вывода. Предложенные проверки здесь не запускались.
+
+**База Steamwoven:** локальный `main` `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae` (PR #36). Каталог статуса проекта отстаёт до PR #30; оценка ниже основана на текущем исходном срезе, а не на старом статусе. CE-ссылки используются только как атрибутированное исследовательское свидетельство. Этот документ не копирует CE-код, не механически переводит его реализацию и не является заключением о лицензии или clean-room происхождении.
+
+## Требования
+
+<a id="fr-item-001"></a>
+
+### FR-ITEM-001 — владение предметами, контейнеры и перемещение
+
+**Предлагаемая фаза: Pre-alpha.** Предмет должен иметь ровно одного владельца либо находиться в мире. Игрок может просматривать инвентарь персонажа и доступного контейнера, подбирать, переносить, переставлять и выбрасывать предметы; предмет остаётся тем же экземпляром при успешном перемещении. Нельзя терять или дублировать объект при отказе из-за вместимости, запрета скрипта либо неподходящего слота. Модель инвентаря различает сетку контейнера/персонажа, экипировочные места и быстрые слоты.
+
+**Наблюдение CE:** `item_transfer_ex` проверяет `SAP_GET`, вычисляет допустимое место и вызывает pickup/insert; `item_drop_ex` проверяет `SAP_DROP` и запрет удаления, снимает владельца и размещает объект в мире. `item_insert`/`item_force_remove` поддерживают контейнерный или critter список, родителя, позицию сетки, pickup/drop/remove triggers и UI notification. При невозможном прямом переносе UI может найти другое свободное место. [Перенос и pickup](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L604-L687), [drop](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L691-L769), [insert/remove](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3639-L3777), [инвентарь UI](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L475-L599).
+
+**Зависимости и сценарии:** объектная модель, контейнеры, map placement, проверки массы/места и скриптовые hooks. На синтетическом инвентаре перебросить предмет между персонажами, в контейнер, в мир и обратно; заполнить сетку; проверить, что отказ сохраняет исходного владельца, а успешная операция оставляет ровно одну запись.
+
+**Steamwoven:** runtime-поведение отсутствует; см. [текущий срез и доказательства покрытия](#текущее-покрытие-steamwoven). **Неизвестно:** оригинальные правила блокировки, UI-перетаскивания, multiplayer authority и полный набор `SAP_*` ограничений требуют отдельной проверки.
+
+<a id="fr-item-002"></a>
+
+### FR-ITEM-002 — вес, вместимость и последствия перегруза
+
+**Предлагаемая фаза: Pre-alpha.** Подбор проверяет переносимый вес персонажа, а инвентарь пересчитывает последствие добавления и удаления предмета. Контейнеры и персонажи имеют разный предел сетки; лимит переносимого веса является свойством персонажа и должен использовать общий расчёт характеристик. UI объясняет отказ при превышении лимита и показывает текущее последствие экипировки/груза.
+
+**Наблюдение CE:** `item_weight` читает вес предмета и применяет владельческие модификаторы; золото в этом расчёте имеет нулевой вес. `item_total_weight` суммирует содержимое; `item_check_insert` сравнивает новый вес с `STAT_CARRY_WEIGHT`; успешные вставка/удаление вызывают пересчёт encumbrance. [Вес одного предмета и инвентаря](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L365-L414), [gate подбора](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3639-L3658), [пересчёт при вставке/удалении](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3743-L3761).
+
+**Зависимости и сценарии:** предел переносимого веса и его изменение — [персонаж и навыки](characters-skills.md); сетка и предметный вес — FR-ITEM-001. Проверить успешный pickup на границе, отказ на один синтетический шаг выше лимита, нулевой вес монет и изменение encumbrance после снятия тяжёлого предмета. Не фиксировать формулу атрибутов в этом документе.
+
+**Steamwoven:** runtime-расчёт и ограничения не реализованы; структурная запись предметов не раскрывает весовой игровой смысл, см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** перевод исходных единиц веса и точная связь уровней encumbrance с движением/действиями должны быть подтверждены отдельно.
+
+<a id="fr-item-003"></a>
+
+### FR-ITEM-003 — стеки и частичное количество
+
+**Предлагаемая фаза: Pre-alpha.** Для предметов, которые по их типу являются количественными ресурсами, перенос выбранного количества уменьшает источник на то же значение, добавляет его получателю либо создаёт отдельный мировой объект; нулевое количество не изменяет состояние. Совместимые стеки объединяются, несовместимые экземпляры остаются раздельными. Интерфейс предлагает выбрать количество только там, где предмет поддерживает количественный перенос.
+
+**Наблюдение CE:** `sub_462410` выбирает stack field только для золота и типов боеприпасов. `item_check_insert` и `item_insert` соединяют совпадающий prototype; `item_gold_transfer` и `item_ammo_transfer` поддерживают передачу части количества. Inventory UI вызывает окно количества именно для `OBJ_TYPE_GOLD`/`OBJ_TYPE_AMMO`; универсальный разделитель произвольных предметов здесь не обнаружен. [Ресурсные типы стека](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1036-L1065), [объединение при вставке](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3715-L3728), [частичный перевод золота](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2463-L2513), [частичный перевод патронов](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3112-L3167), [UI количества](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L3980-L4008).
+
+**Зависимости и сценарии:** перенос, деньги, ammunition pools и экономические транзакции. Перенести часть синтетического стека, объединить совместимые остатки, отказать в переносе больше доступного и проверить сохранение суммы без дубликатов. **Steamwoven:** количественные gameplay stacks не реализованы; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** какие дополнительные исходные типы вне прочитанных ветвей могут вести себя количественно.
+
+<a id="fr-item-004"></a>
+
+### FR-ITEM-004 — ключи, кольца и предметные действия доступа
+
+**Предлагаемая фаза: Later.** Полученные ключи сохраняются как предметные данные; key ring может собирать ключи, а проверка доступа использует ключ персонажа и только явно поддержанные источники party-sharing. Использование ключа/lockpick должно передавать результат в систему замков и контейнеров; правила подбора замка и тревоги принадлежат отдельным механикам.
+
+**Наблюдение CE:** предметные функции извлекают ключи непосредственно из инвентаря и key-ring массива, сопоставляют их с lock ID и ищут ключи у лидера/последователей; `item_ui_apply` передаёт lockpick через skill invocation, не моделируя успех самостоятельно. [Поиск ключей и key rings](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1572-L1674), [party lookup](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1676-L1744), [caller lockpick item → skill](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/item_ui.c#L160-L186).
+
+**Зависимости и сценарии:** замки/контейнеры, партия и навыки — [персонаж и навыки](characters-skills.md), [мир и переходы](world.md). Проверить один подходящий/неподходящий ключ, key-ring, отсутствие доступа и передачу действия lockpick в общий skill runner. **Steamwoven:** игровой key ring и открытие замков не реализованы; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** некоторые CE-ветви содержат специальные wildcard/key-sharing правила; полный оригинальный охват не установлен.
+
+<a id="fr-item-005"></a>
+
+### FR-ITEM-005 — экипировка и допустимость слотов
+
+**Предлагаемая фаза: Pre-alpha.** Игрок может экипировать и снять предмет в соответствующий слот; заменяемый предмет возвращается в сетку, если допустимы снятие и размещение. Проверки учитывают тип слота, совместимость модели/размера одежды, половые ограничения и доступность рук. Фиксированное двуручное оружие несовместимо со щитом; повреждённый предмет не должен экипироваться. Смена экипировки обновляет видимые представления персонажа и item triggers.
+
+**Наблюдение CE:** `item_wield_set` снимает/вставляет предмет и при отказе восстанавливает размещение; `sub_464D20` проверяет слоты, фиксированное двуручное оружие, щит, травмированные руки и требования одежды по race/gender; она возвращает успех для снятия (`sub_465010`), поэтому CE не подтверждает hexed-removal запрет несмотря на enum `ITEM_CANNOT_HEXED`. Операции wear/unwear обновляют Art, light и scripted triggers. [Выбор слота и swap](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2570-L2617), [ограничения экипировки и removal stub](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2657-L2776), [wear/unwear callers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4251-L4412).
+
+**Зависимости и сценарии:** слоты и actor state; численные бонусы/armor/combat formulas принадлежат combat и character разделам. Проверить правильную замену оружия и одежды, отказ двуручного оружия со щитом, неверный размер, повреждённый предмет, возврат заменённого предмета и update внешнего состояния. **Steamwoven:** игрового runtime экипировки нет; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** `sub_465010` — незавершённая ветка CE; не считать это доказательством исходного правила снятия.
+
+<a id="fr-item-006"></a>
+
+### FR-ITEM-006 — оружие, ammunition pools и предметные свойства брони
+
+**Предлагаемая фаза: Pre-alpha.** Оружие с типом боеприпаса может применяться только при достаточном ресурсе; расход и боевой результат согласуются с одним ammo pool персонажа. Слоты/типы вооружения, armor/clothing свойства и заявленные предметом бонусы поступают из данных предмета. Любые правила попадания, расхода за выстрел и урона реализуются и проверяются в [бое, магии и технологиях](combat-magic-tech.md), а не повторяются здесь.
+
+**Наблюдение CE:** `item_ammo_quantity_get` читает pool персонажа или количественный ammo object; `item_ammo_transfer` перемещает точное количество; `item_wield_best` исключает оружие без требуемого ammo quantity и обращается к `item_weapon_*`/skill расчётам. `item.h`/`obj.h` описывают отдельные поля оружия, патронов и armor, но наличие поля не подтверждает конкретные значения игровых данных. [Ammo lookup/transfer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3081-L3178), [caller eligibility for best weapon](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2850-L2942), [item property fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L122-L173).
+
+**Зависимости и сценарии:** equip legality (FR-ITEM-005), combat attack gates, ammo inventory and UI quantity. Синтетически проверить оружие без ammo, с достаточным/недостаточным ammo, перенос патронов и согласованное обновление UI; боевые формулы оставить combat report. **Steamwoven:** item/ammo records распознаются только как wire schema; runtime ammo pools и weapon selection отсутствуют, см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** полный массив боевых и предметных параметров данных здесь не разбирался.
+
+<a id="fr-item-007"></a>
+
+### FR-ITEM-007 — экипируемые источники света и предметные эффекты
+
+**Предлагаемая фаза: Pre-alpha.** Свойство переносимого источника света влияет на владельца только пока предмет надет в подходящем слоте; снятие или потеря предмета пересчитывает его свет. Pickup/use/wear/unwear/attack triggers предмета должны вызывать соответствующее правило эффекта ровно один раз в заданном контексте. Эта строка фиксирует предметную интеграцию, а ambient/sector lighting и luminance задаются в [требованиях времени и освещения](lighting-time.md).
+
+**Наблюдение CE и цепочка:** `item_equipped`/`item_unequipped` вызывают `item_recalc_light`; тот собирает flags надетых предметов, применяет effective-power tiers, обновляет critter flags и свет объекта. `item_insert` вызывает pickup trigger, а wear/used pathways dispatch-ят соответствующие item events. [Equip-trigger → recalc](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4251-L4275), [снятие и recalc](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4388-L4484), [item event dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_item.c#L167-L205), [pickup/used triggers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_item.c#L274-L282), [item used trigger](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_item.c#L516-L529).
+
+**Зависимости и сценарии:** FR-ITEM-005, lighting-time, item trigger dispatch and actor light APIs. Надеть/снять synthetic light item и проверить ровно один ожидаемый emitter; использовать предмет с триггером pickup/use; не создавать второй emitter от лежащего в сетке объекта. **Steamwoven:** no gameplay carried-light or item-event graph; see [coverage](#текущее-покрытие-steamwoven). **Later visual effects** such as modern soft shadows/normal maps remain separate product ideas, not CE-confirmed item behavior.
+
+<a id="fr-item-008"></a>
+
+### FR-ITEM-008 — идентификация, название, описание и осмотр
+
+**Предлагаемая фаза: Pre-alpha.** Неизвестный объект показывает только предназначенное ему unknown-name описание; после идентификации игрок видит имя и подтверждённые эффекты/свойства. Осмотр показывает количество и только те модификаторы, которые разрешает статус идентификации. Платная услуга должна менять состояние идентификации и списывать согласованную цену; интерфейс и world record должны обновиться вместе.
+
+**Наблюдение CE:** `item_is_identified` учитывает magic/tech complexity и флаг `OIF_IDENTIFIED`; `object_examine` читает отдельный неизвестный item description до identification. `intgame` отображает `item_effect` и статистику weapon/armor с ограничением неизвестных модификаторов; `item_perform_identify_service` ставит флаг и переводит деньги. `description.c`, `item_effect.c` и `oname.c` предоставляют строки/внутренние имена из message resources; полного caller chain для внутреннего `o_name_get` здесь не установлено. [Идентификация](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2285-L2325), [неизвестное имя в examine](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3933-L3992), [осмотр item effects и quantity](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L6995-L7110), [identify service](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4104-L4127), [string providers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item_effect.c#L31-L130), [internal object names](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/oname.c#L31-L47).
+
+**Зависимости и сценарии:** item resources, identification service and trade valuation. Для синтетического magical item сравнить unknown/identified name, свойства до/после, стоимость услуги и баланс денег. **Steamwoven:** display and identification states absent; parser skips item-specific fields, см. [покрытие](#текущее-покрытие-steamwoven). Не загружались и не цитируются исходные игровые строки; **неизвестно:** полнота состояний скрытия и точная оригинальная локализация.
+
+<a id="fr-item-009"></a>
+
+### FR-ITEM-009 — применение предмета, эффекты, consumables и charges
+
+**Предлагаемая фаза: Pre-alpha.** Игрок выбирает допустимую цель или клетку, получает отказ при неверной цели/недостаточных требованиях, а ресурс предмета меняется только по результату определённого действия. Единоразовые food/scroll или специальные charges расходуются и удаляются по своему правилу; экипированные предметы могут реагировать на pickup/use/unwear и другие явно заданные triggers. Навык или spell application сам по себе остаётся ответственностью соответствующего домена.
+
+**Наблюдение CE:** UI активирует предмет и направляет цель через `item_use_on_obj/loc`; эти функции dispatch-ят `SAP_USE` и magic/tech/item-use triggers, передают written objects в отдельный UI, уничтожают некоторые food/scroll после использования и маршрутизируют lockpick/healing items в skill path. Heal invocation отдельно уменьшает charges generic healing item, уничтожая предмет при нуле. [UI activation → item use](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/item_ui.c#L139-L240), [use on object/location](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1415-L1569), [healing-item charges](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1848-L1867).
+
+**Зависимости и сценарии:** target/range rules, skill invocation, spell system и item effects. Проверить use-to-self/object/location, отказ по неверной цели, успешный/неудачный расход charges, предмет с нулём и trigger на одно событие. **Steamwoven:** применение и runtime эффекты отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** прочитанный CE-код не доказывает универсальное правило расхода каждого прототипа; исключения должны устанавливаться по callers и данным.
+
+<a id="fr-item-010"></a>
+
+### FR-ITEM-010 — книги, записки и другие written objects
+
+**Предлагаемая фаза: Later.** Предметы типа book/note/newspaper/telegram/plaque/image открывают подходящее представление и связывают объект с его содержимым, не подменяя книгу обычным item tooltip. Схематический документ обрабатывается отдельно: если схематика ещё неизвестна, она добавляется к найденным знаниям и документ потребляется; повторное чтение сообщает, что знание уже есть. Содержимое — игровые данные; здесь оно не воспроизводится.
+
+**Наблюдение CE:** `item_use_on_obj` отправляет written item в `ui_written_start_obj`; `written_ui_start_obj` отличает schematic subtype и вызывает `tech_learn_schematic`, остальные типы направляет в режим чтения. `tech_learn_schematic` записывает новый ID и уничтожает предмет только при первом открытии схематики. [Use written item caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1469-L1475), [written subtype branch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/written_ui.c#L426-L457), [written-type presentation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/written_ui.c#L464-L521), [learn-once behavior](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tech.c#L366-L410).
+
+**Зависимости и сценарии:** localized written data, UI/media and schematic discovery (FR-ITEM-017). Проверить обычное чтение нескольких типов, закрытие и повторное открытие; новый найденный документ добавляет ровно одну schematic entry, дубликат сохраняется и не добавляется повторно. **Steamwoven:** book UI, written records, content and learned-schematic state не реализованы; см. [покрытие](#текущее-покрытие-steamwoven). Оригинальные тексты и bytes не исследовались.
+
+<a id="fr-item-011"></a>
+
+### FR-ITEM-011 — прочность, поломка и ремонт
+
+**Предлагаемая фаза: Later.** Повреждение предмета должно сохранять его текущую прочность и видимый broken state. Сломанный предмет нельзя использовать или надеть, если его тип этого требует; сервис ремонта показывает стоимость, применяет repair и списывает оплату. Правила навыка Repair, уровень обучения, critical outcomes и точный износ максимальной прочности остаются в [персонаже и навыках](characters-skills.md).
+
+**Наблюдение CE:** `object_bust` переводит предмет в destroyed art state, сбрасывает текущий damage field, пытается вынуть его из equipment и запускает `SAP_BUST`; второй bust удаляет объект. `sub_464D20` отказывает в экипировке destroyed item. NPC repair UI считает стоимость от повреждения/цены и запрещает починку broken item без master; `skill_perform_repair_service` передаёт исход в skill runner и платёж. [Предметный break/destruction](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L2625-L2656), [broken equipment gate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2675-L2686), [repair quote UI](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L3884-L3918), [NPC repair transaction](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L2609-L2627), [repair outcome and durability](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1870-L1965).
+
+**Зависимости и сценарии:** common object HP/damage state, skill rules, NPC service and prices. Проверить partial repair, no-op on full health, break/equip rejection, successful master repair and item destruction boundary. **Steamwoven:** item health, break and repair behavior отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** `object_bust` — только одна ветка CE; другие повреждения не проверялись на исходном runtime.
+
+<a id="fr-item-012"></a>
+
+### FR-ITEM-012 — время жизни выброшенных предметов
+
+**Предлагаемая фаза: Later.** Условия исчезновения предмета должны зависеть от его флагов и положения: инвентарные вещи сохраняются при обычном игровом времени, а выброшенные вещи могут иметь настроенный срок существования. Возврат предмета во владение отменяет или приостанавливает соответствующее событие; специальные неразлагаемые и junk-pile случаи не должны исчезать по обычному таймеру. Это игровое событие времени, не погода.
+
+**Наблюдение CE:** `item_drop_ex` размещает предмет и вызывает `item_decay(..., 172800000)`; `item_can_decay` учитывает `OIF_NO_DECAY` и владельца, а `item_decay_timeevent_process` удаляет доступный для decay объект при активной обработке. Transfer отменяет decay. [Drop → 48-hour event scheduling](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L703-L769), [decay eligibility and timer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4486-L4554), [pickup cancels decay](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L681-L687).
+
+**Зависимости и сценарии:** game clock/events, save/load and object ownership; FR-LIGHT time subsystem is a clock dependency only. Синтетически выбросить ordinary, `NO_DECAY` и junk-pile items; продвинуть game time, подобрать до deadline и убедиться, что stale event не удаляет возвращённый предмет. **Steamwoven:** world clock and item lifetime отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). Таймер CE не проверен на оригинальном executable.
+
+<a id="fr-item-013"></a>
+
+### FR-ITEM-013 — торговля, оценка цены и оплата
+
+**Предлагаемая фаза: Later.** Barter должен показать предметы обеих сторон, цену и баланс до подтверждения; завершённая транзакция переносит ровно предмет и оговорённые деньги, а отказ/недостаток средств сохраняет исходный инвентарь. Цена зависит от базовой стоимости, состояния, направления покупки/продажи, ограничения торговца и haggling; отношение с NPC применяется общим social/reaction правилом, а не отдельной предметной формулой.
+
+**Наблюдение CE:** `item_cost` учитывает worth, NPC retail multiplier, haggle effectiveness и item HP; `item_check_sell/buy` проверяют допустимость сделки, script/buy-list и stolen flags. Barter UI применяет item/gold/ammo changes, проверяет остаток средств и откатывает некоторые ошибки. [Цена и критерии покупки/продажи](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L843-L981), [UI transaction checks and transfer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L4123-L4355), [barter open path](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L602-L656).
+
+**Зависимости и сценарии:** gold/quantity transfer (FR-ITEM-003), haggling in characters-skills and NPC reaction in story/social/AI. Проверить обе стороны сделки, точный расчёт средств, отказ торговца, недостаток денег, повреждённый предмет и откат при невозможном переносе. **Steamwoven:** торговля, NPC inventory state and transaction runtime отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). CE `sub_4C1150` оставлен непрочитанной зависимостью; его реакционная формула здесь не закрепляется.
+
+<a id="fr-item-014"></a>
+
+### FR-ITEM-014 — ассортимент торговца и его обновление
+
+**Предлагаемая фаза: Later.** Данные inventory source задают возможный ассортимент, coin range, вероятности появления prototype и разрешённые категории обратного выкупа. NPC/контейнер использует собственное состояние stock; повторное открытие не должно незаметно дублировать одноразовую добычу. Частота пополнения и отличия магазина от обычного NPC/loot source должны быть определены на основе конкретных source records и поведения оригинала.
+
+**Наблюдение CE:** `invensource.c` загружает `Rules\\InvenSource.mes` и опциональный `Rules\\InvenSourceBuy.mes`; записи содержат coin bounds, prototype + rate и buy-all/allowlist. `item.c` генерирует контейнерный/криттерный inventory source и планирует out-of-view NPC regeneration через игровой интервал от 12 до 24 часов, деля его на 4 в multiplayer. Этот regeneration не доказывает универсальный shop restock policy. `invensource_get_id_list` имеет явный TODO о 1-based range guard. [InvenSource loading and lookup TODO](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L21-L33), [initialization/get set](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L88-L182), [assortment and buy-list parser](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L261-L485), [inventory generation/respawn](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2017-L2188).
+
+**Зависимости и сценарии:** item prototypes/content loading, game clock, container/NPC lifecycle and FR-ITEM-013. Проверить источник, одноразовую генерацию, buy-all/allowlist, сохранение купленного/проданного и реальное правило пополнения для конкретного merchant profile. **Steamwoven:** source rules and merchant behavior отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). Тексты/состав исходных наборов не читались.
+
+<a id="fr-item-015"></a>
+
+### FR-ITEM-015 — кража и подкладка предмета
+
+**Предлагаемая фаза: Later.** В режиме pickpocket предмет нельзя незаметно перемещать простым drag-and-drop: steal и plant запускают skill action, который обновляет владельца только по своим итогам. Stolen property сохраняет предметный флаг/происхождение; торговля проверяет его, а исключения fence/разрешённого buyer применяются явно. Социальный/AI fallout и шанс кражи не реализуются в item layer.
+
+**Наблюдение CE:** `inven_ui` различает перетаскивание со стороны персонажа в сторону цели и обратно, после чего вызывает `skill_steal_item` или `skill_plant_item`; эти wrappers запускают общий PICK_POCKET invocation. `item_check_sell` запрещает продавать stolen item обычному покупателю, если торговец не fence. [Steal/plant UI callers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L2280-L2315), [skill wrappers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1446-L1464), [stolen sale restriction](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L936-L963).
+
+**Зависимости и сценарии:** pickpocket skill and detection/faction reactions — character/social domains; ownership/transaction — FR-ITEM-001/013. Проверить успех, провал, подкладку, флаг stolen и продажу fence vs ordinary trader. **Steamwoven:** pickpocket inventory mode and provenance отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** последствия обнаружения и все разрешённые scripts требуют полного AI/dialog audit.
+
+<a id="fr-item-016"></a>
+
+### FR-ITEM-016 — ловушки и размещаемые устройства как item actions
+
+**Предлагаемая фаза: Later.** Использование trap-device предмета направляет игрока к допустимой цели или координате; при успешной постановке предмет расходуется и создаётся world device со связанным эффектом/сценарием. Некоторые устройства могут устанавливать use action на дверь/контейнер; попытка поставить вторую ловушку в занятую клетку должна отказать без потери предмета. Обнаружение/обезвреживание передаёт результат в skill rules; повреждение/взрыв — combat/world effects.
+
+**Наблюдение CE:** `item_use_on_obj/loc` выделяет `trap_is_trap_device`; `trap_use_on_obj` проверяет допустимость цели, а `trap_use_at_loc` проверяет занятость и создаёт trap prototype/script, уничтожая предмет при успехе. `trap_handle_disarm` при успешном expert+ критическом результате может вернуть предмет; skill formula располагается в отдельном invocation. [Item caller into trap path](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1445-L1448), [device on object/location](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/trap.c#L314-L435), [disarm result and recovered item](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/trap.c#L473-L533).
+
+**Зависимости и сценарии:** target/location placement, item-use triggers, trap state, combat effect and disarm skill. Синтетически поставить устройство на неподдерживаемую цель и занятое место, проверить no-consume on rejection, consume/create on success, single disarm and optional recovered item. **Steamwoven:** dynamic trap placement/actions отсутствуют; см. [покрытие](#текущее-покрытие-steamwoven). Прочитанный CE участок не устанавливает все оригинальные trap/device prototypes.
+
+<a id="fr-item-017"></a>
+
+### FR-ITEM-017 — найденные и открываемые технологические схемы
+
+**Предлагаемая фаза: Later.** Игрок может просматривать доступные схемы по технологической дисциплине: найденные документы и схемы, открытые текущими degree. Found entries хранятся отдельно от learned degree; повторное получение найденной схемы не создаёт дубликат. Книга показывает требуемые предметы, product, expertise gate и готовность собрать. Tech degree/intelligence progression остаются зависимостью [персонажа и навыков](characters-skills.md).
+
+**Наблюдение CE:** `tech_learn_schematic` читает ID из written item, добавляет только новый ID в `OBJ_F_PC_SCHEMATICS_FOUND_IDX`; `schematic_ui_toggle` отдельно формирует learned count по tech degree и found list; `tech_schematic_get` выводит ID learned schematic из tech/degree. `schematic_ui_info_get` загружает recipe fields; `tech_from_schematic` определяет discipline для обеих категорий. [Found schematic registration](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tech.c#L366-L410), [learned/found lists in UI](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c#L499-L568), [learned IDs and grouping](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c#L928-L977), [recipe field model/load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c#L984-L1029).
+
+**Зависимости и сценарии:** written items (FR-ITEM-010), tech disciplines and schematics content. Проверить learned vs found tabs, новый документ, повтор документа, empty discipline и recipe with multiple interchangeable component prototypes. **Steamwoven:** schematic content, knowledge and UI absent; см. [покрытие](#текущее-покрытие-steamwoven). Фактические recipe data не читались.
+
+<a id="fr-item-018"></a>
+
+### FR-ITEM-018 — сборка устройства по схеме
+
+**Предлагаемая фаза: Later.** Сборка доступна, когда персонаж обладает требуемой expertise и каждым обязательным компонентом из альтернативных prototype choices. Успех потребляет компоненты в указанном количестве и создаёт настроенный результат указанного quantity в инвентаре; недостаток ресурса/expertise ничего не расходует. Item discipline/complexity задают область recipe gate, но не заменяют общий progression расчёт.
+
+**Наблюдение CE:** schematic UI получает материалы по matching prototypes и проверяет для каждой группы предмет и `tech_degree_level_get` относительно дисциплины и отрицательной item complexity; `schematic_ui_process` находит обе компоненты, расходует одну единицу ammo либо уничтожает обычный ingredient и создаёт `info.qty` product objects с передачей в inventory. Потенциальный сбой создания продукта после потребления ingredients виден в последовательности CE и должен быть покрыт отдельно в независимой транзакционной модели. [Component and expertise gate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c#L1222-L1278), [assembly process and consumption](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c#L1414-L1501), [discipline level API](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tech.c#L333-L359).
+
+**Зависимости и сценарии:** FR-ITEM-017, inventory capacity/ownership (FR-ITEM-001/002), tech degree rules and recipe data. Проверить item/expertise gates, альтернативный prototype, ammo ingredient, успешный output count, отсутствие компонентов и полный инвентарь; при сбое output не терять уже заявленные ресурсы. **Steamwoven:** assembly runtime отсутствует; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** транзакционная гарантия CE неполна, recipe content и точная семантика требований нуждаются в отдельной проверке.
+
+<a id="fr-item-019"></a>
+
+### FR-ITEM-019 — азартная игра и предметная ставка с NPC
+
+**Предлагаемая фаза: Pre-alpha.** В режиме торговли игрок может предложить явно выбранный предмет со стороны NPC для игры на удачу. До броска интерфейс показывает предмет, его рассчитываемую стоимость и достаточность средств/навыка; после разрешения ставка меняет владение предметом, положение в мире, деньги и итоговое сообщение согласованно и ровно один раз. Ошибка, отмена либо недостаточная допустимость не должны скрыто менять инвентарь. Статус/обучение Gambling и формулы расчёта шанса принадлежат [персонажу и навыкам](characters-skills.md); здесь зафиксированы UI, stake eligibility и item/economy outcomes.
+
+**Наблюдение CE:** специальная gambling-зона включается только в barter UI. Выбранный предмет со стороны PC отклоняется; NPC должен иметь очки Gambling; максимальная стоимость предмета сравнивается с пределом игрока, а у игрока проверяется наличие денег. Для надетого/`OIF_WONT_SELL` предмета проверяется соответственно обучение NPC уровня Expert/Master. После этого inventory caller запускает `SKILL_GAMBLING` с PC, NPC и item как аргументами. Skill invocation использует заранее сохранённый следующий бросок, причём комментарий в CE прямо связывает это с запретом повторить попытку загрузкой. Caller выбирает flags `0x12` при success и `0x11` при failure, помечая этот выбор FIXME как неясный; общий transfer handler интерпретирует эти биты как разные item routes и включает ценовую ветвь по `0x10`. Поэтому этот исходный путь не даёт безопасно зафиксировать пользовательское значение «выигрыш/проигрыш» только по кодам flags: результат item ownership/drop/payment должен быть отдельно подтверждён совместимым runtime наблюдением и независимой моделью. [Barter mode creates gambling zone](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L952-L979), [eligibility and displayed checks](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L4387-L4463), [zone hover and input caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L1477-L1493), [item-to-skill invocation and outcome flags](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L4466-L4483), [generic item/payment outcome route](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L4220-L4301), [saved gambling roll and skill limit](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L436-L456), [level-based item-cost cap](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L976-L1007), [non-retry roll caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1555-L1570).
+
+**Зависимости и сценарии:** barter pricing (FR-ITEM-013), inventory/ownership (FR-ITEM-001), [Gambling rank and invocation rules](characters-skills.md), [barter UI](ui-media-lifecycle.md), saved-roll boundary (FR-LIFECYCLE-003). Предлагаемые проверки: неверная сторона инвентаря, отсутствие навыка у NPC, item value выше допустимого предела, недостаток денег, надетый и `WONT_SELL` предмет на каждой границе обучения; отдельно проверить однократное списание/зачисление средств и размещение предмета при каждом исходе, отсутствие дубликатов, корректное обновление после загрузки и отсутствие reroll через save/reload. **Steamwoven:** предметной игры, barter/inventory runtime, skill outcomes и save state нет; см. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** код CE прямо помечает outcome flags как неясные; исходный runtime и все ставки/ресурсные записи не проверялись.
+
+## Текущее покрытие Steamwoven
+
+Срез исходников: [`b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`](https://github.com/Simarglok/arcanum-steamwoven/tree/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae). В текущем репозитории нет item/inventory/equipment/economy runtime в `Arcanum.Simulation`, `Arcanum.Presentation` или Godot scene; поиск по `src`, `tests` и документации нашёл лишь статическое чтение объектов и исключение inventory-only записей из некоторых world queries. Это не доказательство, что item gameplay отсутствует в оригинале.
+
+| Измерение | Текущее свидетельство на pinned HEAD | Покрытие требований |
+| --- | --- | --- |
+| Данные | `StaticObjectLoader` объявляет wire descriptors для item/weapon/ammo/armor/gold/key-ring/written; однако в inspected static-object path `ResolveFields` сохраняет art/flags/location только для scenery type `3`, а прочие типы помечает `UnsupportedType`. | **Частично** лишь framing/shape некоторых сериализованных полей; не предметные записи/значения. [Wire descriptors](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L32-L48), [type-specific field mapping](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L632-L651), [resolver boundary](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L383-L407), [record model](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectModels.cs#L98-L132). |
+| Поведение | В текущих `Simulation` source files реализован только bounded movement domain; item ownership, stacking, use, effects, trade, stock and crafting отсутствуют. | **Нет** по всем FR-ITEM-* runtime rules. [Simulation runtime sample](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Simulation/Movement/MovementRuntime.cs#L1-L25). |
+| Интеграция | Выбранный static scenery viewer и world movement не связаны с actor inventory/equipment. Ограниченный loader — диагностика static sector records. | **Нет** item gameplay integration. См. [bounded static-object API](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L50-L58) и [renderer scope](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111). |
+| Проверка | В текущем `tests` tree есть reader/framing, static-object, dialog и movement tests; нет item inventory/economy runtime suite. Existing successful viewer/parser checks do not verify game item semantics. | **Нет** для предметных behavior gates; новое тестирование не запускалось в этом исследовании. |
+
+## Сводная матрица покрытия Steamwoven
+
+| ID | Данные | Правила | Интеграция | Проверка |
+| --- | --- | --- | --- | --- |
+| FR-ITEM-001 | Частично: wire shape некоторых static object types, записи unsupported | Нет: ownership/transfer runtime отсутствует | Нет: нет actor inventory | Нет: item cases не проверялись |
+| FR-ITEM-002 | Частично: ограниченные static descriptors, без semantic weights | Нет: carry/encumbrance rules отсутствуют | Нет: нет inventory-to-character link | Нет: weight cases отсутствуют |
+| FR-ITEM-003 | Частично: type descriptors, без stack records | Нет: merge/split runtime отсутствует | Нет: нет stack ownership path | Нет: stack suite отсутствует |
+| FR-ITEM-004 | Частично: key/ring shapes only | Нет: key matching/access rules отсутствуют | Нет: нет locks/inventory actions | Нет: unlock cases отсутствуют |
+| FR-ITEM-005 | Частично: item type shapes only | Нет: equipment slot rules отсутствуют | Нет: нет paperdoll/runtime actor | Нет: equip cases отсутствуют |
+| FR-ITEM-006 | Частично: weapon/ammo/armor descriptors only | Нет: pools/eligibility absent | Нет: no combat/equipment bridge | Нет: ammo cases absent |
+| FR-ITEM-007 | Частично: no carried-light semantics | Нет: item effect runtime absent | Нет: no item/world lighting bridge | Нет: equipment light cases absent |
+| FR-ITEM-008 | Частично: no item text/ID values | Нет: identify/valuation absent | Нет: no inspect UI | Нет: identification cases absent |
+| FR-ITEM-009 | Частично: no usable item data | Нет: consumable/charge rules absent | Нет: no item-action integration | Нет: use outcome cases absent |
+| FR-ITEM-010 | Частично: written type shapes only | Нет: no books/read state | Нет: no written-object UI | Нет: reading cases absent |
+| FR-ITEM-011 | Частично: no durability values | Нет: damage/repair state absent | Нет: no repair/equipment bridge | Нет: repair cases absent |
+| FR-ITEM-012 | Частично: no world item lifetime values | Нет: decay/despawn rules absent | Нет: no persistent drops | Нет: lifetime cases absent |
+| FR-ITEM-013 | Частично: no price/shop records | Нет: barter/pricing absent | Нет: no merchant UI/runtime | Нет: purchase cases absent |
+| FR-ITEM-014 | Частично: no stock definitions | Нет: restock rules absent | Нет: no shop refresh lifecycle | Нет: stock cases absent |
+| FR-ITEM-015 | Частично: item data shapes only | Нет: steal/plant rules absent | Нет: no actor inventory or detection bridge | Нет: theft cases absent |
+| FR-ITEM-016 | Частично: no trap item semantics | Нет: placement/disarm item actions absent | Нет: no trap/world integration | Нет: trap item cases absent |
+| FR-ITEM-017 | Частично: no schematic/knowledge records | Нет: learned/found rules absent | Нет: no schematic UI | Нет: discovery cases absent |
+| FR-ITEM-018 | Частично: recipe/ingredient data absent | Нет: assembly runtime absent | Нет: no inventory/crafting bridge | Нет: crafting cases absent |
+| FR-ITEM-019 | Частично: no gamble/item values or saved roll | Нет: Gambling/item stake rules absent | Нет: no barter/skill/save integration | Нет: gamble cases absent |
+
+Во всех строках «Частично» ограничено формой отдельных объявленных wire descriptors в `StaticObjectLoader`; его проверенный static-object resolver не сохраняет обычные item semantics и классифицирует такие типы как unsupported. Это не свидетельствует об отсутствии соответствующих данных или механик в оригинальной игре.
+
+## Инвентарь просмотренных источников и охват
+
+**CE — непосредственно прочитаны функции/участки:** `src/game/item.c` и `item.h` (parent, weight, transfer/drop/insert, stack fields, pricing, use, identification, currency/ammo, equipment, decay); `obj.h`, `obj_flags.h`, `obj.c` (типы/поля/флаги и type mapping); `object.c` (examine, HP and bust); `invensource.c/.h`; `tech.c/.h`, `schematic.h`; `trap.c/.h`; `skill.c` (healing charges, repair branch/service, steal wrappers, gambling cap/roll/invocation); `dialog.c` (gambling message range provider); `item_effect.c`, `description.c`, `oname.c`; `mt_item.c`; `ui/inven_ui.c` (gamble zone, eligibility, caller and generic outcome path plus selected item UI branches), `item_ui.c`, `intgame.c`, `schematic_ui.c`, `tech_ui.c`, `written_ui.c`. `src/game/scroll.c` проверен как camera/view scrolling и не использован как доказательство поведения предмета типа scroll.
+
+**CE — обнаружено поиском, но не разобрано полностью:** `proto.c` и все пути применения/сохранения prototypes; все script handlers и ресурсные recipe/merchant entries; `combat.c`/`anim.c` ammo consumption и attack transaction; остальной `critter.c`, reaction/social and shop dialogue callers; все item event/spell branches `mt_item.c` и остаток item use paths; полный контейнер, trap discovery, quest/item callback и multiplayer routing. Названия этих модулей не означают полного исследования. У `invensource_get_id_list` есть явный TODO по range check; у wear-removal `sub_465010` stub возвращает OK; обе границы сохранены выше как CE incompleteness.
+
+**Steamwoven — непосредственно просмотрены:** `src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs`, `StaticObjectModels.cs`, `src/Arcanum.Simulation/Movement/MovementRuntime.cs`, `docs/project/status.md`, rendering scope document and requirements/method guidance; выполнен поиск item/economy terms по текущим `src`, `tests`, `docs`. Каталог статуса `docs/project/status.md` на этом срезе остаётся историческим до PR #30, поэтому он не использован как единственный источник состояния.
+
+**Не исследовались:** оригинальные resource payloads и тексты, массивы prototype/MES/recipe/shop данных, запуск оригинальной игры, build/run/test графического результата. Все acceptance scenarios — предложения для будущей независимой проверки, не факты выполненной валидации.
