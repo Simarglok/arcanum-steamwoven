@@ -72,6 +72,15 @@ full census, static projection and digest assembly read, then performs final ful
 module/resource/six prototype hash checks BEFORE returning. It does not validate
 and unguardedly reopen. Original identities and loader aggregate are deeply owned.
 
+Synthetic guard negatives call the same concrete final fingerprint verifier used
+by this original path, around an actual structural snapshot factory/Build. An
+unchanged control and independent late mutations of module, resource and each of
+six required synthetic prototypes observe factory reads before final hash reads;
+changed inputs must throw sanitized InputChanged/Fingerprint and return no snapshot.
+No test-authored verification callback, public authentication bypass, original-game
+mutation or platform-specific file-sharing assumption is used. Structural fixtures
+remain Structural, never authenticated originals.
+
 The snapshot owns bounded numeric terrain words/mask/name results and all terminal
 records, no caller archive/source/options, raw name text, filesystem paths, ART
 payloads or lazy source retention. Queries do no I/O, survive disposal/source

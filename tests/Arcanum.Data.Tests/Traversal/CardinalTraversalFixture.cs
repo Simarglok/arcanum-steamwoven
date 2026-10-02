@@ -70,7 +70,8 @@ internal sealed class CardinalTraversalFixture : IDisposable
     internal sealed class ReadTrap(byte[] bytes) : MemoryStream(bytes)
     {
         internal bool Armed; internal int ForbiddenReads;
-        private void Guard() { if (Armed) { ForbiddenReads++; throw new IOException("private stream read forbidden"); } }
+        internal Action? ReadObserved;
+        private void Guard() { ReadObserved?.Invoke(); if (Armed) { ForbiddenReads++; throw new IOException("private stream read forbidden"); } }
         public override int Read(byte[] b, int o, int c) { Guard(); return base.Read(b, o, c); }
         public override int Read(Span<byte> b) { Guard(); return base.Read(b); }
         public override int ReadByte() { Guard(); return base.ReadByte(); }

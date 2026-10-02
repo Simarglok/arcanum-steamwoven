@@ -200,12 +200,8 @@ public static class StaticObjectLoader
             var aggregate = Aggregate(prototypeBefore.Select(item => (item.Aid, item.Fingerprint!)));
             var validation = new StaticObjectValidation(inspection, moduleBefore, resourceBefore,
                 prototypeBefore.Select(item => new StaticObjectPrototypeFingerprint(item.Aid, item.Fingerprint!)).ToArray(), aggregate);
-            return CompleteGuardedProjection(() => projection(source, prototypes, validation), () =>
-            {
-                if (moduleBefore != Fingerprint(moduleStream, limits.MaxArchiveBytes) || resourceBefore != Fingerprint(resourceStream, limits.MaxArchiveBytes) ||
-                    prototypeBefore.Any(item => item.Fingerprint != FingerprintSafe(item.Path, (uint)limits.MaxPrototypeBytes)))
-                    throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable input changed during validation.");
-            });
+            return CompleteGuardedProjection(() => projection(source, prototypes, validation), moduleStream, resourceStream,
+                moduleBefore, resourceBefore, prototypeBefore.Select(item => (item.Path, item.Fingerprint!)).ToArray(), limits);
         }
         catch (StaticObjectException) { throw; }
         catch (IOException) { throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable validation input is unavailable."); }
@@ -232,10 +228,16 @@ public static class StaticObjectLoader
         return (window.TerminalObjectCount, ParseWindow(window.Bytes.ToArray(), window.TerminalObjectCount, limits));
     }
 
-    internal static T CompleteGuardedProjection<T>(Func<T> projection, Action verifyInputs)
+    // Concrete production post-read verifier, shared with bounded synthetic guard tests.
+    // Expected identities come from the authenticated pre-read above; this is not a public original-data factory.
+    internal static T CompleteGuardedProjection<T>(Func<T> projection, Stream moduleStream, Stream resourceStream,
+        StaticObjectInputFingerprint moduleBefore, StaticObjectInputFingerprint resourceBefore,
+        IReadOnlyList<(string Path, StaticObjectInputFingerprint Fingerprint)> prototypeBefore, StaticObjectLoaderOptions limits)
     {
         var owned = projection();
-        verifyInputs();
+        if (moduleBefore != Fingerprint(moduleStream, limits.MaxArchiveBytes) || resourceBefore != Fingerprint(resourceStream, limits.MaxArchiveBytes) ||
+            prototypeBefore.Any(item => item.Fingerprint != FingerprintSafe(item.Path, (uint)limits.MaxPrototypeBytes)))
+            throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable input changed during validation.");
         return owned;
     }
 

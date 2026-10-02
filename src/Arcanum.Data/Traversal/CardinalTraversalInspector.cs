@@ -93,7 +93,8 @@ public static class CardinalTraversalInspector
         return new(identity, epoch, cells, ordinary, inspection.TerminalRecordCount, terrain.TileScriptCount, terrain.SectorScriptBytes, census, complete, membership);
     }
 
-    private static T Sanitize<T>(Func<T> operation)
+    // Internal so guard-negative fixtures exercise the same invocation boundary as both public factories.
+    internal static T Sanitize<T>(Func<T> operation)
     {
         try { return operation(); }
         catch (CardinalTraversalInvocationException) { throw; }

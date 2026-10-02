@@ -75,12 +75,80 @@ public sealed class CardinalTraversalBindingTests
     }
 
     [TestMethod]
-    public void Guard_executes_last_projection_read_before_posthash_and_never_returns_changed_inputs()
+    [DataRow("unchanged")]
+    [DataRow("module")]
+    [DataRow("resource")]
+    [DataRow("4026")]
+    [DataRow("4028")]
+    [DataRow("4030")]
+    [DataRow("4031")]
+    [DataRow("4038")]
+    [DataRow("4048")]
+    public void Production_final_fingerprints_follow_snapshot_reads_and_reject_each_late_mutation(string changedInput)
     {
-        var events = new List<string>(); var bytes = new byte[] { 1, 2, 3 }; var before = Hash(bytes);
-        var value = StaticObjectLoader.CompleteGuardedProjection(() => { events.Add("last-source-read"); return bytes.ToArray(); }, () => { events.Add("final-hash"); Assert.AreEqual(before, Hash(bytes)); });
-        CollectionAssert.AreEqual(new[] { "last-source-read", "final-hash" }, events); CollectionAssert.AreEqual(bytes, value);
-        Throws<IOException>(() => StaticObjectLoader.CompleteGuardedProjection(() => { bytes[0] = 4; return bytes.ToArray(); }, () => { if (Hash(bytes) != before) throw new IOException("changed synthetic input"); }));
-        // Guard used by actual original path is source-traced and exercised by the original gate.
+        // Actual DAT/SEC/MES/v119/default readers + owned Build, not a toy projection.
+        // Structural fixtures never authenticate originals; only the INTERNAL final guard is shared.
+        var aids = new[] { 4026, 4028, 4030, 4031, 4038, 4048 };
+        using var f = new CardinalTraversalFixture(aids.Select(aid => Record(null, aid: aid)).ToArray());
+        var prototypes = new List<(string Path, StaticObjectInputFingerprint Fingerprint)>();
+        foreach (var aid in aids)
+        {
+            var bytes = StaticObjects.StaticObjectLoaderTests.Prototype(aid, 123, 1024);
+            f.PutPrototype(aid, 1024, bytes);
+            prototypes.Add((Path.Combine(f.PrototypeRoot, $"{aid:000000} - fixture.pro"), new(bytes.LongLength, Hash(bytes))));
+        }
+        // Independent BCL oracle over test-authored bytes, not the production Fingerprint method.
+        var moduleBefore = new StaticObjectInputFingerprint(f.ModuleBytes.LongLength, Hash(f.ModuleBytes));
+        var resourceBefore = new StaticObjectInputFingerprint(f.ResourceBytes.LongLength, Hash(f.ResourceBytes));
+        var events = new List<string>(); var projected = false;
+        f.ModuleStream.ReadObserved = () => events.Add(projected ? "post-module-read" : "projection-module-read");
+        f.ResourceStream.ReadObserved = () => events.Add(projected ? "post-resource-read" : "projection-resource-read");
+        CardinalTraversalSnapshot? returned = null;
+        CardinalTraversalSnapshot Construct() => CardinalTraversalInspector.Sanitize(() => StaticObjectLoader.CompleteGuardedProjection(() =>
+        {
+            var snapshot = f.Inspect();
+            Assert.AreEqual("Structural", snapshot.InputIdentity.Kind.ToString());
+            Assert.IsNull(snapshot.InputIdentity.OriginalIdentity);
+            Assert.AreEqual(6, snapshot.Census.Count);
+            CollectionAssert.AreEqual(aids, snapshot.Census.Select(row => row.PrototypeAid!.Value).ToArray());
+            Assert.IsTrue(snapshot.Census.All(row => row.FlagsSource.ToString() == "Prototype"));
+            Result(snapshot.Assess(Request(snapshot)), "Supported", "Open", true);
+            Assert.IsTrue(events.Contains("projection-module-read"));
+            Assert.IsTrue(events.Contains("projection-resource-read"));
+            events.Add("last-projection-read-complete");
+            // Mutate only synthetic inputs AFTER the final factory read/Build, using no OS sharing assumption.
+            if (changedInput == "module") f.ModuleBytes[0] ^= 1;
+            else if (changedInput == "resource") f.ResourceBytes[0] ^= 1;
+            else if (int.TryParse(changedInput, out var aid))
+            {
+                var path = Path.Combine(f.PrototypeRoot, $"{aid:000000} - fixture.pro");
+                var bytes = File.ReadAllBytes(path); bytes[0] ^= 1; File.WriteAllBytes(path, bytes);
+            }
+            projected = true;
+            return snapshot;
+        }, f.ModuleStream, f.ResourceStream, moduleBefore, resourceBefore, prototypes, new StaticObjectLoaderOptions()));
+
+        if (changedInput == "unchanged")
+        {
+            returned = Construct();
+            Result(returned.Assess(Request(returned)), "Supported", "Open", true);
+        }
+        else
+        {
+            var exception = Throws<CardinalTraversalInvocationException>(() => returned = Construct());
+            Assert.IsNull(returned, "A changed input must not return the already-built snapshot.");
+            Assert.AreEqual("InputChanged", exception.Code.ToString());
+            Assert.AreEqual("Fingerprint", exception.Stage.ToString());
+            Assert.AreEqual("CARDINAL_INVOCATION_FAILED", exception.Message);
+            Assert.IsNull(exception.InnerException); Assert.IsNull(exception.SourceIndex); Assert.IsNull(exception.Offset);
+        }
+        Assert.IsTrue(events.IndexOf("post-module-read") > events.IndexOf("last-projection-read-complete"));
+        // The verifier intentionally short-circuits once module mismatch is found.
+        if (changedInput != "module") Assert.IsTrue(events.IndexOf("post-resource-read") > events.LastIndexOf("post-module-read"));
+        Assert.AreEqual(changedInput == "module", moduleBefore.Sha256 != Hash(f.ModuleBytes));
+        Assert.AreEqual(changedInput == "resource", resourceBefore.Sha256 != Hash(f.ResourceBytes));
+        for (var i = 0; i < prototypes.Count; i++)
+            Assert.AreEqual(changedInput == aids[i].ToString(System.Globalization.CultureInfo.InvariantCulture),
+                prototypes[i].Fingerprint.Sha256 != Hash(File.ReadAllBytes(prototypes[i].Path)));
     }
 }
