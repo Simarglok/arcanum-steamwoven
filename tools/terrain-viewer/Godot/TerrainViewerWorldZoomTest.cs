@@ -12,6 +12,7 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD zoom: " + why); }
         static bool Near(double a,double b) => Math.Abs(a-b)<1e-10;
+        WorldZoomExtremeFrameMatrixForSelfTest();
         var none = new RawInputFrame(-1,default); var pad = new RawInputFrame(3,default);
         void Frame(RawInputFrame raw,double dt=.1,bool complete=true) => WorldFrameForSelfTest(none,new[]{raw},dt,complete);
         void Rearm() { Frame(pad); Frame(pad); Frame(pad); }
@@ -116,6 +117,7 @@ public partial class TerrainViewerApp
             KeyEvent(Key.Enter,true); KeyEvent(Key.Enter,false); await NextFrameAsync();
             Require(Near(_camera.State.Zoom,1.7)&&operations==1&&Near(_worldZoomStore.Load(),1.7),"native zoom numeric commit once");
             KeyEvent(Key.Tab,true);KeyEvent(Key.Tab,false); Require(GetViewport().GuiGetFocusOwner()!=editor,"zoom Tab");
+            await WorldSettingsFocusMatrixForSelfTestAsync();
             Rearm(); var modalZoom=_camera.State.Zoom; Frame(pad with {RightTrigger=1},1);
             Require(_camera.State.Zoom==modalZoom&&zoomControl.Value==modalZoom,"modal trigger leaked");
             zoomControl.GetLineEdit().GrabFocus(); Frame(pad); Frame(pad with {Next=true});

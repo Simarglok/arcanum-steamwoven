@@ -133,8 +133,12 @@ public sealed class InputStateReducer
         // physical-stick and keyboard vectors use the same policy; normalization
         // only caps a mixed diagonal command and must not erase sensitivity.
         var actor = CombineDirection(left, Normalize(raw.KeyboardActor)) * context.ActorSensitivity;
-        var camera = CombineDirection(right, Normalize(raw.KeyboardCamera))
-            * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
+        var cameraDirection = CombineDirection(right, Normalize(raw.KeyboardCamera));
+        // WORLD's valid huge finite trigger-only frames must not manufacture
+        // NaN from zero * an overflowing pan scale. Keep the historical lab
+        // route unchanged, and leave real nonzero overflow for host quarantine.
+        var camera = context.WorldZoomEnabled && cameraDirection == default(Vec2) ? default
+            : cameraDirection * (520 * context.CameraSensitivity * context.Delta / Math.Max(context.Zoom, .001));
         // The scene translates its world image. The historical GPAD001 positive pan
         // sign also moved that image right/down. The owner explicitly retains that
         // visual sign for the true defaults; false intentionally reverses an axis.

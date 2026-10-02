@@ -30,6 +30,25 @@ public sealed class WorldZoomTests
         Near(.125,WorldZoomPolicy.Absolute(2,-10)); Near(8,WorldZoomPolicy.Absolute(2,100));
     }
     [TestMethod]
+    public void WorldNeutralPanAvoidsManufacturedOverflowButRetainsRealAndHistoricalOverflow()
+    {
+        foreach (var dt in new[] { 1e307, double.MaxValue })
+        foreach (var device in new[] { -1, 3 })
+        {
+            var reducer = new InputStateReducer(); reducer.SetStartupDevices(new[] { 3 });
+            var raw = new RawInputFrame(device, default) { RightTrigger = device == 3 ? 1 : 0 };
+            var context = new InputContext(Delta: dt, Zoom: 2, AdvanceTime: true) { WorldZoomEnabled = true };
+            var intent = reducer.Reduce(raw, context);
+            Assert.IsTrue(intent.Accepted); Assert.AreEqual(default(Vec2), intent.CameraPan);
+            Assert.IsFalse(intent.CameraActive); Assert.IsFalse(intent.ActorActive);
+            Near(device == 3 ? 1 : 0, intent.ZoomDrive);
+            var pan = reducer.Reduce(raw with { KeyboardCamera = new(1, 0) }, context).CameraPan;
+            Assert.IsFalse(double.IsFinite(pan.X));
+            var historical = reducer.Reduce(raw, context with { WorldZoomEnabled = false });
+            Assert.IsTrue(double.IsNaN(historical.CameraPan.X)); Near(0, historical.ZoomDrive);
+        }
+    }
+    [TestMethod]
     public void WheelCrossingStopsExactlyForOneEventWithoutToleranceStickiness()
     {
         Near(1,WorldZoomPolicy.Step(.9,1.25)); Near(1.25,WorldZoomPolicy.Step(1,1.25));

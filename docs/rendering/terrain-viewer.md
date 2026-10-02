@@ -264,7 +264,9 @@ Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 F1/Start opens paused settings: World zoom numeric editor (keyboard text/Enter/
 Tab; controller shoulders adjust by 0.05), exact 100% (1.00), 200% (2.00),
 300% (3.00), and Fit. Native clicks activate only the clicked control once;
-controller A activates the selected action. Modal triggers do not zoom. Ordinary
+controller A activates the selected action. Keyboard/controller navigation and
+native Tab automatically scroll the focused control (including numeric editors)
+into view; navigation alone never edits zoom. Modal triggers do not zoom. Ordinary
 wheel/+/- retain factors 1.25/0.8 but stop exactly at 1.00 on a crossing event;
 the next event can leave 1.00. These shortcuts require admitted, unfocused world
 input and wheel outside the HUD. Standalone preview controls remain unchanged.

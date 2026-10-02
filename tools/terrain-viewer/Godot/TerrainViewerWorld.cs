@@ -139,21 +139,29 @@ public partial class TerrainViewerApp
     public override void _Notification(int what)
     {
         if (!IsWorld || !_worldInitialized) return;
+        // Only the explicit navigation simulation owns focus while its native
+        // GUI runs. Ordinary/lifecycle routes always retain OS focus quarantine.
+        if (_worldFocusSimulationForSelfTest && (SelfTestBootstrap || _nativeSmoke)) return;
         if (what == NotificationApplicationFocusOut || what == NotificationApplicationFocusIn)
         {
             _worldFocused = what == NotificationApplicationFocusIn;
             _worldReducer.FocusChanged(_worldFocused); QuarantineWorld(); RefreshReadyStatus();
         }
     }
-    private void HandleWorldPulse(IntentFrame intent)
+    private void HandleWorldPulse(IntentFrame intent, bool ownsMenuAnalog)
     {
         if (!intent.Accepted) return;
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
-        var analogDirection = Math.Abs(intent.MenuAnalog) >= .6 ? Math.Sign(intent.MenuAnalog) : 0;
-        if (analogDirection != 0 && analogDirection != _worldMenuAnalogDirection) _worldPanel?.Navigate(analogDirection);
-        _worldMenuAnalogDirection = analogDirection;
+        // Only the selected device can release its analog menu latch. A neutral
+        // keyboard reduction in the same frame is not controller-neutral proof.
+        if (ownsMenuAnalog)
+        {
+            var analogDirection = Math.Abs(intent.MenuAnalog) >= .6 ? Math.Sign(intent.MenuAnalog) : 0;
+            if (analogDirection != 0 && analogDirection != _worldMenuAnalogDirection) _worldPanel?.Navigate(analogDirection);
+            _worldMenuAnalogDirection = analogDirection;
+        }
         if (intent.Previous) _worldPanel?.Adjust(-1);
         if (intent.Next) _worldPanel?.Adjust(1);
         if (intent.Confirm) _worldPanel?.Confirm();
@@ -205,7 +213,8 @@ public partial class TerrainViewerApp
         foreach (var raw in controllers) intents.Add(_worldReducer.Reduce(raw, context with { AdvanceTime = raw.DeviceId == priorActive }, provenance));
         _worldReducer.EndFrame();
         if (priorActive != _worldReducer.ActiveDevice) QuarantineWorld();
-        foreach (var intent in intents) HandleWorldPulse(intent);
+        for (var i = 0; i < intents.Count; i++)
+            HandleWorldPulse(intents[i], i == 0 ? _worldReducer.ActiveDevice is null : controllers[i - 1].DeviceId == _worldReducer.ActiveDevice);
         var active = _worldReducer.ActiveDevice;
         complete &= active is null || controllers.Any(raw => raw.DeviceId == active);
         var neutral = !InputStateReducer.HasAnyLevel(keyboard, context)
@@ -266,7 +275,7 @@ public partial class TerrainViewerApp
         }
         if (raw.DeviceId < 0) raw = WorldKeyboardRouting(raw);
         var intent = _worldReducer.Reduce(raw, WorldContext());
-        if (input is not InputEventMouse) HandleWorldPulse(intent);
+        if (input is not InputEventMouse) HandleWorldPulse(intent, _worldReducer.ActiveDevice is null || raw.DeviceId == _worldReducer.ActiveDevice);
         // Semantic keyboard/controller modal routing is owned above; do not
         // also let focused native controls toggle/navigate the same event.
         var semanticKey = input is InputEventKey keyEvent &&

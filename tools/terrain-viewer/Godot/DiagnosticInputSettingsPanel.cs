@@ -41,7 +41,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
             Text = "Diagnostic input settings — world paused\nDiagnostic free movement — collision not evaluated\nOriginal parity NOT VERIFIED",
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         });
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        var scroll = new ScrollContainer { FollowFocus = true, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         contents.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(_rows);
