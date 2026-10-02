@@ -58,6 +58,18 @@ public static class StaticObjectLoader
         return InspectParsed(source, prototypes, limits, null, null);
     }
 
+    // Assessment policy only: same strict parser and prototype reader, but
+    // unresolved flag references are retained per record. Public loader policies
+    // still abort; malformed bytes and limits always abort.
+    internal static StaticObjectInspection InspectForObstruction(StaticObjectSource source,
+        StaticObjectPrototypeSource prototypes, StaticObjectLoaderOptions limits)
+    {
+        limits.Validate();
+        ValidateArchiveBounds(source.ModuleArchive, limits);
+        ValidateArchiveBounds(source.ResourceArchive, limits);
+        return InspectParsed(source, prototypes, limits, null, null, flagsOnly: true);
+    }
+
     /// <summary>
     /// Resolves a bounded structural resource chain for source indexes zero through four.
     /// This caller-owned operation does not authenticate an original-data identity.
@@ -106,13 +118,14 @@ public static class StaticObjectLoader
 
     private static StaticObjectInspection InspectParsed(StaticObjectSource source, StaticObjectPrototypeSource prototypes,
         StaticObjectLoaderOptions limits, IReadOnlyList<int>? selectedIndexes,
-        IReadOnlyDictionary<int, PrototypeInput>? fingerprints)
+        IReadOnlyDictionary<int, PrototypeInput>? fingerprints, bool flagsOnly = false)
     {
         try
         {
             var (terminalCount, parsed) = ParseSelectedWindow(source, limits);
-            var loadedPrototypes = ReadPrototypes(prototypes, parsed.Where(record => record.Type == 3 && (record.DirectCurrentArt is null || record.DirectFlags is null)), limits, fingerprints);
-            var resolved = parsed.Select(record => ResolveFields(record, loadedPrototypes)).ToArray();
+            var loadedPrototypes = ReadPrototypes(prototypes, parsed.Where(record => record.Type == 3 &&
+                (record.DirectFlags is null || (!flagsOnly && record.DirectCurrentArt is null))), limits, fingerprints, flagsOnly);
+            var resolved = parsed.Select(record => ResolveFields(record, loadedPrototypes, flagsOnly)).ToArray();
             if (selectedIndexes is not null)
             {
                 ValidateSelectedResourceEligibility(resolved, selectedIndexes);
@@ -316,9 +329,13 @@ public static class StaticObjectLoader
     }
 
     private static Dictionary<int, Prototype> ReadPrototypes(StaticObjectPrototypeSource source, IEnumerable<ParsedRecord> records,
-        StaticObjectLoaderOptions limits, IReadOnlyDictionary<int, PrototypeInput>? inputs)
+        StaticObjectLoaderOptions limits, IReadOnlyDictionary<int, PrototypeInput>? inputs, bool allowUnresolved = false)
     {
-        if (!DirectoryExists(source.DirectoryPath)) throw Failure(StaticObjectErrorCode.UnresolvedReference, StaticObjectFailureStage.Prototype, "The explicit prototype source is unavailable.");
+        if (!DirectoryExists(source.DirectoryPath))
+        {
+            if (allowUnresolved) return new Dictionary<int, Prototype>();
+            throw Failure(StaticObjectErrorCode.UnresolvedReference, StaticObjectFailureStage.Prototype, "The explicit prototype source is unavailable.");
+        }
         var result = new Dictionary<int, Prototype>();
         foreach (var required in records.GroupBy(record => record.PrototypeAid).Select(group => new { Aid = group.Key, SourceIndex = group.Min(record => record.SourceIndex) }))
         {
@@ -330,6 +347,10 @@ public static class StaticObjectLoader
                 var input = inputs is not null && inputs.TryGetValue(aid, out var selected)
                     ? selected : new PrototypeInput(aid, UniquePrototypePath(source.DirectoryPath, aid), null);
                 result.Add(aid, ParsePrototype(ReadBoundedFile(input.Path, limits.MaxPrototypeBytes, input.Fingerprint), aid, limits));
+            }
+            catch (StaticObjectException exception) when (allowUnresolved && exception.Code == StaticObjectErrorCode.UnresolvedReference)
+            {
+                // No default for a missing, ambiguous or mismatched reference.
             }
             catch (StaticObjectException exception)
             {
@@ -359,10 +380,20 @@ public static class StaticObjectLoader
         return new Prototype(art, flags);
     }
 
-    private static StaticObjectRecord ResolveFields(ParsedRecord record, IReadOnlyDictionary<int, Prototype> prototypes)
+    private static StaticObjectRecord ResolveFields(ParsedRecord record, IReadOnlyDictionary<int, Prototype> prototypes, bool flagsOnly = false)
     {
         if (record.Type != 3)
             return ToRecord(record, StaticObjectFieldStatus.UnsupportedType, null, false, null, false, null, StaticObjectResourceStatus.OutsideResourceScope, null);
+        if (flagsOnly)
+        {
+            prototypes.TryGetValue(record.PrototypeAid, out var defaultValue);
+            var effectiveFlags = record.DirectFlags ?? defaultValue?.Flags;
+            var effectiveArt = record.DirectCurrentArt ?? defaultValue?.CurrentArt;
+            return ToRecord(record, effectiveFlags.HasValue && effectiveArt.HasValue ? StaticObjectFieldStatus.Resolved : StaticObjectFieldStatus.UnresolvedReference,
+                effectiveArt, record.DirectCurrentArt is null && effectiveArt.HasValue, effectiveFlags,
+                record.DirectFlags is null && effectiveFlags.HasValue,
+                effectiveFlags is uint value ? (value & DynamicFlag) == 0 : null, StaticObjectResourceStatus.NotEvaluated, null);
+        }
         Prototype? prototype = null;
         if (record.DirectCurrentArt is null || record.DirectFlags is null)
         {

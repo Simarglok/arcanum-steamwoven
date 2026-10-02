@@ -578,7 +578,7 @@ public sealed class StaticObjectLoaderTests
         AssertStaticFailure(() => fixture.Inspect(options ?? new StaticObjectLoaderOptions()), code, StaticObjectFailureStage.Record, 0);
     }
 
-    private static byte[] Record(int prototypeAid, int? art, uint? flags, uint spellFlags, long? location = 0, int? offsetX = 0, int? offsetY = 0, int version = 119, int type = 3, int fieldCountDelta = 0, bool badLocationPresence = false)
+    internal static byte[] Record(int prototypeAid, int? art, uint? flags, uint spellFlags, long? location = 0, int? offsetX = 0, int? offsetY = 0, int version = 119, int type = 3, int fieldCountDelta = 0, bool badLocationPresence = false)
     {
         var bytes = new List<byte>();
         I32(bytes, version); ObjectId(bytes, 1, prototypeAid); ObjectId(bytes, 1, 1); I32(bytes, type);
@@ -589,7 +589,7 @@ public sealed class StaticObjectLoaderTests
         return bytes.ToArray();
     }
 
-    private static byte[] ArrayRecord(int size, int count, int words, uint[] bitset, bool includeElements)
+    internal static byte[] ArrayRecord(int size, int count, int words, uint[] bitset, bool includeElements)
     {
         var bytes = new List<byte>();
         I32(bytes, 119); ObjectId(bytes, 1, 7001); ObjectId(bytes, 1, 1); I32(bytes, 3);
@@ -602,7 +602,7 @@ public sealed class StaticObjectLoaderTests
         return bytes.ToArray();
     }
 
-    private static byte[] StringRecord(int length, byte[] value)
+    internal static byte[] StringRecord(int length, byte[] value)
     {
         var bytes = new List<byte>();
         I32(bytes, 119); ObjectId(bytes, 1, 7001); ObjectId(bytes, 1, 1); I32(bytes, 15);
@@ -611,7 +611,7 @@ public sealed class StaticObjectLoaderTests
         return bytes.ToArray();
     }
 
-    private static byte[] Prototype(int aid, int art, uint flags)
+    internal static byte[] Prototype(int aid, int art, uint flags)
     {
         var bytes = new List<byte>(); I32(bytes, 119); ObjectId(bytes, -1, 0); ObjectId(bytes, 1, aid); I32(bytes, 3);
         U32(bytes, 0); U32(bytes, 0); U32(bytes, 0); I32(bytes, art);
@@ -625,7 +625,7 @@ public sealed class StaticObjectLoaderTests
         return bytes.ToArray();
     }
 
-    private static byte[] Sector(params byte[][] records)
+    internal static byte[] Sector(params byte[][] records)
     {
         var objectBytes = records.SelectMany(record => record).ToArray(); var bytes = new byte[4 + (4096 * 4) + 4 + 4 + objectBytes.Length + 4]; var offset = 4 + (4096 * 4);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset), 1); BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(offset + 4), 0xAA0000); objectBytes.CopyTo(bytes, offset + 8);
@@ -656,7 +656,7 @@ public sealed class StaticObjectLoaderTests
     private static void U32(List<byte> bytes, uint value) { var raw = new byte[4]; BinaryPrimitives.WriteUInt32LittleEndian(raw, value); bytes.AddRange(raw); }
     private static void U32(Stream stream, uint value) { Span<byte> raw = stackalloc byte[4]; BinaryPrimitives.WriteUInt32LittleEndian(raw, value); stream.Write(raw); }
 
-    private sealed class Fixture : IDisposable
+    internal sealed class Fixture : IDisposable
     {
         private readonly MemoryStream _moduleBytes; private readonly MemoryStream _resourceBytes;
         public Fixture(params byte[][] records) : this(Sector(records), isSector: true) { }
