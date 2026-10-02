@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Simulation</AssemblyName>
+    <RootNamespace>Arcanum.Simulation</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.Simulation.Tests" />
+  </ItemGroup>
+</Project>

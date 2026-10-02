@@ -24,6 +24,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tools", "tools", "{F5B97B7B
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "terrain-inspect", "tools\terrain-inspect\terrain-inspect.csproj", "{05039B6C-C6B6-45D3-AA3D-1361BB0D2083}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.Simulation", "src\Arcanum.Simulation\Arcanum.Simulation.csproj", "{486B8319-B92C-46DD-A61B-C3C0764B1AA7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Arcanum.Simulation.Tests", "tests\Arcanum.Simulation.Tests\Arcanum.Simulation.Tests.csproj", "{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -33,6 +37,14 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{486B8319-B92C-46DD-A61B-C3C0764B1AA7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{486B8319-B92C-46DD-A61B-C3C0764B1AA7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{486B8319-B92C-46DD-A61B-C3C0764B1AA7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{486B8319-B92C-46DD-A61B-C3C0764B1AA7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972}.Release|Any CPU.Build.0 = Release|Any CPU
 		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -67,6 +79,8 @@ Global
 		{05039B6C-C6B6-45D3-AA3D-1361BB0D2083}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{486B8319-B92C-46DD-A61B-C3C0764B1AA7} = {A2E58854-7483-4641-9C84-BA3AAE908136}
+		{42DD4C81-28B5-4EB5-B0E8-4E6651FF0972} = {66D6C45A-6764-42D8-8C7C-C10EEF849403}
 		{87E60956-AA02-4D6D-B3C7-FCD941E39EFD} = {A2E58854-7483-4641-9C84-BA3AAE908136}
 		{361A6EA0-36E3-445D-8B4F-D1053640C21B} = {A2E58854-7483-4641-9C84-BA3AAE908136}
 		{75C09B83-CB2C-4E3B-959D-0E99548B28C2} = {66D6C45A-6764-42D8-8C7C-C10EEF849403}
