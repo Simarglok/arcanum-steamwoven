@@ -58,23 +58,26 @@ internal static class Program
             }
 
             var passability = args.Length == 7 && args[0] == "--passability";
-            var argumentOffset = passability ? 1 : 0;
+            var cardinal = args.Length == 7 && args[0] == "--cardinal-traversal";
+            var argumentOffset = passability || cardinal ? 1 : 0;
             if (args.Length != argumentOffset + 6 || args[argumentOffset] != "--module" || args[argumentOffset + 2] != "--prototype-root" || args[argumentOffset + 4] != "--resource")
             {
-                throw new ArgumentException("usage: --self-test | [--passability] --module PATH --prototype-root PATH --resource PATH");
+                throw new ArgumentException("usage: --self-test | [--passability|--cardinal-traversal] --module PATH --prototype-root PATH --resource PATH");
             }
 
-            ProbeModule(args[argumentOffset + 1], args[argumentOffset + 3], args[argumentOffset + 5], passability);
+            ProbeModule(args[argumentOffset + 1], args[argumentOffset + 3], args[argumentOffset + 5], passability, cardinal);
             return 0;
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine($"crash-site-probe: FAIL: {exception.GetType().Name}: {exception.Message}");
+            Console.Error.WriteLine(args.Contains("--cardinal-traversal")
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: CARDINAL_INVOCATION_FAILED"
+                : $"crash-site-probe: FAIL: {exception.GetType().Name}: {exception.Message}");
             return 1;
         }
     }
 
-    private static void ProbeModule(string path, string prototypeRoot, string resourcePath, bool passability)
+    private static void ProbeModule(string path, string prototypeRoot, string resourcePath, bool passability, bool cardinal)
     {
         var before = InputFingerprint.Create(path);
         if (before.Bytes != ExpectedModuleBytes || before.Sha256 != ExpectedModuleSha256)
@@ -115,7 +118,7 @@ internal static class Program
         var typeCounts = string.Join(',', instances.GroupBy(instance => instance.Type).OrderBy(group => group.Key).Select(group => $"{group.Key}:{group.Count()}"));
         var staticScenery = resolved.Where(instance => instance.Instance.Type == 3 && (instance.EffectiveFlags & DynamicObjectFlag) == 0).ToArray();
         using var resource = DatArchive.Open(resourcePath, BoundedOptions());
-        if (passability)
+        if (passability || cardinal)
         {
             var inspection = StaticObjectLoader.Inspect(
                 new StaticObjectSource(archive, SectorEntryName, resource),
@@ -128,7 +131,16 @@ internal static class Program
                 MaxSectorDecodedEntryBytes = MaxDecodedSectorBytes,
                 MaxMesDecodedEntryBytes = MaxDecodedSectorBytes,
             });
-            PassabilityProbe.EmitStaticObstruction(report, inspection);
+            if (cardinal)
+            {
+                var staticReport = StaticObstructionInspector.InspectSector(
+                    new StaticObjectSource(archive, SectorEntryName, resource), new StaticObjectPrototypeSource(prototypeRoot),
+                    "CRASH_SITE_MODULE", "CRASH_SITE_PROTOTYPES", selector);
+                CardinalTraversalProbe.Emit(report, staticReport, inspection, sectorBytes, framing.TileStart,
+                    framing.BlockMaskStart, framing.TileScriptCount, framing.SectorScriptBytes,
+                    before.Sha256, resourceBefore.Sha256, prototypeRead.FingerprintAggregate);
+            }
+            else PassabilityProbe.EmitStaticObstruction(report, inspection);
             var passabilityAfter = InputFingerprint.Create(path);
             var passabilityResourceAfter = InputFingerprint.Create(resourcePath);
             if (passabilityAfter != before || passabilityResourceAfter != resourceBefore)
@@ -200,6 +212,7 @@ internal static class Program
     private static void SelfTest()
     {
         PassabilityProbe.SelfTest();
+        CardinalTraversalProbe.SelfTest();
         var valid = CreateFramedFixture(trailingObjectCount: 2);
         var sector = SectorSlice.Parse(valid, rejectNonTileArtIds: true);
         var framing = SectorFraming.Parse(valid, sector.LightCount);
@@ -331,6 +344,9 @@ internal static class Program
             throw new InvalidOperationException("Direct slot-18 flags did not override an opposite matching prototype default.");
         }
         PassabilityProbe.AssertResolvedDirectOverride(directOverride.EffectiveFlags, oppositeBlockerPrototype.Flags);
+        CardinalTraversalProbe.AssertParsedFlags(directOverride.EffectiveFlags, expectedOpen: true, dynamic: false);
+        CardinalTraversalProbe.AssertParsedFlags(directlyResolved[0].EffectiveFlags, expectedOpen: false, dynamic: false);
+        CardinalTraversalProbe.AssertParsedFlags(directlyResolved[1].EffectiveFlags, expectedOpen: false, dynamic: true);
 
         var inherited = ObjectWire.ParseWindow(ObjectWire.CreateSyntheticInstance(3, prototypeId, false, true, flagsOverridden: false, spellFlags: 0), 1)[0];
         var staticPrototypeBytes = ObjectWire.CreateSyntheticPrototype(3, prototypeId, currentAid: 73, flags: 0, spellFlags: 0);
@@ -349,6 +365,8 @@ internal static class Program
 
         var inheritedStatic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(staticPrototypeBytes)])[0];
         var inheritedDynamic = ObjectWire.ResolveEffectiveInstances([inherited], [ObjectWire.ParsePrototype(dynamicPrototypeBytes)])[0];
+        CardinalTraversalProbe.AssertParsedFlags(inheritedStatic.EffectiveFlags, expectedOpen: false, dynamic: false);
+        CardinalTraversalProbe.AssertParsedFlags(inheritedDynamic.EffectiveFlags, expectedOpen: false, dynamic: true);
         if (inherited.DirectFlags is not null || inheritedStatic.EffectiveFlags != StaticFlagSentinel || inheritedDynamic.EffectiveFlags != DynamicObjectFlag ||
             (inheritedStatic.EffectiveFlags & DynamicObjectFlag) != 0 || (inheritedDynamic.EffectiveFlags & DynamicObjectFlag) == 0)
         {

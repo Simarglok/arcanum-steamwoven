@@ -4,6 +4,11 @@
 
 This is an evidence-bounded proposal for a future consumer of [selected-sector passability evidence](../research/sector-passability-evidence.md). It is **not implemented** as a production collision grid, navigation API, path finder, actor controller, renderer overlay, or gameplay rule.
 
+ARC-RES-014 now separately implements a [research-only cardinal assessment](cardinal-traversal-contract.md)
+with [admitted original-data rows](../research/cardinal-traversal-evidence.md) in one
+explicit isolated PC/current-CRITTER-ART context and connected rectangle. It does
+not change this general occupancy proposal or the public component contracts.
+
 It applies only to the immutable base-sector profile `(1452,1290)`, origin `(92928,82560)`, extent 64×64, module selector and identities recorded in the evidence document. A caller must supply the version/profile, base-input identity, coordinate, and the declared actor/context boundary. It does not choose archive, `.dif`, PATCH, or loose-file precedence.
 
 ## Result vocabulary
@@ -88,7 +93,7 @@ A static combined result may become implementation-ready only when all of the fo
 6. actor/context and state inputs are declared with no omitted dynamic override; and
 7. the cardinal edge and any admitted diagonal/corner rule are source-proven.
 
-If any condition fails, component facts can be useful, but combined occupancy and step traversal remain unknown. The current candidate fails conditions 3 through 7. It does not promote the 317-record census or the ARC-RES-012 static subset into total collision semantics.
+If any condition fails, component facts can be useful, but combined occupancy and step traversal remain unknown. The original general proposal fails conditions 3 through 7. It does not promote the 317-record census or the ARC-RES-012 static subset into total collision semantics. The separate ARC-RES-014 research profile closes these dependencies only for its authenticated inputs, full contributor census and declared cardinal context; other states, diagonals, precedence and production admission remain unproved.
 
 ## Non-goals
 

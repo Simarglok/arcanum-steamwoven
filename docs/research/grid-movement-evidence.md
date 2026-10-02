@@ -9,6 +9,12 @@ implements ratified P1–P8 as documentation; its independently authored
 exact/rational examples. CE source is research lineage, not copied implementation.
 Original runtime, source-to-original fidelity and UX comfort are **NOT_VERIFIED**.
 
+Subsequent [ARC-RES-014 cardinal evidence](cardinal-traversal-evidence.md) establishes
+a bounded source/data-only pair in a declared isolated context. It does not rerun
+or reclassify this historical motion worksheet, move an original actor, or establish
+runtime permits; the [readiness frontier](../world/grid-movement-contract.md#real-traversal-readiness-frontier)
+links that narrow new admission separately.
+
 All claims use **Original/source-confirmed**, **Project policy**, **Hypothesis** or
 **Unknown**. Original/source-confirmed has an explicit subtype: **CE-source**
 means inspected source text only; **historical original metadata** means earlier
