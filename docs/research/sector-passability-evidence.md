@@ -8,6 +8,11 @@ The source study is limited to one attributed lineage: [`alexbatalov/arcanum-ce`
 
 The candidate implements a fixed-profile, aggregate-only `--passability` mode in `Arcanum.CrashSiteProbe`. It decodes the already-framed 512-byte block section and raw facade bit 0, and now reports the separate bounded ordinary-static-scenery component recorded in [ARC-RES-012](static-obstruction-evidence.md). Tile-name, dynamic/state, actor, diagonal, edge, precedence, and cross-sector dependencies remain visible as unknown or unsupported; the combined result is still not passability.
 
+The separate later [ARC-RES-014 cardinal mode](cardinal-traversal-evidence.md) uses
+production terrain/name inspections and a full contributor census in a declared
+isolated context. Its four admitted directional rows do not rewrite this historical
+aggregate-only mode or certify general occupancy/installed-game passability.
+
 ## Immutable selected input
 
 The selected base entry and coordinate chain are established by [Crash Site slice](crash-site-slice.md) and [framing](crash-site-framing.md). No original payload, installation path, names/MES text, graphics, screenshots, object payload, or mask/grid is retained here.

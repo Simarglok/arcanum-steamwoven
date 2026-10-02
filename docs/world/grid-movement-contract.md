@@ -290,7 +290,7 @@ and precedence remain those of the [passability contract](passability-contract.m
 | --- | --- | --- |
 | Terrain tile-name component: 91 Unknown/null | Original/source-confirmed (historical original metadata), [current component evidence](../research/terrain-obstruction-components-evidence.md). Different stage from historical 3033 Unknown in [sector evidence](../research/sector-passability-evidence.md). Neither aggregate rerun here. | Resolve only the entries required by a chosen bounded step; retain any unresolved component as Unknown. No need to resolve all 91 for this task. |
 | Mask/facade/name NoBlock | Original/source-confirmed (historical component evidence), [component API](terrain-obstruction-components.md). | Never promote component NoBlock into total Open; retain applicability/null dimensions. |
-| Cardinal source/destination terrain, directional edges/walls/portals | Unknown for real combined steps; CE-source dependencies S8. | Prove exact source and destination contributors, orientation/edge semantics, flags and precedence for fixed immutable context. |
+| Cardinal source/destination terrain, directional edges/walls/portals | [ARC-RES-014 bounded research context](cardinal-traversal-contract.md) has admitted Open/Blocked rows and reversals; production/runtime real steps remain unverified. CE-source dependencies S8. | Retain exact full contributor/source/context proof; do not generalize diagnostic admission to other actors, states or runtime movement. |
 | Diagonal shoulders/corner/recursive object traversal | Unknown; CE-source recursive shoulder path S8, not complete diagonal admission. | Prove both shoulder/edge/corner contributions and relevant tile/object contexts; kinematic corner equality supplies no permission. |
 | Ordinary static-scenery subset | Original/source-confirmed (historical metadata/source), [static contract](static-obstruction-contract.md). Destination-only cardinal-normal-critter/base/flags-zero component. | Do not infer source registration, edge extent or general object membership. Its Blocker-before-Unknown aggregation is component-only. |
 | Other static types, critters, doors and dynamic state | Unknown; source/destination lists, portal state/AI-open, critter death and capabilities in S8. | Fully enumerate relevant object contributions and exact serialized/prototype/runtime inputs; no actor capability or spell-state default. |
@@ -303,7 +303,9 @@ and precedence remain those of the [passability contract](passability-contract.m
 terrain/object/actor/edge/context dependency can permit a real step. Unconditional
 whole-context blocking may report `Supported+Blocked` only under the existing
 composition rule; in-profile unresolved combined steps remain `Unknown+null`.
-Current documented combined cardinal/diagonal steps are Unknown; cross-sector is
+The [bounded cardinal research evidence](../research/cardinal-traversal-evidence.md)
+now closes one declared isolated context, not real movement integration. Other
+combined cardinal contexts and diagonals remain Unknown; cross-sector is
 Unsupported. Geometry can be specified/tested synthetically now without moving
 any original-data actor. The future minimal readiness unit is one fingerprinted,
 immutable, fully assessed cardinal segment and its return/finish path—not full
