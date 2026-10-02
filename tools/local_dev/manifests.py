@@ -160,7 +160,7 @@ def _validate_v2_manifest(manifest: dict[str, Any], expected_tool: str) -> None:
             raise ValueError("v2 export observation attribution is invalid")
 
 
-def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
+def resolve_current(root: Path, tool: str, *, root_id: str | None = None, selected_task: str | None = None) -> tuple[Path, dict[str, Any], dict[str, Any]]:
     """Resolve only recognized current pointers; never use timestamps or directory order."""
     if tool not in SUPPORTED_TOOLS:
         raise ValueError("unknown logical tool")
@@ -169,6 +169,25 @@ def resolve_current(root: Path, tool: str, *, root_id: str | None = None) -> tup
     for task in SUPPORTED_TOOLS[tool]:
         candidates.extend((root / task / "current.json", root / task / "current-v2.json"))
     pointers = [candidate for candidate in candidates if config.optional_authority_bytes(candidate) is not None]
+    if selected_task is not None:
+        if tool != "terrain" or selected_task not in ("ARC-WORLD-001", "ARC-GPAD-004"):
+            raise ValueError("unsupported task-specific current selection")
+        # GPAD and historical WORLD must coexist at the closed world-builds
+        # root. An explicit WORLD/GPAD selection disambiguates tasks, never duplicate
+        # authorities or unsafe siblings; validate the complete pointer set.
+        selected = []
+        if len({pointer.parent for pointer in pointers}) != len(pointers):
+            raise ValueError("duplicate current authority within a task")
+        for pointer in pointers:
+            resolved = resolve_pointer(root, pointer, tool, root_id=root_id)
+            manifest_path, manifest, _ = resolved
+            if manifest.get("task") != pointer.parent.name or manifest_path.parent.parent != pointer.parent:
+                raise ValueError("current pointer task binding does not match its manifest")
+            if pointer.parent.name == selected_task:
+                selected.append(resolved)
+        if len(selected) != 1:
+            raise ValueError("expected exactly one selected task current pointer")
+        return selected[0]
     if len(pointers) != 1:
         raise ValueError("expected exactly one supported current pointer")
     return resolve_pointer(root, pointers[0], tool, root_id=root_id)

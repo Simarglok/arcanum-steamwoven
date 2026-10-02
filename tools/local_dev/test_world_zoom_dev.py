@@ -8,6 +8,38 @@ from tools.local_dev.test_world_dev import WorldDevTests
 
 
 class WorldZoomDevTests(WorldDevTests):
+    def test_explicit_gpad_coexists_without_weakening_old_ambiguity_or_safety(self):
+        old=self.authority_fixture(task='ARC-WORLD-001',tool='terrain')
+        current=self.authority_fixture(task='ARC-GPAD-004',tool='terrain')
+        conf=config.load_config(); conf['inputs']=self.roles(); config.save_config(conf)
+        cli=runpy.run_path(str(Path(__file__).resolve().parents[1]/'arcanum-local'))
+        args=cli['parser']().parse_args(['launch','terrain','--mode','world-diagnostic','--dry-run'])
+        before=self.authority_snapshot()
+        with patch.object(launch,'start',return_value={}) as start:
+            cli['command_launch'](args); start.assert_called_once()
+        self.assertEqual(before,self.authority_snapshot())
+        conf['launchSelection']['terrain']='test:ARC-WORLD-001:'+'a'*40; config.save_config(conf)
+        with patch.object(launch,'start',return_value={}) as start:
+            cli['command_launch'](args); start.assert_called_once()
+        conf['launchSelection']['terrain']='test:ARC-GPAD-004:'+'a'*40; config.save_config(conf)
+        with self.assertRaises(ValueError): manifests.resolve_current(current.parent.parent,'terrain',root_id='test')
+        duplicate=current.parent/'current-v2.json'; duplicate.write_bytes(current.read_bytes())
+        with patch.object(launch,'start') as start:
+            with self.assertRaises(ValueError): cli['command_launch'](args)
+            start.assert_not_called()
+        duplicate.unlink()
+        original=old.read_bytes(); old.write_text('{}')
+        with patch.object(launch,'start') as start:
+            with self.assertRaises(ValueError): cli['command_launch'](args)
+            start.assert_not_called()
+        old.write_bytes(original)
+        payload_path=current.parent/('a'*40)/'manifest.json'
+        payload=json.loads(payload_path.read_bytes()); payload['task']='ARC-WORLD-001'
+        payload_path.write_text(json.dumps(payload))
+        with patch.object(launch,'start') as start:
+            with self.assertRaises(ValueError): cli['command_launch'](args)
+            start.assert_not_called()
+
     def test_gpad004_exact_terrain_launcher_eligibility(self):
         self.authority_fixture(task='ARC-GPAD-004', tool='terrain')
         conf=config.load_config(); conf['inputs']=self.roles(); config.save_config(conf)

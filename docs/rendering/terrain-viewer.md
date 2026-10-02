@@ -288,6 +288,9 @@ WORLD package. In addition to seven terrain gates it requires focused tests,
 source/exported original WORLD, source/exported persistence and dual hostfxr.
 Lease/capacity/frozen observation/v2 inventory/signature/success-only pointer
 rules remain mandatory. Unknown tasks and incomplete/failed gates fail closed.
+Explicit WORLD/GPAD task selection permits their historical current pointers
+to coexist without deleting either; duplicate authorities within a task,
+unsafe sibling pointers and wrong task/head/root bindings still reject.
 Every validation child uses owned isolated input and zoom preference paths
 before initialization; ordinary validation launches must likewise set both
 `WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH` and `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`
