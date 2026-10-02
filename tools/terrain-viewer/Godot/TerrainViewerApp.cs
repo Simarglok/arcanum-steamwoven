@@ -168,7 +168,7 @@ public partial class TerrainViewerApp : Node
         if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
         {
             InitializeWorld(); _actorTimeline = null;
-            _worldActor.Reset(); QuarantineWorld();
+            _worldActor.Configure(result.ActorPlan!.Profile); QuarantineWorld();
             _worldFitView = false;
             _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         }
@@ -868,8 +868,8 @@ public partial class TerrainViewerApp : Node
     {
         if (_readyActorInput is null || _readyActorPlan is null) return;
         _readyActorInput = _readyActorInput with { Action = action, Frame = 0 };
-        _actorTimeline = new AnimationTimeline(action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFrames : ActorDiagnosticSource.WalkFrames,
-            action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFps : ActorDiagnosticSource.WalkFps);
+        var resource = _readyActorPlan.Profile.Resource(action);
+        _actorTimeline = new AnimationTimeline(resource.FramesPerGroup, resource.RawFramesPerSecond);
         PublishActorSelection();
     }
     private void SelectActorFacing(int delta)

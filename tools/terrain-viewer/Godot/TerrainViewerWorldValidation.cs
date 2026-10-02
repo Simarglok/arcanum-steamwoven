@@ -96,7 +96,8 @@ public partial class TerrainViewerApp
             || result.ActorPrototypeFingerprint is null || result.ActorPrototypeFingerprint != result.ActorPrototypeFingerprintAfter
             || (result.ResolvedCount, result.TileCount, result.FacadeCount, result.NormalizationRecoveredCount, result.NormalizationLookupCount) != (4096, 3033, 1063, 457, 86)
             || result.StaticCensusCount != 317 || result.StaticOutsideScopeCount != 312 || result.StaticPlan?.Commands.Count != 5
-            || result.ActorTextures.Count != 184 || result.Textures.Count == 0 || _readyDiagnosticPlan?.IsWorldDiagnostic != true)
+            || result.ActorPlan?.Profile.Id != ActorDiagnosticProfileId.HumanFixed
+            || result.ActorTextures.Count != 55 || result.Textures.Count == 0 || _readyDiagnosticPlan?.IsWorldDiagnostic != true)
             throw new TerrainViewerException(new(TerrainViewerErrorCode.ActorPlan));
         await AssertRepresentativeProductionCanvasAsync(result);
         await AssertSelectedStaticProductionCanvasAsync(result);
@@ -156,15 +157,16 @@ public partial class TerrainViewerApp
                 if ((wx == actor.AnchorX && Math.Abs(wy - actor.AnchorY) <= 5)
                     || (wy == actor.AnchorY && Math.Abs(wx - actor.AnchorX) <= 5)) continue;
                 matched = TryAssertLandmark(actorImage, new(wx, wy, decoded.Rgba[offset], decoded.Rgba[offset + 1],
-                    decoded.Rgba[offset + 2], 255, 643));
+                    decoded.Rgba[offset + 2], 255, actor.TextureKey.ResourceOrdinal));
             }
             if (!matched) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             GD.Print("ARC-WORLD-001 native-smoke combined-window terrain/static/actor pixels=PASS");
         }
+        await RunHumanReadbackAsync(result);
         var count = _cache.Count; var created = _cache.CreatedCount;
         ClearPublishedScene();
         if (_cache.Count != 0 || _cache.DisposedCount != created) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
-        GD.Print($"ARC-WORLD-001 native-smoke PASS terrain=4096/3033/1063 normalization=457/86 static=317/5/312 actor=184 fingerprints=immutable rendered=PASS controls=SIMULATION textures={count} disposed={created} viewport=1280x800,1440x900,800x600 parity=NOT_READY");
+        GD.Print($"ARC-WORLD-001 native-smoke PASS terrain=4096/3033/1063 normalization=457/86 static=317/5/312 actor=55 profile=HumanFixed fingerprints=immutable rendered=PASS controls=SIMULATION textures={count} disposed={created} viewport=1280x800,1440x900,800x600 parity=NOT_READY");
         GetTree().Quit(0);
     }
     internal void WorldControlMatrixForSelfTest()
@@ -211,7 +213,7 @@ public partial class TerrainViewerApp
             var now = _camera.State;
             Require((x ? now.X < old.X : now.X > old.X) && (y ? now.Y < old.Y : now.Y > old.Y), "independent image inversion axes");
         }
-        Require(_worldActor.State.Position == actorBeforeCamera.Position && _readyDiagnosticPlan.WorldBounds == bounds && _cache.Count == _readyDecodedCount + _readyStaticDecodedCount + 184, "camera/selection changed actor, bounds or cache");
+        Require(_worldActor.State.Position == actorBeforeCamera.Position && _readyDiagnosticPlan.WorldBounds == bounds && _cache.Count == _readyDecodedCount + _readyStaticDecodedCount + _readyActorPlan!.Profile.DistinctKeys, "camera/selection changed actor, bounds or cache");
         _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings; ResetWorldScene(); Frame(none); Frame(none); Frame(none);
         GD.Print("ARC-WORLD-001 control matrix PASS SIMULATION Manual/Follow/activity/neutral/focus/modal/inversion/bounds/cache; physical usability NOT_READY");
     }

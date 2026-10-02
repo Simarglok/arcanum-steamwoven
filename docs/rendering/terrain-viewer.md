@@ -145,9 +145,14 @@ Invalid/overflow steps commit neither actor state nor animation clock.
 The project diagnostic screen octants are clockwise up=0, up-right=1, right=2,
 down-right=3, down=4, down-left=5, left=6, up-left=7, with clockwise half-octant
 ties. They do **not** establish original compass semantics: source-facing
-numbers remain opaque. Existing physical group/mirror admission is unchanged.
-Idle plays at a diagnostic 6 FPS/15 frames; Walk at 10 FPS/8 frames. Raw source
-8/15 FPS metadata remains separate. Action changes reset frame/interval;
+numbers remain opaque. WORLD defaults to the closed `HumanFixed` profile:
+single-layer fixed type2/body0 female underwear0, palette0, mapping-only (no
+module/NPC/player appearance association). Idle has one frame at raw 6 FPS;
+Walk has ten frames at raw 17 FPS. These positive ART rates drive the diagnostic
+clock, not an original animation scheduler or movement-speed claim. The legacy
+standalone `actor-diagnostic` keeps `MonsterRegression`, 15/8 frames and the
+6/10 FPS override (raw 8/15). Both ratified action facing tables use physical
+groups `[0,7,6,5,4,5,6,7]` and mirror only slots 1..3. Action changes reset frame/interval;
 same-action facing changes preserve the interval. The last moving segment
 determines facing. Cell floor and ToEven fractional projected pixel offsets
 bridge to the checked source-derived normal placement; camera origin stays 0.
@@ -355,6 +360,40 @@ or attached. Evidence distinguishes synthetic checks, original automated checks,
 original visual inspection, and physical/readability. Only the first two are
 automatable here; local visual and physical/readability observations remain
 explicitly NOT_VERIFIED unless a human records them.
+
+## ARC-RENDER-006 closed human validation and export
+
+Use literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-RENDER-006` at the same DEV001
+endpoint. The immutable v2 package is
+`artifacts/world-builds/ARC-RENDER-006/<full-head>/ArcanumTerrainViewer.app`.
+No new manifest schema or manual registration path is introduced. The thirteen
+inherited gates remain mandatory; `human-metadata`, `source-human-original`
+and `exported-human-original` add three mandatory structured reports. Current
+task authorities can coexist; unknown tasks, unsafe siblings, altered payloads,
+duplicate same-task pointers and missing/failed/NOT_VERIFIED gates fail closed.
+
+`world_validate.py --kind human` requires a local independent private original
+wire oracle through `RENDER006_HUMAN_ORACLE`. Keep it ignored; it is not shipped
+in the app. The non-headless source and exported validators compare all55 used
+RGBA buffers and numeric geometry, then the actual combined main viewport for
+Idle and all ten Walk frames, all eight facings/mirrors at1280x800,1440x900,
+800x600 (264 selections). Comparisons use independently stated foot-anchor and
+mirror geometry and exclude transparent/guide/actual HUD regions. Actual
+hidden-actor and wrong-facing main-canvas controls must fail comparison.
+`--kind human-metadata` emits the separate source metadata gate after the same
+independent comparison. No oracle/no graphical renderer yields no human PASS.
+Reports contain task, full head, host, profile, authenticated original identity,
+coverage and actual viewports; old monster/WORLD PASS lines cannot substitute.
+
+Public `--self-test` retains the standalone184-key monster fixture and adds a
+distinct55-key human WORLD fixture through the real ready publication/canvas
+and lifecycle. It checks static ordering, control/zoom/modal/focus behavior,
+corner envelopes, reload and Nth-upload rollback/disposal without original assets.
+Synthetic, headless, automated original graphical and ordinary observations are
+separate. Ordinary `tools/arcanum-local launch terrain --mode world-diagnostic`
+must use the selected sealed RENDER006 manifest, no automation flags, and owned
+isolated preference paths; actual Idle/Walk observation and post-run signature
+and complete payload integrity are still mandatory outside the sealed bundle.
 
 ## Reproducible local verification
 

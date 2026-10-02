@@ -15,6 +15,7 @@ public static class TerrainCachePolicy
     public const int MaxDistinctKeys = 4096;
     public const int MaxStaticDistinctKeys = 5;
     public const int MaxActorDistinctKeys = 184;
+    public const int MaxHumanDistinctKeys = 55;
     // Standalone modes retain their exclusive extension caps. WORLD explicitly
     // reserves all three domains; the legacy overload remains actor-only.
     public const int MaxCombinedDistinctKeys = MaxDistinctKeys + MaxStaticDistinctKeys;
@@ -41,9 +42,11 @@ public static class TerrainCachePolicy
     public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height)
         => AddCheckedFrame(currentBytes, currentCount, width, height, TerrainViewerMode.ActorDiagnostic);
 
-    public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height, TerrainViewerMode mode)
+    public static long AddCheckedFrame(long currentBytes, int currentCount, int width, int height, TerrainViewerMode mode,
+        ActorDiagnosticProfile? profile = null)
     {
-        var limit = mode switch { TerrainViewerMode.WorldDiagnostic => MaxWorldDistinctKeys, TerrainViewerMode.TerrainOnly => MaxDistinctKeys,
+        profile ??= ActorDiagnosticProfile.ForMode(mode);
+        var limit = mode switch { TerrainViewerMode.WorldDiagnostic => MaxDistinctKeys + MaxStaticDistinctKeys + profile.DistinctKeys, TerrainViewerMode.TerrainOnly => MaxDistinctKeys,
             TerrainViewerMode.CombinedStaticDiagnostic => MaxCombinedDistinctKeys, TerrainViewerMode.ActorDiagnostic => MaxActorModeDistinctKeys,
             _ => throw new ArgumentOutOfRangeException(nameof(mode)) };
         if (currentCount < 0 || currentBytes < 0 || currentCount >= limit) throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ResourceLimit));

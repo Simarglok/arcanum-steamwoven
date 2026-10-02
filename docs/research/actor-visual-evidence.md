@@ -20,7 +20,32 @@ sources. Original paths, entry names, directory strings, textual payloads,
 payload hashes, bytes, pixels, images, and screenshots are neither printed nor
 committed.
 
-## Reproducible selected chain
+## Bounded human evidence and current diagnostic selection
+
+ARC-RENDER-006's private independently decoded packet establishes a genuine
+single-layer type2/body0 female fixed underwear0 human source from the existing
+actor role, not a prototype/NPC association. Idle selector0x20000000/ordinal2667
+is8×1/raw6 FPS; Walk selector0x20000040/ordinal2668 is8×10/raw17 FPS, palette0.
+Physical88-row metadata and reachable55-key/457676-byte catalogue are separate
+evidence sets. The source-semantic chain plus attributed local image observation
+supports the bounded human/orientation recommendation; frame-zero references
+do not prove runtime animation, an ordinary launch or export.
+
+Both ratified diagnostic facing tables map source0..7 to groups0,7,6,5,4,5,6,7
+and mirror slots1..3. Project octants are screen-intuitive; no original compass,
+race selector, original scheduler/movement/collision or visual-parity claim is
+made. Per-frame signed geometry/hotspots must match the packet, including
+nonzero ART offsets which remain metadata-only in normal placement.
+
+Production authentication and original all-used comparisons are distinct from
+public synthetic fixtures. Mandatory structured source/export reports bind
+task/head/host/HumanFixed/original identity/actual viewports and progression;
+legacy WORLD markers cannot pass the human gate. Complete private receipts
+and independent review remain necessary for candidate acceptance. See the
+[closed contract](../rendering/actor-visual-contract.md). The historical probe
+and monster record below remain a separate regression/provenance record.
+
+## Reproducible historical monster chain
 
 The opt-in run labelled `actor-research-source-01` authenticated its three
 caller-selected inputs before and after its read-only traversal:

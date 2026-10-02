@@ -176,6 +176,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
         {
             var started = Environment.TickCount64;
             var progress = TerrainViewerProgress.Empty;
+            var actorProfile = _admission.ActorProfile(arguments.Mode);
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -231,7 +232,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     var key = TerrainTextureKey.FromRecord(record);
                     if (textures.ContainsKey(key)) continue;
                     var frame = TerrainLoader.DecodeSelectedFrame(_resource, record, new TerrainLoaderOptions().ArtOptions);
-                    checkedBytes = _budget.Add(checkedBytes, textures.Count, textures.Count, _budget.Terrain, frame.Width, frame.Height, arguments.Mode);
+                    checkedBytes = _budget.Add(checkedBytes, textures.Count, textures.Count, _budget.Terrain, frame.Width, frame.Height, arguments.Mode, actorProfile);
                     textures.Add(key, new DecodedTerrainTexture(key, frame.Width, frame.Height, frame.Rgba.ToArray()));
                     _checkpoint?.Invoke(new("terrain", textures.Count, textures.Count, checkedBytes));
                 }
@@ -256,7 +257,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                             try { frame = StaticObjectLoader.DecodeSelectedFrame(_resource, record, new StaticObjectLoaderOptions().ArtOptions); }
                             catch (StaticObjectException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode, Stage: TerrainViewerFailureStage.StaticDecode, Progress: progress)); }
                             cancellationToken.ThrowIfCancellationRequested();
-                            checkedBytes = _budget.Add(checkedBytes, textures.Count + staticTextures.Count, staticTextures.Count, _budget.Statics, frame.Width, frame.Height, arguments.Mode);
+                            checkedBytes = _budget.Add(checkedBytes, textures.Count + staticTextures.Count, staticTextures.Count, _budget.Statics, frame.Width, frame.Height, arguments.Mode, actorProfile);
                             staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, frame.Rgba.ToArray()));
                             _checkpoint?.Invoke(new("static", staticTextures.Count, textures.Count + staticTextures.Count, checkedBytes));
                         }
@@ -285,8 +286,9 @@ public sealed class TerrainLoadCoordinator : IDisposable
                         // never consults the terrain resource.
                         _actorOperation = new ActorDiagnosticSourceOperation(() => _admission.OpenArchive(arguments.ActorResourcePath!));
                         var actor = _actorOperation.ExecuteWithBudget(_module, arguments.ActorInput!, textures.Count + staticTextures.Count, checkedBytes,
-                            progress, cancellationToken, _budget, count => _checkpoint?.Invoke(count), arguments.Mode);
-                        if (actor.Textures.Count != TerrainCachePolicy.MaxActorDistinctKeys)
+                            progress, cancellationToken, _budget, count => _checkpoint?.Invoke(count), arguments.Mode,
+                            actorProfile, _admission.AuthenticateOriginalActorMetadata);
+                        if (actor.Textures.Count != actorProfile.DistinctKeys)
                             throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.ActorMetadata, Stage: TerrainViewerFailureStage.ActorMetadata, Progress: progress));
                         checkedBytes = actor.CheckedRgbaBytes;
                         foreach (var item in actor.Textures) actorTextures.Add(item.Key, item.Value);

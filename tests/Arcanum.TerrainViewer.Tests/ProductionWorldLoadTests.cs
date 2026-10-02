@@ -104,9 +104,10 @@ public sealed class ProductionWorldLoadTests
     [TestMethod]
     public async Task IntegratedProductionStaleSuccessFailureAndExitUseDeterministicBarriers()
     {
+        foreach(var human in new[]{false,true})
         foreach(var fail in new[]{false,true})
         {
-            using var fixture=new SyntheticWorldSourceFixture(); using var reached=new ManualResetEventSlim(); using var release=new ManualResetEventSlim();
+            using var fixture=new SyntheticWorldSourceFixture(human:human); using var reached=new ManualResetEventSlim(); using var release=new ManualResetEventSlim();
             var factory=new Factory(fixture,p=>{if(p.Domain=="complete"){reached.Set(); if(!release.Wait(TimeSpan.FromSeconds(10))) throw new TimeoutException();
                 if(fail) throw new TerrainViewerException(new(TerrainViewerErrorCode.ActorDecode));}});
             using var coordinator=new TerrainLoadCoordinator(factory);
@@ -119,7 +120,8 @@ public sealed class ProductionWorldLoadTests
             Assert.IsTrue(coordinator.TryPublish(current,()=>published++)); Assert.AreEqual(1,published);
             Assert.AreEqual(1,coordinator.MaximumObservedConcurrency);
         }
-        using(var fixture=new SyntheticWorldSourceFixture())
+        foreach(var human in new[]{false,true})
+        using(var fixture=new SyntheticWorldSourceFixture(human:human))
         using(var reached=new ManualResetEventSlim())
         using(var release=new ManualResetEventSlim())
         using(var exitStarted=new ManualResetEventSlim())
@@ -137,9 +139,10 @@ public sealed class ProductionWorldLoadTests
     [TestMethod]
     public async Task IntegratedCancelledLoadDisposesBeforeQueuedSuccess()
     {
-        foreach(var (domain,count,archives) in new[]{("static",5,2),("actor",121,3)})
+        foreach(var human in new[]{false,true})
+        foreach(var (domain,count,archives) in new[]{("static",5,2),("actor",human?20:121,3)})
         {
-            using var fixture=new SyntheticWorldSourceFixture(); using var reached=new ManualResetEventSlim();
+            using var fixture=new SyntheticWorldSourceFixture(human:human); using var reached=new ManualResetEventSlim();
             using var release=new ManualResetEventSlim(); using var cancel=new CancellationTokenSource();
             var blocked=false;
             using var coordinator=new TerrainLoadCoordinator(new Factory(fixture,p=>{
@@ -152,7 +155,7 @@ public sealed class ProductionWorldLoadTests
             Assert.IsFalse(queued.IsCompleted); cancel.Cancel(); release.Set();
             await Assert.ThrowsAsync<OperationCanceledException>(async()=>await interrupted);
             var result=await queued;
-            fixture.AssertDisposed(archives+3); Assert.AreEqual(764L,result.CheckedRgbaBytes);
+            fixture.AssertDisposed(archives+3); Assert.AreEqual(human?248L:764L,result.CheckedRgbaBytes);
             Assert.AreEqual(1,coordinator.MaximumObservedConcurrency);
             Assert.IsFalse(coordinator.TryPublish(first,()=>Assert.Fail("Cancelled publication")));
             Assert.IsTrue(coordinator.TryPublish(next,()=>{}));
