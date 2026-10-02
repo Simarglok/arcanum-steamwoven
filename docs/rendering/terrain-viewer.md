@@ -252,6 +252,53 @@ sealed evidence; never edit a finalized package or rerun an unchanged endpoint.
 
 ## Verification and evidence status
 
+### WORLD camera zoom (ARC-GPAD-004)
+
+WORLD starts in Follow at preferred zoom 2.00 when no valid preference exists.
+This is a hypothesis for an assessable actor, not a QHD comfort measurement.
+LT out / RT in are admitted complete-frame levels with deadzone 0.10 and full
+drive one octave/second. The ratio remains 0.125..8 with nearest filtering;
+camera zoom never changes simulation, asset geometry, UI scale or display DPI.
+Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
+
+F1/Start opens paused settings: World zoom numeric editor (keyboard text/Enter/
+Tab; controller shoulders adjust by 0.05), exact 100% (1.00), 200% (2.00),
+300% (3.00), and Fit. Native clicks activate only the clicked control once;
+controller A activates the selected action. Keyboard/controller navigation and
+native Tab automatically scroll the focused control (including numeric editors)
+into view; navigation alone never edits zoom. Modal triggers do not zoom. Ordinary
+wheel/+/- retain factors 1.25/0.8 but stop exactly at 1.00 on a crossing event;
+the next event can leave 1.00. These shortcuts require admitted, unfocused world
+input and wheel outside the HUD. Standalone preview controls remain unchanged.
+
+Separate `user://world_diagnostic_zoom_v1.json` stores numeric
+`{"version":1,"zoom":2.0}` with finite inclusive 0.125..8. Missing, unreadable,
+malformed/type/version/range-invalid files fall back to 2.00. R/reload retain
+the preferred value and reset actor/Follow; Reset defaults and scene persists
+input false/false plus zoom 2.00. Fit is a session-only Manual/unarmed view and
+never overwrites the preferred startup ratio; the next explicit zoom does.
+Discrete edits save once, held changes coalesce with 0.25s settled debounce and
+shutdown flushing. Pending values survive quarantine/reload; failures are shown
+as session-only, not a false persistence success. Resize preserves zoom and only
+clamps center. HUD reports wanted/bounded center and bound limitation.
+
+For the GPAD-004 candidate use the same closed endpoint above with literal
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-GPAD-004`. Its package is
+`artifacts/world-builds/ARC-GPAD-004/<full-head>/ArcanumTerrainViewer.app` and
+selection is `WORLD_ROOT_ID:ARC-GPAD-004:<full-head>`, not a lab or relabelled
+WORLD package. In addition to seven terrain gates it requires focused tests,
+source/exported original WORLD, source/exported persistence and dual hostfxr.
+Lease/capacity/frozen observation/v2 inventory/signature/success-only pointer
+rules remain mandatory. Unknown tasks and incomplete/failed gates fail closed.
+Explicit WORLD/GPAD task selection permits their historical current pointers
+to coexist without deleting either; duplicate authorities within a task,
+unsafe sibling pointers and wrong task/head/root bindings still reject.
+Every validation child uses owned isolated input and zoom preference paths
+before initialization; ordinary validation launches must likewise set both
+`WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH` and `WORLD_DIAGNOSTIC_ZOOM_TEST_PATH`
+to owned files. Never point checks at owner preferences. Full-sector historical
+pixel checks explicitly Fit; default-2 actor framing is a separate assertion.
+
 `--self-test` creates a public in-memory 82x42 asymmetric 8-bpp ART fixture, decodes
 it through `ArtDecoder`, uploads it through the production RGBA8 texture path,
 and constructs the canvas plan through the same `TerrainScenePlan` placement and

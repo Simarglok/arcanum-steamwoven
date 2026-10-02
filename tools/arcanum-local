@@ -79,11 +79,13 @@ def selected_root(conf: dict, registry: dict, tool: str) -> Path:
     if not isinstance(selection, str):
         raise ValueError("configure an explicit launch selection before launch")
     matches: list[Path] = []
+    parts = selection.split(":")
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004") else None
     for root_id, root_text in roots.items():
         if not isinstance(root_id, str) or not isinstance(root_text, str):
             continue
         try:
-            manifest_path, manifest, _ = manifests.resolve_current(config.canonical_existing(root_text, directory=True), tool, root_id=root_id)
+            manifest_path, manifest, _ = manifests.resolve_current(config.canonical_existing(root_text, directory=True), tool, root_id=root_id, selected_task=selected_task)
             selected_id = f"{root_id}:{manifest.get('task') or manifest.get('taskId')}:{manifest_path.parent.name}"
             if selected_id == selection:
                 matches.append(config.canonical_existing(root_text, directory=True))
@@ -103,9 +105,12 @@ def command_launch(args: argparse.Namespace) -> None:
     if tool == "terrain" and args.mode != "actor-diagnostic" and any(value is not None for value in preview.values()):
         raise ValueError("actor preview options are valid only for terrain actor-diagnostic mode")
     root = selected_root(conf, registry, tool)
-    _, manifest, _ = manifests.resolve_current(root, tool)
-    if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) != "ARC-WORLD-001":
-        raise ValueError("world-diagnostic requires an ARC-WORLD-001 artifact")
+    selection = conf.get("launchSelection", {}).get(tool, "")
+    parts = selection.split(":")
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004") else None
+    _, manifest, _ = manifests.resolve_current(root, tool, selected_task=selected_task)
+    if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004"):
+        raise ValueError("world-diagnostic requires an ARC-WORLD-001 or ARC-GPAD-004 artifact")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")

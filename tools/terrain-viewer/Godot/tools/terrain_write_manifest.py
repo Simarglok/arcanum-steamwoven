@@ -10,7 +10,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-TASKS = {"ARC-DEV-001": "builds", "ARC-WORLD-001": "world-builds"}
+TASKS = {"ARC-DEV-001": "builds", "ARC-WORLD-001": "world-builds", "ARC-GPAD-004": "world-builds"}
 GATES = {
     "locked-build": "locked-build.log", "source-headless": "source-headless.log",
     "source-graphical": "source-graphical.log", "export": "export.log",
@@ -43,7 +43,7 @@ def main() -> None:
     if task not in TASKS:
         raise SystemExit("Unsupported terrain export task")
     gates = dict(GATES)
-    if task == "ARC-WORLD-001":
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004"):
         gates.update({"focused-tests": "tests.log", "source-world-original": "source-world-original.log",
                       "exported-world-original": "exported-world-original.log", "source-world-persistence": "source-world-persistence.log",
                       "exported-world-persistence": "exported-world-persistence.log", "dual-hostfxr": "hostfxr.log"})
@@ -69,7 +69,7 @@ def main() -> None:
     except (OSError, ValueError) as error:
         raise SystemExit(f"invalid export preflight evidence: {error}") from error
     expected_candidate_id = f"{root_id}:{task}:{head}"
-    if task == "ARC-WORLD-001":
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004"):
         for host in ("source", "exported"):
             for kind in ("original", "persistence"):
                 bound = json.loads((evidence / f"{host}-world-{kind}.log").read_text(encoding="utf-8"))
@@ -88,12 +88,12 @@ def main() -> None:
         "candidate": {"baseCommit": git(candidate_root, "merge-base", "HEAD", "origin/main"), "commit": head,
                       "tree": git(candidate_root, "rev-parse", "HEAD^{tree}"), "branch": git(candidate_root, "branch", "--show-current")},
         "app": {"relativePath": "ArcanumTerrainViewer.app", "executableRelativePath": app.relative_to(build_root).as_posix(),
-                "ordinaryArgs": ["--mode", "world-diagnostic"] if task == "ARC-WORLD-001" else []},
+                "ordinaryArgs": ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004") else []},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in gates.items()],
         "exportBudget": bound_budget(build_root, "terrain", expected_candidate_id, payload_bytes),
         "acceptance": "not-accepted",
-        "delivery": {"status": "verified-local-candidate; exact-head review pending", "originalInputModes": "PASS" if task == "ARC-WORLD-001" else "NOT_VERIFIED unless separately configured", "ordinaryLaunch": "NOT_VERIFIED"},
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "originalInputModes": "PASS" if task in ("ARC-WORLD-001", "ARC-GPAD-004") else "NOT_VERIFIED unless separately configured", "ordinaryLaunch": "NOT_VERIFIED"},
     }
     (build_root / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

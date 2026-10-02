@@ -148,7 +148,16 @@ public partial class TerrainViewerApp
         _worldPanel.ResetRequested += ResetRequested;
         async Task ClickAsync(Control control)
         {
+            var scroll = _worldPanel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
+            scroll.EnsureControlVisible(control);
+            await NextFrameAsync();
+            // The actual window can reflow the longer zoom status one frame
+            // after focus changes. Scroll the settled layout, not its old rect.
+            scroll.EnsureControlVisible(control);
+            await NextFrameAsync();
             var point = control.GetGlobalRect().GetCenter();
+            Require(scroll.GetGlobalRect().HasPoint(point), "clicked control outside visible scroll viewport");
+            Require(GetViewport().GetVisibleRect().HasPoint(point), $"clicked control outside actual viewport point={point.X}/{point.Y} size={WorldViewport.X}/{WorldViewport.Y}");
             GetViewport().PushInput(new InputEventMouseMotion { Position = point });
             GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point });
             GetViewport().PushInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = point });
@@ -212,7 +221,8 @@ public partial class TerrainViewerApp
             reset.GrabFocus(); await NextFrameAsync();
             changes = 0; resets = 0; await ClickAsync(reset);
             Require(_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false) && changes == 0 && resets == 1
-                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(30, 32), "native Reset WORLD defaults");
+                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(30, 32),
+                $"native Reset WORLD defaults changes={changes} resets={resets} defaults={_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)} saved={_worldStore.Load() == _worldSettings} actor={_worldActor.State.Position.X}/{_worldActor.State.Position.Y}");
             GD.Print("ARC-WORLD-001 settings activation PASS native keyboard/controller once/native Reset false-false; lab default unchanged");
             await AssertWorldSettingsOpacityAsync();
         }
@@ -305,7 +315,7 @@ public partial class TerrainViewerApp
             KeyEvent(Key.F1,true); KeyEvent(Key.F1,false);
             Require(WorldModal, "actual F1 did not open"); Frame(none); Frame(none); Frame(none);
             var spins = _worldPanel!.FindChildren("*","SpinBox",true,false).Cast<SpinBox>().ToArray();
-            Require(spins.Length == 4 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
+            Require(spins.Length == 5 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
             var position = _worldActor.State.Position; var center = _camera!.State;
             KeyEvent(Key.Down,true);
             Require(GetViewport().GuiGetFocusOwner() == spins[1].GetLineEdit(), "digital press must navigate exactly one");

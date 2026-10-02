@@ -13,9 +13,14 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     private int _selected;
     private Label _status = null!;
     private bool _binding;
+    private readonly Dictionary<Control, Action> _actions = new();
+    private SpinBox _zoom = null!;
+    private Label _zoomStatus = null!;
     public event Action<InputSettings>? Changed;
     public event Action? ResetRequested;
     public event Action? CloseRequested;
+    public event Action<double>? ZoomRequested;
+    public event Action? FitRequested;
     public InputSettings Settings { get; private set; } = DiagnosticWorldPolicy.DefaultInputSettings;
     public bool IsOpen => Visible;
     public override void _Ready()
@@ -36,7 +41,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
             Text = "Diagnostic input settings — world paused\nDiagnostic free movement — collision not evaluated\nOriginal parity NOT VERIFIED",
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         });
-        var scroll = new ScrollContainer { HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
+        var scroll = new ScrollContainer { FollowFocus = true, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
         contents.AddChild(scroll);
         _rows = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         scroll.AddChild(_rows);
@@ -47,10 +52,18 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddNumber("Actor sensitivity", .5, 2, .1, s => s.ActorSensitivity, (s, v) => s with { ActorSensitivity = v });
         AddToggle("Camera image X inversion", s => s.InvertCameraX, (s, v) => s with { InvertCameraX = v });
         AddToggle("Camera image Y inversion", s => s.InvertCameraY, (s, v) => s with { InvertCameraY = v });
-        var reset = new Button { Text = "Reset defaults and scene" }; reset.Pressed += () => ResetRequested?.Invoke();
-        _rows.AddChild(reset); _controls.Add(reset);
-        var close = new Button { Text = "Close (F1 / Start / Cancel)" }; close.Pressed += () => CloseRequested?.Invoke();
-        _rows.AddChild(close); _controls.Add(close);
+        _rows.AddChild(new Label { Text = "World zoom (camera ratio, not UI or physical 1:1)" });
+        _zoom = new SpinBox { Name = "WorldZoom", MinValue = .125, MaxValue = 8, Step = 0, CustomArrowStep = .05, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
+        _zoom.ValueChanged += v => { if (!_binding) ZoomRequested?.Invoke(v); };
+        _rows.AddChild(_zoom); _controls.Add(_zoom);
+        AddAction("100% (1.00)", () => ZoomRequested?.Invoke(1));
+        AddAction("200% (2.00)", () => ZoomRequested?.Invoke(2));
+        AddAction("300% (3.00)", () => ZoomRequested?.Invoke(3));
+        AddAction("Fit (session view only)", () => FitRequested?.Invoke());
+        _zoomStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_zoomStatus);
+        _rows.AddChild(new Label { Text = "LT out / RT in: deadzone 0.10, full drive 1 octave/s.\nShoulders adjust selected zoom by 0.05.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddAction("Reset defaults and scene", () => ResetRequested?.Invoke());
+        AddAction("Close (F1 / Start / Cancel)", () => CloseRequested?.Invoke());
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_status);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -69,6 +82,17 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _rows.AddChild(check); _controls.Add(check);
     }
     private void Apply(InputSettings settings) { Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); Changed?.Invoke(Settings); }
+    private void AddAction(string title, Action action)
+    {
+        var button = new Button { Text = title }; button.Pressed += action;
+        _rows.AddChild(button); _controls.Add(button); _actions.Add(button, action);
+    }
+    public void BindZoom(double current, double preferred, bool fit, bool pending, bool failed)
+    {
+        _binding = true; _zoom.Value = current; _binding = false;
+        _zoomStatus.Text = $"Current {(fit ? "Fit view" : "world zoom")}: {current:0.#####}; preferred startup: {preferred:0.#####}. "
+            + (failed ? "Zoom save failed; session value retained." : pending ? "Zoom save pending." : "Zoom preference current.");
+    }
     public void Bind(InputSettings settings)
     {
         Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); _binding = true;
@@ -91,13 +115,12 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     {
         SynchronizeSelection();
         if (_controls[_selected] is CheckButton check) check.ButtonPressed = !check.ButtonPressed;
-        else if (_selected == 6) ResetRequested?.Invoke();
-        else if (_selected == 7) CloseRequested?.Invoke();
+        else if (_actions.TryGetValue(_controls[_selected], out var action)) action();
     }
     public void Adjust(int direction)
     {
         SynchronizeSelection();
-        if (_controls[_selected] is SpinBox spin) spin.Value += direction * spin.Step;
+        if (_controls[_selected] is SpinBox spin) spin.Value += direction * (spin == _zoom ? .05 : spin.Step);
     }
     private void SynchronizeSelection()
     {
@@ -112,5 +135,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _panel.Position = new(24, Math.Min(180, size.Y * .25f));
         _panel.Size = new(Math.Max(1, Math.Min(480, size.X - 48)), Math.Max(1, size.Y - _panel.Position.Y - 24));
     }
+    // Wrapped labels can lower their minimum height only after the first
+    // container layout. Reapply the viewport constraint while open; a native
+    // window need not resize just to make its initial modal scrollable.
+    public override void _Process(double delta) { if (IsOpen) ResizePanel(); }
     public override void _ExitTree() => GetViewport().SizeChanged -= ResizePanel;
 }

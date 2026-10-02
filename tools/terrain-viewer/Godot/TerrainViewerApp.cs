@@ -169,7 +169,8 @@ public partial class TerrainViewerApp : Node
         {
             InitializeWorld(); _actorTimeline = null;
             _worldActor.Reset(); QuarantineWorld();
-            _camera.ResetWorld(WorldAnchor, WorldViewport);
+            _worldFitView = false;
+            _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         }
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         RefreshReadyStatus();

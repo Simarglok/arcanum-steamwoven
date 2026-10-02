@@ -12,6 +12,7 @@ public partial class TerrainViewerApp
         if (arguments.Count != 2 || arguments[0] != "--world-settings-test") return false;
         var store = new DiagnosticInputSettingsStore();
         if (!store.UsesIsolatedTestStorage) throw new ArgumentException("Usage");
+        if (arguments[1].StartsWith("zoom-", StringComparison.Ordinal)) return RunWorldZoomPreferenceTest(arguments[1]);
         var nondefault = new InputSettings(CameraDeadzone: .31, ActorDeadzone: .27, CameraSensitivity: 1.3, ActorSensitivity: .8,
             InvertCameraX: false, InvertCameraY: true);
         var stage = arguments[1]; var passed = false;
@@ -36,6 +37,55 @@ public partial class TerrainViewerApp
         else { GD.Print($"ARC-WORLD-001 settings-test PASS {stage}"); GetTree().Quit(0); }
         return true;
     }
+    private bool RunWorldZoomPreferenceTest(string stage)
+    {
+        if (!_worldZoomStore.UsesIsolatedTestStorage) throw new ArgumentException("Usage");
+        SelfTestBootstrap = true; SetProcess(false);
+        var fixture = TerrainViewerSelfTest.WorldFixture();
+        PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        var passed = false;
+        if (stage is "zoom-first" or "zoom-defaults" or "zoom-malformed") passed = _camera!.State.Zoom == 2 && _worldPreferredZoom == 2;
+        else if (stage == "zoom-write")
+        {
+            SetPreferredWorldZoom(3); ResetWorldScene();
+            PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+            passed = _camera!.State.Zoom == 3 && _worldZoomStore.Load() == 3;
+        }
+        else if (stage == "zoom-read")
+        {
+            passed = _camera!.State.Zoom == 3; FitWorldView();
+            passed &= _worldPreferredZoom == 3 && _worldZoomStore.Load() == 3;
+            ResetWorldScene(); passed &= _camera.State.Zoom == 3;
+        }
+        else if (stage == "zoom-reset")
+        {
+            ResetWorldSettings(); passed = _camera!.State.Zoom == 2 && _worldZoomStore.Load() == 2
+                && _worldSettings == new InputSettings(InvertCameraX:false,InvertCameraY:false);
+        }
+        else if (stage == "zoom-failure")
+        {
+            SetPreferredWorldZoom(3); passed = _camera!.State.Zoom == 3 && _worldZoomPending && _worldZoomSaveFailed;
+            ResetWorldScene(); passed &= _camera.State.Zoom == 3 && _worldZoomSaveFailed;
+        }
+        else if (stage == "zoom-pending")
+        {
+            // Levels below are simulated; do not depend on which sequential
+            // validation host currently owns OS focus.
+            WorldFocusForSelfTest(true);
+            var pad = new RawInputFrame(3,default); var none = new RawInputFrame(-1,default);
+            _worldReducer.SetStartupDevices(new[]{3}); ResetWorldScene();
+            for(var i=0;i<3;i++) WorldFrameForSelfTest(none,new[]{pad},.1);
+            WorldFrameForSelfTest(none,new[]{pad with {RightTrigger=1}},1);
+            passed = _camera!.State.Zoom == 4 && _worldZoomPending && _worldZoomStore.Load() == 2;
+            QuarantineWorld();
+            for(var i=0;i<3;i++) WorldFrameForSelfTest(none,new[]{pad},.1);
+            passed &= !_worldZoomPending && _worldZoomStore.Load() == 4;
+            PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result); passed &= _camera.State.Zoom == 4;
+        }
+        else if (stage == "zoom-read-pending") passed = _camera!.State.Zoom == 4;
+        GD.Print($"ARC-GPAD-004 settings-test {(passed ? "PASS" : "FAIL")} {stage} real-host-store/production-ready/reset/Fit/quarantine/reload");
+        GetTree().Quit(passed ? 0 : 1); return true;
+    }
     private async Task RunWorldNativeSmokeAsync(TerrainLoadResult result)
     {
         if (DisplayServer.GetName() == "headless") throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Readback));
@@ -54,9 +104,15 @@ public partial class TerrainViewerApp
         await NextFrameAsync();
         _camera!.ZoomWorld(4, WorldAnchor, WorldViewport);
         WorldControlMatrixForSelfTest();
+        await WorldZoomMatrixForSelfTestAsync();
         WorldLifecycleMatrixForSelfTest();
         await WorldModalRoutingMatrixForSelfTestAsync();
-        await WorldMouseSettingsMatrixForSelfTestAsync();
+        try { await WorldMouseSettingsMatrixForSelfTestAsync(); }
+        catch (InvalidOperationException exception) when (exception.Message.StartsWith("WORLD mouse settings:", StringComparison.Ordinal))
+        {
+            GD.Print("ARC-WORLD-001 native GUI assertion FAIL " + exception.Message);
+            throw;
+        }
         GD.Print("ARC-WORLD-001 native-smoke stage=actor-rasters");
         // Every admitted physical facing/action selection, on the actual original
         // catalogue/cache and canvas, after motion rather than preview hotkeys.
@@ -73,7 +129,7 @@ public partial class TerrainViewerApp
             await SetSmokeWindowSizeAsync(size); await NextFrameAsync();
             GD.Print($"ARC-WORLD-001 native-smoke stage=viewport requested={size.X}x{size.Y} actual={GetViewport().GetVisibleRect().Size.X}x{GetViewport().GetVisibleRect().Size.Y}");
             if (GetViewport().GetVisibleRect().Size != new Vector2(size.X, size.Y)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
-            _camera.ResetWorld(WorldAnchor, WorldViewport); RefreshReadyStatus(); await NextFrameAsync();
+            _camera.ResetWorld(WorldAnchor, WorldViewport); _camera.Fit(WorldViewport); RefreshReadyStatus(); await NextFrameAsync();
             using var image = GetViewport().GetTexture().GetImage();
             GD.Print($"ARC-WORLD-001 native-smoke stage=readback image={image.GetWidth()}x{image.GetHeight()} hud={HasReadyHudContent(_cache.Count)} limit={_hud!.Text.Contains("collision not evaluated", StringComparison.Ordinal)}");
             if (image.GetWidth() != size.X || image.GetHeight() != size.Y || !HasReadyHudContent(_cache.Count)

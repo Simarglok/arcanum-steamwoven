@@ -7,7 +7,7 @@ namespace Arcanum.TerrainViewer;
 
 public static partial class TerrainViewerSelfTest
 {
-    private static SyntheticActorLoad WorldFixture()
+    internal static SyntheticActorLoad WorldFixture()
     {
         var fixture = SyntheticActorFixture.Create();
         var terrainKey = fixture.Result.Textures.Keys.Single();
@@ -35,7 +35,29 @@ public static partial class TerrainViewerSelfTest
         viewport.AddChild(app); host.AddChild(viewport);
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+        var initial = app.GetSelfTestSnapshot();
+        if (initial.CameraZoom != 2 || app.WorldFollowForSelfTest.Mode != GamepadLab.Core.CameraMode.Follow)
+            throw new InvalidOperationException("WORLD default-2 ordinary ready framing failed.");
+        var hudOrigin = initial.HudPosition;
+        foreach (var ratio in new[] { 1d, 2d, 3d, 1.7 })
+        {
+            app.WorldZoomForSelfTest(ratio);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var framed = app.GetSelfTestSnapshot();
+            var anchor = framed.CanvasTransform * new Vector2(80,1260);
+            if (framed.CameraZoom != ratio || framed.HudPosition != hudOrigin || anchor.DistanceTo(new(400,300)) > 1
+                || framed.Actor != initial.Actor || framed.Input != initial.Input)
+                throw new InvalidOperationException("WORLD ratio/anchor/UI/geometry separation failed.");
+            if (DisplayServer.GetName() != "headless")
+            {
+                using var image = viewport.GetTexture().GetImage();
+                AssertTransformedPixel(image, framed.CanvasTransform, 77,1258,(231,37,19));
+            }
+        }
+        app.WorldZoomForSelfTest(2);
+        GD.Print("ARC-GPAD-004 default2/Follow actor framing exact1/2/3/fractional1.7 UI/geometry separation PASS; nearest public actor pixel=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS") + "; physical1:1/QHD NOT_VERIFIED");
         app.WorldControlMatrixForSelfTest();
+        await app.WorldZoomMatrixForSelfTestAsync();
         app.WorldLifecycleMatrixForSelfTest();
         await app.WorldModalRoutingMatrixForSelfTestAsync();
         await app.WorldMouseSettingsMatrixForSelfTestAsync();
@@ -48,6 +70,10 @@ public static partial class TerrainViewerSelfTest
         // resize must not derive actor position from any Godot transform.
         app.GetNode<Camera2D>("TerrainCamera").PositionSmoothingEnabled = false;
         var camera = app.GetNode<Camera2D>("TerrainCamera");
+        // Preserve the historical sector/guide raster oracle from explicit Fit;
+        // ordinary default framing is verified independently by the zoom matrix.
+        app._Input(new InputEventKey { Keycode = Key.F, Pressed = true });
+        for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(new(-1, default), Array.Empty<GamepadLab.Core.RawInputFrame>(), .1);
         // Zoom through the real world input route, away from UI.
         // At least two screen pixels/source pixel keep the last sparse source
         // column independently observable next to the 1px diagnostic outline.
@@ -94,6 +120,9 @@ public static partial class TerrainViewerSelfTest
             // Resolve the guide in the real combined viewport at each corner.
             // Fit can downsample a one-pixel guide; use the production zoom
             // route for a resolved guide, as for the asymmetric sprite oracle.
+            app._Input(new InputEventKey { Keycode = Key.F, Pressed = true });
+            for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(none, Array.Empty<GamepadLab.Core.RawInputFrame>(), .1);
+            app.WorldFitFollowForSelfTest();
             for (var i = 0; i < 14; i++) app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = new(799,599) });
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (DisplayServer.GetName() != "headless")
