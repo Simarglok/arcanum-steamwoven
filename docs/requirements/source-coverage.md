@@ -35,7 +35,7 @@
 | [`src/game/facade.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/facade.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
 | [`src/game/fate.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/fate.c) | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
 | [`src/game/gameinit.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gameinit.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
-| [`src/game/gamelib.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c) | Есть диапазоны: 18 | [content-product](content-product.md), [lighting-time](lighting-time.md), [scene](scene.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| [`src/game/gamelib.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c) | Есть диапазоны: 19 | [content-product](content-product.md), [lighting-time](lighting-time.md), [scene](scene.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
 | [`src/game/gfade.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gfade.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
 | [`src/game/gmovie.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gmovie.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
 | [`src/game/gsound.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c) | Есть диапазоны: 6 | [ui-media-lifecycle](ui-media-lifecycle.md) |
@@ -122,7 +122,7 @@
 | [`src/game/walkmask.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/walkmask.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
 | [`src/game/wall.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wall.c) | Есть диапазоны: 3 | [scene](scene.md) |
 | [`src/game/wallcheck.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wallcheck.c) | Есть диапазоны: 2 | [scene](scene.md) |
-| [`src/game/wp.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wp.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| [`src/game/wp.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wp.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
 | [`src/ui/anim_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c) | Есть диапазоны: 1 | [lighting-time](lighting-time.md) |
 | [`src/ui/broadcast_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/broadcast_ui.c) | Есть диапазоны: 1 | [story-social-ai](story-social-ai.md) |
 | [`src/ui/charedit_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/charedit_ui.c) | Есть диапазоны: 10 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
@@ -155,7 +155,7 @@
 | [`src/ui/wmap_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_ui.c) | Есть диапазоны: 8 | [ui-media-lifecycle](ui-media-lifecycle.md), [world](world.md), [world-travel-runtime](world-travel-runtime.md) |
 | [`src/ui/written_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/written_ui.c) | Есть диапазоны: 3 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
 
-В доменных документах есть range-привязки для **112 из 140** модулей; для **28** таких привязок нет. Это показатели трассировки источников, не полноты поведения.
+В доменных документах есть range-привязки для **113 из 140** модулей; для **27** таких привязок нет. Это показатели трассировки источников, не полноты поведения.
 
 ## Дополнительные привязки вне census
 
@@ -177,9 +177,9 @@
 | [`src/main.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/main.c) | [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
 | [`src/net_compat.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/net_compat.h) | [ui-media-lifecycle](ui-media-lifecycle.md) |
 
-## Дополнительный проход инфраструктуры объектов
+## Инфраструктура объектов
 
-Родитель просмотрел следующие тела/участки. Это поддержка уже описанных identity, lifetime и сериализации, а не отдельные действия игрока и не обязательство воспроизвести устройство памяти C-кода:
+Следующие исследованные участки относятся к identity, lifetime и сериализации. Они не задают отдельные действия игрока или обязательство воспроизвести устройство памяти C-кода:
 
 - [object-node pool, создание и освобождение](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object_node.c#L20-L105).
 - [magic/tech node pool и начальные поля](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_obj_node.c#L23-L100).
@@ -187,7 +187,7 @@
 - [сериализация SizeableArray](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c#L110-L137) и [сброс типизированных object fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c#L218-L260): структуры хранения, не самостоятельная механика инвентаря/квестов.
 - [таблица имён групп флагов и полей](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.c#L5-L52): registry metadata, не доказательство исполнения всех значений флагов.
 
-Этот supplemental pass не повышает покрытие Steamwoven и не заменяет domain caller/behavior review. Таблица выше считает диапазоны в доменных документах; отсутствие такой привязки не скрывает выполненные здесь дополнительные чтения.
+Эти источники описывают инфраструктуру CE и сами по себе не подтверждают покрытие Steamwoven. Таблица выше считает привязки в тематических документах; выбранные инфраструктурные диапазоны приведены здесь отдельно.
 
 ## Следующие исследования и непроверенный объём
 

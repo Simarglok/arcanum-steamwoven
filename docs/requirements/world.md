@@ -11,7 +11,7 @@
 
 ## Предложение по этапам
 
-Метки **pre-alpha** и **later** — предварительная оценка только для требований этого world domain. Минимальные pre-alpha-кандидаты здесь — идентичность карты/сектора, границы секторов, один проверяемый connector, точное место прибытия и сохранение изменённого состояния при уходе/возврате. Это не полное определение pre-alpha, не требование загрузить весь мир и не ранжирование других игровых механик. Метки нужны для последующего cross-domain review; они не являются сроками, заданиями или полномочием создавать задачи. [Решения по архитектурному направлению](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/architecture/decisions.md), [roadmap и граница task authority](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/roadmap.md#L1-L4).
+Метки **pre-alpha** и **later** — предварительная оценка только для требований этого world domain. Минимальные pre-alpha-кандидаты здесь — идентичность карты/сектора, границы секторов, один проверяемый connector, точное место прибытия и сохранение изменённого состояния при уходе/возврате. Это не полное определение pre-alpha, не требование загрузить весь мир и не ранжирование других игровых механик. Метки являются предложением для согласования раннего объёма; они не являются сроками, заданиями или полномочием создавать задачи. [Решения по архитектурному направлению](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/architecture/decisions.md), [roadmap и граница task authority](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/roadmap.md#L1-L4).
 
 ## Требования
 
