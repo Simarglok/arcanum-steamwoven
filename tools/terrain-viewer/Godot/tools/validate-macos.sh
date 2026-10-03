@@ -46,6 +46,8 @@ cleanup_candidate() {
   /bin/rm -f "$project_root/SyntheticActorFixture.cs.uid" "$project_root/TerrainDiagnosticHud.cs.uid" \
     "$project_root/DiagnosticInputSettingsStore.cs.uid" "$project_root/DiagnosticInputSettingsPanel.cs.uid" "$project_root/TerrainViewerWorld.cs.uid" \
     "$project_root/TerrainViewerWorldLifecycleTest.cs.uid" "$project_root/TerrainViewerWorldSelfTest.cs.uid" "$project_root/TerrainViewerWorldValidation.cs.uid" \
+    "$project_root/TerrainViewerWorldGridTest.cs.uid" "$project_root/TerrainViewerWorldOriginalGridValidation.cs.uid" \
+    "$project_root/TerrainViewerWorldReadbackScope.cs.uid" "$project_root/TerrainViewerWorldRetirementTest.cs.uid" \
     "$project_root/DiagnosticZoomSettingsStore.cs.uid" "$project_root/TerrainViewerWorldZoomTest.cs.uid" \
     "$project_root/TerrainViewerWorldZoomBoundaryTest.cs.uid" "$project_root/TerrainViewerHumanValidation.cs.uid"
 }

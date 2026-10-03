@@ -7,6 +7,7 @@ from pathlib import Path
 import runpy
 import subprocess
 import sys
+import tempfile
 import unittest
 from typing import Any
 from unittest.mock import patch
@@ -118,6 +119,28 @@ class GridReportTests(unittest.TestCase):
 
 class GridEndpointOrderTests(unittest.TestCase):
     """Actual writer and registry boundaries, using public synthetic reports only."""
+    def test_endpoint_cleanup_removes_new_grid_sidecars_but_not_unrelated_files(self):
+        source = Path(__file__).resolve().parents[1] / 'terrain-viewer/Godot/tools/validate-macos.sh'
+        cleanup = source.read_text().split('cleanup_candidate() {', 1)[1].split('\n}', 1)[0]
+        with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
+            root = Path(directory)
+            names = ('TerrainViewerWorldGridTest', 'TerrainViewerWorldOriginalGridValidation',
+                     'TerrainViewerWorldReadbackScope', 'TerrainViewerWorldRetirementTest')
+            for name in (*names, 'Unrelated'):
+                (root / (name + '.cs.uid')).write_text('public synthetic sidecar\n')
+            # Exercise the production cleanup function. Lock restoration is a
+            # recorded no-op in this synthetic workspace, not a real git write.
+            git = root / 'git'
+            git.write_text('#!/bin/sh\nexit 0\n'); git.chmod(0o700)
+            script = root / 'cleanup.sh'
+            script.write_text('set -eu\ncleanup_candidate() {' + cleanup + '\n}\ncleanup_candidate\n')
+            subprocess.run(['/bin/sh', str(script)], check=True,
+                env={**os.environ, 'PATH': str(root) + ':/usr/bin:/bin',
+                     'project_root': str(root), 'candidate_root': str(root)})
+            for name in names:
+                self.assertFalse((root / (name + '.cs.uid')).exists(), name)
+            self.assertEqual('public synthetic sidecar\n', (root / 'Unrelated.cs.uid').read_text())
+
     root: Path
     setUp=fixtures.LocalDevTests.setUp
     tearDown=fixtures.LocalDevTests.tearDown
