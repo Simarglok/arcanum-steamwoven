@@ -46,7 +46,9 @@ Payload fingerprints alone would not prove whole-file integrity.
 All links below are the pinned revision, not mutable main:
 
 - [Game aggregate versus editor mobile load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1360-L1501), [name transform](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1668-L1688).
-- [Object framing](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L4770-L4880), [whole-array inheritance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2540-L2593), [description source selection](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L123-L145).
+- [Object version and reader dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1253), [prototype reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2932-L2985), [instance reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3032-L3092). The blocked prototype identifier selects the prototype branch; the instance branch reads identity, type, field count and override masks before its field callbacks.
+- [Prototype field callback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3246-L3259), [instance field callback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3301-L3312), [serialized scalar/presence/array fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c#L517-L762), [array header/payload and bitset read](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c#L319-L342). These are the file-reading seams, distinct from [overridden-field enumeration](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L4783-L4808), which chooses callbacks by mask and field order, not by reading record headers.
+- [Whole-array inheritance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2540-L2593), [description source selection](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L123-L145).
 - [SAP and operand declarations](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L7-L81), [catalogue and DLG derivation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L38-L207), [SCR framing](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3430-L3555).
 
 ## Conditional caller and entry rule
@@ -94,7 +96,7 @@ with decimal operand tokens. No raw expressions or operand values are published.
 | DLG node 1 action instance 4: IN | One signed item-name identity; sign selects direction. Selected case NPC/substitute inventory → PC, with transfer failure/drop behavior. | Inventory effect, not display or IQ gate; `dialog.c:2004-2056`. | NeedsImplementation (inventory query/transfer/location/failure policy). |
 | DLG node 1 action instance 6: QU | Two operands: quest identity/state; participants PC plus NPC context. | After preceding effects; `dialog.c:1958-1960`. | SupportedByExistingRuntime as a standalone command in its accepted domains, NOT admission of the entire entry. |
 | DLG node 1 action instance 7: RU | One rumor identity; PC rumor log. | Last entry effect; `dialog.c:2075-2077`. | SupportedByExistingRuntime individually, not a skipped-prefix execution path. |
-| DLG NPC nodes 1 and 9 Condition fields | Speech metadata, not Player condition evaluation; source derives speech ID using script identity. | Before NPC text/action handling; `dialog.c:2264-2277,2968-2991`. | NeedsImplementation (speech/media boundary); no false LF/unknown-condition rejection as NPC eligibility. |
+| DLG NPC nodes 1 and 9 Condition fields | Speech metadata, not Player condition evaluation; source derives speech ID using script identity. | Before NPC text/action handling; `dialog.c:2264-2277`. | NeedsImplementation (speech/media boundary); no false LF/unknown-condition rejection as NPC eligibility. |
 | Player IDs 2..7 gender/IQ | Alternate field is gender selector, not female text. Signed IQ gate: positive minimum, negative maximum; dumb adjustment precedes IQ. | Gender → IQ → condition; `dialog.c:1309-1355`. | NeedsImplementation in caller; current runtime accepts caller booleans only. |
 | Player IDs 2..7 RE condition | One signed threshold: positive reaction minimum, negative maximum; NPC reaction toward PC. | After entry effects and gender/IQ; `dialog.c:1489-1499`. | NeedsImplementation; do not substitute LF or guessed reaction. |
 | Player IDs 4,5,7 RE action | One operand; selected unsigned form sets reaction to absolute value, not relative adjustment. | Selected reply effect before transition; `dialog.c:1933-1956`. | NeedsImplementation. |
@@ -177,6 +179,13 @@ from count, not capacity or serialized pointer-placeholder. Malformed framing,
 reserved masks, duplicates/missing resources, wrong role, invalid IDs, cycles,
 unsupported active operations and missing queries fail with redacted categories.
 The probe never extracts resources or prints original exceptions/paths/text.
+Catalogue selection compares the **complete leading decimal basename key**, not
+a fixed-width digit prefix: key 13240 cannot satisfy attachment 1324. Strict
+printable-ASCII raw names, exact `scr\` folder / `.scr` suffix, no nested path,
+sign, whitespace prefix or numeric overflow are project safety policy, not a
+reimplementation of permissive CE `atoi`. Leading zeros may identify the same
+numeric key but raw spelling is retained for the exact payload read; multiple
+actual matches fail, including differently spelled names for the same key.
 It reads all record boundaries but semantically traces only the necessary SCR
 path and first DLG frontier. A success establishes structural evidence, not VM
 or runtime admission. Logs and independent selected-field/count worksheets are

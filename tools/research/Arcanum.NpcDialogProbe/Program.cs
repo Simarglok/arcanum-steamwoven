@@ -91,11 +91,7 @@ internal static class Program
         var binding = DialogBinding(npc.Scripts, prototypes[0].Scripts);
         Require(binding.Script > 0 && binding.Script <= 99999, "InvalidScriptId");
         using var scripts = DatArchive.Open(m.Scripts);
-        var prefix = Encoding.ASCII.GetBytes($"scr\\{binding.Script:D5}");
-        var candidates = scripts.Entries.Where(e => e.RawNameBytes.Take(prefix.Length).SequenceEqual(prefix) &&
-            Encoding.ASCII.GetString(e.RawNameBytes.ToArray()).EndsWith(".scr\0", StringComparison.Ordinal)).ToArray();
-        Require(candidates.Length == 1, "MissingOrAmbiguousScriptCatalogue");
-        var scrName = Encoding.ASCII.GetString(candidates[0].RawNameBytes.ToArray()[..^1]);
+        var scrName = ScriptResource(scripts, binding.Script);
         var scr = Unique(scripts, scrName, 1024 * 1024);
         var entry = Resolve(scr, binding.Flags, m.Following, m.Jilted);
         using var dialogs = DatArchive.Open(m.Dialogs);
@@ -134,6 +130,28 @@ internal static class Program
                 substitutions = Tokens(r.Text.Bytes).Concat(Tokens(r.AlternateText.Bytes)).ToArray() }),
             integrityUnchanged = true, runtimeAdmission = "NOT_EVALUATED_ReadOnlyStructuralEvidence"
         };
+    }
+    internal static string ScriptResource(DatArchive archive, int script)
+    {
+        Require(script is > 0 and <= 99999, "InvalidScriptId");
+        var candidates = archive.Entries.Where(e => CatalogueKey(e.RawNameBytes) == script).ToArray();
+        Require(candidates.Length == 1, "MissingOrAmbiguousScriptCatalogue");
+        // Retain the exact raw spelling for the subsequent Unique payload read.
+        return Encoding.ASCII.GetString(candidates[0].RawNameBytes.ToArray()[..^1]);
+    }
+    private static int? CatalogueKey(IReadOnlyList<byte> raw)
+    {
+        if (raw.Count == 0 || raw[^1] != 0 || raw.Take(raw.Count - 1).Any(b => b is < 32 or > 126)) return null;
+        var name = Encoding.ASCII.GetString(raw.ToArray()[..^1]);
+        if (!name.StartsWith("scr\\", StringComparison.Ordinal) || !name.EndsWith(".scr", StringComparison.Ordinal)) return null;
+        var basename = name.AsSpan(4, name.Length - 8);
+        if (basename.ContainsAny('\\', '/', ':')) return null;
+        var digits = 0;
+        while (digits < basename.Length && basename[digits] is >= '0' and <= '9') digits++;
+        // Parse the COMPLETE leading decimal run, not a five-character prefix.
+        // Strict syntax is project policy: no whitespace, sign, normalization or overflow recovery.
+        return digits > 0 && int.TryParse(basename[..digits], NumberStyles.None, CultureInfo.InvariantCulture, out var key) &&
+            key is > 0 and <= 99999 ? key : null;
     }
     internal static void ValidateObjectId(string value) => Require(Regex.IsMatch(value, "^[0-9a-f]{64}$"), "InvalidObjectId");
     internal static ObjectRecord SelectNpc(IEnumerable<ObjectRecord> records, string hash)

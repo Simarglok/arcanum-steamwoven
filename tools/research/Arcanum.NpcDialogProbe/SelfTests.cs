@@ -108,6 +108,33 @@ internal static class SelfTests
         }
         using (var dat = DatArchive.Open(new MemoryStream(Archive("a", "a"))))
             Reject(() => Program.Unique(dat, "a", 1), "MissingOrAmbiguousResource");
+        // The catalogue helper used by Run, with real production DAT indexes.
+        // Wrong numeric key must fail before any SCR/DLG entry can be resolved.
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\013240Synthetic.scr"))))
+            Reject(() => Program.ScriptResource(dat, 1324), "MissingOrAmbiguousScriptCatalogue");
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\01324Synthetic.scr"))))
+        {
+            Check(Program.ScriptResource(dat, 1324) == "scr\\01324Synthetic.scr", "complete catalogue key control");
+            Check(Program.Unique(dat, Program.ScriptResource(dat, 1324), 1).Single() == 7, "catalogue exact payload read");
+            Reject(() => Program.ScriptResource(dat, 0), "InvalidScriptId");
+        }
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\013240Synthetic.scr", "scr\\01324Synthetic.scr"))))
+            Check(Program.ScriptResource(dat, 1324) == "scr\\01324Synthetic.scr", "unrelated longer key not ambiguity");
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\01324First.scr", "scr\\01324Second.scr"))))
+            Reject(() => Program.ScriptResource(dat, 1324), "MissingOrAmbiguousScriptCatalogue");
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\01324Synthetic.scr", "scr\\01324Synthetic.scr"))))
+            Reject(() => Program.ScriptResource(dat, 1324), "MissingOrAmbiguousScriptCatalogue");
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\0001324Synthetic.scr"))))
+            Check(Program.ScriptResource(dat, 1324) == "scr\\0001324Synthetic.scr", "raw leading zeros retained");
+        using (var dat = DatArchive.Open(new MemoryStream(Archive("scr\\01324Synthetic.scr", "scr\\0001324Synthetic.scr"))))
+            Reject(() => Program.ScriptResource(dat, 1324), "MissingOrAmbiguousScriptCatalogue");
+        foreach (var name in new[] { "scr\\+01324Synthetic.scr", "scr\\ 01324Synthetic.scr", "scr\\Synthetic.scr",
+            "scr\\01324\\Synthetic.scr", "scr\\01324/Synthetic.scr", "scr\\01324:Synthetic.scr",
+            "scr\\999999999999999999999Synthetic.scr", "scr\\01324Synthetic.scr\0extra" })
+        {
+            using var dat = DatArchive.Open(new MemoryStream(Archive(name)));
+            Reject(() => Program.ScriptResource(dat, 1324), "MissingOrAmbiguousScriptCatalogue");
+        }
         var dlg = DlgReader.Read(Encoding.ASCII.GetBytes("{81}{Synthetic NPC}{}{}{}{}{}\n{82}{Reply}{}{5}{}{44}{}\n{44}{Destination}{}{}{}{}{}"));
         Check(Program.Group(dlg, 81, false).Select(r => r.Id).SequenceEqual(new[] { 82 }), "serialized role group");
         Check(Program.Group(dlg, 81, true).Select(r => r.Id).SequenceEqual(new[] { 82 }), "selected numeric group");
