@@ -141,10 +141,12 @@ public sealed record StaticObjectArtMetadata(int ArtType, int SceneryCategory, i
 
 public sealed class StaticObjectInspection
 {
-    internal StaticObjectInspection(StaticObjectCensusStatus censusStatus, int terminalRecordCount, IReadOnlyList<StaticObjectRecord> records)
+    internal StaticObjectInspection(StaticObjectCensusStatus censusStatus, int terminalRecordCount, IReadOnlyList<StaticObjectRecord> records,
+        IEnumerable<StaticObjectTraversalRecord>? traversalRecords = null)
     {
         CensusStatus = censusStatus; TerminalRecordCount = terminalRecordCount;
         Records = new ReadOnlyCollection<StaticObjectRecord>(records.ToArray());
+        TraversalRecords = Array.AsReadOnly(traversalRecords?.ToArray() ?? []);
         FieldResolvedCount = Records.Count(record => record.FieldStatus == StaticObjectFieldStatus.Resolved);
         ResourceResolvedCount = Records.Count(record => record.ResourceStatus == StaticObjectResourceStatus.Resolved);
         ResourceNotEvaluatedCount = Records.Count(record => record.ResourceStatus == StaticObjectResourceStatus.NotEvaluated);
@@ -152,6 +154,7 @@ public sealed class StaticObjectInspection
     }
 
     public StaticObjectCensusStatus CensusStatus { get; }
+    internal IReadOnlyList<StaticObjectTraversalRecord> TraversalRecords { get; }
     public int TerminalRecordCount { get; }
     public IReadOnlyList<StaticObjectRecord> Records { get; }
     public int FieldResolvedCount { get; }
@@ -183,3 +186,7 @@ public sealed class StaticObjectValidation
 
 /// <summary>Identifier-only evidence for one canonical type-A prototype file.</summary>
 public sealed record StaticObjectPrototypeFingerprint(int Aid, StaticObjectInputFingerprint Fingerprint);
+
+// Common wire facts only. Non-scenery defaults and effective flags are never admitted.
+internal sealed record StaticObjectTraversalRecord(int SourceIndex, int ObjectType, int? PrototypeAid,
+    long? PackedLocation, uint? DirectFlags, uint? EffectiveFlags, bool FlagsInherited);

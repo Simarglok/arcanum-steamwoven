@@ -141,7 +141,10 @@ public static class StaticObjectLoader
                     resolved[sourceIndex] = resolvedRecord;
                 }
             }
-            return new StaticObjectInspection(StaticObjectCensusStatus.Complete, terminalCount, resolved);
+            return new StaticObjectInspection(StaticObjectCensusStatus.Complete, terminalCount, resolved,
+                parsed.Select((record, index) => new StaticObjectTraversalRecord(record.SourceIndex, record.Type,
+                    record.PrototypeAid < 0 ? null : record.PrototypeAid, record.Location, record.DirectFlags,
+                    record.Type == 3 ? resolved[index].EffectiveFlags : null, record.Type == 3 && resolved[index].FlagsInherited)));
         }
         catch (TerrainException exception)
         {
@@ -160,6 +163,11 @@ public static class StaticObjectLoader
     /// </summary>
     public static StaticObjectValidation ValidateOriginalData(string modulePath, string resourcePath, string prototypeDirectory,
         StaticObjectLoaderOptions? options = null)
+        => WithValidatedOriginalData(modulePath, resourcePath, prototypeDirectory, options, (_, _, validation) => validation);
+
+    // Assembly-internal projection executes BEFORE final authentication checks; no public bypass.
+    internal static T WithValidatedOriginalData<T>(string modulePath, string resourcePath, string prototypeDirectory,
+        StaticObjectLoaderOptions? options, Func<StaticObjectSource, StaticObjectPrototypeSource, StaticObjectValidation, T> projection)
     {
         ArgumentException.ThrowIfNullOrEmpty(modulePath); ArgumentException.ThrowIfNullOrEmpty(resourcePath);
         ArgumentException.ThrowIfNullOrEmpty(prototypeDirectory);
@@ -190,11 +198,10 @@ public static class StaticObjectLoader
             if (inspection.TerminalRecordCount != 317)
                 throw Failure(StaticObjectErrorCode.InvalidSelector, StaticObjectFailureStage.Selector, "The authenticated input does not contain the fixed selected record count.");
             var aggregate = Aggregate(prototypeBefore.Select(item => (item.Aid, item.Fingerprint!)));
-            if (moduleBefore != Fingerprint(moduleStream, limits.MaxArchiveBytes) || resourceBefore != Fingerprint(resourceStream, limits.MaxArchiveBytes) ||
-                prototypeBefore.Any(item => item.Fingerprint != FingerprintSafe(item.Path, (uint)limits.MaxPrototypeBytes)))
-                throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable input changed during validation.");
-            return new StaticObjectValidation(inspection, moduleBefore, resourceBefore,
+            var validation = new StaticObjectValidation(inspection, moduleBefore, resourceBefore,
                 prototypeBefore.Select(item => new StaticObjectPrototypeFingerprint(item.Aid, item.Fingerprint!)).ToArray(), aggregate);
+            return CompleteGuardedProjection(() => projection(source, prototypes, validation), moduleStream, resourceStream,
+                moduleBefore, resourceBefore, prototypeBefore.Select(item => (item.Path, item.Fingerprint!)).ToArray(), limits);
         }
         catch (StaticObjectException) { throw; }
         catch (IOException) { throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable validation input is unavailable."); }
@@ -219,6 +226,19 @@ public static class StaticObjectLoader
         if (window.TerminalObjectCount > limits.MaxRecords)
             throw Failure(StaticObjectErrorCode.LimitExceeded, StaticObjectFailureStage.SectorFraming, "The terminal object count exceeds the configured limit.");
         return (window.TerminalObjectCount, ParseWindow(window.Bytes.ToArray(), window.TerminalObjectCount, limits));
+    }
+
+    // Concrete production post-read verifier, shared with bounded synthetic guard tests.
+    // Expected identities come from the authenticated pre-read above; this is not a public original-data factory.
+    internal static T CompleteGuardedProjection<T>(Func<T> projection, Stream moduleStream, Stream resourceStream,
+        StaticObjectInputFingerprint moduleBefore, StaticObjectInputFingerprint resourceBefore,
+        IReadOnlyList<(string Path, StaticObjectInputFingerprint Fingerprint)> prototypeBefore, StaticObjectLoaderOptions limits)
+    {
+        var owned = projection();
+        if (moduleBefore != Fingerprint(moduleStream, limits.MaxArchiveBytes) || resourceBefore != Fingerprint(resourceStream, limits.MaxArchiveBytes) ||
+            prototypeBefore.Any(item => item.Fingerprint != FingerprintSafe(item.Path, (uint)limits.MaxPrototypeBytes)))
+            throw Failure(StaticObjectErrorCode.InvalidFraming, StaticObjectFailureStage.FingerprintInput, "An immutable input changed during validation.");
+        return owned;
     }
 
     private static readonly IReadOnlyList<int> SelectedResourceIndexes = [0, 1, 2, 3, 4];
@@ -304,10 +324,10 @@ public static class StaticObjectLoader
         {
             if (!set[field]) continue;
             if (type == 3 && field == CurrentArtSlot) art = cursor.I32();
-            else if (type == 3 && field == LocationSlot) location = cursor.OptionalI64();
+            else if (field == LocationSlot) location = cursor.OptionalI64();
             else if (type == 3 && field == OffsetXSlot) offsetX = cursor.I32();
             else if (type == 3 && field == OffsetYSlot) offsetY = cursor.I32();
-            else if (type == 3 && field == ObjectFlagsSlot) flags = cursor.U32();
+            else if (field == ObjectFlagsSlot) flags = cursor.U32();
             else Skip(ref cursor, fields[field], limits);
         }
         return new ParsedRecord(sourceIndex, prototype.Aid ?? -1, type, art, flags, location, offsetX, offsetY);
@@ -588,7 +608,8 @@ public static class StaticObjectLoader
 
     private static StaticObjectRecord ToRecord(ParsedRecord value, StaticObjectFieldStatus status, int? art, bool artInherited, uint? flags, bool flagsInherited,
         bool? isStatic, StaticObjectResourceStatus resourceStatus, StaticObjectArtMetadata? metadata) =>
-        new(value.SourceIndex, value.Type, value.PrototypeAid < 0 ? null : value.PrototypeAid, value.DirectCurrentArt, value.DirectFlags, value.Location, value.DirectOffsetX, value.DirectOffsetY,
+        new(value.SourceIndex, value.Type, value.PrototypeAid < 0 ? null : value.PrototypeAid, value.DirectCurrentArt,
+            value.Type == 3 ? value.DirectFlags : null, value.Type == 3 ? value.Location : null, value.DirectOffsetX, value.DirectOffsetY,
             status, art, artInherited, flags, flagsInherited, isStatic, resourceStatus, metadata);
     private static StaticObjectRecord Copy(StaticObjectRecord value, StaticObjectResourceStatus status, StaticObjectArtMetadata? metadata) =>
         new(value.SourceIndex, value.ObjectType, value.PrototypeAid, value.DirectCurrentArt, value.DirectFlags, value.Location, value.DirectOffsetX, value.DirectOffsetY,

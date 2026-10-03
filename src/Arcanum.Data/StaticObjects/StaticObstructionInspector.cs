@@ -50,7 +50,7 @@ public static class StaticObstructionInspector
         return Create(validation.Inspection, 463, "CRASH_SITE_MODULE", "CRASH_SITE_PROTOTYPES", new StaticObstructionInputIdentity(validation));
     }
 
-    private static StaticObstructionSectorReport Create(StaticObjectInspection inspection, int ordinal, string moduleId,
+    internal static StaticObstructionSectorReport Create(StaticObjectInspection inspection, int ordinal, string moduleId,
         string prototypeId, StaticObstructionInputIdentity? identity)
     {
         var provenance = new List<StaticObstructionProvenance>
