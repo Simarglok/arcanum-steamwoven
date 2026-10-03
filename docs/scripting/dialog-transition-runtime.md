@@ -16,6 +16,12 @@ unverified.
 
 ## Synthetic public usage
 
+The [NPC invocation/entry contract](npc-dialog-entry-contract.md) and
+[Crash Site evidence](../research/crash-site-npc-dialog-evidence.md) describe a
+separate, proposed bridge. The selected Virgil entry is not supported by this
+runtime: it requires GF/IN/RE and has six structural immediate replies. Research
+does not truncate the group or skip those effects to claim compatibility.
+
 ```csharp
 var document = DlgReader.Read(syntheticDlgBytes);
 var request = new DialogStartRequest(
