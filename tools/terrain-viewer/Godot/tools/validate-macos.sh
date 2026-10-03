@@ -42,7 +42,7 @@ if test ! -x "$DOTNET" || test ! -x "$GODOT"; then printf '%s\n' 'Canonical SDK 
 mkdir -p "$build_root/evidence"
 cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
-    tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
+    src/Arcanum.Simulation/packages.lock.json tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
   /bin/rm -f "$project_root/SyntheticActorFixture.cs.uid" "$project_root/TerrainDiagnosticHud.cs.uid" \
     "$project_root/DiagnosticInputSettingsStore.cs.uid" "$project_root/DiagnosticInputSettingsPanel.cs.uid" "$project_root/TerrainViewerWorld.cs.uid" \
     "$project_root/TerrainViewerWorldLifecycleTest.cs.uid" "$project_root/TerrainViewerWorldSelfTest.cs.uid" "$project_root/TerrainViewerWorldValidation.cs.uid" \

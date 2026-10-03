@@ -131,7 +131,7 @@ class GridEndpointOrderTests(unittest.TestCase):
             # Exercise the production cleanup function. Lock restoration is a
             # recorded no-op in this synthetic workspace, not a real git write.
             git = root / 'git'
-            git.write_text('#!/bin/sh\nexit 0\n'); git.chmod(0o700)
+            git.write_text('#!/bin/sh\nprintf "%s\\n" "$@" > "$project_root/git-args"\n'); git.chmod(0o700)
             script = root / 'cleanup.sh'
             script.write_text('set -eu\ncleanup_candidate() {' + cleanup + '\n}\ncleanup_candidate\n')
             subprocess.run(['/bin/sh', str(script)], check=True,
@@ -140,6 +140,7 @@ class GridEndpointOrderTests(unittest.TestCase):
             for name in names:
                 self.assertFalse((root / (name + '.cs.uid')).exists(), name)
             self.assertEqual('public synthetic sidecar\n', (root / 'Unrelated.cs.uid').read_text())
+            self.assertIn('src/Arcanum.Simulation/packages.lock.json', (root / 'git-args').read_text().splitlines())
 
     root: Path
     setUp=fixtures.LocalDevTests.setUp
