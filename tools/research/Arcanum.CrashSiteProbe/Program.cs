@@ -8,7 +8,7 @@ using Arcanum.Data.Terrain;
 
 namespace Arcanum.CrashSiteProbe;
 
-internal static class Program
+internal static partial class Program
 {
     private const string SectorEntryName = "maps\\Arcanum1-024-fixed\\86570436012.sec";
     private const int SectorTileCount = 64 * 64;
@@ -50,6 +50,8 @@ internal static class Program
     {
         try
         {
+            if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
+            if (args.SequenceEqual(["--area-self-test"])) { AreaSelfTest(); return 0; }
             if (args.SequenceEqual(["--self-test"]))
             {
                 SelfTest();
@@ -803,9 +805,18 @@ internal static class Program
 
     private sealed record InstanceInfo(int SourceIndex, ObjectId PrototypeId, int Type, int? DirectCurrentAid, long? Location, int? DirectOffsetX, int? DirectOffsetY, uint? DirectFlags)
     {
+        public bool ScriptsOverridden { get; init; }
         public bool CurrentAidOverridden => DirectCurrentAid.HasValue;
+        public ObjectId OwnId { get; init; }
+        public IReadOnlyDictionary<int, int> NumericFields { get; init; } = new Dictionary<int, int>();
+        public IReadOnlyList<ArraySpan> Arrays { get; init; } = [];
     }
-    private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags);
+    private sealed record ArraySpan(int Field, int Start, int End, int Size, int Count, int WordStart, int Words);
+    private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags)
+    {
+        public IReadOnlyList<ScriptAttachment> Scripts { get; init; } = [];
+        public IReadOnlyDictionary<int, int> NumericFields { get; init; } = new Dictionary<int, int>();
+    }
     private sealed record ResolvedInstance(int SourceIndex, InstanceInfo Instance, int CurrentAid, uint EffectiveFlags, bool CurrentAidInherited);
     private sealed record PrototypeFingerprint(int Aid, InputFingerprint Fingerprint);
     private sealed record PrototypeInput(string Path, PrototypeFingerprint Fingerprint);
@@ -861,7 +872,7 @@ internal static class Program
             return matches[0];
         }
 
-        private static SortedDictionary<int, string> ParseMes(byte[] bytes)
+        public static SortedDictionary<int, string> ParseMes(byte[] bytes)
         {
             var text = System.Text.Encoding.ASCII.GetString(bytes);
             var result = new SortedDictionary<int, string>();
@@ -894,7 +905,7 @@ internal static class Program
             return result;
         }
 
-        private static bool IsSafeRelativeArtFilename(string value) => value.Length > 4 && value.EndsWith(".art", StringComparison.OrdinalIgnoreCase) && value.All(character => character is >= ' ' and <= '~' && character is not '/' and not '\\');
+        public static bool IsSafeRelativeArtFilename(string value) => value.Length > 4 && value.EndsWith(".art", StringComparison.OrdinalIgnoreCase) && value.All(character => character is >= ' ' and <= '~' && character is not '/' and not '\\');
 
         private static string NormalizePath(IReadOnlyList<byte> raw)
         {
@@ -916,7 +927,7 @@ internal static class Program
         private static readonly WireKind[] Common = K("i,p64,i*3,au32*3,i*7,au32*3,i*12,ai32,ascript,i*2,au32,au64");
         private static readonly WireKind[] Wall = K("i*3,au32,au64");
         private static readonly WireKind[] Portal = K("i*6,au32,au64");
-        private static readonly WireKind[] Container = K("i*4,poid,i*4,au32,au64");
+        private static readonly WireKind[] Container = K("i*4,aoid,i*4,au32,au64");
         private static readonly WireKind[] Scenery = K("i,poid,i*2,au32,au64");
         private static readonly WireKind[] Projectile = K("i*3,poid,i*2,au32,au64");
         private static readonly WireKind[] Item = K("i,poid,i*19,au32,au64");
@@ -937,6 +948,15 @@ internal static class Program
             for (var index = 0; index < expectedCount; index++) records.Add(ParseInstance(ref cursor) with { SourceIndex = index });
             if (!cursor.AtEnd) throw new InvalidDataException("Object window has trailing bytes after the required record count.");
             return records;
+        }
+
+        public static InstanceInfo ParseNext(ReadOnlySpan<byte> bytes, out int consumed)
+        {
+            var cursor = new Cursor(bytes[..Math.Min(bytes.Length, MaxDecodedSectorBytes)]);
+            var result = ParseInstance(ref cursor);
+            consumed = cursor.Offset;
+            if (consumed < 70) throw new InvalidDataException("Record failed minimum envelope progress.");
+            return result;
         }
 
         public static List<PrototypeInfo> ReadReferencedPrototypes(DatArchive archive, ObjectId[] referenced)
@@ -1100,14 +1120,20 @@ internal static class Program
             ReadMasks(ref cursor, type, prototype: true, out _);
             var fields = FieldsFor(type);
             var currentAid = cursor.I32();
+            var numeric = new Dictionary<int, int> { [0] = currentAid };
             uint flags = 0;
+            var arrays = new List<ArraySpan>();
             for (var field = 1; field < fields.Count; field++)
             {
-                if (field == ObjectFlagsField) flags = cursor.U32();
-                else Skip(ref cursor, fields[field], requireNul: true);
+                if (fields[field] == WireKind.I32)
+                {
+                    var value = cursor.I32(); numeric[field] = value;
+                    if (field == ObjectFlagsField) flags = unchecked((uint)value);
+                }
+                else Skip(ref cursor, fields[field], requireNul: true, arrays, field);
             }
             if (!cursor.AtEnd) throw new InvalidDataException("Prototype entry contains trailing bytes.");
-            return new PrototypeInfo(id, type, currentAid, flags);
+            return new PrototypeInfo(id, type, currentAid, flags) { NumericFields = numeric, Scripts = DecodeScripts(bytes, arrays) };
         }
 
         private static InstanceInfo ParseInstance(ref Cursor cursor)
@@ -1115,7 +1141,7 @@ internal static class Program
             RequireVersion(ref cursor);
             var prototype = ReadObjectId(ref cursor, allowBlocked: false);
             if (prototype.Type is -1 or -2) throw new InvalidDataException("Sector instance has a prototype/runtime discriminator.");
-            _ = ReadObjectId(ref cursor, allowBlocked: false);
+            var ownId = ReadObjectId(ref cursor, allowBlocked: false);
             var type = ReadType(ref cursor);
             var fields = FieldsFor(type);
             var numFields = cursor.I16();
@@ -1127,17 +1153,28 @@ internal static class Program
             int? offsetX = null;
             int? offsetY = null;
             uint? flags = null;
+            var numeric = new Dictionary<int, int>();
+            var arrays = new List<ArraySpan>();
             for (var field = 0; field < fields.Count; field++)
             {
                 if (!set[field]) continue;
-                if (field == CurrentArtField) currentAid = cursor.I32();
-                else if (field == LocationField) location = cursor.Presence() ? cursor.I64() : null;
-                else if (field == OffsetXField) offsetX = cursor.I32();
-                else if (field == OffsetYField) offsetY = cursor.I32();
-                else if (field == ObjectFlagsField) flags = cursor.U32();
-                else Skip(ref cursor, fields[field], requireNul: true);
+                if (fields[field] == WireKind.I32)
+                {
+                    var value = cursor.I32(); numeric[field] = value;
+                    if (field == CurrentArtField) currentAid = value;
+                    else if (field == OffsetXField) offsetX = value;
+                    else if (field == OffsetYField) offsetY = value;
+                    else if (field == ObjectFlagsField) flags = unchecked((uint)value);
+                    continue;
+                }
+                if (field == LocationField) location = cursor.Presence() ? cursor.I64() : null;
+                else
+                {
+                    try { Skip(ref cursor, fields[field], requireNul: true, arrays, field); }
+                    catch (InvalidDataException error) { throw new InvalidDataException($"field={field} offset={cursor.Offset} {error.Message}"); }
+                }
             }
-            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags);
+            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags) { OwnId = ownId, NumericFields = numeric, Arrays = arrays, ScriptsOverridden = set[31] };
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)
@@ -1225,11 +1262,11 @@ internal static class Program
         {
             var type = cursor.I16(); cursor.Skip(6); var payload = cursor.Bytes(16).ToArray();
             if (type == -1 && allowBlocked) return new ObjectId(type, payload);
-            if (type is < 0 or > 3) throw new InvalidDataException("Object ID form is unsupported.");
+            if (type is < 0 or > 3) throw new InvalidDataException($"Object ID form {type} is unsupported.");
             return new ObjectId(type, payload);
         }
 
-        private static void Skip(ref Cursor cursor, WireKind kind, bool requireNul)
+        private static void Skip(ref Cursor cursor, WireKind kind, bool requireNul, List<ArraySpan>? arrays = null, int field = -1)
         {
             switch (kind)
             {
@@ -1241,15 +1278,20 @@ internal static class Program
                     var value = cursor.Bytes(stringCount + 1); if (requireNul && value[^1] != 0) throw new InvalidDataException("String lacks its required terminator."); return;
                 case WireKind.OptObjectId: if (cursor.Presence()) _ = ReadObjectId(ref cursor, false); return;
                 default:
+                    var start = cursor.Offset;
                     if (!cursor.Presence()) return;
                     var expectedSize = kind switch { WireKind.ArrI32 or WireKind.ArrU32 => 4, WireKind.ArrI64 or WireKind.ArrU64 => 8, WireKind.ArrScript => 12, WireKind.ArrQuest => 16, WireKind.ArrObjectId => 24, _ => throw new InvalidDataException("Unknown wire kind.") };
                     var size = cursor.I32(); var arrayCount = cursor.I32(); _ = cursor.I32();
                     if (size != expectedSize || arrayCount < 0 || arrayCount > MaxDecodedSectorBytes / expectedSize) throw new InvalidDataException("Array header violates the canonical bounded form.");
                     cursor.Skip(checked(size * arrayCount));
-                    var words = cursor.I32(); if (words < 2 || words > MaxDecodedSectorBytes / 4) throw new InvalidDataException("Array bitset word count is outside the supported bound.");
+                    var wordStart = cursor.Offset;
+                    // Pinned FILE reader rejects fread(size=0,count=1). An absent
+                    // array is distinct from a present array with empty contents.
+                    var words = cursor.I32(); if (words < 1 || words > MaxDecodedSectorBytes / 4) throw new InvalidDataException("Array bitset word count is outside the supported FILE bound.");
                     var bits = cursor.Bytes(checked(words * 4));
                     var actual = 0; for (var index = 0; index < words; index++) actual += BitOperations.PopCount(BinaryPrimitives.ReadUInt32LittleEndian(bits.Slice(index * 4, 4)));
                     if (actual != arrayCount) throw new InvalidDataException("Array bitset population does not match its element count.");
+                    arrays?.Add(new ArraySpan(field, start, cursor.Offset, size, arrayCount, wordStart, words));
                     return;
             }
         }
@@ -1339,6 +1381,7 @@ internal static class Program
         private readonly ReadOnlySpan<byte> _bytes; private int _offset;
         public Cursor(ReadOnlySpan<byte> bytes) { _bytes = bytes; _offset = 0; }
         public int Remaining => _bytes.Length - _offset; public bool AtEnd => _offset == _bytes.Length;
+        public int Offset => _offset;
         public short I16() { var value = BinaryPrimitives.ReadInt16LittleEndian(Bytes(2)); return value; }
         public int I32() { var value = BinaryPrimitives.ReadInt32LittleEndian(Bytes(4)); return value; }
         public long I64() { var value = BinaryPrimitives.ReadInt64LittleEndian(Bytes(8)); return value; }

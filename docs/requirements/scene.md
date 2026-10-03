@@ -8,6 +8,8 @@
 
 ## Требования
 
+Позднее исследование ARC-RES-015: [area inventory](../research/crash-site-area-inventory.md) учитывает 426 статических и 88 core mobile records, отдельные resource/placement gaps и cave sources; [area contract](../world/crash-site-area-contract.md) сохраняет flags/order/cache границы. Это не расширяет production five-only profile и не объявляет FR-SCENE-001..009 реализованными.
+
 <a id="fr-scene-001"></a>
 
 ### FR-SCENE-001 — Сцена учитывает каждый тип источника отдельно (`prealpha-core`)
