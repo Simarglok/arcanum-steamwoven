@@ -14,7 +14,7 @@ public static class DiagnosticWorldBounds
             foreach (var corner in new[] { new DiagnosticSectorPosition(0, 0), new(0, 63), new(63, 0), new(63, 63) })
             foreach (var action in new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk })
             foreach (var facing in Enumerable.Range(0, 8))
-            foreach (var frame in Enumerable.Range(0, action == ActorDiagnosticAction.Idle ? 15 : 8))
+            foreach (var frame in Enumerable.Range(0, actor.Profile.Resource(action).FramesPerGroup))
             {
                 var selected = actor.Select(DiagnosticActorMotion.ToPlacement(new(corner, facing, action), frame)).Current;
                 var left = Math.Min(selected.Destination.X, checked((int)selected.AnchorX - 4));

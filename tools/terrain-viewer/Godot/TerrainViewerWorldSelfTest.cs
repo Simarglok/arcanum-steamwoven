@@ -9,7 +9,7 @@ public static partial class TerrainViewerSelfTest
 {
     internal static SyntheticActorLoad WorldFixture()
     {
-        var fixture = SyntheticActorFixture.Create();
+        var fixture = SyntheticActorFixture.Create(human: true);
         var terrainKey = fixture.Result.Textures.Keys.Single();
         var terrain = TerrainScenePlan.CreateSynthetic(new(-2600, -100, 5200, 2800),
             [new(1, terrainKey, TerrainKind.Tile, 30, 32, 0, 200, 100, new(TerrainDiagnosticMode.EditorDiagnostic, 0, 0, 0))]);
@@ -62,7 +62,7 @@ public static partial class TerrainViewerSelfTest
         await app.WorldModalRoutingMatrixForSelfTestAsync();
         await app.WorldMouseSettingsMatrixForSelfTestAsync();
         var snapshot = app.GetSelfTestSnapshot();
-        if (app.WorldStateForSelfTest.Position != new DiagnosticSectorPosition(30,32) || snapshot.CacheCount != 190
+        if (app.WorldStateForSelfTest.Position != new DiagnosticSectorPosition(30,32) || snapshot.CacheCount != 61
             || snapshot.Actor?.AnchorX != 80 || snapshot.Actor.AnchorY != 1260
             || !snapshot.Hud.Contains("collision not evaluated", StringComparison.Ordinal))
             throw new InvalidOperationException("WORLD literal combined publication failed.");
@@ -95,7 +95,7 @@ public static partial class TerrainViewerSelfTest
         foreach (var size in new[] { new Vector2I(480,320), new(1280,800), new(800,600) })
         {
             viewport.Size = size; await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            if (app.WorldStateForSelfTest != actorBefore || app.GetSelfTestSnapshot().CacheCount != 190)
+            if (app.WorldStateForSelfTest != actorBefore || app.GetSelfTestSnapshot().CacheCount != 61)
                 throw new InvalidOperationException("WORLD resize mutated actor/cache.");
         }
         // Reach every declared sector corner through the actual motion/input
@@ -112,7 +112,7 @@ public static partial class TerrainViewerSelfTest
             var corner = app.GetSelfTestSnapshot();
             var bounds = fixture.Result.DiagnosticPlan!.WorldBounds;
             if (app.WorldStateForSelfTest.Position != new DiagnosticSectorPosition(x,y)
-                || app.WorldStateForSelfTest.Action != ActorDiagnosticAction.Idle || corner.CacheCount != 190
+                || app.WorldStateForSelfTest.Action != ActorDiagnosticAction.Idle || corner.CacheCount != 61
                 || corner.Actor!.Destination.X < bounds.X || corner.Actor.Destination.Y < bounds.Y
                 || corner.Actor.Destination.X + corner.Actor.Destination.Width > bounds.X + bounds.Width
                 || corner.Actor.Destination.Y + corner.Actor.Destination.Height > bounds.Y + bounds.Height)
@@ -135,15 +135,15 @@ public static partial class TerrainViewerSelfTest
         GD.Print("ARC-WORLD-001 sector corners/envelope actual app PASS; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
         app.PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result);
         var reloaded = app.GetSelfTestSnapshot();
-        if (reloaded.CreatedTextures != 380 || reloaded.DisposedTextures != 190 || reloaded.CacheCount != 190)
+        if (reloaded.CreatedTextures != 122 || reloaded.DisposedTextures != 61 || reloaded.CacheCount != 61)
             throw new InvalidOperationException("WORLD reload ownership failed.");
         app.PublishSyntheticFailureForSelfTest(TerrainViewerMode.WorldDiagnostic,new(TerrainViewerErrorCode.RenderFailure,Stage:TerrainViewerFailureStage.Upload));
-        if (app.GetSelfTestSnapshot().DisposedTextures != 380 || app.GetSelfTestSnapshot().CacheCount != 0)
+        if (app.GetSelfTestSnapshot().DisposedTextures != 122 || app.GetSelfTestSnapshot().CacheCount != 0)
             throw new InvalidOperationException("WORLD failure ownership failed.");
         app.ClearSyntheticForSelfTest(); viewport.QueueFree();
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         // Inject failures independently at each uploaded domain in the SAME app.
-        foreach (var failureAt in new[] { 1, 3, 8 })
+        foreach (var failureAt in new[] { 1, 3, 8, 33, 61 })
         {
             var childViewport = new SubViewport { Size = new(800,600) };
             var failing = new TerrainViewerApp { SelfTestBootstrap = true }; failing.SetProcess(false);
@@ -156,6 +156,6 @@ public static partial class TerrainViewerSelfTest
                 throw new InvalidOperationException("WORLD domain upload rollback failed.");
             childViewport.QueueFree(); await host.ToSignal(host.GetTree(),SceneTree.SignalName.ProcessFrame);
         }
-        GD.Print("ARC-WORLD-001 integrated synthetic app PASS five statics/184 actor/control matrix/resize/domain rollback; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
+        GD.Print("ARC-WORLD-001 integrated synthetic app PASS five statics/55 human actor/control matrix/resize/domain rollback; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
     }
 }

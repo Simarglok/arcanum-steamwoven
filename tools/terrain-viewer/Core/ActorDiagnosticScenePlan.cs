@@ -21,18 +21,24 @@ public sealed record ActorDiagnosticFrame(ActorDiagnosticTextureKey TextureKey, 
 /// <summary>Public production planning seam. Its destination deliberately excludes ART frame offsets.</summary>
 public sealed record ActorDiagnosticDrawCommand(ActorDiagnosticTextureKey TextureKey, TerrainRect Destination, long AnchorX, long AnchorY,
     ActorDiagnosticAction Action, int RequestedFacing, int PhysicalGroup, bool FlipX, int SourceOffsetX, int SourceOffsetY,
-    int EffectiveOffsetX, int EffectiveOffsetY, int Frame, int FrameCount, int RawFramesPerSecond);
+    int EffectiveOffsetX, int EffectiveOffsetY, int Frame, int FrameCount, int RawFramesPerSecond)
+{
+    public ActorDiagnosticProfileId ProfileId { get; init; } = ActorDiagnosticProfileId.MonsterRegression;
+    public int SourceFacing { get; init; }
+}
 
 public sealed class ActorDiagnosticScenePlan
 {
     private ActorDiagnosticScenePlan(IReadOnlyDictionary<(ActorDiagnosticAction Action, int Group, int Frame), ActorDiagnosticFrame> catalog,
-        ActorDiagnosticDrawCommand current, IReadOnlyList<TerrainRect> admittedBounds)
+        ActorDiagnosticDrawCommand current, IReadOnlyList<TerrainRect> admittedBounds, ActorDiagnosticProfile profile)
     {
+        Profile = profile;
         Catalog = catalog;
         Current = current;
         AdmittedBounds = admittedBounds;
     }
 
+    public ActorDiagnosticProfile Profile { get; }
     public IReadOnlyDictionary<(ActorDiagnosticAction Action, int Group, int Frame), ActorDiagnosticFrame> Catalog { get; }
     public ActorDiagnosticDrawCommand Current { get; }
     /// <summary>
@@ -46,68 +52,74 @@ public sealed class ActorDiagnosticScenePlan
     {
         ArgumentNullException.ThrowIfNull(input);
         ValidateSelectionInput(input);
-        var facing = MapFacing(input.Facing);
-        if (!Catalog.TryGetValue((input.Action, facing.Group, input.Frame), out var selected))
+        var facing = Profile.Facing(input.Action, input.Facing);
+        if (!Catalog.TryGetValue((input.Action, facing.PhysicalGroup, input.Frame), out var selected))
             throw Failure(TerrainViewerErrorCode.ActorFrame);
         var selectedInput = input with { Width = selected.Width, Height = selected.Height, HotX = selected.HotX, HotY = selected.HotY,
             ArtOffsetX = selected.ArtOffsetX, ArtOffsetY = selected.ArtOffsetY };
-        return new ActorDiagnosticScenePlan(Catalog, Place(selectedInput, selected, facing), AdmittedBounds);
+        return new ActorDiagnosticScenePlan(Catalog, Place(selectedInput, selected, facing, Profile), AdmittedBounds, Profile);
     }
 
-    public static ActorDiagnosticScenePlan CreateSynthetic(ActorDiagnosticPlacementInput input, IEnumerable<ActorDiagnosticFrame> frames)
+    public static ActorDiagnosticScenePlan CreateSynthetic(ActorDiagnosticPlacementInput input, IEnumerable<ActorDiagnosticFrame> frames,
+        ActorDiagnosticProfile? profile = null)
     {
+        profile ??= ActorDiagnosticProfile.MonsterRegression;
         ArgumentNullException.ThrowIfNull(input);
         ArgumentNullException.ThrowIfNull(frames);
         ValidateSelectionInput(input);
         var catalog = frames.ToArray();
         if (catalog.Length == 0) throw Failure(TerrainViewerErrorCode.ActorMetadata);
-        var facing = MapFacing(input.Facing);
+        var facing = profile.Facing(input.Action, input.Facing);
         // This is a fixed two-resource profile, not a general actor catalogue.
         // Validate each descriptor before grouping so a substituted resource,
         // selector, action, timing, or frame range never becomes a plausible
         // missing-frame result later in selection.
-        foreach (var item in catalog) ValidateFixedProfileFrame(item);
-        var grouped = catalog.GroupBy(frame => (Action: ActionFor(frame.TextureKey.Selector), frame.TextureKey.PhysicalGroup, frame.TextureKey.Frame)).ToArray();
+        foreach (var item in catalog) profile.ValidateFrame(item);
+        var grouped = catalog.GroupBy(frame => (Action: profile.ActionFor(frame.TextureKey.Selector), frame.TextureKey.PhysicalGroup, frame.TextureKey.Frame)).ToArray();
         if (grouped.Any(group => group.Count() != 1)) throw Failure(TerrainViewerErrorCode.ActorMetadata);
         var lookup = grouped.ToDictionary(group => group.Key, group => group.Single());
-        if (!lookup.TryGetValue((input.Action, facing.Group, input.Frame), out var selected)) throw Failure(TerrainViewerErrorCode.ActorFrame);
-        var current = Place(input, selected, facing);
+        if (!lookup.TryGetValue((input.Action, facing.PhysicalGroup, input.Frame), out var selected)) throw Failure(TerrainViewerErrorCode.ActorFrame);
+        var current = Place(input, selected, facing, profile);
         var all = new List<TerrainRect>();
         foreach (var item in lookup.Values)
         {
 
-            // Apply this frame at the unchanged caller anchor. Groups 5..7
-            // have both an unmirrored request and a reflected 1..3 request;
-            // both rectangles participate in stable diagnostic fit bounds.
-            var frameInput = input with { Action = ActionFor(item.TextureKey.Selector), Frame = item.TextureKey.Frame,
-                Facing = item.TextureKey.PhysicalGroup, Width = item.Width, Height = item.Height, HotX = item.HotX, HotY = item.HotY,
-                ArtOffsetX = item.ArtOffsetX, ArtOffsetY = item.ArtOffsetY };
-            all.Add(VisibleGuideBounds(Place(frameInput, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, false))));
-            var mirroredRequest = item.TextureKey.PhysicalGroup switch { 7 => 1, 6 => 2, 5 => 3, _ => -1 };
-            if (mirroredRequest >= 0)
-                all.Add(VisibleGuideBounds(Place(frameInput with { Facing = mirroredRequest }, item, new ActorPhysicalFacing(item.TextureKey.PhysicalGroup, true))));
+            var action = profile.ActionFor(item.TextureKey.Selector);
+            foreach (var slot in Enumerable.Range(0, 8))
+            {
+                var binding = profile.Facing(action, slot);
+                if (binding.PhysicalGroup != item.TextureKey.PhysicalGroup) continue;
+                var frameInput = input with { Action = action, Frame = item.TextureKey.Frame, Facing = slot,
+                    Width = item.Width, Height = item.Height, HotX = item.HotX, HotY = item.HotY,
+                    ArtOffsetX = item.ArtOffsetX, ArtOffsetY = item.ArtOffsetY };
+                all.Add(VisibleGuideBounds(Place(frameInput, item, binding, profile)));
+            }
         }
-        return new ActorDiagnosticScenePlan(lookup, current, Array.AsReadOnly(all.ToArray()));
+        return new ActorDiagnosticScenePlan(lookup, current, Array.AsReadOnly(all.ToArray()), profile);
     }
 
-    public static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame)
+    public static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame,
+        ActorDiagnosticProfile? profile = null)
+    {
+        profile ??= ActorDiagnosticProfile.MonsterRegression;
+        ArgumentNullException.ThrowIfNull(input);
+        ValidateSelectionInput(input);
+        profile.ValidateFrame(frame);
+        if (profile.ActionFor(frame.TextureKey.Selector) != input.Action)
+            throw Failure(TerrainViewerErrorCode.ActorMetadata);
+        return Place(input, frame, profile.Facing(input.Action, input.Facing), profile);
+    }
+
+    private static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame,
+        ActorDiagnosticFacing facing, ActorDiagnosticProfile profile)
     {
         ArgumentNullException.ThrowIfNull(input);
         ValidateSelectionInput(input);
-        ValidateFixedProfileFrame(frame);
-        if (ActionFor(frame.TextureKey.Selector) != input.Action)
+        profile.ValidateFrame(frame);
+        if (profile.ActionFor(frame.TextureKey.Selector) != input.Action || facing.PhysicalGroup != frame.TextureKey.PhysicalGroup)
             throw Failure(TerrainViewerErrorCode.ActorMetadata);
-        return Place(input, frame, MapFacing(input.Facing));
-    }
-
-    private static ActorDiagnosticDrawCommand Place(ActorDiagnosticPlacementInput input, ActorDiagnosticFrame frame, ActorPhysicalFacing facing)
-    {
-        ArgumentNullException.ThrowIfNull(input);
-        ValidateSelectionInput(input);
-        ValidateFixedProfileFrame(frame);
-        if (ActionFor(frame.TextureKey.Selector) != input.Action || facing.Group != frame.TextureKey.PhysicalGroup)
-            throw Failure(TerrainViewerErrorCode.ActorMetadata);
-        if (input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Width != frame.Width || input.Height != frame.Height ||
+        if (input.Frame < 0 || input.Frame >= frame.FramesPerAction || input.Frame != frame.TextureKey.Frame
+            || input.Width != frame.Width || input.Height != frame.Height ||
             input.Width <= 0 || input.Height <= 0)
             throw Failure(TerrainViewerErrorCode.ActorFrame);
         try
@@ -132,8 +144,9 @@ public sealed class ActorDiagnosticScenePlan
             var bottom = checked((int)bottomWide);
             return new ActorDiagnosticDrawCommand(frame.TextureKey, new TerrainRect(narrowLeft, narrowTop,
                 checked(right - narrowLeft), checked(bottom - narrowTop)),
-                anchorX, anchorY, input.Action, input.Facing, facing.Group, facing.FlipX, frame.ArtOffsetX, frame.ArtOffsetY,
-                effectiveOffsetX, frame.ArtOffsetY, input.Frame, frame.FramesPerAction, frame.RawFramesPerSecond);
+                anchorX, anchorY, input.Action, input.Facing, facing.PhysicalGroup, facing.FlipX, frame.ArtOffsetX, frame.ArtOffsetY,
+                effectiveOffsetX, frame.ArtOffsetY, input.Frame, frame.FramesPerAction, frame.RawFramesPerSecond)
+                { ProfileId = profile.Id, SourceFacing = facing.SourceFacing };
         }
         catch (OverflowException)
         {
@@ -163,26 +176,6 @@ public sealed class ActorDiagnosticScenePlan
         _ = MapFacing(input.Facing);
     }
 
-    /// <summary>
-    /// Validates the complete owner-authorized descriptor profile. Select,
-    /// CreateSynthetic and direct Place all reach this same closed seam; ART
-    /// bytes do not carry selector metadata, so selector/resource binding is
-    /// intentionally validated here rather than fabricated in a fixture.
-    /// </summary>
-    private static void ValidateFixedProfileFrame(ActorDiagnosticFrame frame)
-    {
-        var action = ActionFor(frame.TextureKey.Selector);
-        var expectedResource = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleResourceOrdinal : ActorDiagnosticSource.WalkResourceOrdinal;
-        var expectedSelector = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleSelector : ActorDiagnosticSource.WalkSelector;
-        var expectedFrames = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFrames : ActorDiagnosticSource.WalkFrames;
-        var expectedFps = action == ActorDiagnosticAction.Idle ? ActorDiagnosticSource.IdleFps : ActorDiagnosticSource.WalkFps;
-        if (frame.TextureKey.ResourceOrdinal != expectedResource || frame.TextureKey.Selector != expectedSelector
-            || frame.TextureKey.Palette != ActorDiagnosticSource.Palette || frame.TextureKey.PhysicalGroup < 0 || frame.TextureKey.PhysicalGroup >= ActorDiagnosticSource.PhysicalGroups
-            || frame.TextureKey.Frame < 0 || frame.TextureKey.Frame >= expectedFrames || frame.FramesPerAction != expectedFrames || frame.RawFramesPerSecond != expectedFps
-            || frame.Width <= 0 || frame.Height <= 0)
-            throw Failure(TerrainViewerErrorCode.ActorMetadata);
-    }
-
     private static TerrainRect VisibleGuideBounds(ActorDiagnosticDrawCommand command)
     {
         try
@@ -201,14 +194,6 @@ public sealed class ActorDiagnosticScenePlan
             throw Failure(TerrainViewerErrorCode.ActorPlan);
         }
     }
-
-    // Synthetic catalogues use the documented selector action bit and production keeps action explicit.
-    private static ActorDiagnosticAction ActionFor(uint selector) => selector switch
-    {
-        ActorDiagnosticSource.IdleSelector => ActorDiagnosticAction.Idle,
-        ActorDiagnosticSource.WalkSelector => ActorDiagnosticAction.Walk,
-        _ => throw Failure(TerrainViewerErrorCode.ActorMetadata)
-    };
     private static TerrainViewerException Failure(TerrainViewerErrorCode code) => new(new TerrainViewerError(code, Stage: code switch
     {
         TerrainViewerErrorCode.ActorFacing => TerrainViewerFailureStage.ActorFacing,

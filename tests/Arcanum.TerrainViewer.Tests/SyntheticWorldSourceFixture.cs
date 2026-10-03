@@ -18,9 +18,14 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
     internal string ResourcePath { get; }
     internal string ActorPath { get; }
     internal string PrototypesPath { get; }
+    internal bool Human { get; }
+    internal bool AuthenticateHumanMetadata { get; }
     internal Admission Identity { get; }
-    internal SyntheticWorldSourceFixture(bool corruptActor = false, bool corruptStatic = false)
+    internal SyntheticWorldSourceFixture(bool corruptActor = false, bool corruptStatic = false, bool human = false,
+        Func<byte[],byte[]>? humanIdleTransform = null, bool moveHumanIdle = false, bool authenticateHumanMetadata = false)
     {
+        Human = human;
+        AuthenticateHumanMetadata = authenticateHumanMetadata;
         Directory.CreateDirectory(_root);
         ModulePath = Path.Combine(_root, "module.dat"); ResourcePath = Path.Combine(_root, "terrain.dat");
         ActorPath = Path.Combine(_root, "actor.dat"); PrototypesPath = Path.Combine(_root, "prototypes");
@@ -39,8 +44,10 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
         terrain[4754] = ("ART/FACADE/ZERO.ART", Art(1,1,8,0));
         File.WriteAllBytes(ResourcePath, Dat(terrain));
         var actor = Enumerable.Range(0, 4755).Select(i => ($"f{i}", Array.Empty<byte>())).ToArray();
-        actor[4753] = ("idle.art", corruptActor ? [1] : Art(8,15,8,1));
-        actor[4754] = ("walk.art", Art(8,8,15,1));
+        actor[human ? 2667 : 4753] = ("idle.art", corruptActor ? [1] : Art(8,human ? 1 : 15,human ? 6 : 8,human ? 0 : 1));
+        actor[human ? 2668 : 4754] = ("walk.art", Art(8,human ? 10 : 8,human ? 17 : 15,human ? 0 : 1));
+        if (human && humanIdleTransform is not null) actor[2667] = ("idle.art", humanIdleTransform(actor[2667].Item2));
+        if (human && moveHumanIdle) { actor[2670] = actor[2667]; actor[2667] = ("empty",Array.Empty<byte>()); }
         File.WriteAllBytes(ActorPath, Dat(actor));
         Identity = new Admission(this);
     }
@@ -65,6 +72,11 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
         internal override InputFingerprint Module => _module;
         internal override InputFingerprint Resource => _resource;
         internal override InputFingerprint ActorResource => _actor;
+        // Only the admitted identity/metadata oracle is simulated. Parsing,
+        // source selection, checked retention, planning and disposal are real.
+        internal override ActorDiagnosticProfile ActorProfile(TerrainViewerMode mode) => _fixture.Human
+            ? ActorDiagnosticProfile.HumanFixed : ActorDiagnosticProfile.MonsterRegression;
+        internal override bool AuthenticateOriginalActorMetadata => _fixture.AuthenticateHumanMetadata;
         internal override InputFingerprint Prototypes => new(0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
         internal override TerrainSectorSelector Selector => new(SectorPath, "fixture", 0,0,1,0,0,64,64);
         internal override bool AcceptCensus(int tiles, int facades, int recovered, int lookups) => (tiles,facades,recovered,lookups) == (3033,1063,0,0);

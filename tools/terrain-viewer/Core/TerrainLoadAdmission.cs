@@ -16,6 +16,8 @@ internal class TerrainLoadAdmission
     internal virtual InputFingerprint Resource => new(CrashSiteProfile.ResourceSize, CrashSiteProfile.ResourceSha256);
     internal virtual InputFingerprint ActorResource => new(CrashSiteProfile.ActorResourceSize, CrashSiteProfile.ActorResourceSha256);
     internal virtual InputFingerprint Prototypes => new(CrashSiteProfile.ActorPrototypeAggregateSize, CrashSiteProfile.ActorPrototypeAggregateSha256);
+    internal virtual ActorDiagnosticProfile ActorProfile(TerrainViewerMode mode) => ActorDiagnosticProfile.ForMode(mode);
+    internal virtual bool AuthenticateOriginalActorMetadata => true;
     internal virtual TerrainSectorSelector Selector => CrashSiteProfile.CreateSelector();
     internal virtual DatArchive OpenArchive(string path) => DatArchive.Open(path,
         new DatReaderOptions { MaxArchiveBytes = uint.MaxValue, MaxStoredEntryBytes = 1024 * 1024, MaxDecodedEntryBytes = 1024 * 1024 });
@@ -36,9 +38,10 @@ internal sealed record TerrainLoadBudget(int Terrain = 4096, int Statics = 5, in
             || Total is < 0 or > 4285 || Bytes is < 0 or > 268435456)
             throw new ArgumentOutOfRangeException(nameof(TerrainLoadBudget));
     }
-    internal long Add(long bytes, int total, int domainCount, int domainLimit, int width, int height, TerrainViewerMode mode)
+    internal long Add(long bytes, int total, int domainCount, int domainLimit, int width, int height, TerrainViewerMode mode,
+        ActorDiagnosticProfile? profile = null)
     {
-        var result = TerrainCachePolicy.AddCheckedFrame(bytes, total, width, height, mode);
+        var result = TerrainCachePolicy.AddCheckedFrame(bytes, total, width, height, mode, profile);
         if (domainCount >= domainLimit || total >= Total || result > Bytes)
             throw new TerrainViewerException(new(TerrainViewerErrorCode.ResourceLimit));
         return result;

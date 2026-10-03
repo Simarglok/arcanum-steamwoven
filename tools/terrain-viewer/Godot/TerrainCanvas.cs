@@ -10,6 +10,7 @@ public partial class TerrainCanvas : Node2D
     private ActorDiagnosticScenePlan? _actorPlan;
     private TerrainTextureCache? _textures;
     private bool _showStatics = true;
+    private bool _showActor = true;
 
     public TerrainCanvas()
     {
@@ -117,6 +118,12 @@ public partial class TerrainCanvas : Node2D
         QueueRedraw();
     }
 
+    public void SetActorVisibilityForReadback(bool visible)
+    {
+        _showActor = visible;
+        QueueRedraw();
+    }
+
     public override void _Draw()
     {
         if (_plan is null || _textures is null) return;
@@ -141,7 +148,7 @@ public partial class TerrainCanvas : Node2D
 
     private void DrawActor()
     {
-        if (_actorPlan is not null && _textures is not null)
+        if (_showActor && _actorPlan is not null && _textures is not null)
         {
             var actor = _actorPlan.Current;
             if (_textures.TryGet(actor.TextureKey, out var texture))

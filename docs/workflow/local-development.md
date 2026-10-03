@@ -76,6 +76,26 @@ The three existing Gamepad, Display and Terrain `validate-macos.sh` endpoints re
 
 The bounded sampler observes baseline/periodic/final destination free bytes and isolated per-export TMPDIR allocated blocks; it always stops/joins. `evidence/export-observation.json` (`arcanum-export-observation-v1`) is frozen BEFORE every writer hashes evidence and bound separately as `exportBudget.observation`. Free-space drops and output bytes are never temporary usage. Production Godot/.NET caches are not fully isolated by TMPDIR: observations therefore say `temporaryMeasurementStatus=unavailable`, `observedTemporaryBytes=null`, while preserving real sampled filesystem low water and coverage limitations. Compatibility `temporaryLowWaterBytes=0` means unavailable here, NOT a measured zero. Only successful qualified fully attributed observations with candidate/manifest/observation provenance update history; failed finalization/publication cannot advance it. Legacy v2 remains read-only compatible, and its old temporary estimate is never trusted observed history. ART remains next-export-only guidance, not rebuilt here.
 
+## Closed human WORLD candidate
+
+Terrain additionally supports `ARC-GPAD-004` and `ARC-RENDER-006` in the same
+ignored world-builds root and v2 schema. Explicit task selection permits valid
+historical currents to coexist; every supported sibling is still inspected and
+unsafe/duplicate same-task/wrong-head authorities fail closed. RENDER006 ordinary
+WORLD uses HumanFixed, while standalone actor preview remains MonsterRegression.
+
+Use `ARCANUM_TERRAIN_EXPORT_TASK=ARC-RENDER-006` with the existing leased endpoint.
+The inherited thirteen terrain/WORLD/GPAD gates plus `human-metadata`,
+`source-human-original`, `exported-human-original` must all PASS. The new three
+structured reports bind task/head/host/profile/original identity and actual human
+graphical coverage, not only historical WORLD marker text. Keep independent
+original-pixel oracle local/ignored; never ship it in a manifest or package.
+No ordinary input automation is added. After selecting the immutable candidate,
+`launch terrain --mode world-diagnostic --dry-run` and a real ordinary launch
+are separate from smoke; require actual Idle/Walk observation and unchanged
+seal/signature outside the sealed app. Registration is still not acceptance,
+review, publication or owner merge.
+
 ## Boundaries
 
 A local generated/exported artifact is never implicitly accepted, merged, or published. Real artifact deletion requires a separately accepted fully proven plan; this candidate intentionally performs no deletion. Human review, original-data checks, graphical inspection, physical controller tests, Bluetooth reconnect/drift, all axes/settings, exhaustive stability, and original parity remain separate evidence.

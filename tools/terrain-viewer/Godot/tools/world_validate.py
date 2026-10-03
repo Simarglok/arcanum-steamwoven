@@ -34,7 +34,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--candidate-root", type=Path, required=True)
     parser.add_argument("--app", type=Path)
-    parser.add_argument("--kind", choices=("original", "synthetic", "persistence"), default="original")
+    parser.add_argument("--kind", choices=("original", "synthetic", "persistence", "human", "human-metadata"), default="original")
     parser.add_argument("--headless", action="store_true")
     parser.add_argument("--timeout", type=int, default=60)
     args = parser.parse_args()
@@ -57,13 +57,34 @@ def main() -> int:
     head = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"], text=True, capture_output=True, check=True).stdout.strip()
     began = datetime.now(timezone.utc).isoformat(); start = time.monotonic()
     stage_results = []
-    if args.kind == "original":
+    if args.kind in ("original", "human", "human-metadata"):
         if args.headless:
             raise ValueError("original readback requires graphical rendering")
+        if args.kind != "original":
+            reference = env.get("RENDER006_HUMAN_ORACLE")
+            if not reference or not config.regular_file(Path(reference)).is_file():
+                raise ValueError("explicit independent private human reference required")
+            env["RENDER006_CANDIDATE"] = head
+            env["RENDER006_HOST"] = "exported" if args.app else "source"
         argv = prefix + ["--", "--native-smoke", *launch.terrain_arguments(config.load_config().get("inputs", {}), "world-diagnostic")]
         code, output = run_child(argv, env, args.timeout)
         passed = code == 0 and any(line.startswith("ARC-WORLD-001 native-smoke PASS ")
                                   and "fingerprints=immutable rendered=PASS" in line for line in output.splitlines())
+        if args.kind != "original":
+            from tools.local_dev.human_validation import validate_report
+            reports = [json.loads(line.removeprefix("ARC-RENDER-006 human-readback "))
+                       for line in output.splitlines() if line.startswith("ARC-RENDER-006 human-readback ")]
+            if len(reports) != 1:
+                passed = False
+            else:
+                human = reports[0]
+                validate_report(human, head, env["RENDER006_HOST"], "human")
+                human.update(kind=args.kind, outcome="PASS" if passed else "FAIL", exitCode=code,
+                             startedAt=began, elapsedSeconds=round(time.monotonic()-start,3))
+                validate_report(human, head, env["RENDER006_HOST"], args.kind)
+                print(json.dumps(human, sort_keys=True))
+                owned.cleanup()
+                return 0 if passed else 1
     elif args.kind == "synthetic":
         code, output = run_child(prefix + ["--", "--self-test"], env, args.timeout)
         passed = code == 0 and "ARC-WORLD-001 self-test PASS" in output
@@ -109,7 +130,7 @@ def main() -> int:
                "elapsedSeconds": round(time.monotonic() - start, 3), "exitCode": code,
                "graphical": not args.headless, "outcome": "PASS" if passed else "FAIL",
                "stages": stage_results,
-               "diagnostics": [line for line in output.splitlines() if line.startswith(("ARC-GPAD-004", "ARC-WORLD-001", "ARC-RENDER-003 self-test FAIL", "ARC-RENDER-004 native-smoke failure", "ARC-RENDER-004 native-smoke readback", "ARC-RENDER-005 actor native raster"))]}
+               "diagnostics": [line for line in output.splitlines() if line.startswith(("ARC-RENDER-006", "ARC-GPAD-004", "ARC-WORLD-001", "ARC-RENDER-003 self-test FAIL", "ARC-RENDER-004 native-smoke failure", "ARC-RENDER-004 native-smoke readback", "ARC-RENDER-005 actor native raster"))]}
     print(json.dumps(summary, sort_keys=True))
     owned.cleanup()
     return 0 if passed else 1

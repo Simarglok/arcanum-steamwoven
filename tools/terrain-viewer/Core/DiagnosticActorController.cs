@@ -7,7 +7,11 @@ public sealed class DiagnosticActorController
 {
     private readonly DiagnosticActorMotion _motion = new();
     private AnimationTimeline _timeline = null!;
-    public DiagnosticActorController() => Reset();
+    public DiagnosticActorController(ActorDiagnosticProfile? profile = null)
+    { Profile = profile ?? ActorDiagnosticProfile.MonsterRegression; Reset(); }
+    public ActorDiagnosticProfile Profile { get; private set; }
+    public void Configure(ActorDiagnosticProfile profile)
+    { ArgumentNullException.ThrowIfNull(profile); Profile = profile; Reset(); }
     public DiagnosticActorState State { get; private set; } = null!;
     public int CurrentFrame => _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
@@ -42,12 +46,11 @@ public sealed class DiagnosticActorController
         return step;
     }
 
-    private static AnimationTimeline Timeline(ActorDiagnosticAction action)
+    private AnimationTimeline Timeline(ActorDiagnosticAction action)
     {
-        var idle = action == ActorDiagnosticAction.Idle;
-        var timeline = new AnimationTimeline(idle ? ActorDiagnosticSource.IdleFrames : ActorDiagnosticSource.WalkFrames,
-            idle ? ActorDiagnosticSource.IdleFps : ActorDiagnosticSource.WalkFps);
-        timeline.SetManualFramesPerSecond(idle ? DiagnosticWorldPolicy.IdleFramesPerSecond : DiagnosticWorldPolicy.WalkFramesPerSecond);
+        var descriptor = Profile.Resource(action);
+        var timeline = new AnimationTimeline(descriptor.FramesPerGroup, descriptor.RawFramesPerSecond);
+        if (Profile.Clock == ActorDiagnosticClock.LegacyOverride) timeline.SetManualFramesPerSecond(descriptor.DiagnosticFramesPerSecond);
         timeline.SetMode(PlaybackMode.Loop); timeline.Play();
         return timeline;
     }

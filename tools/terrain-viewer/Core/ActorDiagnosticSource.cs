@@ -2,13 +2,10 @@ using Arcanum.Data;
 
 namespace Arcanum.TerrainViewer.Core;
 
-/// <summary>
-/// Bounded reader for the one owner-authorized diagnostic profile.  It accepts no
-/// names or general actor records: resource ordinals and ART metadata are the
-/// complete source boundary exposed to the viewer.
-/// </summary>
+/// <summary>Closed numeric actor catalogues; no names, appearance discovery or general actor records.</summary>
 public static class ActorDiagnosticSource
 {
+    // Historical standalone preview constants retained for compatibility only.
     public const int ModuleOrdinal = 643;
     public const uint BaseSelector = 0xc9001810;
     public const uint IdleSelector = 0xc9001810;
@@ -25,11 +22,6 @@ public static class ActorDiagnosticSource
     public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input)
         => Create(module, resource, input, 0, 0, CancellationToken.None);
 
-    /// <summary>
-    /// Decodes the fixed catalogue while accounting every RGBA frame before it
-    /// is retained.  The caller passes terrain's already-retained count/bytes
-    /// so actor mode shares the unchanged aggregate cap.
-    /// </summary>
     public static ActorDiagnosticLoad Create(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
         int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, Action<int>? retainedFrameCheckpoint = null,
         TerrainViewerMode mode = TerrainViewerMode.ActorDiagnostic)
@@ -38,8 +30,10 @@ public static class ActorDiagnosticSource
 
     internal static ActorDiagnosticLoad CreateWithBudget(DatArchive module, DatArchive resource, ActorDiagnosticPlacementInput input,
         int alreadyRetainedCount, long alreadyCheckedRgbaBytes, CancellationToken cancellationToken, TerrainLoadBudget budget,
-        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
+        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode,
+        ActorDiagnosticProfile? profile = null, bool authenticateOriginalMetadata = true)
     {
+        profile ??= ActorDiagnosticProfile.ForMode(mode);
         ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(resource);
         if (input is null || input.MapX is null || input.MapY is null || input.CameraOriginX is null || input.CameraOriginY is null
@@ -48,67 +42,68 @@ public static class ActorDiagnosticSource
         if (input.RenderBranch != ActorDiagnosticRenderBranch.NormalUncached || input.ScalePercent != 100 || input.Shrunk != false)
             throw Failure(TerrainViewerErrorCode.ActorRenderState, TerrainViewerFailureStage.ActorRenderState);
         if (!Enum.IsDefined(input.Action)) throw Failure(TerrainViewerErrorCode.ActorInput, TerrainViewerFailureStage.ActorInput);
-        if (module.Entries.Count(entry => entry.Ordinal == ModuleOrdinal) != 1)
+        var facing = profile.Facing(input.Action, input.Facing);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (profile.ModuleOrdinal is int moduleOrdinal && module.Entries.Count(entry => entry.Ordinal == moduleOrdinal) != 1)
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-        var catalog = new List<ActorDiagnosticFrame>(PhysicalGroups * (IdleFrames + WalkFrames));
+        var catalog = new List<ActorDiagnosticFrame>(profile.DistinctKeys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
-        var checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Idle, IdleSelector, IdleResourceOrdinal, IdleFps, IdleFrames,
+        var checkedRgbaBytes = DecodeAction(resource, profile.Idle, profile, authenticateOriginalMetadata,
             catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
-        checkedRgbaBytes = DecodeAction(resource, ActorDiagnosticAction.Walk, WalkSelector, WalkResourceOrdinal, WalkFps, WalkFrames,
+        checkedRgbaBytes = DecodeAction(resource, profile.Walk, profile, authenticateOriginalMetadata,
             catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
-        if (textures.Count != TerrainCachePolicy.MaxActorDistinctKeys || catalog.Count != TerrainCachePolicy.MaxActorDistinctKeys)
+        if (textures.Count != profile.DistinctKeys || catalog.Count != profile.DistinctKeys
+            || (authenticateOriginalMetadata && profile.OriginalRgbaBytes is long expectedBytes && checkedRgbaBytes - alreadyCheckedRgbaBytes != expectedBytes))
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-        ActorPhysicalFacing physical;
-        try { physical = ActorDiagnosticScenePlan.MapFacing(input.Facing); }
-        catch (TerrainViewerException) { throw; }
-        var selected = catalog.SingleOrDefault(frame => frame.TextureKey.PhysicalGroup == physical.Group && frame.TextureKey.Frame == input.Frame
-            && (input.Action == ActorDiagnosticAction.Walk ? frame.TextureKey.Selector == WalkSelector : frame.TextureKey.Selector == IdleSelector));
+        var selected = catalog.SingleOrDefault(frame => frame.TextureKey.PhysicalGroup == facing.PhysicalGroup && frame.TextureKey.Frame == input.Frame
+            && frame.TextureKey.Selector == profile.Resource(input.Action).Selector);
         if (selected is null) throw Failure(TerrainViewerErrorCode.ActorFrame, TerrainViewerFailureStage.ActorFrame);
         var plannedInput = input with { Width = selected.Width, Height = selected.Height, HotX = selected.HotX, HotY = selected.HotY,
             ArtOffsetX = selected.ArtOffsetX, ArtOffsetY = selected.ArtOffsetY };
-        var plan = ActorDiagnosticScenePlan.CreateSynthetic(plannedInput, catalog);
+        var plan = ActorDiagnosticScenePlan.CreateSynthetic(plannedInput, catalog, profile);
         return new ActorDiagnosticLoad(plan, textures, checkedRgbaBytes);
     }
 
-    private static long DecodeAction(DatArchive resource, ActorDiagnosticAction action, uint selector, int ordinal, int fps, int expectedFrames,
+    private static long DecodeAction(DatArchive resource, ActorDiagnosticResource descriptor, ActorDiagnosticProfile profile, bool authenticateOriginalMetadata,
         ICollection<ActorDiagnosticFrame> catalog, IDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> textures, int alreadyRetainedCount,
         long checkedRgbaBytes, CancellationToken cancellationToken, TerrainLoadBudget budget, Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
     {
-        var entries = resource.Entries.Where(candidate => candidate.Ordinal == ordinal).ToArray();
+        var entries = resource.Entries.Where(candidate => candidate.Ordinal == descriptor.Ordinal).ToArray();
         if (entries.Length != 1) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-        var entry = entries[0];
         try
         {
-            var bytes = resource.ReadEntry(entry);
-            var metadata = ArtDecoder.Inspect(bytes, new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = PhysicalGroups * IdleFrames });
-            if (metadata.Header.PhysicalGroupCount != PhysicalGroups || metadata.Header.FramesPerGroup != expectedFrames || metadata.Header.FramesPerSecond != fps ||
-                metadata.Header.PalettePresenceWords.Count <= Palette || metadata.Header.PalettePresenceWords[Palette] == 0)
+            cancellationToken.ThrowIfCancellationRequested();
+            var bytes = resource.ReadEntry(entries[0]);
+            var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = descriptor.PhysicalGroups * descriptor.FramesPerGroup };
+            var metadata = ArtDecoder.Inspect(bytes, options);
+            if (metadata.Header.PhysicalGroupCount != descriptor.PhysicalGroups || metadata.Header.FramesPerGroup != descriptor.FramesPerGroup
+                || metadata.Header.FramesPerSecond != descriptor.RawFramesPerSecond || metadata.Header.FramesPerSecond <= 0
+                || metadata.Header.PalettePresenceWords.Count <= descriptor.Palette || metadata.Header.PalettePresenceWords[descriptor.Palette] == 0)
                 throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-            for (var group = 0; group < PhysicalGroups; group++)
+            if (authenticateOriginalMetadata) profile.ValidateOriginalMetadata(descriptor.Action, metadata);
+            foreach (var group in profile.UsedGroups(descriptor.Action))
+            for (var frame = 0; frame < descriptor.FramesPerGroup; frame++)
             {
-                for (var frame = 0; frame < expectedFrames; frame++)
+                cancellationToken.ThrowIfCancellationRequested();
+                var key = new ActorDiagnosticTextureKey(descriptor.Ordinal, descriptor.Selector, group, frame, descriptor.Palette);
+                if (textures.ContainsKey(key)) continue;
+                var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frame, descriptor.Palette), options);
+                if (decoded.EffectivePaletteSlot != descriptor.Palette) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
+                var geometry = decoded.Frame;
+                // Decoder storage is transient. Account the exact unique key and
+                // checked RGBA BEFORE retaining/copying into the load catalogue.
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, frame, Palette), new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = PhysicalGroups * IdleFrames });
-                    if (decoded.EffectivePaletteSlot != Palette) throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
-                    var key = new ActorDiagnosticTextureKey(ordinal, selector, group, frame, Palette);
-                    var geometry = decoded.Frame;
-                    catalog.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, geometry.HotX, geometry.HotY, geometry.OffsetX, geometry.OffsetY, expectedFrames, fps));
-                    // The decoder's transient frame is not scene state.  Check
-                    // the shared terrain+actor cap before copying/retaining the
-                    // frame's RGBA array in this load-local texture catalogue.
-                    try
-                    {
-                        checkedRgbaBytes = budget.Add(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), textures.Count, budget.Actor, decoded.Width, decoded.Height, mode);
-                    }
-                    catch (TerrainViewerException exception) when (exception.Error.Code is TerrainViewerErrorCode.ResourceLimit or TerrainViewerErrorCode.DecodeFailure)
-                    {
-                        throw Failure(exception.Error.Code, TerrainViewerFailureStage.ActorDecode);
-                    }
-                    textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
-                    retainedFrameCheckpoint?.Invoke(new("actor", textures.Count, alreadyRetainedCount + textures.Count, checkedRgbaBytes));
-                    cancellationToken.ThrowIfCancellationRequested();
+                    checkedRgbaBytes = budget.Add(checkedRgbaBytes, checked(alreadyRetainedCount + textures.Count), textures.Count,
+                        Math.Min(budget.Actor, profile.DistinctKeys), decoded.Width, decoded.Height, mode, profile);
                 }
+                catch (TerrainViewerException exception) when (exception.Error.Code is TerrainViewerErrorCode.ResourceLimit or TerrainViewerErrorCode.DecodeFailure)
+                { throw Failure(exception.Error.Code, TerrainViewerFailureStage.ActorDecode); }
+                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
+                catalog.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, geometry.HotX, geometry.HotY,
+                    geometry.OffsetX, geometry.OffsetY, descriptor.FramesPerGroup, descriptor.RawFramesPerSecond));
+                retainedFrameCheckpoint?.Invoke(new("actor", textures.Count, alreadyRetainedCount + textures.Count, checkedRgbaBytes));
+                cancellationToken.ThrowIfCancellationRequested();
             }
             return checkedRgbaBytes;
         }
@@ -130,11 +125,7 @@ public static class ActorDiagnosticSource
     }
 }
 
-/// <summary>
-/// Owns the actor archive for one production load. Its narrow archive-open
-/// boundary safely classifies actor input failures without swallowing
-/// cancellation or unrelated programmer exceptions.
-/// </summary>
+/// <summary>Owns one actor archive with path-free open failures and idempotent disposal.</summary>
 public sealed class ActorDiagnosticSourceOperation : IDisposable
 {
     private readonly Func<DatArchive> _openArchive;
@@ -152,7 +143,8 @@ public sealed class ActorDiagnosticSourceOperation : IDisposable
 
     internal ActorDiagnosticLoad ExecuteWithBudget(DatArchive module, ActorDiagnosticPlacementInput input, int alreadyRetainedCount,
         long alreadyCheckedRgbaBytes, TerrainViewerProgress progress, CancellationToken cancellationToken, TerrainLoadBudget budget,
-        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode)
+        Action<TerrainLoadCheckpoint>? retainedFrameCheckpoint, TerrainViewerMode mode,
+        ActorDiagnosticProfile? profile = null, bool authenticateOriginalMetadata = true)
     {
         cancellationToken.ThrowIfCancellationRequested();
         try { _archive ??= _openArchive(); }
@@ -161,7 +153,7 @@ public sealed class ActorDiagnosticSourceOperation : IDisposable
         catch (UnauthorizedAccessException) { throw OpenFailure(progress); }
         ArgumentNullException.ThrowIfNull(module);
         return ActorDiagnosticSource.CreateWithBudget(module, _archive, input, alreadyRetainedCount, alreadyCheckedRgbaBytes,
-            cancellationToken, budget, retainedFrameCheckpoint, mode);
+            cancellationToken, budget, retainedFrameCheckpoint, mode, profile, authenticateOriginalMetadata);
     }
 
     public void Dispose()
