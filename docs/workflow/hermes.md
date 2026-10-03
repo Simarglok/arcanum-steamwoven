@@ -10,7 +10,7 @@ Reuse the installed profiles from [conductor-hermes](https://github.com/Conducto
 
 Operational role definitions, model routing and effort settings belong to conductor-hermes. Inspect its current installed package for each managed run; this repository does not retain a model snapshot or a project-specific fleet. Profiles are shared across boards. Set named assignees explicitly; never rely on global/default fallback for this project.
 
-Attach `universal-development` explicitly to each runnable task/continuation. A clear small task can skip Planner. Developer requests native review by dev-reviewer; requested changes return to the original Developer and candidate. A review pass is not a merge. The maintainer merges.
+Attach `universal-development` explicitly to each runnable task/continuation. A clear small task can skip Planner. Developer requests native review by dev-reviewer; requested changes return to the original Developer and candidate. A review pass is not a merge. For Hermes-managed tasks, [the project merge policy](merge-policy.md) authorizes `dev-reviewer` to perform a separate post-publication acceptance-and-merge stage when all scope, independent PASS, check, identity and PR-head gates pass. This standing permission applies only to this project; narrower task contracts and existing human gates still apply. Other roles and direct Codex work retain human merge.
 
 ## Task contract
 
