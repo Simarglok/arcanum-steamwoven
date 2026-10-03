@@ -4,6 +4,7 @@ using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.Traversal;
 using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer.Tests;
@@ -12,7 +13,7 @@ namespace Arcanum.TerrainViewer.Tests;
 // DAT/ART/sector/static-chain decoders in ONE production load operation.
 internal sealed class SyntheticWorldSourceFixture : IDisposable
 {
-    internal const string SectorPath = "maps\\fixture\\world.sec";
+    internal const string SectorPath = "maps\\Arcanum1-024-fixed\\86570436012.sec";
     private readonly string _root = Path.Combine(Path.GetTempPath(), "world-wire-" + Guid.NewGuid().ToString("N"));
     internal string ModulePath { get; }
     internal string ResourcePath { get; }
@@ -78,10 +79,16 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
             ? ActorDiagnosticProfile.HumanFixed : ActorDiagnosticProfile.MonsterRegression;
         internal override bool AuthenticateOriginalActorMetadata => _fixture.AuthenticateHumanMetadata;
         internal override InputFingerprint Prototypes => new(0, "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
-        internal override TerrainSectorSelector Selector => new(SectorPath, "fixture", 0,0,1,0,0,64,64);
+        internal override TerrainSectorSelector Selector => new(SectorPath, "BASE_SECTOR_1452_1290", 1452,1290,86570436012,92928,82560,64,64);
         internal override bool AcceptCensus(int tiles, int facades, int recovered, int lookups) => (tiles,facades,recovered,lookups) == (3033,1063,0,0);
         internal override StaticObjectInspection InspectStatics(TerrainViewerArguments args, DatArchive module, DatArchive resource)
             => StaticObjectLoader.InspectSelectedResources(new(module, SectorPath, resource), new(_fixture.PrototypesPath));
+        internal override CardinalTraversalSnapshot InspectTraversal(TerrainViewerArguments args, DatArchive module, DatArchive resource, long epoch) =>
+            CardinalTraversalInspector.InspectSector(new(module, SectorPath, resource), new(_fixture.PrototypesPath),
+                "MODULE", "RESOURCE", "PROTOTYPES", Selector, new(resource, "RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs), epoch);
+        internal override bool AcceptTraversalIdentity(CardinalTraversalSnapshot snapshot, InputFingerprint module, InputFingerprint resource) =>
+            snapshot.InputIdentity.Kind == CardinalTraversalInputKind.Structural && module == Module && resource == Resource &&
+            snapshot.InputIdentity.Sector.SectorX == 1452 && snapshot.InputIdentity.Sector.SectorY == 1290;
         internal override DatArchive OpenArchive(string path)
         {
             var stream = new TrackedStream(File.ReadAllBytes(path)); Streams.Add(stream); return DatArchive.Open(stream);
@@ -100,13 +107,14 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
     {
         using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
         writer.Write(0); for (var i = 0; i < 4096; i++) writer.Write(i < 3033 ? 0x000001c0u : 0xb0000000u);
-        writer.Write(1); writer.Write(0xaa0000);
+        writer.Write(1); writer.Write(0xaa0004); writer.Write(2); writer.Write(new byte[48]);
+        writer.Write(new byte[12]); writer.Write(new byte[24]); writer.Write(new byte[512]);
         for (var i = 0; i < 317; i++)
         {
             writer.Write(119); ObjectId(writer, 7000+i); ObjectId(writer, 1); writer.Write(3);
             writer.Write((short)5); writer.Write(0x0004000fu); writer.Write(0); writer.Write(0);
             writer.Write(unchecked((int)(0x40080000u + ((uint)(i%5+1)<<6))));
-            writer.Write((byte)1); writer.Write((long)i); writer.Write(i); writer.Write(-i); writer.Write(0u);
+            writer.Write((byte)1); writer.Write(unchecked((long)((ulong)(uint)(92928+i%64) | ((ulong)(uint)(82560+i/64)<<32)))); writer.Write(i); writer.Write(-i); writer.Write(1024u);
         }
         writer.Write(317); return stream.ToArray();
     }

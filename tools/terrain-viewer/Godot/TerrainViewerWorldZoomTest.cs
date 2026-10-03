@@ -56,13 +56,29 @@ public partial class TerrainViewerApp
         var prior=adapter.SampleController(3,true);
         Require(!adapter.RefreshControllerLevels(3,a=>a==JoyAxis.TriggerRight?1.1f:0,_=>false,true)&&adapter.SampleController(3,true)==prior,"invalid native trigger transaction");
         // Same authoritative inputs/time with and without camera zoom.
-        (DiagnosticActorState,int,ActorDiagnosticPlacementInput) RunActor(bool zoom)
+        string RunActor(bool zoom)
         {
-            SetPreferredWorldZoom(2); ResetWorldScene(); Rearm();
-            foreach(var dt in new[]{.04,.06,.17,.23,.5}) Frame(pad with {LeftStick=new(1,0),RightTrigger=zoom?1:0},dt);
-            return (_worldActor.State,_worldActor.CurrentFrame,_readyActorInput!);
+            // Independent equal receipt timestamps, NOT equal camera delta.
+            var snapshot = _worldActor.Session!.Snapshot;
+            _worldActor.Configure(snapshot, Arcanum.Simulation.Movement.SimulationTime.At(0));
+            _worldGridInput = new(); _worldTestTime = Arcanum.Simulation.Movement.SimulationTime.At(0);
+            RetireWorldLifecycle(); _worldAdapter.Clear(); QuarantineWorld();
+            SetPreferredWorldZoom(2); Rearm();
+            var events = new List<Arcanum.Simulation.Movement.MovementEvent>();
+            var evidence = new List<GridStepEvidence>();
+            foreach(var dt in new[]{.04,.06,.17,.23,.5})
+            {
+                Frame(pad with {LeftStick=new(1,0),RightTrigger=zoom?1:0},dt);
+                var advance = _worldActor.Session.LastAdvance!;
+                events.AddRange(advance.Movement.Events); evidence.AddRange(advance.Evidence);
+            }
+            return System.Text.Json.JsonSerializer.Serialize(new {
+                snapshot = Arcanum.Simulation.Movement.MovementRuntime.QuerySnapshot(_worldActor.Session.State),
+                events, evidence, frame = _worldActor.CurrentFrame, placement = _readyActorInput
+            });
         }
-        Require(RunActor(false)==RunActor(true),"equal-time actor position/facing/action/frame/placement");
+        Require(RunActor(false)==RunActor(true),"equal-receipt full runtime snapshot/events/keys/evidence/animation/placement");
+        WorldSettleForSelfTest(pad);
         Require(_readyDiagnosticPlan.WorldBounds==bounds&&_cache.Count==count&&_cache.CreatedCount==created,"immutable envelope/cache");
         SetPreferredWorldZoom(2); ResetWorldScene(); Rearm();
         _camera.UpdateWorld(WorldAnchor,default,new(12,5),false,true,WorldViewport);
@@ -82,7 +98,7 @@ public partial class TerrainViewerApp
         _Input(new InputEventKey{Keycode=Key.Minus,Pressed=true}); Require(_camera.State.Zoom==1,"minus crossing1");
         _Input(new InputEventKey{Keycode=Key.Minus,Pressed=true}); Require(_camera.State.Zoom==.8,"minus leaves1");
         SetPreferredWorldZoom(3); FitWorldView(); Require(_worldPreferredZoom==3&&_worldZoomStore.Load()==3&&_worldFitView,"Fit preference isolation");
-        ResetWorldScene(); Require(_camera.State.Zoom==3&&_camera.FollowState.Mode==CameraMode.Follow,"R preference precedence");
+        ResetWorldScene(); WorldSettleForSelfTest(pad); Require(_camera.State.Zoom==3&&_camera.FollowState.Mode==CameraMode.Follow,"R preference precedence");
         if(!WorldModal) ToggleWorldSettings();
         var actorPosition=_worldActor.State.Position; var settings=_worldSettings;
         var zoomControl=_worldPanel!.GetNodeOrNull<SpinBox>("WorldZoom") ?? _worldPanel.FindChild("WorldZoom",true,false) as SpinBox;

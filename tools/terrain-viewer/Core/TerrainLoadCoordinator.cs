@@ -4,6 +4,7 @@ using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.Traversal;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -26,6 +27,7 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public InputFingerprint? ActorPrototypeFingerprintAfter { get; init; }
     public int StaticCensusCount { get; init; }
     public int StaticOutsideScopeCount { get; init; }
+    public CardinalTraversalSnapshot? TraversalSnapshot { get; init; }
 }
 
 /// <summary>
@@ -204,6 +206,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 var actorTextures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
                 var staticCensus = 0;
                 var staticOutsideScope = 0;
+                CardinalTraversalSnapshot? traversal = null;
                 _module = _admission.OpenArchive(arguments.ModulePath);
                 cancellationToken.ThrowIfCancellationRequested();
                 _resource = _admission.OpenArchive(arguments.ResourcePath);
@@ -301,6 +304,13 @@ public sealed class TerrainLoadCoordinator : IDisposable
 
                 }
                 cancellationToken.ThrowIfCancellationRequested();
+                if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
+                {
+                    traversal = _admission.InspectTraversal(arguments, _module, _resource, generation);
+                    cancellationToken.ThrowIfCancellationRequested();
+                    if (traversal.EvidenceEpoch != generation || !_admission.AcceptTraversalIdentity(traversal, moduleBefore, resourceBefore))
+                        throw new TerrainViewerException(new(TerrainViewerErrorCode.FingerprintMismatch, Stage: TerrainViewerFailureStage.Fingerprint));
+                }
                 _checkpoint?.Invoke(new("complete", actorTextures.Count, textures.Count + staticTextures.Count + actorTextures.Count, checkedBytes));
                 cancellationToken.ThrowIfCancellationRequested();
                 var moduleAfter = Fingerprint(arguments.ModulePath);
@@ -335,7 +345,8 @@ public sealed class TerrainLoadCoordinator : IDisposable
                     ActorPrototypeFingerprint = prototypeBefore,
                     ActorPrototypeFingerprintAfter = prototypeAfter,
                     StaticCensusCount = staticCensus,
-                    StaticOutsideScopeCount = staticOutsideScope
+                    StaticOutsideScopeCount = staticOutsideScope,
+                    TraversalSnapshot = traversal
                 };
             }
             catch (TerrainViewerException) { throw; }
@@ -343,6 +354,12 @@ public sealed class TerrainLoadCoordinator : IDisposable
             // The app must never publish a cancellation HUD over a new generation
             // or an exiting tree.
             catch (OperationCanceledException) { throw; }
+            catch (CardinalTraversalInvocationException exception)
+            {
+                throw new TerrainViewerException(new(exception.Code == CardinalTraversalInvocationCode.LimitExceeded
+                    ? TerrainViewerErrorCode.ResourceLimit : TerrainViewerErrorCode.FingerprintMismatch,
+                    Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress));
+            }
             catch (FileNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable, Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress)); }
             catch (DirectoryNotFoundException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable, Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress)); }
             catch (UnauthorizedAccessException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.InputUnavailable, Stage: TerrainViewerFailureStage.Fingerprint, Progress: progress)); }

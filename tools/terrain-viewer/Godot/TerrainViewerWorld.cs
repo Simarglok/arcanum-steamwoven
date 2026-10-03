@@ -1,5 +1,6 @@
 using Arcanum.Input;
 using Arcanum.Input.Godot;
+using Arcanum.Simulation.Movement;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
@@ -10,10 +11,43 @@ using Input = global::Godot.Input;
 
 public partial class TerrainViewerApp
 {
-    private readonly GodotInputAdapter _worldAdapter = new();
-    private readonly InputStateReducer _worldReducer = new();
-    private readonly DiagnosticInputSafetyGate _worldGate = new();
-    private readonly DiagnosticActorController _worldActor = new();
+    private GodotInputAdapter _worldAdapter = new();
+    private InputStateReducer _worldReducer = new();
+    private DiagnosticInputSafetyGate _worldGate = new();
+    private DiagnosticGridActor _worldActor = new();
+    private GridInputQueue _worldGridInput = new();
+    private bool _worldResetPending;
+    private bool _worldReloadPending;
+    private DiagnosticGridSession? _worldLifecycleSession;
+    private string _worldGridDiagnostic = "GRID_NOT_LOADED";
+    private SimulationTime? _worldTestTime;
+    private SimulationTime? _worldObservationTime;
+    private SimulationTime WorldTime => _worldObservationTime ?? _worldTestTime ?? SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
+    private void WorldObservation(Action action)
+    {
+        if (_worldObservationTime.HasValue) { action(); return; }
+        _worldObservationTime = WorldTime;
+        try { action(); }
+        catch (Exception error) when (error is InvalidOperationException or OverflowException or TerrainViewerException or ArgumentException)
+        {
+            // Fault disposal is distinct from motion settlement. Do not retry
+            // quarantine on an invalid/closed clock or publish trial events.
+            _worldGate.Close(); _worldReducer.Quarantine();
+            GD.Print("ARC-WORLD-003 lifecycle=observation-fault-disposal (not CenterArrived)");
+            // Only our closed numeric input/runtime category is safe here;
+            // arbitrary exception text can contain protected input paths.
+            if (error.Message.StartsWith("GRID_", StringComparison.Ordinal)
+                && error.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
+                GD.Print("ARC-WORLD-003 observation-failure=" + error.Message);
+            PublishFailure(TerrainViewerMode.WorldDiagnostic, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
+            if (SelfTestBootstrap || _nativeSmoke) throw;
+        }
+        finally { _worldObservationTime = null; }
+    }
+    private void RetireWorldLifecycle()
+    {
+        _worldResetPending = false; _worldReloadPending = false; _worldLifecycleSession = null;
+    }
     private readonly DiagnosticInputSettingsStore _worldStore = new();
     private readonly DiagnosticZoomSettingsStore _worldZoomStore = new();
     private double _worldPreferredZoom = 2;
@@ -26,7 +60,7 @@ public partial class TerrainViewerApp
     private Vec2 _worldDrag;
     private bool _worldFocused = true;
     private bool _worldInitialized;
-    private bool _worldBoundaryLimited;
+
     private bool _worldUiFocused;
     private int _worldMenuAnalogDirection;
     private bool IsWorld => _arguments?.Mode == TerrainViewerMode.WorldDiagnostic || _readyMode == TerrainViewerMode.WorldDiagnostic;
@@ -62,18 +96,25 @@ public partial class TerrainViewerApp
         Delta: delta, Zoom: _camera?.State.Zoom ?? 1, InvertCameraX: _worldSettings.InvertCameraX,
         InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance) { WorldZoomEnabled = true };
 
-    private void QuarantineWorld()
+    private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
+    private void QuarantineWorldObserved()
     {
-        _worldGate.Close(); _worldReducer.Quarantine(); _worldActor.SafetyStop();
+        _worldGate.Close(); _worldReducer.Quarantine();
+        if (_worldActor.Session is { } session && !_exiting)
+            _worldGridInput.Observe(session, WorldTime, ActorIntent.Neutral);
         _worldMenuAnalogDirection = 0;
         _dragging = false; _worldDrag = default; _camera?.SafetyResetWorld();
         if (_readyMode == TerrainViewerMode.WorldDiagnostic && _readyActorPlan is not null) PublishWorldSelection();
     }
-    private void ResetWorldScene()
+    private void ResetWorldScene() => WorldObservation(() => RequestWorldLifecycle(false));
+    private void RequestWorldLifecycle(bool reload)
     {
-        QuarantineWorld(); _worldActor.Reset(); _worldActor.SafetyStop();
+        QuarantineWorld();
+        if (_worldActor.Session is null) return;
+        _worldLifecycleSession = _worldActor.Session;
+        _worldReloadPending |= reload; _worldResetPending = !_worldReloadPending;
         FlushWorldZoom(); _worldFitView = false;
-        PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom); RefreshReadyStatus();
+        RefreshReadyStatus();
     }
     private void ToggleWorldSettings()
     {
@@ -124,7 +165,8 @@ public partial class TerrainViewerApp
         _worldZoomSettled = Math.Min(.25, _worldZoomSettled + Math.Min(delta, .25));
         if (_worldZoomSettled >= .25) FlushWorldZoom();
     }
-    private void WorldConnectionChanged(long id, bool connected)
+    private void WorldConnectionChanged(long id, bool connected) => WorldObservation(() => WorldConnectionObserved(id, connected));
+    private void WorldConnectionObserved(long id, bool connected)
     {
         var device = checked((int)id);
         if (!connected)
@@ -144,8 +186,11 @@ public partial class TerrainViewerApp
         if (_worldFocusSimulationForSelfTest && (SelfTestBootstrap || _nativeSmoke)) return;
         if (what == NotificationApplicationFocusOut || what == NotificationApplicationFocusIn)
         {
-            _worldFocused = what == NotificationApplicationFocusIn;
-            _worldReducer.FocusChanged(_worldFocused); QuarantineWorld(); RefreshReadyStatus();
+            WorldObservation(() =>
+            {
+                _worldFocused = what == NotificationApplicationFocusIn;
+                _worldReducer.FocusChanged(_worldFocused); QuarantineWorld(); RefreshReadyStatus();
+            });
         }
     }
     private void HandleWorldPulse(IntentFrame intent, bool ownsMenuAnalog)
@@ -169,7 +214,12 @@ public partial class TerrainViewerApp
     private void ProcessWorld(double delta)
     {
         if (_exiting || !_worldInitialized) return;
-        if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); return; }
+        if (_worldTestTime.HasValue && (SelfTestBootstrap || _nativeSmoke)) return;
+        WorldObservation(() => ProcessWorldObserved(delta));
+    }
+    private void ProcessWorldObserved(double delta)
+    {
+        if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); AdvanceWorldGrid(default); return; }
         if (WorldUiFocus != _worldUiFocused) { _worldUiFocused = WorldUiFocus; QuarantineWorld(); }
         var complete = _worldFocused;
         var controllers = new List<RawInputFrame>();
@@ -202,7 +252,7 @@ public partial class TerrainViewerApp
         if (!complete || !_worldFocused || !double.IsFinite(delta) || delta < 0 || !Valid(keyboard)
             || controllers.Any(raw => !Valid(raw))
             || (observedActive is int device && !controllers.Any(raw => raw.DeviceId == device)))
-        { QuarantineWorld(); RefreshReadyStatus(); return; }
+        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatus(); return; }
         keyboard = WorldKeyboardRouting(keyboard);
         var context = WorldContext(delta, true);
         var priorActive = _worldReducer.ActiveDevice;
@@ -220,9 +270,9 @@ public partial class TerrainViewerApp
         var neutral = !InputStateReducer.HasAnyLevel(keyboard, context)
             && controllers.Where(raw => raw.DeviceId == active).All(raw => !InputStateReducer.HasAnyLevel(raw, context)) && !_dragging;
         var wasOpen = _worldGate.IsOpen;
-        _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus, complete, neutral);
+        _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || _readyMode != TerrainViewerMode.WorldDiagnostic)
-        { _worldDrag = default; SettleWorldZoom(delta, false); return; }
+        { _worldDrag = default; AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         var pan = intents.Aggregate(_worldDrag, (sum, intent) => sum + intent.CameraPan);
@@ -232,10 +282,7 @@ public partial class TerrainViewerApp
         if (!double.IsFinite(pan.X) || !double.IsFinite(pan.Y)) { QuarantineWorld(); return; }
         try
         {
-            var step = _worldActor.Update(actor, delta, input => _readyActorPlan.Select(input));
-            if (step.Status != DiagnosticMotionStatus.Accepted) { QuarantineWorld(); return; }
-            _worldBoundaryLimited = step.BoundaryLimited;
-            PublishWorldSelection();
+            AdvanceWorldGrid(actor);
             var triggerHeld = controllers.Where(raw => raw.DeviceId == active)
                 .Any(raw => InputStateReducer.EffectiveTrigger(raw.LeftTrigger) > 0 || InputStateReducer.EffectiveTrigger(raw.RightTrigger) > 0);
             // Zoom-only is neither pan nor a neutral opportunity to arm Manual
@@ -254,13 +301,57 @@ public partial class TerrainViewerApp
     private void PublishWorldSelection()
     {
         if (_readyActorPlan is null || _readyDiagnosticPlan?.IsWorldDiagnostic != true) return;
-        var input = DiagnosticActorMotion.ToPlacement(_worldActor.State, _worldActor.CurrentFrame);
+        if (_worldActor.Session is null) return;
+        var input = _worldActor.Placement();
         var actor = _readyActorPlan.Select(input);
         var plan = _readyDiagnosticPlan.WithWorldActor(actor);
         _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current; _readyDiagnosticPlan = plan;
         _canvas!.Publish(plan, _cache);
     }
-    private void InputWorld(InputEvent input)
+    private void AdvanceWorldGrid(Vec2 actor)
+    {
+        if (_worldActor.Session is not { } session || _readyActorPlan is null || _readyMode != TerrainViewerMode.WorldDiagnostic) return;
+        var time = WorldTime;
+        var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor);
+        _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
+        if (_worldGridInput.CompleteFrontier is not { } frontier) return;
+        var advance = _worldActor.Advance(frontier, _worldGridInput.CompleteThrough(frontier), input => _readyActorPlan.Select(input));
+        if (advance.Movement.Status != MovementStatus.Completed)
+            throw new InvalidOperationException($"GRID_RUNTIME_{advance.Movement.Status}_{advance.Movement.Failure?.Kind}");
+        _worldGridInput.PublishedThrough(frontier);
+        foreach (var evidence in advance.Evidence)
+        {
+            var assessment = evidence.Assessment;
+            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} records={assessment.RecordAssessments.Count} gaps={assessment.Gaps.Count} epoch={session.Snapshot.EvidenceEpoch}";
+            // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
+            GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
+                evidence.Key, coverage=assessment.Coverage.ToString(), disposition=assessment.Disposition?.ToString(),
+                assessment.ReasonCode, records=assessment.RecordAssessments.Count, gaps=assessment.Gaps.Count,
+                selectedEvidenceSha256=assessment.StepEvidence.SelectedEvidenceSha256
+            }));
+        }
+        foreach (var item in advance.Movement.Events)
+            GD.Print("ARC-WORLD-003 event=" + System.Text.Json.JsonSerializer.Serialize(item));
+        PublishWorldSelection();
+        if (ReferenceEquals(_worldLifecycleSession, session) && session.State.Phase == MovementPhase.Settled)
+        {
+            if (_worldReloadPending && _arguments is not null)
+            {
+                RetireWorldLifecycle();
+                _lastLoad = StartLoadAsync(_arguments, false);
+            }
+            else
+            {
+                if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
+                RetireWorldLifecycle();
+                _worldActor.Configure(session.Snapshot, time); _worldGridInput = new(); _worldGate.Close();
+                PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
+            }
+        }
+    }
+    private void InputWorld(InputEvent input) => WorldObservation(() => InputWorldObserved(input));
+    private void InputWorldObserved(InputEvent input)
     {
         var wasModal = WorldModal;
         var raw = _worldAdapter.Map(input, _worldFocused);
@@ -276,6 +367,7 @@ public partial class TerrainViewerApp
         if (raw.DeviceId < 0) raw = WorldKeyboardRouting(raw);
         var intent = _worldReducer.Reduce(raw, WorldContext());
         if (input is not InputEventMouse) HandleWorldPulse(intent, _worldReducer.ActiveDevice is null || raw.DeviceId == _worldReducer.ActiveDevice);
+        CaptureWorldCallbackActor(raw, intent);
         // Semantic keyboard/controller modal routing is owned above; do not
         // also let focused native controls toggle/navigate the same event.
         var semanticKey = input is InputEventKey keyEvent &&
@@ -296,17 +388,39 @@ public partial class TerrainViewerApp
         {
             if (key.Keycode == Key.R) ResetWorldScene();
             else if (key.Keycode == Key.F) FitWorldView();
-            else if (key.Keycode == Key.L && _arguments is not null) { QuarantineWorld(); _lastLoad = StartLoadAsync(_arguments, false); }
+            else if (key.Keycode == Key.L && _arguments is not null) RequestWorldLifecycle(true);
             else if (_worldGate.IsOpen && key.Keycode is Key.Plus or Key.Minus) StepPreferredWorldZoom(key.Keycode == Key.Plus ? 1.25 : .8);
             else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
             else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
         }
         RefreshReadyStatus();
     }
-    internal void WorldFrameForSelfTest(RawInputFrame keyboard, IReadOnlyList<RawInputFrame> controllers, double delta, bool complete = true)
+    private void CaptureWorldCallbackActor(RawInputFrame raw, IntentFrame reduced)
+    {
+        if (_worldActor.Session is not { } session) return;
+        var actor = default(Vec2);
+        if (_worldGate.IsOpen && _worldFocused && !WorldModal && !WorldUiFocus && _worldLifecycleSession is null)
+        {
+            // Reduce the other domain too; a mouse/keyboard event must not
+            // release the active left stick. Timing/pulses remain callback-only.
+            actor = raw.DeviceId < 0 ? reduced.Movement
+                : _worldReducer.Reduce(WorldKeyboardRouting(_worldAdapter.SampleKeyboard(_worldFocused)), WorldContext()).Movement;
+            var selected = _worldAdapter.SampleController(_worldReducer.ActiveDevice, _worldFocused);
+            if (selected is not null)
+                actor += raw.DeviceId == _worldReducer.ActiveDevice ? reduced.Movement
+                    : _worldReducer.Reduce(selected, WorldContext()).Movement;
+            if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
+        }
+        var direction = DiagnosticGridActor.Resolve(actor);
+        _worldGridInput.Observe(session, WorldTime, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
+    }
+    internal void WorldFrameForSelfTest(RawInputFrame keyboard, IReadOnlyList<RawInputFrame> controllers, double delta, bool complete = true, SimulationTime? observationTime = null)
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Simulation requires an explicit test launch.");
-        ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)");
+        // The script clock is independent of camera delta, including zero,
+        // invalid and huge zoom deltas. Exact motion tests supply literal times.
+        _worldTestTime = observationTime ?? new SimulationTime((_worldTestTime ?? _worldActor.Session?.State.Time ?? WorldTime).Value + ExactScalar.Create(1, 10));
+        WorldObservation(() => ApplyWorldObservedFrame(delta, complete, keyboard, controllers, "SIMULATION complete-level frame (not physical evidence)"));
     }
     private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)
     {
@@ -317,6 +431,16 @@ public partial class TerrainViewerApp
         return raw;
     }
     internal DiagnosticActorState WorldStateForSelfTest => _worldActor.State;
+    internal SimulationTime WorldTimeForSelfTest => _worldTestTime ?? WorldTime;
+    internal void WorldSettleForSelfTest(params RawInputFrame[] controllers)
+    {
+        // Bounded independent receipt observations, not camera-delta integration.
+        // Live D=1/2 means eight 1/10-second receipts suffice for a fresh neutral
+        // to seal, return/finish and close its settlement frontier.
+        for (var i = 0; i < 8; i++) WorldFrameForSelfTest(new(-1, default), controllers, .1);
+        if (_worldActor.Session?.State.Phase != MovementPhase.Settled)
+            throw new InvalidOperationException("GRID_TEST_SETTLEMENT_REQUIRED");
+    }
     internal void WorldZoomForSelfTest(double zoom)
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
@@ -342,13 +466,17 @@ public partial class TerrainViewerApp
             + $" | wanted center ({_camera.WantedCenter.X:0.###},{_camera.WantedCenter.Y:0.###}) bounded ({_camera.State.X:0.###},{_camera.State.Y:0.###}) bound limited {_camera.BoundLimited} | LT out / RT in";
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
-        return zoomStatus + $" | World sector-local cells ({s.Position.X:0.####},{s.Position.Y:0.####}) | anchor domain [0,63] reset (30,32) | free projected speed 240 px/s at sensitivity 1 | Actor: {profile.Id} {s.Action} | Frame: {_worldActor.CurrentFrame} | diagnostic clock {profile.Clock} Idle {profile.Idle.DiagnosticFramesPerSecond} / Walk {profile.Walk.DiagnosticFramesPerSecond} | Facing mapping: project diagnostic octant {s.Facing}; opaque source facing {binding.SourceFacing}, physical group {binding.PhysicalGroup}, flip {binding.FlipX} | Camera: {_camera!.FollowState.Mode} | boundary limited {_worldBoundaryLimited} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Layering: terrain -> facades -> statics -> actor -> guides -> HUD | Controls: WASD/left actor, arrows/right image pan, drag camera, wheel/+/- zoom, F fit, R reset, L reload, F1/Start settings";
+        var runtime = _worldActor.Session?.State;
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | zone x4..8/y0..3 sector1452,1290 spawn(6,1), D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Controls A/D map-X/+X W/S map-Y/+Y; stick same, diagonals denied; arrows/right pan; LT/RT zoom; F fit R reset L reload F1 settings | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {
         if (!_worldInitialized) return;
         FlushWorldZoom();
         QuarantineWorld();
+        GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
+        _worldActor.DisposeSession();
+        RetireWorldLifecycle(); _worldGridInput = new();
         Input.JoyConnectionChanged -= WorldConnectionChanged;
         if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;
         if (_worldPanel is not null)

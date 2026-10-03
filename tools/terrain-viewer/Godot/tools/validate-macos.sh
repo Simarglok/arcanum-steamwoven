@@ -8,7 +8,7 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
 if test "$build_root" != "$main_root/artifacts/$artifact_dir/$task/$head"; then printf '%s\n' 'Build root must bind the closed exact-head terrain task.' >&2; exit 2; fi
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
@@ -50,7 +50,15 @@ cleanup_candidate() {
     "$project_root/TerrainViewerWorldZoomBoundaryTest.cs.uid" "$project_root/TerrainViewerHumanValidation.cs.uid"
 }
 trap cleanup_candidate EXIT HUP INT TERM
-run_log() { name=$1; shift; "$@" >"$build_root/evidence/$name" 2>&1; }
+run_log() {
+  name=$1; shift
+  if test "$task" = ARC-WORLD-003; then
+    (cd "$candidate_root" && /usr/bin/python3 -B -m tools.local_dev.grid_export_gates \
+      --evidence "$build_root/evidence" --head "$head" --log "$name" -- "$@")
+  else
+    "$@" >"$build_root/evidence/$name" 2>&1
+  fi
+}
 run_log locked-restore.log "$DOTNET" restore "$project_root/Arcanum.TerrainViewer.sln" --locked-mode
 run_log locked-build.log "$DOTNET" build "$project_root/Arcanum.TerrainViewer.sln" --no-restore
 run_log tests.log "$DOTNET" test "$candidate_root/tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj" --no-build
@@ -65,9 +73,12 @@ if test "$task" != ARC-DEV-001; then
   run_log source-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root"
   run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence
 fi
-if test "$task" = ARC-RENDER-006; then
-  run_log source-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind human --timeout 180
-  run_log human-metadata.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind human-metadata --timeout 180
+if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003; then
+  run_log source-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind human --timeout 180
+  run_log human-metadata.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind human-metadata --timeout 180
+fi
+if test "$task" = ARC-WORLD-003; then
+  run_log source-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind grid-original --timeout 180
 fi
 run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export-debug 'macOS debug' "$build_root/ArcanumTerrainViewer.app"
 /usr/bin/grep -F "$DOTNET" "$build_root/evidence/export.log" >/dev/null
@@ -86,8 +97,11 @@ if test "$task" != ARC-DEV-001; then
   run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence
   run_log hostfxr.log /usr/bin/python3 -B "$project_root/tools/hostfxr_validate.py" "$build_root/ArcanumTerrainViewer.app"
 fi
-if test "$task" = ARC-RENDER-006; then
-  run_log exported-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind human --timeout 180
+if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003; then
+  run_log exported-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task" --kind human --timeout 180
+fi
+if test "$task" = ARC-WORLD-003; then
+  run_log exported-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task" --kind grid-original --timeout 180
 fi
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/ArcanumTerrainViewer.app"
 cleanup_candidate

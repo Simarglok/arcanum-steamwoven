@@ -20,25 +20,29 @@ public partial class TerrainViewerApp
         Frame(held); var anchor = _worldActor.State.Position; var center = _camera.State;
         Frame(none with { KeyboardCameraHeld = true });
         Require(_camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "opposing held pan armed return");
+        WorldSettleForSelfTest(); anchor = _worldActor.State.Position; center = _camera.State;
         _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld();
         var padNeutral = new RawInputFrame(3,default);
         var padHeld = new RawInputFrame(3,new(1,0),new(1,0));
         Frame(held,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor && _camera.State == center, "acquisition held moved");
-        Neutral(padNeutral); Frame(none,padHeld);
+        Neutral(padNeutral); Frame(none,padHeld); Frame(none,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position != anchor && _camera.FollowState.Mode == CameraMode.Manual, "active simultaneous independent intents");
         var beforeInactive = (_worldActor.State, _camera.State, _camera.FollowState);
         WorldConnectionChanged(9,false);
         Require((_worldActor.State, _camera.State, _camera.FollowState) == beforeInactive, "inactive disconnect changed scene");
-        WorldConnectionChanged(3,false); anchor = _worldActor.State.Position; center = _camera.State;
-        Require(!_worldActor.IsPlaying && !_worldGate.IsOpen, "active disconnect did not stop");
+        WorldConnectionChanged(3,false); center = _camera.State;
+        Require(!_worldGate.IsOpen, "active disconnect did not quarantine");
+        WorldSettleForSelfTest();
+        Require(!_worldActor.IsPlaying && _camera.State == center, "active disconnect accepted motion did not settle independently");
+        ResetWorldScene(); WorldSettleForSelfTest(); anchor = _worldActor.State.Position; center = _camera.State;
         WorldConnectionChanged(3,true); Frame(none,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor && _camera.State == center, "reconnect held moved");
         Frame(none,padNeutral); Frame(none with { KeyboardActorHeld = true },padNeutral); Frame(none,padNeutral); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor, "opposing keyboard or one neutral sample opened reconnect");
-        Neutral(padNeutral); Frame(none,padHeld with { RightStick = default });
+        Neutral(padNeutral); Frame(none,padHeld with { RightStick = default }); Frame(none,padHeld with { RightStick = default }); Frame(none,padHeld with { RightStick = default });
         Require(_worldActor.State.Position != anchor && _camera.FollowState.Mode == CameraMode.Follow, "fresh actor after reconnect did not follow");
-        _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene(); Neutral();
+        _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene(); WorldSettleForSelfTest(); Neutral();
         _camera.ZoomWorld(8,WorldAnchor,WorldViewport);
         var actorBefore = _worldActor.State;
         var beforeHud = _camera.State;
@@ -57,7 +61,8 @@ public partial class TerrainViewerApp
         Require(!_worldActor.IsPlaying && !_worldGate.IsOpen && _camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "Fit lifecycle");
         var preferences = _worldSettings;
         _Input(new InputEventKey { Keycode = Key.R, Pressed = true });
-        Require(_worldActor.State.Position == new DiagnosticSectorPosition(30,32) && _worldActor.State.Facing == 0 && _worldActor.CurrentFrame == 0
+        WorldSettleForSelfTest();
+        Require(_worldActor.State.Position == new DiagnosticSectorPosition(6,1) && _worldActor.State.Facing == 5 && _worldActor.CurrentFrame == 0
             && _worldSettings == preferences && _camera.FollowState.Mode == CameraMode.Follow, "reset lifecycle/preferences");
         Neutral();
         // Canonical linked adapter reconciles every mapped level, including
@@ -98,9 +103,10 @@ public partial class TerrainViewerApp
         foreach (var failure in new[] { "incomplete", "missing-active", "invalid-pad", "invalid-keyboard", "unfocused", "invalid-delta" })
         {
             _worldReducer.SetStartupDevices(new[] { 3 }); ResetWorldScene();
+            WorldSettleForSelfTest(pad);
             for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
             _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
-            WorldFrameForSelfTest(moving, new[] { pad }, .37);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(moving, new[] { pad }, .37);
             Require(_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Walk, "precondition moving");
             if (manual)
             {
@@ -115,16 +121,19 @@ public partial class TerrainViewerApp
                 failure == "missing-active" ? Array.Empty<RawInputFrame>()
                 : new[] { failure == "invalid-pad" ? pad with { LeftStick = new(double.NaN,0) } : pad },
                 failure == "invalid-delta" ? double.NaN : 2, failure != "incomplete");
-            Require(_worldActor.State.Position == position && _camera.State == center && !WorldModal
-                && !_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Idle && _worldActor.CurrentFrame == 0
+            Require(_camera.State == center && !WorldModal
                 && !_camera.FollowState.RecenterArmed && !_worldGate.IsOpen && !_dragging && _worldDrag == default && _worldMenuAnalogDirection == 0,
-                failure + " did not stop/quarantine before actions");
+                failure + " did not quarantine before actions");
+            WorldSettleForSelfTest(pad); position = _worldActor.State.Position;
+            Require(!_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Idle && _worldActor.CurrentFrame == 0
+                && _camera.State == center, failure + " accepted return/finish did not settle independently");
+            QuarantineWorld();
             WorldFrameForSelfTest(moving, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
             WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
             Require(_worldActor.State.Position == position && _camera.State == center && !_worldGate.IsOpen, "held or single neutral reopened");
             WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(none, new[] { pad }, .1);
             Require(_worldGate.IsOpen && _worldActor.State.Position == position, "two full neutral frames required");
-            WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(moving, new[] { pad }, .1);
             Require(_worldActor.State.Position != position, "fresh activation did not recover");
         }
         _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
@@ -220,8 +229,9 @@ public partial class TerrainViewerApp
             var reset = _worldPanel.FindChildren("*", "Button", true, false).Cast<Button>().Single(b => b.Text == "Reset defaults and scene");
             reset.GrabFocus(); await NextFrameAsync();
             changes = 0; resets = 0; await ClickAsync(reset);
+            WorldSettleForSelfTest();
             Require(_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false) && changes == 0 && resets == 1
-                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(30, 32),
+                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(6, 1),
                 $"native Reset WORLD defaults changes={changes} resets={resets} defaults={_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)} saved={_worldStore.Load() == _worldSettings} actor={_worldActor.State.Position.X}/{_worldActor.State.Position.Y}");
             GD.Print("ARC-WORLD-001 settings activation PASS native keyboard/controller once/native Reset false-false; lab default unchanged");
             await AssertWorldSettingsOpacityAsync();
@@ -258,7 +268,7 @@ public partial class TerrainViewerApp
                 var rect = panel.GetGlobalRect();
                 if (WorldViewport != new Vector2(size.X, size.Y) || rect.Position.X < 0 || rect.Position.Y < 0
                     || rect.End.X > size.X || rect.End.Y > size.Y || header is null || !header.IsVisibleInTree()
-                    || !header.Text.Contains("collision not evaluated", StringComparison.Ordinal) || !header.Text.Contains("NOT VERIFIED", StringComparison.Ordinal)
+                    || !header.Text.Contains("Bounded cardinal grid", StringComparison.Ordinal) || !header.Text.Contains("NOT VERIFIED", StringComparison.Ordinal)
                     || _worldActor.State != actor)
                     throw new InvalidOperationException("WORLD settings containment/limitations changed.");
                 if (DisplayServer.GetName() == "headless") continue;

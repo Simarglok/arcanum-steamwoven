@@ -21,7 +21,7 @@ Configuration does not scan a machine. `configure discover --game-root PATH` exa
 
 ## Ordinary diagnostics launch
 
-The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005`, `ARC-DEV-001` and `ARC-WORLD-001`, Gamepad `ARC-GPAD-001/002/003`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or more than one current pointer fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
+The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005/006`, `ARC-DEV-001`, `ARC-WORLD-001/003` and `ARC-GPAD-004`, Gamepad `ARC-GPAD-001/002/003`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or ambiguous current selection fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
 
     tools/arcanum-local launch art --dry-run
     tools/arcanum-local launch gamepad --dry-run
@@ -95,6 +95,40 @@ No ordinary input automation is added. After selecting the immutable candidate,
 are separate from smoke; require actual Idle/Walk observation and unchanged
 seal/signature outside the sealed app. Registration is still not acceptance,
 review, publication or owner merge.
+
+## Bounded original grid candidate (ARC-WORLD-003)
+
+WORLD003 uses the existing terrain endpoint, logical tool and world-builds root,
+not a new exporter or alias. In an owned `ARCANUM_LOCAL_HOME`, configure all five
+input roles (module, terrain resource, actor resource, prototype directory,
+source label), root and exact `ROOT_ID:ARC-WORLD-003:<full-head>` selection.
+Do not overwrite parent/default homes or delete historical task currents.
+
+    ARCANUM_LOCAL_HOME=OWNED_CONFIG ARCANUM_LOCAL_ROOT_ID=WORLD_ROOT_ID \
+      ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003 TMPDIR=OWNED_TMP \
+      tools/terrain-viewer/Godot/tools/validate-macos.sh
+
+After successful immutable export and exact selection:
+
+    ARCANUM_LOCAL_HOME=OWNED_CONFIG tools/arcanum-local launch terrain --mode world-diagnostic --dry-run
+    ARCANUM_LOCAL_HOME=OWNED_CONFIG tools/arcanum-local launch terrain --mode world-diagnostic
+
+The actual grid source has no free fallback: preview overrides, wrong legacy
+task/head, malformed or unsafe sibling authorities, and missing inputs reject
+before launch. Retain all sixteen parent gates, plus source/exported
+`grid-original` reports validated against literal complete traces at all three
+required viewports. For WORLD003, every gate also has a timestamped actual-child
+exit/digest receipt; writer and registration enforce PASS/exit0/task/head/log
+binding. Registration requires both logs and receipts in the sealed evidence
+inventory. Synthetic authority fixtures prove fail-closed consumer behavior,
+not original graphical acceptance.
+
+Dry-run establishes argv only. Ordinary graphical observation must separately
+establish original human Idle/Walk, early return, post-entry finish and visible
+blocked destination on the exact exported app with no automation flags. Keep
+its PID/argv/viewport/exit/crash and post-run manifest/full payload/evidence/
+signature proof outside the seal. A native-smoke PASS cannot replace this lane.
+See [bounded grid policy and input mapping](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy).
 
 ## Boundaries
 

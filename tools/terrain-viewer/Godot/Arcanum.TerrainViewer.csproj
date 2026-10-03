@@ -7,6 +7,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="../../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="GodotInputAdapter.cs" />
+    <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/GridWireFixture.cs" Link="GridWireFixture.cs" />
     <ProjectReference Include="../Core/Arcanum.TerrainViewer.Core.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
   </ItemGroup>

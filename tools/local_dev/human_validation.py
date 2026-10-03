@@ -12,12 +12,14 @@ from . import config
 VIEWPORTS = [[1280, 800], [1440, 900], [800, 600]]
 
 
-def validate_report(report: object, head: str, host: str, kind: str) -> None:
+def validate_report(report: object, head: str, host: str, kind: str, task: str = 'ARC-RENDER-006') -> None:
+    if task not in ('ARC-RENDER-006', 'ARC-WORLD-003'):
+        raise ValueError('unsupported human report task')
     if not isinstance(report, dict) or (
         report.get('schema'), report.get('task'), report.get('candidateCommit'),
         report.get('host'), report.get('kind'), report.get('profile'),
         report.get('outcome'), report.get('exitCode')
-    ) != ('arcanum-human-validation-v1', 'ARC-RENDER-006', head, host, kind, 'HumanFixed', 'PASS', 0):
+    ) != ('arcanum-human-validation-v1', task, head, host, kind, 'HumanFixed', 'PASS', 0):
         raise ValueError('human report task/head/host/profile/outcome binding is invalid')
     if not re.fullmatch(r'[0-9a-f]{40}', head):
         raise ValueError('human report requires a full candidate commit')
@@ -33,7 +35,7 @@ def validate_report(report: object, head: str, host: str, kind: str) -> None:
             raise ValueError('human graphical behavior coverage is incomplete')
 
 
-def validate_reports(evidence: Path, head: str) -> None:
+def validate_reports(evidence: Path, head: str, task: str = 'ARC-RENDER-006') -> None:
     for name, host, kind in (('human-metadata.log', 'source', 'human-metadata'),
                              ('source-human-original.log', 'source', 'human'),
                              ('exported-human-original.log', 'exported', 'human')):
@@ -44,4 +46,4 @@ def validate_reports(evidence: Path, head: str) -> None:
             report = json.loads(data)
         except (ValueError, UnicodeError) as error:
             raise ValueError('invalid human structured report') from error
-        validate_report(report, head, host, kind)
+        validate_report(report, head, host, kind, task)

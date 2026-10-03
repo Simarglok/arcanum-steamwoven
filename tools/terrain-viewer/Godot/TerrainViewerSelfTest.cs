@@ -28,6 +28,7 @@ public static partial class TerrainViewerSelfTest
             AssertReadyStateRetainsOnlyHudMetrics();
             await AssertSyntheticProductionAppAsync(host);
             await AssertSyntheticWorldAppAsync(host);
+            await AssertSyntheticWorldRetirementAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {

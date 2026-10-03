@@ -42,6 +42,22 @@ It additionally requires source/exported WORLD persistence and dual-hostfxr
 gates, with isolated input and zoom paths; the task/root/head v2 binding,
 capacity/lease/frozen-observation and finalized-rerun rejection are unchanged.
 
+The bounded grid source candidate uses literal
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
+the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original
+grid structured reports; all eighteen require task/head/log-bound actual-exit
+receipts. Use an owned local home and the independent ignored human reference,
+never package original pixels. Before the one clean final-head export, run the
+standalone viewer tests, root checks below, focused original bridge/Data tests,
+headless and native graphical synthetic checks, original human/grid native
+readback and isolated process-restart persistence. Exact ordinary launch and
+post-runtime complete manifest/payload/evidence/signature integrity are later
+separate observations, not inferred from export exit zero.
+
+Research Python self-tests require a Python supporting their syntax (3.10+;
+use the available current interpreter, not macOS system Python 3.9). The local
+endpoint remains standard-library-only and uses its documented interpreter.
+
 Run from repository root:
 
 ```sh

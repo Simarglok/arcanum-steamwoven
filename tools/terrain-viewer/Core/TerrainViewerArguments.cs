@@ -69,7 +69,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new ActorDiagnosticPlacementInput(actorMapX, actorMapY, actorOriginX, actorOriginY, actorOffsetX, actorOffsetY,
                 actorBranch.Value, actorScale.Value, actorShrunk, actorAction.Value, actorFacing.Value, actorFrame.Value, 0, 0, 0, 0, 0, 0);
         }
-        if (mode == TerrainViewerMode.WorldDiagnostic) actor = DiagnosticActorMotion.ToPlacement(new DiagnosticActorMotion().Reset(), 0);
+        if (mode == TerrainViewerMode.WorldDiagnostic)
+            actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
+                ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor);
     }
 

@@ -7,5 +7,6 @@
     <ProjectReference Include="../../../src/Arcanum.Data/Arcanum.Data.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Input/Arcanum.Input.csproj" />
+    <ProjectReference Include="../../../src/Arcanum.Simulation/Arcanum.Simulation.csproj" />
   </ItemGroup>
 </Project>

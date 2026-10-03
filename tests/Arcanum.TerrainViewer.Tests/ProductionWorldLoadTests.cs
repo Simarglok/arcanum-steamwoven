@@ -114,7 +114,14 @@ public sealed class ProductionWorldLoadTests
             var old=coordinator.BeginGeneration(); var task=coordinator.LoadAsync(old,fixture.Arguments);
             Assert.IsTrue(reached.Wait(TimeSpan.FromSeconds(10))); var current=coordinator.BeginGeneration(); release.Set();
             if(fail) await Assert.ThrowsAsync<TerrainViewerException>(async()=>await task);
-            else {var result=await task; Assert.IsTrue(result.DiagnosticPlan!.IsWorldDiagnostic);}
+            else
+            {
+                var result=await task; Assert.IsTrue(result.DiagnosticPlan!.IsWorldDiagnostic);
+                Assert.AreEqual(old,result.TraversalSnapshot!.EvidenceEpoch);
+                // Numeric snapshot is owned after all archive handles dispose;
+                // old epoch must not become the current publication generation.
+                Assert.AreNotEqual(current,result.TraversalSnapshot.EvidenceEpoch);
+            }
             fixture.AssertDisposed(3); var published=0;
             Assert.IsFalse(coordinator.TryPublish(old,()=>published++)); Assert.AreEqual(0,published);
             Assert.IsTrue(coordinator.TryPublish(current,()=>published++)); Assert.AreEqual(1,published);
@@ -155,6 +162,7 @@ public sealed class ProductionWorldLoadTests
             Assert.IsFalse(queued.IsCompleted); cancel.Cancel(); release.Set();
             await Assert.ThrowsAsync<OperationCanceledException>(async()=>await interrupted);
             var result=await queued;
+            Assert.AreEqual(next,result.TraversalSnapshot!.EvidenceEpoch);
             fixture.AssertDisposed(archives+3); Assert.AreEqual(human?248L:764L,result.CheckedRgbaBytes);
             Assert.AreEqual(1,coordinator.MaximumObservedConcurrency);
             Assert.IsFalse(coordinator.TryPublish(first,()=>Assert.Fail("Cancelled publication")));

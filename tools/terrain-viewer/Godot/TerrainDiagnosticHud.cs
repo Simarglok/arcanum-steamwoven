@@ -86,7 +86,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
         var mode = _mode switch { TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
             TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
         var limitation = _mode == TerrainViewerMode.WorldDiagnostic
-            ? "\nDiagnostic free movement — collision not evaluated\nOriginal placement/movement/visual parity: NOT VERIFIED"
+            ? "\nBounded cardinal grid — original Data admission, not gameplay\nOriginal placement/movement/visual parity: NOT VERIFIED"
             : _mode == TerrainViewerMode.ActorDiagnostic ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
         if (_sticky is not null)
             _sticky.Text = $"{(automatedTestMode ? "AUTOMATED TEST MODE\n" : string.Empty)}Mode: {mode}\nDIAGNOSTIC — not gameplay/original parity{limitation}";

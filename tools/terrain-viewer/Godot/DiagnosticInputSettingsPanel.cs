@@ -38,7 +38,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         contents.AddChild(new Label
         {
             Name = "WorldSettingsLimitation",
-            Text = "Diagnostic input settings — world paused\nDiagnostic free movement — collision not evaluated\nOriginal parity NOT VERIFIED",
+            Text = "Diagnostic input settings — new intent gated; accepted step settles\nBounded cardinal grid — original Data admission, not gameplay\nOriginal parity NOT VERIFIED",
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         });
         var scroll = new ScrollContainer { FollowFocus = true, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
