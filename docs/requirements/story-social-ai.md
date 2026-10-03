@@ -13,6 +13,13 @@
 
 ## Требования для проверки владельцем-игроком
 
+Уточнение ARC-RES-016 для FR-DIALOG-001..004 и FR-SCRIPT-001..003:
+[исследование одного NPC Crash Site](../research/crash-site-npc-dialog-evidence.md)
+связывает исходный instance/prototype/event с условной точкой SAP_DIALOG;
+[контракт вызова](../scripting/npc-dialog-entry-contract.md) отделяет этот bridge
+от one-edge runtime, будущих state adapters, traversal/text и UI. Это не новая
+реализация, не запуск оригинальной игры и не доказательство automatic first speech.
+
 <a id="fr-dialog-001"></a>
 
 ### FR-DIALOG-001 — Начало разговора с подходящим участником

@@ -28,6 +28,11 @@ ignored `research-private/ARC-RES-005/`.
 
 ## Candidate and selection rationale
 
+Later [Crash Site NPC-dialog evidence](crash-site-npc-dialog-evidence.md)
+establishes one base-world Virgil instance/event chain and conditional SAP_DIALOG
+entry through the original fields. This does not retroactively prove original
+execution, automatic first speech or universal precedence for DLG-006.
+
 Inspection begins with `dlg\01324Virgil.dlg`: its paired numeric SCR/DLG names
 and bounded archive metadata are known, while an initial-encounter link is not.
 The real-data probe reports only archive fingerprint, identifier hash, ordinal,
