@@ -24,4 +24,4 @@ For this project, use the GitHub account `Simarglok`, not `conductor-hermes-bot`
 
 For Hermes-managed work, use the installed universal profiles and `universal-development` skill described in `docs/workflow/hermes.md`. Direct Codex work follows its explicit user scope. Independent review targets the exact candidate. Report Implemented, Not implemented, Remaining work, checks and material uncertainties.
 
-Publish a PR only when the accepted task authorizes it. Never merge; the user merges. Never dispatch new work based solely on an Obsidian note or a proposed milestone.
+Publish a PR only when the accepted task authorizes it. For Hermes-managed tasks on board `arcanum-steamwoven`, read and follow `docs/workflow/merge-policy.md`: it grants `dev-reviewer` standing permission for a separate post-publication acceptance-and-merge stage after all its gates pass. Other roles and direct Codex work retain human merge. A narrower task restriction still applies. Never dispatch new work based solely on an Obsidian note or a proposed milestone.
