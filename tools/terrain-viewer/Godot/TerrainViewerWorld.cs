@@ -19,7 +19,7 @@ public partial class TerrainViewerApp
     private bool _worldResetPending;
     private bool _worldReloadPending;
     private DiagnosticGridSession? _worldLifecycleSession;
-    private string _worldGridDiagnostic = "GRID_NOT_LOADED";
+    private string _worldGridDiagnostic = "No step assessment yet";
     private SimulationTime? _worldTestTime;
     private SimulationTime? _worldObservationTime;
     private SimulationTime WorldTime => _worldObservationTime ?? _worldTestTime ?? SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
@@ -467,7 +467,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | zone x4..8/y0..3 sector1452,1290 spawn(6,1), D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Controls A/D map-X/+X W/S map-Y/+Y; stick same, diagonals denied; arrows/right pan; LT/RT zoom; F fit R reset L reload F1 settings | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | small diagnostic test area x4..8/y0..3 sector1452,1290 spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Controls WASD/left stick: eight screen sectors; actor-axis inversion separate from camera (F1); arrows/right stick pan; LT/RT zoom; F fit R reset L reload F1 settings | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {
