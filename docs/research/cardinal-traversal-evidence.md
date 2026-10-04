@@ -1,5 +1,18 @@
 # Cardinal traversal evidence — ARC-RES-014
 
+## Later WORLD003 diagnostic amendment (research history preserved)
+
+The cardinal research evidence below remains historical and does not silently
+admit diagonals. The separate opt-in [production policy](../world/cardinal-traversal-assessment.md)
+composes final terrain with both object-only shoulder paths within the same zone,
+context and guarded identities. Source rationale remains the literal pinned
+`object.c` adjacent predicate (direction retained for each object constraint),
+not executable parity or copied CE code. Sustainable Use License attribution and
+all original input integrity requirements below remain unchanged. Numeric original
+observations discriminate shoulder scenery corner denial at spawn from Open
+diagonals and all-eight positive neighbors at reachable `(7,2)`. These are local
+implementation checks, not independent review, ordinary acceptance or delivery.
+
 ## Result and classification boundary
 
 One independently authored research candidate implements the

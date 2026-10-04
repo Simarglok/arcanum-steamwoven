@@ -1,5 +1,28 @@
 # Bounded production cardinal traversal assessment
 
+## WORLD003 bounded-adjacent policy amendment
+
+Both factories additionally accept optional `CardinalTraversalAdmissionPolicy
+policy = CardinalTraversalAdmissionPolicy.CardinalOnly`. The unchanged
+default retains `BASE_SECTOR_1452_1290` and `DIAGONAL_RULE_UNPROVED`. WORLD selects
+`BoundedAdjacent`/`BASE_SECTOR_1452_1290_ADJACENT_V1`; immutable snapshot, assessment,
+step evidence and runtime binding must agree on that policy. Final terrain is
+queried once; `Assessment.Legs` and `StepEvidence.Legs` retain the four object-only
+XShoulder/XFinal/YShoulder/YFinal constraints for map diagonals. Each leg owns full
+records, components, exact from/to and leg/original directions; each gap carries
+its leg role. Parent records remain final-destination records rather than flattened
+duplicates. Open needs complete nonblocking closure; unconditional Blocked retains
+all unrelated gaps. No query-time I/O, mutable permit, shoulder terrain or multi-step
+path is introduced. Both endpoints and shoulders stay in x4..8/y0..3, with the
+same isolated context; path0x1000 remains Unknown and never falls back.
+
+Authenticated original observations at spawn `(6,1)` distinguish diagonals toward
+`(5,0)`/`(5,2)` (Blocked by shoulder scenery index1) from `(7,2)`/`(7,0)` (Open),
+all four legs retaining317 records and zero gaps. Reachable `(7,2)` provides Open
+for all eight neighbors. These are narrow structural/diagnostic facts, not whole
+zone reachability or original-executable parity. The unchanged cardinal API and
+historical evidence below do not themselves prove the new input/rendering policy.
+
 ## Status, source and limits
 
 ARC-DATA-008 implements the owned production API below in `Arcanum.Data.Traversal`,

@@ -25,7 +25,8 @@ public partial class TerrainViewerApp
         {
             var bits = stage[(stage.IndexOf('-') + 1)..];
             if (bits is not ("00" or "01" or "10" or "11")) throw new ArgumentException("Usage");
-            var stored = nondefault with { InvertCameraX = bits[0] == '1', InvertCameraY = bits[1] == '1' };
+            var stored = nondefault with { InvertCameraX = bits[0] == '1', InvertCameraY = bits[1] == '1',
+                InvertActorX = bits[0] == '0', InvertActorY = bits[1] == '0' };
             if (stage.StartsWith("write-", StringComparison.Ordinal)) store.Save(stored);
             InitializeWorld(); passed = store.Load() == stored && _worldSettings == stored;
         }
@@ -55,17 +56,17 @@ public partial class TerrainViewerApp
         {
             passed = _camera!.State.Zoom == 3; FitWorldView();
             passed &= _worldPreferredZoom == 3 && _worldZoomStore.Load() == 3;
-            ResetWorldScene(); passed &= _camera.State.Zoom == 3;
+            ResetWorldScene(); WorldSettleForSelfTest(); passed &= _camera.State.Zoom == 3;
         }
         else if (stage == "zoom-reset")
         {
-            ResetWorldSettings(); passed = _camera!.State.Zoom == 2 && _worldZoomStore.Load() == 2
+            ResetWorldSettings(); WorldSettleForSelfTest(); passed = _camera!.State.Zoom == 2 && _worldZoomStore.Load() == 2
                 && _worldSettings == new InputSettings(InvertCameraX:false,InvertCameraY:false);
         }
         else if (stage == "zoom-failure")
         {
             SetPreferredWorldZoom(3); passed = _camera!.State.Zoom == 3 && _worldZoomPending && _worldZoomSaveFailed;
-            ResetWorldScene(); passed &= _camera.State.Zoom == 3 && _worldZoomSaveFailed;
+            ResetWorldScene(); WorldSettleForSelfTest(); passed &= _camera.State.Zoom == 3 && _worldZoomSaveFailed;
         }
         else if (stage == "zoom-pending")
         {
@@ -90,6 +91,10 @@ public partial class TerrainViewerApp
     {
         if (DisplayServer.GetName() == "headless") throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Readback));
         SetProcess(false); // Only the explicit native-smoke child owns injected input.
+        // Publication and OS notifications already observed live timestamps.
+        // Freeze the test clock at a NEW live receipt, not the older published
+        // state watermark, before any asynchronous native readbacks begin.
+        _worldTestTime = WorldTime;
         WorldFocusForSelfTest(true);
         if (result.ModuleFingerprint != result.ModuleFingerprintAfter || result.ResourceFingerprint != result.ResourceFingerprintAfter
             || result.ActorResourceFingerprint is null || result.ActorResourceFingerprint != result.ActorResourceFingerprintAfter
@@ -132,15 +137,19 @@ public partial class TerrainViewerApp
             if (GetViewport().GetVisibleRect().Size != new Vector2(size.X, size.Y)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             _camera.ResetWorld(WorldAnchor, WorldViewport); _camera.Fit(WorldViewport); RefreshReadyStatus(); await NextFrameAsync();
             using var image = GetViewport().GetTexture().GetImage();
-            GD.Print($"ARC-WORLD-001 native-smoke stage=readback image={image.GetWidth()}x{image.GetHeight()} hud={HasReadyHudContent(_cache.Count)} limit={_hud!.Text.Contains("collision not evaluated", StringComparison.Ordinal)}");
+            GD.Print($"ARC-WORLD-001 native-smoke stage=readback image={image.GetWidth()}x{image.GetHeight()} hud={HasReadyHudContent(_cache.Count)} limit={_hud!.Text.Contains("Bounded adjacent grid", StringComparison.Ordinal)}");
             if (image.GetWidth() != size.X || image.GetHeight() != size.Y || !HasReadyHudContent(_cache.Count)
-                || !_hud!.Text.Contains("collision not evaluated", StringComparison.Ordinal)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
+                || !_hud!.Text.Contains("Bounded adjacent grid", StringComparison.Ordinal)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             // The actual combined window must contain decoded terrain AND a
             // decoded static landmark. Dimensions/HUD alone are not rendering.
             if (!await CaptureAndValidateSmokeFrameAsync(size, 4102, _cache.Count))
                 throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             // Resolve the original actor texels at high zoom through the SAME
             // combined canvas/camera, not just the isolated raster above.
+            // The bounded spawn (6,1) is not near the full-sector Fit center.
+            // Explicitly center this actor readback; zoom in Manual preserves
+            // its center and must not silently regain Follow in production.
+            _camera.ResetWorld(WorldAnchor, WorldViewport);
             _camera.ZoomWorld(64, WorldAnchor, WorldViewport);
             await NextFrameAsync();
             using var actorImage = GetViewport().GetTexture().GetImage();
@@ -163,6 +172,8 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-001 native-smoke combined-window terrain/static/actor pixels=PASS");
         }
         await RunHumanReadbackAsync(result);
+        await RunGridOriginalReadbackAsync(result);
+        await WorldOriginalReloadReadbackAsync(result);
         var count = _cache.Count; var created = _cache.CreatedCount;
         ClearPublishedScene();
         if (_cache.Count != 0 || _cache.DisposedCount != created) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
@@ -174,7 +185,7 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD simulation: " + why); }
         var none = new RawInputFrame(-1, default);
-        var left = none with { KeyboardActor = new(1, 0), KeyboardActorHeld = true };
+        var left = none with { KeyboardActor = new(-1, 1), KeyboardActorHeld = true };
         var right = none with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
         var both = left with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
         void Frame(RawInputFrame raw, double delta = .1, bool complete = true) => WorldFrameForSelfTest(raw, Array.Empty<RawInputFrame>(), delta, complete);
@@ -183,13 +194,15 @@ public partial class TerrainViewerApp
         _camera!.ZoomWorld(4, WorldAnchor, WorldViewport);
         Frame(right, 0); Require(_camera.FollowState.Mode == CameraMode.Manual, "dt0 right Manual");
         Frame(right); Require(_worldActor.State.Position == initial.Position, "camera-only displaced actor");
-        var manual = _camera.State; Frame(left);
+        var manual = _camera.State; Frame(left); Frame(left); Frame(left);
         Require(_worldActor.State.Position != initial.Position && _camera.State == manual, "actor movement must keep Manual camera fixed");
         Frame(both); Require(_camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "simultaneous priority");
         var afterBoth = _camera.State; Frame(left); Require(_camera.State == afterBoth, "release right while left held snapped camera");
         Frame(none); Require(_camera.State == afterBoth && _camera.FollowState.RecenterArmed, "neutral must arm without snapping");
         Frame(left); Require(_camera.FollowState.Mode == CameraMode.Follow, "fresh actor must resume Follow");
         Frame(right); Frame(none); Frame(both); Require(!_camera.FollowState.RecenterArmed, "simultaneous must cancel stale return");
+        WorldSettleForSelfTest(); // Complete accepted motion, not a SafetyStop freeze.
+        ResetWorldScene(); WorldSettleForSelfTest();
         var beforeSafety = _worldActor.State.Position; var beforeCenter = _camera.State;
         foreach (var focus in new[] { false, true })
         {
@@ -197,9 +210,10 @@ public partial class TerrainViewerApp
             Require(_worldActor.State.Position == beforeSafety && _camera.State == beforeCenter, "focus held or incomplete levels moved");
         }
         Frame(left); Frame(none); Frame(left); Require(_worldActor.State.Position == beforeSafety, "one neutral frame rearmed");
-        Frame(none); Frame(none); Frame(left); Require(_worldActor.State.Position != beforeSafety, "complete two neutral frames failed to rearm");
-        ToggleWorldSettings(); var modalPosition = _worldActor.State.Position; Frame(both);
-        Require(_worldActor.State.Position == modalPosition && !_worldActor.IsPlaying, "modal must safety-stop");
+        Frame(none); Frame(none); Require(_worldGate.IsOpen, "complete two neutral frames failed to rearm gate");
+        Frame(left); Frame(left); Frame(left); Require(_worldActor.State.Position != beforeSafety, "rearmed known Open step failed");
+        WorldSettleForSelfTest(); ToggleWorldSettings(); var modalPosition = _worldActor.State.Position; Frame(both);
+        Require(_worldActor.State.Position == modalPosition && !_worldActor.IsPlaying, "settled modal cannot start motion");
         ToggleWorldSettings(); Frame(both); Require(_worldActor.State.Position == modalPosition, "modal-close held restarted");
         Frame(none); Frame(none); Frame(none);
         var actorBeforeCamera = _worldActor.State;

@@ -46,7 +46,7 @@ source-derived normal branch and draws terrain, then actor, then its magenta
 rectangle and yellow anchor cross. That is diagnostic layering, not original
 occlusion or placement parity.
 
-`--mode world-diagnostic` (ARC-WORLD-001) combines the same terrain, exactly
+`--mode world-diagnostic` (ARC-WORLD-003 grid bridge) combines the same terrain, exactly
 five admitted statics and the fixed-profile actor. It requires explicit
 `--module`, `--resource`, `--actor-resource`, `--prototypes` (an authenticated
 directory) and `--source-id`; it rejects all actor preview overrides. These
@@ -132,20 +132,45 @@ sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 
 ## Integrated world diagnostic policy
 
-WORLD is free diagnostic movement, not gameplay or collision. State is double
-sector-local cell-center `(X,Y)`, closed `[0,63]` on each axis, reset `(30,32)`,
-Idle frame 0/facing 0. Projection is `(40*(Y-X),20*(Y+X))`; inverse screen delta
-is `(v/40-u/80,v/40+u/80)`. Speed is 240 unzoomed projected pixels/second at
-sensitivity 1. Circular deadzones and linear sensitivity are applied once;
-screen diagonals are normalized. Analytic boundary segments slide tangentially
-without substepping; completely blocked displacement selects Idle. Zero-time
-input cannot move or create Walk; explicit neutral may stop Walk at frame 0.
-Invalid/overflow steps commit neither actor state nor animation clock.
+WORLD003 replaces WORLD001's free diagnostic integrator in this source
+candidate; historical parent artifacts retain their original behavior. There
+is no free-movement mode or admission-failure fallback. This is a bounded
+original-data admission diagnostic, **not** gameplay or original-executable
+collision parity. It uses the existing [headless movement runtime](../world/grid-movement-runtime.md)
+and [cardinal Data assessment](../world/cardinal-traversal-assessment.md), never
+Godot physics, navigation or a second frame-based simulator.
 
-The project diagnostic screen octants are clockwise up=0, up-right=1, right=2,
-down-right=3, down=4, down-left=5, left=6, up-left=7, with clockwise half-octant
-ties. They do **not** establish original compass semantics: source-facing
-numbers remain opaque. WORLD defaults to the closed `HumanFixed` profile:
+The fixed sector is `(1452,1290)`, admitted zone `x=4..8,y=0..3`, under declared
+isolated-PC/current-CRITTER-ART/non-polymorph context. Diagnostic spawn/reset is
+`(6,1)`, facing map `XPlus`; this is **not** recovered original placement.
+Each new runtime-generated opportunity gets an exact-key assessment from the
+owned snapshot. Only Supported/Open permits a start. Blocked, Unknown and
+Unsupported leave the settled cell unchanged and show their concrete reason;
+the full contributor/gap evidence is retained outside the bounded permit codes.
+The adapter replays the earliest missing assessment against the same immutable
+previous state, then publishes one final result; invalid/capacity failures are
+atomic, not partial movement.
+
+Live adjacent duration is the explicit positive rational **1/2 second** per
+cell, with entry at **1/4 second**. It is project diagnostic policy, independent
+of ART FPS, analog magnitude, camera delta and original movement speed. Neutral
+before entry smoothly returns to the committed origin; equality or later
+commits/finishes the destination. Turning while accepted execution is active
+does not rotate that segment or queue intermediate turns. Returning and
+post-entry finish remain Walk under neutral; only real center arrival selects
+Idle. Held rejected intent does not repeatedly create opportunities.
+
+The HUD separates exact committed cell, rational continuous anchor, phase,
+clock, step/opportunity IDs and assessment. Full exact admission/input keys are
+also retained in numeric debug receipts. Projection remains
+`(40*(Y-X),20*(Y+X))`; rendering-only rounding cannot commit a cell. Actor
+callbacks use monotonic host microseconds converted to rational seconds, one
+ordered complete batch per timestamp. The newest tick remains open until a
+strictly newer observation proves it complete; no late-input retagging.
+
+The rendering catalogue retains project diagnostic octants, not original
+compass semantics. WORLD uses the bounded eight-sector screen mapping below and
+the closed `HumanFixed` profile:
 single-layer fixed type2/body0 female underwear0, palette0, mapping-only (no
 module/NPC/player appearance association). Idle has one frame at raw 6 FPS;
 Walk has ten frames at raw 17 FPS. These positive ART rates drive the diagnostic
@@ -153,13 +178,54 @@ clock, not an original animation scheduler or movement-speed claim. The legacy
 standalone `actor-diagnostic` keeps `MonsterRegression`, 15/8 frames and the
 6/10 FPS override (raw 8/15). Both ratified action facing tables use physical
 groups `[0,7,6,5,4,5,6,7]` and mirror only slots 1..3. Action changes reset frame/interval;
-same-action facing changes preserve the interval. The last moving segment
-determines facing. Cell floor and ToEven fractional projected pixel offsets
+same-action facing changes preserve the interval. Runtime motion events and
+phase determine facing, including reversed facing on early cancellation;
+denial does not rotate the actor. Cell floor and ToEven fractional projected pixel offsets
 bridge to the checked source-derived normal placement; camera origin stays 0.
 Follow targets continuous projected baseline plus `(0,20)`, not rounded sprite
 position. No sprite repositioning/visual nudge substitutes for source geometry.
 
-WASD/left stick moves the actor. Arrows/right stick pans the world image and
+WASD/left stick requests **screen sectors**. The reducer applies circular deadzone
+and linear sensitivity once; WORLD then applies separate actor X/Y inversion
+(defaults false/false) once. Retain each nonzero component whose magnitude is at
+least half the largest (inclusive ties), then map the screen sector to one
+neighbor. Camera inversion remains independent and authored v1 camera settings
+are preserved when migrating files without actor fields. Sensitivity affects
+magnitude, not the fixed diagnostic half-second step duration. Opposing keys net
+neutral but still count as activity for safety/Follow. The literal mapping follows
+`(40*(Y-X),20*(Y+X))`, not a compass alias or original-executable claim:
+
+| Input | Map direction | Unzoomed projected cell delta | Human octant / physical group / flip |
+| --- | --- | --- | --- |
+| W / stick N | XMinusYMinus | `(0,-40)` | `0 / 0 / no` |
+| W+D / stick NE | XMinus | `(40,-20)` | `1 / 7 / yes` |
+| D / stick E | XMinusYPlus | `(80,0)` | `2 / 6 / yes` |
+| S+D / stick SE | YPlus | `(40,20)` | `3 / 5 / yes` |
+| S / stick S | XPlusYPlus | `(0,40)` | `4 / 4 / no` |
+| S+A / stick SW | XPlus | `(-40,20)` | `5 / 5 / no` |
+| A / stick W | XPlusYMinus | `(-80,0)` | `6 / 6 / no` |
+| W+A / stick NW | YMinus | `(-40,-20)` | `7 / 7 / no` |
+
+From spawn, S+A admits `(6,1)->(7,1)`; release/finish and W+D return to `(6,1)`.
+W+D at spawn requests `(5,1)` and is blocked by the already admitted scenery
+index 1 (one of the five, no extra/invented blocker). Its diagnostic anchor is
+`(-163,134)`, rectangle `(-276,-128,204,267)`. Destination evidence is
+asymmetric; general occupancy/reachability/occlusion are not inferred.
+
+WORLD opts into `BASE_SECTOR_1452_1290_ADJACENT_V1`, still only x4..8/y0..3.
+Data's default `CardinalOnly` policy remains unchanged. Straight screen axes are
+map diagonals: final terrain is assessed once, with four role-labelled object
+constraints for both shoulders and both final legs. No shoulder terrain, route
+search, four runtime permits, staircase or corner cutting is inferred. At spawn,
+W and D legitimately deny because the XMinus shoulder is the existing `(5,1)`
+blocker. S can reach `(7,2)` where all eight directions have original-data positive
+coverage; holding still renews each admitted segment and stops honestly at the
+bounded zone or obstacle. Native callback/frame and original-pixel tests cover
+all eight sectors, four actor inversion states, keyboard/stick simulation and
+three actual viewports. They do not replace required ordinary physical observation
+or independent review of the frozen candidate.
+
+Arrows/right stick pans the world image and
 immediately selects Manual, even at zero dt or a clamped camera. Simultaneous
 actor/camera intent remains independent. Releasing pan while actor remains
 held stays Manual; both domains neutral arms return without snapping; the next
@@ -173,21 +239,28 @@ Left drag selects Manual without moving the actor; wheel/+/- changes bounded
 zoom without changing Follow eligibility. HUD/settings consumes pointer input;
 UI keyboard focus blocks world input. Resize clamps the center to viewport
 bounds but never derives actor state from `Camera2D`. `F` fits and remains
-Manual/unarmed; `R` resets scene and Follow without resetting preferences;
-`L` reloads through generation-aware loading. F11/Escape use ordinary window
-controls. Focus loss/gain, modal transitions, active disconnect/acquisition,
-reset/reload/failure/exit stop animation and quarantine stale input. Inactive
+Manual/unarmed; `R` requests explicit safe scene/Follow reset without resetting
+preferences; `L` requests generation-aware reload. Both enqueue neutral and
+wait for accepted return/finish to reach Settled before replacing the session.
+The successor has a fresh input queue/sequence and snapshot epoch binding;
+old pending lifecycle flags cannot execute in it. Missing reload arguments
+fail closed, never fall back to reset. Failure/exit disposes the session,
+distinct from (and without manufacturing) CenterArrived. F11/Escape use ordinary
+window controls. Focus loss/gain, modal transitions and active disconnect/acquisition
+enqueue timestamped neutral and quarantine **new input**, not accepted motion. Inactive
 disconnect preserves scene. Rearm requires two complete observed-neutral frame
 samples of every mapped keyboard and active-controller level; cached/event or
 opposing-key cancellation is not neutral proof. Live sampling uses pinned
 Godot APIs, not simulated levels. An incomplete, missing-active-controller or
-invalid observation quarantines **before** reducer timing or UI actions: Idle
-frame 0, cleared drag/navigation and Manual-return arm, with last valid actor
-position and bounded camera center preserved. Held input on recovery cannot
+invalid observation quarantines **before** reducer timing or UI actions:
+cleared drag/navigation and Manual-return arm, with bounded camera center
+preserved. Already accepted return/finish and its Walk clock continue under the
+closed gate. Held input on recovery cannot
 substitute for those two complete neutral frames.
 
-F1/Start or the HUD button opens bounded settings: independent camera X/Y
-inversion, independent actor/camera deadzones and sensitivities, reset and close.
+F1/Start or the HUD button opens bounded settings: independent camera X/Y and
+actor screen X/Y inversion, independent actor/camera deadzones and sensitivities,
+reset and close.
 WORLD first launch and Reset use **false/false**: stick right/down moves the
 camera right/down (world image left/up). True reverses only the selected
 camera axis; actor and menu directions are unchanged. Explicit saved values,
@@ -202,13 +275,13 @@ repeat; held keys, D-pad, echo and unrelated mouse events do not advance it.
 Focused numeric editors retain native digit/edit/Enter/Tab input. Mouse clicks
 belong to native GUI dispatch, not semantic Confirm on the previously focused
 control. Keyboard/controller activation and navigation are consumed once,
-while world movement and Follow remain stopped. The bounded scrollable panel
-uses an opaque background; free-movement/collision/parity limitations remain
+while new movement and Follow activation are gated (accepted motion continues).
+The bounded scrollable panel uses an opaque background; bounded-grid/context/parity limitations remain
 visible in a fixed header even when the settings rows scroll.
 
 Paint is terrain → diagnostic facades → five sorted statics → actor → guides
-→ HUD. The persistent label says free diagnostic movement, collision not
-evaluated and original parity NOT VERIFIED, including loading/failure/modal.
+→ HUD. The persistent label says bounded adjacent grid, original Data admission,
+not gameplay and original parity NOT VERIFIED, including loading/failure/modal.
 Shared `src/Arcanum.Input` owns project input/Follow/Vec2; historical
 `GamepadLab.Core` names and type forwarding are compatibility only. The viewer
 does not reference the experiment assembly, targeting or obstacle algorithms.
@@ -230,7 +303,9 @@ checks cover missing-file first launch, each explicit axis combination and
 Reset. Headless containment checks do not establish opacity. Original graphical
 native checks separately authenticate immutable module/terrain/actor/prototype
 roles, terrain 4096/3033/1063 with zero issues and normalization 457/86,
-static census 317/5/312, all 184 actor frames, motion/selection/readback,
+static census 317/5/312, all 55 HumanFixed texture keys (457676 RGBA bytes),
+264 catalogue selections, actual grid early/equality/late/open-reverse/blocker
+traces and phase-specific actor pixels with hidden-actor/static controls,
 requested=actual 1280x800,1440x900,800x600 viewports and texture disposal.
 Headless checks are structural, not pixels. Source, exported original checks,
 isolated settings restart and later ordinary unchanged-artifact observation
@@ -242,18 +317,35 @@ After source corrections and a clean committed candidate, use the closed
 WORLD endpoint (not the historical manual recipe below):
 
     ARCANUM_LOCAL_HOME=OWNED_CONFIG ARCANUM_LOCAL_ROOT_ID=WORLD_ROOT_ID \
-      ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-001 \
+      ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003 \
       tools/terrain-viewer/Godot/tools/validate-macos.sh
 
 Configure WORLD separately at ignored `artifacts/world-builds`; keep legacy
 roots/pointers. Use effective TMPDIR and a verified same-tool complete payload
 estimate per [toolchain](../workflow/toolchain.md). The endpoint leases one
 final head through gates/export/codesign/observation freeze/v2 finalization and
-success-only registration. Select `WORLD_ROOT_ID:ARC-WORLD-001:<head>` and run
+success-only registration. Select `WORLD_ROOT_ID:ARC-WORLD-003:<head>` and run
 `tools/arcanum-local launch terrain --mode world-diagnostic` for ordinary use.
 Default mode remains terrain-only. No test/capture/input/fullscreen automation
 belongs in ordinary launch. Later observation logs/digest bindings stay outside
 sealed evidence; never edit a finalized package or rerun an unchanged endpoint.
+
+WORLD003 retains all sixteen parent terrain/WORLD/GPAD/Human gates and adds
+source/exported `grid-original` structured reports. Both manifest writing and
+registration require eighteen PASS actual-exit receipts bound to task, full
+head, timestamp and log digest; registration also requires the gate logs and
+receipts in the immutable evidence inventory. Independent private original
+pixel reference stays local/ignored, never in the app, manifest or PR.
+
+The production bridge/readback tests live in
+[Core tests](../../tests/Arcanum.TerrainViewer.Tests/DiagnosticGridSessionTests.cs),
+[original bridge](../../tests/Arcanum.TerrainViewer.Tests/OriginalGridBridgeTests.cs),
+[grid notifications](../../tools/terrain-viewer/Godot/TerrainViewerWorldGridTest.cs),
+[retirement/ownership](../../tools/terrain-viewer/Godot/TerrainViewerWorldRetirementTest.cs)
+and [original graphical readback](../../tools/terrain-viewer/Godot/TerrainViewerWorldOriginalGridValidation.cs).
+Native automated readback is software evidence, not a physical Xbox comfort
+measurement or ordinary-launch observation. A source pass is not an exported
+artifact, independent review, publication or merge claim.
 
 ## Verification and evidence status
 

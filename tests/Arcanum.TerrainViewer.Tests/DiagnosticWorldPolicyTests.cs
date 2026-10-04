@@ -20,7 +20,8 @@ public sealed class DiagnosticWorldPolicyTests
         var args = TerrainViewerArguments.Parse(complete);
         Assert.AreEqual(TerrainViewerMode.WorldDiagnostic, args.Mode);
         Assert.AreEqual("terrain-r", args.ResourcePath); Assert.AreEqual("actor-r", args.ActorResourcePath);
-        Assert.AreEqual(30L, args.ActorInput!.MapX); Assert.AreEqual(32L, args.ActorInput.MapY);
+        Assert.AreEqual(6L, args.ActorInput!.MapX); Assert.AreEqual(1L, args.ActorInput.MapY);
+        Assert.AreEqual(5, args.ActorInput.Facing);
         Assert.AreEqual(ActorDiagnosticAction.Idle, args.ActorInput.Action); Assert.AreEqual(0, args.ActorInput.Frame);
         foreach (var option in new[] { "--module", "--resource", "--actor-resource", "--prototypes", "--source-id" })
         {
@@ -205,7 +206,7 @@ public sealed class DiagnosticWorldPolicyTests
     {
         Assert.AreEqual(20, typeof(RawInputFrame).GetMethod("Deconstruct")!.GetParameters().Length);
         Assert.AreEqual(14, typeof(IntentFrame).GetMethod("Deconstruct")!.GetParameters().Length);
-        const string defaults = "{\"version\":1,\"cameraDeadzone\":0.2,\"actorDeadzone\":0.2,\"cameraSensitivity\":1,\"actorSensitivity\":1,\"invertCameraX\":true,\"invertCameraY\":true}";
+        const string defaults = "{\"version\":1,\"cameraDeadzone\":0.2,\"actorDeadzone\":0.2,\"cameraSensitivity\":1,\"actorSensitivity\":1,\"invertCameraX\":true,\"invertCameraY\":true,\"invertActorX\":false,\"invertActorY\":false}";
         Assert.AreEqual(defaults, InputSettingsCodec.Serialize(InputSettings.Default));
         foreach (var value in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
         {

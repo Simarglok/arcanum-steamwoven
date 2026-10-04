@@ -168,18 +168,22 @@ public partial class TerrainViewerApp : Node
         if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
         {
             InitializeWorld(); _actorTimeline = null;
-            _worldActor.Configure(result.ActorPlan!.Profile); QuarantineWorld();
+            RetireWorldLifecycle();
+            _worldActor.Configure(result.TraversalSnapshot ?? throw new InvalidOperationException("GRID_SNAPSHOT_REQUIRED"), WorldTime);
+            _worldGridInput = new(); QuarantineWorld(); PublishWorldSelection();
             _worldFitView = false;
             _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         }
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         RefreshReadyStatus();
         if (arguments.Mode == TerrainViewerMode.WorldDiagnostic)
-            GD.Print($"ARC-WORLD-001 ready terrain={result.ResolvedCount}/{result.TileCount}/{result.FacadeCount} static={_readyStaticAdmittedCount} actor-textures={result.ActorTextures.Count} viewport={WorldViewport.X}x{WorldViewport.Y} display={DisplayServer.GetName()} test={SelfTestBootstrap || _nativeSmoke} collision=not-evaluated parity=NOT_VERIFIED");
+            GD.Print($"ARC-WORLD-003 ready terrain={result.ResolvedCount}/{result.TileCount}/{result.FacadeCount} static={_readyStaticAdmittedCount} actor-textures={result.ActorTextures.Count} viewport={WorldViewport.X}x{WorldViewport.Y} display={DisplayServer.GetName()} test={SelfTestBootstrap || _nativeSmoke} cardinal-profile={result.TraversalSnapshot?.ProfileId} parity=NOT_VERIFIED");
     }
 
     private void ClearPublishedScene()
     {
+        RetireWorldLifecycle();
+        _worldActor.DisposeSession(); _worldGridInput = new();
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
@@ -188,7 +192,12 @@ public partial class TerrainViewerApp : Node
     /// <summary>Sole failure publication route for normal loads and self-test injection.</summary>
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
-        if (mode == TerrainViewerMode.WorldDiagnostic) QuarantineWorld();
+        if (mode == TerrainViewerMode.WorldDiagnostic)
+        {
+            _worldGate.Close(); _worldReducer.Quarantine();
+            _dragging = false; _worldDrag = default; _worldMenuAnalogDirection = 0;
+            _camera?.SafetyResetWorld();
+        }
         _hud?.SetMode(mode);
         ClearPublishedScene();
         ShowFailureStatus(mode, error);
@@ -775,7 +784,16 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
-        if (IsWorld) { ProcessWorld(delta); return; }
+        if (IsWorld)
+        {
+            try { ProcessWorld(delta); }
+            catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
+            {
+                GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
+                PublishFailure(TerrainViewerMode.WorldDiagnostic,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
+            }
+            return;
+        }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);
         var before = _camera?.State;
         if (Input.IsKeyPressed(Key.W) || Input.IsKeyPressed(Key.Up)) _camera?.Pan(new Vector2(0, -step));
@@ -910,6 +928,7 @@ public partial class TerrainViewerApp : Node
     private void ShowStatus(string text) => _hud?.SetDiagnosticText(text, _nativeSmoke || SelfTestBootstrap);
     public override void _ExitTree()
     {
+        if (_exiting) return;
         _exiting = true;
         ExitWorld();
         GetViewport().SizeChanged -= HandleViewportSizeChanged;

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Arcanum.TerrainViewer.Core;
+using Arcanum.Simulation.Movement;
 using GamepadLab.Core;
 using Godot;
 using Environment = System.Environment;
@@ -15,6 +16,10 @@ public partial class TerrainViewerApp
         var path = Environment.GetEnvironmentVariable("RENDER006_HUMAN_ORACLE");
         if (string.IsNullOrEmpty(path)) return; // inherited WORLD smoke remains separate
         if (!_nativeSmoke || DisplayServer.GetName() == "headless") throw HumanFailure();
+        await WithWorldReadbackScopeAsync(result, () => RunHumanCatalogueReadbackAsync(result, path));
+    }
+    private async Task RunHumanCatalogueReadbackAsync(TerrainLoadResult result, string path)
+    {
         using var document = JsonDocument.Parse(File.ReadAllBytes(path));
         var root = document.RootElement;
         if (root.GetProperty("schema").GetString() != "arcanum-human-private-oracle-v1"
@@ -38,27 +43,30 @@ public partial class TerrainViewerApp
         }
         if (bytes != 457676) throw HumanFailure();
         var samples = 0; var progression = false; var actual = new List<int[]>();
-        var directions = new[] { new Vec2(0,-1), new(1,-1), new(1,0), new(1,1), new(0,1), new(-1,1), new(-1,0), new(-1,-1) };
+        void RenderSelection(int action, int slot, int frame)
+        {
+            // Full inherited resource/geometry coverage is a pure render
+            // catalogue check, NOT permission to move diagonally. Production
+            // grid action clock progression is independently exercised below.
+            var input = new ActorDiagnosticPlacementInput(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
+                (ActorDiagnosticAction)action,slot,frame,0,0,0,0,0,0);
+            _readyActorPlan = result.ActorPlan!.Select(input); _readyActorInput = input; _readyActor = _readyActorPlan.Current;
+            _readyDiagnosticPlan = _readyDiagnosticPlan!.WithWorldActor(_readyActorPlan);
+            _canvas!.Publish(_readyDiagnosticPlan,_cache);
+        }
         // Literal ratified table, independent of Profile.Facing/MapFacing.
         var groups = new[] {0,7,6,5,4,5,6,7};
         foreach (var size in new[] {new Vector2I(1280,800), new(1440,900), new(800,600)})
         {
             await SetSmokeWindowSizeAsync(size); actual.Add([size.X,size.Y]);
-            ResetWorldScene(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 2);
+            _worldActor.Configure(result.TraversalSnapshot!,SimulationTime.At(0));
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, 2);
             foreach (var action in new[] {0,1})
             for (var slot = 0; slot < 8; slot++)
             {
-                _worldActor.Reset();
-                // Motion intentionally preserves state for dt0. A positive
-                // sub-frame interval admits the requested motion octant.
-                _worldActor.Update(directions[slot],.0001);
-                if (action == 0) _worldActor.Update(default,0);
                 for (var frame = 0; frame < (action == 0 ? 1 : 10); frame++)
                 {
-                    if (frame > 0) _worldActor.Update(directions[slot],1d/17);
-                    PublishWorldSelection(); _camera.ResetWorld(WorldAnchor, WorldViewport,2);
-                    if (_worldActor.CurrentFrame != frame) throw HumanFailure();
-                    progression |= frame > 0;
+                    RenderSelection(action,slot,frame); _camera.ResetWorld(WorldAnchor, WorldViewport,2);
                     var row = rows.Single(r => r.GetProperty("action").GetInt32() == action
                         && r.GetProperty("group").GetInt32() == groups[slot] && r.GetProperty("frame").GetInt32() == frame);
                     await NextFrameAsync();
@@ -75,18 +83,30 @@ public partial class TerrainViewerApp
             }
             // Negative controls use the actual main combined canvas, not a
             // fake expected failure or merely a texture image.
-            _worldActor.Reset(); _worldActor.Update(directions[2],.0001); PublishWorldSelection();
+            RenderSelection(1,2,0);
             var reference = rows.Single(r => r.GetProperty("action").GetInt32()==1 && r.GetProperty("group").GetInt32()==6 && r.GetProperty("frame").GetInt32()==0);
             _camera.ResetWorld(WorldAnchor,WorldViewport,2); await NextFrameAsync();
             _canvas!.SetActorVisibilityForReadback(false); await NextFrameAsync();
             using (var hidden = GetViewport().GetTexture().GetImage()) if (MatchesHumanReference(hidden,reference,2)) throw HumanFailure();
             _canvas.SetActorVisibilityForReadback(true);
-            _worldActor.Update(directions[6],.0001); PublishWorldSelection(); await NextFrameAsync();
+            RenderSelection(1,6,0); await NextFrameAsync();
             using (var wrong = GetViewport().GetTexture().GetImage()) if (MatchesHumanReference(wrong,reference,2)) throw HumanFailure();
+        }
+        _worldActor.Configure(result.TraversalSnapshot!,SimulationTime.At(0));
+        for (var frame=0;frame<10;frame++)
+        {
+            var batches=frame==0 ? new[]{new InputBatch(SimulationTime.At(0),[MovementInput.Set(0,ActorIntent.Toward(NeighborDirection.XPlus))])} : Array.Empty<InputBatch>();
+            var movement=_worldActor.Advance(SimulationTime.At(frame,17),batches,input=>_readyActorPlan!.Select(input));
+            if(movement.Movement.Status!=MovementStatus.Completed||_worldActor.State.Action!=ActorDiagnosticAction.Walk||_worldActor.CurrentFrame!=frame) throw HumanFailure();
+            PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor,WorldViewport,2); await NextFrameAsync();
+            using var image=GetViewport().GetTexture().GetImage();
+            var row=rows.Single(r=>r.GetProperty("action").GetInt32()==1&&r.GetProperty("group").GetInt32()==5&&r.GetProperty("frame").GetInt32()==frame);
+            if(!MatchesHumanReference(image,row,5)) throw HumanFailure();
+            progression |= frame>0;
         }
         if (samples != 264 || !progression) throw HumanFailure();
         GD.Print("ARC-RENDER-006 human-readback " + JsonSerializer.Serialize(new {
-            schema="arcanum-human-validation-v1", task="ARC-RENDER-006",
+            schema="arcanum-human-validation-v1", task=Environment.GetEnvironmentVariable("RENDER006_TASK") ?? "ARC-RENDER-006",
             candidateCommit=Environment.GetEnvironmentVariable("RENDER006_CANDIDATE"),
             host=Environment.GetEnvironmentVariable("RENDER006_HOST"), kind="human", profile="HumanFixed", outcome="PASS", exitCode=0,
             originalIdentity="authenticated-actor-role", physicalRows=88, distinctKeys=55, rgbaBytes=457676,

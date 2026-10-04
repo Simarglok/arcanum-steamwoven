@@ -17,15 +17,18 @@ public sealed class CardinalTraversalSnapshot
 
     internal CardinalTraversalSnapshot(CardinalTraversalInputIdentity identity, long epoch, CardinalTerrainCell[] terrain,
         StaticObstructionSectorReport staticReport, int terminalCount, int tileScripts, int sectorScriptBytes,
-        IEnumerable<CardinalTraversalCensusRecord> census, bool censusShapeComplete, bool membershipComplete)
+        IEnumerable<CardinalTraversalCensusRecord> census, bool censusShapeComplete, bool membershipComplete,
+        CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly)
     {
         InputIdentity = identity; EvidenceEpoch = epoch; DeclaredContext = CardinalTraversalRules.DeclaredContext();
+        ProfileId = CardinalTraversalRules.Profile(policy); AdmissionPolicy = policy;
         _terrain = terrain.ToArray(); _static = staticReport;
         TerminalRecordCount = terminalCount; TileScriptCount = tileScripts; SectorScriptBytes = sectorScriptBytes;
         Census = Array.AsReadOnly(census.ToArray()); _censusShapeComplete = censusShapeComplete; _membershipComplete = membershipComplete;
         _recordsByIndex = staticReport.Records.GroupBy(r => r.SourceIndex).ToDictionary(g => g.Key, g => g.ToArray());
     }
-    public string ProfileId => CardinalTraversalRules.ProfileId;
+    public string ProfileId { get; }
+    public CardinalTraversalAdmissionPolicy AdmissionPolicy { get; }
     public CardinalTraversalInputIdentity InputIdentity { get; }
     public long EvidenceEpoch { get; }
     public CardinalTraversalContext DeclaredContext { get; }
@@ -43,7 +46,7 @@ public sealed class CardinalTraversalSnapshot
 
         // Branch gaps occur only after complete semantic admission, and never run normal composition.
         var branchGaps = new List<CardinalTraversalGap>();
-        if (((int)request.Direction & 1) == 0)
+        if (((int)request.Direction & 1) == 0 && AdmissionPolicy == CardinalTraversalAdmissionPolicy.CardinalOnly)
             branchGaps.Add(new(Unknown(CardinalTraversalComponentKind.SourceEdges, "DIAGONAL_RULE_UNPROVED", Spec())));
         if (request.Context.PathFlags == 0x1000)
             branchGaps.Add(new(Unknown(CardinalTraversalComponentKind.Actor, "PATH_BRANCH_UNAVAILABLE", Spec())));
@@ -77,9 +80,44 @@ public sealed class CardinalTraversalSnapshot
             : Unknown(CardinalTraversalComponentKind.Census, "TERMINAL_CENSUS_UNCERTAIN", Serialized()));
 
         // Full record evaluation and ALL missing fact gaps, not only a winning primary record reason.
+        AssessObjectRecords(request.To, records, gaps);
+        Add(_membershipComplete ? Open(CardinalTraversalComponentKind.SourceEdges, "SERIALIZED_SOURCE_EDGE_TYPES_ABSENT", Spec())
+            : Unknown(CardinalTraversalComponentKind.SourceEdges, "SOURCE_EDGE_CENSUS_UNCERTAIN", Spec()));
+        Add(_membershipComplete ? Open(CardinalTraversalComponentKind.DestinationOtherTypes, "SERIALIZED_OTHER_TYPES_ABSENT", Spec())
+            : Unknown(CardinalTraversalComponentKind.DestinationOtherTypes, "OTHER_TYPE_CENSUS_UNCERTAIN", Spec()));
+        Add(Open(CardinalTraversalComponentKind.SupplementalRegistry, "DECLARED_EMPTY_SUPPLEMENTAL_REGISTRY", Policy(), [new("REGISTRY_COUNT", 0)]));
+        Add(NotApplicable(CardinalTraversalComponentKind.ActorSelf, "ACTOR_AT_SOURCE_ONLY", Policy()));
+        Add(NotApplicable(CardinalTraversalComponentKind.RouteTrapFireWindow, "ROUTE_ONLY_RULES_NOT_APPLICABLE", Spec()));
+        Add(NotApplicable(CardinalTraversalComponentKind.ScriptExecution, "SELECTED_HELPER_NO_SCRIPT_EXECUTION", Spec(),
+            [new("TILE_SCRIPT_COUNT", TileScriptCount), new("SECTOR_SCRIPT_BYTES", SectorScriptBytes)]));
+
+        var tileBlocker = components.Where(c => c.ComponentKind is CardinalTraversalComponentKind.DestinationMask or
+            CardinalTraversalComponentKind.DestinationFacade or CardinalTraversalComponentKind.DestinationName)
+            .Any(c => c.Disposition == CardinalTraversalDisposition.Blocked);
+        // Reuse the existing destination-only production component, but never mistake its subset for closure.
+        var diagonal = ((int)request.Direction & 1) == 0;
+        var legs = diagonal ? AssessLegs(request) : Array.Empty<CardinalTraversalLegEvidence>();
+        gaps.AddRange(legs.SelectMany(l => l.Gaps));
+        var sceneryBlocker = _membershipComplete && (diagonal
+            ? legs.Any(l => l.RecordAssessments.Any(r => r.Result.Disposition == CardinalTraversalDisposition.Blocked))
+            : _static.GetDestinationForStep(request.From.X, request.From.Y, request.To.X, request.To.Y).Result.Disposition == StaticObstructionDisposition.Blocker);
+        if (tileBlocker || sceneryBlocker)
+            return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
+                tileBlocker ? "UNCONDITIONAL_TILE_BLOCKER" : diagonal ? "ADMITTED_ADJACENT_SCENERY_BLOCKER" : "ADMITTED_DESTINATION_SCENERY_BLOCKER", components, records, gaps, legs);
+        if (gaps.Count != 0)
+            return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", components, records, gaps, legs);
+        return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open,
+            "COMPLETE_NONBLOCKING_EVIDENCE", components, records, gaps, legs);
+    }
+
+    private void AssessObjectRecords(CardinalTraversalCell destination, List<CardinalTraversalRecordAssessment> records,
+        List<CardinalTraversalGap> gaps, CardinalTraversalDirection? originalDirection = null)
+    {
         foreach (var row in Census)
         {
             var provenance = RecordProvenance(row);
+            var inputs = RecordInputs(row).ToList();
+            if (originalDirection is { } direction) inputs.Add(new("ORIGINAL_DIRECTION", (int)direction));
             var missing = new List<string>();
             if (row.ObjectType != 3) missing.Add("TYPE_UNADMITTED");
             if (row.ObjectType == 3 && row.EffectiveFlags is null) missing.Add("FLAGS_UNRESOLVED");
@@ -101,9 +139,9 @@ public sealed class CardinalTraversalSnapshot
             if (missing.Count != 0)
             {
                 registration = CardinalTraversalApplicability.Unknown;
-                result = Unknown(CardinalTraversalComponentKind.Census, missing[0], provenance, RecordInputs(row));
+                result = Unknown(CardinalTraversalComponentKind.Census, missing[0], provenance, inputs);
                 foreach (var reason in missing)
-                    gaps.Add(new(Unknown(CardinalTraversalComponentKind.Census, reason, provenance, RecordInputs(row)), row.SourceIndex));
+                    gaps.Add(new(Unknown(CardinalTraversalComponentKind.Census, reason, provenance, inputs), row.SourceIndex));
             }
             else
             {
@@ -111,39 +149,47 @@ public sealed class CardinalTraversalSnapshot
                 var exclusion = ordinary.Result.Applicability == StaticObstructionApplicability.NotApplicable;
                 registration = exclusion ? CardinalTraversalApplicability.NotApplicable : CardinalTraversalApplicability.Applicable;
                 if (exclusion)
-                    result = NotApplicable(CardinalTraversalComponentKind.Census, ordinary.Result.ReasonCode, provenance, RecordInputs(row));
-                else if (row.LocalCell != request.To)
-                    result = NotApplicable(CardinalTraversalComponentKind.Census, "RECORD_NOT_AT_DESTINATION", provenance, RecordInputs(row));
+                    result = NotApplicable(CardinalTraversalComponentKind.Census, ordinary.Result.ReasonCode, provenance, inputs);
+                else if (row.LocalCell != destination)
+                    result = NotApplicable(CardinalTraversalComponentKind.Census, "RECORD_NOT_AT_DESTINATION", provenance, inputs);
                 else
                     result = new(CardinalTraversalComponentKind.Census, CardinalTraversalApplicability.Applicable, CardinalTraversalCoverage.Supported,
                         ordinary.Result.Disposition == StaticObstructionDisposition.Blocker ? CardinalTraversalDisposition.Blocked : CardinalTraversalDisposition.Open,
-                        ordinary.Result.ReasonCode, RecordInputs(row), provenance);
+                        ordinary.Result.ReasonCode, inputs, provenance);
             }
             records.Add(new(row, registration, result));
         }
-        Add(_membershipComplete ? Open(CardinalTraversalComponentKind.SourceEdges, "SERIALIZED_SOURCE_EDGE_TYPES_ABSENT", Spec())
-            : Unknown(CardinalTraversalComponentKind.SourceEdges, "SOURCE_EDGE_CENSUS_UNCERTAIN", Spec()));
-        Add(_membershipComplete ? Open(CardinalTraversalComponentKind.DestinationOtherTypes, "SERIALIZED_OTHER_TYPES_ABSENT", Spec())
-            : Unknown(CardinalTraversalComponentKind.DestinationOtherTypes, "OTHER_TYPE_CENSUS_UNCERTAIN", Spec()));
-        Add(Open(CardinalTraversalComponentKind.SupplementalRegistry, "DECLARED_EMPTY_SUPPLEMENTAL_REGISTRY", Policy(), [new("REGISTRY_COUNT", 0)]));
-        Add(NotApplicable(CardinalTraversalComponentKind.ActorSelf, "ACTOR_AT_SOURCE_ONLY", Policy()));
-        Add(NotApplicable(CardinalTraversalComponentKind.RouteTrapFireWindow, "ROUTE_ONLY_RULES_NOT_APPLICABLE", Spec()));
-        Add(NotApplicable(CardinalTraversalComponentKind.ScriptExecution, "SELECTED_HELPER_NO_SCRIPT_EXECUTION", Spec(),
-            [new("TILE_SCRIPT_COUNT", TileScriptCount), new("SECTOR_SCRIPT_BYTES", SectorScriptBytes)]));
+    }
 
-        var tileBlocker = components.Where(c => c.ComponentKind is CardinalTraversalComponentKind.DestinationMask or
-            CardinalTraversalComponentKind.DestinationFacade or CardinalTraversalComponentKind.DestinationName)
-            .Any(c => c.Disposition == CardinalTraversalDisposition.Blocked);
-        // Reuse the existing destination-only production component, but never mistake its subset for closure.
-        var scenery = _static.GetDestinationForStep(request.From.X, request.From.Y, request.To.X, request.To.Y);
-        var sceneryBlocker = _membershipComplete && scenery.Result.Disposition == StaticObstructionDisposition.Blocker;
-        if (tileBlocker || sceneryBlocker)
-            return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
-                tileBlocker ? "UNCONDITIONAL_TILE_BLOCKER" : "ADMITTED_DESTINATION_SCENERY_BLOCKER", components, records, gaps);
-        if (gaps.Count != 0)
-            return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", components, records, gaps);
-        return new(request, InputIdentity, EvidenceEpoch, true, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open,
-            "COMPLETE_NONBLOCKING_EVIDENCE", components, records, gaps);
+    private CardinalTraversalLegEvidence[] AssessLegs(CardinalTraversalRequest request)
+    {
+        var hx = new CardinalTraversalCell(request.To.X, request.From.Y);
+        var hy = new CardinalTraversalCell(request.From.X, request.To.Y);
+        var x = request.To.X < request.From.X ? CardinalTraversalDirection.XMinus : CardinalTraversalDirection.XPlus;
+        var y = request.To.Y < request.From.Y ? CardinalTraversalDirection.YMinus : CardinalTraversalDirection.YPlus;
+        CardinalTraversalLegEvidence Leg(CardinalTraversalLegRole role, CardinalTraversalCell from, CardinalTraversalCell to,
+            CardinalTraversalDirection direction)
+        {
+            var components = new List<CardinalTraversalComponentAssessment>();
+            var records = new List<CardinalTraversalRecordAssessment>();
+            var gaps = new List<CardinalTraversalGap>();
+            void Closure(CardinalTraversalComponentKind kind, string proved, string missing, bool complete)
+            {
+                var inputs = new[] { new CardinalTraversalNumericInput("ORIGINAL_DIRECTION", (int)request.Direction) };
+                var c = complete ? Open(kind, proved, Spec(), inputs) : Unknown(kind, missing, Spec(), inputs);
+                components.Add(c); if (!complete) gaps.Add(new(c));
+            }
+            Closure(CardinalTraversalComponentKind.Registration, "EXACT_CELL_REGISTRATION_PROVED", "REGISTRATION_UNCERTAIN", _membershipComplete);
+            Closure(CardinalTraversalComponentKind.Extent, "EXACT_CELL_EXTENT_PROVED", "EXTENT_UNCERTAIN", _membershipComplete);
+            Closure(CardinalTraversalComponentKind.Census, "TERMINAL_CENSUS_COMPLETE", "TERMINAL_CENSUS_UNCERTAIN", _censusShapeComplete);
+            Closure(CardinalTraversalComponentKind.SourceEdges, "SERIALIZED_SOURCE_EDGE_TYPES_ABSENT", "SOURCE_EDGE_CENSUS_UNCERTAIN", _membershipComplete);
+            Closure(CardinalTraversalComponentKind.DestinationOtherTypes, "SERIALIZED_OTHER_TYPES_ABSENT", "OTHER_TYPE_CENSUS_UNCERTAIN", _membershipComplete);
+            AssessObjectRecords(to, records, gaps, request.Direction);
+            return new(role, from, to, direction, request.Direction, components, records, gaps);
+        }
+        // Both paths must satisfy the object predicate; no shoulder terrain is queried.
+        return [Leg(CardinalTraversalLegRole.XShoulder, request.From, hx, x), Leg(CardinalTraversalLegRole.XFinal, hx, request.To, y),
+            Leg(CardinalTraversalLegRole.YShoulder, request.From, hy, y), Leg(CardinalTraversalLegRole.YFinal, hy, request.To, x)];
     }
 
     private string? Validate(CardinalTraversalRequest r)

@@ -4,7 +4,8 @@ namespace Arcanum.Input;
 
 /// <summary>Common policy only; each host owns its distinct storage.</summary>
 public sealed record InputSettings(int Version = 1, double CameraDeadzone = .20, double ActorDeadzone = .20,
-    double CameraSensitivity = 1, double ActorSensitivity = 1, bool InvertCameraX = true, bool InvertCameraY = true)
+    double CameraSensitivity = 1, double ActorSensitivity = 1, bool InvertCameraX = true, bool InvertCameraY = true,
+    bool InvertActorX = false, bool InvertActorY = false)
 {
     public static InputSettings Default => new();
     public InputSettings Validated() => Validated(Default);
@@ -38,7 +39,9 @@ public static class InputSettingsCodec
             settings = settings with
             {
                 InvertCameraX = document.RootElement.TryGetProperty("invertCameraX", out _) ? settings.InvertCameraX : fallback.InvertCameraX,
-                InvertCameraY = document.RootElement.TryGetProperty("invertCameraY", out _) ? settings.InvertCameraY : fallback.InvertCameraY
+                InvertCameraY = document.RootElement.TryGetProperty("invertCameraY", out _) ? settings.InvertCameraY : fallback.InvertCameraY,
+                InvertActorX = document.RootElement.TryGetProperty("invertActorX", out _) ? settings.InvertActorX : fallback.InvertActorX,
+                InvertActorY = document.RootElement.TryGetProperty("invertActorY", out _) ? settings.InvertActorY : fallback.InvertActorY
             };
             return settings.Validated(fallback);
         }

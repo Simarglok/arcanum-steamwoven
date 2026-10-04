@@ -59,15 +59,22 @@ public partial class TerrainViewerApp
         foreach (var raw in new[] {
             pad with { RightStick = new(1, 0), RightTrigger = 1 },
             pad with { RightStick = new(1, 1), RightTrigger = 1 },
-            pad with { LeftStick = new(0, 1), RightTrigger = 1 },
+
             pad with { RightTrigger = double.NaN }, pad with { LeftTrigger = double.PositiveInfinity },
             pad with { RightTrigger = 1.1 }, pad with { LeftTrigger = -.1 },
             pad with { RightStick = new(double.NaN, 0) }, pad with { LeftStick = new(0, double.PositiveInfinity) } })
         {
             Prepare(); var state = _camera!.State; var position = _worldActor.State.Position;
             WorldFrameForSelfTest(none, new[] { raw }, double.MaxValue);
-            Require(!_worldGate.IsOpen && _camera.State == state && _worldActor.State.Position == position, "genuine overflow/invalid levels quarantine");
+            Require(!_worldGate.IsOpen && _camera.State == state && _worldActor.State.Position == position, "genuine pan overflow/invalid levels quarantine " + raw);
         }
+        Prepare();
+        var actorOnly = pad with { LeftStick = new(-1,1), RightTrigger = 1 };
+        for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { actorOnly }, double.MaxValue);
+        Require(_worldGate.IsOpen && _camera!.State.Zoom == 8 && _worldActor.IsPlaying
+            && _worldActor.Session!.State.CommittedCell == new Arcanum.Simulation.Movement.CellCoord(6,1),
+            "finite independent actor receipt clock under huge camera delta");
+        WorldSettleForSelfTest(pad);
         Prepare(); var camera = _camera!.State;
         WorldFrameForSelfTest(none with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true }, new[] { pad with { RightTrigger = 1 } }, double.MaxValue);
         Require(!_worldGate.IsOpen && _camera.State == camera, "genuine keyboard pan overflow quarantine");
@@ -85,7 +92,7 @@ public partial class TerrainViewerApp
         var panel = _worldPanel!;
         var scroll = panel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
         var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton).ToArray();
-        Require(controls.Length == 13, "all controls retained");
+        Require(controls.Length == 15, "all camera/actor/zoom controls retained");
         var none = new RawInputFrame(-1, default); var pad = new RawInputFrame(3, default);
         var viewport = GetViewport(); var original = viewport.GetVisibleRect().Size;
         // Complete simulated levels own timing; actual GUI/layout still runs.
@@ -129,9 +136,9 @@ public partial class TerrainViewerApp
                     for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
                     await Visible(0, mode + " open/reopen");
                     for (var direction = 1; direction >= -1; direction -= 2)
-                    for (var step = 0; step < 12; step++)
+                    for (var step = 0; step < 14; step++)
                     {
-                        var index = direction == 1 ? step + 1 : 11 - step;
+                        var index = direction == 1 ? step + 1 : 13 - step;
                         if (mode == "Dpad")
                         {
                             var button = direction == 1 ? JoyButton.DpadDown : JoyButton.DpadUp;

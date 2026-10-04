@@ -11,6 +11,8 @@ public partial class TerrainCanvas : Node2D
     private TerrainTextureCache? _textures;
     private bool _showStatics = true;
     private bool _showActor = true;
+    internal bool ActorVisibleForReadback => _showActor;
+    internal bool StaticVisibleForReadback => _showStatics;
 
     public TerrainCanvas()
     {

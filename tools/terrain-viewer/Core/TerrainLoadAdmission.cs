@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Arcanum.Data;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.Traversal;
 
 [assembly: InternalsVisibleTo("Arcanum.TerrainViewer.Tests")]
 
@@ -25,6 +26,15 @@ internal class TerrainLoadAdmission
         (tiles, facades, recovered, lookups) == (3033, 1063, 457, 86);
     internal virtual StaticObjectInspection InspectStatics(TerrainViewerArguments arguments, DatArchive module, DatArchive resource) =>
         StaticObjectLoader.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!).Inspection;
+    internal virtual CardinalTraversalSnapshot InspectTraversal(TerrainViewerArguments arguments, DatArchive module, DatArchive resource, long epoch) =>
+        CardinalTraversalInspector.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!, epoch,
+            policy: CardinalTraversalAdmissionPolicy.BoundedAdjacent);
+    internal virtual bool AcceptTraversalIdentity(CardinalTraversalSnapshot snapshot, InputFingerprint module, InputFingerprint resource) =>
+        snapshot.InputIdentity.Kind == CardinalTraversalInputKind.AuthenticatedOriginal &&
+        snapshot.InputIdentity.OriginalIdentity is { } identity &&
+        identity.Module.Length == module.Size && identity.Module.Sha256 == module.Sha256 &&
+        identity.Resource.Length == resource.Size && identity.Resource.Sha256 == resource.Sha256 &&
+        snapshot.InputIdentity.Sector.SectorX == Selector.SectorX && snapshot.InputIdentity.Sector.SectorY == Selector.SectorY;
 }
 
 // Tests may LOWER a budget to exercise the exact before-retention boundaries

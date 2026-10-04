@@ -1,5 +1,13 @@
 # Headless grid movement runtime
 
+WORLD003's host now maps eight screen sectors to existing semantic map neighbors
+under a separate bounded-adjacent Data policy. The Simulation contract below is
+unchanged: one frozen segment, atomic diagonal destination commit, fixed diagnostic
+duration supplied by its host, early return/equality finish and held renewal. Four
+Data shoulder/object evidence legs are constraints, never runtime waypoints or
+four permits. See [WORLD mapping and bounds](../rendering/terrain-viewer.md); the
+default cardinal-only Data profile and original-executable limitations remain.
+
 ## Scope and provenance
 
 `Arcanum.Simulation` is an independently authored, package-free `net8.0` library.

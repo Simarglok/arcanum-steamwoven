@@ -4,6 +4,8 @@ using Arcanum.Data.Terrain;
 namespace Arcanum.Data.Traversal;
 
 public readonly record struct CardinalTraversalCell(int X, int Y);
+public enum CardinalTraversalAdmissionPolicy { CardinalOnly = 0, BoundedAdjacent = 1 }
+public enum CardinalTraversalLegRole { XShoulder = 0, XFinal = 1, YShoulder = 2, YFinal = 3 }
 public enum CardinalTraversalDirection
 {
     XMinusYMinus = 0, XMinus = 1, XMinusYPlus = 2, YPlus = 3,
@@ -202,6 +204,9 @@ public sealed class CardinalTraversalGap
 {
     internal CardinalTraversalGap(CardinalTraversalComponentAssessment result, int? sourceIndex = null)
     { ComponentKind = result.ComponentKind; SourceIndex = sourceIndex; ReasonCode = result.ReasonCode; Provenance = result.Provenance; }
+    internal CardinalTraversalGap(CardinalTraversalGap gap, CardinalTraversalLegRole role)
+    { ComponentKind = gap.ComponentKind; SourceIndex = gap.SourceIndex; ReasonCode = gap.ReasonCode; Provenance = gap.Provenance; LegRole = role; }
+    public CardinalTraversalLegRole? LegRole { get; }
     public CardinalTraversalComponentKind ComponentKind { get; }
     public int? SourceIndex { get; }
     public string ReasonCode { get; }
@@ -259,18 +264,41 @@ public sealed class CardinalTraversalRecordAssessment
     public CardinalTraversalComponentAssessment Result { get; }
 }
 
+/// <summary>Object-only shoulder constraint, never a terrain query or runtime waypoint.</summary>
+public sealed class CardinalTraversalLegEvidence
+{
+    internal CardinalTraversalLegEvidence(CardinalTraversalLegRole role, CardinalTraversalCell from, CardinalTraversalCell to,
+        CardinalTraversalDirection direction, CardinalTraversalDirection originalDirection,
+        IEnumerable<CardinalTraversalComponentAssessment> components, IEnumerable<CardinalTraversalRecordAssessment> records,
+        IEnumerable<CardinalTraversalGap> gaps)
+    {
+        Role = role; From = from; To = to; Direction = direction; OriginalDirection = originalDirection;
+        Components = Array.AsReadOnly(components.ToArray()); RecordAssessments = Array.AsReadOnly(records.ToArray());
+        Gaps = Array.AsReadOnly(gaps.Select(g => new CardinalTraversalGap(g, role)).ToArray());
+    }
+    public CardinalTraversalLegRole Role { get; }
+    public CardinalTraversalCell From { get; }
+    public CardinalTraversalCell To { get; }
+    public CardinalTraversalDirection Direction { get; }
+    public CardinalTraversalDirection OriginalDirection { get; }
+    public IReadOnlyList<CardinalTraversalComponentAssessment> Components { get; }
+    public IReadOnlyList<CardinalTraversalRecordAssessment> RecordAssessments { get; }
+    public IReadOnlyList<CardinalTraversalGap> Gaps { get; }
+}
+
 public sealed class CardinalTraversalAssessment
 {
     internal CardinalTraversalAssessment(CardinalTraversalRequest request, CardinalTraversalInputIdentity identity, long epoch,
         bool coordinatesAdmitted, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition, string reason,
         IEnumerable<CardinalTraversalComponentAssessment> components, IEnumerable<CardinalTraversalRecordAssessment> records,
-        IEnumerable<CardinalTraversalGap> gaps)
+        IEnumerable<CardinalTraversalGap> gaps, IEnumerable<CardinalTraversalLegEvidence>? legs = null)
     {
         if ((coverage == CardinalTraversalCoverage.Supported) != disposition.HasValue) throw new ArgumentException("Whole Supported requires disposition.");
         Request = request; InputIdentity = identity; EvidenceEpoch = epoch; Context = request.Context;
         From = new(request.From, coordinatesAdmitted); To = new(request.To, coordinatesAdmitted); Direction = request.Direction;
         Coverage = coverage; Disposition = disposition; ReasonCode = reason;
         Components = Array.AsReadOnly(components.ToArray()); RecordAssessments = Array.AsReadOnly(records.ToArray()); Gaps = Array.AsReadOnly(gaps.ToArray());
+        Legs = Array.AsReadOnly((legs ?? []).ToArray());
         StepEvidence = new(this);
     }
     public CardinalTraversalRequest Request { get; }
@@ -287,6 +315,7 @@ public sealed class CardinalTraversalAssessment
     public IReadOnlyList<CardinalTraversalRecordAssessment> RecordAssessments { get; }
     public IReadOnlyList<CardinalTraversalGap> Gaps { get; }
     public CardinalTraversalStepEvidence StepEvidence { get; }
+    public IReadOnlyList<CardinalTraversalLegEvidence> Legs { get; }
 }
 
 /// <summary>Immutable full-row step binding, not a permit. Complete Blocked still prohibits a move.</summary>
@@ -294,12 +323,14 @@ public sealed class CardinalTraversalStepEvidence
 {
     internal CardinalTraversalStepEvidence(CardinalTraversalAssessment assessment)
     {
-        ProfileId = CardinalTraversalRules.ProfileId; InputIdentity = assessment.InputIdentity; EvidenceEpoch = assessment.EvidenceEpoch;
+        ProfileId = assessment.Request.ProfileId; InputIdentity = assessment.InputIdentity; EvidenceEpoch = assessment.EvidenceEpoch;
         Context = assessment.Context; ContextFingerprint = CardinalTraversalEncoding.ContextDigest(Context);
         From = assessment.From; To = assessment.To; Direction = assessment.Direction; Coverage = assessment.Coverage;
         Disposition = assessment.Disposition; ReasonCode = assessment.ReasonCode;
         Components = assessment.Components; RecordAssessments = assessment.RecordAssessments; Gaps = assessment.Gaps;
+        Legs = assessment.Legs;
         Provenance = Array.AsReadOnly(Components.SelectMany(c => c.Provenance).Concat(RecordAssessments.SelectMany(r => r.Result.Provenance))
+            .Concat(Legs.SelectMany(l => l.Components.SelectMany(c => c.Provenance).Concat(l.RecordAssessments.SelectMany(r => r.Result.Provenance))))
             .Select(p => p.SourceId).Distinct(StringComparer.Ordinal).ToArray());
     }
     public string ProfileId { get; }
@@ -316,6 +347,7 @@ public sealed class CardinalTraversalStepEvidence
     public CardinalTraversalDisposition? Disposition { get; }
     public string ReasonCode { get; }
     public bool CompleteCoverage => Coverage == CardinalTraversalCoverage.Supported && Gaps.Count == 0;
+    public IReadOnlyList<CardinalTraversalLegEvidence> Legs { get; }
     public IReadOnlyList<string> Provenance { get; }
     public IReadOnlyList<CardinalTraversalComponentAssessment> Components { get; }
     public IReadOnlyList<CardinalTraversalRecordAssessment> RecordAssessments { get; }
@@ -325,6 +357,12 @@ public sealed class CardinalTraversalStepEvidence
 internal static class CardinalTraversalRules
 {
     internal const string ProfileId = "BASE_SECTOR_1452_1290";
+    internal static string Profile(CardinalTraversalAdmissionPolicy policy) => policy switch
+    {
+        CardinalTraversalAdmissionPolicy.CardinalOnly => ProfileId,
+        CardinalTraversalAdmissionPolicy.BoundedAdjacent => "BASE_SECTOR_1452_1290_ADJACENT_V1",
+        _ => throw new ArgumentOutOfRangeException(nameof(policy))
+    };
     internal const string ContextId = "ISOLATED_PC_CRITTER_ART_NONPOLYMORPH";
     internal const string SpecificationId = "CE-a7ff41b300ef712f0e7d088183a3d08957110cdd";
     internal static CardinalTraversalContext DeclaredContext() => new(ContextId, 15, 2, 0, 0, false, false, CardinalTraversalActorState.OrdinaryGround, 0);
