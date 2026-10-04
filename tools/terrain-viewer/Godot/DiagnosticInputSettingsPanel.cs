@@ -38,7 +38,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         contents.AddChild(new Label
         {
             Name = "WorldSettingsLimitation",
-            Text = "Diagnostic input settings — new intent gated; accepted step settles\nBounded cardinal grid — original Data admission, not gameplay\nOriginal parity NOT VERIFIED",
+            Text = "Diagnostic input settings — new intent gated; accepted step settles\nBounded adjacent grid — original Data admission, not gameplay\nOriginal parity NOT VERIFIED",
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         });
         var scroll = new ScrollContainer { FollowFocus = true, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
@@ -52,6 +52,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddNumber("Actor sensitivity", .5, 2, .1, s => s.ActorSensitivity, (s, v) => s with { ActorSensitivity = v });
         AddToggle("Camera image X inversion", s => s.InvertCameraX, (s, v) => s with { InvertCameraX = v });
         AddToggle("Camera image Y inversion", s => s.InvertCameraY, (s, v) => s with { InvertCameraY = v });
+        AddToggle("Actor screen X inversion", s => s.InvertActorX, (s, v) => s with { InvertActorX = v });
+        AddToggle("Actor screen Y inversion", s => s.InvertActorY, (s, v) => s with { InvertActorY = v });
         _rows.AddChild(new Label { Text = "World zoom (camera ratio, not UI or physical 1:1)" });
         _zoom = new SpinBox { Name = "WorldZoom", MinValue = .125, MaxValue = 8, Step = 0, CustomArrowStep = .05, SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _zoom.ValueChanged += v => { if (!_binding) ZoomRequested?.Invoke(v); };
@@ -77,7 +79,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     }
     private void AddToggle(string title, Func<InputSettings, bool> get, Func<InputSettings, bool, InputSettings> set)
     {
-        var check = new CheckButton { Text = title };
+        var check = new CheckButton { Name = title.Replace(" ", ""), Text = title };
         check.Toggled += value => { if (!_binding) Apply(set(Settings, value)); };
         _rows.AddChild(check); _controls.Add(check);
     }
@@ -100,6 +102,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         for (var i = 0; i < numbers.Length; i++) ((SpinBox)_controls[i]).Value = numbers[i];
         ((CheckButton)_controls[4]).ButtonPressed = Settings.InvertCameraX;
         ((CheckButton)_controls[5]).ButtonPressed = Settings.InvertCameraY;
+        ((CheckButton)_controls[6]).ButtonPressed = Settings.InvertActorX;
+        ((CheckButton)_controls[7]).ButtonPressed = Settings.InvertActorY;
         _binding = false;
     }
     public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; ((SpinBox)_controls[0]).GetLineEdit().GrabFocus(); }

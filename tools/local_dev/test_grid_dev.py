@@ -56,10 +56,10 @@ class GridReportTests(unittest.TestCase):
                     key=dict(Binding=dict(ChartId='SECTOR_1452_1290_LOCAL_CENTERS',ActorId='HUMAN_FIXED_DIAGNOSTIC',
                         ContextId='c'*64,CapabilitiesProfileId='ISOLATED_PC_HUMAN_FIXED_V1',
                         CapabilitiesFingerprint='KIND15_ART2_FLAGS0_GROUND_NONPOLYMORPH_REGISTRY0',
-                        AssessmentProfileId='BASE_SECTOR_1452_1290',InputFingerprint=digest,EvidenceEpoch=7),
+                        AssessmentProfileId='BASE_SECTOR_1452_1290_ADJACENT_V1',InputFingerprint=digest,EvidenceEpoch=7),
                         From=dict(X=source[0],Y=source[1]),To=dict(X=dest[0],Y=dest[1]),Direction=direction,
                         StartTime=time,OpportunityId=index+1,ProposedStepId=index+1,
-                        MaterialIntentKey=dict(Time=time,Sequence=index*2),EvidenceRevision=0)
+                        MaterialIntentKey=dict(Time=time,Sequence=index*4+1),EvidenceRevision=0)
                     admissions.append(dict(from_=source,to=dest,direction=direction,records=317,gaps=0,
                         selectedEvidenceSha256=digest,evidenceEpoch=7,coverage='Supported',
                         disposition='Blocked' if name=='blocker' else 'Open',key=key))
@@ -69,12 +69,46 @@ class GridReportTests(unittest.TestCase):
         return dict(schema='arcanum-grid-validation-v1',task='ARC-WORLD-003',candidateCommit=head,
             host='source',kind='grid-original',outcome='PASS',exitCode=0,
             originalIdentity='authenticated-original-grid-and-actor',profile='HumanFixed',
-            assessmentProfile='BASE_SECTOR_1452_1290',context='ISOLATED_PC_CRITTER_ART_NONPOLYMORPH',
+            assessmentProfile='BASE_SECTOR_1452_1290_ADJACENT_V1',context='ISOLATED_PC_CRITTER_ART_NONPOLYMORPH',
             duration='1/2',contextFingerprint='c'*64,graphical=True,actualViewports=[[1280,800],[1440,900],[800,600]],
             negativeControls='PASS',renderedPhases=['Idle','Walk','Returning','OutboundAfterEntry','Blocked'],
             originalParity='NOT_VERIFIED',selectedEvidenceSha256=digest,evidenceEpoch=7,
             blocker=dict(sourceIndex=1,cell=[5,1],anchor=[-163,134],rectangle=[-276,-128,204,267],
-                visible='PASS',reason='ADMITTED_DESTINATION_SCENERY_BLOCKER'),cases=cases)
+                visible='PASS',reason='ADMITTED_DESTINATION_SCENERY_BLOCKER'),cases=cases,screenCases=self.screen_fixture(digest))
+
+    @staticmethod
+    def screen_fixture(digest):
+        rows=[]
+        offsets=[(-1,-1),(-1,0),(-1,1),(0,1),(1,1),(1,0),(1,-1),(0,-1)]
+        inversions=[[0,1,2,3,4,5,6,7],[0,7,6,5,4,3,2,1],[4,3,2,1,0,7,6,5],[4,5,6,7,0,1,2,3]]
+        for viewport in ([1280,800],[1440,900],[800,600]):
+            for device in ('keyboard','stick'):
+                for flags in range(4):
+                    for sector in range(8):
+                        facing=inversions[flags][sector];dx,dy=offsets[facing];target=[7+dx,2+dy]
+                        edge=f'7,2>{target[0]},{target[1]}'
+                        events=[f'StepStarted@2/1:{edge}']
+                        if facing!=4:events.append(f'FacingChanged@2/1:{edge}')
+                        events.extend([f'ActionChanged@2/1:{edge}',f'CellCommitted@9/4:{edge}',f'CenterArrived@5/2:{edge}',f'ActionChanged@5/2:{edge}'])
+                        legs=[]
+                        if facing%2==0:
+                            hx,hy=[7+dx,2],[7,2+dy];xd,yd=(1 if dx<0 else 5),(7 if dy<0 else 3)
+                            for role,source,destination,direction in [('XShoulder',[7,2],hx,xd),('XFinal',hx,target,yd),('YShoulder',[7,2],hy,yd),('YFinal',hy,target,xd)]:
+                                legs.append(dict(role=role,**{'from':source},to=destination,direction=direction,originalDirection=facing,records=317,gaps=0,blockers=[]))
+                        rows.append(dict(viewport=viewport,device=device,sector=sector,flags=flags,facing=facing,direction=facing,projected=[40*(dy-dx),20*(dy+dx)],
+                            **{'from':[7,2]},to=target,rendered='PASS',coverage='Supported',disposition='Open',gaps=0,profile='BASE_SECTOR_1452_1290_ADJACENT_V1',
+                            evidenceEpoch=7,selectedEvidenceSha256=digest,trace='|'.join(events),legs=legs))
+        return rows
+
+    def test_screen_matrix_rejects_swapped_ne_nw_stale_profile_legs_and_duplicates(self):
+        good=self.sample()
+        changes=[lambda r:r.pop('screenCases'),lambda r:r.__setitem__('assessmentProfile','BASE_SECTOR_1452_1290'),
+            lambda r:r['screenCases'][1].__setitem__('to',[7,1]),lambda r:r['screenCases'][0]['legs'].pop(),
+            lambda r:r['screenCases'][0]['legs'][0].__setitem__('originalDirection',4),
+            lambda r:r['screenCases'].__setitem__(1,r['screenCases'][0])]
+        for change in changes:
+            bad=copy.deepcopy(good);change(bad)
+            with self.assertRaises(ValueError):validate_report(bad,'a'*40,'source')
 
     def test_literal_report_and_each_binding_rejects_changed_or_missing(self):
         good=self.sample(); validate_report(good,'a'*40,'source')

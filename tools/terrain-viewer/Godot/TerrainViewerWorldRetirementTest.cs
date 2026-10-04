@@ -20,8 +20,9 @@ public partial class TerrainViewerApp
         var none = new RawInputFrame(-1, default);
         void Frame(int numerator) => WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(numerator,16));
         Frame(1); Frame(2); Frame(3);
-        _worldTestTime = SimulationTime.At(1); _Input(new InputEventKey { Keycode = Key.D, Pressed = true });
-        WorldFrameForSelfTest(none with {KeyboardActor = new(1,0), KeyboardActorHeld = true}, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(17,16));
+        _worldTestTime = SimulationTime.At(1);
+        _Input(new InputEventKey { Keycode = Key.S, Pressed = true }); _Input(new InputEventKey { Keycode = Key.A, Pressed = true });
+        WorldFrameForSelfTest(none with {KeyboardActor = new(-1,1), KeyboardActorHeld = true}, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(17,16));
         var retired = _worldActor.Session!; var epoch = retired.Snapshot.EvidenceEpoch; var previousLoad = _lastLoad;
         _worldTestTime = SimulationTime.At(9,8); _Input(new InputEventKey { Keycode = Key.L, Pressed = true });
         Require(ReferenceEquals(retired,_worldActor.Session) && _worldReloadPending && ReferenceEquals(previousLoad,_lastLoad), "L loaded before settlement");
@@ -46,7 +47,7 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic test bootstrap required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("GRID retirement: " + why); }
         var none = new RawInputFrame(-1, default);
-        var held = none with { KeyboardActor = new(1,0), KeyboardActorHeld = true };
+        var held = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
         void Frame(int time, RawInputFrame? keys = null) => WorldFrameForSelfTest(keys ?? none, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(time));
         void Prepare()
         {
@@ -55,7 +56,8 @@ public partial class TerrainViewerApp
             _worldGridInput = new(); RetireWorldLifecycle(); _worldAdapter.Clear();
             _worldReducer.SetStartupDevices(Array.Empty<int>()); _worldFocused = true;
             QuarantineWorld(); PublishWorldSelection(); Frame(1); Frame(2); Frame(3);
-            _worldTestTime = SimulationTime.At(10); _Input(new InputEventKey { Keycode = Key.D, Pressed = true });
+            _worldTestTime = SimulationTime.At(10);
+            _Input(new InputEventKey { Keycode = Key.S, Pressed = true }); _Input(new InputEventKey { Keycode = Key.A, Pressed = true });
             Frame(11, held); Frame(12, held);
             Require(_worldActor.Session!.State.Phase == MovementPhase.OutboundBeforeEntry, "moving setup");
         }

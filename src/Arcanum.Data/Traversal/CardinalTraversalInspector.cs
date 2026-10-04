@@ -12,13 +12,14 @@ public static class CardinalTraversalInspector
     public static CardinalTraversalSnapshot InspectSector(StaticObjectSource source, StaticObjectPrototypeSource prototypes,
         string moduleSourceId, string resourceSourceId, string prototypeSourceId, TerrainSectorSelector selector,
         TerrainTileNameSource? tileNameSource, long evidenceEpoch, TerrainLoaderOptions? terrainOptions = null,
-        StaticObjectLoaderOptions? staticOptions = null)
+        StaticObjectLoaderOptions? staticOptions = null, CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly)
     {
         ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(prototypes); ArgumentNullException.ThrowIfNull(selector);
         CardinalTraversalRules.ValidateId(moduleSourceId, nameof(moduleSourceId));
         CardinalTraversalRules.ValidateId(resourceSourceId, nameof(resourceSourceId));
         CardinalTraversalRules.ValidateId(prototypeSourceId, nameof(prototypeSourceId));
         if (evidenceEpoch < 0) throw new ArgumentOutOfRangeException(nameof(evidenceEpoch));
+        _ = CardinalTraversalRules.Profile(policy);
         var terrainLimits = terrainOptions ?? new TerrainLoaderOptions(); terrainLimits.Validate();
         var staticLimits = staticOptions ?? new StaticObjectLoaderOptions(); staticLimits.Validate();
         return Sanitize(() =>
@@ -29,15 +30,17 @@ public static class CardinalTraversalInspector
             var inspection = StaticObjectLoader.InspectForObstruction(source, prototypes, staticLimits);
             var ordinary = StaticObstructionInspector.Create(inspection, entry.Ordinal, moduleSourceId, prototypeSourceId, null);
             return Build(CardinalTraversalInputKind.Structural, moduleSourceId, resourceSourceId, prototypeSourceId,
-                selector, entry, terrain, inspection, ordinary, null, evidenceEpoch);
+                selector, entry, terrain, inspection, ordinary, null, evidenceEpoch, policy);
         });
     }
 
     public static CardinalTraversalSnapshot ValidateOriginalData(string modulePath, string resourcePath, string prototypeDirectory,
-        long evidenceEpoch, TerrainLoaderOptions? terrainOptions = null, StaticObjectLoaderOptions? staticOptions = null)
+        long evidenceEpoch, TerrainLoaderOptions? terrainOptions = null, StaticObjectLoaderOptions? staticOptions = null,
+        CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly)
     {
         ArgumentException.ThrowIfNullOrEmpty(modulePath); ArgumentException.ThrowIfNullOrEmpty(resourcePath); ArgumentException.ThrowIfNullOrEmpty(prototypeDirectory);
         if (evidenceEpoch < 0) throw new ArgumentOutOfRangeException(nameof(evidenceEpoch));
+        _ = CardinalTraversalRules.Profile(policy);
         var terrainLimits = terrainOptions ?? new TerrainLoaderOptions(); terrainLimits.Validate();
         var staticLimits = staticOptions ?? new StaticObjectLoaderOptions(); staticLimits.Validate();
         return Sanitize(() => StaticObjectLoader.WithValidatedOriginalData(modulePath, resourcePath, prototypeDirectory, staticLimits,
@@ -52,7 +55,7 @@ public static class CardinalTraversalInspector
                 var ordinary = StaticObstructionInspector.Create(validation.Inspection, entry.Ordinal, "CRASH_SITE_MODULE", "CRASH_SITE_PROTOTYPES", identity);
                 // Full terrain/MES/census/static projection and digest happen INSIDE the loader's final hash guard.
                 return Build(CardinalTraversalInputKind.AuthenticatedOriginal, "CRASH_SITE_MODULE", "CRASH_SITE_RESOURCE", "CRASH_SITE_PROTOTYPES",
-                    selector, entry, terrain, validation.Inspection, ordinary, identity, evidenceEpoch);
+                    selector, entry, terrain, validation.Inspection, ordinary, identity, evidenceEpoch, policy);
             }));
     }
 
@@ -67,7 +70,8 @@ public static class CardinalTraversalInspector
 
     internal static CardinalTraversalSnapshot Build(CardinalTraversalInputKind kind, string moduleId, string resourceId, string prototypeId,
         TerrainSectorSelector selector, DatEntry entry, TerrainObstructionSectorReport terrain, StaticObjectInspection inspection,
-        StaticObstructionSectorReport ordinary, StaticObstructionInputIdentity? original, long epoch)
+        StaticObstructionSectorReport ordinary, StaticObstructionInputIdentity? original, long epoch,
+        CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly)
     {
         var words = terrain.CopyTileWords(); var mask = terrain.CopyBlockWords();
         var cells = words.Select((raw, ordinal) => new CardinalTerrainCell(raw, mask?[ordinal / 32],
@@ -90,7 +94,7 @@ public static class CardinalTraversalInspector
         var digest = CardinalTraversalEncoding.EvidenceDigest(kind, moduleId, resourceId, prototypeId, sector,
             terrain.SelectedNameEntry, original, words, mask, cells, inspection.TerminalRecordCount, census, terrain.TileScriptCount, terrain.SectorScriptBytes);
         var identity = new CardinalTraversalInputIdentity(kind, moduleId, resourceId, prototypeId, sector, terrain.SelectedNameEntry, original, digest);
-        return new(identity, epoch, cells, ordinary, inspection.TerminalRecordCount, terrain.TileScriptCount, terrain.SectorScriptBytes, census, complete, membership);
+        return new(identity, epoch, cells, ordinary, inspection.TerminalRecordCount, terrain.TileScriptCount, terrain.SectorScriptBytes, census, complete, membership, policy);
     }
 
     // Internal so guard-negative fixtures exercise the same invocation boundary as both public factories.

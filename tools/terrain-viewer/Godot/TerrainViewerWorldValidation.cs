@@ -25,7 +25,8 @@ public partial class TerrainViewerApp
         {
             var bits = stage[(stage.IndexOf('-') + 1)..];
             if (bits is not ("00" or "01" or "10" or "11")) throw new ArgumentException("Usage");
-            var stored = nondefault with { InvertCameraX = bits[0] == '1', InvertCameraY = bits[1] == '1' };
+            var stored = nondefault with { InvertCameraX = bits[0] == '1', InvertCameraY = bits[1] == '1',
+                InvertActorX = bits[0] == '0', InvertActorY = bits[1] == '0' };
             if (stage.StartsWith("write-", StringComparison.Ordinal)) store.Save(stored);
             InitializeWorld(); passed = store.Load() == stored && _worldSettings == stored;
         }
@@ -136,9 +137,9 @@ public partial class TerrainViewerApp
             if (GetViewport().GetVisibleRect().Size != new Vector2(size.X, size.Y)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             _camera.ResetWorld(WorldAnchor, WorldViewport); _camera.Fit(WorldViewport); RefreshReadyStatus(); await NextFrameAsync();
             using var image = GetViewport().GetTexture().GetImage();
-            GD.Print($"ARC-WORLD-001 native-smoke stage=readback image={image.GetWidth()}x{image.GetHeight()} hud={HasReadyHudContent(_cache.Count)} limit={_hud!.Text.Contains("Bounded cardinal grid", StringComparison.Ordinal)}");
+            GD.Print($"ARC-WORLD-001 native-smoke stage=readback image={image.GetWidth()}x{image.GetHeight()} hud={HasReadyHudContent(_cache.Count)} limit={_hud!.Text.Contains("Bounded adjacent grid", StringComparison.Ordinal)}");
             if (image.GetWidth() != size.X || image.GetHeight() != size.Y || !HasReadyHudContent(_cache.Count)
-                || !_hud!.Text.Contains("Bounded cardinal grid", StringComparison.Ordinal)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
+                || !_hud!.Text.Contains("Bounded adjacent grid", StringComparison.Ordinal)) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             // The actual combined window must contain decoded terrain AND a
             // decoded static landmark. Dimensions/HUD alone are not rendering.
             if (!await CaptureAndValidateSmokeFrameAsync(size, 4102, _cache.Count))
@@ -184,7 +185,7 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD simulation: " + why); }
         var none = new RawInputFrame(-1, default);
-        var left = none with { KeyboardActor = new(1, 0), KeyboardActorHeld = true };
+        var left = none with { KeyboardActor = new(-1, 1), KeyboardActorHeld = true };
         var right = none with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
         var both = left with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
         void Frame(RawInputFrame raw, double delta = .1, bool complete = true) => WorldFrameForSelfTest(raw, Array.Empty<RawInputFrame>(), delta, complete);

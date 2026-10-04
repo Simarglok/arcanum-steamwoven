@@ -312,7 +312,7 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || _readyMode != TerrainViewerMode.WorldDiagnostic) return;
         var time = WorldTime;
-        var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor);
+        var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var advance = _worldActor.Advance(frontier, _worldGridInput.CompleteThrough(frontier), input => _readyActorPlan.Select(input));
@@ -411,7 +411,7 @@ public partial class TerrainViewerApp
                     : _worldReducer.Reduce(selected, WorldContext()).Movement;
             if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         }
-        var direction = DiagnosticGridActor.Resolve(actor);
+        var direction = DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         _worldGridInput.Observe(session, WorldTime, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
     }
     internal void WorldFrameForSelfTest(RawInputFrame keyboard, IReadOnlyList<RawInputFrame> controllers, double delta, bool complete = true, SimulationTime? observationTime = null)

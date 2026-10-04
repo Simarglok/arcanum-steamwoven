@@ -206,7 +206,7 @@ public sealed class DiagnosticWorldPolicyTests
     {
         Assert.AreEqual(20, typeof(RawInputFrame).GetMethod("Deconstruct")!.GetParameters().Length);
         Assert.AreEqual(14, typeof(IntentFrame).GetMethod("Deconstruct")!.GetParameters().Length);
-        const string defaults = "{\"version\":1,\"cameraDeadzone\":0.2,\"actorDeadzone\":0.2,\"cameraSensitivity\":1,\"actorSensitivity\":1,\"invertCameraX\":true,\"invertCameraY\":true}";
+        const string defaults = "{\"version\":1,\"cameraDeadzone\":0.2,\"actorDeadzone\":0.2,\"cameraSensitivity\":1,\"actorSensitivity\":1,\"invertCameraX\":true,\"invertCameraY\":true,\"invertActorX\":false,\"invertActorY\":false}";
         Assert.AreEqual(defaults, InputSettingsCodec.Serialize(InputSettings.Default));
         foreach (var value in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity })
         {

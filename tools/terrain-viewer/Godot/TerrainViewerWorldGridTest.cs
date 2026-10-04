@@ -26,6 +26,7 @@ public partial class TerrainViewerApp
         }
         void At(int time, Action callback) { _worldTestTime = SimulationTime.At(time); callback(); }
         void SendKey(Key key, bool pressed) => _Input(new InputEventKey { Keycode = key, Pressed = pressed });
+        void SendOpen(bool pressed) { SendKey(Key.S, pressed); SendKey(Key.A, pressed); }
         void Prepare(bool pad = false)
         {
             if (WorldModal) ToggleWorldSettings();
@@ -44,13 +45,15 @@ public partial class TerrainViewerApp
         const string cancel = "|StepCancelled@12/1:6,1>7,1|FacingChanged@12/1:6,1>7,1";
         const string arrive = "|CenterArrived@14/1:6,1>7,1|ActionChanged@14/1:6,1>7,1";
         // All material input occurs BETWEEN frames, including two entries at13.
-        Prepare(); At(10, () => SendKey(Key.D, true)); At(12, () => SendKey(Key.D, false));
+        Prepare(); At(10, () => SendOpen(true)); At(12, () => SendOpen(false));
         At(13, () => { SendKey(Key.S, true); SendKey(Key.S, false); });
         Frame(14); Frame(15);
         Require(Trace() == start + cancel + arrive, "between-frame/same-tick full transcript: " + Trace());
         Require(_worldActor.Session!.State.Anchor.U == ExactScalar.Integer(6)
             && _worldActor.Session.State.CommittedCell == new CellCoord(6,1), "same-tick neutral suppressed stale start");
-        Require(events.Select(e => e.Key).Distinct().Count() == 1 && events[0].Key.MaterialIntentKey == new InputKey(SimulationTime.At(10), 0), "literal original callback key");
+        // S then A form one completed chord; its second same-tick material
+        // observation (sequence1) owns the frozen segment, not interim S.
+        Require(events.Select(e => e.Key).Distinct().Count() == 1 && events[0].Key.MaterialIntentKey == new InputKey(SimulationTime.At(10), 1), "literal original callback chord key");
         // Safety notifications at early/equality/late release. Entry precedes
         // equal-time neutral; Return/Finish remain Walk even though gate closes.
         foreach (var safety in new[] { "focus", "modal", "disconnect", "incomplete" })
@@ -59,8 +62,8 @@ public partial class TerrainViewerApp
             var padMode = safety == "disconnect";
             Prepare(padMode);
             var pads = padMode ? new[] { new RawInputFrame(3, default) } : Array.Empty<RawInputFrame>();
-            At(10, () => SendKey(Key.D, true));
-            observed = none with { KeyboardActor = new(1,0), KeyboardActorHeld = true };
+            At(10, () => SendOpen(true));
+            observed = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
             At(release, () =>
             {
                 if (safety == "focus") _Notification((int)NotificationApplicationFocusOut);
@@ -87,17 +90,19 @@ public partial class TerrainViewerApp
             }
             Require(_worldActor.Session.State.Phase == MovementPhase.Settled && !_worldActor.IsPlaying, safety + " settled Idle");
             // Held callbacks cannot bypass quarantine; no new admission key.
-            At(20, () => SendKey(Key.D, true)); Frame(21, true, pads); Frame(22, true, pads);
+            At(20, () => SendOpen(true)); Frame(21, true, pads); Frame(22, true, pads);
             Require(events.Count(e => e.Kind == MovementEventKind.StepStarted) == 1, safety + " held callback bypassed safety");
         }
         Prepare(true);
-        At(10, () => _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 1 }));
+        At(10, () => { _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = -1 });
+            _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 1 }); });
         At(11, () =>
         {
             _Input(new InputEventMouseMotion { Relative = Vector2.One });
             _Input(new InputEventJoypadMotion { Device = 9, Axis = JoyAxis.LeftY, AxisValue = 1 });
         });
-        At(12, () => _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }));
+        At(12, () => { _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 });
+            _Input(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }); });
         Frame(13, true, new RawInputFrame(3, default)); Frame(14, true, new RawInputFrame(3, default)); Frame(15, true, new RawInputFrame(3, default));
         Require(Trace() == start + cancel + arrive, "neutral mouse callback released active stick: " + Trace());
         // Restore a fresh live-duration session after isolated D8 assertions.

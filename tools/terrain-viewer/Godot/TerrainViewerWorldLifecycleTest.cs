@@ -13,7 +13,7 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD lifecycle: " + why); }
         var none = new RawInputFrame(-1, default);
-        var held = none with { KeyboardActor = new(1,0), KeyboardCamera = new(1,0), KeyboardActorHeld = true, KeyboardCameraHeld = true };
+        var held = none with { KeyboardActor = new(-1,1), KeyboardCamera = new(1,0), KeyboardActorHeld = true, KeyboardCameraHeld = true };
         void Frame(RawInputFrame keys, params RawInputFrame[] pads) => WorldFrameForSelfTest(keys, pads, .1);
         void Neutral(params RawInputFrame[] pads) { Frame(none,pads); Frame(none,pads); Frame(none,pads); }
         ResetWorldScene(); Neutral(); _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
         WorldSettleForSelfTest(); anchor = _worldActor.State.Position; center = _camera.State;
         _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld();
         var padNeutral = new RawInputFrame(3,default);
-        var padHeld = new RawInputFrame(3,new(1,0),new(1,0));
+        var padHeld = new RawInputFrame(3,new(-1,1),new(1,0));
         Frame(held,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor && _camera.State == center, "acquisition held moved");
         Neutral(padNeutral); Frame(none,padHeld); Frame(none,padHeld); Frame(none,padHeld);
@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD incomplete observation: " + why); }
         var none = new RawInputFrame(-1, default);
-        var moving = none with { KeyboardActor = new(1,0), KeyboardActorHeld = true };
+        var moving = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
         var pad = new RawInputFrame(3, default);
         foreach (var manual in new[] { false, true })
         foreach (var failure in new[] { "incomplete", "missing-active", "invalid-pad", "invalid-keyboard", "unfocused", "invalid-delta" })
@@ -177,30 +177,32 @@ public partial class TerrainViewerApp
             _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
             if (!WorldModal) ToggleWorldSettings();
             var toggles = _worldPanel.FindChildren("*", "CheckButton", true, false).Cast<CheckButton>().ToArray();
-            Require(toggles.Length == 2, "two independent controls required");
+            Require(toggles.Length == 4, "four independent camera/actor controls required");
             foreach (var x in new[] { false, true }) foreach (var y in new[] { false, true })
-            foreach (var axis in new[] { 0, 1 })
+            foreach (var axis in new[] { 0, 1, 2, 3 })
             {
-                var initial = new InputSettings(InvertCameraX: x, InvertCameraY: y);
+                var initial = new InputSettings(InvertCameraX: x, InvertCameraY: y, InvertActorX: x, InvertActorY: y);
                 SaveWorldSettings(initial); _worldPanel.Bind(initial);
                 // Deliberately focus the OTHER axis: native clicks must not also
                 // invoke semantic Confirm on this previously focused control.
-                toggles[1 - axis].GrabFocus();
+                toggles[axis ^ 1].GrabFocus();
                 for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
                 await NextFrameAsync();
                 var position = _worldActor.State.Position; var center = _camera!.State;
                 changes = 0;
                 await ClickAsync(toggles[axis]);
-                var expected = initial with { InvertCameraX = axis == 0 ? !x : x, InvertCameraY = axis == 1 ? !y : y };
+                var expected = initial with { InvertCameraX = axis == 0 ? !x : x, InvertCameraY = axis == 1 ? !y : y,
+                    InvertActorX = axis == 2 ? !x : x, InvertActorY = axis == 3 ? !y : y };
                 Require(_worldSettings == expected && toggles[0].ButtonPressed == expected.InvertCameraX
-                    && toggles[1].ButtonPressed == expected.InvertCameraY && changes == 1 && _worldStore.Load() == expected,
+                    && toggles[1].ButtonPressed == expected.InvertCameraY && toggles[2].ButtonPressed == expected.InvertActorX
+                    && toggles[3].ButtonPressed == expected.InvertActorY && changes == 1 && _worldStore.Load() == expected,
                     $"native click axis={axis} from={x}/{y} actual={_worldSettings.InvertCameraX}/{_worldSettings.InvertCameraY} changes={changes}");
                 Require(_worldActor.State.Position == position && _camera.State == center && !_worldActor.IsPlaying
                     && !_worldGate.IsOpen && !_camera.FollowState.RecenterArmed, "mouse UI moved world/armed Follow");
                 ToggleWorldSettings(); ToggleWorldSettings(); await NextFrameAsync();
                 Require(_worldSettings == expected && _worldPanel.Settings == expected, "close/reopen changed preferences");
             }
-            GD.Print("ARC-WORLD-001 native checkbox clicks PASS all four starting combinations/two axes/one change/persist/reopen/world stopped; SIMULATION not physical evidence");
+            GD.Print("ARC-WORLD-001 native checkbox clicks PASS all four starting combinations/four axes/one change/persist/reopen/world stopped; SIMULATION not physical evidence");
             // Native semantic activation is consumed once, even with an echo,
             // held frame, unrelated pointer event and subsequent release.
             SaveWorldSettings(new InputSettings(InvertCameraX: false, InvertCameraY: false)); _worldPanel.Bind(_worldSettings);
@@ -268,7 +270,7 @@ public partial class TerrainViewerApp
                 var rect = panel.GetGlobalRect();
                 if (WorldViewport != new Vector2(size.X, size.Y) || rect.Position.X < 0 || rect.Position.Y < 0
                     || rect.End.X > size.X || rect.End.Y > size.Y || header is null || !header.IsVisibleInTree()
-                    || !header.Text.Contains("Bounded cardinal grid", StringComparison.Ordinal) || !header.Text.Contains("NOT VERIFIED", StringComparison.Ordinal)
+                    || !header.Text.Contains("Bounded adjacent grid", StringComparison.Ordinal) || !header.Text.Contains("NOT VERIFIED", StringComparison.Ordinal)
                     || _worldActor.State != actor)
                     throw new InvalidOperationException("WORLD settings containment/limitations changed.");
                 if (DisplayServer.GetName() == "headless") continue;

@@ -151,7 +151,7 @@ The adapter replays the earliest missing assessment against the same immutable
 previous state, then publishes one final result; invalid/capacity failures are
 atomic, not partial movement.
 
-Live cardinal duration is the explicit positive rational **1/2 second** per
+Live adjacent duration is the explicit positive rational **1/2 second** per
 cell, with entry at **1/4 second**. It is project diagnostic policy, independent
 of ART FPS, analog magnitude, camera delta and original movement speed. Neutral
 before entry smoothly returns to the committed origin; equality or later
@@ -169,7 +169,7 @@ ordered complete batch per timestamp. The newest tick remains open until a
 strictly newer observation proves it complete; no late-input retagging.
 
 The rendering catalogue retains project diagnostic octants, not original
-compass semantics. WORLD uses only the evidenced cardinal mapping below and
+compass semantics. WORLD uses the bounded eight-sector screen mapping below and
 the closed `HumanFixed` profile:
 single-layer fixed type2/body0 female underwear0, palette0, mapping-only (no
 module/NPC/player appearance association). Idle has one frame at raw 6 FPS;
@@ -185,26 +185,45 @@ bridge to the checked source-derived normal placement; camera origin stays 0.
 Follow targets continuous projected baseline plus `(0,20)`, not rounded sprite
 position. No sprite repositioning/visual nudge substitutes for source geometry.
 
-WASD/left stick requests map neighbors, **not screen directions**. The reducer
-applies circular deadzone and linear sensitivity once. Retain each nonzero
-component whose magnitude is at least half the largest (inclusive ties);
-two retained components request a diagonal, which Data denies as
-`DIAGONAL_RULE_UNPROVED`, never silently rerouted to an axis. Sensitivity affects
-magnitude, not step duration. Opposing keys net neutral but still count as
-activity for safety/Follow. The literal cardinal mapping is:
+WASD/left stick requests **screen sectors**. The reducer applies circular deadzone
+and linear sensitivity once; WORLD then applies separate actor X/Y inversion
+(defaults false/false) once. Retain each nonzero component whose magnitude is at
+least half the largest (inclusive ties), then map the screen sector to one
+neighbor. Camera inversion remains independent and authored v1 camera settings
+are preserved when migrating files without actor fields. Sensitivity affects
+magnitude, not the fixed diagnostic half-second step duration. Opposing keys net
+neutral but still count as activity for safety/Follow. The literal mapping follows
+`(40*(Y-X),20*(Y+X))`, not a compass alias or original-executable claim:
 
 | Input | Map direction | Unzoomed projected cell delta | Human octant / physical group / flip |
 | --- | --- | --- | --- |
-| A / stick -X | XMinus | `(40,-20)` | `1 / 7 / yes` |
-| S / stick +Y | YPlus | `(40,20)` | `3 / 5 / yes` |
-| D / stick +X | XPlus | `(-40,20)` | `5 / 5 / no` |
-| W / stick -Y | YMinus | `(-40,-20)` | `7 / 7 / no` |
+| W / stick N | XMinusYMinus | `(0,-40)` | `0 / 0 / no` |
+| W+D / stick NE | XMinus | `(40,-20)` | `1 / 7 / yes` |
+| D / stick E | XMinusYPlus | `(80,0)` | `2 / 6 / yes` |
+| S+D / stick SE | YPlus | `(40,20)` | `3 / 5 / yes` |
+| S / stick S | XPlusYPlus | `(0,40)` | `4 / 4 / no` |
+| S+A / stick SW | XPlus | `(-40,20)` | `5 / 5 / no` |
+| A / stick W | XPlusYMinus | `(-80,0)` | `6 / 6 / no` |
+| W+A / stick NW | YMinus | `(-40,-20)` | `7 / 7 / no` |
 
-From spawn, D admits `(6,1)->(7,1)`; release/finish and A return to `(6,1)`.
-A at spawn requests `(5,1)` and is blocked by the already admitted scenery
+From spawn, S+A admits `(6,1)->(7,1)`; release/finish and W+D return to `(6,1)`.
+W+D at spawn requests `(5,1)` and is blocked by the already admitted scenery
 index 1 (one of the five, no extra/invented blocker). Its diagnostic anchor is
 `(-163,134)`, rectangle `(-276,-128,204,267)`. Destination evidence is
 asymmetric; general occupancy/reachability/occlusion are not inferred.
+
+WORLD opts into `BASE_SECTOR_1452_1290_ADJACENT_V1`, still only x4..8/y0..3.
+Data's default `CardinalOnly` policy remains unchanged. Straight screen axes are
+map diagonals: final terrain is assessed once, with four role-labelled object
+constraints for both shoulders and both final legs. No shoulder terrain, route
+search, four runtime permits, staircase or corner cutting is inferred. At spawn,
+W and D legitimately deny because the XMinus shoulder is the existing `(5,1)`
+blocker. S can reach `(7,2)` where all eight directions have original-data positive
+coverage; holding still renews each admitted segment and stops honestly at the
+bounded zone or obstacle. Native callback/frame and original-pixel tests cover
+all eight sectors, four actor inversion states, keyboard/stick simulation and
+three actual viewports. They do not replace required ordinary physical observation
+or independent review of the frozen candidate.
 
 Arrows/right stick pans the world image and
 immediately selects Manual, even at zero dt or a clamped camera. Simultaneous
@@ -239,8 +258,9 @@ preserved. Already accepted return/finish and its Walk clock continue under the
 closed gate. Held input on recovery cannot
 substitute for those two complete neutral frames.
 
-F1/Start or the HUD button opens bounded settings: independent camera X/Y
-inversion, independent actor/camera deadzones and sensitivities, reset and close.
+F1/Start or the HUD button opens bounded settings: independent camera X/Y and
+actor screen X/Y inversion, independent actor/camera deadzones and sensitivities,
+reset and close.
 WORLD first launch and Reset use **false/false**: stick right/down moves the
 camera right/down (world image left/up). True reverses only the selected
 camera axis; actor and menu directions are unchanged. Explicit saved values,
@@ -260,7 +280,7 @@ The bounded scrollable panel uses an opaque background; bounded-grid/context/par
 visible in a fixed header even when the settings rows scroll.
 
 Paint is terrain → diagnostic facades → five sorted statics → actor → guides
-→ HUD. The persistent label says bounded cardinal grid, original Data admission,
+→ HUD. The persistent label says bounded adjacent grid, original Data admission,
 not gameplay and original parity NOT VERIFIED, including loading/failure/modal.
 Shared `src/Arcanum.Input` owns project input/Follow/Vec2; historical
 `GamepadLab.Core` names and type forwarding are compatibility only. The viewer

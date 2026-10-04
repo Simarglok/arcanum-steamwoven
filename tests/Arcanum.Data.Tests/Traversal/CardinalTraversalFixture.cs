@@ -32,9 +32,10 @@ internal sealed class CardinalTraversalFixture : IDisposable
         Module = DatArchive.Open(ModuleStream, leaveOpen: true); Resource = DatArchive.Open(ResourceStream, leaveOpen: true);
         Source = new(Module, SectorPath, Resource); Prototypes = new(PrototypeRoot);
     }
-    internal CardinalTraversalSnapshot Inspect(bool nameSource = true, long epoch = 7, TerrainLoaderOptions? terrain = null, StaticObjectLoaderOptions? objects = null) =>
+    internal CardinalTraversalSnapshot Inspect(bool nameSource = true, long epoch = 7, TerrainLoaderOptions? terrain = null, StaticObjectLoaderOptions? objects = null,
+        CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly) =>
         CardinalTraversalInspector.InspectSector(Source, Prototypes, "MODULE", "RESOURCE", "PROTOTYPES", Selector,
-            nameSource ? new(Resource, "RESOURCE", NamePath, TerrainPathProfile.CeNonWindowsMacOs) : null, epoch, terrain, objects);
+            nameSource ? new(Resource, "RESOURCE", NamePath, TerrainPathProfile.CeNonWindowsMacOs) : null, epoch, terrain, objects, policy);
     internal void PutPrototype(int aid, uint flags, byte[]? bytes = null, string? filename = null) =>
         File.WriteAllBytes(Path.Combine(PrototypeRoot, filename ?? $"{aid:000000} - fixture.pro"), bytes ?? StaticObjects.StaticObjectLoaderTests.Prototype(aid, 123, flags));
     internal static long World(int x = 92933, int y = 82561) => unchecked((long)((ulong)(uint)x | ((ulong)(uint)y << 32)));

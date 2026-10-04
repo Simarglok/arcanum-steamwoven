@@ -4,6 +4,7 @@ import json
 import re
 from pathlib import Path
 from . import config
+from .screen_grid_validation import validate_screen_cases
 
 VIEWPORTS = [[1280, 800], [1440, 900], [800, 600]]
 START = 'StepStarted@1/1:6,1>7,1|ActionChanged@1/1:6,1>7,1'
@@ -28,7 +29,7 @@ def validate_report(report: object, head: str, host: str) -> None:
         raise ValueError('grid report requires an exact candidate commit')
     if (report.get('originalIdentity') != 'authenticated-original-grid-and-actor'
             or report.get('profile') != 'HumanFixed'
-            or report.get('assessmentProfile') != 'BASE_SECTOR_1452_1290'
+            or report.get('assessmentProfile') != 'BASE_SECTOR_1452_1290_ADJACENT_V1'
             or report.get('context') != 'ISOLATED_PC_CRITTER_ART_NONPOLYMORPH'
             or report.get('duration') != '1/2'
             or report.get('graphical') is not True
@@ -76,15 +77,16 @@ def validate_report(report: object, head: str, host: str) -> None:
                 binding = dict(ChartId='SECTOR_1452_1290_LOCAL_CENTERS', ActorId='HUMAN_FIXED_DIAGNOSTIC',
                     ContextId=context_fingerprint, CapabilitiesProfileId='ISOLATED_PC_HUMAN_FIXED_V1',
                     CapabilitiesFingerprint='KIND15_ART2_FLAGS0_GROUND_NONPOLYMORPH_REGISTRY0',
-                    AssessmentProfileId='BASE_SECTOR_1452_1290', InputFingerprint=digest, EvidenceEpoch=epoch)
+                    AssessmentProfileId='BASE_SECTOR_1452_1290_ADJACENT_V1', InputFingerprint=digest, EvidenceEpoch=epoch)
                 time = dict(Value=dict(Numerator=1 if index == 0 else 2, Denominator=1, IsValid=True), IsValid=True)
                 if not isinstance(key, dict) or any(key.get(field) != value for field, value in {
                     'Binding': binding, 'From': dict(X=source[0], Y=source[1]),
                     'To': dict(X=destination[0], Y=destination[1]), 'Direction': direction,
                     'StartTime': time, 'OpportunityId': index + 1, 'ProposedStepId': index + 1,
-                    'MaterialIntentKey': dict(Time=time, Sequence=index * 2), 'EvidenceRevision': 0,
+                    'MaterialIntentKey': dict(Time=time, Sequence=index * 4 + 1), 'EvidenceRevision': 0,
                 }.items()):
                     raise ValueError('grid runtime-generated exact key is incomplete or stale')
+    validate_screen_cases(report.get('screenCases'), digest, epoch)
 
 
 def validate_reports(evidence: Path, head: str) -> None:

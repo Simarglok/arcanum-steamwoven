@@ -11,7 +11,8 @@ internal sealed class GridWireFixture : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "grid-wire-" + Guid.NewGuid().ToString("N"));
     private const string SectorPath = "maps\\Arcanum1-024-fixed\\86570436012.sec";
-    internal GridWireFixture(bool names = true, int uncertainRecords = 0, bool tileBlocker = false)
+    internal GridWireFixture(bool names = true, int uncertainRecords = 0, bool tileBlocker = false,
+        CardinalTraversalAdmissionPolicy policy = CardinalTraversalAdmissionPolicy.CardinalOnly)
     {
         Directory.CreateDirectory(_root);
         using var sector = new MemoryStream(); using var w = new BinaryWriter(sector);
@@ -28,7 +29,7 @@ internal sealed class GridWireFixture : IDisposable
         using var resource = DatArchive.Open(new MemoryStream(Dat(names ? [("art\\tile\\tilename.mes", Encoding.ASCII.GetBytes("{0}{aaa}{300}{aaa}"))] : [])));
         Snapshot = CardinalTraversalInspector.InspectSector(new(module, SectorPath, resource), new(_root),
             "MODULE", "RESOURCE", "PROTOTYPES", new(SectorPath, "BASE_SECTOR_1452_1290", 1452,1290,86570436012,92928,82560,64,64),
-            names ? new(resource,"RESOURCE","art\\tile\\tilename.mes",TerrainPathProfile.CeNonWindowsMacOs) : null, 7);
+            names ? new(resource,"RESOURCE","art\\tile\\tilename.mes",TerrainPathProfile.CeNonWindowsMacOs) : null, 7, policy: policy);
         // All sources are disposed before any runtime tests query the snapshot.
     }
     internal CardinalTraversalSnapshot Snapshot { get; }

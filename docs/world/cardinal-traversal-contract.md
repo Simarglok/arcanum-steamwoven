@@ -1,5 +1,23 @@
 # Bounded cardinal traversal evidence contract (ARC-RES-014)
 
+## WORLD003 opt-in amendment (historical cardinal contract retained)
+
+The research contract below remains the `CardinalOnly` default and historical
+evidence. WORLD003 selects the separate production `BoundedAdjacent` policy,
+profile `BASE_SECTOR_1452_1290_ADJACENT_V1`; sector, zone x4..8/y0..3, context,
+guarded input identity and unavailable path0x1000 branch remain unchanged.
+Final destination mask/facade/name are queried once. For a map diagonal, both
+object-only shoulder paths must close: XShoulder, XFinal, YShoulder, YFinal.
+Each retains exact endpoints, leg direction, original diagonal direction, full
+record census and role-labelled gaps. Shoulder terrain is not a contributor.
+One complete Open assessment binds one runtime key/half-second segment, not four
+permits or intermediate commits. A known unconditional blocker retains all gaps;
+unknown membership/flags/census cannot certify Open or invent a blocker.
+See [production assessment](cardinal-traversal-assessment.md) and the independently
+projected [screen mapping](../rendering/terrain-viewer.md). Default cardinal diagonal
+Unknown tests and the historical research outputs are not reinterpreted as this
+new profile. No dynamic walls/portals, executable parity or wider-zone admission.
+
 ## Status and scope
 
 This is an implemented **research-only** assessment in the standalone

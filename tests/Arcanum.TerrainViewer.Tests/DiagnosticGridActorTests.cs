@@ -54,8 +54,8 @@ public sealed class DiagnosticGridActorTests
     public void InputResolutionHasLiteralAxesInclusiveHalfTiesNoDiagonalFallback()
     {
         var vectors=new[]{new Vec2(-1,0),new(1,0),new(0,-1),new(0,1),new(1,.5),new(1,.499),new(-.5,-1),default(Vec2)};
-        NeighborDirection?[] expected=[NeighborDirection.XMinus,NeighborDirection.XPlus,NeighborDirection.YMinus,NeighborDirection.YPlus,NeighborDirection.XPlusYPlus,NeighborDirection.XPlus,NeighborDirection.XMinusYMinus,null];
-        CollectionAssert.AreEqual(expected,vectors.Select(DiagnosticGridActor.Resolve).ToArray());
+        NeighborDirection?[] expected=[NeighborDirection.XPlusYMinus,NeighborDirection.XMinusYPlus,NeighborDirection.XMinusYMinus,NeighborDirection.XPlusYPlus,NeighborDirection.YPlus,NeighborDirection.XMinusYPlus,NeighborDirection.YMinus,null];
+        CollectionAssert.AreEqual(expected,vectors.Select(v => DiagnosticGridActor.Resolve(v)).ToArray());
         Assert.Throws<ArgumentException>(()=>DiagnosticGridActor.Resolve(new(double.NaN,1)));
     }
     [TestMethod]

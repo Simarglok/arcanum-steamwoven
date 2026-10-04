@@ -21,7 +21,7 @@ public static partial class TerrainViewerSelfTest
     }
     internal static SyntheticActorLoad WorldFixture()
     {
-        using var grid = new Arcanum.TerrainViewer.Tests.GridWireFixture();
+        using var grid = new Arcanum.TerrainViewer.Tests.GridWireFixture(policy: Arcanum.Data.Traversal.CardinalTraversalAdmissionPolicy.BoundedAdjacent);
         var fixture = SyntheticActorFixture.Create(human: true);
         var terrainKey = fixture.Result.Textures.Keys.Single();
         var terrain = TerrainScenePlan.CreateSynthetic(new(-2600, -100, 5200, 2800),
@@ -54,7 +54,7 @@ public static partial class TerrainViewerSelfTest
         app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
         var initial = app.GetSelfTestSnapshot();
         if (initial.CameraZoom != 2 || app.WorldFollowForSelfTest.Mode != GamepadLab.Core.CameraMode.Follow)
-            throw new InvalidOperationException("WORLD default-2 ordinary ready framing failed.");
+            throw new InvalidOperationException($"WORLD default-2 ordinary ready framing failed zoom={initial.CameraZoom} follow={app.WorldFollowForSelfTest}");
         var hudOrigin = initial.HudPosition;
         foreach (var ratio in new[] { 1d, 2d, 3d, 1.7 })
         {
@@ -124,8 +124,8 @@ public static partial class TerrainViewerSelfTest
         // All directions are tested through actual aggregation/Data/runtime.
         var none = new GamepadLab.Core.RawInputFrame(-1, default);
         foreach (var (direction, x, y) in new[] {
-            (new GamepadLab.Core.Vec2(0,-1),6d,0d), (new GamepadLab.Core.Vec2(1,0),8d,1d),
-            (new GamepadLab.Core.Vec2(-1,0),6d,1d), (new GamepadLab.Core.Vec2(0,1),6d,3d) })
+            (new GamepadLab.Core.Vec2(-1,-1),6d,0d), (new GamepadLab.Core.Vec2(-1,1),8d,1d),
+            (new GamepadLab.Core.Vec2(1,-1),6d,1d), (new GamepadLab.Core.Vec2(1,1),6d,3d) })
         {
             app._Input(new InputEventKey { Keycode = Key.R, Pressed = true });
             app.WorldSettleForSelfTest();
@@ -157,7 +157,7 @@ public static partial class TerrainViewerSelfTest
                 AssertGuideAt(image, corner.CanvasTransform, checked((int)corner.Actor!.AnchorX), checked((int)corner.Actor.AnchorY), true);
             }
         }
-        GD.Print("ARC-WORLD-003 bounded cardinal zone/Blocked/Unsupported/envelope actual app PASS; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
+        GD.Print("ARC-WORLD-003 bounded adjacent zone/Blocked/Unsupported/envelope actual app PASS; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
         app.PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result);
         var reloaded = app.GetSelfTestSnapshot();
         if (reloaded.CreatedTextures != 122 || reloaded.DisposedTextures != 61 || reloaded.CacheCount != 61)

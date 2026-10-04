@@ -62,9 +62,11 @@ public sealed class DiagnosticGridActor
     };
     public static int Octant(NeighborDirection facing) => facing switch
     {
-        NeighborDirection.XMinus => 1, NeighborDirection.YPlus => 3,
-        NeighborDirection.XPlus => 5, NeighborDirection.YMinus => 7,
-        _ => throw new InvalidOperationException("GRID_CARDINAL_FACING_REQUIRED")
+        NeighborDirection.XMinusYMinus => 0, NeighborDirection.XMinus => 1,
+        NeighborDirection.XMinusYPlus => 2, NeighborDirection.YPlus => 3,
+        NeighborDirection.XPlusYPlus => 4, NeighborDirection.XPlus => 5,
+        NeighborDirection.XPlusYMinus => 6, NeighborDirection.YMinus => 7,
+        _ => throw new ArgumentOutOfRangeException(nameof(facing))
     };
     public static ActorDiagnosticPlacementInput Placement(MovementState state, int frame) =>
         DiagnosticActorMotion.ToPlacement(RenderState(state), frame); // pure geometry ONLY
@@ -78,26 +80,27 @@ public sealed class DiagnosticGridActor
     }
 
     /// <summary>
-    /// Caller policy: A/D (stick X) request map -X/+X; W/S (stick Y) request
-    /// map -Y/+Y. Reducer already applied deadzone. Retain both components at
-    /// >= half the largest magnitude, inclusive ties, and request the resulting
-    /// diagonal explicitly (Data denies it); never reroute an unsupported request.
+    /// WORLD policy: quantize the aggregate in screen space, after the reducer's
+    /// deadzone and once-only actor inversion. Retain components at >= half the
+    /// largest magnitude, inclusive ties. Translate all eight screen sectors to
+    /// projected adjacent map centers; never reroute a denied Data request.
     /// Sensitivity affects magnitude, not duration. Opposing keys net neutral;
     /// their separate activity bit still governs safety and camera Follow.
     /// </summary>
-    public static NeighborDirection? Resolve(Vec2 reduced)
+    public static NeighborDirection? Resolve(Vec2 reduced, bool invertActorX = false, bool invertActorY = false)
     {
         if (!double.IsFinite(reduced.X) || !double.IsFinite(reduced.Y)) throw new ArgumentException("GRID_INPUT_NONFINITE");
+        reduced = new(invertActorX ? -reduced.X : reduced.X, invertActorY ? -reduced.Y : reduced.Y);
         var largest = Math.Max(Math.Abs(reduced.X), Math.Abs(reduced.Y));
         if (largest == 0) return null;
         var x = Math.Abs(reduced.X) >= largest * .5 ? Math.Sign(reduced.X) : 0;
         var y = Math.Abs(reduced.Y) >= largest * .5 ? Math.Sign(reduced.Y) : 0;
         return (x, y) switch
         {
-            (-1,-1) => NeighborDirection.XMinusYMinus, (-1,0) => NeighborDirection.XMinus,
-            (-1,1) => NeighborDirection.XMinusYPlus, (0,1) => NeighborDirection.YPlus,
-            (1,1) => NeighborDirection.XPlusYPlus, (1,0) => NeighborDirection.XPlus,
-            (1,-1) => NeighborDirection.XPlusYMinus, (0,-1) => NeighborDirection.YMinus,
+            (0,-1) => NeighborDirection.XMinusYMinus, (1,-1) => NeighborDirection.XMinus,
+            (1,0) => NeighborDirection.XMinusYPlus, (1,1) => NeighborDirection.YPlus,
+            (0,1) => NeighborDirection.XPlusYPlus, (-1,1) => NeighborDirection.XPlus,
+            (-1,0) => NeighborDirection.XPlusYMinus, (-1,-1) => NeighborDirection.YMinus,
             _ => throw new InvalidOperationException("GRID_INPUT_RESOLUTION_INVALID")
         };
     }

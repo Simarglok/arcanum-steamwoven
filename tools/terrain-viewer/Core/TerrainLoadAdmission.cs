@@ -27,7 +27,8 @@ internal class TerrainLoadAdmission
     internal virtual StaticObjectInspection InspectStatics(TerrainViewerArguments arguments, DatArchive module, DatArchive resource) =>
         StaticObjectLoader.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!).Inspection;
     internal virtual CardinalTraversalSnapshot InspectTraversal(TerrainViewerArguments arguments, DatArchive module, DatArchive resource, long epoch) =>
-        CardinalTraversalInspector.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!, epoch);
+        CardinalTraversalInspector.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!, epoch,
+            policy: CardinalTraversalAdmissionPolicy.BoundedAdjacent);
     internal virtual bool AcceptTraversalIdentity(CardinalTraversalSnapshot snapshot, InputFingerprint module, InputFingerprint resource) =>
         snapshot.InputIdentity.Kind == CardinalTraversalInputKind.AuthenticatedOriginal &&
         snapshot.InputIdentity.OriginalIdentity is { } identity &&

@@ -30,10 +30,12 @@ public partial class TerrainViewerApp
         var rows=root.GetProperty("rows").EnumerateArray().ToArray();
         var snapshot=result.TraversalSnapshot!; var none=new RawInputFrame(-1,default); var level=none;
         var events=new List<MovementEvent>(); var evidence=new List<GridStepEvidence>(); var cases=new List<object>();
+        var screenCases=new List<object>(); var controllerMode=false; var padLevel=new RawInputFrame(3,default);
+        var savedSettings=_worldSettings;
         var viewports=new List<int[]>(); var renderedPhases=new HashSet<string>();
         void Frame(int numerator,int denominator=16)
         {
-            WorldFrameForSelfTest(level,Array.Empty<RawInputFrame>(),.1,true,SimulationTime.At(numerator,denominator));
+            WorldFrameForSelfTest(level,controllerMode?new[]{padLevel}:Array.Empty<RawInputFrame>(),.1,true,SimulationTime.At(numerator,denominator));
             var advance=_worldActor.Session!.LastAdvance;
             if(advance is null) return;
             events.AddRange(advance.Movement.Events.Where(e=>!events.Any(old=>old.Ordinal==e.Ordinal)));
@@ -42,13 +44,17 @@ public partial class TerrainViewerApp
         void KeyAt(int numerator,int denominator,Key key,bool pressed)
         {
             _worldTestTime=SimulationTime.At(numerator,denominator);
-            _Input(new InputEventKey {Keycode=key,Pressed=pressed});
-            level=none with {KeyboardActor=pressed?new Vec2(key==Key.A?-1:1,0):default,KeyboardActorHeld=pressed};
+            // Preserve the historical literal map-X transcripts with corrected
+            // screen chords: A-proxy is NE/W+D, D-proxy is SW/S+A.
+            foreach(var physical in key==Key.A?new[]{Key.W,Key.D}:new[]{Key.S,Key.A})
+                _Input(new InputEventKey {Keycode=physical,Pressed=pressed});
+            level=none with {KeyboardActor=pressed?(key==Key.A?new Vec2(1,-1):new Vec2(-1,1)):default,KeyboardActorHeld=pressed};
         }
-        void Prepare()
+        void Prepare(bool controller=false)
         {
             if(WorldModal) ToggleWorldSettings(); GetViewport().GuiReleaseFocus();
-            _worldAdapter.Clear(); _worldReducer.SetStartupDevices(Array.Empty<int>()); RetireWorldLifecycle();
+            controllerMode=controller; padLevel=new(3,default); _worldSettings=DiagnosticWorldPolicy.DefaultInputSettings;
+            _worldAdapter.Clear(); _worldReducer.SetStartupDevices(controller?new[]{3}:Array.Empty<int>()); RetireWorldLifecycle();
             _worldActor=new(); _worldActor.Configure(snapshot,SimulationTime.At(0));
             _worldGridInput=new(); _worldTestTime=SimulationTime.At(0); _worldFocused=true; level=none;
             QuarantineWorld(); Frame(1,10); Frame(2,10); Frame(3,10);
@@ -58,8 +64,8 @@ public partial class TerrainViewerApp
         JsonElement Reference()
         {
             var state=_worldActor.State; var action=state.Action==ActorDiagnosticAction.Walk?1:0;
-            // Independent literal cardinal table, not Profile.Facing/MapFacing.
-            var group=state.Facing is 1 or 7?7:5;
+            // Independent literal eight-facing table, not Profile.Facing/MapFacing.
+            var group=new[]{0,7,6,5,4,5,6,7}[state.Facing];
             return rows.Single(r=>r.GetProperty("action").GetInt32()==action
                 && r.GetProperty("group").GetInt32()==group && r.GetProperty("frame").GetInt32()==_worldActor.CurrentFrame);
         }
@@ -89,10 +95,70 @@ public partial class TerrainViewerApp
             Require(await HasStaticDifferenceInFullSceneAsync(image,landmark),"visible blocker hidden-static negative control");
             renderedPhases.Add("Blocked");
         }
+        async Task ScreenMatrix(Vector2I size)
+        {
+            Vec2[] vectors=[new(0,-1),new(1,-1),new(1,0),new(1,1),new(0,1),new(-1,1),new(-1,0),new(-1,-1)];
+            Key[][] keys=[[Key.W],[Key.W,Key.D],[Key.D],[Key.S,Key.D],[Key.S],[Key.S,Key.A],[Key.A],[Key.W,Key.A]];
+            // Literal projected-sign oracle (manager F-PLAN-NE-NW). These are
+            // independent map displacements, not Resolve/Octant output.
+            int[] mx=[-1,-1,-1,0,1,1,1,0], my=[-1,0,1,1,1,0,-1,-1];
+            int[][] inversions=[[0,1,2,3,4,5,6,7],[0,7,6,5,4,3,2,1],[4,3,2,1,0,7,6,5],[4,5,6,7,0,1,2,3]];
+            foreach(var controller in new[]{false,true}) for(var flags=0;flags<4;flags++) for(var sector=0;sector<8;sector++)
+            {
+                Prepare(controller);
+                // Reach the interior center through the real S callback/queue,
+                // never by teleporting/configuring another diagnostic spawn.
+                _worldTestTime=SimulationTime.At(1); _Input(new InputEventKey {Keycode=Key.S,Pressed=true});
+                level=none with{KeyboardActor=new(0,1),KeyboardActorHeld=true}; Frame(17); Frame(18);
+                _worldTestTime=SimulationTime.At(5,4); _Input(new InputEventKey {Keycode=Key.S,Pressed=false}); level=none;
+                Frame(25); Frame(26);
+                Require(_worldActor.Session!.State.CommittedCell==new CellCoord(7,2)&&_worldActor.Session.State.Phase==MovementPhase.Settled,"interior original S admission");
+                events.Clear(); evidence.Clear();
+                _worldSettings=_worldSettings with{InvertActorX=(flags&1)!=0,InvertActorY=(flags&2)!=0};
+                _worldTestTime=SimulationTime.At(2);
+                if(controller)
+                {
+                    _Input(new InputEventJoypadMotion{Device=3,Axis=JoyAxis.LeftX,AxisValue=(float)vectors[sector].X});
+                    _Input(new InputEventJoypadMotion{Device=3,Axis=JoyAxis.LeftY,AxisValue=(float)vectors[sector].Y});
+                    padLevel=padLevel with{LeftStick=vectors[sector]};
+                }
+                else
+                {
+                    foreach(var key in keys[sector])_Input(new InputEventKey{Keycode=key,Pressed=true});
+                    level=none with{KeyboardActor=vectors[sector],KeyboardActorHeld=true};
+                }
+                Frame(33); Frame(34);
+                var wanted=inversions[flags][sector]; var started=events.Single(e=>e.Kind==MovementEventKind.StepStarted);
+                Require(started.Key.From==new CellCoord(7,2)&&started.Key.To==new CellCoord(7+mx[wanted],2+my[wanted])
+                    &&(int)started.Key.Direction==wanted&&_worldActor.State.Facing==wanted,"literal screen endpoint/facing");
+                var delta=new[]{40*(my[wanted]-mx[wanted]),20*(my[wanted]+mx[wanted])};
+                Require(Math.Sign(delta[0])==Math.Sign(vectors[wanted].X)&&Math.Sign(delta[1])==Math.Sign(vectors[wanted].Y),"independent projected signs all8 including NE/NW");
+                await Render("Walk",sector==0&&flags==0);
+                _worldTestTime=SimulationTime.At(9,4);
+                if(controller)
+                {
+                    _Input(new InputEventJoypadMotion{Device=3,Axis=JoyAxis.LeftX,AxisValue=0});
+                    _Input(new InputEventJoypadMotion{Device=3,Axis=JoyAxis.LeftY,AxisValue=0}); padLevel=new(3,default);
+                }
+                else {foreach(var key in keys[sector])_Input(new InputEventKey{Keycode=key,Pressed=false}); level=none;}
+                Frame(41); Frame(42); await Render("Idle");
+                var admitted=evidence.Single(); var assessment=admitted.Assessment;
+                Require(_worldActor.Session.State.Phase==MovementPhase.Settled&&_worldActor.Session.State.CommittedCell==started.Key.To
+                    &&assessment.Coverage==CardinalTraversalCoverage.Supported&&assessment.Disposition==CardinalTraversalDisposition.Open
+                    &&assessment.Gaps.Count==0&&assessment.Legs.Count==((wanted&1)==0?4:0),"actual all8 original admission closure");
+                screenCases.Add(new{viewport=new[]{size.X,size.Y},device=controller?"stick":"keyboard",sector,flags,facing=wanted,projected=delta,
+                    from=new[]{7,2},to=new[]{started.Key.To.X,started.Key.To.Y},direction=wanted,rendered="PASS",coverage="Supported",disposition="Open",gaps=assessment.Gaps.Count,
+                    profile=assessment.StepEvidence.ProfileId,evidenceEpoch=snapshot.EvidenceEpoch,selectedEvidenceSha256=snapshot.InputIdentity.SelectedEvidenceSha256,
+                    trace=string.Join("|",events.Select(e=>$"{e.Kind}@{e.Time.Value.Numerator}/{e.Time.Value.Denominator}:{e.Key.From.X},{e.Key.From.Y}>{e.Key.To.X},{e.Key.To.Y}")),
+                    legs=assessment.Legs.Select(l=>new{role=l.Role.ToString(),from=new[]{l.From.X,l.From.Y},to=new[]{l.To.X,l.To.Y},direction=(int)l.Direction,
+                        originalDirection=(int)l.OriginalDirection,records=l.RecordAssessments.Count,gaps=l.Gaps.Count,blockers=l.RecordAssessments.Where(r=>r.Result.Disposition==CardinalTraversalDisposition.Blocked).Select(r=>r.SourceIndex).ToArray()}).ToArray()});
+            }
+        }
         foreach(var size in new[]{new Vector2I(1280,800),new(1440,900),new(800,600)})
         {
             await SetSmokeWindowSizeAsync(size); viewports.Add([size.X,size.Y]);
             Require(GetViewport().GetVisibleRect().Size==new Vector2(size.X,size.Y),"actual viewport");
+            await ScreenMatrix(size);
             foreach(var name in new[]{"early","equality","late","open-reverse","blocker"})
             {
                 Prepare(); await Render("Idle");
@@ -151,7 +217,8 @@ public partial class TerrainViewerApp
             duration="1/2",graphical=true,actualViewports=viewports,negativeControls="PASS",
             renderedPhases=new[]{"Idle","Walk","Returning","OutboundAfterEntry","Blocked"},originalParity="NOT_VERIFIED",
             selectedEvidenceSha256=snapshot.InputIdentity.SelectedEvidenceSha256,evidenceEpoch=snapshot.EvidenceEpoch,
-            blocker=new {sourceIndex=1,cell=new[]{5,1},anchor=new[]{-163,134},rectangle=new[]{-276,-128,204,267},visible="PASS",reason="ADMITTED_DESTINATION_SCENERY_BLOCKER"},cases
+            blocker=new {sourceIndex=1,cell=new[]{5,1},anchor=new[]{-163,134},rectangle=new[]{-276,-128,204,267},visible="PASS",reason="ADMITTED_DESTINATION_SCENERY_BLOCKER"},cases,screenCases
         }));
+        _worldSettings=savedSettings;
     }
 }

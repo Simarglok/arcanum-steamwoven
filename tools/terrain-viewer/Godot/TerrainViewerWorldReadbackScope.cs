@@ -14,7 +14,7 @@ public partial class TerrainViewerApp
     private async Task WithWorldReadbackScopeAsync(TerrainLoadResult result, Func<Task> readback)
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
-        var actor = _worldActor; var queue = _worldGridInput;
+        var actor = _worldActor; var queue = _worldGridInput; var settings = _worldSettings;
         var adapter = _worldAdapter; var reducer = _worldReducer; var gate = _worldGate;
         var clock = _worldTestTime; var observation = _worldObservationTime;
         var lifecycle = _worldLifecycleSession; var reset = _worldResetPending; var reload = _worldReloadPending;
@@ -47,7 +47,7 @@ public partial class TerrainViewerApp
             // notifications. Restore the original controller without recomputing
             // Follow eligibility, center or a pending live lifecycle.
             await NextFrameAsync();
-            _worldActor = actor; _worldGridInput = queue; _worldAdapter = adapter; _worldReducer = reducer; _worldGate = gate;
+            _worldActor = actor; _worldGridInput = queue; _worldAdapter = adapter; _worldReducer = reducer; _worldGate = gate; _worldSettings = settings;
             _worldTestTime = clock; _worldObservationTime = observation;
             _worldLifecycleSession = lifecycle; _worldResetPending = reset; _worldReloadPending = reload;
             _readyDiagnosticPlan = scene; _readyActorPlan = plan; _readyActorInput = input; _readyActor = selected;
