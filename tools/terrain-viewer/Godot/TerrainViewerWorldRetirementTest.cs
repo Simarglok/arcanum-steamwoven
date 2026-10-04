@@ -107,7 +107,7 @@ public partial class TerrainViewerApp
             var camera = _camera; var cameraState = camera!.State; var follow = camera.FollowState;
             var plan = _readyDiagnosticPlan; var clock = _worldTestTime; var frontier = queue.CompleteFrontier;
             var pending = queue.CompleteThrough(SimulationTime.At(12)).Length;
-            var processing = IsProcessing(); var visible = _canvas!.ActorVisibleForReadback;
+            var processing = IsProcessing(); var processingInput = IsProcessingInput(); var visible = _canvas!.ActorVisibleForReadback;
             try
             {
                 await WithWorldReadbackScopeAsync(result, async () =>
@@ -118,6 +118,20 @@ public partial class TerrainViewerApp
                     _worldActor.Advance(SimulationTime.At(1), [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0,ActorIntent.Toward(NeighborDirection.XPlus))])]);
                     _canvas.SetActorVisibilityForReadback(false); _canvas.SetStaticVisibilityForReadback(false);
                     _camera!.ResetWorld(WorldAnchor,WorldViewport,3); await NextFrameAsync();
+                    // Native events really enter the viewport while the render
+                    // catalogue replaces a detached session across awaits. An
+                    // explicit test callback must still reach the app directly.
+                    _worldTestTime = SimulationTime.At(2);
+                    _Input(new InputEventMouseMotion { Position = new(799,599) });
+                    var detachedQueue = _worldGridInput;
+                    _worldActor.Configure(result.TraversalSnapshot!, SimulationTime.At(2));
+                    var successor = _worldActor.Session;
+                    _worldTestTime = SimulationTime.At(3);
+                    GetViewport().PushInput(new InputEventMouseMotion { Position = new(798,599), Relative = new(-1,0) });
+                    await NextFrameAsync();
+                    Require(ReferenceEquals(successor,_worldActor.Session) && detachedQueue.CompleteFrontier is null,
+                        "native input entered detached replacement session");
+                    Require(!IsProcessingInput(), "readback native input ownership");
                     if (fail) throw new InvalidOperationException("owned readback failure");
                 });
                 Require(!fail, "expected failure missing");
@@ -130,7 +144,8 @@ public partial class TerrainViewerApp
                 && ReferenceEquals(plan,_readyDiagnosticPlan) && _worldTestTime == clock
                 && ReferenceEquals(_worldLifecycleSession,actor.Session) && _worldReloadPending && !_worldResetPending
                 && queue.CompleteFrontier == frontier && queue.CompleteThrough(SimulationTime.At(12)).Length == pending
-                && IsProcessing() == processing && _canvas.ActorVisibleForReadback == visible && _canvas.StaticVisibleForReadback,
+                && IsProcessing() == processing && IsProcessingInput() == processingInput
+                && _canvas.ActorVisibleForReadback == visible && _canvas.StaticVisibleForReadback,
                 "async success/failure leaked ownership/state/visibility");
         }
         // Failure/new publication clears old pending lifecycle; a successor may

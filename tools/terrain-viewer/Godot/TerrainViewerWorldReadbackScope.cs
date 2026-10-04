@@ -24,9 +24,12 @@ public partial class TerrainViewerApp
         var camera = _camera!; var cameraPosition = camera.Camera.Position; var cameraZoom = camera.Camera.Zoom;
         var size = new Vector2I((int)WorldViewport.X, (int)WorldViewport.Y);
         var actorVisible = _canvas!.ActorVisibleForReadback; var staticVisible = _canvas.StaticVisibleForReadback;
-        var processing = IsProcessing(); var simulatedFocus = _worldFocusSimulationForSelfTest;
+        var processing = IsProcessing(); var processingInput = IsProcessingInput(); var simulatedFocus = _worldFocusSimulationForSelfTest;
         var focusOwner = GetViewport().GuiGetFocusOwner(); var modal = WorldModal;
-        SetProcess(false); _worldFocusSimulationForSelfTest = true;
+        // Render-only catalogue checks replace detached sessions across awaits.
+        // OS callbacks must not bind their queue to a previous detached session.
+        // Explicit test _Input calls still exercise the real routing directly.
+        SetProcess(false); SetProcessInput(false); _worldFocusSimulationForSelfTest = true;
         try
         {
             _worldActor = new(); _worldGridInput = new(); _worldAdapter = new(); _worldReducer = new(); _worldGate = new();
@@ -58,7 +61,7 @@ public partial class TerrainViewerApp
             _canvas.Publish(scene!, _cache);
             if (modal) _worldPanel?.Show(); else _worldPanel?.Hide();
             if (GodotObject.IsInstanceValid(focusOwner)) focusOwner!.GrabFocus(); else GetViewport().GuiReleaseFocus();
-            _worldFocusSimulationForSelfTest = simulatedFocus; SetProcess(processing); RefreshReadyStatus();
+            _worldFocusSimulationForSelfTest = simulatedFocus; SetProcess(processing); SetProcessInput(processingInput); RefreshReadyStatus();
         }
     }
 }
