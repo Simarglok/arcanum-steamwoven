@@ -64,6 +64,8 @@ Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; Ste
 
 ### FR-PRODUCT-002 — Keyboard/mouse и semantic gamepad управление
 
+**Принятое уточнение 2026-10-04:** клавиатура/мышь используют оригинальную схему Arcanum и её интерфейсные действия; движение на WASD не требуется. Новые пресеты и contextual UI относятся к gamepad. Детальная спецификация и диагностические расширения — в [original-keyboard-mouse](original-keyboard-mouse.md); modern resolution/HiDPI/UI scaling из FR-PRODUCT-001 сохраняются.
+
 Gamepad передаёт намерения актёра/камеры/действий, UI показывает contextual prompts; прямое управление не требует отдельно двигать курсор и нажимать движение на каждом шаге. Базовый target проверки — Xbox Series по Bluetooth; это не заявление о проверке всех контроллеров. **Основание:** [accepted controller direction](../project/vision.md#accepted-controller-direction). **Приёмка:** движение/выбор/диалог/меню доступны обоими input methods; reconnection и actual device UX проверены отдельно. **Покрытие:** частично — [input lab](../../experiments/gamepad-lab/README.md) и diagnostic scene; original-world interaction и production menus отсутствуют.
 
 <a id="fr-product-003"></a>
