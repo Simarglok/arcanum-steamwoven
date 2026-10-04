@@ -10,6 +10,10 @@ The separate [terrain obstruction component API](terrain-obstruction-components.
 
 ## API
 
+The separate [complete area owner](crash-site-area-loader.md) reuses this sector
+framing for the selected exterior survey/core/context and authenticated frame
+chains. It does not widen this single-sector API or its obstruction profile.
+
 Use `TerrainLoader.Inspect(module, selector, source, options)` to receive exactly 4,096 ordinal outcomes. Successful outcomes form `ResolvedRecords`; failed cells form `Issues`, and never count as supported. `TerrainLoader.Load(...)` uses the same pipeline and throws `TerrainIncompleteException` with its report if any cell failed. `DecodeSelectedFrame(resourceArchive, record, options)` reselects the record's exact DAT ordinal and identity before calling `ArtDecoder.Decode`; it is the only on-demand RGBA path.
 
 `TerrainGeometry.Place(kind, localX, localY, rawId, frameWidth, frameHeight, viewport)` is pure diagnostic geometry. It projects `(40 * (y - x), 20 * (y + x))`, applies the one-pixel X anchor adjustment, uses a 78 by 40 tile or 80 by 40 editor-facade footprint, crops against viewport then frame bounds, and returns null for a valid no-draw intersection. It retains raw tile flip `(rawId & 0xC1) == 0xC1`; facades do not flip in this diagnostic mode. ART hotspots and offsets are retained as metadata but not applied as placement.

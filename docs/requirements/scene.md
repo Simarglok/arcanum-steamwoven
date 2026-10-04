@@ -8,6 +8,14 @@
 
 ## Требования
 
+ARC-DATA-009: [complete exterior data owner](../world/crash-site-area-loader.md)
+даёт отдельные terrain/sector/object metadata, все 426 core statics и 88 mobile
+body references с explicit dispositions, presence/default provenance и
+identity-bound group/frame/palette/placement inputs. Это data-layer покрытие
+FR-SCENE-001/002, а не submitted draw commands, ordering/visibility, roof/wall
+rendering или passability. Active unsupported required composite layers fail
+readiness; source-frame decoding не объявляет FR-SCENE-001..009 реализованными.
+
 Позднее исследование ARC-RES-015: [area inventory](../research/crash-site-area-inventory.md) учитывает 426 статических и 88 core mobile records, отдельные resource/placement gaps и cave sources; [area contract](../world/crash-site-area-contract.md) сохраняет flags/order/cache границы. Это не расширяет production five-only profile и не объявляет FR-SCENE-001..009 реализованными.
 
 <a id="fr-scene-001"></a>

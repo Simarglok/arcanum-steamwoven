@@ -4,6 +4,14 @@
 
 ## Как читать выводы
 
+ARC-DATA-009 добавляет [bounded complete-area Data API](../world/crash-site-area-loader.md):
+survey 621 → 9 core sectors и явный context, immutable world/source keys, 36,864
+core terrain, 426 static и 88 mobile bodies, reconcile 7,399 aggregate records.
+Это частичное data-layer покрытие FR-WORLD-001/002/003/005/007 (источники, адреса,
+snapshot и numeric endpoint), не streaming/eviction runtime, crossing movement,
+cave transition, DIF/PATCH или original-runtime parity. Исторические оценки ниже
+остаются привязанными к своему baseline; full-area renderer ещё не реализован.
+
 Позднее bounded research ARC-RES-015: [перепись Crash Site area](../research/crash-site-area-inventory.md) и [предлагаемый multi-sector/mobile контракт](../world/crash-site-area-contract.md) уточняют источники, границу и потенциальные cave endpoints. Это исследование, не реализация FR-WORLD-001..007 и не original-runtime parity; исторический coverage ниже сохранён.
 
 - **Подтверждено исходником CE** означает, что прочитан код именно указанного immutable commit. Это атрибуция source behavior, а не проверка оригинального исполняемого файла или поведения на оригинальных данных.

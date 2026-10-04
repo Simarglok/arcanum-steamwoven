@@ -24,6 +24,11 @@ turn `IsStatic` into a general collision verdict. See the separate
 
 ## API
 
+The separate [complete area owner](crash-site-area-loader.md) shares the internal
+v119 FILE wire reader while supplying its own authenticated multisector/mobile
+profile. This frozen reader's 317-record and five-only resource scopes remain
+unchanged; full-area readiness is not a claim made by `InspectSelectedResources`.
+
 ```csharp
 using var module = DatArchive.Open(modulePath);
 using var resource = DatArchive.Open(resourcePath);

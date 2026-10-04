@@ -2,6 +2,11 @@
 
 ## Status
 
+The separately scoped [complete exterior data owner](../world/crash-site-area-loader.md)
+now applies the bounded framing to the selected multisector area and reconciles
+its normal-game aggregate. It does not make the historical one-sector observations
+below a universal sector/map schema or establish runtime scene parity.
+
 This note specifies only the inspected Crash Site sector described in
 [crash-site-slice.md](../research/crash-site-slice.md). The claims below are
 not a universal map-file format specification.

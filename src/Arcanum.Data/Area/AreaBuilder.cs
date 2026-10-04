@@ -1,0 +1,384 @@
+using System.Buffers.Binary;
+using System.Collections.ObjectModel;
+using System.Globalization;
+using System.Text;
+using Arcanum.Data.Objects;
+using Arcanum.Data.StaticObjects;
+using Arcanum.Data.Terrain;
+
+namespace Arcanum.Data.Area;
+
+public sealed partial class AreaDataOwner
+{
+    private AreaInspection Build(CancellationToken token, AreaOwnership output)
+    {
+        _budget.BeginPhase(AreaBudgetPhase.I1);
+        using var construction = new AreaOwnership(_budget);
+        // Candidate array, survey nodes, BFS/ring sets and bounded diagnostics.
+        // The module entry count bounds even a malformed selector population.
+        construction.Allocate(checked(65536 + Archive(new(AreaSourceRole.Module)).Entries.Count * 16L + _limits.MaxSurvey * 2048L));
+        var issues = new List<AreaIssue>();
+        var moduleKey = new AreaInputKey(AreaSourceRole.Module); var module = Archive(moduleKey);
+        var candidates = module.Entries.Where(e => Name(e).StartsWith(_plan.SectorPrefix, StringComparison.Ordinal) && Name(e).EndsWith(".sec", StringComparison.Ordinal)).ToArray();
+        if (candidates.Length > _limits.MaxSurvey) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
+
+        var survey = new SortedDictionary<long, SurveyRow>();
+        foreach (var entry in candidates)
+        {
+            token.ThrowIfCancellationRequested();
+            var name = Name(entry); var tail = name[_plan.SectorPrefix.Length..];
+            if (tail.Contains('/') || !long.TryParse(tail[..^4], NumberStyles.None, CultureInfo.InvariantCulture, out var packed))
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Selection);
+            var coordinate = AreaSectorCoordinate.Unpack(packed);
+            using var payload = new AreaOwnership(_budget);
+            var bytes = ReadEntry(EntryIdentity(moduleKey, entry), token, payload);
+            payload.Allocate(checked(bytes.Length * 2L + 32768));
+            var framing = ParseSector(bytes);
+            var metadata = framing.Framing[TerrainSection.MetadataAndSound];
+            var townmap = metadata.Length == 0 ? (int?)null : BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(metadata.Offset));
+            if (!survey.TryAdd(packed, new(coordinate, entry, townmap))) throw Fail(AreaErrorCode.DuplicateIdentity, AreaStage.Selection);
+        }
+        var core = new HashSet<long>(); var queue = new Queue<AreaSectorCoordinate>(); queue.Enqueue(_plan.Start);
+        while (queue.TryDequeue(out var coordinate))
+        {
+            token.ThrowIfCancellationRequested();
+            if (core.Contains(coordinate.Packed) || !survey.TryGetValue(coordinate.Packed, out var row) || row.Townmap != _plan.Townmap) continue;
+            core.Add(coordinate.Packed);
+            foreach (var next in Neighbors(coordinate, diagonal: false)) queue.Enqueue(next);
+        }
+        if (core.Count == 0) throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Selection);
+        var ring = core.SelectMany(id => Neighbors(AreaSectorCoordinate.Unpack(id), diagonal: true)).Select(c => c.Packed).Where(id => !core.Contains(id)).ToHashSet();
+        if (core.Count + ring.Count > checked(_limits.MaxPresentSectors + 16)) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
+        var present = core.Concat(ring).Where(survey.ContainsKey).Order().ToArray();
+        if (present.Length > _limits.MaxPresentSectors) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
+        _budget.BeginPhase(AreaBudgetPhase.I2);
+        // Admit the shared finite wire-schema/hash initialization before the
+        // first prototype can trigger it. Per-record reservations describe the
+        // warm graph and must not silently rely on another owner's warm-up.
+        _budget.Reserve(65536);
+        var mappings = ReadMappings(token, construction);
+        TerrainLoader.TileNames tiles; TerrainLoader.FacadeNames facades;
+        try
+        {
+            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile]);
+            facades = TerrainLoader.FacadeNames.Parse(mappings[AreaMappingRole.Facade]);
+        }
+        catch (TerrainException) { throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); }
+        var tileSource = MappingSource(AreaMappingRole.Tile); var facadeSource = MappingSource(AreaMappingRole.Facade);
+        var sectors = new List<AreaSectorRecord>(); var terrain = new List<AreaTerrainRecord>(); var objects = new List<AreaObjectRecord>();
+        var visuals = new List<AreaVisualRecord>(); var terrainSelections = new Dictionary<(AreaEntryIdentity, int, int, int), AreaVisualKey>();
+        var terrainEntries = new Dictionary<uint, AreaEntryIdentity>();
+        var definitions = ReadPrototypes(token, construction);
+        var prototypes = new Dictionary<int, ObjectWireRecord>();
+        var instanceIds = new InstanceIndex(construction);
+        _budget.BeginPhase(AreaBudgetPhase.I3);
+        foreach (var packed in present)
+        {
+            token.ThrowIfCancellationRequested(); var row = survey[packed]; var coordinate = row.Coordinate; var scope = core.Contains(packed) ? AreaScope.Core : AreaScope.Context;
+            using var payload = new AreaOwnership(_budget);
+            var bytes = ReadEntry(EntryIdentity(moduleKey, row.Entry), token, payload); payload.Allocate(checked(bytes.Length * 2L + 32768));
+            var parsed = ParseSector(bytes); var framing = parsed.Framing;
+            var sectorKey = new AreaSectorKey(Identity(moduleKey).Sha256, _plan.RuntimeMap, packed);
+            output.Allocate(checked(4096L * 384 + 8192));
+            output.Allocate(checked(framing.LightCount * 128L));
+            var lights = new List<IReadOnlyList<int>>();
+            var lightRange = framing[TerrainSection.Lights];
+            for (var l = 0; l < framing.LightCount; l++)
+            {
+                var words = new int[12]; for (var w = 0; w < 12; w++) words[w] = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(lightRange.Offset + 48 * l + 4 * w));
+                lights.Add(Array.AsReadOnly(words));
+            }
+            sectors.Add(new(sectorKey, coordinate, scope, true, row.Entry.Ordinal, row.Townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
+                framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(), EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes)));
+            if (framing.RoofDiscriminator == 0) issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Sector, framing[TerrainSection.Roof].Offset));
+            for (var ordinal = 0; ordinal < 4096; ordinal++)
+            {
+                var raw = parsed.Words[ordinal]; var lookup = raw >> 28 == 0 ? raw & ~63U : raw;
+                var key = new AreaVisualKey(AreaSourceKind.Terrain, sectorKey, ordinal, string.Empty);
+                try
+                {
+                    int group = 0, frame = 0, palette;
+                    if (raw >> 28 == 0) palette = (int)((raw >> 4) & 3);
+                    else if (raw >> 28 == 11) { frame = (int)((raw >> 1) & 1023); palette = 0; }
+                    else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, index: ordinal);
+                    if (!terrainEntries.TryGetValue(lookup, out var entry))
+                    {
+                        // Locator-only build-local index. No entry, encoded ART
+                        // or pixel payload is cached. Charge selector strings and
+                        // index capacity before resolving the first occurrence.
+                        var role = raw >> 28 == 0 ? AreaMappingRole.Tile : AreaMappingRole.Facade;
+                        construction.Allocate(checked(4096 + mappings[role].Values.Max(v => v.Length) * 16L));
+                        var path = raw >> 28 == 0 ? TerrainLoader.TilePath(tiles, lookup).Path : "art/facade/" + Safe(facades.Name(TerrainLoader.FacadeNumber(raw))) + ".art";
+                        entry = Unique(raw >> 28 == 0 ? tileSource : facadeSource, path);
+                        terrainEntries.Add(lookup, entry);
+                    }
+                    var tuple = (entry, group, frame, palette);
+                    if (!terrainSelections.TryGetValue(tuple, out var selected))
+                    {
+                        selected = key;
+                        AdmitVisual(visuals);
+                        output.Allocate(2048);
+                        AddVisual(visuals, MakeVisual(key, raw, lookup, entry, group, group, frame, palette, false, 0, 0, 100, null, token));
+                        terrainSelections.Add(tuple, selected);
+                    }
+                    terrain.Add(new(key, ordinal & 63, ordinal >> 6, checked(coordinate.OriginX + (ordinal & 63)), checked(coordinate.OriginY + (ordinal >> 6)), raw, lookup, scope, selected));
+                }
+                catch (AreaException error) { _budget.EndFrame(); issues.Add(error.Issue with { SourceIndex = ordinal }); }
+                catch (TerrainException) { issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Mapping, SourceIndex: ordinal)); }
+            }
+            var start = framing.ObjectWindow.Range.Offset; var end = framing.ObjectWindow.Range.End;
+            for (var ordinal = 0; ordinal < framing.ObjectWindow.TerminalObjectCount; ordinal++)
+            {
+                using var wire = new AreaOwnership(_budget);
+                var record = ReadWire(bytes.AsSpan(start, end - start), AreaStage.Sector, start, ordinal, ownership: wire);
+                instanceIds.Register(record, moduleKey, packed, start, AreaStage.Sector, ordinal, allowNull: true);
+                AddObject(record, moduleKey, packed, ordinal, start, scope, coordinate, definitions, prototypes, objects, visuals, mappings, issues, token, output);
+                start = checked(start + record.Length);
+            }
+            if (start != end) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Sector, start, framing.ObjectWindow.TerminalObjectCount);
+        }
+        foreach (var packed in ring.Except(survey.Keys).Order())
+        {
+            var coordinate = AreaSectorCoordinate.Unpack(packed);
+            sectors.Add(new(new(Identity(moduleKey).Sha256, _plan.RuntimeMap, packed), coordinate, AreaScope.Context, false, null, null, 0, 1, 0, 0, [], [], null, null));
+        }
+        _budget.BeginPhase(AreaBudgetPhase.I4);
+        var partitions = new int[4]; var aggregate = new Dictionary<string, Correspondence>(StringComparer.Ordinal);
+        if (_streams.ContainsKey(new(AreaSourceRole.NormalGameMobile)))
+        {
+            using var payload = new AreaOwnership(_budget);
+            var source = new AreaInputKey(AreaSourceRole.NormalGameMobile); var bytes = ReadFile(source, token, payload);
+            if (bytes.Length < 16) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Aggregate);
+            var offset = 16; var index = 0;
+            while (offset < bytes.Length)
+            {
+                token.ThrowIfCancellationRequested();
+                if (index >= _limits.MaxAggregateRecords) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Aggregate, offset, index);
+                using var wire = new AreaOwnership(_budget);
+                var record = ReadWire(bytes.AsSpan(offset), AreaStage.Aggregate, offset, index, ownership: wire);
+                // Register the complete aggregate once, BEFORE location slicing.
+                instanceIds.Register(record, source, null, offset, AreaStage.Aggregate, index, allowNull: false);
+                construction.Allocate(512);
+                if (!aggregate.TryAdd(record.Own.Sha256, new(record.Type, record.Parent.Number, record.SemanticSha256))) throw Fail(AreaErrorCode.DuplicateIdentity, AreaStage.Aggregate, offset, index);
+                var location = record.Fields.TryGetValue(1, out var locationField) ? locationField.Number : null;
+                var x = location.HasValue ? (int?)unchecked((int)location.Value) : null;
+                var y = location.HasValue ? (int?)unchecked((int)(location.Value >> 32)) : null;
+                var scope = x is null or < 0 || y is null or < 0 ? AreaScope.Unknown : core.Contains(new AreaSectorCoordinate(x.Value / 64, y.Value / 64).Packed) ? AreaScope.Core : ring.Contains(new AreaSectorCoordinate(x.Value / 64, y.Value / 64).Packed) ? AreaScope.Context : AreaScope.Outside;
+                partitions[(int)scope]++;
+                if (scope is AreaScope.Core or AreaScope.Context)
+                    AddObject(record, source, null, index, offset, scope, null, definitions, prototypes, objects, visuals, mappings, issues, token, output);
+                else if (scope == AreaScope.Unknown) issues.Add(new(AreaErrorCode.UnknownLocation, AreaStage.Aggregate, offset, index));
+                offset = checked(offset + record.Length); index++;
+            }
+        }
+        _budget.BeginPhase(AreaBudgetPhase.I5);
+        construction.Allocate(checked(65536 + module.Entries.Count * 16L));
+        var editorIds = new HashSet<string>(StringComparer.Ordinal);
+        var editor = module.Entries.Where(e => Name(e).StartsWith(_plan.SectorPrefix, StringComparison.Ordinal) && Name(e).EndsWith(".mob", StringComparison.Ordinal)).ToArray();
+        if (editor.Length > _limits.MaxAggregateRecords) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Correspondence);
+        foreach (var entry in editor)
+        {
+            token.ThrowIfCancellationRequested();
+            using var payload = new AreaOwnership(_budget);
+            var bytes = ReadEntry(EntryIdentity(moduleKey, entry), token, payload);
+            using var wire = new AreaOwnership(_budget);
+            var record = ReadWire(bytes, AreaStage.Correspondence, 0, entry.Ordinal, ownership: wire);
+            construction.Allocate(512);
+            if (record.Own.Kind == 0) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Correspondence, 0, entry.Ordinal);
+            if (record.Length != bytes.Length || !editorIds.Add(record.Own.Sha256) || !aggregate.TryGetValue(record.Own.Sha256, out var other) || other != new Correspondence(record.Type, record.Parent.Number, record.SemanticSha256))
+                throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Correspondence, 0, entry.Ordinal);
+        }
+        if (editor.Length != aggregate.Count) issues.Add(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Correspondence));
+        _budget.BeginPhase(AreaBudgetPhase.I6);
+        var reconciliation = new AreaReconciliation(survey.Count, core.Count, present.Length - core.Count, ring.Count - (present.Length - core.Count),
+            terrain.Count(t => t.Scope == AreaScope.Core), terrain.Count(t => t.Scope == AreaScope.Context), objects.Count(o => o.Key.Kind == AreaSourceKind.Static && o.Scope == AreaScope.Core),
+            aggregate.Count, partitions[0], partitions[1], partitions[2], partitions[3], editorIds.Count, prototypes.Count, visuals.Count);
+        if (_plan.Original) OriginalProfile.Check(reconciliation, sectors, objects, visuals);
+        // Only the actual new immutable collection copies/sort/endpoints remain
+        // here; object/visual graphs were admitted before their construction.
+        output.Allocate(checked(8192 + 32L * sectors.Count + 8L * (_plan.Identities.Count + terrain.Count + objects.Count + visuals.Count)));
+        var endpoints = _plan.Original ? OriginalProfile.Endpoints(objects) : [];
+        var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, endpoints);
+        return new(snapshot, issues, _budget.Usage);
+    }
+
+    private void AddObject(ObjectWireRecord record, AreaInputKey input, long? packed, int ordinal, int offset, AreaScope scope, AreaSectorCoordinate? sector,
+        Dictionary<int, ObjectWireRecord> definitions, Dictionary<int, ObjectWireRecord> prototypes, List<AreaObjectRecord> objects, List<AreaVisualRecord> visuals,
+        Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, List<AreaIssue> issues, CancellationToken token, AreaOwnership output)
+    {
+        if (objects.Count >= _limits.MaxObjects) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Appearance, offset, ordinal);
+
+        if (record.Parent.Kind != 1 || record.Parent.Number is not int number) throw Fail(AreaErrorCode.MissingSource, AreaStage.Prototype, offset, ordinal);
+        if (!prototypes.TryGetValue(number, out var prototype))
+        {
+            if (prototypes.Count >= _limits.MaxPrototypes) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Prototype);
+            if (!definitions.TryGetValue(number, out prototype)) throw Fail(AreaErrorCode.MissingSource, AreaStage.Prototype, offset, ordinal);
+            prototypes.Add(number, prototype);
+        }
+        if (prototype.Type != record.Type) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Prototype, offset, ordinal);
+        using var temporary = new AreaOwnership(_budget);
+        temporary.Allocate(checked(4096 + 160L * (prototype.Fields.Count + record.Fields.Count) + maps.Values.SelectMany(m => m.Values).Max(v => v.Length) * 16L));
+        var effective = new SortedDictionary<int, ObjectWireValue>(prototype.Fields.ToDictionary(p => p.Key, p => p.Value));
+        foreach (var pair in record.Fields) effective[pair.Key] = pair.Value;
+        long? directLocation = record.Fields.TryGetValue(1, out var direct) ? direct.Number : null;
+        long? x = null, y = null;
+        if (directLocation.HasValue)
+        {
+            if (sector.HasValue) { x = checked(sector.Value.OriginX + (directLocation.Value & 63)); y = checked(sector.Value.OriginY + ((directLocation.Value >> 32) & 63)); }
+            else { x = unchecked((int)directLocation.Value); y = unchecked((int)(directLocation.Value >> 32)); if (x < 0 || y < 0) x = y = null; }
+        }
+        var kind = sector.HasValue ? AreaSourceKind.Static : AreaSourceKind.Mobile;
+        var key = new AreaObjectKey(Identity(input).Sha256, _plan.RuntimeMap, kind, packed, ordinal, offset, record.Own.Sha256, record.Length);
+        var disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : AreaDisposition.MissingMandatoryFact;
+        var ready = true; var layersReady = true;
+        try
+        {
+            var flags = unchecked((uint)Number(effective, 18));
+            disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : (flags & 4096) != 0 ? AreaDisposition.ExteriorSectorInsertionRefusedByInventory :
+                (flags & 0x103) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
+            if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
+            if (scope == AreaScope.Core)
+            {
+                if (record.Type is not 2 and not 3 and not 5 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16)
+                    throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
+                var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
+                var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
+                var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
+                AdmitVisual(visuals);
+                var request = ObjectRequest(aid, maps, token);
+                output.Allocate(2048);
+                AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token));
+                foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })
+                {
+                    if (!effective.TryGetValue(slot, out var array)) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
+                    if ((flags & bit) == 0) continue;
+                    for (var index = 0; index < size; index++)
+                    {
+                        var element = array.Elements.SingleOrDefault(e => e.Key == index);
+                        var layerAid = element is null ? 0U : checked((uint)element.Words[0]);
+                        if (layerAid == uint.MaxValue) continue;
+                        // No eye-candy source role has been admitted by this profile.
+                        // Active required references cannot be renderer-Unknown success.
+                        layersReady = false;
+                        throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, offset, ordinal);
+                    }
+                }
+            }
+        }
+        catch (AreaException error) { _budget.EndFrame(); ready = false; issues.Add(error.Issue with { SourceIndex = ordinal }); }
+        output.Allocate(4096); // object/key/list capacity and escaped record/ID hashes
+        var directFields = CopyFields(record.Fields, record, direct: true, output);
+        var effectiveFields = CopyFields(effective, record, direct: false, output);
+        objects.Add(new(key, 119, record.Type, number, record.Parent.Sha256, prototype.Own.Sha256, record.Sha256, record.SemanticSha256, scope,
+            directLocation, x, y, disposition, directFields, effectiveFields, ready, x.HasValue && y.HasValue, layersReady));
+    }
+    private IReadOnlyList<AreaFieldValue> CopyFields(IReadOnlyDictionary<int, ObjectWireValue> fields, ObjectWireRecord instance, bool direct, AreaOwnership output)
+    {
+        var elements = fields.Values.Sum(v => v.Elements.Count * 160L);
+        // 128/field covers field/wrapper/reference copies. Held 320 also
+        // includes an existing escaped fingerprint, without charging its
+        // allocation twice. Numeric words are independently copied below.
+        output.Allocate(checked(4096 + fields.Count * 128L + elements), checked(4096 + fields.Count * 320L + elements));
+        return Array.AsReadOnly(fields.Select(p => new AreaFieldValue(p.Key, (AreaPresence)((int)p.Value.Presence + 1),
+            direct || instance.Fields.ContainsKey(p.Key) ? AreaValueOrigin.Instance : AreaValueOrigin.Prototype, p.Value.Number,
+            Array.AsReadOnly(p.Value.Elements.Select(e => new AreaSparseElement(e.Key, Array.AsReadOnly(e.Words.ToArray()))).ToArray()), p.Value.Fingerprint)).ToArray());
+    }
+    private ObjectWireRecord ReadWire(ReadOnlySpan<byte> bytes, AreaStage stage, int offset, int index, bool prototype = false, AreaOwnership? ownership = null)
+    {
+        _budget.Context = new(AreaBudgetCallsite.Wire, _budget.Context.Source, _budget.Context.Ordinal, offset, index);
+        try { return ObjectWireReader.Read(bytes, WireLimits, prototype, ownership is null ? _budget.Reserve : ownership.Allocate, maxRecordBytes: 1048576); }
+        catch (StaticObjectException error) { throw Fail(error.Code == StaticObjectErrorCode.UnsupportedVersion || error.Code == StaticObjectErrorCode.UnsupportedType ? AreaErrorCode.UnsupportedVersionOrSchema : error.Code == StaticObjectErrorCode.LimitExceeded ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, stage, offset, index); }
+        catch (OverflowException) { throw Fail(AreaErrorCode.MalformedRecord, stage, offset, index); }
+    }
+    private static TerrainLoader.ParsedSector ParseSector(byte[] bytes)
+    {
+        try { return TerrainLoader.ParseSector(bytes, new TerrainLoaderOptions()); }
+        catch (TerrainException error) { throw Fail(error is TerrainLimitExceededException ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Sector); }
+    }
+    private static long Number(IReadOnlyDictionary<int, ObjectWireValue> fields, int slot) => fields.TryGetValue(slot, out var value) && value.Presence == ObjectWirePresence.Value && value.Number.HasValue ? value.Number.Value : throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance);
+    private Dictionary<int, ObjectWireRecord> ReadPrototypes(CancellationToken token, AreaOwnership ownership)
+    {
+        var definitions = new Dictionary<int, ObjectWireRecord>();
+        var rawIds = new HashSet<string>(StringComparer.Ordinal);
+        var supplied = _plan.Identities.Where(i => i.Key.Role == AreaSourceRole.Prototype).ToArray();
+        if (supplied.Length > _limits.MaxPrototypes) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Prototype);
+        foreach (var identity in supplied.OrderBy(i => i.Key.Number))
+        {
+            token.ThrowIfCancellationRequested();
+            using var payload = new AreaOwnership(_budget);
+            var bytes = ReadFile(identity.Key, token, payload);
+            var record = ReadWire(bytes, AreaStage.Prototype, 0, identity.Key.Number, prototype: true, ownership);
+            ownership.Allocate(512);
+            if (!rawIds.Add(record.Own.Sha256) || !definitions.TryAdd(record.Own.Number!.Value, record))
+                throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Prototype, 0, identity.Key.Number);
+            if (record.Length != bytes.Length) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Prototype, 0, identity.Key.Number);
+        }
+        foreach (var identity in supplied)
+            if (!definitions.TryGetValue(identity.Key.Number, out var record) || record.Own.Number != identity.Key.Number)
+                throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Prototype, 0, identity.Key.Number);
+        return definitions;
+    }
+    // Source occurrence and optional permanent entity are independent domains.
+    // Sequential framing supplies monotone non-overlapping extents per payload;
+    // sourceIndex is a checked witness, never the occurrence's sole identity.
+    private sealed class InstanceIndex(AreaOwnership ownership)
+    {
+        private readonly Dictionary<(AreaInputKey, long?), (int End, int Order)> _ends = [];
+        private readonly HashSet<string> _raw = new(StringComparer.Ordinal);
+        private readonly HashSet<ObjectEntityId> _entities = [];
+        internal void Register(ObjectWireRecord record, AreaInputKey source, long? sector, int start, AreaStage stage, int order, bool allowNull)
+        {
+            if (record.Length <= 0 || start < 0) throw Fail(AreaErrorCode.MalformedRecord, stage, start, order);
+            if (record.Own.Kind == 0 && !allowNull) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, stage, start, order);
+            var payload = (source, sector); var end = checked(start + record.Length);
+            if (_ends.TryGetValue(payload, out var prior) && (start != prior.End || order != checked(prior.Order + 1)))
+                throw Fail(AreaErrorCode.DuplicateIdentity, stage, start, order);
+            if (!_ends.ContainsKey(payload) && order != 0) throw Fail(AreaErrorCode.MalformedRecord, stage, start, order);
+            ownership.Allocate(512); // dictionary/hash capacity and copied semantic projection
+            _ends[payload] = (end, order);
+            if (record.Own.Entity is { } entity && (!_raw.Add(record.Own.Sha256) || !_entities.Add(entity)))
+                throw Fail(AreaErrorCode.DuplicateIdentity, stage, start, order);
+        }
+    }
+    private static IEnumerable<AreaSectorCoordinate> Neighbors(AreaSectorCoordinate coordinate, bool diagonal)
+    {
+        for (var y = -1; y <= 1; y++) for (var x = -1; x <= 1; x++)
+        {
+            if (x == 0 && y == 0 || !diagonal && Math.Abs(x) + Math.Abs(y) != 1) continue;
+            var nx = coordinate.X + x; var ny = coordinate.Y + y;
+            if (nx >= 0 && ny >= 0 && nx < 67108864 && ny < 67108864) yield return new(nx, ny);
+        }
+    }
+    private string Name(DatEntry entry)
+    {
+        if (_names.TryGetValue(entry, out var name)) return name;
+        name = entry.RawNameBytes.Any(b => b > 127) ? string.Empty : string.Create(entry.RawNameBytes.Count - 1, entry.RawNameBytes, static (chars, raw) =>
+        {
+            for (var i = 0; i < chars.Length; i++)
+            {
+                var c = (char)raw[i];
+                chars[i] = c == '\\' ? '/' : c is >= 'A' and <= 'Z' ? (char)(c + ('a' - 'A')) : c;
+            }
+        });
+        _names.Add(entry, name); return name;
+    }
+    private static string Safe(string token)
+    {
+        if (string.IsNullOrWhiteSpace(token) || token != token.Trim() || token.Any(c => c < 32 || c >= 127 || c is '/' or '\\' or ':') || token is "." or "..")
+            throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Mapping);
+        return token;
+    }
+    private AreaEntryIdentity Unique(AreaInputKey source, string path)
+    {
+        var normalized = path.Replace('\\', '/').ToLowerInvariant();
+        var matches = _indexes.TryGetValue(source, out var index) && index.TryGetValue(normalized, out var found) ? found : [];
+        if (matches.Length == 0) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
+        if (matches.Length != 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
+        return _entryIdentities[(source, matches[0].Ordinal)];
+    }
+    private void AdmitVisual(List<AreaVisualRecord> visuals)
+    { if (visuals.Count >= _limits.MaxVisuals) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Frame); }
+    private static void AddVisual(List<AreaVisualRecord> visuals, AreaVisualRecord visual) => visuals.Add(visual);
+    private sealed record SurveyRow(AreaSectorCoordinate Coordinate, DatEntry Entry, int? Townmap);
+    private sealed record Correspondence(int Type, int? Prototype, string Semantic);
+}

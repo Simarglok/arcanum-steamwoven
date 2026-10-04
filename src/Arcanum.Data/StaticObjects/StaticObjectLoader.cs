@@ -3,6 +3,7 @@ using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data.Terrain;
+using Arcanum.Data.Objects;
 
 namespace Arcanum.Data.StaticObjects;
 
@@ -32,7 +33,7 @@ public static class StaticObjectLoader
     private static readonly WireKind[] CommonFields = K("i,p64,i*3,au32*3,i*7,au32*3,i*12,ai32,ascript,i*2,au32,au64");
     private static readonly WireKind[] WallFields = K("i*3,au32,au64");
     private static readonly WireKind[] PortalFields = K("i*6,au32,au64");
-    private static readonly WireKind[] ContainerFields = K("i*4,poid,i*4,au32,au64");
+    private static readonly WireKind[] ContainerFields = K("i*4,aoid,i*4,au32,au64");
     private static readonly WireKind[] SceneryFields = K("i,poid,i*2,au32,au64");
     private static readonly WireKind[] ProjectileFields = K("i*3,poid,i*2,au32,au64");
     private static readonly WireKind[] ItemFields = K("i,poid,i*19,au32,au64");
@@ -43,7 +44,7 @@ public static class StaticObjectLoader
     private static readonly WireKind[] ShortItemFields = K("i*3,au32,au64");
     private static readonly WireKind[] KeyRingFields = K("i,au32,i*2,au32,au64");
     private static readonly WireKind[] WrittenFields = K("i*6,au32,au64");
-    private static readonly WireKind[] CritterFields = K("i*2,ai32*3,au32,i*4,au32*2,poid,i,poid*5,i,aoid,i*2,poid,p64,i*6,au32,au64");
+    private static readonly WireKind[] CritterFields = K("i*2,ai32*3,au32,i*4,au32*2,poid,i,poid*5,i,aoid,i*2,aoid,p64,i*6,au32,au64");
     private static readonly WireKind[] PcFields = K("i*2,au32,au64,i*2,aquest,au32,au64,au32,au64,i,au64,au32*3,i,s,i,au32*2,i*2,au32,au64");
     private static readonly WireKind[] NpcFields = K("i,poid,i,poid*2,i*2,au64,i,p64*2,i*3,poid,i*2,aoid,au32*2,i*3,au32,aoid");
 
@@ -308,29 +309,14 @@ public static class StaticObjectLoader
 
     private static ParsedRecord ParseRecord(ref Cursor cursor, int sourceIndex, StaticObjectLoaderOptions limits)
     {
-        if (cursor.I32() != ObjectVersion) throw new StaticObjectException(StaticObjectErrorCode.UnsupportedVersion, "The object version is unsupported.");
-        var prototype = cursor.ObjectId(allowBlocked: false);
-        if (prototype.Kind is < 0 or > 3) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "The prototype identifier form is invalid.");
-        _ = cursor.ObjectId(allowBlocked: false);
-        var type = cursor.I32();
-        if (type is < 0 or > 17) throw new StaticObjectException(StaticObjectErrorCode.UnsupportedType, "The object type is unsupported.");
-        var fields = FieldsFor(type);
-        var fieldCount = cursor.I16();
-        if (fieldCount < 0 || fieldCount > limits.MaxFields) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "The object field count exceeds the configured limit.");
-        var set = ReadMasks(ref cursor, type, fields.Length, out var count);
-        if (fieldCount != count) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "The object field count differs from the override-mask population.");
-        int? art = null; long? location = null; int? offsetX = null; int? offsetY = null; uint? flags = null;
-        for (var field = 0; field < fields.Length; field++)
-        {
-            if (!set[field]) continue;
-            if (type == 3 && field == CurrentArtSlot) art = cursor.I32();
-            else if (field == LocationSlot) location = cursor.OptionalI64();
-            else if (type == 3 && field == OffsetXSlot) offsetX = cursor.I32();
-            else if (type == 3 && field == OffsetYSlot) offsetY = cursor.I32();
-            else if (field == ObjectFlagsSlot) flags = cursor.U32();
-            else Skip(ref cursor, fields[field], limits);
-        }
-        return new ParsedRecord(sourceIndex, prototype.Aid ?? -1, type, art, flags, location, offsetX, offsetY);
+        var record = ObjectWireReader.Read(cursor.Remaining, limits);
+        cursor.Skip(record.Length);
+        long? Number(int slot) => record.Fields.TryGetValue(slot, out var value) ? value.Number : null;
+        return new ParsedRecord(sourceIndex, record.Parent.Number ?? -1, record.Type,
+            record.Type == 3 ? (int?)Number(CurrentArtSlot) : null,
+            Number(ObjectFlagsSlot) is long flags ? unchecked((uint)flags) : null,
+            Number(LocationSlot), record.Type == 3 ? (int?)Number(OffsetXSlot) : null,
+            record.Type == 3 ? (int?)Number(OffsetYSlot) : null);
     }
 
     private static bool[] ReadMasks(ref Cursor cursor, int type, int fieldLength, out int count)
@@ -382,22 +368,17 @@ public static class StaticObjectLoader
 
     private static Prototype ParsePrototype(byte[] bytes, int expectedAid, StaticObjectLoaderOptions limits)
     {
-        var cursor = new Cursor(bytes);
-        if (cursor.I32() != ObjectVersion) throw new StaticObjectException(StaticObjectErrorCode.UnsupportedVersion, "A prototype version is unsupported.");
-        if (cursor.ObjectId(allowBlocked: true).Kind != -1) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "A prototype lacks its required marker.");
-        var id = cursor.ObjectId(allowBlocked: false);
-        if (id.Aid != expectedAid) throw new StaticObjectException(StaticObjectErrorCode.UnresolvedReference, "A prototype identifier does not match its canonical file selector.");
-        if (cursor.I32() != 3) throw new StaticObjectException(StaticObjectErrorCode.UnresolvedReference, "A prototype type does not match its static-object reference.");
-        _ = ReadMasks(ref cursor, 3, FieldsFor(3).Length, out _);
-        var art = cursor.I32(); uint flags = 0;
-        var fields = FieldsFor(3);
-        for (var field = 1; field < fields.Length; field++)
-        {
-            if (field == ObjectFlagsSlot) flags = cursor.U32();
-            else Skip(ref cursor, fields[field], limits);
-        }
-        if (!cursor.AtEnd) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "A prototype has trailing bytes.");
-        return new Prototype(art, flags);
+        if (bytes.Length >= 56 && BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(0)) == 119 &&
+            (BinaryPrimitives.ReadInt16LittleEndian(bytes.AsSpan(28)) != 1 ||
+             BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(36)) != expectedAid ||
+             BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(52)) != 3))
+            throw new StaticObjectException(StaticObjectErrorCode.UnresolvedReference, "A prototype does not match its static-object reference.");
+        var record = ObjectWireReader.Read(bytes, limits, prototype: true);
+        if (record.Own.Number != expectedAid || record.Type != 3)
+            throw new StaticObjectException(StaticObjectErrorCode.UnresolvedReference, "A prototype does not match its static-object reference.");
+        if (record.Length != bytes.Length) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "A prototype has trailing bytes.");
+        return new Prototype(checked((int)record.Fields[CurrentArtSlot].Number!.Value),
+            unchecked((uint)record.Fields[ObjectFlagsSlot].Number!.Value));
     }
 
     private static StaticObjectRecord ResolveFields(ParsedRecord record, IReadOnlyDictionary<int, Prototype> prototypes, bool flagsOnly = false)
@@ -631,7 +612,7 @@ public static class StaticObjectLoader
                 var size = cursor.I32(); var count = cursor.I32(); _ = cursor.I32(); var expected = kind switch { WireKind.ArrI32 or WireKind.ArrU32 => 4, WireKind.ArrI64 or WireKind.ArrU64 => 8, WireKind.ArrScript => 12, WireKind.ArrQuest => 16, WireKind.ArrObjectId => 24, _ => throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An object wire kind is unknown.") };
                 if (size != expected || count < 0) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array envelope is invalid.");
                 if (count > limits.MaxArrayElements) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "An array element count exceeds its configured limit.");
-                cursor.Skip(checked(size * count)); var words = cursor.I32(); if (words < 2) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array bitset is invalid.");
+                cursor.Skip(checked(size * count)); var words = cursor.I32(); if (words < 1) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array bitset is invalid.");
                 if (words > limits.MaxArrayElements) throw new StaticObjectException(StaticObjectErrorCode.LimitExceeded, "An array bitset exceeds its configured limit.");
                 var bitset = cursor.Bytes(checked(words * 4)); var population = 0; for (var index = 0; index < words; index++) population += BitOperations.PopCount(BinaryPrimitives.ReadUInt32LittleEndian(bitset.Slice(index * 4, 4)));
                 if (population != count) throw new StaticObjectException(StaticObjectErrorCode.InvalidRecord, "An array bitset population differs from its element count."); return;
@@ -650,7 +631,7 @@ public static class StaticObjectLoader
         return values.ToArray();
     }
 
-    private static WireKind[] FieldsFor(int type) => [.. CommonFields, .. FirstTypeFields(type), .. SecondTypeFields(type)];
+    internal static WireKind[] FieldsFor(int type) => [.. CommonFields, .. FirstTypeFields(type), .. SecondTypeFields(type)];
     private static WireKind[] FirstTypeFields(int type) => type switch
     {
         0 => WallFields,
@@ -676,8 +657,8 @@ public static class StaticObjectLoader
         16 => NpcFields,
         _ => []
     };
-    private static int MaskWords(int type) => type is >= 5 and <= 14 ? 4 : type is 15 or 16 ? 5 : 3;
-    private static int MaskStart(int type, int word)
+    internal static int MaskWords(int type) => type is >= 5 and <= 14 ? 4 : type is 15 or 16 ? 5 : 3;
+    internal static int MaskStart(int type, int word)
     {
         if (word == 0) return 0;
         if (word == 1) return 32;
@@ -687,7 +668,7 @@ public static class StaticObjectLoader
         if (type is 15 or 16 && word == 4) return CommonFields.Length + FirstTypeFields(type).Length;
         throw new InvalidOperationException("The object mask word is invalid.");
     }
-    private static int MaskLength(int type, int word)
+    internal static int MaskLength(int type, int word)
     {
         if (word == 0) return 32;
         if (word == 1) return CommonFields.Length - 32;
@@ -698,7 +679,7 @@ public static class StaticObjectLoader
         throw new InvalidOperationException("The object mask word is invalid.");
     }
 
-    private enum WireKind { I32, OptI64, ArrI32, ArrI64, ArrU32, ArrU64, ArrScript, ArrQuest, OptString, OptObjectId, ArrObjectId }
+    internal enum WireKind { I32, OptI64, ArrI32, ArrI64, ArrU32, ArrU64, ArrScript, ArrQuest, OptString, OptObjectId, ArrObjectId }
     private readonly record struct ObjectId(short Kind, int? Aid);
     private sealed record ParsedRecord(int SourceIndex, int PrototypeAid, int Type, int? DirectCurrentArt, uint? DirectFlags, long? Location, int? DirectOffsetX, int? DirectOffsetY);
     private sealed record Prototype(int CurrentArt, uint Flags);
@@ -712,6 +693,7 @@ public static class StaticObjectLoader
         private readonly ReadOnlySpan<byte> _bytes;
         public Cursor(ReadOnlySpan<byte> bytes) { _bytes = bytes; Offset = 0; }
         public int Offset { get; private set; }
+        public ReadOnlySpan<byte> Remaining => _bytes[Offset..];
         public bool AtEnd => Offset == _bytes.Length;
         public short I16() => BinaryPrimitives.ReadInt16LittleEndian(Bytes(2));
         public int I32() => BinaryPrimitives.ReadInt32LittleEndian(Bytes(4));

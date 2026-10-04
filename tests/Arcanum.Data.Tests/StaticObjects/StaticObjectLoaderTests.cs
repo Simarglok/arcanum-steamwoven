@@ -138,6 +138,36 @@ public sealed class StaticObjectLoaderTests
     }
 
     [TestMethod]
+    public void File_array_capacity_is_positive_not_the_runtime_minimum_and_never_eats_the_next_record()
+    {
+        // These bit words independently encode sparse key31 and key33. A one-word
+        // FILE capacity is valid; a runtime resize policy is not a wire constraint.
+        foreach (var bitset in new uint[][] { [0x80000000], [0, 2] })
+        {
+            var first = ArrayRecord(4, 1, bitset.Length, bitset, includeElements: true);
+            var next = Record(7002, 0x40000000, 0, 0, location: 63, offsetX: -17, offsetY: 29);
+            using var fixture = new Fixture(first, next);
+            File.WriteAllBytes(Path.Combine(fixture.PrototypeRoot, "007001 - array.pro"), Prototype(7001, 0x40000000, 0));
+            var report = fixture.Inspect();
+            Assert.AreEqual(2, report.TerminalRecordCount);
+            Assert.AreEqual(1, report.Records[1].SourceIndex);
+            Assert.AreEqual(7002, report.Records[1].PrototypeAid);
+            Assert.AreEqual(63L, report.Records[1].Location);
+            Assert.AreEqual(-17, report.Records[1].DirectOffsetX);
+            Assert.AreEqual(29, report.Records[1].DirectOffsetY);
+        }
+        using (var empty = ArrayFixture(ArrayRecord(4, 0, 1, [0], includeElements: false)))
+            Assert.AreEqual(StaticObjectCensusStatus.Complete, empty.Inspect().CensusStatus);
+        AssertArrayFailure(ArrayRecord(4, 0, 0, [], includeElements: false), StaticObjectErrorCode.InvalidRecord);
+        AssertArrayFailure(ArrayRecord(4, 1, 1, [3], includeElements: true), StaticObjectErrorCode.InvalidRecord);
+        AssertArrayFailure(ArrayRecord(8, 1, 1, [1], includeElements: true), StaticObjectErrorCode.InvalidRecord);
+        AssertArrayFailure(ArrayRecord(4, -1, 1, [0], includeElements: false), StaticObjectErrorCode.InvalidRecord);
+        AssertArrayFailure(ArrayRecord(4, 1, 2, [0, 2], includeElements: true), StaticObjectErrorCode.LimitExceeded,
+            new StaticObjectLoaderOptions { MaxArrayElements = 1 });
+        AssertArrayFailure(ArrayRecord(4, 1, 1, [1], includeElements: true)[..^1], StaticObjectErrorCode.InvalidRecord);
+    }
+
+    [TestMethod]
     public void Inspect_validates_type_15_string_envelopes_nuls_truncation_and_caps()
     {
         using (var valid = new Fixture(StringRecord(3, "abc\0"u8.ToArray())))
