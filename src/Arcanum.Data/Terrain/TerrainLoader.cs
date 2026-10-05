@@ -285,7 +285,7 @@ public static class TerrainLoader
         return true;
     }
 
-    private static (string Path, string Branch) TilePath(TileNames table, uint id)
+    internal static (string Path, string Branch) TilePath(TileNames table, uint id)
     {
         var num1 = checked((int)((id >> 22) & 63)); var num2 = checked((int)((id >> 16) & 63)); var outdoor = ((id >> 8) & 1) != 0; var flip1 = ((id >> 7) & 1) != 0; var flip2 = ((id >> 6) & 1) != 0;
         var edge = checked((int)((id >> 12) & 15)); if ((id & 1) != 0) edge = EdgeReverse[edge]; var variation = checked((int)((id >> 9) & 7)); if ((id & 1) != 0 && EdgeForward[edge] == EdgeReverse[edge]) variation += 8;
@@ -297,7 +297,7 @@ public static class TerrainLoader
         if (second < 0) return ($"art\\tile\\{name2}bse{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art", "tile-second-not-outdoor");
         return first < second ? ($"art\\tile\\{name1}{name2}{EdgeCodes[edge]}{(char)('a' + variation)}.art", "tile-outdoor-forward") : ($"art\\tile\\{name2}{name1}{EdgeCodes[15 - edge]}{(char)('a' + variation)}.art", "tile-outdoor-reversed");
     }
-    private static int FacadeNumber(uint id) => checked((int)((id >> 17) & 0xFF) + (((id & (1u << 27)) != 0) ? 256 : 0));
+    internal static int FacadeNumber(uint id) => checked((int)((id >> 17) & 0xFF) + (((id & (1u << 27)) != 0) ? 256 : 0));
     private static string? NormalizeEntry(DatEntry entry)
     {
         var raw = entry.RawNameBytes;
@@ -329,7 +329,7 @@ public static class TerrainLoader
 
     internal sealed record ParsedSector(uint[] Words, TerrainSerializedBlockMask? BlockMask, TerrainSectorFraming Framing);
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
-    private sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
+    internal sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
     {
         public static TileNames Parse(SortedDictionary<int, string> entries)
         { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99), Read(entries, 100, 199), Read(entries, 200, 299), Read(entries, 300, 399)); }
@@ -337,7 +337,7 @@ public static class TerrainLoader
         public int OutdoorIndex(string value) { var index = Array.FindIndex(outdoorFlip, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); if (index >= 0) return index; index = Array.FindIndex(outdoorFixed, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); return index < 0 ? -1 : outdoorFlip.Length + index; }
         private static string[] Read(SortedDictionary<int, string> entries, int first, int last) => entries.Where(x => x.Key >= first && x.Key <= last).Select(x => MesPathToken(x.Value)).ToArray();
     }
-    private sealed class FacadeNames(string[] values)
+    internal sealed class FacadeNames(string[] values)
     {
         public static FacadeNames Parse(SortedDictionary<int, string> entries) { if (entries.Count is < 1 or > 511 || !entries.ContainsKey(0)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Facade MES must have exact key 0 and 1 through 511 entries."); return new(entries.Values.Select(MesPathToken).ToArray()); }
         public string Name(int ordinal) => ordinal >= 0 && ordinal < values.Length ? values[ordinal] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Facade selector exceeds initialized MES range.");

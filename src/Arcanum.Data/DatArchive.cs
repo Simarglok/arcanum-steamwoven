@@ -66,10 +66,16 @@ public sealed class DatArchive : IDisposable
         }
     }
 
-    public byte[] ReadEntry(DatEntry entry)
+    public byte[] ReadEntry(DatEntry entry) => ReadEntryCore(entry, null, default);
+
+    internal byte[] ReadEntry(DatEntry entry, IDatEntryAdmission admission, CancellationToken token = default)
+        => ReadEntryCore(entry, admission, token);
+
+    private byte[] ReadEntryCore(DatEntry entry, IDatEntryAdmission? admission, CancellationToken token)
     {
         lock (_readGate)
         {
+            token.ThrowIfCancellationRequested();
             ThrowIfDisposed();
             ArgumentNullException.ThrowIfNull(entry);
             if (!ReferenceEquals(entry.Owner, this))
@@ -96,10 +102,21 @@ public sealed class DatArchive : IDisposable
                 throw new DatFormatException("Plain entry stored and declared sizes differ.");
             }
 
+            admission?.Admit(checked(entry.StoredSize + 32L));
             var stored = new byte[(int)entry.StoredSize];
             _stream.Seek(entry.Offset, SeekOrigin.Begin);
-            ReadExactly(_stream, stored, "entry payload");
-            return entry.Flags == PlainFlag ? stored : InflateExact(stored, checked((int)entry.DeclaredOutputSize));
+            ReadExactly(_stream, stored, "entry payload", token);
+            if (entry.Flags == PlainFlag) return stored;
+            if (admission is not null)
+            {
+                // Projection has fixed stack workspace and a bounded sanitized
+                // failure envelope. Admit it before traversing untrusted input.
+                admission.Admit(DatInflateProjection.BaseEnvelope);
+                var envelope = DatInflateProjection.Measure(stored, checked((int)entry.DeclaredOutputSize), token);
+                admission.Admit(envelope - DatInflateProjection.BaseEnvelope);
+            }
+            token.ThrowIfCancellationRequested();
+            return InflateExact(stored, checked((int)entry.DeclaredOutputSize), token);
         }
     }
 
@@ -232,7 +249,7 @@ public sealed class DatArchive : IDisposable
         return archive;
     }
 
-    private static byte[] InflateExact(byte[] stored, int declaredSize)
+    private static byte[] InflateExact(byte[] stored, int declaredSize, CancellationToken token)
     {
         try
         {
@@ -243,6 +260,7 @@ public sealed class DatArchive : IDisposable
             var writtenTotal = 0;
             while (writtenTotal < output.Length)
             {
+                token.ThrowIfCancellationRequested();
                 var written = inflater.Inflate(output, writtenTotal, output.Length - writtenTotal);
                 if (written > 0)
                 {
@@ -268,6 +286,7 @@ public sealed class DatArchive : IDisposable
             // declared bound without allocating a declaredSize + 1 destination buffer.
             if (writtenTotal == output.Length)
             {
+                token.ThrowIfCancellationRequested();
                 if (inflater.Inflate(scratch, 0, 1) > 0)
                 {
                     throw new DatFormatException("Zlib output exceeds declared length.");
@@ -326,10 +345,11 @@ public sealed class DatArchive : IDisposable
         }
     }
 
-    private static void ReadExactly(Stream stream, Span<byte> destination, string label)
+    private static void ReadExactly(Stream stream, Span<byte> destination, string label, CancellationToken token = default)
     {
         while (!destination.IsEmpty)
         {
+            token.ThrowIfCancellationRequested();
             var read = stream.Read(destination);
             if (read == 0)
             {
