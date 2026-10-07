@@ -335,6 +335,9 @@ receipt after admission/identity checks; it is not that future owner.
 lease escapes into authoritative state or renderer metadata. Detached read-only
 copies survive owner disposal; new source generation prevents stale reacquisition.
 The helper's returned hourly/overlay metadata are detached/read-only and tested.
+Overlay ABSENT, NULL, EMPTY, VALUES and inherited effective results all reject
+mutation. Test-owned FILE records exercise prototype/instance array presence and
+override masks through the actual research parser before default resolution.
 Texture/pixel caches are renderer-owned. No scene lifetime or GC heap guarantee is
 asserted by these caps.
 
@@ -384,6 +387,10 @@ no silent dropping to fit. DAT caps delegate to the existing `DatArchive` guards
 the new tests bind exact policy values plus admission boundaries, while existing
 Data/DAT tests exercise reader limits. Resource tokens are bounded relative names;
 no archive extraction destination or executable path is constructed.
+Selected-sector and referenced-scheme tests share the inspector's admission
+seams: 32 is accepted, 33 rejects before payload expansion or new ID retention;
+rejection leaves the admitted count/set unchanged. Repeated scheme IDs consume
+no additional slot, including at the cap.
 
 Read-only handles remain bound to path device/inode, size, modification/change
 identity and streamed SHA-256 before/after use (supported macOS/Linux .NET 8 ABI).

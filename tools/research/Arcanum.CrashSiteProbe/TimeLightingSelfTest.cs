@@ -137,7 +137,62 @@ internal static partial class Program
             var projected=OverlayField(values,[new ArraySpan(16,0,29,4,2,21,1)],16,true);
             Equal(projected.Values[0],0u,"explicit-zero"); Equal(projected.Values[2],4294967295u,"invalid-art");
             Equal(EffectiveOverlay(absent,projected),projected,"inherit-prototype"); Equal(EffectiveOverlay(nullArray,projected),nullArray,"null-overrides"); Equal(EffectiveOverlay(emptyArray,projected),emptyArray,"empty-overrides");
-            Reject(()=>((IDictionary<int,uint>)projected.Values).Add(1,3),"overlay-immutable");
+            void FrozenOverlay(Overlay overlay, string label)
+            {
+                var before = overlay.Values.ToArray();
+                var mutable = (IDictionary<int,uint>)overlay.Values;
+                Reject(() => mutable.Add(1,3),label+"-add");
+                Reject(() => mutable[0]=77,label+"-replace");
+                Reject(mutable.Clear,label+"-clear");
+                Equal(overlay.Values.SequenceEqual(before),true,label+"-unchanged");
+            }
+            foreach (var overlay in new[] { absent,nullArray,emptyArray,projected,EffectiveOverlay(absent,projected) })
+                FrozenOverlay(overlay,"overlay-immutable-"+overlay.Presence);
+
+            // Test-owned FILE envelopes and literal offsets, independently computed.
+            // Exercise actual Program ObjectWire -> Arrays/OverlayOverrides wiring,
+            // not just manually constructed ArraySpan or override booleans.
+            foreach (var (field,offset) in new[] { (15,208),(16,237),(17,266) })
+            foreach (var (prototypePresence,prototypePayload) in new[] { ("NULL",new byte[]{0}),("EMPTY",empty),("VALUES",values) })
+            {
+                var baseline = ObjectWire.CreateSyntheticPrototype(3,ObjectId.A(7001),73);
+                var prototypeBytes = baseline[..offset].Concat(prototypePayload).Concat(baseline[(offset+29)..]).ToArray();
+                var parsedPrototype = ObjectWire.ParsePrototype(prototypeBytes);
+                Equal(parsedPrototype.Arrays.Any(a=>a.Field==field),prototypePresence!="NULL","prototype-array-wire");
+                var prototypeOverlay = OverlayField(prototypeBytes,parsedPrototype.Arrays,field,true);
+                Equal(prototypeOverlay.Presence,prototypePresence,"prototype-presence-wire");
+                FrozenOverlay(prototypeOverlay,"prototype-wire-"+prototypePresence);
+                foreach (var (directPresence,payload) in new[] { ("ABSENT",Array.Empty<byte>()),("NULL",new byte[]{0}),("EMPTY",empty),("VALUES",values) })
+                {
+                    var header = new byte[70]; header[0]=119; header[4]=1; header[28]=1; header[52]=3;
+                    BinaryPrimitives.WriteInt32LittleEndian(header.AsSpan(12),7001);
+                    // Minimal type3 envelope: count at56, first override mask at58.
+                    if (directPresence!="ABSENT") { header[56]=1; BinaryPrimitives.WriteUInt32LittleEndian(header.AsSpan(58),1u<<field); }
+                    var instanceBytes = header.Concat(payload).ToArray();
+                    var parsedInstance = ObjectWire.ParseNext(instanceBytes,out var consumed);
+                    Equal(consumed,instanceBytes.Length,"instance-exact-eof");
+                    Equal(parsedInstance.PrototypeId.AidValue(),7001,"instance-prototype-binding");
+                    Equal(parsedInstance.OverlayOverrides.Contains(field),directPresence!="ABSENT","overlay-override-wire");
+                    Equal(parsedInstance.Arrays.Any(a=>a.Field==field),directPresence is "EMPTY" or "VALUES","instance-array-wire");
+                    var directOverlay = OverlayField(instanceBytes,parsedInstance.Arrays,field,parsedInstance.OverlayOverrides.Contains(field));
+                    Equal(directOverlay.Presence,directPresence,"direct-presence-wire");
+                    Equal(directOverlay.Values.Count,directPresence=="VALUES"?2:0,"direct-count-wire");
+                    if (directPresence=="VALUES") { Equal(directOverlay.Values[0],0u,"wire-explicit-zero"); Equal(directOverlay.Values[2],4294967295u,"wire-invalid-art"); }
+                    var effectiveOverlay = EffectiveOverlay(directOverlay,prototypeOverlay);
+                    var expectedPresence = directPresence=="ABSENT"?prototypePresence:directPresence;
+                    Equal(effectiveOverlay.Presence,expectedPresence,"effective-presence-wire");
+                    Equal(effectiveOverlay.Values.Count,expectedPresence=="VALUES"?2:0,"effective-count-wire");
+                    if (expectedPresence=="VALUES") { Equal(effectiveOverlay.Values[0],0u,"effective-zero-wire"); Equal(effectiveOverlay.Values[2],4294967295u,"effective-invalid-art-wire"); }
+                    FrozenOverlay(directOverlay,"direct-wire-"+directPresence);
+                    FrozenOverlay(effectiveOverlay,"effective-wire-"+expectedPresence);
+                    Array.Fill(instanceBytes,(byte)0); // Returned metadata does not alias input bytes.
+                    Equal(directOverlay.Values.Count,directPresence=="VALUES"?2:0,"detached-wire-count");
+                    if (directPresence=="VALUES") Equal(directOverlay.Values[2],4294967295u,"detached-wire-value");
+                }
+                Array.Fill(prototypeBytes,(byte)0);
+                Equal(prototypeOverlay.Values.Count,prototypePresence=="VALUES"?2:0,"detached-prototype-count");
+                if (prototypePresence=="VALUES") Equal(prototypeOverlay.Values[2],4294967295u,"detached-prototype-value");
+            }
             values[25]=16; Reject(()=>OverlayField(values,[new ArraySpan(16,0,29,4,2,21,1)],16,true),"overlay-index");
 
             // T6: literal flags and full distinct load/hour-refresh decision table.
@@ -173,7 +228,21 @@ internal static partial class Program
             Equal(Compose(80,127,100,false,false),129,"quantized-tint"); Equal(Compose(80,255,255,false,true),80,"key-transparency");
 
             // T8: real helpers' explicit policies plus selected input lifecycle.
-            foreach(var cap in new long[]{536870912,67108864,131072,4096,1048576,32,8192,1024})
+            Equal(SectorCap,32,"selected-sector-policy"); Equal(SchemeCap,32,"referenced-scheme-policy");
+            var selected = 0; var expanded = 0;
+            void ExpandSelectedSector() { SelectSector(ref selected); expanded++; }
+            for (var i=0;i<32;i++) ExpandSelectedSector();
+            Equal(selected,32,"sector-equality"); Equal(expanded,32,"sector-expanded-equality");
+            Reject(ExpandSelectedSector,"sector-33-before-expansion");
+            Equal(selected,32,"sector-rejection-atomic"); Equal(expanded,32,"sector-rejected-not-expanded");
+            var referenced = new HashSet<int>();
+            for (var id=1;id<=32;id++) ReferenceScheme(referenced,id);
+            Equal(referenced.Count,32,"scheme-equality");
+            ReferenceScheme(referenced,32); Equal(referenced.Count,32,"duplicate-at-scheme-cap");
+            Reject(()=>ReferenceScheme(referenced,33),"scheme-33-before-retention");
+            Equal(referenced.Count,32,"scheme-rejection-atomic"); Equal(referenced.Contains(33),false,"scheme-rejected-not-retained");
+            selected=int.MaxValue; Reject(()=>SelectSector(ref selected),"sector-admission-overflow"); Equal(selected,int.MaxValue,"sector-overflow-atomic");
+            foreach(var cap in new long[]{536870912,67108864,131072,4096,1048576,8192,1024})
             { Admit(cap,cap); checks++; Reject(()=>Admit(cap+1,cap),"cap-plus-one"); Reject(()=>Admit(-1,cap),"negative-budget"); }
             Equal(Options().MaxArchiveBytes,536870912u,"archive-policy"); Equal(Options().MaxIndexBytes,67108864u,"index-policy"); Equal(Options().MaxTotalNameBytes,67108864u,"names-policy");
             Equal(Options().MaxEntryCount,131072,"entries-policy"); Equal(Options().MaxNameBytes,4096u,"name-policy"); Equal(Options().MaxStoredEntryBytes,1048576u,"stored-policy"); Equal(Options().MaxDecodedEntryBytes,1048576u,"decoded-policy");

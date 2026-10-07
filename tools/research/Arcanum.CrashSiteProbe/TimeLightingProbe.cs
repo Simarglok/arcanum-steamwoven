@@ -25,6 +25,15 @@ internal static partial class Program
         public static string Diagnostic(Exception error) => error is InspectionFailure ? error.Message : "TIME_LIGHTING_INSPECTION_FAILED";
         private static string Hash(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         private static void Admit(long count, long cap) { if (count < 0 || count > cap) throw Fail("BUDGET_EXCEEDED"); }
+        private static void SelectSector(ref int selected)
+        {
+            var next = checked(selected + 1); Admit(next, SectorCap); selected = next;
+        }
+        private static void ReferenceScheme(HashSet<int> schemes, int id)
+        {
+            if (schemes.Contains(id)) return;
+            Admit(checked(schemes.Count + 1), SchemeCap); schemes.Add(id);
+        }
         private static int CountBytes(int count, int width, int cap) { Admit(count, cap); return checked(count * width); }
         private static DatReaderOptions Options() => new()
         {
@@ -267,9 +276,9 @@ internal static partial class Program
         private sealed record Overlay(string Presence, IReadOnlyDictionary<int, uint> Values);
         private static Overlay OverlayField(byte[] bytes, IReadOnlyList<ArraySpan> arrays, int field, bool overridden)
         {
-            if (!overridden) return new("ABSENT", new Dictionary<int, uint>());
+            if (!overridden) return new("ABSENT", new System.Collections.ObjectModel.ReadOnlyDictionary<int, uint>(new Dictionary<int, uint>()));
             var matches = arrays.Where(a => a.Field == field).Take(2).ToArray();
-            if (matches.Length == 0) return new("NULL", new Dictionary<int, uint>());
+            if (matches.Length == 0) return new("NULL", new System.Collections.ObjectModel.ReadOnlyDictionary<int, uint>(new Dictionary<int, uint>()));
             if (matches.Length != 1) throw Fail("OVERLAY_AMBIGUOUS");
             var a = matches[0]; if (a.Size != 4 || a.Start < 0 || a.End > bytes.Length) throw Fail("OVERLAY_SCHEMA");
             var result = new SortedDictionary<int, uint>(); var rank = 0;
@@ -346,7 +355,7 @@ internal static partial class Program
                 {
                     if (!maps.TryGetValue(map, out var record)) throw Fail("MAP_CATALOGUE");
                     var prefix = "maps/" + Token(record.Split(',')[0]) + "/";
-                    var mapDefault = MapDefault(Resource(prefix + "mapinfo.txt")); schemes.Add(mapDefault);
+                    var mapDefault = MapDefault(Resource(prefix + "mapinfo.txt")); ReferenceScheme(schemes, mapDefault);
                     defaults.Add(new { catalogue = map, runtime = map - 4999, map_default = mapDefault, scope = map == 5000 ? "SELECTED_EXTERIOR" : "SUPPLEMENTARY_CAVE_EDITOR_SOURCE_ONLY" });
                     var points = map == 5000 ? Enumerable.Range(1288, 5).SelectMany(y => Enumerable.Range(1450, 5).Select(x => (X: x, Y: y))) : new[] { (X: 32, Y: 31) };
                     foreach (var point in points)
@@ -355,9 +364,9 @@ internal static partial class Program
                         var found = module.Entries.Where(e => Name(e).Equals(name, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
                         if (found.Length > 1) throw Fail("SECTOR_AMBIGUOUS");
                         if (found.Length == 0) { sectors.Add(new { catalogue = map, id, x = point.X, y = point.Y, present = false }); continue; }
-                        stage = "SECTOR_FRAMING"; Admit(++selected, SectorCap); var entry = found[0]; var bytes = Read(entry); _ = StationaryCount(bytes); var slice = SectorSlice.Parse(bytes, false); var framing = SectorFraming.Parse(bytes, slice.LightCount);
+                        stage = "SECTOR_FRAMING"; SelectSector(ref selected); var entry = found[0]; var bytes = Read(entry); _ = StationaryCount(bytes); var slice = SectorSlice.Parse(bytes, false); var framing = SectorFraming.Parse(bytes, slice.LightCount);
                         var (town, scheme) = Metadata(bytes, framing);
-                        var resolved = Resolve(mapDefault, scheme); schemes.Add(resolved); Admit(schemes.Count, SchemeCap);
+                        var resolved = Resolve(mapDefault, scheme); ReferenceScheme(schemes, resolved);
                         var lightRows = new List<object>();
                         for (var i = 0; i < slice.LightCount; i++)
                         {
