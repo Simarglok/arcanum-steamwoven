@@ -1,5 +1,9 @@
 # Требования к статической сцене и входу в здания
 
+ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
+для FR-SCENE-012/013/014/016 сохраняет physical/visual, state и edge frontiers;
+Research/Proposed, NOT_READY, без scene collision или door/window runtime.
+
 Дата: 2026-10-02. Steamwoven baseline: `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae` (`docs/functional-requirements-20261002`). Сверяемый источник CE: [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd). Рабочие деревья baseline и CE были чистыми на момент исследования.
 
 Область: поверхность сцены, статические предметы и деревья, стены/здания, двери-порталы, окна, крыши, их рисование и затрагивающие их правила перемещения. Условия боя, инвентарь, NPC/AI и карта переходов/`jumppoint` не специфицируются. Физический проход через дверь не означает, что здание является отдельной картой: если данные задают переход карты, он относится к отдельному контракту переходов.

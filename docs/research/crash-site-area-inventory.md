@@ -1,5 +1,9 @@
 # Crash Site area inventory
 
+The [whole-exterior traversal research contract](../world/crash-site-area-traversal-contract.md)
+reconciles this full census without visual filtering or mobile deduplication;
+loaded/live readiness remains NOT_READY.
+
 ## Scope and evidence vocabulary
 
 ARC-RES-015 expands the [frozen initial sector](crash-site-slice.md) into a

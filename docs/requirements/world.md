@@ -1,5 +1,9 @@
 # Функциональные требования: карты, сектора и переходы
 
+ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
+для FR-WORLD-002/003/004: coordinates, neighbor binding и edge evidence;
+Research/Proposed, NOT_READY, без streaming/eviction или crossing movement runtime.
+
 **Срез исследования:** 2026-10-02. Проверенные checkout: `arcanum-ce` commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` (чистый HEAD) и `arcanum-steamwoven` commit `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. Требования относятся только к этому домену; это не полный аудит игры и не утверждённый backlog.
 
 ## Как читать выводы
