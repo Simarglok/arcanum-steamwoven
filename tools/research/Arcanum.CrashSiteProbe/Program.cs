@@ -52,6 +52,8 @@ internal static partial class Program
         {
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
             if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--area-traversal-research") return ProbeAreaTraversal(args[1..]);
+            if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
             if (args.SequenceEqual(["--area-self-test"])) { AreaSelfTest(); return 0; }
             if (args.SequenceEqual(["--self-test"]))
@@ -76,6 +78,8 @@ internal static partial class Program
         {
             Console.Error.WriteLine(args.Any(arg => arg.StartsWith("--time-lighting", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {TimeLightingProbe.Diagnostic(exception)}"
+                : args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: AREA_TRAVERSAL_INVOCATION_FAILED"
                 : args.Contains("--cardinal-traversal")
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: CARDINAL_INVOCATION_FAILED"
                 : $"crash-site-probe: FAIL: {exception.GetType().Name}: {exception.Message}");

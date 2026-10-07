@@ -1,5 +1,8 @@
 # Bounded production cardinal traversal assessment
 
+See the separate [whole-exterior research contract](crash-site-area-traversal-contract.md)
+for FILE-effective/loaded-registry frontiers. No production profile expands here.
+
 ## WORLD003 bounded-adjacent policy amendment
 
 Both factories additionally accept optional `CardinalTraversalAdmissionPolicy
