@@ -9,6 +9,90 @@ namespace Arcanum.Scripting.Tests.NpcDialog;
 public sealed class NpcDialogEntryResourceTests
 {
     [TestMethod]
+    public void Unsupported_dlg_syntax_is_a_container_frontier_before_any_query()
+    {
+        // Literal invented payloads exercise DlgReader through authenticated
+        // selected DAT entries, not a mocked reader or resolver exception.
+        foreach (var text in new[]
+        {
+            "{901} {}{}{}{}{}{}", "{901}// invented-private-dlg\n{}{}{}{}{}{}",
+            "{901}{invented-private-dlg{}}{}{}{}{}{}", "{901}{}{}{}{}{}{}\t",
+            "{901}{}{}{}{}{}{}\r", "{901}{}{}{}{}{}{}\x80", "//\x80\n{901}{}{}{}{}{}{}",
+        })
+        {
+            using var f = new NpcDialogFixture(dialog: Encoding.Latin1.GetBytes(text));
+            f.Invocation = f.Invocation with { CallerLine = new(2) };
+            AssertContainerFailure(f, NpcDialogCode.UnsupportedRepresentation, frontier: true);
+        }
+    }
+    [TestMethod]
+    public void Malformed_dlg_structure_remains_a_container_error_before_any_query()
+    {
+        foreach (var text in new[]
+        {
+            "", "{901}{}{}{}{}{}", "{901}{invented-private-dlg", "}",
+            "{901}{invented-private-dlg\0}{}{}{}{}{}", "{901}{}{}{0}{}{}{}",
+            "{901}{}{}{}{}{}{}{901}{}{}{}{}{}{}", "{2147483648}{}{}{}{}{}{}",
+        })
+        {
+            using var f = new NpcDialogFixture(dialog: Encoding.Latin1.GetBytes(text));
+            AssertContainerFailure(f, NpcDialogCode.MalformedContainer, frontier: false);
+        }
+    }
+    [TestMethod]
+    public void Dlg_field_and_record_limits_remain_container_budget_errors()
+    {
+        using var field = new NpcDialogFixture(dialog: "{901}{invented-private-dlg}{}{}{}{}{}"u8.ToArray());
+        AssertContainerFailure(field, NpcDialogCode.Budget, frontier: false, new() { MaxDialogFieldBytes = 19 });
+        using var records = new NpcDialogFixture(dialog: "{901}{}{}{}{}{}{}\n{999}{}{}{}{}{}{}"u8.ToArray());
+        AssertContainerFailure(records, NpcDialogCode.Budget, frontier: false, new() { MaxDialogRecords = 1 });
+    }
+    [TestMethod]
+    public void Valid_adjacent_dlg_fields_admit_and_resolve_without_leaking_borrowed_handles()
+    {
+        using var f = new NpcDialogFixture(dialog: " // invented-private-dlg\r\n{901}{}{}{}{}{}{}\n{999}{}{}{}{}{}{}"u8.ToArray());
+        var scripts = f.Streams[^2]; var dialogs = f.Streams[^1];
+        scripts.Position = 7; dialogs.Position = 11;
+        var queries = new EntryQueries(); var p = f.Prepare();
+        Assert.AreEqual(NpcDialogAdmission.Admitted, p.Admission); Assert.IsNotNull(p.Plan);
+        Assert.IsNull(p.Error); Assert.IsNull(p.Frontier); Assert.AreEqual(0, queries.Calls.Count);
+        Assert.AreEqual(7L, scripts.Position); Assert.AreEqual(11L, dialogs.Position);
+        Assert.IsTrue(scripts.CanRead); Assert.IsTrue(dialogs.CanRead);
+        var r = NpcDialogEntryResolver.Resolve(p.Plan, queries, new());
+        Assert.AreEqual(NpcDialogResolutionKind.Resolved, r.Kind); Assert.AreEqual(901, r.Entry!.DlgNode.Value);
+        CollectionAssert.AreEqual(new[] { "V0", "F0", "V0", "L4:1", "V1", "J2", "V2", "L11:3", "V3", "V4" }, queries.Calls);
+        Assert.AreEqual(7L, scripts.Position); Assert.AreEqual(11L, dialogs.Position);
+        Assert.IsTrue(scripts.CanRead); Assert.IsTrue(dialogs.CanRead);
+    }
+    private static void AssertContainerFailure(NpcDialogFixture f, NpcDialogCode code, bool frontier, NpcDialogEntryLimits? limits = null)
+    {
+        var scripts = f.Streams[^2]; var dialogs = f.Streams[^1];
+        scripts.Position = 7; dialogs.Position = 11;
+        var queries = new EntryQueries(); var p = f.Prepare(limits);
+        // Even an accidentally admitted plan must not reach a query unnoticed.
+        if (p.Plan is not null) NpcDialogEntryResolver.Resolve(p.Plan, queries, new());
+        Assert.AreEqual(0, queries.Calls.Count); Assert.IsNull(p.Plan);
+        Assert.AreEqual(NpcDialogAdmission.Rejected, p.Admission);
+        if (frontier)
+        {
+            Assert.IsNull(p.Error); Assert.IsNotNull(p.Frontier);
+            Assert.AreEqual(code, p.Frontier.Code); Assert.AreEqual(NpcDialogStage.Container, p.Frontier.Stage);
+            Assert.AreEqual(f.Invocation, p.Frontier.Invocation); Assert.IsNull(p.Frontier.Line);
+            Assert.IsFalse(p.Frontier.ToString().Contains("invented-private-dlg", StringComparison.Ordinal));
+        }
+        else
+        {
+            Assert.IsNull(p.Frontier); Assert.IsNotNull(p.Error);
+            Assert.AreEqual(code, p.Error.Code); Assert.AreEqual(NpcDialogStage.Container, p.Error.Stage);
+            Assert.AreEqual(f.Invocation, p.Error.Invocation); Assert.IsNull(p.Error.Line);
+            Assert.IsFalse(p.Error.ToString().Contains("invented-private-dlg", StringComparison.Ordinal));
+        }
+        // Invocation equality above includes participants, caller line and all
+        // source/state/attachment versions. Container failures have no decoded line.
+        Assert.AreEqual(7L, scripts.Position); Assert.AreEqual(11L, dialogs.Position);
+        Assert.IsTrue(scripts.CanRead); Assert.IsTrue(dialogs.CanRead);
+    }
+    [TestMethod]
     public void Invalid_raw_catalogue_bytes_and_uint_metadata_fail_statically()
     {
         using var f = new NpcDialogFixture();

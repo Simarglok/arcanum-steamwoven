@@ -140,6 +140,14 @@ Stale, unsupported condition/action/operand/callback/representation, NoEntry,
 Cycle, Budget, Cancelled and InvalidLimits. Trace contains typed predicate/query
 status/selected action and safe line/node IDs only. There are no command ports.
 
+Unsupported DLG syntax reported by `DlgUnsupportedFormatException` is a
+`Container` / `UnsupportedRepresentation` frontier, not malformed input. Actual
+DLG structural failures remain `Container` / `MalformedContainer` errors, and
+reader limits remain `Container` / `Budget` errors. All reject preparation without
+a plan or external queries. The invocation retains participants, source/state/
+attachment versions and caller line; no decoded SCR line is claimed for a DLG
+container failure. Borrowed stream positions and ownership are preserved.
+
 ## Opt-in production checks
 
 Public fixtures are invented and exercise the actual AreaDataOwner wire path,

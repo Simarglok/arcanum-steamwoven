@@ -94,6 +94,7 @@ public static class NpcDialogEntryResolver
         catch (DatUnsupportedEntryException) { return PreparationFailure(invocation, Fail(NpcDialogStage.Resource, NpcDialogCode.UnsupportedRepresentation, true)); }
         catch (DatUnsupportedFormatException) { return PreparationFailure(invocation, Fail(NpcDialogStage.Resource, NpcDialogCode.UnsupportedRepresentation, true)); }
         catch (DatException) { return PreparationFailure(invocation, Fail(NpcDialogStage.Resource, NpcDialogCode.MalformedContainer)); }
+        catch (DlgUnsupportedFormatException) { return PreparationFailure(invocation, Fail(NpcDialogStage.Container, NpcDialogCode.UnsupportedRepresentation, true)); }
         catch (DlgException) { return PreparationFailure(invocation, Fail(NpcDialogStage.Container, NpcDialogCode.MalformedContainer)); }
         catch (Exception) { return PreparationFailure(invocation, Fail(NpcDialogStage.Invocation, NpcDialogCode.WrongContext)); }
     }
