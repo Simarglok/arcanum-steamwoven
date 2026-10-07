@@ -151,11 +151,18 @@ Notation `[...]` is an array, `records[]` a nested array of record arrays:
   unknownMobiles,editorCorrespondence,prototypes,visuals]`.
 * Selected evidence: `["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,
   ruleId,sourcePin,inputKind,catalogueMap,runtimeMap,profile,inputs[],sectors[],
-  occurrences[],terrain[],visuals[],reconciliation,components[],nameBinding]`.
+  occurrences[],terrain[],visuals[],reconciliation,components[],nameBinding,authorizedScope[]]`.
   Name binding `[entry,payloadSha256]` or null. Components sort cell x/y then kind.
+  Authorized scope is `[packedSector,scope]` sorted by packed sector, unique
+  Core/Context entries. This explicit geometric selection is independent of
+  supplied sector metadata: omitted and Present=false admitted neighbors both
+  retain missing-sector gaps, not outside-scope results. Original scope comes
+  from the approved owner selection; synthetic scope is ProjectDeclared.
 * Actor context: `["AREA_TRAVERSAL_RESEARCH_V1","ACTOR_CONTEXT",1,caller,chart,
   actorId,kind,currentArt,spellFlags,ground,stateMode,classification,profile,
-  registryPolicy,stateToken]`. Different state or actor has a different digest.
+  registryPolicy,stateToken,registryClosed]`. Different state or actor has a different digest.
+  `registryClosed` is an explicit ProjectDeclared structural-fixture boolean,
+  never true for AuthenticatedOriginal. There is no unbound closure override.
 * Binding (report/query): `[schema,ruleId,sourcePin,inputKind,map,profile,
   selectedEvidenceDigest,actorContextDigest,generation]`. Generation is explicit
   caller-owned integer, not time/randomness and not part of selected input digest.
@@ -176,17 +183,17 @@ are embedded in the self-test and documented with their digests after execution.
 The ACTOR_CONTEXT fixture is exactly:
 
 ```json
-["AREA_TRAVERSAL_RESEARCH_V1","ACTOR_CONTEXT",1,"sub_425760","WORLD_CELL_CENTERS_V1","HUMAN_FIXED_DIAGNOSTIC",15,536870912,0,true,"DeclaredDiagnosticOverlay","ProjectDeclared","fixture","NONEDITOR_EXACT_TILE","state-1"]
+["AREA_TRAVERSAL_RESEARCH_V1","ACTOR_CONTEXT",1,"sub_425760","WORLD_CELL_CENTERS_V1","HUMAN_FIXED_DIAGNOSTIC",15,536870912,0,true,"DeclaredDiagnosticOverlay","ProjectDeclared","fixture","NONEDITOR_EXACT_TILE","state-1",false]
 ```
 
-SHA256: `03c335f03e8ead934048fdfbdb6ca3c825cfc6c5589dfe0a207bfca406e29dfa`.
+SHA256: `9dfa1a228beb1f04a35bf03da67f70e135a2ed0365f57517a8b8eeaeab68cce7`.
 The empty structural SELECTED_EVIDENCE **encoding-only** fixture is exactly:
 
 ```json
-["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","a7ff41b300ef712f0e7d088183a3d08957110cdd","Structural",1,1,"fixture",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null]
+["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","a7ff41b300ef712f0e7d088183a3d08957110cdd","Structural",1,1,"fixture",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]
 ```
 
-SHA256: `9f4ed20c1709f1b4c72d7e6eeada18aea9bcfe2726a1abc9b3c64588fd69b9ea`.
+SHA256: `5491cd236bfd9a2e8424643da97f4928e30cce2d90ee1bb027bf4b31bfee5ade`.
 It is not a valid original area/registration declaration. Field payload
 `[18,"Value","Instance",0,[],null]` hashes to
 `df80171b2be70e88bf4c1446cb75eaa8ee9bb47dff745bd12fae482196e91f77`;
@@ -200,8 +207,18 @@ also exercises selected-evidence sorting and neighbor-state digest invalidation.
 ## Lifetime and invalidation
 
 Reports own immutable copies of fields, sparse words and collections, no leased
-stream/frame/mutable-state reference or lazy I/O. A query is I/O-free. Source
-owner disposal cannot rewrite the historical report. New neighbor/source/state,
+stream/frame/mutable-state reference or lazy I/O. A query is I/O-free. Evidence
+construction recomputes selected evidence from those exact owned copies of
+the full snapshot, component rows, name binding and authorized scope, requiring
+equality with the supplied binding. Actor/context digest includes structural
+registry closure. Reusing old bindings with changed evidence is rejected;
+detached historical queries continue to assess only their immutable old evidence.
+Missing/partial/invalid placement is a construction error, never an omitted
+occurrence. Static source-sector/map/scope/source identity and low-bit rebased
+location must agree; mobiles use their serialized world location. A located
+schema-unready occurrence retains an explicit completeness gap; visual-layer
+readiness is retained but is not a traversal exclusion predicate.
+Source owner disposal cannot rewrite the historical report. New neighbor/source/state,
 location/flags/HP/capability/chart/profile/rule changes invalidate derived binding;
 a stale generation/context/digest is an invocation error. Identical old inputs
 are historical evidence, not permission for new state. Runtime segment

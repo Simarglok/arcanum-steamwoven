@@ -18,7 +18,18 @@ internal static partial class Program
     private const string AreaTraversalPin = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     private readonly record struct ResearchCell(int Map, long X, long Y);
     private sealed record ResearchActor(string Caller, string Chart, string Id, int Kind, uint Art, uint SpellFlags,
-        bool Ground, string StateMode, string Classification, string Profile, string RegistryPolicy, string StateToken);
+        bool Ground, string StateMode, string Classification, string Profile, string RegistryPolicy, string StateToken, bool RegistryClosed = false);
+    private sealed record ResearchScope(long Packed, AreaScope Scope);
+    private sealed record ResearchNameBinding(AreaEntryIdentity Entry, string PayloadSha256);
+    private sealed record ResearchSelection(int CatalogueMap, int RuntimeMap, string Profile, IReadOnlyList<AreaInputIdentity> Inputs,
+        IReadOnlyList<AreaSectorRecord> Sectors, IReadOnlyList<AreaObjectRecord> Objects, IReadOnlyList<AreaTerrainRecord> Terrain,
+        IReadOnlyList<AreaVisualRecord> Visuals, AreaReconciliation Reconciliation, IReadOnlyList<ResearchScope> AuthorizedScope);
+    private static ResearchSelection Selection(AreaSnapshot s) => new(s.CatalogueMap, s.RuntimeMap, s.Profile, s.Inputs, s.Sectors,
+        s.Objects, s.Terrain, s.Visuals, s.Reconciliation, Frozen(s.Sectors.Select(x => new ResearchScope(x.Key.Packed, x.Scope))));
+    private static ResearchBinding Bind(ResearchSelection s, ResearchActor a, IReadOnlyList<ResearchComponent> components,
+        ResearchNameBinding? name = null, string inputKind = "Structural", long generation = 1) =>
+        new(AreaTraversalSchema, AreaTraversalRule, AreaTraversalPin, inputKind, s.RuntimeMap, s.Profile,
+            CanonicalDigest(SelectedArray(s, components, name, inputKind)), CanonicalDigest(ActorArray(a)), generation);
     private sealed record ResearchBinding(string Schema, string Rule, string SourcePin, string InputKind, int Map,
         string Profile, string SelectedDigest, string ActorDigest, long Generation);
     private sealed record ResearchComponent(ResearchCell Cell, string Kind, string Coverage, string Applicability,
@@ -49,7 +60,7 @@ internal static partial class Program
     private static object?[] ComponentArray(ResearchComponent c) => [CellArray(c.Cell), c.Kind, c.Coverage, c.Applicability, c.Disposition,
         c.Reason, c.ProvenanceKind, c.SourceId, c.Ordinal, c.Classification, c.RawArt];
     private static object?[] ActorArray(ResearchActor a) => [AreaTraversalSchema, "ACTOR_CONTEXT", 1, a.Caller, a.Chart, a.Id,
-        a.Kind, a.Art, a.SpellFlags, a.Ground, a.StateMode, a.Classification, a.Profile, a.RegistryPolicy, a.StateToken];
+        a.Kind, a.Art, a.SpellFlags, a.Ground, a.StateMode, a.Classification, a.Profile, a.RegistryPolicy, a.StateToken, a.RegistryClosed];
     private static object?[] BindingArray(ResearchBinding b) => [b.Schema, b.Rule, b.SourcePin, b.InputKind, b.Map, b.Profile, b.SelectedDigest, b.ActorDigest, b.Generation];
     private static object?[] GapArray(ResearchGap g) => [g.Code, g.Cell is { } c ? CellArray(c) : null, g.Object is { } o ? ObjectKeyArray(o) : null, g.Slot, g.Dependency, g.NextPrerequisite, g.Classification];
     private static object?[] RecordRowArray(ResearchRecordRow r) => [r.Role, ObjectKeyArray(r.Key), r.Coverage, r.Applicability, r.Disposition, r.Reason, r.Classification];
@@ -95,29 +106,53 @@ internal static partial class Program
         internal ResearchActor Actor { get; }
         internal IReadOnlyList<AreaObjectRecord> Objects { get; }
         private readonly Dictionary<long, AreaSectorRecord> _sectors;
+        private readonly Dictionary<long, AreaScope> _scope;
         private readonly Dictionary<ResearchCell, ResearchComponent[]> _components;
         // Synthetic declarations are explicit. Original FILE snapshots never close loaded registry.
         private readonly bool _registryClosed;
-        internal ResearchEvidence(ResearchBinding binding, ResearchActor actor, IEnumerable<AreaSectorRecord> sectors,
-            IEnumerable<AreaObjectRecord> objects, IEnumerable<ResearchComponent> components, bool registryClosed = false)
+        internal ResearchEvidence(ResearchBinding binding, ResearchActor actor, ResearchSelection selection,
+            IEnumerable<ResearchComponent> components, ResearchNameBinding? name = null)
         {
             if (binding.Generation < 0 || binding.Schema != AreaTraversalSchema || binding.Rule != AreaTraversalRule || binding.SourcePin != AreaTraversalPin ||
                 binding.ActorDigest != CanonicalDigest(ActorArray(actor)) || binding.Profile != actor.Profile || binding.Map < 0 ||
-                binding.InputKind is not ("Structural" or "AuthenticatedOriginal") || !IsResearchSha256(binding.SelectedDigest) || (registryClosed && binding.InputKind != "Structural"))
+                binding.InputKind is not ("Structural" or "AuthenticatedOriginal") || !IsResearchSha256(binding.SelectedDigest) || (actor.RegistryClosed && binding.InputKind != "Structural") ||
+                selection.RuntimeMap != binding.Map || selection.Profile != binding.Profile)
                 throw new InvalidDataException("EVIDENCE_BINDING");
             if (actor.Caller != "sub_425760" || actor.Chart != "WORLD_CELL_CENTERS_V1" || actor.Kind != 15 || actor.Art >> 28 != 2 || actor.SpellFlags != 0 || !actor.Ground ||
                 actor.StateMode != "DeclaredDiagnosticOverlay" || actor.Classification != "ProjectDeclared" || actor.RegistryPolicy != "NONEDITOR_EXACT_TILE" || string.IsNullOrEmpty(actor.StateToken))
                 throw new InvalidDataException("ACTOR_APPLICABILITY");
-            Binding = binding; Actor = actor; _registryClosed = registryClosed;
-            _sectors = sectors.ToDictionary(s => s.Key.Packed, s => s with { Sections = Frozen(s.Sections), Lights = Frozen(s.Lights.Select(Frozen)) });
+            Binding = binding; Actor = actor; _registryClosed = actor.RegistryClosed;
+            var owned = selection with { Inputs = Frozen(selection.Inputs),
+                Sectors = Frozen(selection.Sectors.Select(s => s with { Sections = Frozen(s.Sections), Lights = Frozen(s.Lights.Select(Frozen)) })),
+                Objects = Frozen(OrderedObjects(selection.Objects).Select(CopyOccurrence)), Terrain = Frozen(selection.Terrain),
+                Visuals = Frozen(selection.Visuals), AuthorizedScope = Frozen(selection.AuthorizedScope) };
+            _scope = owned.AuthorizedScope.ToDictionary(s => s.Packed, s => s.Scope);
+            foreach (var s in owned.AuthorizedScope)
+                if (s.Scope is not (AreaScope.Core or AreaScope.Context) || AreaSectorCoordinate.Unpack(s.Packed).Packed != s.Packed)
+                    throw new InvalidDataException("SCOPE_BINDING");
+            _sectors = owned.Sectors.ToDictionary(s => s.Key.Packed);
             foreach (var s in _sectors.Values)
-                if (s.Key.RuntimeMap != binding.Map || AreaSectorCoordinate.Unpack(s.Key.Packed) != s.Coordinate) throw new InvalidDataException("SECTOR_BINDING");
-            Objects = Frozen(OrderedObjects(objects).Select(CopyOccurrence));
+                if (s.Key.RuntimeMap != binding.Map || AreaSectorCoordinate.Unpack(s.Key.Packed) != s.Coordinate || !_scope.TryGetValue(s.Key.Packed, out var scope) || scope != s.Scope)
+                    throw new InvalidDataException("SECTOR_BINDING");
+            Objects = owned.Objects;
             if (Objects.Select(o => o.Key).Distinct().Count() != Objects.Count || Objects.Any(o => o.Key.RuntimeMap != binding.Map || o.Type is < 0 or > 17 || !Enum.IsDefined(o.Key.Kind) ||
                 o.Key.SourceIndex < 0 || o.Key.Offset < 0 || o.Key.Length <= 0 || !IsResearchSha256(o.Key.SourceSha256) || !IsResearchSha256(o.Key.ObjectIdSha256)))
                 throw new InvalidDataException("OCCURRENCE_BINDING");
             foreach (var o in Objects)
             {
+                if (o.Key.Kind is not (AreaSourceKind.Static or AreaSourceKind.Mobile) || !Enum.IsDefined(o.Scope) || !Enum.IsDefined(o.Disposition) ||
+                    !o.PlacementReady || o.SerializedLocation is not { } location || o.WorldX is not { } x || o.WorldY is not { } y ||
+                    x is < 0 or > 4294967295L || y is < 0 or > 4294967295L)
+                    throw new InvalidDataException("OCCURRENCE_PLACEMENT");
+                if (o.Key.Kind == AreaSourceKind.Static)
+                {
+                    if (o.Key.Sector is not { } packed || !_sectors.TryGetValue(packed, out var sector) || !sector.Present ||
+                        sector.Scope != o.Scope || sector.Key.SourceSha256 != o.Key.SourceSha256 ||
+                        x != checked(sector.Coordinate.OriginX + (location & 63)) || y != checked(sector.Coordinate.OriginY + ((location >> 32) & 63)))
+                        throw new InvalidDataException("STATIC_PLACEMENT_BINDING");
+                }
+                else if (o.Key.Sector is not null || x != unchecked((int)location) || y != unchecked((int)(location >> 32)) ||
+                    o.Scope != Scope(new(binding.Map, x, y))) throw new InvalidDataException("MOBILE_PLACEMENT_BINDING");
                 foreach (var fields in new[] { o.DirectFields, o.EffectiveFields })
                 {
                     if (fields.Select(f => f.Slot).Distinct().Count() != fields.Count || fields.Any(f => f.Slot < 0 || !Enum.IsDefined(f.Presence) || !Enum.IsDefined(f.Origin)))
@@ -130,12 +165,15 @@ internal static partial class Program
                             throw new InvalidDataException("FIELD_SHAPE");
                 }
             }
-            _components = components.GroupBy(c => c.Cell).ToDictionary(g => g.Key, g => g.ToArray());
+            var copiedComponents = components.ToArray();
+            _components = copiedComponents.GroupBy(c => c.Cell).ToDictionary(g => g.Key, g => g.ToArray());
             foreach (var (cell, rows) in _components)
                 if (cell.Map != binding.Map || Sector(cell) is not { Present: true } || rows.Length != 3 || rows.Select(r => r.Kind).Distinct().Count() != 3 ||
                     rows.Any(r => r.Kind is not ("Mask" or "Facade" or "Name") || r.Coverage is not ("Supported" or "Unknown" or "Unsupported") ||
                         r.Applicability is not ("Applicable" or "NotApplicable" or "Unknown") || r.Disposition is not (null or "NoBlock" or "Blocked") ||
                         (r.Coverage == "Supported" && r.Applicability == "Applicable") != (r.Disposition is not null))) throw new InvalidDataException("COMPONENT_BINDING");
+            if (binding.SelectedDigest != CanonicalDigest(SelectedArray(owned, copiedComponents, name, binding.InputKind)))
+                throw new InvalidDataException("SELECTED_CONTENT_BINDING");
         }
         private AreaSectorRecord? Sector(ResearchCell c)
         {
@@ -143,6 +181,8 @@ internal static partial class Program
             var packed = new AreaSectorCoordinate(c.X / 64, c.Y / 64).Packed;
             return _sectors.GetValueOrDefault(packed);
         }
+        private AreaScope Scope(ResearchCell c) => c.X is < 0 or > 4294967295L || c.Y is < 0 or > 4294967295L ? AreaScope.Outside :
+            _scope.GetValueOrDefault(new AreaSectorCoordinate(c.X / 64, c.Y / 64).Packed, AreaScope.Outside);
         internal ResearchResult Assess(ResearchQuery q)
         {
             if (q.Binding != Binding || q.From.Map != Binding.Map || q.To.Map != Binding.Map || q.Scope is not ("CoreWithContextEvidence" or "Path0x1000Unavailable")) throw new InvalidDataException("QUERY_BINDING");
@@ -154,15 +194,17 @@ internal static partial class Program
             if (q.From.X is < 0 or > 4294967295L || q.To.X is < 0 or > 4294967295L || q.From.Y is < 0 or > 4294967295L || q.To.Y is < 0 or > 4294967295L)
                 return Finish("Unsupported", null, "WORLD_COORDINATE_UNSUPPORTED");
             var from = Sector(q.From); var to = Sector(q.To);
-            if (from is null || to is null || from.Scope != AreaScope.Core || to.Scope is not (AreaScope.Core or AreaScope.Context))
+            if (Scope(q.From) != AreaScope.Core || Scope(q.To) is not (AreaScope.Core or AreaScope.Context))
                 return Finish("Unsupported", null, "SCOPE_UNSUPPORTED");
             if (q.Scope == "Path0x1000Unavailable")
             {
                 Gap("PATH_FLAG_0x1000_CALLER_UNAVAILABLE", q.From, null, null, "S11", "Supply separately selected path caller/state evidence; no S1 fallback");
                 return Finish("Unknown", null, "PATH_BRANCH_UNAVAILABLE");
             }
-            if (!from.Present) Gap("SOURCE_SECTOR_MISSING", q.From, null, null, "S10", "Supply identity-bound source sector");
-            if (!to.Present) Gap("NEIGHBOR_SECTOR_MISSING", q.To, null, null, "S10", "Supply identity-bound neighbor sector");
+            if (from is not { Present: true }) Gap("SOURCE_SECTOR_MISSING", q.From, null, null, "S10", "Supply identity-bound source sector");
+            if (to is not { Present: true }) Gap("NEIGHBOR_SECTOR_MISSING", q.To, null, null, "S10", "Supply identity-bound neighbor sector");
+            foreach (var o in Objects.Where(o => !o.SchemaReady))
+                Gap("OCCURRENCE_SCHEMA_UNREADY", null, o.Key, null, "S6/S7/S8", "Close retained occurrence schema before completeness");
             if (_components.TryGetValue(q.To, out var terrain))
             {
                 components.AddRange(terrain.OrderBy(c => c.Kind == "Mask" ? 0 : c.Kind == "Facade" ? 1 : 2));
@@ -261,7 +303,7 @@ internal static partial class Program
             r.ReasonCode, r.Provenance.Kind.ToString(), r.Provenance.SourceId, r.Provenance.EntryOrdinal, "InputObserved", rawArt);
     private static ResearchActor DeclaredAreaActor(string profile) => new("sub_425760", "WORLD_CELL_CENTERS_V1", "HUMAN_FIXED_DIAGNOSTIC", 15, 0x20000000, 0,
         true, "DeclaredDiagnosticOverlay", "ProjectDeclared", profile, "NONEDITOR_EXACT_TILE", "FILE_EFFECTIVE_INITIAL_NO_LOADED_OBSERVATION_V1");
-    private static object?[] SelectedArray(AreaSnapshot s, IReadOnlyList<ResearchComponent> components, object? nameBinding, string inputKind)
+    private static object?[] SelectedArray(ResearchSelection s, IReadOnlyList<ResearchComponent> components, ResearchNameBinding? nameBinding, string inputKind)
     {
         var r = s.Reconciliation;
         return [AreaTraversalSchema, "SELECTED_EVIDENCE", 1, AreaTraversalRule, AreaTraversalPin, inputKind, s.CatalogueMap, s.RuntimeMap, s.Profile,
@@ -276,7 +318,9 @@ internal static partial class Program
                 v.ViewLength, v.NominalFacing, v.SourceGroup, v.PhysicalGroup, v.Frame, v.RequestedPalette, v.EffectivePalette, v.Mirrored, v.Width, v.Height, v.HotX, v.HotY,
                 v.ArtOffsetX, v.ArtOffsetY, v.ObjectOffsetX, v.ObjectOffsetY, v.Scale, v.EncodedBytes, v.RgbaBytes, v.RgbaSha256, v.Policy }).ToArray(),
             new object?[] { r.Survey, r.CoreSectors, r.ContextPresent, r.ContextMissing, r.CoreTerrain, r.ContextTerrain, r.Statics, r.Aggregate, r.CoreMobiles, r.ContextMobiles, r.OutsideMobiles, r.UnknownMobiles, r.EditorCorrespondence, r.Prototypes, r.Visuals },
-            components.OrderBy(c => c.Cell.X).ThenBy(c => c.Cell.Y).ThenBy(c => c.Kind == "Mask" ? 0 : c.Kind == "Facade" ? 1 : 2).Select(ComponentArray).ToArray(), nameBinding];
+            components.OrderBy(c => c.Cell.X).ThenBy(c => c.Cell.Y).ThenBy(c => c.Kind == "Mask" ? 0 : c.Kind == "Facade" ? 1 : 2).Select(ComponentArray).ToArray(),
+            nameBinding is { } n ? new object?[] { EntryArray(n.Entry), n.PayloadSha256 } : null,
+            s.AuthorizedScope.OrderBy(x => x.Packed).Select(x => new object?[] { x.Packed, x.Scope.ToString() }).ToArray()];
     }
     private static int ProbeAreaTraversal(string[] args)
     {
@@ -306,7 +350,7 @@ internal static partial class Program
             var selected = snapshot.Inputs.Single(p => p.Key == paths[i].Key);
             if (selected.Length != before[i].Bytes || selected.Sha256 != before[i].Sha256) throw new InvalidDataException("SNAPSHOT_SOURCE_IDENTITY");
         }
-        var components = new List<ResearchComponent>(); object? nameBinding = null;
+        var components = new List<ResearchComponent>(); ResearchNameBinding? nameBinding = null;
         using (var module = DatArchive.Open(args[1], BoundedOptions()))
         using (var resource = DatArchive.Open(args[5], BoundedOptions()))
         {
@@ -314,7 +358,7 @@ internal static partial class Program
             var names = resource.Entries.Where(e => AreaName(e).Equals(namePath, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
             if (names.Length != 1) throw new InvalidDataException("NAME_SELECTION");
             var name = names[0]; var nameIdentity = new AreaEntryIdentity(new(AreaSourceRole.Resource2), name.Ordinal, name.Flags, name.StoredSize, name.DeclaredOutputSize, name.Offset, AreaHash(name.RawNameBytes.ToArray()));
-            nameBinding = new object?[] { EntryArray(nameIdentity), AreaHash(resource.ReadEntry(name)) };
+            nameBinding = new(nameIdentity, AreaHash(resource.ReadEntry(name)));
             var nameSource = new TerrainTileNameSource(resource, snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource2).Sha256, namePath, TerrainPathProfile.CeNonWindowsMacOs);
             foreach (var s in snapshot.Sectors.Where(s => s.Present))
             {
@@ -337,9 +381,9 @@ internal static partial class Program
             }
         }
         var actor = DeclaredAreaActor(snapshot.Profile);
-        var binding = new ResearchBinding(AreaTraversalSchema, AreaTraversalRule, AreaTraversalPin, "AuthenticatedOriginal", snapshot.RuntimeMap, snapshot.Profile,
-            CanonicalDigest(SelectedArray(snapshot, components, nameBinding, "AuthenticatedOriginal")), CanonicalDigest(ActorArray(actor)), 1);
-        var evidence = new ResearchEvidence(binding, actor, snapshot.Sectors, snapshot.Objects, components);
+        var selection = Selection(snapshot);
+        var binding = Bind(selection, actor, components, nameBinding, "AuthenticatedOriginal");
+        var evidence = new ResearchEvidence(binding, actor, selection, components, nameBinding);
         var queries = new List<(string Label, ResearchCell From, ResearchCell To, string Direction)>
         {
             ("FrozenForwardAreaProfile", new(snapshot.RuntimeMap,92934,82561), new(snapshot.RuntimeMap,92933,82561), "XMinus"),
@@ -409,17 +453,22 @@ internal static partial class Program
         const string sha = "0000000000000000000000000000000000000000000000000000000000000000";
         var actor = DeclaredAreaActor("fixture") with { StateToken = "state-1" };
         var binding = new ResearchBinding(AreaTraversalSchema, AreaTraversalRule, AreaTraversalPin, "Structural", 1, "fixture", sha, CanonicalDigest(ActorArray(actor)), 1);
-        static AreaSectorRecord Sector(long x, long y, bool present = true) => new(new("fixture-source",1,new AreaSectorCoordinate(x,y).Packed),new(x,y),AreaScope.Core,present,0,2,0,1,0xAA0004,0,[],[],null,null);
+        static AreaSectorRecord Sector(long x, long y, bool present = true) => new(new("0000000000000000000000000000000000000000000000000000000000000000",1,new AreaSectorCoordinate(x,y).Packed),new(x,y),AreaScope.Core,present,0,2,0,1,0xAA0004,0,[],[],null,null);
         AreaSectorRecord[] sectors = [Sector(1,1),Sector(2,1),Sector(1,2),Sector(2,2)];
         static ResearchCell C(long x,long y) => new(1,x,y);
         static ResearchComponent[] Clear(ResearchCell c) => [new(c,"Mask","Supported","Applicable","NoBlock","FIXTURE_MASK","SerializedSector","fixture",0),
             new(c,"Facade","Supported","NotApplicable",null,"FIXTURE_FACADE","PackedTerrainId","fixture",0),new(c,"Name","Supported","Applicable","NoBlock","FIXTURE_NAME","TileNameMes","fixture",0)];
-        AreaObjectRecord O(int index,int type,long x,long y,long? flags=0) => new(new(sha,1,AreaSourceKind.Static,67108865,index,index*100,sha,79),119,type,7001,sha,sha,sha,sha,
-            AreaScope.Core,0,x,y,AreaDisposition.BodyEligibleConditionally,flags.HasValue?[new(18,AreaPresence.Value,AreaValueOrigin.Instance,flags,[],null)]:[],
+        AreaObjectRecord O(int index,int type,long x,long y,long? flags=0) => new(new(sha,1,AreaSourceKind.Static,new AreaSectorCoordinate(x/64,y/64).Packed,index,index*100,sha,79),119,type,7001,sha,sha,sha,sha,
+            AreaScope.Core,(x & 63) | ((y & 63) << 32),x,y,AreaDisposition.BodyEligibleConditionally,flags.HasValue?[new(18,AreaPresence.Value,AreaValueOrigin.Instance,flags,[],null)]:[],
             flags.HasValue?[new(18,AreaPresence.Value,AreaValueOrigin.Instance,flags,[],null)]:[],true,true,true);
-        ResearchEvidence E(IEnumerable<AreaObjectRecord>? objects=null, IEnumerable<ResearchComponent>? rows=null, bool registry=true, IEnumerable<AreaSectorRecord>? selected=null) =>
-            new(binding,actor,selected??sectors,objects??[],rows??Clear(C(128,128)),registry);
-        ResearchResult Q(ResearchEvidence e,long x,long y,long tx,long ty,string d) => e.Assess(new(binding,C(x,y),C(tx,ty),d,"CoreWithContextEvidence"));
+        ResearchSelection S(IEnumerable<AreaObjectRecord>? objects = null, IEnumerable<AreaSectorRecord>? selected = null) =>
+            new(1,1,"fixture",[],Frozen(selected??sectors),Frozen(objects??[]),[],[],new(0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),Frozen(sectors.Select(s=>new ResearchScope(s.Key.Packed,s.Scope))));
+        ResearchEvidence E(IEnumerable<AreaObjectRecord>? objects=null, IEnumerable<ResearchComponent>? rows=null, bool registry=true, IEnumerable<AreaSectorRecord>? selected=null)
+        {
+            var s=S(objects,selected); var a=actor with{RegistryClosed=registry}; var c=Frozen(rows??Clear(C(128,128)));
+            return new(Bind(s,a,c),a,s,c);
+        }
+        ResearchResult Q(ResearchEvidence e,long x,long y,long tx,long ty,string d) => e.Assess(new(e.Binding,C(x,y),C(tx,ty),d,"CoreWithContextEvidence"));
 
         // T1: literal borders and four-sector corner; actual public coordinate seam.
         foreach(var pair in new[]{(127L,80L,128L,80L,"XPlus"),(128L,80L,127L,80L,"XMinus"),(80L,127L,80L,128L,"YPlus"),(80L,128L,80L,127L,"YMinus"),(127L,127L,128L,128L,"XPlusYPlus")})
@@ -480,14 +529,15 @@ internal static partial class Program
         var blocked=Q(E([block],final,false),80,80,81,80,"XPlus");
         Check(blocked.Disposition=="Blocked" && !blocked.CompleteCoverage && blocked.Readiness=="NOT_READY" && blocked.Gaps.Count>0,"T7_TERRAIN_PRECEDENCE");
         Check(Q(E([block],Clear(C(81,80)),false),80,80,81,80,"XPlus").Disposition is null,"T7_OBJECT_REGISTRATION");
-        var pathResult=E(rows:Clear(C(81,80))).Assess(new(binding,C(80,80),C(81,80),"XPlus","Path0x1000Unavailable"));
+        var pathEvidence=E(rows:Clear(C(81,80)));
+        var pathResult=pathEvidence.Assess(new(pathEvidence.Binding,C(80,80),C(81,80),"XPlus","Path0x1000Unavailable"));
         Check(pathResult.Coverage=="Unknown" && pathResult.Disposition is null && pathResult.Legs.Count==0 && pathResult.Gaps.Single().Code=="PATH_FLAG_0x1000_CALLER_UNAVAILABLE","T7_PATH_NO_FALLBACK");
         Reject(()=>E([block,block]),"T8_DUPLICATE_KEY");
         Reject(()=>E([block with{EffectiveFields=[new(18,AreaPresence.Null,AreaValueOrigin.Instance,0,[],null)]}]),"T8_FIELD_SHAPE");
         Reject(()=>E([block with{EffectiveFields=[new(30,AreaPresence.Array,AreaValueOrigin.Instance,null,[new(0,[-1])],null)]}]),"T8_UNSIGNED_WORD");
-        Reject(()=>new ResearchEvidence(binding with{Map=2},actor,sectors,[],[]),"T8_MAP");
-        Reject(()=>new ResearchEvidence(binding,actor with{Kind=16},sectors,[],[]),"T8_ACTOR");
-        Reject(()=>new ResearchEvidence(binding with{SelectedDigest="invalid"},actor,sectors,[],[]),"T8_DIGEST_SHAPE");
+        Reject(()=>new ResearchEvidence(binding with{Map=2},actor,S(),[]),"T8_MAP");
+        Reject(()=>new ResearchEvidence(binding,actor with{Kind=16},S(),[]),"T8_ACTOR");
+        Reject(()=>new ResearchEvidence(binding with{SelectedDigest="invalid"},actor,S(),[]),"T8_DIGEST_SHAPE");
         Reject(()=>E([block with{EffectiveFields=[new(18,AreaPresence.Value,AreaValueOrigin.Instance,2147483648L,[],null)]}]),"T8_FLAG_WIDTH");
         var unknownApplicable=Clear(C(81,80)); unknownApplicable[0]=unknownApplicable[0] with {Applicability="Unknown",Disposition=null,Reason="FIXTURE_APPLICABILITY_UNKNOWN"};
         Check(Q(E(rows:unknownApplicable),80,80,81,80,"XPlus").Coverage=="Unknown","T7_APPLICABILITY_UNKNOWN");
@@ -500,13 +550,68 @@ internal static partial class Program
         VerifyFinalInputs([path],[before]); File.WriteAllBytes(path,[1,2,4]);
         Reject(()=>VerifyFinalInputs([path],[before]),"T9_LATE_MUTATION");
         // Retain the owned synthetic artifact as evidence; no cleanup of shared data.
-        Reject(()=>evidence.Assess(new(binding with{Generation=2},C(80,80),C(81,80),"XPlus","CoreWithContextEvidence")),"T9_GENERATION");
-        Reject(()=>evidence.Assess(new(binding with{ActorDigest=sha},C(80,80),C(81,80),"XPlus","CoreWithContextEvidence")),"T9_ACTOR_DIGEST");
+        Reject(()=>evidence.Assess(new(evidence.Binding with{Generation=2},C(80,80),C(81,80),"XPlus","CoreWithContextEvidence")),"T9_GENERATION");
+        Reject(()=>evidence.Assess(new(evidence.Binding with{ActorDigest=sha},C(80,80),C(81,80),"XPlus","CoreWithContextEvidence")),"T9_ACTOR_DIGEST");
         Check(((System.Collections.IList)evidence.Objects).IsReadOnly,"T9_READONLY");
 
+        // Review R1: valid content binding first, then changed evidence with the OLD binding.
+        var selected=S([block]); var clearRows=Clear(C(81,80)); var closedActor=actor with{RegistryClosed=true};
+        var validBinding=Bind(selected,closedActor,clearRows); var historical=new ResearchEvidence(validBinding,closedActor,selected,clearRows);
+        Check(Q(historical,80,80,81,80,"XPlus").Disposition=="Blocked","R1_VALID_CANONICAL_BINDING");
+        var changedMask=clearRows.ToArray(); changedMask[0]=changedMask[0] with{Disposition="Blocked"};
+        Reject(()=>new ResearchEvidence(validBinding,closedActor,selected,changedMask),"R1_STALE_MASK");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor,selected with{Sectors=Frozen(selected.Sectors.Select(s=>s with{Placeholder=s.Placeholder+1}))},clearRows),"R1_STALE_NEIGHBOR");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor,selected with{Objects=[block with{EffectiveFields=[new(18,AreaPresence.Value,AreaValueOrigin.Instance,1024,[],null)]}]},clearRows),"R1_STALE_OCCURRENCE");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor,selected with{Objects=[]},clearRows),"R1_STALE_OCCURRENCE_REMOVAL");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor with{RegistryClosed=false},selected,clearRows),"R1_STALE_REGISTRY");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor with{StateToken="state-2"},selected,clearRows),"R1_STALE_STATE");
+        Reject(()=>new ResearchEvidence(validBinding,closedActor,selected with{AuthorizedScope=selected.AuthorizedScope.Skip(1).ToArray()},clearRows),"R1_STALE_SCOPE");
+        var renewed=E([noBlock],Clear(C(81,80)));
+        Reject(()=>renewed.Assess(new(validBinding,C(80,80),C(81,80),"XPlus","CoreWithContextEvidence")),"R1_OLD_QUERY_NEW_EVIDENCE");
+        Check(Q(historical,80,80,81,80,"XPlus").Disposition=="Blocked" && Q(renewed,80,80,81,80,"XPlus").Disposition=="Open","R1_DETACHED_HISTORY");
+
+        // Review R2: no unlocated record can silently disappear from the tile predicate.
+        foreach(var malformed in new[]{block with{SerializedLocation=null,WorldX=null,WorldY=null,PlacementReady=false,SchemaReady=false,RequiredLayersReady=false,Disposition=AreaDisposition.MissingMandatoryFact},
+            block with{WorldX=null},block with{WorldY=null},block with{SerializedLocation=null},block with{WorldX=-1},block with{WorldY=4294967296L},
+            block with{PlacementReady=false},block with{WorldX=82},block with{Scope=AreaScope.Context},block with{Key=block.Key with{RuntimeMap=2}},
+            block with{Key=block.Key with{Sector=67108866}},block with{Key=block.Key with{SourceSha256=new string('1',64)}},block with{Key=block.Key with{Sector=null}}})
+            Reject(()=>E([malformed],Clear(C(81,80))),"R2_PLACEMENT_SHAPE");
+        var schemaGap=Q(E([O(9,3,90,90) with{SchemaReady=false}],Clear(C(81,80))),80,80,81,80,"XPlus");
+        Check(schemaGap.Coverage=="Unknown" && schemaGap.Disposition is null && schemaGap.Gaps.Single().Code=="OCCURRENCE_SCHEMA_UNREADY","R2_UNREADY_COMPLETENESS");
+        Check(Q(E([block with{RequiredLayersReady=false}],Clear(C(81,80))),80,80,81,80,"XPlus").Disposition=="Blocked","R2_LAYERS_NOT_EXCLUSION");
+        var mobile=block with{Key=block.Key with{Kind=AreaSourceKind.Mobile,Sector=null},SerializedLocation=343597383761};
+        Check(Q(E([mobile],Clear(C(81,80))),80,80,81,80,"XPlus").Disposition=="Blocked","R2_MOBILE_WORLD_PLACEMENT");
+        Reject(()=>E([mobile with{SerializedLocation=343597383762}],Clear(C(81,80))),"R2_MOBILE_LOCATION_MISMATCH");
+        Reject(()=>E([mobile with{Key=mobile.Key with{Sector=67108865}}],Clear(C(81,80))),"R2_MOBILE_SECTOR_OWNERSHIP");
+        Reject(()=>E([mobile with{Scope=AreaScope.Context}],Clear(C(81,80))),"R2_MOBILE_SCOPE_MISMATCH");
+        var mutableSectors=sectors.ToArray(); var mutableRows=Clear(C(81,80)); var mutableObjects=new[]{block};
+        var mutableSelection=S(mutableObjects) with{Sectors=mutableSectors,Objects=mutableObjects};
+        var immutable=new ResearchEvidence(Bind(mutableSelection,closedActor,mutableRows),closedActor,mutableSelection,mutableRows);
+        mutableSectors[0]=Sector(1,1,false); mutableRows[0]=mutableRows[0] with{Disposition="Blocked"}; mutableObjects[0]=noBlock;
+        Check(Q(immutable,80,80,81,80,"XPlus").Disposition=="Blocked" && immutable.Objects.Single().WorldX==81,"R2_OWNED_PLACEMENT_COMPONENT_SECTOR_COPY");
+
+        // Review R3: geometric scope is declared separately, not inferred from availability.
+        foreach(var pair in new[]{(127L,80L,128L,80L,"XPlus",67108866L),(128L,80L,127L,80L,"XMinus",67108865L),
+            (80L,127L,80L,128L,"YPlus",134217729L),(80L,128L,80L,127L,"YMinus",67108865L),
+            (127L,127L,128L,128L,"XPlusYPlus",134217730L),(128L,128L,127L,127L,"XMinusYMinus",67108865L)})
+        {
+            var omitted=Q(E(rows:[],selected:sectors.Where(s=>s.Key.Packed!=pair.Item6)),pair.Item1,pair.Item2,pair.Item3,pair.Item4,pair.Item5);
+            var absent=Q(E(rows:[],selected:sectors.Select(s=>s.Key.Packed==pair.Item6?s with{Present=false}:s)),pair.Item1,pair.Item2,pair.Item3,pair.Item4,pair.Item5);
+            Check(omitted.Coverage=="Unknown" && omitted.Disposition is null && omitted.Readiness=="NOT_READY" && omitted.Gaps.Any(g=>g.Code=="NEIGHBOR_SECTOR_MISSING" && g.Cell==C(pair.Item3,pair.Item4)),"R3_OMITTED_ADMITTED_NEIGHBOR");
+            Check(absent.Coverage=="Unknown" && absent.Disposition is null && absent.Gaps.Select(g=>g.Code).SequenceEqual(omitted.Gaps.Select(g=>g.Code)),"R3_PRESENT_FALSE_EQUIVALENCE");
+            var reverseMissing=Q(E(rows:[],selected:sectors.Where(s=>s.Key.Packed!=pair.Item6)),pair.Item3,pair.Item4,pair.Item1,pair.Item2,
+                pair.Item5=="XPlus"?"XMinus":pair.Item5=="XMinus"?"XPlus":pair.Item5=="YPlus"?"YMinus":pair.Item5=="YMinus"?"YPlus":pair.Item5=="XPlusYPlus"?"XMinusYMinus":"XPlusYPlus");
+            Check(reverseMissing.Coverage=="Unknown" && reverseMissing.Gaps.Any(g=>g.Code=="SOURCE_SECTOR_MISSING"),"R3_OMITTED_SOURCE");
+        }
+        foreach(var outside in new[]{(64L,80L,63L,80L,"XMinus"),(191L,80L,192L,80L,"XPlus"),(80L,64L,80L,63L,"YMinus"),(80L,191L,80L,192L,"YPlus")})
+        {
+            var r=Q(E(rows:[]),outside.Item1,outside.Item2,outside.Item3,outside.Item4,outside.Item5);
+            Check(r.Coverage=="Unsupported" && r.Disposition is null && r.Reason=="SCOPE_UNSUPPORTED","R3_TRUE_OUTSIDE");
+        }
+
         // T10: Python hashlib/json literals, independently computed before these checks.
-        const string actorPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"ACTOR_CONTEXT\",1,\"sub_425760\",\"WORLD_CELL_CENTERS_V1\",\"HUMAN_FIXED_DIAGNOSTIC\",15,536870912,0,true,\"DeclaredDiagnosticOverlay\",\"ProjectDeclared\",\"fixture\",\"NONEDITOR_EXACT_TILE\",\"state-1\"]";
-        Check(Canonical(ActorArray(actor))==actorPayload && CanonicalDigest(ActorArray(actor))=="03c335f03e8ead934048fdfbdb6ca3c825cfc6c5589dfe0a207bfca406e29dfa","T10_ACTOR_LITERAL");
+        const string actorPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"ACTOR_CONTEXT\",1,\"sub_425760\",\"WORLD_CELL_CENTERS_V1\",\"HUMAN_FIXED_DIAGNOSTIC\",15,536870912,0,true,\"DeclaredDiagnosticOverlay\",\"ProjectDeclared\",\"fixture\",\"NONEDITOR_EXACT_TILE\",\"state-1\",false]";
+        Check(Canonical(ActorArray(actor))==actorPayload && CanonicalDigest(ActorArray(actor))=="9dfa1a228beb1f04a35bf03da67f70e135a2ed0365f57517a8b8eeaeab68cce7","T10_ACTOR_LITERAL");
         Check(Canonical(FieldArray(new(18,AreaPresence.Value,AreaValueOrigin.Instance,0,[],null)))=="[18,\"Value\",\"Instance\",0,[],null]" &&
             CanonicalDigest(FieldArray(new(18,AreaPresence.Value,AreaValueOrigin.Instance,0,[],null)))=="df80171b2be70e88bf4c1446cb75eaa8ee9bb47dff745bd12fae482196e91f77","T10_ZERO_LITERAL");
         var sparse=new AreaFieldValue(30,AreaPresence.Array,AreaValueOrigin.Prototype,null,[new(9,[1,2]),new(2,[0,4294967295])],null);
@@ -514,9 +619,9 @@ internal static partial class Program
         Check(CanonicalDigest(ActorArray(actor with{StateToken="state-2"}))!=binding.ActorDigest,"T10_STATE_INVALIDATION");
         Reject(()=>Canonical(new object?[]{1.0}),"T10_FLOAT"); Reject(()=>Canonical("\n"),"T10_NONASCII");
         object?[] selectedFixture=["AREA_TRAVERSAL_RESEARCH_V1","SELECTED_EVIDENCE",1,"S1_NORMAL_GROUND_FILE_FRONTIER_V1","a7ff41b300ef712f0e7d088183a3d08957110cdd","Structural",1,1,"fixture",
-            Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),new int[15],Array.Empty<object?>(),null];
-        const string selectedPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"SELECTED_EVIDENCE\",1,\"S1_NORMAL_GROUND_FILE_FRONTIER_V1\",\"a7ff41b300ef712f0e7d088183a3d08957110cdd\",\"Structural\",1,1,\"fixture\",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null]";
-        Check(Canonical(selectedFixture)==selectedPayload && CanonicalDigest(selectedFixture)=="9f4ed20c1709f1b4c72d7e6eeada18aea9bcfe2726a1abc9b3c64588fd69b9ea","T10_SELECTED_LITERAL");
+            Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),Array.Empty<object?>(),new int[15],Array.Empty<object?>(),null,Array.Empty<object?>()];
+        const string selectedPayload="[\"AREA_TRAVERSAL_RESEARCH_V1\",\"SELECTED_EVIDENCE\",1,\"S1_NORMAL_GROUND_FILE_FRONTIER_V1\",\"a7ff41b300ef712f0e7d088183a3d08957110cdd\",\"Structural\",1,1,\"fixture\",[],[],[],[],[],[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],[],null,[]]";
+        Check(Canonical(selectedFixture)==selectedPayload && CanonicalDigest(selectedFixture)=="5491cd236bfd9a2e8424643da97f4928e30cce2d90ee1bb027bf4b31bfee5ade","T10_SELECTED_LITERAL");
         AreaTraversalOwnerOracles(Check, Reject);
         Console.WriteLine($"area-traversal-self-test: PASS ({checks} independent research assertions; T1-T10, structural only; production owner/framing limits separately exercised by root Area tests)");
     }
@@ -576,11 +681,11 @@ internal static partial class Program
                 rows.Add(CopyComponent(cell,"Mask",c.SerializedBlockMask,t.RawArt)); rows.Add(CopyComponent(cell,"Facade",c.FacadeWalkabilityBit,t.RawArt)); rows.Add(CopyComponent(cell,"Name",c.TileNameRule,t.RawArt));
             }
         }
-        var actor=DeclaredAreaActor(snapshot.Profile); var binding=new ResearchBinding(AreaTraversalSchema,AreaTraversalRule,AreaTraversalPin,"Structural",1,snapshot.Profile,CanonicalDigest(SelectedArray(snapshot,rows,null,"Structural")),CanonicalDigest(ActorArray(actor)),1);
-        check(binding.SelectedDigest==CanonicalDigest(SelectedArray(snapshot,rows.AsEnumerable().Reverse().ToArray(),null,"Structural")),"T10_SELECTED_COMPONENT_ORDER");
+        var actor=DeclaredAreaActor(snapshot.Profile) with{RegistryClosed=true}; var selection=Selection(snapshot); var binding=Bind(selection,actor,rows);
+        check(binding.SelectedDigest==CanonicalDigest(SelectedArray(selection,rows.AsEnumerable().Reverse().ToArray(),null,"Structural")),"T10_SELECTED_COMPONENT_ORDER");
         var changedRows=rows.ToArray(); changedRows[0]=changedRows[0] with{Reason="NEW_NEIGHBOR_STATE"};
-        check(binding.SelectedDigest!=CanonicalDigest(SelectedArray(snapshot,changedRows,null,"Structural")),"T9_NEIGHBOR_STATE_INVALIDATION");
-        var evidence=new ResearchEvidence(binding,actor,snapshot.Sectors,snapshot.Objects,rows,true);
+        reject(()=>new ResearchEvidence(binding,actor,selection,changedRows),"T9_NEIGHBOR_STATE_INVALIDATION");
+        var evidence=new ResearchEvidence(binding,actor,selection,rows);
         var query=new ResearchQuery(binding,new(1,127,64),new(1,128,64),"XPlus","CoreWithContextEvidence");
         var result=evidence.Assess(query); owner.Dispose(); resource.Dispose(); module.Dispose();
         check(result.Coverage=="Unknown" && result.Disposition is null && result.Gaps.Any(g=>g.Code=="BLOCK_MASK_ABSENT"),"T7_ACTUAL_COMPONENT_GAP");
