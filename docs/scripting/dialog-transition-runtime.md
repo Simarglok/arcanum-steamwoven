@@ -18,8 +18,9 @@ unverified.
 
 The [NPC invocation/entry contract](npc-dialog-entry-contract.md) and
 [Crash Site evidence](../research/crash-site-npc-dialog-evidence.md) describe a
-separate, proposed bridge. The selected Virgil entry is not supported by this
-runtime: it requires GF/IN/RE and has six structural immediate replies. Research
+separate [bounded query-only entry bridge](npc-dialog-entry-runtime.md). It computes
+a checked NPC entry without calling this runtime. The selected Virgil entry is not
+supported by this runtime: it requires GF/IN/RE and has six structural immediate replies. Research
 does not truncate the group or skip those effects to claim compatibility.
 
 ```csharp
