@@ -1,5 +1,9 @@
 # Complete Crash Site exterior data loader
 
+[Whole-exterior traversal research](crash-site-area-traversal-contract.md)
+consumes this immutable FILE-effective snapshot; visual completeness does not
+close post-load registry or actor state and grants no movement permission.
+
 ## Scope and evidence boundary
 
 `Arcanum.Data.Area` is a synchronous, Godot-independent, read-only loader for the

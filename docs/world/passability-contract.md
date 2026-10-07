@@ -1,5 +1,8 @@
 # Proposed selected-sector passability contract
 
+See [whole-exterior adjacent-step research](crash-site-area-traversal-contract.md)
+for eight-direction/source/state frontiers, not a universal occupancy verdict.
+
 ## Status
 
 This is an evidence-bounded proposal for a future consumer of [selected-sector passability evidence](../research/sector-passability-evidence.md). It is **not implemented** as a production collision grid, navigation API, path finder, actor controller, renderer overlay, or gameplay rule.

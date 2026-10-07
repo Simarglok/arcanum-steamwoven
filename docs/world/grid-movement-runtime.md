@@ -1,5 +1,8 @@
 # Headless grid movement runtime
 
+The [whole-exterior research proposal](crash-site-area-traversal-contract.md)
+does not change this runtime's frozen segment, commit or return behavior.
+
 WORLD003's host now maps eight screen sectors to existing semantic map neighbors
 under a separate bounded-adjacent Data policy. The Simulation contract below is
 unchanged: one frozen segment, atomic diagonal destination commit, fixed diagnostic

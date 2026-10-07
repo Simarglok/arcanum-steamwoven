@@ -50,6 +50,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.FirstOrDefault() == "--area-traversal-research") return ProbeAreaTraversal(args[1..]);
+            if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
             if (args.SequenceEqual(["--area-self-test"])) { AreaSelfTest(); return 0; }
             if (args.SequenceEqual(["--self-test"]))
@@ -72,7 +74,9 @@ internal static partial class Program
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(args.Contains("--cardinal-traversal")
+            Console.Error.WriteLine(args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: AREA_TRAVERSAL_INVOCATION_FAILED"
+                : args.Contains("--cardinal-traversal")
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: CARDINAL_INVOCATION_FAILED"
                 : $"crash-site-probe: FAIL: {exception.GetType().Name}: {exception.Message}");
             return 1;

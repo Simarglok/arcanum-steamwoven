@@ -1,5 +1,8 @@
 # Bounded cardinal traversal evidence contract (ARC-RES-014)
 
+ARC-RES-017's [whole-exterior research proposal](crash-site-area-traversal-contract.md)
+retains this frozen profile separately; it does not widen cardinal admission.
+
 ## WORLD003 opt-in amendment (historical cardinal contract retained)
 
 The research contract below remains the `CardinalOnly` default and historical
