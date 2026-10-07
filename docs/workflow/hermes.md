@@ -16,6 +16,8 @@ Attach `universal-development` explicitly to each runnable task/continuation. A 
 
 Use a Kanban card with: ID/title, context, goal, allowed scope, sources and provenance, dependencies, acceptance criteria, checks, documentation deliverables and publication authority. Record base/head/workspace and reviewer findings at handoff.
 
+For every new board card, follow the [canonical task naming policy](task-naming.md) for the human title, machine-readable body fields, root ownership and idempotency key. Keep native task IDs stable and distinguish root ownership from dependency parents.
+
 Continue from current accepted board work and the [merged component catalogue](../project/status.md). Do not queue the entire product vision, launch workers, or populate tasks merely as a side effect of project setup.
 
 ## Local references

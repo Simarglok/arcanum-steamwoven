@@ -3,6 +3,7 @@
 ## Task authority
 
 - Hermes Kanban board `arcanum-steamwoven` is authoritative for board-managed tasks and acceptance criteria. An explicit user instruction may also authorize bounded direct Codex work; it does not authorize creating or dispatching board tasks. Obsidian and repository roadmaps are knowledge/reference material, not task dispatch authority.
+- For new board cards, follow the canonical [task naming policy](docs/workflow/task-naming.md) for titles, body fields, root ownership and idempotency. Native task IDs and dependency edges keep their separate meanings.
 - Confirm task ID, scope, assigned workspace and existing changes before editing. Work in the task's isolated checkout and preserve unrelated work.
 - Read `docs/architecture/decisions.md`, `docs/research/method.md` and the relevant task references. Do not expand a bounded task into a full engine.
 - Project development currently runs natively on macOS. Do not install Windows, run legacy executables, patch the installed game, or change shared Hermes profiles/settings unless the task explicitly covers it.
