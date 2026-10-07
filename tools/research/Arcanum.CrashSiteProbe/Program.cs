@@ -50,6 +50,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
+            if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
             if (args.SequenceEqual(["--area-self-test"])) { AreaSelfTest(); return 0; }
             if (args.SequenceEqual(["--self-test"]))
@@ -72,7 +74,9 @@ internal static partial class Program
         }
         catch (Exception exception)
         {
-            Console.Error.WriteLine(args.Contains("--cardinal-traversal")
+            Console.Error.WriteLine(args.Any(arg => arg.StartsWith("--time-lighting", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {TimeLightingProbe.Diagnostic(exception)}"
+                : args.Contains("--cardinal-traversal")
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: CARDINAL_INVOCATION_FAILED"
                 : $"crash-site-probe: FAIL: {exception.GetType().Name}: {exception.Message}");
             return 1;
@@ -810,10 +814,12 @@ internal static partial class Program
         public ObjectId OwnId { get; init; }
         public IReadOnlyDictionary<int, int> NumericFields { get; init; } = new Dictionary<int, int>();
         public IReadOnlyList<ArraySpan> Arrays { get; init; } = [];
+        public IReadOnlyList<int> OverlayOverrides { get; init; } = [];
     }
     private sealed record ArraySpan(int Field, int Start, int End, int Size, int Count, int WordStart, int Words);
     private sealed record PrototypeInfo(ObjectId Id, int Type, int CurrentAid, uint Flags)
     {
+        public IReadOnlyList<ArraySpan> Arrays { get; init; } = [];
         public IReadOnlyList<ScriptAttachment> Scripts { get; init; } = [];
         public IReadOnlyDictionary<int, int> NumericFields { get; init; } = new Dictionary<int, int>();
     }
@@ -1133,7 +1139,7 @@ internal static partial class Program
                 else Skip(ref cursor, fields[field], requireNul: true, arrays, field);
             }
             if (!cursor.AtEnd) throw new InvalidDataException("Prototype entry contains trailing bytes.");
-            return new PrototypeInfo(id, type, currentAid, flags) { NumericFields = numeric, Scripts = DecodeScripts(bytes, arrays) };
+            return new PrototypeInfo(id, type, currentAid, flags) { NumericFields = numeric, Scripts = DecodeScripts(bytes, arrays), Arrays = arrays };
         }
 
         private static InstanceInfo ParseInstance(ref Cursor cursor)
@@ -1174,7 +1180,7 @@ internal static partial class Program
                     catch (InvalidDataException error) { throw new InvalidDataException($"field={field} offset={cursor.Offset} {error.Message}"); }
                 }
             }
-            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags) { OwnId = ownId, NumericFields = numeric, Arrays = arrays, ScriptsOverridden = set[31] };
+            return new InstanceInfo(-1, prototype, type, currentAid, location, offsetX, offsetY, flags) { OwnId = ownId, NumericFields = numeric, Arrays = arrays, ScriptsOverridden = set[31], OverlayOverrides = Array.AsReadOnly(Enumerable.Range(15, 3).Where(i => set[i]).ToArray()) };
         }
 
         private static bool[] ReadMasks(ref Cursor cursor, int type, bool prototype, out int popcount)

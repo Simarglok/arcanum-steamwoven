@@ -4,6 +4,13 @@
 
 ## Как читать выводы
 
+**ARC-RES-018 — RESEARCH:** [clock/light контракт](../world/time-lighting-contract.md)
+связывает numeric map default/sector sentinel с активным hour scheme, не объявляя
+отдельную ambient policy для каждого visible neighbour. Bounded original selection
+и synthetic override/coverage проверки не реализуют world streaming/transfer;
+stationary coordinates и masks остаются NOT_READY. Legacy/HD shared state —
+предложение; production clock и original-runtime parity не подтверждены.
+
 ARC-DATA-009 добавляет [bounded complete-area Data API](../world/crash-site-area-loader.md):
 survey 621 → 9 core sectors и явный context, immutable world/source keys, 36,864
 core terrain, 426 static и 88 mobile bodies, reconcile 7,399 aggregate records.

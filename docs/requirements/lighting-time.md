@@ -8,6 +8,16 @@
 
 ## Требования
 
+**ARC-RES-018 — RESEARCH (2026-10-07):** [канонический clock/light контракт](../world/time-lighting-contract.md)
+трассирует raw clock, относительное hour scheduling, numeric map/sector schemes,
+indoor/outdoor channels и stationary/primary/overlay provenance; bounded inspector
+и независимые synthetic/original-data проверки отделены от production coverage.
+В выбранном exterior нет stationary records, но есть non-invalid object-light
+descriptions; это не доказывает их активность. Календарные quirks, gaps/reload,
+coordinate/mask readiness и layer-specific tint не заменены guessed defaults.
+FR-LIGHT остаются предложенными: production clock/scheduler/renderer и original
+executable/gameplay/visual parity **не реализованы / NOT_VERIFIED** этим research.
+
 <a id="fr-light-001"></a>
 
 ### FR-LIGHT-001 — единые игровые часы и граница дня/ночи
