@@ -17,8 +17,19 @@
 [исследование одного NPC Crash Site](../research/crash-site-npc-dialog-evidence.md)
 связывает исходный instance/prototype/event с условной точкой SAP_DIALOG;
 [контракт вызова](../scripting/npc-dialog-entry-contract.md) отделяет этот bridge
-от one-edge runtime, будущих state adapters, traversal/text и UI. Это не новая
-реализация, не запуск оригинальной игры и не доказательство automatic first speech.
+от one-edge runtime, будущих state adapters, traversal/text и UI.
+ARC-SCRIPT-002 реализует [bounded query-only выбор entry](../scripting/npc-dialog-entry-runtime.md):
+actual loaded SAP attachment, explicit authenticated resources, versioned queries
+и проверенный NPC DLG node. Это не полный разговор, не GF/IN/RE effects/state
+services, не запуск оригинальной игры и не доказательство automatic first speech.
+
+Уточнение покрытия ARC-SCRIPT-002 (остальная таблица ниже сохраняет исторический срез):
+
+| ID | Реализованное дополнение | Проверка / сохраняющаяся граница |
+|---|---|---|
+| FR-DIALOG-001 | Вычисленный NPC entry из loaded attachment/SCR, без caller-selected DLG node | Production synthetic и opt-in original; lifecycle, запуск разговора и UI отсутствуют |
+| FR-SCRIPT-001 | Типизированный контекст SAP_DIALOG и whole-array effective attachment | Нет автоматического world-event dispatcher или writeback |
+| FR-SCRIPT-002 | Bounded TRUE/LOCAL_FLAG/FOLLOWING/JILTED и advance/GOTO/DIALOG entry slice | Versioned query-only; неизвестные branches — frontier, общей VM и state services нет |
 
 <a id="fr-dialog-001"></a>
 

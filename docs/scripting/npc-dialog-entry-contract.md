@@ -2,10 +2,12 @@
 
 ## Status
 
-This is an engine-independent proposed bridge contract grounded in the
+This is an engine-independent bridge contract grounded in the
 [Crash Site Virgil evidence](../research/crash-site-npc-dialog-evidence.md).
-It is not a new production API, SCR VM, NPC loader, dialogue UI or gameplay parity
-claim. The existing [one-edge runtime](dialog-transition-runtime.md) remains
+The bounded production [entry runtime](npc-dialog-entry-runtime.md) implements
+attachment/resource binding and query-only entry selection, not a general SCR VM,
+NPC lifecycle, dialogue UI or gameplay parity claim. The existing
+[one-edge runtime](dialog-transition-runtime.md) remains
 unchanged. Its LF/QU/RU ports and caller-selected NPC start do not implement this
 whole original-data chain. No future implementation tasks are automatically authorized.
 
@@ -68,8 +70,8 @@ frontier with no replacement no-op.
 
 | Capability | State owner / required contract | Current implementation |
 |---|---|---|
-| Following and jilted queries | World companion relationships; NPC and PC roles explicit | Missing |
-| SCR-local flag reads/control flow/callback | Effective event attachment; source/version and SCR-line context | Missing (DLG LF alone is not dispatch) |
+| Following and jilted queries | World companion relationships; NPC and PC roles explicit | Typed version-bound entry ports implemented; actual state services missing |
+| SCR-local flag reads/control flow/callback | Effective event attachment; source/version and SCR-line context | Bounded query-only entry slice implemented; callback/writeback missing (DLG LF alone is not dispatch) |
 | Global flag writes | Shared world story state; typed identity/boolean, order/version | Missing |
 | Inventory transfer | NPC/substitute inventory and PC; direction, lookup, transfer/drop failure policy | Missing |
 | Reaction eligibility/set | NPC attitude toward PC; threshold sign and absolute/relative/set representation distinct | Missing |
