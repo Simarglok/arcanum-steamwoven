@@ -12,6 +12,12 @@ Research/Proposed, NOT_READY, без scene collision или door/window runtime.
 
 ## Требования
 
+**ARC-RES-018 — RESEARCH:** [clock/light контракт](../world/time-lighting-contract.md)
+отделяет tile/facade/roof palette paths, emitter tint sources и object/overlay
+описания от активного света и submitted pixels. Нулевой stationary count не
+означает отсутствия object lights; original masks/coordinate/state binding остаются
+NOT_READY. Это не реализация FR-SCENE, lighting renderer или cave transition.
+
 ARC-DATA-009: [complete exterior data owner](../world/crash-site-area-loader.md)
 даёт отдельные terrain/sector/object metadata, все 426 core statics и 88 mobile
 body references с explicit dispositions, presence/default provenance и

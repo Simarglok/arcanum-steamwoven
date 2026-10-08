@@ -10,6 +10,12 @@ NOT_READY; не реализация route, portal/window runtime или рас�
 
 ## Требования
 
+**ARC-RES-018 — RESEARCH:** [clock/light контракт](../world/time-lighting-contract.md)
+разделяет original raw/game/animation/real clocks и exact movement `SimulationTime`.
+Pause/admission, relative ambient scheduling и уже due callbacks — разные seams.
+Rest/combat/travel/save restoration остаются зависимостями будущей ratified policy,
+не production clock/scheduler или реализованными FR-NAV/FR-RUNTIME этим исследованием.
+
 <a id="fr-nav-001"></a>
 
 ### FR-NAV-001 — Клик задаёт цель пути, а прямой ввод задаёт направление
