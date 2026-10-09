@@ -11,6 +11,13 @@ admits LF/QU/RU only and rejects a sixth structural response before any ports.
 See the [invocation contract](npc-dialog-entry-contract.md) for upstream identity
 and event admission; no dirty rendering/input candidate is a source for this work.
 
+ARC-SCRIPT-003 separately accepts and implements only the bounded
+[versioned global-flag owner and standalone typed GF adapters](global-flag-state-runtime.md).
+Missing admitted bootstrap bits stay Unknown; equal known writes retain a
+successful no-change receipt without a revision bump. This does not adopt the
+remaining proposals below or wire GF into the current DLG parser/session: GF
+remains Unsupported there, and the complete Virgil trace is not implemented.
+
 Labels used throughout:
 
 - **S — Source-confirmed:** inspected CE source at the exact revision below;
