@@ -1,12 +1,29 @@
 # Game clock policy and boundary contract
 
-Status: **RESEARCH**, ARC-RES-020. Recommendation **Proposed**, not implemented
-production behavior or owner-ratified gameplay. This consolidates the clock part
+Status: **RESEARCH**, ARC-RES-020. Recommendation **Proposed** beyond the bounded
+ARC-WORLD-004 subset described below, not full owner-ratified gameplay. This consolidates the clock part
 of [RES-018](time-lighting-contract.md); it does not replace its lighting contract.
 The shapes below are document-only, not existing public APIs. No running clock,
 scheduler, save parser, ambient renderer or Legacy/HD integration is added.
 Original executable, multiplayer, gameplay, night and visual parity remain
 **NOT_VERIFIED**; those observations are not required for this bounded research.
+
+### Bounded implementation boundary — ARC-WORLD-004
+
+The accepted task implements only named normalized startup/calendar P1 and
+bootstrap/query/ordinary AdvanceGameTime/SetPaused from P2 in the existing
+Godot-free Simulation assembly; see [runtime API and tests](game-clock-runtime.md).
+It adds opaque immutable per-owner reference identity to the complete token,
+fixes generation at1, and specifies serialized calls and idempotent disposal.
+Public long Year overflow is unreachable within supported int startup/long time;
+the same production derivation has a separate internal arithmetic capacity probe.
+This does not promote the remaining proposals or these research shapes to APIs:
+raw/source admission/menu behavior, JumpTo, Restore, persistence/migration,
+scheduler, P3 consumer, lighting/Legacy-HD, Movement conversion and host/UI
+integration remain Research/Proposed or separately scoped Remaining work.
+Fingerprints remain declarations, not provenance attestations; no original parity
+or full gameplay acceptance is claimed. The worksheet remains table conformance,
+not runtime proof. Exact-head review/publication/verified merge are separate gates.
 
 ## Evidence classes and provenance
 
