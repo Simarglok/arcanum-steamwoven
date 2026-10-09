@@ -147,6 +147,11 @@ class ProbeTests(unittest.TestCase):
         bad_loop = bytes(28) + struct.pack('<II', 1, 0) + struct.pack('<6I', 0, 0, 0, 4, 0, 0)
         self.reject('WavLoopBounds', lambda: p.wav_header(wave(chunk(b'smpl', bad_loop))))
         self.reject('WavLoopLimit', lambda: p.wav_header(wave(chunk(b'smpl', bytes(28) + struct.pack('<II', 17, 0)))))
+        # Repeated smpl chunks cannot each spend the entire aggregate loop budget.
+        sixteen_loops = bytes(28) + struct.pack('<II', 16, 0) + struct.pack('<6I', 0, 0, 0, 3, 0, 0) * 16
+        one_loop = bytes(28) + struct.pack('<II', 1, 0) + struct.pack('<6I', 0, 0, 0, 3, 0, 0)
+        self.assertEqual(len(p.wav_header(wave(chunk(b'smpl', sixteen_loops)))['smpl_loops']), 16)
+        self.reject('WavLoopLimit', lambda: p.wav_header(wave(chunk(b'smpl', sixteen_loops) + chunk(b'smpl', one_loop))))
         self.reject('WavChunkLimit', lambda: p.wav_header(wave(chunk(b'JUNK', b'') * 127)))
         body = b'WAVE' + b'JUNK' + struct.pack('<I', 0xffffffff)
         self.reject('WavChunkBounds', lambda: p.wav_header(b'RIFF' + struct.pack('<I', len(body)) + body))

@@ -216,7 +216,7 @@ def wav_header(data: bytes) -> dict:
         elif tag == b'smpl':
             require(size >= 36, 'WavSmplHeader')
             count = struct.unpack_from('<I', data, start+28)[0]
-            require(count <= 16 and 36 + 24 * count <= size, 'WavLoopLimit')
+            require(len(loops) + count <= 16 and 36 + 24 * count <= size, 'WavLoopLimit')
             for i in range(count):
                 _, kind, first, last, fraction, repeat = struct.unpack_from('<6I', data, start+36+24*i)
                 loops.append({'type': kind, 'start': first, 'end_inclusive': last, 'fraction': fraction, 'repeat': repeat})

@@ -369,6 +369,7 @@ local links, privacy and the full scoped diff are audited before handoff.
 | F03 | original module fallback | User table represented, no useful original user audio inferred from dummy mapping; synthetic fallback oracle O01 provides independent behavior evidence. Closed as explicit scope/Unknown, not fabricated original playback. |
 | F04 | environment inline-script denial | Runtime rejected shell `python -c`; used permitted task-owned script files without credentials/profile changes. Closed infrastructure alternative; not a substantive review correction. |
 | F05 | bounded MES identity preservation / O01 negative boundary | Self-audit found blanket comment removal could rewrite comment-like bytes inside values. Byte scanner now strips comments only outside fields; literal value preservation and unterminated/nested-brace rejection are regression-tested. Closed without normalizing original identifiers. |
+| F06 | WAV aggregate loop budget / O05 boundary | Final self-review found repeated `smpl` chunks could each spend the16-loop limit. Enforce16 across the complete WAV; literal16-loop acceptance and17-loop split-chunk rejection regression added. Closed after full checks rerun. |
 | U01 | CE combined flags, bad values, pending restore, zero-sector, listener callers | Explicit Source anomalies/Unknown above; proposed strict subset differs intentionally, not retail parity. |
 | U02 | all decoders, platforms, devices, catalog and retail behavior | NOT_VERIFIED and outside accepted research gates; no inferred pass from source, header or exit0. |
 
