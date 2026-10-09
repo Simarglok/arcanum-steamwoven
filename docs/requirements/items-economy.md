@@ -1,5 +1,7 @@
 # Предметы и экономика — функциональные требования
 
+**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного CE-исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+
 **Срез исследования:** 2026-10-02. **Объём:** предметы как принадлежащие актёрам или контейнерам объекты, инвентарь, экипировка, переносимые ресурсы, использование и состояние предметов, written objects, торговля, кража, ловушки-устройства и технологическая сборка. Это доменный раздел полного каталога, а не аудит всех систем игры.
 
 **Границы домена.** Здесь фиксируются предметные последствия и связи между подсистемами. Формулы характеристик, навыков, aptitude и обучения относятся к [персонажу и навыкам](characters-skills.md); расчёты урона, расход боеприпасов при атаке, spell effects и боевые действия — к [бою, магии и технологиям](combat-magic-tech.md); реакция NPC, фракции и социальные последствия — к [истории и социальным системам](story-social-ai.md). Требования ниже ссылаются на эти домены там, где предметная операция от них зависит, не дублируя их формулы.
@@ -20,7 +22,7 @@
 
 **Зависимости и сценарии:** объектная модель, контейнеры, map placement, проверки массы/места и скриптовые hooks. На синтетическом инвентаре перебросить предмет между персонажами, в контейнер, в мир и обратно; заполнить сетку; проверить, что отказ сохраняет исходного владельца, а успешная операция оставляет ровно одну запись.
 
-**Steamwoven:** runtime-поведение отсутствует; см. [текущий срез и доказательства покрытия](#текущее-покрытие-steamwoven). **Неизвестно:** оригинальные правила блокировки, UI-перетаскивания, multiplayer authority и полный набор `SAP_*` ограничений требуют отдельной проверки.
+**Steamwoven:** runtime владения/transfer отсутствует; Area сохраняет bounded item/container identities и insertion disposition. Negative IN исследован как отдельный source/proposal контракт, не production service. См. [покрытие](#текущее-покрытие-steamwoven). **Неизвестно:** оригинальные правила блокировки, UI-перетаскивания, multiplayer authority и полный набор `SAP_*` ограничений требуют отдельной проверки.
 
 <a id="fr-item-002"></a>
 
@@ -92,7 +94,7 @@
 
 **Наблюдение CE:** `item_is_identified` учитывает magic/tech complexity и флаг `OIF_IDENTIFIED`; `object_examine` читает отдельный неизвестный item description до identification. `intgame` отображает `item_effect` и статистику weapon/armor с ограничением неизвестных модификаторов; `item_perform_identify_service` ставит флаг и переводит деньги. `description.c`, `item_effect.c` и `oname.c` предоставляют строки/внутренние имена из message resources; полного caller chain для внутреннего `o_name_get` здесь не установлено. [Идентификация](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2285-L2325), [неизвестное имя в examine](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3933-L3992), [осмотр item effects и quantity](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L6995-L7110), [identify service](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4104-L4127), [string providers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item_effect.c#L31-L130), [internal object names](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/oname.c#L31-L47).
 
-**Зависимости и сценарии:** item resources, identification service and trade valuation. Для синтетического magical item сравнить unknown/identified name, свойства до/после, стоимость услуги и баланс денег. **Steamwoven:** display and identification states absent; parser skips item-specific fields, см. [покрытие](#текущее-покрытие-steamwoven). Не загружались и не цитируются исходные игровые строки; **неизвестно:** полнота состояний скрытия и точная оригинальная локализация.
+**Зависимости и сценарии:** item resources, identification service and trade valuation. Для синтетического magical item сравнить unknown/identified name, свойства до/после, стоимость услуги и баланс денег. **Steamwoven:** идентификация/осмотр/UI и original text presentation отсутствуют. Area wire fields/appearance identity не устанавливают item display name/valuation semantics. См. [покрытие](#текущее-покрытие-steamwoven). **неизвестно:** полнота состояний скрытия и точная оригинальная локализация.
 
 <a id="fr-item-009"></a>
 
@@ -206,38 +208,33 @@
 
 ## Текущее покрытие Steamwoven
 
-Срез исходников: [`b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`](https://github.com/Simarglok/arcanum-steamwoven/tree/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae). В текущем репозитории нет item/inventory/equipment/economy runtime в `Arcanum.Simulation`, `Arcanum.Presentation` или Godot scene; поиск по `src`, `tests` и документации нашёл лишь статическое чтение объектов и исключение inventory-only записей из некоторых world queries. Это не доказательство, что item gameplay отсутствует в оригинале.
+[Complete exterior Area API](../world/crash-site-area-loader.md) читает static/mobile/prototype fields, object identity, item/container body appearance и отдельные insertion-refused dispositions. Это data-layer вклад в FR-ITEM-001 и визуальный/identity контракт, а не игровой inventory owner. Сохранение wire fields и распознавание типа не устанавливают семантику веса, stacks, экипировки, цен, ремонта или crafting; по этим предметным значениям coverage ниже — «Нет».
 
-| Измерение | Текущее свидетельство на pinned HEAD | Покрытие требований |
-| --- | --- | --- |
-| Данные | `StaticObjectLoader` объявляет wire descriptors для item/weapon/ammo/armor/gold/key-ring/written; однако в inspected static-object path `ResolveFields` сохраняет art/flags/location только для scenery type `3`, а прочие типы помечает `UnsupportedType`. | **Частично** лишь framing/shape некоторых сериализованных полей; не предметные записи/значения. [Wire descriptors](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L32-L48), [type-specific field mapping](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L632-L651), [resolver boundary](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L383-L407), [record model](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectModels.cs#L98-L132). |
-| Поведение | В текущих `Simulation` source files реализован только bounded movement domain; item ownership, stacking, use, effects, trade, stock and crafting отсутствуют. | **Нет** по всем FR-ITEM-* runtime rules. [Simulation runtime sample](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Simulation/Movement/MovementRuntime.cs#L1-L25). |
-| Интеграция | Выбранный static scenery viewer и world movement не связаны с actor inventory/equipment. Ограниченный loader — диагностика static sector records. | **Нет** item gameplay integration. См. [bounded static-object API](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs#L50-L58) и [renderer scope](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111). |
-| Проверка | В текущем `tests` tree есть reader/framing, static-object, dialog и movement tests; нет item inventory/economy runtime suite. Existing successful viewer/parser checks do not verify game item semantics. | **Нет** для предметных behavior gates; новое тестирование не запускалось в этом исследовании. |
+[RES-019 dialog state](../scripting/dialog-state-contract.md) и [RES-021 negative IN](../scripting/negative-inventory-transfer-contract.md) описывают источники и будущие порты/сценарии. Production inventory/IN transfer, callbacks, parent mutation, quantity и recovery не реализованы. GF owner к инвентарю отношения не имеет. Ни research self-tests, ни Area body/frame checks не считаются выполнением передачи предмета.
 
 ## Сводная матрица покрытия Steamwoven
 
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
-| FR-ITEM-001 | Частично: wire shape некоторых static object types, записи unsupported | Нет: ownership/transfer runtime отсутствует | Нет: нет actor inventory | Нет: item cases не проверялись |
-| FR-ITEM-002 | Частично: ограниченные static descriptors, без semantic weights | Нет: carry/encumbrance rules отсутствуют | Нет: нет inventory-to-character link | Нет: weight cases отсутствуют |
-| FR-ITEM-003 | Частично: type descriptors, без stack records | Нет: merge/split runtime отсутствует | Нет: нет stack ownership path | Нет: stack suite отсутствует |
-| FR-ITEM-004 | Частично: key/ring shapes only | Нет: key matching/access rules отсутствуют | Нет: нет locks/inventory actions | Нет: unlock cases отсутствуют |
-| FR-ITEM-005 | Частично: item type shapes only | Нет: equipment slot rules отсутствуют | Нет: нет paperdoll/runtime actor | Нет: equip cases отсутствуют |
-| FR-ITEM-006 | Частично: weapon/ammo/armor descriptors only | Нет: pools/eligibility absent | Нет: no combat/equipment bridge | Нет: ammo cases absent |
-| FR-ITEM-007 | Частично: no carried-light semantics | Нет: item effect runtime absent | Нет: no item/world lighting bridge | Нет: equipment light cases absent |
-| FR-ITEM-008 | Частично: no item text/ID values | Нет: identify/valuation absent | Нет: no inspect UI | Нет: identification cases absent |
-| FR-ITEM-009 | Частично: no usable item data | Нет: consumable/charge rules absent | Нет: no item-action integration | Нет: use outcome cases absent |
-| FR-ITEM-010 | Частично: written type shapes only | Нет: no books/read state | Нет: no written-object UI | Нет: reading cases absent |
-| FR-ITEM-011 | Частично: no durability values | Нет: damage/repair state absent | Нет: no repair/equipment bridge | Нет: repair cases absent |
-| FR-ITEM-012 | Частично: no world item lifetime values | Нет: decay/despawn rules absent | Нет: no persistent drops | Нет: lifetime cases absent |
-| FR-ITEM-013 | Частично: no price/shop records | Нет: barter/pricing absent | Нет: no merchant UI/runtime | Нет: purchase cases absent |
-| FR-ITEM-014 | Частично: no stock definitions | Нет: restock rules absent | Нет: no shop refresh lifecycle | Нет: stock cases absent |
-| FR-ITEM-015 | Частично: item data shapes only | Нет: steal/plant rules absent | Нет: no actor inventory or detection bridge | Нет: theft cases absent |
-| FR-ITEM-016 | Частично: no trap item semantics | Нет: placement/disarm item actions absent | Нет: no trap/world integration | Нет: trap item cases absent |
-| FR-ITEM-017 | Частично: no schematic/knowledge records | Нет: learned/found rules absent | Нет: no schematic UI | Нет: discovery cases absent |
-| FR-ITEM-018 | Частично: recipe/ingredient data absent | Нет: assembly runtime absent | Нет: no inventory/crafting bridge | Нет: crafting cases absent |
-| FR-ITEM-019 | Частично: no gamble/item values or saved roll | Нет: Gambling/item stake rules absent | Нет: no barter/skill/save integration | Нет: gamble cases absent |
+| FR-ITEM-001 | Частично: Area item/container identities, effective fields и insertion-refused dispositions | Нет: ownership/transfer runtime отсутствует; negative IN — research/proposal | Нет: нет actor inventory/transaction service | Частично: original Area body/identity checks; inventory transfer не выполнялся |
+| FR-ITEM-002 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: carry/encumbrance rules отсутствуют | Нет: нет inventory-to-character link | Нет: weight cases отсутствуют |
+| FR-ITEM-003 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: merge/split runtime отсутствует | Нет: нет stack ownership path | Нет: stack suite отсутствует |
+| FR-ITEM-004 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: key matching/access rules отсутствуют | Нет: нет locks/inventory actions | Нет: unlock cases отсутствуют |
+| FR-ITEM-005 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: equipment slot rules отсутствуют | Нет: нет paperdoll/runtime actor | Нет: equip cases отсутствуют |
+| FR-ITEM-006 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: pools/eligibility absent | Нет: no combat/equipment bridge | Нет: ammo cases absent |
+| FR-ITEM-007 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: item effect runtime absent | Нет: no item/world lighting bridge | Нет: equipment light cases absent |
+| FR-ITEM-008 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: identify/valuation absent | Нет: no inspect UI | Нет: identification cases absent |
+| FR-ITEM-009 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: consumable/charge rules absent | Нет: no item-action integration | Нет: use outcome cases absent |
+| FR-ITEM-010 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: no books/read state | Нет: no written-object UI | Нет: reading cases absent |
+| FR-ITEM-011 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: damage/repair state absent | Нет: no repair/equipment bridge | Нет: repair cases absent |
+| FR-ITEM-012 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: decay/despawn rules absent | Нет: no persistent drops | Нет: lifetime cases absent |
+| FR-ITEM-013 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: barter/pricing absent | Нет: no merchant UI/runtime | Нет: purchase cases absent |
+| FR-ITEM-014 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: restock rules absent | Нет: no shop refresh lifecycle | Нет: stock cases absent |
+| FR-ITEM-015 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: steal/plant rules absent | Нет: no actor inventory or detection bridge | Нет: theft cases absent |
+| FR-ITEM-016 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: placement/disarm item actions absent | Нет: no trap/world integration | Нет: trap item cases absent |
+| FR-ITEM-017 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: learned/found rules absent | Нет: no schematic UI | Нет: discovery cases absent |
+| FR-ITEM-018 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: assembly runtime absent | Нет: no inventory/crafting bridge | Нет: crafting cases absent |
+| FR-ITEM-019 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: Gambling/item stake rules absent | Нет: no barter/skill/save integration | Нет: gamble cases absent |
 
 Во всех строках «Частично» ограничено формой отдельных объявленных wire descriptors в `StaticObjectLoader`; его проверенный static-object resolver не сохраняет обычные item semantics и классифицирует такие типы как unsupported. Это не свидетельствует об отсутствии соответствующих данных или механик в оригинальной игре.
 
