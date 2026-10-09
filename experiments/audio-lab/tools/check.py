@@ -71,8 +71,8 @@ def main():
     env = os.environ.copy()
     dotnet = Path.home() / ".local/share/dotnet"
     env.update(DOTNET_ROOT=str(dotnet), PATH=str(dotnet) + ":/usr/bin:/bin:/usr/sbin:/sbin", __GODOT_SHELL_ENV_SET="1")
-    # Keep Godot/export process temporary writes in caller-selected owned scratch,
-    # never implicitly select the system temp folder. Retain for task evidence.
+    # Own/.NET probes use caller-selected scratch. Native Godot macOS staging
+    # must also be checked against the direct-app recipe; TMPDIR alone is not proof.
     scratch = Path(os.environ["AUDIO_LAB_SCRATCH"]).resolve()
     if not scratch.is_dir():
         raise SystemExit("AUDIO_LAB_SCRATCH must be an existing owned scratch directory")

@@ -74,7 +74,8 @@ claim that process RSS equals payload bytes: a bounded decoder copy, WAV Data
 inspection copy, engine mixing state and runtime overhead are transient/extra.
 The recipe reports sampled actual process-tree peak RSS separately (150ms
 sampling can miss a shorter allocation peak). Lab runtime budget is 1GiB RSS;
-owned export/build/evidence budget is 2GiB; check free space before export. Do
+owned export/build/evidence budget is 2GiB; auxiliary build/test process-tree
+budget is 2GiB RSS (distinct from the native lab's 1GiB); check space before export. Do
 not remove shared caches, another task's artifacts or retained evidence.
 
 WAV admission is deliberately narrow metadata validation, not a custom codec:
@@ -182,11 +183,38 @@ a clean committed candidate after required source/root checks. Use a NEW owned
 `artifacts/audio-lab/<run>/export-<head>/` directory; retain all logs outside it.
 Fresh editor bridge/import is required before export; then canonical Godot
 `--headless --path experiments/audio-lab/Godot --export-debug macOS
-ABSOLUTE_EXPORT_DIR/AudioLab.zip --verbose`. Inspect exporter log/bridge; use
-matching 4.7.2.mono templates. `tools/artifact.py extract --directory DIR
---head SHA` safely extracts only AudioLab.app members without external symlinks;
-`seal` applies an ad-hoc local signature and writes an immutable complete file/
-mode/hash/directory manifest plus archive hash/head/provenance. This is not
+ABSOLUTE_EXPORT_DIR/AudioLab.app --verbose`. Inspect exporter log/bridge; use
+matching 4.7.2.mono templates. Direct app output bypasses native ZIP staging.
+The preset explicitly disables console wrapper, exporter signing/notarization,
+sandbox and liquid-glass icon generation. It leaves custom entitlements empty:
+the macOS exporter can delete that custom file during cleanup. Observe actual
+owned app destination and .NET publish scratch paths; TMPDIR alone does not
+prove macOS native staging isolation. No blanket engine-cache isolation is claimed.
+
+Both scoped projects keep Debug locks separate from committed
+`locks/ExportDebug/{osx-x64,osx-arm64}/packages.lock.json`. ExportDebug restores
+are locked and reject missing/unsupported RIDs. To bootstrap only before a
+stable commit, restore the Godot project for each RID with
+`-p:Configuration=ExportDebug -p:RuntimeIdentifier=RID -p:SelfContained=true
+-p:GodotTargetPlatform=macos -p:RestoreLockedMode=false`; inspect all four locks
+and exact Godot4.7.2 versions. Accepted checks use `--locked-mode` instead of
+the override. Verify default -> both RID -> default locked restore, unchanged
+tracked locks, and a rejected unsupported RID before final source/export checks.
+Use the singular property explicitly: `dotnet restore -r` sets the plural
+RuntimeIdentifiers list, unlike `dotnet publish -r`, and cannot select this lock.
+Never restore dirty locks after export to hide mutation. Source-only locks/plist
+are excluded from exported resources.
+
+`tools/artifact.py seal --directory DIR --head SHA --export-receipt RECEIPT`
+applies an ad-hoc local signature using scoped `Godot/audio-entitlements.plist`:
+exactly allow-jit, allow-unsigned-executable-memory, allow-dyld-environment-variables
+and disable-library-validation under `com.apple.security.cs`, all true. It reads
+back actual executable entitlements and deep/strict signature before writing an
+immutable schema2 manifest (complete entries/modes/hashes, root mode, head/task/
+provenance, entitlement recipe hash and clean direct-app export receipt/log
+binding). No archive hash is invented: the canonical tested payload is the app.
+The historical ZIP extraction guard remains app-only, never executes a wrapper,
+and is not used in the final direct-app recipe. This is not
 Developer-ID signing, notarization or permission to change macOS security.
 
 Launch the exported `AudioLab.app/Contents/MacOS/AudioLab` WITHOUT editor/path
@@ -194,7 +222,7 @@ arguments through the same native verification/restart suite. For ordinary launc
 also use macOS LaunchServices `open -n -W AudioLab.app --args
 --ordinary-seconds=2 ...`, verify report and normal shutdown (the opener exit alone
 is not app exit proof). Finally run `artifact.py verify` to check every payload
-entry/archive hash plus deep/strict codesign AFTER runtime, keeping runtime logs
+entry/mode/hash, receipt/log/recipe binding and deep/strict codesign AFTER runtime, keeping runtime logs
 outside the sealed payload. Manifest digest belongs in the exact-head handoff.
 No game files are eligible payload; only own compiled lab, synthetic recipe,
 Godot/.NET engine dependencies and Main scene/project configuration are exported.
