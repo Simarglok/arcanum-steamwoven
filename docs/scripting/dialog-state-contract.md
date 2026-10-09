@@ -11,6 +11,13 @@ admits LF/QU/RU only and rejects a sixth structural response before any ports.
 See the [invocation contract](npc-dialog-entry-contract.md) for upstream identity
 and event admission; no dirty rendering/input candidate is a source for this work.
 
+ARC-SCRIPT-003 separately accepts and implements only the bounded
+[versioned global-flag owner and standalone typed GF adapters](global-flag-state-runtime.md).
+Missing admitted bootstrap bits stay Unknown; equal known writes retain a
+successful no-change receipt without a revision bump. This does not adopt the
+remaining proposals below or wire GF into the current DLG parser/session: GF
+remains Unsupported there, and the complete Virgil trace is not implemented.
+
 Labels used throughout:
 
 - **S — Source-confirmed:** inspected CE source at the exact revision below;
@@ -130,6 +137,13 @@ profile uses a nonstacking item (quantity1). Stack coalescing/destruction, stack
 quantity, insertion/slot/equipment side effects and transfer scripts remain U3.
 The item adapter must either evidence those outcomes or refuse their capability;
 “one command” does not prove “one unit”.
+
+The [ARC-RES-021 negative-IN contract](negative-inventory-transfer-contract.md)
+refines this U3 source trace with exact callback participants, list/slot/stack
+effects, placement/decay and a typed failure/conformance matrix. Nonstacking
+quantity1 is a proposed capability profile, not an observed original quantity or
+accepted gameplay rule. The selected original instance/type/quantity/live-parent
+joins remain NOT_VERIFIED; no production inventory adapter is introduced.
 
 S [negative direction][in-action] attempts transfer to PC, ignores its boolean result and
 checks parent identity. If parent is not PC, removes the item and calls placement
@@ -387,7 +401,7 @@ production services or an independent original-runtime oracle.
 | --- | --- | --- |
 | U1 | Original parser grammar, `>`/`<` intention, all GF/IN/RE forms/domains | Inspect version-matched editor documentation and additional bounded field shapes; trace original parser with synthetic author-created dialogue in a separately authorized executable study. Do not fix `atoi` semantics by intuition. |
 | U2 | Original effective/stored reaction, modifiers/AI side effects and target outcome | Trace reaction service with named race/effects/leadership profiles and effective+base before/after values; use independent literal adapter tests. Exact vanilla compatibility needs original executable evidence; CE contains a reaction fix. |
-| U3 | Quantity/stack merge/destruction, equipment/slot effects, live substitute inventory, placement/decay and transfer script callbacks | Select bounded original item definitions/instance inventories and independently inspect item insertion/remove/stack and SAP_TRANSFER paths; authorize one negative-IN diagnostic adapter before broader forms. Refuse unavailable dependencies. |
+| U3 | Original quantity/type/prototype/live-parent joins, live substitute inventory and actual stack/equipment/placement/decay/callback outcomes | [ARC-RES-021](negative-inventory-transfer-contract.md) refines the source-only insertion/remove/stack/SAP_TRANSFER/placement trace and gives bounded next checks plus a proposed typed matrix. Static/editor data and CE trace do not prove live ownership or execution; refuse unsupported dependencies. Quantity1/MissingItem remain owner-decision proposals before any adapter. |
 | U4 | Original visible reply parity, generic/generated fallback, max5 short circuit under state changes | Run authorized original sessions with named PC gender/IQ/dumb and reaction profile, record identifier-only offered sets/order before/after. Current integer worksheet is not a GUI observation. |
 | U5 | Session concurrency/persistence, callback/Exit/Special closure, full traversal, rollback | Separate dependency-ledger design and failure injection on real services; original callback/return study; no transaction guarantee inferred. |
 | U6 | Exact owner acceptance of safety subset/domains/caps/divergences | Owner decision on the explicit P recommendations before implementation; retain Unknown/proposal if declined or undecided. No production cards are created by this research. |
