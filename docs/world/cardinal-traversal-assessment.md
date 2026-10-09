@@ -31,9 +31,12 @@ historical evidence below do not themselves prove the new input/rendering policy
 ARC-DATA-008 implements the owned production API below in `Arcanum.Data.Traversal`,
 independently authored against the ratified [bounded specification](cardinal-traversal-contract.md)
 and [attributed research evidence](../research/cardinal-traversal-evidence.md).
-Inspected integration base: `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae` (through
-owner-merged DATA007/RES014). This describes the local implementation candidate,
-not a claim of publication, independent review PASS or owner merge.
+Merged delivery: [PR #38](https://github.com/Simarglok/arcanum-steamwoven/pull/38)
+implements the default cardinal API; [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44)
+adds the bounded-adjacent amendment and WORLD003 consumer. Current audited scope
+is recorded in the [component catalogue](../project/status.md). Historical
+experiment details below retain their own source/context; this status update
+is not a fresh runtime check.
 
 CE specification pin `a7ff41b300ef712f0e7d088183a3d08957110cdd` is Sustainable
 Use License v1.0, not MIT. CE-source claims are not original-executable observations.
