@@ -79,14 +79,14 @@ ANCHORS = {
     "boot-hour24": [1885, 24], "init": [1885, 15],
 }
 SOURCE_REFS = {
-    "calendar": {"calendar"}, "raw": {"wire"}, "carry": {"calendar"},
+    "calendar": {"calendar"}, "carry": {"calendar"},
     "startup": {"startup", "static-start", "init"},
     "admission": {"admission"}, "references": {"admission"},
     "gate": {"admission", "menu-open", "menu-close"},
     "delay": {"calendar", "ambient-callback"}, "due": {"admission"},
 }
 PROPOSAL_REFS = {
-    "normalized": {"P1"}, "bootstrap": {"P1", "P2"},
+    "normalized": {"P1"}, "raw": {"P1"}, "bootstrap": {"P1", "P2"},
     "transition": {"P2"}, "detached": {"P2"}, "consumer": {"P3"},
 }
 

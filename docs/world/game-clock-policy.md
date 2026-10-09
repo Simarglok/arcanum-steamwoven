@@ -280,6 +280,8 @@ detached `[historicalDescriptorUnchanged,tokenStillCurrent]`; transitions use
 `[disposition,failure,[schema,profileAlias,generation,revision,timestamp,hour,isDay,
 consumerBinding]|previous]`. NoChange means zero extra replacement/publication;
 Changed means one complete hypothetical replacement, not an observed runtime event.
+The entire raw worksheet row is tagged Proposal because its last two fields derive
+P1 normalization; only unchanged two-word retention is a source fact.
 
 | Required family / fixture IDs | Explicit oracle boundaries |
 | --- | --- |
