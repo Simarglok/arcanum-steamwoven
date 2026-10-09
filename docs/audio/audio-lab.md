@@ -219,9 +219,11 @@ Developer-ID signing, notarization or permission to change macOS security.
 
 Launch the exported `AudioLab.app/Contents/MacOS/AudioLab` WITHOUT editor/path
 arguments through the same native verification/restart suite. For ordinary launch
-also use macOS LaunchServices `open -n -W AudioLab.app --args
+also use macOS LaunchServices `open -n -W AudioLab.app --args --
 --ordinary-seconds=2 ...`, verify report and normal shutdown (the opener exit alone
-is not app exit proof). Finally run `artifact.py verify` to check every payload
+is not app exit proof). The second `--` is Godot's user-argument separator;
+without it the app remains interactive rather than running the bounded diagnostic.
+Finally run `artifact.py verify` to check every payload
 entry/mode/hash, receipt/log/recipe binding and deep/strict codesign AFTER runtime, keeping runtime logs
 outside the sealed payload. Manifest digest belongs in the exact-head handoff.
 No game files are eligible payload; only own compiled lab, synthetic recipe,
