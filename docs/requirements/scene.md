@@ -1,10 +1,12 @@
 # Требования к статической сцене и входу в здания
 
+**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного CE-исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+
 ARC-RES-017: [whole-exterior traversal research](../world/crash-site-area-traversal-contract.md)
 для FR-SCENE-012/013/014/016 сохраняет physical/visual, state и edge frontiers;
 Research/Proposed, NOT_READY, без scene collision или door/window runtime.
 
-Дата: 2026-10-02. Steamwoven baseline: `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae` (`docs/functional-requirements-20261002`). Сверяемый источник CE: [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd). Рабочие деревья baseline и CE были чистыми на момент исследования.
+Дата: 2026-10-02. Исходный Steamwoven research baseline: `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae` (`docs/functional-requirements-20261002`). Сверяемый источник CE: [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd). Рабочие деревья baseline и CE были чистыми на момент исследования.
 
 Область: поверхность сцены, статические предметы и деревья, стены/здания, двери-порталы, окна, крыши, их рисование и затрагивающие их правила перемещения. Условия боя, инвентарь, NPC/AI и карта переходов/`jumppoint` не специфицируются. Физический проход через дверь не означает, что здание является отдельной картой: если данные задают переход карты, он относится к отдельному контракту переходов.
 
@@ -36,7 +38,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** CE загружает крыши и объекты отдельными секциями ([`sector.c`, `sector_roof_list_load` / `objlist_load`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1362-L1371), [обработка сектора](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1545-L1571)); игровой draw pipeline вызывает поверхности, объекты и крыши по отдельным путям ([`gamelib_draw_game`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1702-L1715)). Данные: секционные tile/roof/object-записи, тип объекта, прототипы, resource mapping и ART-кадр. Приоритет DIF/PATCH/loose-файлов этим источником не установлен.
 
-**Steamwoven сейчас.** В выбранном Crash Site загружены 4 096 записей поверхности и проведена перепись 317 v119 статических записей. Ресурсный этап сцены разрешает ровно пять записей и явно относит 312 к `OutsideResourceScope`; это отдельный результат от агрегата проходимости всех 317 записей. Wall/portal/roof scene path отсутствует. См. [каталог компонентов](../project/status.md), [loader](../world/static-object-loader.md) и [static obstruction evidence](../research/static-obstruction-evidence.md).
+**Steamwoven сейчас.** [DATA009](../world/crash-site-area-loader.md) раздельно сохраняет core/context terrain, static/mobile occurrences, dispositions и visual chains: 36,864 core cells, 426 statics, 88 core mobiles. Inventory-insertion refusal не разрешает автоматически рисовать тело. Viewer всё ещё использует один sector/пять statics; full-area renderer в работе, не на audit main. [PR #46](https://github.com/Simarglok/arcanum-steamwoven/pull/46).
 
 <a id="fr-scene-002"></a>
 
@@ -46,7 +48,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** `object_draw` читает `OBJ_F_CURRENT_AID`, затем подготавливает ART blit через `object_setup_blit` ([`object_draw`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L495-L576), [`object_setup_blit`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4665-L4704)); загрузчик сектора помещает объекты в его списки ([`objlist_load`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1425-L1444)). Требуются instance/prototype current ART, выбранный mapping и resource archive с валидными group/frame/palette.
 
-**Steamwoven сейчас.** `StaticObjectLoader` разрешает census/default поля для выбранных записей и отдельно ограничивает resource resolution индексами 0–4; `StaticSceneryScenePlan.FromAuthenticatedInspection` требует ровно эти пять разрешённых ресурсов. Это полезная диагностическая грань, но не полнота сцены. [Загрузчик](../world/static-object-loader.md#api), [план сцены](../../tools/terrain-viewer/Core/StaticSceneryScenePlan.cs#L40-L60).
+**Steamwoven сейчас.** Area API разрешает все 2,444 требуемые selected terrain/object chains объявленного original profile, actual defaults, физическую frame selection и identity-bound leases. Пять-only `StaticSceneryScenePlan` остаётся отдельной frozen регрессией; general original resource precedence не реализован. [API](../world/crash-site-area-loader.md).
 
 <a id="fr-scene-003"></a>
 
@@ -56,7 +58,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** CE рисует типизированные записи сектора через общий `object_draw` и вычисляет кадр/прямоугольник из instance и ART ([`object_draw`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L552-L576), [`sub_443620`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4811-L4858)). Вывод о том, что растительность должна покрываться общим статическим pipeline и что видимая крона не задаёт collision footprint, — **политика продукта**; отдельная классификация деревьев и её runtime-поведение здесь не подтверждены.
 
-**Steamwoven сейчас.** Зафиксировано пять resource chains и пять диагностических размещений, но документы не утверждают, что выбранная пятёрка покрывает класс деревьев. Остальные 312 записей имеют явный `OutsideResourceScope`, то есть результат вне ресурсной области, а не разрешённую ART-цепочку. [Ограничение выбранного ресурсного набора](../world/static-object-loader.md#api), [пять размещений](../rendering/static-scenery-contract.md#required-finite-input-record).
+**Steamwoven сейчас.** Vegetation/static chains уже входят в полный core Area snapshot и сверяются с independent original inventory. Это data coverage наружной области, без general tree class rule или показа всей растительности в viewer. Остальные static records больше не следует считать неизученными только из-за пяти-only scene API. [Area inventory](../research/crash-site-area-inventory.md), [Data loader](../world/crash-site-area-loader.md).
 
 <a id="fr-scene-004"></a>
 
@@ -66,7 +68,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** В `object_draw` экранная проекция location дополняется `OBJ_F_OFFSET_X/Y` и `+40,+20`; `sub_443620` получает frame hotspot/размер и строит rectangle ([координатная база](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L570-L576), [геометрия кадра](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4811-L4858)). Эти функции вызываются из пути рисования объекта. Розничная интерпретация всех форматов/типов остаётся непроверенной.
 
-**Steamwoven сейчас.** Для пяти отобранных записей зафиксирована формула проекции + direct instance offset − hotspot, с ART offset, сохранённым отдельно; synthetic fixtures покрывают знаковые offsets и hotspot. Это не размещение оставшихся 312 объектов. [Контракт размещения](../rendering/static-scenery-contract.md#diagnostic-coordinate-and-rectangle-rule), [реализация](../../tools/terrain-viewer/Core/StaticSceneryScenePlan.cs#L63-L90).
+**Steamwoven сейчас.** Area visual descriptors сохраняют signed hotspots/ART/object offsets, dimensions, scale и mirroring. Diagnostic projection/hotspot rule не доказывает общий original placement. Viewer размещает пять statics и HumanFixed, с bounded historical metadata/raster checks. [Area API](../world/crash-site-area-loader.md), [viewer](../rendering/terrain-viewer.md).
 
 <a id="fr-scene-005"></a>
 
@@ -76,7 +78,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** В игровом draw pipeline `tile_draw` вызывается до `object_draw` (`gamelib_draw_game`, [порядок](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1702-L1715)). `facade_draw` появляется в editor draw path, а не в показанном normal-game вызове; следовательно, точное normal-runtime поведение фасада из этого call site не подтверждается.
 
-**Steamwoven сейчас.** Terrain loader и диагностический viewer покрывают 4 096 tile/facade records выбранного сектора; planner задаёт диагностические слои Tile и Facade. Это не измерение normal-runtime фасадного слоя. [План поверхности](../../tools/terrain-viewer/Core/TerrainScenePlan.cs#L34-L74), [статус компонента](../project/status.md).
+**Steamwoven сейчас.** Area Data покрывает tile/facade выбранных core/context sectors; viewer сохраняет bounded layer policy одного сектора. Full-area rendering, normal runtime facade/visibility и pixel parity не следуют из полного Data snapshot. [Area API](../world/crash-site-area-loader.md).
 
 <a id="fr-scene-006"></a>
 
@@ -86,7 +88,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** `object_draw` распределяет blits по underlay/flat/shadow/non-flat/overlay order ranges, а `object_flush_pending_blits` сортирует очередь; roof рисуется после объекта ([группы объектов](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L525-L530), [enqueue/sort/flush](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4755-L4808), [общий draw pipeline](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1702-L1715)). CE-комментарии также указывают на артефакты dirty rectangles для scaled sprites ([`object.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L880-L896)).
 
-**Steamwoven сейчас.** Диагностический static sort — `(anchorY, anchorX, sourceIndex)`; canvas отдельно рисует поверхность, пять статических команд и foreground actor. Это проектная воспроизводимая политика, не восстановленный оригинальный z-order; walls/roofs отсутствуют. [План](../../tools/terrain-viewer/Core/StaticSceneryScenePlan.cs#L22-L30), [canvas](../../tools/terrain-viewer/Godot/TerrainCanvas.cs#L120-L179), [ограничение](../rendering/static-scenery-contract.md#ordering-and-overlap-policy).
+**Steamwoven сейчас.** Viewer имеет finite diagnostic terrain/facade/statics/actor ordering, а Area выдаёт descriptors для будущего renderer. General depth/occlusion, wall/roof и normal original z-order не реализованы. [Viewer policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [Data API](../world/crash-site-area-loader.md).
 
 <a id="fr-scene-007"></a>
 
@@ -148,7 +150,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** CE разносит визуальный frame rectangle (`object.c`) и traversal: `tile_is_blocking` отдельно использует block mask и tile-art свойства, а `object_calc_traversal_cost_func` обрабатывает scenery, wall и portal ветви ([tile blocking](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c#L166-L190), [object traversal](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L2962-L3029)). Нужны tile masks/names/facade, direct/prototype object flags, destination/edge context, wall/portal state и actor capability.
 
-**Steamwoven сейчас.** Проверяются отдельно terrain obstruction components и 317-записный ordinary-static destination-cell component. Последний знает 58 Blocker / 259 NoBlock для одного фиксированного контекста, но не общий `IsWalkable`, стену, портал, footprint или route. Обобщённая occupancy/step оценка остаётся Unknown; отдельно ARC-RES-014 зафиксировал четыре gap-free directed rows — 3 Open и 1 Blocked — для одного аутентифицированного исследования и контекста. Это не общий production permission API и не интеграция с игровой сценой. [Static evidence](../research/static-obstruction-evidence.md#fixed-profile-aggregate-run), [общая граница passability](../world/passability-contract.md#composition-rule), [узкие cardinal rows](../research/cardinal-traversal-evidence.md#measured-directed-component-table).
+**Steamwoven сейчас.** Owned [Data assessment](../world/cardinal-traversal-assessment.md) и WORLD003 используют physical contributors, а не sprite extent. В x4..8/y0..3 и isolated context покрыты cardinal и opt-in four-object-leg diagonal assessment. Это bounded production admission, не общий IsWalkable, live world registry или full-area permission. [PR #38](https://github.com/Simarglok/arcanum-steamwoven/pull/38), [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44).
 
 <a id="fr-scene-013"></a>
 
@@ -158,7 +160,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** `path_make` проверяет blocking tile и находящиеся в целевой клетке scenery/critters; анимационный step caller отдельно проверяет `tile_is_blocking` и `object_traversal_is_blocked` ([path check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/path.c#L89-L114), [step check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L4737-L4748)). Это source trace; некоторые CE branches помечены неполными и полный алгоритм движения/навигации здесь не специфицирован.
 
-**Steamwoven сейчас.** `MovementRuntime` моделирует шаги и timing на переданных assessments, но у текущего WORLD diagnostic указано `collision not evaluated`; загрузчик не подключает blocker components к перемещению. Поэтому движение вокруг сцены пока отсутствует как интегрированное игровое поведение. [World policy](../../tools/terrain-viewer/Core/DiagnosticWorldPolicy.cs#L3-L14), [runtime](../../src/Arcanum.Simulation/Movement/MovementRuntime.cs#L15-L40), [каталог](../project/status.md).
+**Steamwoven сейчас.** WORLD003 связывает owned Data assessment с exact MovementRuntime и viewer; разрешённый шаг стартует только с matching Supported/Open. Final terrain и четыре role-labelled object legs учитываются при map diagonal; blocked shoulder отказывает. Viewer больше не использует free/collision-not-evaluated integrator. Scope x4..8/y0..3, dynamic doors/registry/HP/full-area traversal не покрыты. [Viewer](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy), [whole-area frontier](../world/crash-site-area-traversal-contract.md).
 
 <a id="fr-scene-014"></a>
 
@@ -192,9 +194,10 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 ## Ключевые разрывы покрытия
 
-- Три независимых измерения статической сцены нельзя складывать в одно число: 317 записей в census, пять разрешённых ART resource chains (плюс 312 явных `OutsideResourceScope`) и 317 вкладов ordinary-static obstruction отвечают на разные вопросы. Обычная obstruction исследована только как destination-cell component в одном фиксированном context; ARC-RES-014 добавляет четыре точных направленных cardinal результата, но это не полнота рендера и не общий production movement verdict.
-- Статический viewer сейчас рисует конечную пятёрку с собственной диагностической сортировкой. Не доказано, что среди неё есть дерево; нет scene coverage остальных статических ресурсов, wall/portal/window/roof decoder и renderer, нормальной глубины/occlusion или collision integration.
-- CE даёт конкретные реализации для нескольких путей, но содержит `TODO: Check rotations` и `TODO: Incomplete` в wall helper/editor коде. В осмотренных roof draw/coverage функциях TODO/FIXME не обнаружен. `object_draw` отдельно помечает один индексный расчёт как `TODO: Unclear` и документирует scaled-sprite dirty-rectangle артефакт. Это открытые вопросы одного CE source lineage; только оригинальный runtime может подтвердить совместимость.
+- Complete exterior Data owner разрешает terrain/static/mobile body chains, но viewer всё ещё рисует finite sector/пять statics. Full-area renderer — отдельная поставка; Data-ready не равно draw/visibility-ready.
+- WORLD003 уже подключает bounded original-data step assessment к runtime/actor. Его 20-cell rectangle и isolated context не закрывают whole-exterior registry, HP/state, cross-sector permission или route search.
+- Wall/portal/window/roof gameplay и normal original depth/occlusion не реализованы. Отсутствие таких active composite references в выбранном original Area profile не доказывает поддержку их форматов.
+- Source TODO/unclear branches и original-runtime parity сохраняются как ограничения исходного исследования; исторические viewer/readback проверки ниже не снимают их.
 
 ## Сводное покрытие на Steamwoven baseline
 
@@ -202,19 +205,19 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
-| FR-SCENE-001 | Частично: 4,096 tile и 317 v119 static records одного сектора | Частично: отдельные census/resource/obstruction результаты | Частично: поверхность и конечные 5 scenery records | Частично: data probe и synthetic/unit scope; без runtime |
-| FR-SCENE-002 | Частично: 5 ART chains; прочие 312 `OutsideResourceScope` | Частично: selected fields/defaults | Частично: renderer принимает ровно 5 records | Частично: limited records и synthetic tests |
-| FR-SCENE-003 | Нет: класс дерева не установлен | Нет: tree-specific coverage | Нет: tree path не доказан | Нет |
-| FR-SCENE-004 | Частично: ART metadata/offsets для выбранных 5 | Частично: diagnostic anchor formula | Частично: 5 scene placements | Частично: synthetic hotspot/offset fixtures |
-| FR-SCENE-005 | Частично: выбранные tile/facade данные | Частично: bounded surface/facade layer policy | Частично: diagnostic terrain и scenery | Частично: historical component/viewer checks |
-| FR-SCENE-006 | Нет: полный набор depth records не покрыт | Частично: `(anchorY, anchorX, sourceIndex)` — diagnostic policy | Частично: finite static scene, без wall/roof | Частично: bounded ordering tests |
+| FR-SCENE-001 | Частично — 36,864 core terrain, 426 statics и 88 mobiles; context отдельно | Частично — occurrence/disposition/visual chains различаются; не live registry | Частично — Area API; viewer сохраняет один сектор и 5 statics | Частично — полный original Data census; full-area rendering не проверен |
+| FR-SCENE-002 | Частично — 2,444 selected terrain/object visual chains Area | Частично — actual instance/prototype/resource/frame/default chain и leases | Частично — самостоятельный Area API; viewer по-прежнему 5 records | Частично — каждый selected chain сверяется с independent original manifest |
+| FR-SCENE-003 | Частично — vegetation/static body chains входят в core Area census | Частично — source selectors/defaults; нет общего live vegetation path | Частично — Data API; полная растительность в viewer ещё не показана | Частично — original area chain reconciliation, не full-scene visual parity |
+| FR-SCENE-004 | Частично — signed offsets/hotspots/scale/mirror для Area visuals | Частично — diagnostic projection; общий placement/visibility не ратифицирован | Частично — пять static placements и fixed Human в viewer | Частично — metadata/original frame checks и historical bounded raster |
+| FR-SCENE-005 | Частично — tile/facade данные всех выбранных Area sectors | Частично — bounded terrain/facade layer policy | Частично — diagnostic sector; full-area renderer не смержен | Частично — original Data и historical source/export viewer checks |
+| FR-SCENE-006 | Частично — Area occurrence/visual metadata, без общего depth model | Частично — finite diagnostic ordering; не original z-order/occlusion | Частично — terrain/facade/statics/actor policy, без wall/roof | Частично — bounded ordering/readback; полная сцена не сравнивалась |
 | FR-SCENE-007 | Нет: wall/building data model | Нет: wall-piece connection rules | Нет: wall scene path | Нет |
 | FR-SCENE-008 | Нет: portal state/resources | Нет: physical door traversal | Нет: state-aware portal rendering | Нет |
 | FR-SCENE-009 | Нет: window/wall records | Нет: window traversal | Нет: wall/window integration | Нет |
 | FR-SCENE-010 | Частично: roof-section framing/discriminator only | Нет: piece topology rules | Нет: roof renderer | Нет: no roof scenario |
 | FR-SCENE-011 | Частично: roof section boundary only | Нет: coverage/fade/hit-state integration | Нет: actor-roof integration | Нет |
-| FR-SCENE-012 | Частично: terrain components and 317 static flag records | Частично: one static destination-cell context; separate terrain components | Нет: no general movement admission | Частично: aggregate plus four directed cardinal rows; not universal passability |
-| FR-SCENE-013 | Частично: bounded terrain/static assessments | Нет: scene-to-navigation adapter отсутствует | Нет: no scene collision integration | Частично: только component/headless tests, не проверка adapter или original traversal |
+| FR-SCENE-012 | Частично — terrain/static census плюс owned directed evidence | Частично — CardinalOnly и opt-in BoundedAdjacent; sprite extent не blocker | Частично — WORLD003 diagnostic admission в x4..8/y0..3 | Частично — original cardinal/shoulder rows и source/export grid cases |
+| FR-SCENE-013 | Частично — identity-bound terrain/static directed step evidence | Частично — final terrain и 4 object legs для map diagonal в узком контексте | Частично — Data → MovementRuntime → viewer; нет общего navigation adapter | Частично — historical original bridge и 18 source/export gates; не full-area permission |
 | FR-SCENE-014 | Нет: portal state absent | Нет: open/close-to-traversal path | Нет: no door gameplay | Нет |
 | FR-SCENE-015 | Нет: building/interior identity unresolved | Нет: no same-map building traversal policy | Нет: no integrated interior scene | Нет |
 | FR-SCENE-016 | Нет: window data absent | Нет: window-specific edge rule | Нет: no window interaction | Нет |

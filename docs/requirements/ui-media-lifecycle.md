@@ -1,5 +1,7 @@
 # UI, медиа и lifecycle — функциональные требования
 
+**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного CE-исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+
 **Срез исследования:** 2026-10-02. **Объём:** главные и игровые экраны, доступ игрока к системам через UI, фильмы/слайды/звук, запуск игровой сессии, настройки и save/load. Это доменный раздел общего каталога, а не аудит всех функций игры, ресурсов или всех ветвей каждого CE-модуля.
 
 **База и происхождение.** Исследован `arcanum-ce` на [`a7ff41b300ef712f0e7d088183a3d08957110cdd`](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd) и текущий Steamwoven `main` на [`b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`](https://github.com/Simarglok/arcanum-steamwoven/tree/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae), срез PR #36. Каталог статуса Steamwoven отстаёт до PR #30; здесь состояние сверялось с кодом закреплённого HEAD. «Наблюдение CE» описывает только прочитанный код и caller chain, не подтверждает поведение оригинального executable. «Предложение проекта» и фазы Pre-alpha/Later предложены для проверки опытным игроком, не являются уже принятым контрактом. «Неизвестно» отмечает незакрытые CE-ветви, данные, платформенные ограничения и поведение оригинального runtime.
@@ -185,11 +187,11 @@
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
 | FR-UI-001 | Нет: игровые menu data | Нет: нет session/menu rules | Нет: viewer only | Нет: production flow not checked |
-| FR-UI-002 | Нет: HUD assets/state | Нет: only bounded synthetic input policy | Нет: not in world runtime | Частично: input lab, not production HUD |
-| FR-UI-003 | Частично: DLG reader only | Частично: limited headless transition only | Нет: no dialog screens/NPC hookup | Нет: no production dialog UI check |
+| FR-UI-002 | Нет: production HUD/action/quick-slot state не загружается | Частично: diagnostic input/Follow/zoom; original keyboard mapping только специфицирован | Частично: lab и WORLD viewer; нет game HUD/semantic interaction | Частично: bounded native/simulated input; complete original controls не проверены |
+| FR-UI-003 | Частично: DLG reader и computed NPC entry | Частично: headless Direct и query-only entry; полного разговора нет | Нет: нет dialog UI/world interaction; GF/session link отсутствует | Частично: production headless tests; production dialog UI не проверен |
 | FR-UI-004 | Нет: no game screen resources | Нет: no inventory/character/map UI | Нет: diagnostic scene only | Нет: no production screen checks |
 | FR-UI-005 | Нет: no game text presentation | Нет: no production message rules | Нет: synthetic UI lab isolated | Частично: synthetic layout, not game text |
-| FR-UI-006 | Нет: no game option tables | Частично: input tuning only | Нет: no options screen | Нет: persistence/options UI not checked |
+| FR-UI-006 | Неприменимо: diagnostic preferences не требуют original option tables | Частично: независимые actor/camera axes, deadzone/sensitivity и zoom | Частично: WORLD settings UI, не product options screen | Частично: historical source/export persistence/focus checks; Bluetooth UX отдельно |
 | FR-UI-007 | Неприменимо: synthetic fixtures, no game resources | Частично: display lab layout policy | Нет: lab not product UI | Частично: logical layout only; physical readability unknown |
 | FR-UI-008 | Нет: no game mode state | Нет: no simulation pause/menu | Нет: inspector playback only | Нет: game pause flow absent |
 | FR-MEDIA-001 | Нет: no game video assets/runtime | Нет: no movie path | Нет: no decoder integration | Нет: no media playback verification |
@@ -199,7 +201,7 @@
 | FR-LIFECYCLE-001 | Нет: no game module/session state | Нет: no game bootstrap | Нет: viewer archive lifecycle only | Нет: no launch/continue flow |
 | FR-LIFECYCLE-002 | Нет: no game save payload/metadata | Нет: no game save actions | Нет: no persistence store/UI | Нет: no save/load run |
 | FR-LIFECYCLE-003 | Нет: no game save schema | Нет: no module restoration | Нет: no game persistence | Нет: input settings codec is unrelated |
-| FR-LIFECYCLE-004 | Частично: camera/actor settings only | Частично: bounded JSON validation only | Нет: no product options bridge | Нет: game preference persistence not checked |
+| FR-LIFECYCLE-004 | Частично: strict input/zoom preference schemas; не все game preferences | Частично: migration/default/reset/coalesced saving в diagnostics | Частично: WORLD settings/restart path; общего product options bridge нет | Частично: historical source/export persistence stages; не game preferences parity |
 
 ## Инвентарь просмотренных источников и охват
 

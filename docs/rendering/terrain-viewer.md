@@ -132,8 +132,9 @@ sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 
 ## Integrated world diagnostic policy
 
-WORLD003 replaces WORLD001's free diagnostic integrator in this source
-candidate; historical parent artifacts retain their original behavior. There
+Merged [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44)
+replaces WORLD001's free diagnostic integrator with WORLD003; historical parent
+artifacts retain their original behavior. There
 is no free-movement mode or admission-failure fallback. This is a bounded
 original-data admission diagnostic, **not** gameplay or original-executable
 collision parity. It uses the existing [headless movement runtime](../world/grid-movement-runtime.md)

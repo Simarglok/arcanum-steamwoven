@@ -1,5 +1,7 @@
 # Время мира и освещение — функциональные требования
 
+**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного CE-исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+
 **Срез исследования:** 2026-10-02. **Объём:** игровое время, день/ночь, глобальный и локальный свет, его связь с соответствующими проверками. Это ограниченная спецификация, не аудит всех систем игры. Погода, полный планировщик заданий/AI и движок за пределами непосредственно подтверждённых зависимостей.
 
 **Уровни утверждений.** «Наблюдение CE» означает только прочитанный код `arcanum-ce` на `a7ff41b300ef712f0e7d088183a3d08957110cdd`; это не отдельное измерение оригинального исполняемого файла. «Предложение проекта» — функциональная политика для независимой реализации. «Неизвестно» — поведение, которое нельзя закрепить без дополнительной проверки данных или оригинального runtime. Требования и сценарии ниже предложены и не реализованы этим документом.
@@ -28,7 +30,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** сериализуемое состояние игровых часов; профиль совместимости для календаря и порогов; единый интерфейс чтения времени для симуляции и отображения. **Предложенные сценарии:** проверить границы 05:59/06:00 и 17:59/18:00 на CE-профиле; перевести часы через полночь и убедиться, что интерфейс, освещение и потребители признака дня видят одно состояние.
 
-**Steamwoven на `b1245e5`:** в проверенных источниках Data, Simulation и terrain viewer игрового clock/day-night состояния нет; текущий viewer показывает диагностическую сцену, а не игровой интерфейс. [Каталог текущего bounded scope](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/status.md#L12-L25). Покрытие требования отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Normalized clock policy](../world/game-clock-policy.md) — исследование/предложение, не поставленный clock owner; WORLD004 ещё вне audit main.
 
 <a id="fr-light-002"></a>
 
@@ -42,7 +44,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** профиль скорости времени, пошаговый бой и другие состояния остановки, очередь игровых событий и операции ожидания. **Предложенные сценарии:** render-frame пауза не меняет игровое время; приостановка профиля блокирует часовой переход; ожидание на час продвигает ровно на час по выбранной политике и снимает затемнение только после синхронизации света. Число `8×` следует принять лишь после решения о целевом профиле и проверке оригинального runtime.
 
-**Steamwoven на `b1245e5`:** в проверенных Simulation/UI источниках нет игрового времени, паузы или ожидания. Таймлайн ART-анимации — отдельный presentation-инструмент и не покрывает это требование. [Каталог bounded scope](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/status.md#L8-L13). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Normalized clock policy](../world/game-clock-policy.md) — исследование/предложение, не поставленный clock owner; WORLD004 ещё вне audit main.
 
 <a id="fr-light-003"></a>
 
@@ -54,7 +56,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** идентификаторы и содержимое таблицы схем; шестиканальная запись на час; безопасная проверка входных диапазонов и полноты. **Предложенные сценарии:** синтетическая схема с различными indoor/outdoor компонентами выдаёт 24 независимых пары и не меняет данные исходного ресурса; отсутствующий файл или некорректная запись дают явную диагностическую ошибку вместо молчаливой правдоподобной палитры.
 
-**Steamwoven на `b1245e5`:** таблица lighting scheme и её интерпретация отсутствуют. MES reader для terrain применяется к ограниченным картографическим записям и не является lighting scheme loader. [Текущий bounded terrain loader](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainLoader.cs#L228-L255). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
 
 <a id="fr-light-004"></a>
 
@@ -66,7 +68,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** подтверждённая грамматика схемы и правила её крайних слотов. **Предложенные сценарии:** на синтетических якорях подтвердить промежуточное значение каждого канала и округление; отдельно зафиксировать ожидаемое поведение пустых слотов до первого и после последнего якоря; reject или безопасно диагностировать таблицу без достаточных якорей.
 
-**Steamwoven на `b1245e5`:** интерполятора и модели схем нет. Текущая палитра ART для отладочной отрисовки не покрывает цветовую схему мира. [Декодер ART и неохваченные эффекты](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/formats/art.md#L74-L86). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
 
 <a id="fr-light-005"></a>
 
@@ -78,7 +80,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** clock и схема из FR-LIGHT-001/003; события игрового времени; инвалидирование palette/light buffers. **Предложенные сценарии:** в синтетической схеме цвета неизменны между двумя игровыми часовыми границами, меняются ровно при переходе часа и после восстановления из паузы сразу соответствуют текущему времени.
 
-**Steamwoven на `b1245e5`:** hourly callback, palette application и world-light invalidation не реализованы; текущий terrain viewer не имеет runtime clock. [Viewer draw path](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/tools/terrain-viewer/Godot/TerrainCanvas.cs#L120-L140), [явно отсутствующие эффекты в контракте viewer](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
 
 <a id="fr-light-006"></a>
 
@@ -90,7 +92,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** terrain/roof classification, ambient pair, tile/facade/roof pass order, source palettes и renderer blend behavior. **Предложенные сценарии:** контрастная синтетическая схема визуально различает indoor/outdoor terrain; смена одного канала затрагивает только соответствующий класс; крыша не получает indoor channel по умолчанию.
 
-**Steamwoven на `b1245e5`:** в `TerrainCanvas` выполняется декодированная текстура с обычной альфой, без ambient tint, lighting или shading. [Фактическая отрисовка terrain](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/tools/terrain-viewer/Godot/TerrainCanvas.cs#L120-L140), [ограничения диагностического renderer](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111). Покрытие отсутствует и не требуется от диагностического viewer.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
 
 <a id="fr-light-007"></a>
 
@@ -102,7 +104,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** карта, селектор сектора, mapinfo, поле sector light scheme и таблица scheme ids. **Предложенные сценарии:** два соседних синтетических сектора с разными схемами переключаются на границе; сектор с id map-default следует текущему map-default; переключение сохраняет тот же игровой час.
 
-**Steamwoven на `b1245e5`:** поддержан только фиксированный диагностический сектор. Парсер сохраняет framing-метаданные света, но не разрешает map/sector scheme. [Fixed terrain selection и отсутствие precedence/runtime](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainModels.cs#L162-L181), [границы terrain loader](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainLoader.cs#L182-L213). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
 
 <a id="fr-light-008"></a>
 
@@ -114,7 +116,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** sector records, light records, save/DIF override, light ART/palette, map coordinates and neighboring sectors. **Предложенные сценарии:** синтетический stationary light affects only intersecting tiles; OFF suppresses it; DARK subtracts rather than adds; an overlapping emitter in a neighboring sector remains visible without duplicate contribution.
 
-**Steamwoven на `b1245e5`:** `ParseSector` bounds count and skips exactly `count × 48` bytes, keeping only `LightCount` and byte ranges; it does not decode a light record or retain a light-source object. Для фактического выбранного диагностического сектора зафиксирован `light_count = 0`; это свойство одного выбранного входа, а не свидетельство отсутствия света в других секторах/картах. [Current framing parser](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainLoader.cs#L182-L213), [выбранный сектор и предел наблюдения](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/formats/maps.md#L37-L45). Coverage limited to framing, no light behavior.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. Area/terrain reader сохраняет light-section framing/counts и raw fields, без light records/handles/activity semantics или emitters. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
 
 <a id="fr-light-009"></a>
 
@@ -126,7 +128,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** object/prototype and item flags, equipment slots/effectiveness, actor state, object movement, primary/overlay light ART, sector membership. **Предложенные сценарии:** экипировать/снять синтетический light item меняет только ожидаемый actor emitter; движение переносит источник; удаление owner удаляет связанные источники; inventory item не добавляется вторым источником рядом с персонажем.
 
-**Steamwoven на `b1245e5`:** terrain parser не декодирует light handles и отдельная limited static-object feature не строит общий runtime actor light graph. Существующие actor pixels в диагностической сцене не получают lighting pass. [Object window boundary](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainLoader.cs#L197-L213), [viewer draw path](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/tools/terrain-viewer/Godot/TerrainCanvas.cs#L120-L140). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. Area/terrain reader сохраняет light-section framing/counts и raw fields, без light records/handles/activity semantics или emitters. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
 
 <a id="fr-light-010"></a>
 
@@ -138,7 +140,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** игровой clock, схема, scenery flags, terrain tile class, object state и секторная загрузка. **Предложенные сценарии:** синтетический time-sensitive emitter выключен днём и включён ночью по профилю; загрузка сектора сразу вычисляет корректный флаг из текущего часа; смена часа не добавляет light handle дважды.
 
-**Steamwoven на `b1245e5`:** нет моделирования флагов состояния/активности emitters; выбранный сектор имеет ноль записей света, но это лишь частный структурный факт. [Framing-only `Lights` section](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainModels.cs#L162-L181), [selected-sector count](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/formats/maps.md#L37-L45). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. Area/terrain reader сохраняет light-section framing/counts и raw fields, без light records/handles/activity semantics или emitters. [Research frontier](../world/time-lighting-contract.md), [Area loader](../world/crash-site-area-loader.md).
 
 <a id="fr-light-011"></a>
 
@@ -150,7 +152,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** единый light sampling API; skill invocation context; emitted-light flags и dark-sight capabilities; object/coordinate luminance. **Предложенные сценарии:** синтетический свет меняет только явно light-aware результат; одинаковые параметры объекта и координаты дают согласованный sample; dark-sight/emission модификаторы проверяются независимо; не относящиеся к свету действия не меняются.
 
-**Steamwoven на `b1245e5`:** lighting API и игровой skill evaluation отсутствуют. Фиксированный набор actor/static rendering не устанавливает их взаимодействие с игровой видимостью. [Ограничения component catalogue](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/status.md#L12-L25). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. См. [каталог компонентов](../project/status.md); исследовательский контракт не закрывает gameplay/save/Remastered интеграцию.
 
 <a id="fr-light-012"></a>
 
@@ -162,7 +164,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** save schema/versioning, world clock, active scheme, sector state and event queue. **Предложенные сценарии:** сохранить synthetic world перед переходом часа, загрузить после нескольких wall-clock минут и получить прежние часы/схему; сохранить во время приостановленного мира и проверить точное возобновление без пропуска или повтора hourly event.
 
-**Steamwoven на `b1245e5`:** persistence игрового мира и lighting отсутствует; сохранение состояния ART inspector playback не покрывает игровые часы. [Project status boundary](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/project/status.md#L23-L25). Покрытие отсутствует.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. См. [каталог компонентов](../project/status.md); исследовательский контракт не закрывает gameplay/save/Remastered интеграцию.
 
 ## Поздние визуальные идеи и границы доказательств
 
@@ -174,15 +176,13 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Наблюдение CE:** в просмотренных pinned-source участках есть локальные источники, dark-light ветка, legacy shadow API/settings и рисунок света, но подтверждения именно современного soft-shadow профиля или normal-map освещения здесь нет. Это не доказывает отсутствие любой формы теней в оригинале; эти два конкретных улучшения остаются проектной идеей. **Зависимости:** отдельный presentation backend и явный visual-mode switch, сохраняющий simulation state согласно принятому [направлению режимов](../architecture/decisions.md#architecture-direction). **Предложенный сценарий:** переключение Legacy/Remastered меняет только картинку; синтетические clock, luminance gameplay values и сохранённое состояние остаются идентичны.
 
-**Steamwoven на `b1245e5`:** renderer не реализует lighting, shadows или normal maps и не проверяет режимы качества; в текущем документе проекта принято Legacy-first, а позднее улучшение графики отделено от runtime parity. [Viewer limitations](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111), [visual modes decision](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/architecture/decisions.md#L8-L18). Покрытие отсутствует; это поздняя идея продукта.
+**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. См. [каталог компонентов](../project/status.md); исследовательский контракт не закрывает gameplay/save/Remastered интеграцию.
 
 ## Текущее покрытие и неопределённости
 
-1. **Есть только bounded framing:** current `TerrainLoader.ParseSector` проверяет count и лимиты, вычисляет 48-байтовый диапазон записей и пропускает его; `TerrainSectorFraming` предоставляет `LightCount` и byte ranges, но не типизированный `Light` или список emitters. Это полезная структурная точка продолжения, не runtime lighting. [Парсер на `b1245e5`](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainLoader.cs#L182-L213), [модель framing](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/src/Arcanum.Data/Terrain/TerrainModels.cs#L162-L181).
-2. **Визуальная граница:** текущий viewer отрисовывает заданные текстуры диагностически; его контракт прямо исключает lighting, shadows и grading. Это корректная ограниченная сцена, но она не может служить свидетельством отсутствия оригинальных light records или поведения в иных секторах. [Canvas](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/tools/terrain-viewer/Godot/TerrainCanvas.cs#L120-L140), [контракт renderer](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/rendering/terrain-viewer.md#L103-L111).
-3. **Нулевой selected-sector count:** `light_count = 0` установлен только для выбранного сектора в зафиксированном формате/входе. Другие секторы, карты, сохранённые DIF-варианты и объектные источники этим наблюдением не охвачены. [Ограниченное наблюдение входа](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/docs/formats/maps.md#L37-L45).
-4. **Неизвестное оригинальное поведение:** CE-source не заменяет независимое наблюдение игрового runtime. Требуют проверки целевой профиль скорости игрового времени, крайние пустые слоты lighting schemes, точные правила indoor/outdoor для каждого слоя, полный охват object/overlay/carried emitters, правила видимости за пределами явно caller-linked skill checks и поведение на реальных карта/сохранениях.
-5. **Изоляция источников:** ссылки на CE — только для описания поведения. Документ не копирует CE-код и не является разрешением механически переносить его структуру. Любая реализация остаётся независимой и должна пройти применимые требования provenance/licensing из [метода исследования](../research/method.md).
+[RES-018 time/light](../world/time-lighting-contract.md) и [RES-020 clock policy](../world/game-clock-policy.md) смержены как исследование. Их bounded source/raw-data/table checks не являются тестами production clock или lighting. На audit baseline публичных clock/scheduler/light-scheme/emitters/rendering/save систем нет. WORLD004 существует на доске, но не вошёл в этот merged срез. Exact movement time и ART playback clocks остаются отдельными доменами.
+
+Area Data owner сохраняет секционные границы/counts и raw fields; декодирование источников/схем, их значение и активность требуют своих реализаций. Состояние исследования и production coverage разделены в матрице.
 
 ## Сводная матрица покрытия Steamwoven
 

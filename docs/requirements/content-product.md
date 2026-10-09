@@ -1,6 +1,8 @@
 # Данные, совместимость и отдельные цели Steamwoven
 
-Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; Steamwoven coverage pin `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. Чтение исходников; новых original-data или runtime проверок не проводилось. CE-source-confirmed означает подтверждение конкретного кода, а не оригинального поведения. Сценарии ниже — предложенная приёмка, не выполненные тесты. См. [правила реестра](README.md).
+**Покрытие реализации:** аудит 2026-10-09, merged main [`a8a553b7`](https://github.com/Simarglok/arcanum-steamwoven/tree/a8a553b7c406ace77ea019bf2b13251f00ecddb6), через PR #54. Источники исходного CE-исследования и его дата сохранены; актуальный объём — в таблице и Steamwoven-описаниях ниже. [Метод и срез доски](README.md#база-и-происхождение). Новых runtime/GUI/original-data запусков в этом аудите нет.
+
+Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; исходный Steamwoven research pin `b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae`. Чтение исходников; новых original-data или runtime проверок не проводилось. CE-source-confirmed означает подтверждение конкретного кода, а не оригинального поведения. Сценарии ниже — предложенная приёмка, не выполненные тесты. См. [правила реестра](README.md).
 
 ## Контент и системные зависимости
 
@@ -8,7 +10,7 @@ Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; Ste
 
 ### FR-CONTENT-001 — Оригинальные ресурсы читаются из выбранных источников
 
-**Поведение.** Запуск использует данные собственной установленной игры пользователя; логическое имя ресурса сохраняется независимо от физического архива/каталога. Отсутствующий обязательный источник имеет явный результат ошибки. **CE-source:** [загрузка module DAT и каталога](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1838-L1902), [подключение репозитория](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L573-L649); политика не распространять assets взята из [vision](../project/vision.md), не из CE. **Зависимости/приёмка:** внешний data source, DAT/loose lookup; корректная установка разрешает объявленный ресурс, неполная даёт диагностируемую ошибку без подмены. **Покрытие:** частично — caller-selected bounded [DAT reader](../Arcanum.Data.md) и локальный launch workflow; полного автоматического discovery и общего game-resource resolver нет.
+**Поведение.** Запуск использует данные собственной установленной игры пользователя; логическое имя ресурса сохраняется независимо от физического архива/каталога. Отсутствующий обязательный источник имеет явный результат ошибки. **CE-source:** [загрузка module DAT и каталога](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1838-L1902), [подключение репозитория](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L573-L649); политика не распространять assets взята из [vision](../project/vision.md), не из CE. **Зависимости/приёмка:** внешний data source, DAT/loose lookup; корректная установка разрешает объявленный ресурс, неполная даёт диагностируемую ошибку без подмены. **Покрытие:** частично — authenticated [Area owner/selected-frame leases](../world/crash-site-area-loader.md), bounded DAT и explicit selected NPC SCR/DLG sources. Автоматического game discovery и общего resolver нет.
 
 <a id="fr-content-002"></a>
 
@@ -26,13 +28,13 @@ Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; Ste
 
 ### FR-CONTENT-004 — Объекты сохраняют identity, тип и наследуемые свойства
 
-**Поведение.** Instance override и prototype default различаются; ссылки на сущности не заменяются индексом спрайта или временным UI handle. **CE-source:** [`obj_read` выбирает proto/instance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1252), [`obj_field_fetch` direct/transient/prototype ветви](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2485-L2535), [solitary object reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_file.c#L43-L64). **Приёмка:** отличающиеся instance/default значения, сохранённая identity при переходе, явный unsupported type. **Покрытие:** частично — [317 static records/default fields](../world/static-object-loader.md) в выбранном v119 profile; общего mutable registry, всех object types, ссылочных lifecycle/save semantics нет.
+**Поведение.** Instance override и prototype default различаются; ссылки на сущности не заменяются индексом спрайта или временным UI handle. **CE-source:** [`obj_read` выбирает proto/instance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1252), [`obj_field_fetch` direct/transient/prototype ветви](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L2485-L2535), [solitary object reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_file.c#L43-L64). **Приёмка:** отличающиеся instance/default значения, сохранённая identity при переходе, явный unsupported type. **Покрытие:** частично — [Area](../world/crash-site-area-loader.md) сохраняет multisector v119 static/mobile/prototype identity, direct/effective presence и immutable occurrences; [NPC entry](../scripting/npc-dialog-entry-runtime.md) сохраняет typed bindings. Mutable registry, save/actor lifecycle отсутствуют.
 
 <a id="fr-content-005"></a>
 
 ### FR-CONTENT-005 — Системы продолжают читать оригинальные структуры
 
-**Поведение.** DAT/ART/PRO/MOB/MES/DLG/SCR/maps остаются источниками для поддержанных областей; одноразовая конверсия не скрывает оригинальную identity и несовместимые записи. **Происхождение:** принятое [архитектурное направление](../architecture/decisions.md); CE демонстрирует separate [DAT variants](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L92-L127) и [object reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1252), но не доказывает допустимость любого варианта. **Приёмка:** поддержанные/неподдержанные форматы и версии имеют явный результат; cache не теряет оригинальные ID. **Покрытие:** частично — bounded DAT/ART/DLG, selected sector/static readers. Считать по каждому формату/подмножеству в [каталоге](../project/status.md), не общей галочкой «data compatibility».
+**Поведение.** DAT/ART/PRO/MOB/MES/DLG/SCR/maps остаются источниками для поддержанных областей; одноразовая конверсия не скрывает оригинальную identity и несовместимые записи. **Происхождение:** принятое [архитектурное направление](../architecture/decisions.md); CE демонстрирует separate [DAT variants](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L92-L127) и [object reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L1233-L1252), но не доказывает допустимость любого варианта. **Приёмка:** поддержанные/неподдержанные форматы и версии имеют явный результат; cache не теряет оригинальные ID. **Покрытие:** частично — bounded DAT/ART/MES/SEC/PRO/mobile/DLG readers и selected SCR entry graph используются напрямую. Поддержка всех вариантов, overlays/DIF/PATCH, save и полной VM не заявлена. [Catalogue](../project/status.md).
 
 <a id="fr-content-006"></a>
 
@@ -72,7 +74,7 @@ Gamepad передаёт намерения актёра/камеры/дейст
 
 ### FR-PRODUCT-003 — Независимая камера, follow и управляемый zoom
 
-Левый стик управляет актёром; правый — камерой с независимыми настройками обеих осей. Manual pan снимает follow; после нейтрали актёра/камеры новая actor-only команда возвращает follow. LT — zoom out, RT — zoom in; точные presets для возврата к 100% и комфортному увеличению предлагаются как деталь UX, пока не являются принятым конкретным mapping. **Основание:** прямые решения владельца в обсуждении; [current diagnostic policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy). Предпочтительное направление описывается видимым движением картинки, не названием checkbox. **Приёмка:** обе оси задаются независимо mouse/gamepad, neutral/follow сценарий, точный preset, saved preferences. **Покрытие:** частично — dual-domain pan/follow/settings и [diagnostic wheel/+/- zoom](https://github.com/Simarglok/arcanum-steamwoven/blob/b1245e59c585c7b7b03dd0b764e2d3e31d0f89ae/tools/terrain-viewer/Godot/TerrainViewerWorld.cs#L224-L243). Gamepad triggers, точные presets, production camera limits и grid integration на этом pin не подтверждены; более новый кандидат не зачтён.
+Левый стик управляет актёром; правый — камерой с независимыми настройками обеих осей. Manual pan снимает follow; после нейтрали актёра/камеры новая actor-only команда возвращает follow. LT — zoom out, RT — zoom in; точные presets для возврата к 100% и комфортному увеличению предлагаются как деталь UX, пока не являются принятым конкретным mapping. **Основание:** прямые решения владельца в обсуждении; [current diagnostic policy](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy). Предпочтительное направление описывается видимым движением картинки, не названием checkbox. **Приёмка:** обе оси задаются независимо mouse/gamepad, neutral/follow сценарий, точный preset, saved preferences. **Покрытие:** частично — merged WORLD zoom/Follow/grid integration: LT-out/RT-in, 0.125..8, exact 1/2/3x presets/numeric entry, ordinary default2x и отдельная persisted zoom policy. [PR #37](https://github.com/Simarglok/arcanum-steamwoven/pull/37), [WORLD003](../rendering/terrain-viewer.md#integrated-world-diagnostic-policy). Numerical1.00 не physical pixel1:1; production limits и Bluetooth/QHD comfort отдельно не подтверждены.
 
 <a id="fr-product-004"></a>
 
@@ -104,17 +106,17 @@ Normal/depth/occlusion/emissive maps, soft shadows, fog, weather, particles, imp
 
 | ID | Данные | Правила | Интеграция | Проверка | Ограниченный объём |
 | --- | --- | --- | --- | --- | --- |
-| FR-CONTENT-001 | Частично | Нет | Частично | Частично | Caller-selected DAT и local diagnostic launch; не полный game discovery/resolver. |
+| FR-CONTENT-001 | Частично | Частично | Частично | Частично | Authenticated Area owner/frame leases и explicit NPC SCR/DLG sources; не game discovery/general resolver. |
 | FR-CONTENT-002 | Нет | Нет | Нет | Нет | Универсальный precedence profile не принят и не реализован. |
 | FR-CONTENT-003 | Нет | Нет | Нет | Нет | Campaign bootstrap отсутствует. |
-| FR-CONTENT-004 | Частично | Частично | Частично | Частично | Selected v119 static identity/default chain; не общий mutable world registry. |
-| FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded format readers и diagnostics; не все форматы/варианты. |
+| FR-CONTENT-004 | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
+| FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
 | FR-CONTENT-006 | Частично | Нет | Нет | Частично | Raw DLG/MES projections; не text/encoding/UI runtime. |
 | FR-CONTENT-007 | Нет | Нет | Нет | Нет | Gameplay RNG отсутствует. |
 | FR-CONTENT-008 | Нет | Нет | Нет | Нет | Общего mod compatibility profile нет. |
 | FR-PRODUCT-001 | Неприменимо | Частично | Частично | Частично | Display lab; не production game UI/readability. |
 | FR-PRODUCT-002 | Неприменимо | Частично | Частично | Частично | Synthetic/diagnostic input, не все gameplay actions. |
-| FR-PRODUCT-003 | Неприменимо | Частично | Частично | Частично | Pan/follow/settings и wheel/+/- zoom в diagnostics; нет подтверждения LT/RT, exact presets или production camera path. |
+| FR-PRODUCT-003 | Неприменимо | Частично | Частично | Частично | WORLD LT-out/RT-in, 1/2/3x+numeric zoom, saved default2x, Follow/Manual и grid integration; не production camera или physical1:1. |
 | FR-PRODUCT-004 | Частично | Нет | Частично | Частично | Selected Legacy frames/viewer; нет HD assets/backend/toggle, а проверка касается только Legacy diagnostics. |
 | FR-PRODUCT-005 | Неприменимо | Неприменимо | Частично | Частично | macOS diagnostics; не playable cross-platform validation. |
 | FR-PRODUCT-006 | Неприменимо | Нет | Нет | Нет | Только direction/source study; нет утверждённого gameplay fix profile. |
