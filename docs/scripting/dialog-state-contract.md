@@ -46,7 +46,7 @@ is the implementation frontier.
 | E2 | Same evidence, conditional caller/entry; [entry production source](../../src/Arcanum.Scripting/NpcDialog/NpcDialogEntryResolver.cs) | PC triggerer, NPC attachee, extra absent, caller SCR line0. Following false, two attachment-local flags false, jilted false reach SCR line4 → DLG NPC1. Those booleans are diagnostic assumptions, not observed world state. |
 | E3 | [NPC entry before enumeration][entry], [selected Player action before transition][select], [Direct dispatch][direct] | Fresh-entry effects occur before eligibility; selected action occurs before target entry. Regeneration (`randomize=true`) skips entry effects in source, not a retry recipe for failed commands. |
 | E4 | [GF query][gf-query], [GF action][gf-action], [global flag owner][global] | Two operands, bit identity and comparison/write value; world-global, not PC or attachment-local. |
-| E5 | [IN query][in-query], [IN action][in-action], [lookup][lookup], [substitute][substitute], [transfer][transfer], [placement][placement] | Sign/direction, first name match, conditional substitute/followers, transfer then parent check and fallback. No count argument. |
+| E5 | [IN query][in-query], [IN action][in-action], [lookup][lookup], [substitute][substitute], [transfer wrapper/unparented GET][transfer-get], [parented transfer][transfer], [placement][placement] | Sign/direction, first name match, conditional substitute/followers, transfer then parent check and fallback; conditional SAP_GET/SAP_TRANSFER and existing/new junk-pile insertion. No count argument. |
 | E6 | [RE query][re-query], [RE action][re-action], [reaction service][reaction] | Signed threshold vs lexically signed delta vs unsigned target adjustment; effective query and mutable reaction storage are not identical quantities. |
 | E7 | [QU action][qu], [RU action][ru], [LF query][lf-query], [LF action][lf-action], [attachment flags][local] | PC quest with NPC context; PC rumor; effective NPC SAP_DIALOG attachment flags, not DLG asset bits. |
 | E8 | [Numeric sort][sort], [comparison][compare], [gender/IQ/condition/cap][filter], [role/gender parse][role] | Numeric source grouping, five eligible candidates; gender → adjusted IQ → condition; Player alternate is selector, NPC Condition is media metadata. |
@@ -131,9 +131,9 @@ quantity, insertion/slot/equipment side effects and transfer scripts remain U3.
 The item adapter must either evidence those outcomes or refuse their capability;
 “one command” does not prove “one unit”.
 
-S negative direction attempts transfer to PC, ignores its boolean result and
+S [negative direction][in-action] attempts transfer to PC, ignores its boolean result and
 checks parent identity. If parent is not PC, removes the item and calls placement
-at PC location. Placement may insert into/create a junk pile, drop to ground and
+at PC location. [Placement][placement] may insert into/create a junk pile, drop to ground and
 schedule decay; it is not always a bare world drop. Positive direction on parent
 mismatch places at NPC location if NPC has a PC leader, otherwise destroys the
 item. These positive/destroy forms are **not** in the recommended initial subset.
@@ -145,7 +145,9 @@ item is an explicit `MissingItem` rejection in the initial safety profile, a
 **deliberate divergence** from CE continuation requiring owner acceptance. Refused
 transfer with a successful verified fallback is Applied/Placed, not automatically
 failure; fallback refusal after removal is Indeterminate, not Rejected. A source
-transfer can invoke SAP_TRANSFER/SAP_GET: no callbacks/full VM are claimed here.
+transfer wrapper dispatches to [parented SAP_TRANSFER][transfer] or
+[unparented SAP_GET][transfer-get] depending on the item's current parent:
+no callbacks/full VM are claimed here.
 No inventory object/name/order/quantity is reconstructed from dialogue display.
 
 ## Complete entry and one Direct trace
@@ -369,7 +371,7 @@ production services or an independent original-runtime oracle.
 | --- | --- | --- | --- |
 | L1 Exact identities and conditional entry | E1/E2 D/S; current source E10 | E11 current hash/terminal check; inherited object evidence E1 | Entry-to-state context binding; verified bounded identity, no live-state claim |
 | L2 GF arity/owner/read/write | E4/E9 S, E11 D selected shapes | C01,C02,C15,C16 | Global story service + strict parser; missing production |
-| L3 IN signed direction/lookup/instance/fallback | E5 S, E11 D negative selected form | C03..C07,C21; U3 for quantity/callbacks | Inventory service/receipt; negative-only proposal, positive/stack frontier |
+| L3 IN signed direction/lookup/instance/fallback | E5 S ([transfer wrapper/GET][transfer-get], [parented TRANSFER][transfer], [existing/new pile placement][placement]), E11 D negative selected form | C03..C07,C21; U3 for quantity/callbacks | Inventory service/receipt; negative-only proposal, positive/stack frontier |
 | L4 RE threshold vs target vs relative | E6 S, E11 D unsigned selected action | C08,C09,C10,C15; U1/U2 | Effective reaction query and explicit target/delta adapter; missing production |
 | L5 Seven effects, post-effects gates, Player-before-target | E3/E7 S, E11 D | T1/C09/C16/C17 | Source/selection/target staging and independent ordered receipt test |
 | L6 QU/RU/LF ownership, not working services | E7 S/E10 project source | C09,C17,C18 | Quest/rumor/attachment adapters with dependency versions; missing |
@@ -424,7 +426,9 @@ Original mode reads existing explicitly selected archives, checks full input
 hashes before/after, resolves numeric1324 and exact derived DLG uniqueness, checks
 bounded framing and selected shape/order/predicate algebra, prints only hashes,
 identifiers and categorical shape/results. It writes no extracted resource, text
-or operands. DAT helper lineage is shared for archive framing; the independent
+or operands. File hashes use the existing Python3.10-compatible streaming DAT
+hash helper; self-test exercises empty-file and `abc` known-answer hashes through
+that same path. DAT helper lineage is shared for archive framing; the independent
 DLG worksheet is not independent source lineage or a new production parser.
 Wrong hash/missing input/unknown shape/failed worksheet is FAIL, never parity PASS.
 Private run evidence carries task/run/session/workspace/base/head/UTC/commands/
@@ -448,8 +452,9 @@ is separate from review; NO_MERGE remains in force for this task's delivery.
 [in-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2004-L2056
 [lookup]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1067-L1101
 [substitute]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2055-L2084
+[transfer-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L604-L688
 [transfer]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L773-L839
-[placement]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3906-L3944
+[placement]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3906-L3981
 [re-query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1489-L1499
 [re-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1933-L1956
 [reaction]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L192-L299

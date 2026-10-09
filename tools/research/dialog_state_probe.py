@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 import re
 import struct
+import tempfile
 
 import dat_probe
 
@@ -28,8 +29,7 @@ def require(value: bool, code: str) -> None:
 
 
 def digest(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
+    return dat_probe.hash_file(path)
 
 
 def threshold(value: int, encoded: int) -> bool:
@@ -52,6 +52,15 @@ def self_test() -> dict:
         nonlocal checks
         require(actual == expected, "SyntheticOracleMismatch")
         checks += 1
+
+    # Known-answer file hashes exercise the same streaming path as original mode.
+    with tempfile.TemporaryDirectory(prefix="dialog-state-selftest-") as directory:
+        sample = Path(directory) / "synthetic.bin"
+        for payload, expected in [
+            (b"", "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            (b"abc", "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")]:
+            sample.write_bytes(payload)
+            check(digest(sample), expected)
 
     # Literal boundary oracles, not values derived from a proposed API.
     for reaction, token, expected in [(39, 40, False), (40, 40, True),
