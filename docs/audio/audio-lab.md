@@ -140,6 +140,9 @@ digest/exit/PID/log hash and sampled process-tree peak RSS. Create an ignored ow
 `artifacts/audio-lab/<run>/ownership.json` first. Labels are immutable; do not
 reuse a stale log. Read the logs and reports: exit zero alone is not acceptance.
 Evidence created before the final commit is exploratory, not final-head proof.
+Set `AUDIO_LAB_SCRATCH` to an existing owned scratch directory; each command gets
+a fresh retained `TMPDIR` there, recorded in its receipt. Do not delete it before
+review/delivery or claim all engine caches are isolated by that variable.
 
 Run fresh canonical editor build/import (not `dotnet run` for the Godot app):
 

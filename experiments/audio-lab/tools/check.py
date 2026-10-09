@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -70,6 +71,13 @@ def main():
     env = os.environ.copy()
     dotnet = Path.home() / ".local/share/dotnet"
     env.update(DOTNET_ROOT=str(dotnet), PATH=str(dotnet) + ":/usr/bin:/bin:/usr/sbin:/sbin", __GODOT_SHELL_ENV_SET="1")
+    # Keep Godot/export process temporary writes in caller-selected owned scratch,
+    # never implicitly select the system temp folder. Retain for task evidence.
+    scratch = Path(os.environ["AUDIO_LAB_SCRATCH"]).resolve()
+    if not scratch.is_dir():
+        raise SystemExit("AUDIO_LAB_SCRATCH must be an existing owned scratch directory")
+    effective_temp = tempfile.mkdtemp(prefix="audio-lab-" + a.label + "-", dir=scratch)
+    env["TMPDIR"] = effective_temp
     start = time.monotonic()
     peak = 0
     timeout = False
@@ -91,6 +99,7 @@ def main():
                   workspace=str(ROOT), head=head, source_digest=before_digest,
                   source_unchanged=before_digest == tree_digest(), timestamp=stamp,
                   command=command, canonical_dotnet=str(dotnet / "dotnet"),
+                  effective_temp=effective_temp,
                   pid=process.pid, exit=exit_code, timed_out=timeout,
                   seconds=time.monotonic() - start, sampled_process_tree_peak_rss_bytes=peak,
                   rss_sample_interval_seconds=.15, log=str(log),
