@@ -12,7 +12,7 @@ from . import config
 SUPPORTED_TOOLS = {
     "art": ("ARC-RENDER-001", "ARC-RENDER-002"),
     "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001", "ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"),
-    "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003"),
+    "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003", "ARC-GPAD-005"),
     "display": ("ARC-UI-001",),
 }
 

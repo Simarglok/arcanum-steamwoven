@@ -157,11 +157,41 @@ public partial class TerrainViewerApp
         Require(!_coordinator.TryPublish(generation-1, () => throw new InvalidOperationException("stale failure published"))
             && _worldLifecycleSession is null && _worldActor.Session!.State.LastOpportunity is null, "stale app publication");
         Prepare(); var aborted = _worldActor.Session!; var abortedState = aborted.State;
+        var retiredPanel = _worldPanel!;
+        // Compare native connection-list cardinality across synchronous ownership
+        // transitions: a Variant's custom Callable does not retain managed
+        // Action identity. No other app initialization/await occurs here.
+        int Connections() => global::Godot.Input.Singleton.GetSignalConnectionList(global::Godot.Input.SignalName.JoyConnectionChanged).Count;
+        var connectedCount = Connections(); InitializeWorld();
+        Require(_worldInitialized && connectedCount > 0 && Connections() == connectedCount, "repeat initialization changed subscriptions");
         ExitWorld(); ExitWorld();
         Require(_worldActor.Session is null && _worldLifecycleSession is null && !_worldResetPending && !_worldReloadPending
             && ReferenceEquals(aborted.State,abortedState) && aborted.State.Phase == MovementPhase.OutboundBeforeEntry,
             "exit disposal manufactured settlement or retained lifecycle");
+        var retiredQueue = _worldGridInput;
+        Require(!_worldInitialized && Connections() == connectedCount - 1 && _worldPanel is null
+            && retiredPanel.GetParent() is null && retiredPanel.IsQueuedForDeletion(), "teardown did not consume panel/subscription ownership");
+        ExitWorld();
+        Require(Connections() == connectedCount - 1 && ReferenceEquals(retiredQueue, _worldGridInput) && ReferenceEquals(aborted.State, abortedState), "repeat exit changed disposed state");
+        // Legitimate later initialization reacquires exactly one subscription
+        // and one live panel. Test the native HUD event, not a direct Toggle call.
+        InitializeWorld(); var successorPanel = _worldPanel!; InitializeWorld();
+        Require(_worldInitialized && Connections() == connectedCount && ReferenceEquals(successorPanel, _worldPanel)
+            && !ReferenceEquals(retiredPanel, successorPanel) && GetChildren().OfType<DiagnosticInputSettingsPanel>().Count() == 1,
+            "reinitialization duplicated or lost ownership");
+        var settingsButton = _hud!.GetNode<VBoxContainer>("TerrainDiagnosticPanel/DiagnosticContents")
+            .GetChildren().OfType<Button>().Single(button => button.Text == "Input settings (F1 / Start)");
+        settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
+        Require(successorPanel.IsOpen, "reowned HUD settings subscription absent or duplicated");
+        settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
+        Require(!successorPanel.IsOpen, "reowned HUD close subscription absent or duplicated");
+        PublishSyntheticForSelfTest(arguments, result); Prepare();
+        var reownedSession = _worldActor.Session!; var reownedState = reownedSession.State;
+        ExitWorld(); ExitWorld();
+        Require(!_worldInitialized && Connections() == connectedCount - 1 && _worldPanel is null && _worldActor.Session is null
+            && ReferenceEquals(reownedSession.State, reownedState) && reownedState.Phase == MovementPhase.OutboundBeforeEntry,
+            "reowned disposal manufactured CenterArrived or retained subscriptions");
         Require(oldSession.State.Phase == MovementPhase.OutboundBeforeEntry, "failure disposal manufactured CenterArrived");
-        GD.Print("ARC-WORLD-003 retirement/ownership PASS production R early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/exit disposal distinct from CenterArrived");
+        GD.Print("ARC-WORLD-003 retirement/ownership PASS production R early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/once-owned teardown/reinitialization/native HUD subscription/exit disposal distinct from CenterArrived");
     }
 }

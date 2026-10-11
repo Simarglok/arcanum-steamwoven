@@ -1,5 +1,11 @@
 # Gamepad prototype evidence
 
+## ARC-GPAD-005 current lab surface
+
+The same lab now contains Contextual, QuickSlots and Radial templates, all ten assignable synthetic slots, target/ground confirmation, RB display-provider labels, camera-only trigger zoom, Settings user-copy digital/shoulder editing and lab-only v2 preferences. [Gamepad presets](gamepad-presets.md) is the canonical actual binding/context/schema/reset/switch/verification and **full owner comparison checklist**. None of these demonstrations implements production inventory/spells/skills/combat/party screens or integrates presets into WORLD. Exact-head exported/ordinary delivery and independent review are separate gates; physical Bluetooth/comfort/final-layout remains owner-pending.
+
+The historical ARC-GPAD-002 evidence below describes its v1 behavior. Current Settings Reset/preset changes preserve positions and camera mode; only F2 deliberately resets actor and camera. Missing v2 can migrate valid v1 without changing it; WORLD paths/defaults are separate and unchanged.
+
 ## ARC-GPAD-002 implementation
 
 The Gamepad Lab remains a standalone synthetic Godot 4.7.2 / .NET 8 experiment. It has procedural shapes only: no original data, extracted assets, game integration, original navigation, or controller cursor emulation.

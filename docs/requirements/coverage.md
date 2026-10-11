@@ -4,6 +4,8 @@
 
 183 группы в 10 доменах; это не процент готовности. Данные, правила, интеграция и проверка оцениваются отдельно. «Частично» означает только названный диапазон; research/Proposal и root Done не считаются product runtime. Исторические candidate-specific synthetic/original/export/owner observations не являются новыми запусками аудита или original executable parity. Приёмка полного FR остаётся в доменном документе; статусы четырёх измерений здесь повторяют его текущую таблицу.
 
+Отдельный кандидат ARC-GPAD-005: [три шаблона/десять слотов и чек-лист](../input/gamepad-presets.md) расширяют только synthetic lab/framework для FR-PRODUCT-002/003, FR-UI-002/006/007 и preference-подслучая FR-LIFECYCLE-004. Реальные inventory/spell/skill/combat/party UI и WORLD preset integration не реализованы. Source/export/ordinary/review/merge подтверждаются отдельными exact-head receipts; candidate source не закрывает merged таблицу или физическую XboxBT/comfort/final-layout проверку владельца.
+
 ## Мир и переходы
 
 Источник таблицы: [world.md](world.md).

@@ -472,17 +472,29 @@ public partial class TerrainViewerApp
     private void ExitWorld()
     {
         if (!_worldInitialized) return;
-        FlushWorldZoom();
-        QuarantineWorld();
-        GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
-        _worldActor.DisposeSession();
-        RetireWorldLifecycle(); _worldGridInput = new();
-        Input.JoyConnectionChanged -= WorldConnectionChanged;
-        if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;
-        if (_worldPanel is not null)
+        // Consume this initialization before any callbacks. Retirement and tree
+        // exit may both arrive; neither may disconnect another generation's
+        // subscriptions or dispose the same session twice.
+        _worldInitialized = false;
+        try
         {
-            _worldPanel.Changed -= SaveWorldSettings; _worldPanel.CloseRequested -= ToggleWorldSettings; _worldPanel.ResetRequested -= ResetWorldSettings;
-            _worldPanel.ZoomRequested -= SetPreferredWorldZoom; _worldPanel.FitRequested -= FitWorldView;
+            FlushWorldZoom();
+            QuarantineWorld();
+            GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
+        }
+        finally
+        {
+            _worldActor.DisposeSession();
+            RetireWorldLifecycle(); _worldGridInput = new();
+            Input.JoyConnectionChanged -= WorldConnectionChanged;
+            if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;
+            if (_worldPanel is { } panel)
+            {
+                _worldPanel = null;
+                panel.Changed -= SaveWorldSettings; panel.CloseRequested -= ToggleWorldSettings; panel.ResetRequested -= ResetWorldSettings;
+                panel.ZoomRequested -= SetPreferredWorldZoom; panel.FitRequested -= FitWorldView;
+                panel.Hide(); RemoveChild(panel); panel.QueueFree();
+            }
         }
     }
 }

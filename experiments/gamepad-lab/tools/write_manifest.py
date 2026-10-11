@@ -10,7 +10,9 @@ from pathlib import Path
 import subprocess
 import sys
 
-TASK = "ARC-GPAD-003"
+TASK = os.environ.get("ARCANUM_GAMEPAD_EXPORT_TASK", "ARC-GPAD-003")
+if TASK not in ("ARC-GPAD-003", "ARC-GPAD-005"):
+    raise SystemExit("unsupported gamepad export task")
 REQUIRED_LOGS = (
     "sdk-info.log", "locked-restore.log", "locked-tests-restore.log", "release-build.log",
     "core-harness.log", "editor-import.log", "debug-build.log", "godot-self-test.log",
@@ -75,13 +77,21 @@ def main() -> None:
     from tools.local_dev.export_endpoint import bound_budget
     if git(candidate_root, "rev-parse", "HEAD") != head or git(candidate_root, "status", "--porcelain"):
         raise SystemExit("manifest requires the current clean candidate HEAD")
-    if build_root != main_root / "artifacts" / "builds" / TASK / head or not app.is_file() or not app.is_relative_to(build_root / "GamepadLab.app"):
+    artifact_dir = "gamepad-builds" if TASK == "ARC-GPAD-005" else "builds"
+    if build_root != main_root / "artifacts" / artifact_dir / TASK / head or not app.is_file() or not app.is_relative_to(build_root / "GamepadLab.app"):
         raise SystemExit("build root or exported app is not the exact candidate package")
     evidence = build_root / "evidence"
-    missing = [name for name in (*REQUIRED_LOGS, *REQUIRED_REPORTS) if not (evidence / name).is_file()]
-    if missing or not (evidence / "automated-capture.png").stat().st_size:
+    gates = GATES
+    required_logs, required_reports = REQUIRED_LOGS, REQUIRED_REPORTS
+    if TASK == "ARC-GPAD-005":
+        from tools.local_dev.gamepad_export_gates import GATES as gates, validate_reports
+        validate_reports(evidence, head)
+        required_logs = tuple(gates.values())
+        required_reports = ("exported-smoke.json", "ordinary-launch-not-verified.json", "export-preflight.json", "source-preset-matrix.json", "exported-preset-matrix.json", "source-preset-persistence.json", "exported-preset-persistence.json")
+    missing = [name for name in (*required_logs, *required_reports) if not (evidence / name).is_file()]
+    if missing or (TASK == "ARC-GPAD-003" and not (evidence / "automated-capture.png").stat().st_size):
         raise SystemExit(f"missing or empty durable evidence: {missing}")
-    for report in ("exported-smoke.json", "persistence-write.json", "persistence-verify-nondefault.json", "persistence-verify-default.json"):
+    for report in (("exported-smoke.json",) if TASK == "ARC-GPAD-005" else ("exported-smoke.json", "persistence-write.json", "persistence-verify-nondefault.json", "persistence-verify-default.json")):
         validate_report(evidence / report)
     try:
         preflight = json.loads((evidence / "export-preflight.json").read_text(encoding="utf-8"))
@@ -103,7 +113,7 @@ def main() -> None:
         "candidate": {"baseCommit": base, "commit": head, "tree": tree, "branch": git(candidate_root, "branch", "--show-current")},
         "app": {"relativePath": "GamepadLab.app", "executableRelativePath": app.relative_to(build_root).as_posix()},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
-        "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in GATES.items()],
+        "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in gates.items()],
         "exportBudget": bound_budget(build_root, "gamepad", expected_candidate_id, payload_bytes),
         "acceptance": "not-accepted",
         "delivery": {"status": "verified-local-candidate; exact-head review pending", "physicalXboxBluetooth": "NOT_VERIFIED", "signingNotarization": "NOT_VERIFIED", "ordinaryLaunch": "NOT_VERIFIED; --capture evidence is automated"},

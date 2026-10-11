@@ -1,6 +1,7 @@
 using System.Text.Json;
 using GamepadLab.Core;
 using Godot;
+using Arcanum.Input;
 
 namespace GamepadLab;
 
@@ -12,29 +13,61 @@ public partial class LabRoot : Node2D
     private SelectionState _selection = new(); private SelectionResult? _result; private MovementState _actor = new(new Vec2(460, 610), new Vec2(1, 0));
     private LabSettings _settings = LabSettings.Default; private CameraFollowState _cameraState = new(); private Vec2 _cameraCenter; private bool _focused = true; private RawInputFrame _lastRaw = new(-1, default);
     private string _lastProvenance = "LIVE OS EVENT (not physical usability proof)"; private string _lastEvent = "startup"; private bool _lastAccepted;
+    private readonly GamepadPresetReducer _presets = new();
+    private readonly LabActionExecutor _actions = new();
+    private PresetState _presetState = new(); private PresetStep? _presetStep;
+    private long _epoch; private long _observationFrame;
+    private bool _injectedObservations;
+    private string? _editingSlot; private string? _editingBinding;
+    private LabHighlightLayer _highlight = null!;
 
     public override void _Ready()
     {
         LabInputAdapter.EnsureInputMap(); _world = GetNode<Node2D>("WorldRoot"); _camera = GetNode<Camera2D>("Camera2D"); _courtyard = GetNode<SyntheticCourtyard>("WorldRoot/SyntheticCourtyard"); _hud = GetNode<LabHud>("CanvasLayer/LabHud");
-        _settings = _settingsStore.Load(); _input.SetStartupDevices(Input.GetConnectedJoypads()); ResetCameraCentered(); Input.JoyConnectionChanged += OnJoyConnectionChanged;
+        _settings = _settingsStore.Load(); _hud.SetScale(_settings.UiScalePercent); _input.SetStartupDevices(Input.GetConnectedJoypads()); ResetCameraCentered(); Input.JoyConnectionChanged += OnJoyConnectionChanged;
+        _highlight = new LabHighlightLayer(); GetNode<CanvasLayer>("CanvasLayer").AddChild(_highlight);
+        _actions.Boundary(_epoch); AddLog(_settingsStore.Diagnostic);
         SyncActor(); AddLog("Lab ready: synthetic-only scene; no original data. Default camera inversion is X=true, Y=true.");
-        var args = OS.GetCmdlineUserArgs(); if (args.Contains("--self-test")) CallDeferred(nameof(RunSelfTest)); else if (args.Contains("--smoke")) CallDeferred(nameof(RunSmoke), args); else if (args.Contains("--persistence")) CallDeferred(nameof(RunPersistence), args); else if (args.Contains("--capture")) CallDeferred(nameof(RunCapture), args);
+        var args = OS.GetCmdlineUserArgs();
+        if (GetViewport() is not SubViewport)
+        {
+            if (args.Contains("--self-test")) CallDeferred(nameof(RunSelfTest)); else if (args.Contains("--smoke")) CallDeferred(nameof(RunSmoke), args); else if (args.Contains("--persistence")) CallDeferred(nameof(RunPersistence), args); else if (args.Contains("--capture")) CallDeferred(nameof(RunCapture), args);
+            else if (args.Contains("--preset-matrix")) CallDeferred(nameof(RunPresetMatrix), args);
+        }
     }
     public override void _ExitTree() => Input.JoyConnectionChanged -= OnJoyConnectionChanged;
 
     public override void _Process(double delta)
     {
-        _input.EndFrame(); RefreshCameraLayout(); RefreshSelection();
-        var intents = new List<IntentFrame>(); var controller = _adapter.SampleController(_input.ActiveDevice, _focused);
-        if (controller is RawInputFrame joy) intents.Add(_input.Reduce(joy, Context(delta, _hud.ModalVisible, true)));
-        intents.Add(_input.Reduce(_adapter.SampleKeyboard(_focused), Context(delta, _hud.ModalVisible, controller is null)));
-        if (!_hud.ModalVisible) ApplyWorldIntents(intents.Where(i => i.Accepted), delta);
+        _input.EndFrame(); RefreshCameraLayout(); RefreshSelection(); _observationFrame++;
+        if (!_injectedObservations)
+        {
+            _adapter.RefreshKeyboardLevels(Input.IsKeyPressed);
+            if (_input.ActiveDevice is int device && Input.GetConnectedJoypads().Contains(device))
+                _adapter.RefreshControllerLevels(device, axis => Input.GetJoyAxis(device, axis), button => Input.IsJoyButtonPressed(device, button));
+        }
+        else CompleteInjectedObservation();
+        var intents = new List<IntentFrame>(); var controller = _adapter.SampleController(_input.ActiveDevice, _focused, _observationFrame);
+        if (controller is RawInputFrame joy) intents.Add(Route(_input.Reduce(joy, Context(delta, _hud.ModalVisible, true)) with { SourceDeviceId = joy.DeviceId }));
+        intents.Add(Route(_input.Reduce(_adapter.SampleKeyboard(_focused, _observationFrame), Context(delta, _hud.ModalVisible, true))));
+        if (!_hud.ModalVisible && _actions.Pending is null)
+        {
+            if (_actions.TurnBased)
+                _actions.PreviewGrid(intents.Where(i => i.Accepted).Aggregate(default(Vec2), (v, i) => v + i.Movement), delta);
+            else ApplyWorldIntents(intents.Where(i => i.Accepted), delta);
+        }
+        else if (_actions.Pending?.Kind == "ground")
+            _actions.MoveGround(intents.Where(i => i.Accepted).Aggregate(default(Vec2), (v, i) => v + i.Movement) * (160 * delta));
         if (_hud.ModalVisible)
         {
             var menu = intents.LastOrDefault(i => i.Accepted && (i.MenuDirection != 0 || Math.Abs(i.MenuAnalog) > .45));
             var move = _menuRepeat.Update(menu?.MenuDirection ?? 0, menu?.MenuAnalog ?? 0, delta); if (move != 0) _hud.Navigate(move);
         }
-        RefreshSelection(); _courtyard.SetSelected(_result!.Id); UpdateHud();
+        RefreshSelection(); _courtyard.SetSelected(_actions.SelectedTargetId ?? _result!.Id); UpdateHud();
+        var highlight = _presetStep?.Highlight == true && !_hud.ModalVisible;
+        var highlighted = highlight ? _actions.Eligible(_courtyard.WorldTargets) : Array.Empty<LabWorldTarget>();
+        _courtyard.SetHighlighted(highlighted.Select(t => t.Id));
+        _highlight.UpdateLabels(highlighted, _world, GetViewport().GetVisibleRect(), _settings.UiScalePercent);
     }
 
     public override void _Input(InputEvent input) => Handle(input, "LIVE OS EVENT (not physical usability proof)");
@@ -42,25 +75,23 @@ public partial class LabRoot : Node2D
     {
         if (input is InputEventKey recenter && recenter.Pressed && recenter.Keycode == Key.F2) { Recenter(); GetViewport().SetInputAsHandled(); return; }
         var raw = _adapter.Map(input, _focused); _lastRaw = raw; _lastProvenance = provenance; _lastEvent = DescribeEvent(input);
+        // Refresh real modifier levels for the selecting event without discarding a short event pulse.
+        if (!_injectedObservations && input is InputEventJoypadButton button && Input.GetConnectedJoypads().Contains(button.Device))
+        {
+            _adapter.RefreshControllerLevels(button.Device, axis => Input.GetJoyAxis(button.Device, axis), b => b == button.ButtonIndex ? button.Pressed : Input.IsJoyButtonPressed(button.Device, b));
+            raw = _adapter.SampleController(button.Device, _focused, -1)!;
+        }
         var intent = _input.Reduce(raw, Context(GetProcessDeltaTime(), _hud.ModalVisible), provenance); _lastAccepted = intent.Accepted;
         if (!intent.Accepted) return;
-        if (_hud.ModalVisible)
-        {
-            if (input is InputEventMouseButton mouse && mouse.Pressed && mouse.ButtonIndex == MouseButton.Left) _hud.SelectAt(mouse.Position);
-            if (intent.Cancel) CloseModal(); else if (intent.Confirm) ActivateModal(); GetViewport().SetInputAsHandled(); return;
-        }
-        if (input is InputEventMouseButton click && click.Pressed && click.ButtonIndex == MouseButton.Left)
+        if (!_hud.ModalVisible && input is InputEventMouseButton click && click.Pressed && click.ButtonIndex == MouseButton.Left)
         {
             var picked = _courtyard.PickVisible(click.Position, _world); var ground = _world.MakeCanvasPositionLocal(click.Position);
             _selection = picked is null ? _targeting.PickGround(new Vec2(ground.X, ground.Y)) : _targeting.Pick(picked); RefreshSelection(); AddLog(picked is null ? "Mouse picked ground (targeting only)" : $"Mouse picked {picked}; manual lock.");
+            _actions.Select(_courtyard.WorldTargets.FirstOrDefault(t => t.Id == picked));
             GetViewport().SetInputAsHandled(); return;
         }
-        if (intent.Previous || intent.Next) { _selection = _targeting.Cycle(_result!, intent.Next ? 1 : -1); RefreshSelection(); AddLog($"Cycle -> {_selection.SelectedId}"); }
-        if (intent.Cancel) { _selection = _targeting.CancelLock(); ClearWorldIntents("Movement cancelled: cancel; both sticks require neutral."); }
-        if (intent.Context) { _hud.ShowContext(PrimaryAction()); ClearWorldIntents("Context menu opened."); }
-        if (intent.Settings) { _hud.ShowSettings(); ClearWorldIntents("Settings opened."); }
-        if (intent.Confirm) AddLog(_result!.IsGround ? "destination selected for targeting only; left stick moves actor" : $"{PrimaryAction()} {_result.Id} (synthetic)");
-        if (intent.Inspect) AddLog(_result!.IsGround ? "inspect ground (synthetic)" : $"inspect {_result.Id} (synthetic)");
+        if (_hud.ModalVisible && input is InputEventMouseButton mouse && mouse.Pressed && mouse.ButtonIndex == MouseButton.Left) _hud.SelectAt(mouse.Position);
+        Route(intent);
         GetViewport().SetInputAsHandled();
     }
 
@@ -77,15 +108,23 @@ public partial class LabRoot : Node2D
         // A simultaneous keyboard/controller sample cannot bypass that configured cap,
         // but neither can this integration layer erase a 1.0–2.0 effort value.
         if (movement.Length > _settings.ActorSensitivity) movement = movement.Normalized() * _settings.ActorSensitivity;
+        var zoom = LabZoomPolicy.Apply(_camera.Zoom.X, sampled.Sum(i => i.ZoomDrive), delta); _camera.Zoom = new Vector2((float)zoom, (float)zoom);
         var step = _movement.Update(_actor, movement, delta, _settings.MovementMode, _movementPolicy,
             (candidate, radius) => _courtyard.CanOccupy(ToGodot(candidate), (float)radius));
         var wasBlocked = _actor.Outcome == MovementOutcome.Blocked;
-        _actor = step.State; SyncActor(); ApplyCameraPolicy(movement, camera);
+        _actor = step.State; SyncActor();
+        if (_presetState.WheelOpen || _presetState.AwaitingCameraNeutral || _cameraHandoffObservation)
+        {
+            if (_cameraState.Mode == CameraMode.Follow) { _cameraCenter = CameraBounds().ClampCenter(_actor.Position); ApplyCameraCenter(); }
+        }
+        else ApplyCameraPolicy(movement, camera);
+        _cameraHandoffObservation = false;
         if (!wasBlocked && _actor.Outcome == MovementOutcome.Blocked) AddLog("Actor blocked; intent latched until neutral or direction changes.");
     }
     private void ActivateModal()
     {
         var choice = _hud.Activate(); if (choice == "" || choice == "Close" || choice == "Cancel") { CloseModal(); return; }
+        if (ActivatePresetSurface(choice)) return;
         if (_hud.ModalKind == ModalKind.Context)
         {
             if (choice == "Inspect") AddLog(_result!.IsGround ? "inspect ground (synthetic)" : $"inspect {_result.Id} (synthetic)");
@@ -108,11 +147,11 @@ public partial class LabRoot : Node2D
             "Reset defaults" => LabSettings.Default,
             _ => _settings
         }).Validated();
-        if (choice == "Recenter actor") Recenter();
-        _settingsStore.Save(_settings); if (choice == "Reset defaults") { ClearWorldIntents("Defaults reset (inverted X/Y); neutral frame required."); ResetCameraCentered(); } else AddLog($"Saved setting: {choice}");
+        if (choice == "Recenter camera") ResetCameraCentered();
+        _settingsStore.Save(_settings); _hud.SetScale(_settings.UiScalePercent); if (choice == "Reset defaults") { ClearWorldIntents("Defaults reset (inverted X/Y); positions/mode/zoom preserved."); } else AddLog($"Saved setting: {choice}");
     }
     private void CloseModal() { _hud.HideModal(); ClearWorldIntents("Modal closed; both sticks require neutral."); }
-    private void ClearWorldIntents(string log) { CancelMovement(null); _input.Quarantine(); _cameraState = _cameraFollow.SafetyReset(_cameraState); _menuRepeat.Clear(); AddLog(log); }
+    private void ClearWorldIntents(string log) { CancelMovement(null); _input.Quarantine(); _cameraState = _cameraState with { RecenterArmed = false }; _menuRepeat.Clear(); _actions.Boundary(++_epoch); _presetState = new(ContextEpoch: _epoch, NextEdgeId: _presetState.NextEdgeId); AddLog(log); }
     private void CancelMovement(string? reason)
     {
         _actor = _actor with { Goal = null, GoalAgeSeconds = 0, Outcome = MovementOutcome.Idle, BlockedIntent = null };
@@ -130,20 +169,30 @@ public partial class LabRoot : Node2D
     private void RefreshCameraLayout() { _cameraCenter = CameraBounds().ClampCenter(_cameraCenter); ApplyCameraCenter(); }
     private void OnJoyConnectionChanged(long device, bool connected)
     {
-        if (!connected) { _input.Disconnect((int)device); _adapter.ForgetDevice((int)device); CancelMovement(null); _cameraState = _cameraFollow.SafetyReset(_cameraState); AddLog($"Controller {(int)device} disconnected; both world intents cleared."); }
+        if (!connected) { var active = _input.ActiveDevice == device; _input.Disconnect((int)device); _adapter.ForgetDevice((int)device); if (active) ClearWorldIntents($"Active controller {device} disconnected."); }
         else AddLog($"Controller {(int)device} connected; neutral sample required after activation.");
     }
     public override void _Notification(int what)
     {
         base._Notification(what);
-        if (what == NotificationApplicationFocusOut) { _focused = false; _input.FocusChanged(false); _adapter.ClearKeyboard(); CancelMovement(null); _cameraState = _cameraFollow.SafetyReset(_cameraState); _menuRepeat.Clear(); AddLog("Focus lost: both sticks and movement cleared."); }
-        if (what == NotificationApplicationFocusIn) { _focused = true; _input.FocusChanged(true); CancelMovement(null); _cameraState = _cameraFollow.SafetyReset(_cameraState); AddLog("Focus regained: selected controller must be neutral."); }
+        // Explicit simulation owns its lifecycle timeline as well as its levels.
+        // Live/ordinary use still dispatches every native focus notification.
+        if (!_injectedObservations && what == NotificationApplicationFocusOut) ApplyFocus(false);
+        if (!_injectedObservations && what == NotificationApplicationFocusIn) ApplyFocus(true);
+    }
+    private void ApplyFocus(bool focused)
+    {
+        _focused = focused; _input.FocusChanged(focused);
+        if (!focused) _adapter.ClearKeyboard();
+        ClearWorldIntents(focused ? "Focus regained: selected controller must be genuinely neutral." : "Focus lost: all pending/chord/world domains cleared.");
     }
 
     public async void RunSelfTest()
     {
         try
         {
+            _injectedObservations = true;
+            VerificationMode.Require(_settingsStore.UsesIsolatedTestStorage, "self-test requires isolated storage");
             foreach (var action in new[] { "lab_actor_move", "lab_camera_pan", "lab_confirm", "lab_cancel", "lab_inspect", "lab_previous", "lab_next", "lab_context", "lab_settings", "lab_menu_up", "lab_menu_down" }) VerificationMode.Require(InputMap.HasAction(action) && InputMap.ActionGetEvents(action).Count > 0, $"missing mapping {action}");
             var saved = _settings; var initialActor = _actor.Position; var initialWorld = _world.Position; var initialCameraCenter = _cameraCenter; var initialCameraState = _cameraState;
             var initialSize = GetWindow().Size; var initialScaleSize = GetWindow().ContentScaleSize; var initialZoom = _camera.Zoom;
@@ -247,9 +296,9 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
             VerificationMode.Require(_actor.Position == modalActor && _world.Position == modalWorld, "modal leaked either world intent"); CloseModal();
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
-            _Notification((int)NotificationApplicationFocusOut); var focusActor = _actor.Position; var focusWorld = _world.Position;
+            ApplyFocus(false); var focusActor = _actor.Position; var focusWorld = _world.Position;
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = .8f }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = .8f }, VerificationMode.Simulation); _Process(.1);
-            VerificationMode.Require(_actor.Position == focusActor && _world.Position == focusWorld, "focus loss retained a stick intent"); _Notification((int)NotificationApplicationFocusIn);
+            VerificationMode.Require(_actor.Position == focusActor && _world.Position == focusWorld, "focus loss retained a stick intent"); ApplyFocus(true);
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftX, AxisValue = 0 }, VerificationMode.Simulation); Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.RightX, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
             var contextSettings = _settings; var contextLog = _log.Count;
             _hud.ShowContext("Talk"); ActivateModal();
@@ -275,7 +324,7 @@ public partial class LabRoot : Node2D
             PressKey(Key.F1); ReleaseKey(Key.F1); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "settings did not open through adapter");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
             var settingsIndex = _hud.SelectedIndex; var menuActor = _actor.Position; var menuWorld = _world.Position;
-            PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % 14, "adapter digital menu repeat did not move immediately"); _Process(.34); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % 14, "adapter digital menu repeated too early"); _Process(.01); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 2) % 14, "adapter digital menu repeat missed threshold"); ReleaseKey(Key.Down); _Process(0);
+            PressKey(Key.Down); _Process(0); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % _hud.OptionCount, "adapter digital menu repeat did not move immediately"); _Process(.34); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 1) % _hud.OptionCount, "adapter digital menu repeated too early"); _Process(.01); VerificationMode.Require(_hud.SelectedIndex == (settingsIndex + 2) % _hud.OptionCount, "adapter digital menu repeat missed threshold"); ReleaseKey(Key.Down); _Process(0);
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .65f }, VerificationMode.Simulation); _Process(0); var analogIndex = _hud.SelectedIndex; _Process(.35); VerificationMode.Require(_hud.SelectedIndex != analogIndex, "adapter analog menu repeat did not advance");
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = .45f }, VerificationMode.Simulation); _Process(0); var releasedIndex = _hud.SelectedIndex; _Process(.2); VerificationMode.Require(_hud.SelectedIndex == releasedIndex, "adapter analog menu repeat did not release");
             VerificationMode.Require(_actor.Position == menuActor && _world.Position == menuWorld, "modal menu routing leaked actor or camera movement");
@@ -285,9 +334,12 @@ public partial class LabRoot : Node2D
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
             var contextAdapterSettings = _settingsStore.Load(); var contextAdapterLog = _log.Count;
             Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = true }, VerificationMode.Simulation); _Process(0); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.DpadDown, Pressed = false }, VerificationMode.Simulation);
-            VerificationMode.Require(_hud.SelectedOption == "Inspect", "context adapter navigation did not select Inspect");
+            VerificationMode.Require(_hud.SelectedOption == "slot-02", "full-ten adapter navigation did not select literal slot02");
             Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation);
-            VerificationMode.Require(!_hud.ModalVisible && _log.Skip(contextAdapterLog).Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase)) && _settingsStore.Load() == contextAdapterSettings, "context Inspect through adapter wrote settings or missed dispatch");
+            VerificationMode.Require(_hud.ModalKind == ModalKind.Slot && _hud.SelectedOption == "Use", "slot detail did not open through fixed modal A");
+            Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = true }, VerificationMode.Simulation); Handle(new InputEventJoypadButton { Device = 3, ButtonIndex = JoyButton.A, Pressed = false }, VerificationMode.Simulation);
+            VerificationMode.Require(!_hud.ModalVisible && _actions.Journal.Last().SlotId == "slot-02" && _settingsStore.Load() == contextAdapterSettings, "slot02 use through adapter wrote settings or lost stable ID");
+            _actions.Cancel(_presetState.NextEdgeId);
             Handle(new InputEventJoypadMotion { Device = 3, Axis = JoyAxis.LeftY, AxisValue = 0 }, VerificationMode.Simulation); _Process(0); _Process(0);
 
             // Measure actual scene displacement after adapter/reducer processing. The
@@ -400,6 +452,8 @@ public partial class LabRoot : Node2D
         {
             // The smoke is repeatable even after a previous local run changed a
             // preference; it then proves an actual non-default write and reset.
+            _injectedObservations = true;
+            VerificationMode.Require(_settingsStore.UsesIsolatedTestStorage, "smoke requires isolated storage");
             _settings = LabSettings.Default; _settingsStore.Save(_settings);
             var actorBefore = _actor.Position; Handle(new InputEventKey { Keycode = Key.D, Pressed = true }, VerificationMode.Simulation); _Process(.1); Handle(new InputEventKey { Keycode = Key.D, Pressed = false }, VerificationMode.Simulation);
             var worldBefore = _world.Position; Handle(new InputEventKey { Keycode = Key.Right, Pressed = true }, VerificationMode.Simulation); _Process(.1); Handle(new InputEventKey { Keycode = Key.Right, Pressed = false }, VerificationMode.Simulation);
@@ -427,6 +481,9 @@ public partial class LabRoot : Node2D
         var operation = args[index + 1]; var report = args[index + 2];
         try
         {
+            VerificationMode.Require(_settingsStore.UsesIsolatedTestStorage, "persistence requires explicit isolated storage");
+            _injectedObservations = true; SetProcess(false); SetProcessInput(false);
+            if (RunPresetPersistenceOperation(operation, report)) return;
             var persisted = LabSettings.Default with { InvertCameraX = false, InvertCameraY = true, ActorSensitivity = 1.5, MovementMode = MovementMode.NearbyGoal };
             if (operation == "write")
             {
@@ -459,20 +516,29 @@ public partial class LabRoot : Node2D
     }
     private void PressKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = true }, VerificationMode.Simulation);
     private void ReleaseKey(Key key) => Handle(new InputEventKey { Keycode = key, Pressed = false }, VerificationMode.Simulation);
-    private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_settings.CameraDeadzone, _settings.ActorDeadzone, _settings.CameraSensitivity, _settings.ActorSensitivity, delta, _camera.Zoom.X, _settings.InvertCameraX, _settings.InvertCameraY, modal, advanceTime);
+    private InputContext Context(double delta, bool modal, bool advanceTime = false) => new(_settings.CameraDeadzone, _settings.ActorDeadzone, _settings.CameraSensitivity, _settings.ActorSensitivity, delta, _camera.Zoom.X, _settings.InvertCameraX, _settings.InvertCameraY, modal, advanceTime) { ExplicitGamepadBindingsEnabled = true, WorldZoomEnabled = true };
     private string PrimaryAction() => _result?.Id is null ? "Choose destination" : _result.Id.StartsWith("npc") ? "Talk" : _result.Id.StartsWith("door") || _result.Id == "crate" ? "Open" : _result.Id.StartsWith("enemy") ? "Mark" : "Pick up";
-    private string Prompt() => _input.Method == InputMethod.Gamepad ? "Left stick: move actor   Right stick: camera   [A] interact [X] inspect [Y] context [Start] settings" : "WASD: actor   arrows: camera/menu   [F2] recenter   [Enter] interact [I] inspect [F1] settings";
+    private string Prompt()
+    {
+        var bindings = _presetStep?.HudBindings ?? Profile.Bindings.Where(b => b.Context == "world" && b.Modifiers.Count == 0 && b.Button is "a" or "x" or "y" or "b").ToArray();
+        var faces = string.Join("  ", bindings.Select(b => $"[{b.Button.ToUpperInvariant()}] {(b.SlotId is null ? b.ActionId : b.SlotId + " " + (_settings.Slots.Assignments[b.SlotId] ?? "EMPTY"))}"));
+        var method = _input.Method == InputMethod.Gamepad ? faces : "WASD actor/arrows camera-menu; Enter interact, I inspect, C slots/catalog, F1 settings, F2 diagnostic actor reset";
+        var shoulders = $"{Profile.RbModifierButton.ToUpperInvariant()} labels"
+            + (Profile.BasePresetId == "radial" ? $"; hold {Profile.LbModifierButton.ToUpperInvariant()} wheel" : $"; {Profile.LbModifierButton.ToUpperInvariant()} slot bank");
+        return $"{_settings.ActivePresetId} ({(Profile.Id == "user-copy" ? "user copy" : "template")}) bank {_presetStep?.Bank ?? "Contextual"}; {method}\nLS actor/menu/preview; RS camera/wheel; LT/RT zoom; {shoulders}; D-pad targets/battle/followers; L3 camera recenter; R3 lock; View hub; Menu settings\nLayer {Layer}; target {_actions.SelectedTargetId ?? "ground"}; lock {_actions.Locked}; pending {_actions.Pending?.ActionId ?? "none"}; grid {_actions.GridPreview?.ToString() ?? "none"}; journal {_actions.Journal.Count}; synthetic only / physical Xbox Not verified";
+    }
     private void UpdateHud()
     {
         var active = _input.ActiveDevice; var name = active is int id ? Input.GetJoyName(id) : "none"; var goal = _actor.Goal is Vec2 g ? $"{g.X:F0},{g.Y:F0}" : "none";
         _hud.UpdateView($"Focus: {_focused}\nMethod: {_input.Method}; active: {active?.ToString() ?? "none"} / {name}\nLeft raw: {_lastRaw.LeftStick.X:F2},{_lastRaw.LeftStick.Y:F2}; right raw: {_lastRaw.RightStick.X:F2},{_lastRaw.RightStick.Y:F2}\nCamera {_cameraState.Mode}; center {_cameraCenter.X:F0},{_cameraCenter.Y:F0}; neutral armed={_cameraState.RecenterArmed}\nCamera deadzone {_settings.CameraDeadzone:F2}, sensitivity {_settings.CameraSensitivity:F1}; invert X={_settings.InvertCameraX} (right -> image {(_settings.InvertCameraX ? "right" : "left")}), Y={_settings.InvertCameraY} (down -> image {(_settings.InvertCameraY ? "down" : "up")})\nActor deadzone {_settings.ActorDeadzone:F2}, sensitivity {_settings.ActorSensitivity:F1}; mode={_settings.MovementMode} (PROTOTYPE POLICY)\nActor {_actor.Position.X:F0},{_actor.Position.Y:F0}; goal={goal}; outcome={_actor.Outcome}; replans={_actor.ReplanCount}\nLast event: {_lastEvent}; accepted: {_lastAccepted}; {_lastProvenance}\nPhysical Xbox: Not verified", Prompt(), _log);
     }
-    private void AddLog(string text) => _log.Add($"• {text}");
+    private void AddLog(string text) { if (_log.Count == 128) _log.RemoveAt(0); _log.Add($"• {text}"); }
     private void RefreshSelection()
     {
         var viewport = GetViewport().GetVisibleRect(); var focus = viewport.GetCenter(); var ground = _world.MakeCanvasPositionLocal(focus);
         _result = _targeting.Update(_courtyard.Candidates(_world), new Rect(viewport.Position.X, viewport.Position.Y, viewport.Size.X, viewport.Size.Y), _selection, new TargetingPolicy(), new Vec2(ground.X, ground.Y));
         _selection = new SelectionState(_result.Id, _result.ManualLock, _result.IsGround && _selection.ManualGroundPoint is not null ? _result.GroundPoint : null);
+        _actions.ObservePresentation(_courtyard.WorldTargets.FirstOrDefault(t => t.Id == _result.Id));
     }
     private static Vector2 ToGodot(Vec2 value) => new((float)value.X, (float)value.Y);
     private static string DescribeEvent(InputEvent input) => input switch { InputEventJoypadButton button => $"JoyButton {button.ButtonIndex} {(button.Pressed ? "pressed" : "released")} device {button.Device}", InputEventJoypadMotion motion => $"JoyAxis {motion.Axis} value {motion.AxisValue:F2} device {motion.Device}", InputEventKey key => $"Key {key.Keycode} {(key.Pressed ? "pressed" : "released")}", InputEventMouseButton mouse => $"MouseButton {mouse.ButtonIndex} {(mouse.Pressed ? "pressed" : "released")}", _ => input.GetClass() };

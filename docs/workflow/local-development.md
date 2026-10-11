@@ -21,7 +21,7 @@ Configuration does not scan a machine. `configure discover --game-root PATH` exa
 
 ## Ordinary diagnostics launch
 
-The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005/006`, `ARC-DEV-001`, `ARC-WORLD-001/003` and `ARC-GPAD-004`, Gamepad `ARC-GPAD-001/002/003`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or ambiguous current selection fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
+The supported logical mappings are ART `ARC-RENDER-001/002`, terrain `ARC-RENDER-003/004/005/006`, `ARC-DEV-001`, `ARC-WORLD-001/003` and `ARC-GPAD-004`, Gamepad `ARC-GPAD-001/002/003/005`, and Display `ARC-UI-001`. The resolver supports only their observed schema-v1 pointers and immutable `arcanum-build-manifest-v2`/`arcanum-build-current-v2` bindings. Unknown/mixed schemas, a missing or stale digest, an escape from a configured root, or ambiguous current selection fails closed. Required hashes must be full lowercase SHA-256; empty/malformed hashes cannot disable verification. Only observed ART/UI legacy pointers may omit the hash entirely; a supplied hash is always validated. It never chooses by modification time.
 
     tools/arcanum-local launch art --dry-run
     tools/arcanum-local launch gamepad --dry-run
@@ -35,6 +35,14 @@ Launch selection is an explicit local `launchSelection` record, separate from `a
 Terrain actor diagnostic defaults are deliberately caller-labelled zero map/camera/offset anchors, `normal-uncached`, scale 100, shrunk false, Idle, facing 0, frame 0. In actor-diagnostic mode only, callers may explicitly provide `--actor-map-x`, `--actor-map-y`, `--actor-camera-origin-x`, `--actor-camera-origin-y`, `--actor-offset-x`, `--actor-offset-y`, `--actor-render-branch`, `--actor-scale-percent`, `--actor-shrunk`, `--actor-action`, `--actor-facing`, and `--actor-frame`. The launcher accepts only the viewer's fixed normal-uncached/100/non-shrunk profile, Idle/Walk, facing 0..7, and an action-valid frame; terrain-only and combined reject these options. This is diagnostic policy, not inferred world state or original-placement parity.
 
 ## Retention lifecycle
+
+### Gamepad presets artifact (ARC-GPAD-005)
+
+Use a separate owned `ARCANUM_LOCAL_HOME`, root `gpad005` pointing to ignored `artifacts/gamepad-builds`, and literal `ARCANUM_GAMEPAD_EXPORT_TASK=ARC-GPAD-005` with the existing `experiments/gamepad-lab/tools/validate-macos.sh`. The output is `ARC-GPAD-005/FULL_HEAD/GamepadLab.app` under that root. Leave default/old homes, 001/002/003 current/accepted/rollback authorities and terrain 004 unchanged; do not broaden selection to skip unsafe siblings or repackage 003. Before export, prove the canonical tools/editor bridge, clean complete committed tree, lease and measured destination budget. A known complete configured payload may supply the estimate, not directory history or a guessed app size.
+
+005 adds bound SDK/editor, source/exported matrix and preferences, shared-regression and policy gates to the existing Core/self-test/export/smoke/codesign requirements. Writer and registration use the same full semantic/report/source-build-runtime validator. Native baselines and actual non-headless same-scene tuple rasters are distinct from physical display/comfort observations. Source and exported restart/migration checks use isolated preference paths. A failed/partial/finalized candidate stays intact and cannot be blindly exported again; no manual `builds register-export` bypass is permitted.
+
+After registration, set the owned home's exact launch selection `gpad005:ARC-GPAD-005:FULL_HEAD`, then ordinary `launch gamepad --dry-run` and `launch gamepad` with all test-only preference/candidate overrides removed. Record actual executable/PID/argv/one-window/runtime classification outside the sealed bundle, and revalidate complete manifest/evidence/payload digests and deep/strict codesign after runtime. Selection/registration is not independent acceptance; local acceptance overlays require the full exact-head review/authority references. Owner physical XboxBT/drift/reconnect/comfort/final-layout stays separately PENDING. [Preset instructions and full checklist](../input/gamepad-presets.md).
 
 WORLD uses the same terrain logical tool and immutable v2 authority, with a
 separate ignored configured `artifacts/world-builds` root. Do not delete legacy
