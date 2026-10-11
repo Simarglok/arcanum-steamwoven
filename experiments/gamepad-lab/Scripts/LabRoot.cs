@@ -460,7 +460,9 @@ public partial class LabRoot : Node2D
             VerificationMode.Require(_actor.Position.X > actorBefore.X && _world.Position.X > worldBefore.X, "smoke did not prove actor/camera keyboard separation");
             PressKey(Key.Enter); ReleaseKey(Key.Enter); var confirmed = _log.Any(line => line.Contains("(synthetic)", StringComparison.Ordinal));
             PressKey(Key.I); ReleaseKey(Key.I); var inspected = _log.Any(line => line.Contains("inspect", StringComparison.OrdinalIgnoreCase));
-            PressKey(Key.F1); ReleaseKey(Key.F1); _Process(0); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "smoke did not open settings");
+            // Opening Settings quarantines input; the synchronous smoke must
+            // supply the same two complete neutral observations as ordinary use.
+            PressKey(Key.F1); ReleaseKey(Key.F1); _Process(0); _Process(0); VerificationMode.Require(_hud.ModalKind == ModalKind.Settings, "smoke did not open settings");
             PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); PressKey(Key.Enter); ReleaseKey(Key.Enter); VerificationMode.Require(_settings.CameraDeadzone != LabSettings.Default.CameraDeadzone && _settingsStore.Load().CameraDeadzone == _settings.CameraDeadzone, "smoke did not persist changed setting");
             for (var step = 0; step < 11; step++) { PressKey(Key.Down); _Process(0); ReleaseKey(Key.Down); _Process(0); }
             VerificationMode.Require(_hud.SelectedOption == "Reset defaults", "smoke did not navigate to Reset defaults"); PressKey(Key.Enter); ReleaseKey(Key.Enter);
