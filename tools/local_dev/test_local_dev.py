@@ -986,7 +986,10 @@ if os.environ['ARCANUM_EXPORT_PHASE'] == 'validate':
 else:
     assert (evidence / 'export-observation.json').is_file()
     frozen = (evidence / 'export-observation.json').read_bytes()
-    env = {**os.environ, 'PYTHONPATH':source, 'ARCANUM_LOCAL_ROOT_ID':'test'}
+    # This fixture explicitly exercises the legacy003 writer/root. Do not
+    # inherit the real enclosing005 endpoint's task into this subprocess.
+    env = {**os.environ, 'PYTHONPATH':source, 'ARCANUM_LOCAL_ROOT_ID':'test',
+           'ARCANUM_GAMEPAD_EXPORT_TASK':'ARC-GPAD-003'}
     subprocess.run([sys.executable, '-B', writer, repo, main, str(candidate), head, str(app)], check=True, env=env)
     assert frozen == (evidence / 'export-observation.json').read_bytes()
 """
@@ -994,6 +997,19 @@ else:
              manifest=str(candidate / "manifest.json"), temporary_root=str(self.root),
              output_bytes=7, temporary_bytes=None, estimate_manifest=str(estimate), write_root=[str(repo)],
              command=[sys.executable, "-B", "-c", code, str(candidate), str(repo), str(main), str(writer), str(source), head])
+
+    def test_export_endpoint_legacy_writer_isolates_inherited005_task(self) -> None:
+        with patch.dict(os.environ, {"ARCANUM_GAMEPAD_EXPORT_TASK": "ARC-GPAD-005"}):
+            args = self.synthetic_endpoint()
+            self.assertEqual(export_endpoint.run_export(args), 0)
+        candidate = Path(args.manifest).parent
+        payload = json.loads(Path(args.manifest).read_text())
+        self.assertEqual(payload["task"], "ARC-GPAD-003")
+        self.assertEqual(payload["candidate"]["commit"], args.candidate)
+        pointer = json.loads((candidate.parent / "current.json").read_text())
+        self.assertEqual(pointer["manifestSha256"], manifests.sha256(Path(args.manifest)))
+        identity = f"test:ARC-GPAD-003:{args.candidate}"
+        self.assertEqual(config.load_registry()["builds"][identity]["lifecycle"], "exported")
 
     def test_export_endpoint_registers_only_after_success_and_writes_v2_pointer(self) -> None:
         args = self.synthetic_endpoint()
