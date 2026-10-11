@@ -431,7 +431,7 @@ public partial class LabRoot
                 GD.Print($"Preset matrix observed {preset} {size} UI{ui} zoom{zoom}");
             }
             System.IO.File.WriteAllText(report, LabEvidenceCodec.Encode(new { schema = "arcanum-gamepad-lab-matrix-v1", task = "ARC-GPAD-005",
-                candidateCommit = OS.GetEnvironment("ARCANUM_GAMEPAD_CANDIDATE"), origin = OS.HasFeature("standalone") ? "exported" : "source", status = "passed",
+                candidateCommit = OS.GetEnvironment("ARCANUM_GAMEPAD_CANDIDATE"), origin = OS.HasFeature("template") ? "exported" : "source", status = "passed",
                 isolatedTestStorage = true, backend = DisplayServer.GetName(), renderer = RenderingServer.GetCurrentRenderingMethod(), godotVersion = Engine.GetVersionInfo()["string"].AsString(),
                 nativeBaseline = new { actualViewport = new[] { nativeSize.X, nativeSize.Y }, window = new[] { GetWindow().Size.X, GetWindow().Size.Y }, capture = "native-baseline.png",
                     sha256 = Convert.ToHexString(SHA256.HashData(System.IO.File.ReadAllBytes(System.IO.Path.Combine(dir, "native-baseline.png")))).ToLowerInvariant() },
@@ -446,7 +446,7 @@ public partial class LabRoot
             var passiveGeometry = activeScene?._highlight.PassiveGeometryEvidence();
             var geometry = activeScene?._highlight.GeometryEvidence();
             System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { schema = "arcanum-gamepad-lab-matrix-v1", task = "ARC-GPAD-005", status = "failed",
-                candidateCommit = OS.GetEnvironment("ARCANUM_GAMEPAD_CANDIDATE"), origin = OS.HasFeature("standalone") ? "exported" : "source",
+                candidateCommit = OS.GetEnvironment("ARCANUM_GAMEPAD_CANDIDATE"), origin = OS.HasFeature("template") ? "exported" : "source",
                 backend = DisplayServer.GetName(), renderer = RenderingServer.GetCurrentRenderingMethod(), activeTuple,
                 activeStep = activeScene?._activeMatrixStep, passiveGeometry, geometry,
                 diagnosticOnly = args.Contains("--d4-context-prefix"), acceptanceClaimed = false,

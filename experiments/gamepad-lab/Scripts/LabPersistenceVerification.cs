@@ -105,7 +105,7 @@ public partial class LabRoot
         var encoded = System.IO.File.ReadAllBytes(_settingsStore.SelectedPath);
         System.IO.File.WriteAllText(report, JsonSerializer.Serialize(new { schema = "arcanum-gamepad-lab-persistence-v1", task = "ARC-GPAD-005",
             candidateCommit = OS.GetEnvironment("ARCANUM_GAMEPAD_CANDIDATE"), operation, status = "passed", isolatedTestStorage = true,
-            origin = OS.HasFeature("standalone") ? "exported" : "source", diagnostic = _settingsStore.Diagnostic,
+            origin = OS.HasFeature("template") ? "exported" : "source", diagnostic = _settingsStore.Diagnostic,
             storedJson = System.Text.Encoding.UTF8.GetString(encoded), sha256 = Convert.ToHexString(SHA256.HashData(encoded)).ToLowerInvariant(),
             actorUnchanged = true, cameraUnchanged = true, provenance = VerificationMode.Simulation }));
         GD.Print("GamepadLab isolated persistence: PASS " + operation); GetTree().Quit(0); return true;

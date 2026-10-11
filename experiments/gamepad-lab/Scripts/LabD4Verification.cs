@@ -97,7 +97,7 @@ public partial class LabRoot
         LabRoot? scene = null;
         try
         {
-            VerificationMode.Require(DisplayServer.GetName() != "headless" && !OS.HasFeature("standalone") && _settingsStore.UsesIsolatedTestStorage,
+            VerificationMode.Require(DisplayServer.GetName() != "headless" && !OS.HasFeature("template") && _settingsStore.UsesIsolatedTestStorage,
                 "D4 trace requires SOURCE non-headless renderer and isolated storage");
             SetProcess(false); SetProcessInput(false); System.IO.Directory.CreateDirectory(dir);
             await LayoutFrames(); await RenderedFrame();
