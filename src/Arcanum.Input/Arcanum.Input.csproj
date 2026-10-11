@@ -3,4 +3,5 @@
     <AssemblyName>Arcanum.Input</AssemblyName>
     <RootNamespace>Arcanum.Input</RootNamespace>
   </PropertyGroup>
+  <Import Project="../../experiments/gamepad-lab/tools/ExportLocks.targets" />
 </Project>

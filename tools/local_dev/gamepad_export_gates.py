@@ -13,6 +13,7 @@ import subprocess
 import zlib
 from . import config
 from . import gamepad_matrix_authority as matrix_authority
+from . import gamepad_export_locks
 
 TASK = 'ARC-GPAD-005'
 GATES = {
@@ -255,6 +256,13 @@ def run_gate(evidence: Path, head: str, name: str, command: list[str]) -> int:
     origin = name.split('-preset-matrix.log')[0] if name in ('source-preset-matrix.log', 'exported-preset-matrix.log') else None
     context = matrix_authority.prepare(root, evidence, origin, head, command, json_authority) if origin else None
     environment = os.environ.copy()
+    export_locks = None
+    if name == 'export.log' and '--export-debug' in command:
+        assert build_map is not None
+        export_locks = gamepad_export_locks.verify_current(build_map)
+        witness_dir = evidence / 'export-lock-witnesses'
+        witness_dir.mkdir()  # A fresh directory; no historical witness reuse.
+        environment['ArcanumExportLockEvidence'] = str(witness_dir)
     if context:
         binding = context['binding']
         environment.update(ARCANUM_GAMEPAD_MATRIX_NONCE=binding['nonce'], ARCANUM_GAMEPAD_INPUT_MAP_SHA256=binding['inputMapSha256'],
@@ -269,22 +277,42 @@ def run_gate(evidence: Path, head: str, name: str, command: list[str]) -> int:
             code = result.returncode
         except subprocess.TimeoutExpired:
             stream.write(('\nGAMEPAD_GATE_TIMEOUT_%ds\n' % budget).encode()); code = 124
+    if export_locks is not None:
+        # Retain the actual child MSBuild output that Godot otherwise puts in
+        # overwritten per-configuration logs. Never manufacture absent lines.
+        with log_path.open('ab') as stream:
+            for row in export_locks:
+                data = config.optional_authority_bytes(evidence / 'export-lock-witnesses' / row['witness'])
+                if data is not None:
+                    stream.write(b'\nACTUAL_MSBUILD_LOCK_WITNESS\n' + data)
     log = config.optional_authority_bytes(log_path)
     if log is None:
         raise ValueError('gate log disappeared before receipt')
     failed_log = engine_error(log)
-    build_evidence = None
-    if build_map is not None and code == 0 and not failed_log:
-        if matrix_authority.input_map(root) != build_map:
-            raise ValueError('complete source inputs changed during build')
-        output_dir = root / 'experiments/gamepad-lab/.godot/mono/temp/bin/Debug' if name == 'debug-build.log' else Path(command[-1])
-        build_evidence = dict(inputMap=build_map, inputMapSha256=matrix_authority.digest(build_map), outputs=matrix_authority.inventory(output_dir))
-    receipt = dict(schema='arcanum-gamepad-gate-result-v1', task=TASK, candidateCommit=head,
+    build_evidence: dict | None = None
+    binding_failure = None
+    if build_map is not None:
+        try:
+            if matrix_authority.input_map(root) != build_map:
+                raise ValueError('complete source inputs changed during build')
+            if code == 0 and not failed_log:
+                if export_locks is not None:
+                    gamepad_export_locks.verify_current(build_map)
+                    gamepad_export_locks.validate(evidence, build_map, export_locks, log)
+                output_dir = root / 'experiments/gamepad-lab/.godot/mono/temp/bin/Debug' if name == 'debug-build.log' else Path(command[-1])
+                build_evidence = dict(inputMap=build_map, inputMapSha256=matrix_authority.digest(build_map), outputs=matrix_authority.inventory(output_dir))
+                if export_locks is not None: build_evidence['exportLocks'] = export_locks
+        except (ValueError, OSError) as error:
+            binding_failure = str(error)
+    receipt: dict = dict(schema='arcanum-gamepad-gate-result-v1', task=TASK, candidateCommit=head,
         command=command, workspace=str(Path.cwd()), nativeTask=os.environ.get('HERMES_KANBAN_TASK'),
-        gate=next(g for g,f in GATES.items() if f==name), log=name, outcome='PASS' if code==0 and not failed_log else 'FAIL', exitCode=code,
+        gate=next(g for g,f in GATES.items() if f==name), log=name, outcome='PASS' if code==0 and not failed_log and binding_failure is None else 'FAIL', exitCode=code,
         engineError=failed_log,
         startedAt=started, finishedAt=datetime.now(timezone.utc).isoformat(), logBytes=len(log), logSha256=hashlib.sha256(log).hexdigest())
     if build_evidence is not None: receipt['matrixBuild'] = build_evidence
+    if binding_failure is not None: receipt['bindingFailure'] = binding_failure
+    if export_locks is not None:
+        receipt['exportLockEnvironment'] = {'ArcanumExportLockEvidence': environment['ArcanumExportLockEvidence']}
     if context:
         receipt['matrixBinding'] = context['binding']
         receipt['matrixEnvironment'] = {k: environment.get(k) for k in ('ARCANUM_GAMEPAD_CANDIDATE', 'GAMEPAD_LAB_SETTINGS_TEST_PATH',
@@ -294,7 +322,7 @@ def run_gate(evidence: Path, head: str, name: str, command: list[str]) -> int:
         json.dump(receipt, stream, indent=2); stream.write('\n')
     if context and code == 0 and not failed_log:
         matrix_authority.finish(evidence, origin, head, command, context, receipt, json_authority)
-    return code if code != 0 else int(failed_log)
+    return code if code != 0 else int(failed_log or binding_failure is not None)
 
 
 def main() -> int:

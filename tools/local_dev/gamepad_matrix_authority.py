@@ -98,6 +98,11 @@ def prepare(root: Path, evidence: Path, origin: str, head: str, command: list[st
     actual = input_map(root)
     if actual != mapping or build.get('outcome') != 'PASS' or type(build.get('exitCode')) is not int or build['exitCode'] != 0:
         raise ValueError('fresh successful build with unchanged complete inputs required')
+    if origin == 'exported':
+        from . import gamepad_export_locks
+        gamepad_export_locks.verify_current(mapping)
+        gamepad_export_locks.validate(evidence, mapping, build['matrixBuild'].get('exportLocks'),
+                                     config.optional_authority_bytes(evidence / 'export.log') or b'')
     outputs = build['matrixBuild']['outputs']
     if inventory(Path(outputs['directory'])) != outputs:
         raise ValueError('application outputs changed since build')
@@ -115,6 +120,12 @@ def finish(evidence: Path, origin: str, head: str, command: list[str], context: 
     root = Path(context['inputMap']['workspace'])
     if input_map(root) != context['inputMap'] or inventory(Path(context['runtime']['outputs']['directory'])) != context['runtime']['outputs'] or file_pin(Path(command[0])) != context['runtime']['executablePin']:
         raise ValueError('runtime or full inputs changed during matrix')
+    if origin == 'exported':
+        from . import gamepad_export_locks
+        build = load(evidence / context['buildReceipt'])
+        gamepad_export_locks.verify_current(context['inputMap'])
+        gamepad_export_locks.validate(evidence, context['inputMap'], build['matrixBuild'].get('exportLocks'),
+                                     config.optional_authority_bytes(evidence / 'export.log') or b'')
     report_name = origin + '-preset-matrix.json'
     report = load(evidence / report_name)
     if report.get('binding') != context['binding'] or report.get('origin') != origin or report.get('candidateCommit') != head:
@@ -217,7 +228,12 @@ def validate_binding(evidence: Path, origin: str, head: str, report: dict, load,
         if start.utcoffset() is None or end < start or start < build_end or (end-start).total_seconds()>420:
             raise ValueError('runtime time budget/build order mismatch')
     except (ValueError, KeyError, TypeError) as error: raise ValueError('invalid actual runtime times') from error
-    return {'evidence/'+n for n in (name, build_name, runtime_name, raw)}
+    required = {'evidence/'+n for n in (name, build_name, runtime_name, raw)}
+    if origin == 'exported':
+        from . import gamepad_export_locks
+        required |= gamepad_export_locks.validate(evidence, mapping, build['matrixBuild'].get('exportLocks'),
+                                                 config.optional_authority_bytes(evidence / 'export.log') or b'')
+    return required
 
 
 def number(value: object) -> float:

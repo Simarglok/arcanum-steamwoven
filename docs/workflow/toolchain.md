@@ -79,6 +79,16 @@ ARCANUM_LOCAL_HOME=OWNED_HOME ARCANUM_LOCAL_ROOT_ID=gpad005 \
 
 Configure the separate ignored `artifacts/gamepad-builds` root in that owned home first; use a verified single-payload estimate if no accepted/current same-tool measurement exists. `ARC-GPAD-003` remains the default export task; other export choices reject, while readers retain 001/002/003. The 005 endpoint executes locked lab restores/Core `--all`, actual SDK/editor bridge, source and exported production-scene **54-tuple** GUI matrices plus native baselines, isolated fresh-process preferences/migration, shared input/WORLD headless+graphical/root regressions, lifecycle-policy tests, smoke/plist/codesign and shared fail-closed report validation. Its lease spans capacity sampling/freeze, manifest/inventories/seals and registration. Logs and all receipts must bind the actual exact clean committed candidate, build/runtime inputs and exit; an old dirty SOURCE pass cannot supply a new stable-head matrix. After registration, ordinary no-test/no-injection launch and postruntime signature/digest checks remain separate. See [presets](../input/gamepad-presets.md) and [local workflow](local-development.md#gamepad-presets-artifact-arc-gpad-005); GUI simulation is not physical Xbox Bluetooth/comfort validation.
 
+Gamepad's existing universal macOS debug preset publishes both `osx-x64` and
+`osx-arm64` with `ExportDebug`. Each of the Lab, Core and shared Input projects
+has a separate committed `packages.ExportDebug.<RID>.lock.json`; the scoped
+MSBuild target selects that exact project/RID path and requires locked restore.
+Debug/editor locks remain separate (GodotSharpEditor is Debug-only in the pinned
+SDK). The 005 receipt binds all six consumed lock paths/bytes/digests and actual
+child MSBuild witnesses; SOURCE/EXPORT authority, writer and registration retain
+the complete candidate-map guard. Missing, altered or cross-project pins reject.
+No tracked lock is excluded or restored after a build/export.
+
 ## Opt-in original data
 
 Original inputs remain read-only and local. Set only the inputs needed for the selected check; never commit actual paths or content. Missing required inputs fail or make an invocation inconclusive, not verified. Use `--no-build` only after building the corresponding project/configuration.

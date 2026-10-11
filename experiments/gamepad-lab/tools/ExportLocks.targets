@@ -1,0 +1,24 @@
+<Project>
+  <!-- Configuration-specific committed inputs: Debug/editor dependencies stay
+       separate from the exact macOS debug export graph. No lock restoration. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'ExportDebug' and ('$(RuntimeIdentifier)' == 'osx-arm64' or '$(RuntimeIdentifier)' == 'osx-x64')">
+    <NuGetLockFilePath>$(MSBuildProjectDirectory)/packages.ExportDebug.$(RuntimeIdentifier).lock.json</NuGetLockFilePath>
+    <RestoreLockedMode>true</RestoreLockedMode>
+  </PropertyGroup>
+  <Target Name="ArcanumExportLockWitness" BeforeTargets="_GenerateRestoreGraphProjectEntry;Build"
+          Condition="'$(Configuration)' == 'ExportDebug' and ('$(RuntimeIdentifier)' == 'osx-arm64' or '$(RuntimeIdentifier)' == 'osx-x64')">
+    <Error Condition="'$(RestoreLockedMode)' != 'true'" Text="Export requires locked-mode restore." />
+    <Error Condition="'$(NuGetLockFilePath)' != '$(MSBuildProjectDirectory)/packages.ExportDebug.$(RuntimeIdentifier).lock.json'"
+           Text="Export requires its own project-specific committed lock." />
+    <GetFileHash Files="$(NuGetLockFilePath)" Algorithm="SHA256">
+      <Output TaskParameter="Items" ItemName="ArcanumExportLockHash" />
+    </GetFileHash>
+    <Message Importance="High" Text="ARCANUM_EXPORT_LOCK|$(MSBuildProjectFullPath)|$(Configuration)|$(RuntimeIdentifier)|$(NuGetLockFilePath)|$(RestoreLockedMode)|%(ArcanumExportLockHash.FileHash)" />
+    <!-- Godot keeps per-RID MSBuild logs in a shared overwritten log. The
+         leased runner supplies a fresh private witness directory instead. -->
+    <WriteLinesToFile Condition="'$(ArcanumExportLockEvidence)' != ''"
+                      File="$(ArcanumExportLockEvidence)/$(MSBuildProjectName).$(RuntimeIdentifier).txt"
+                      Lines="ARCANUM_EXPORT_LOCK|$(MSBuildProjectFullPath)|$(Configuration)|$(RuntimeIdentifier)|$(NuGetLockFilePath)|$(RestoreLockedMode)|%(ArcanumExportLockHash.FileHash)"
+                      Overwrite="false" />
+  </Target>
+</Project>

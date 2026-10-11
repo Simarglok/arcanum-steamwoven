@@ -12,6 +12,9 @@ import zlib
 from unittest.mock import patch
 from . import gamepad_export_gates as gates
 from . import gamepad_matrix_authority as authority
+from . import gamepad_export_locks as locks
+import subprocess
+import sys
 
 HEAD='a'*40
 
@@ -142,6 +145,94 @@ class AuthorityPolicyTests(unittest.TestCase):
         for _ in range(130):value={'next':value}
         report=dict(witnessSchema='arcanum-gamepad-geometry-witnesses-v1',witnesses={'0'*64:'{}'},tuples=[dict(labelGeometry=value,settlement=[],scrollObservations=[])])
         with self.assertRaises(ValueError):gates.validate_witnesses(report)
+
+
+class ExportLockPolicyTests(unittest.TestCase):
+    """Synthetic lock/receipt policy only, never canonical export evidence."""
+    def setUp(self):
+        self.work=tempfile.TemporaryDirectory(prefix='gpad-lock-policy-',dir=os.environ.get('TMPDIR'))
+        self.addCleanup(self.work.cleanup)
+        self.root=Path(self.work.name)/'candidate';self.root.mkdir()
+        self.evidence=Path(self.work.name)/'evidence';self.evidence.mkdir()
+        self.mapping: dict = dict(workspace=str(self.root),files={})
+        for project in ('experiments/gamepad-lab/GamepadLab.csproj',
+                        'experiments/gamepad-lab/Core/GamepadLab.Core.csproj',
+                        'src/Arcanum.Input/Arcanum.Input.csproj'):
+            for rid in ('osx-x64','osx-arm64'):
+                relative=str(Path(project).parent/('packages.ExportDebug.'+rid+'.lock.json'))
+                path=self.root/relative;path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_text('SYNTHETIC PIN '+project+' '+rid+'\n')
+                self.mapping['files'][relative]=authority.file_pin(path)
+        self.rows=locks.verify_current(self.mapping)
+        directory=self.evidence/'export-lock-witnesses';directory.mkdir()
+        self.log=b''
+        for row in self.rows:
+            line=locks.witness_line(self.mapping,row)+'\n'
+            (directory/row['witness']).write_text(line)
+            self.log+=line.encode()
+
+    def test_exact_six_inputs_and_actual_witnesses(self):
+        self.assertEqual(len(self.rows),6)
+        self.assertEqual(len({r['path'] for r in self.rows}),6)
+        self.assertEqual(len(locks.validate(self.evidence,self.mapping,self.rows,self.log)),6)
+
+    def test_missing_altered_or_cross_project_receipt_pin(self):
+        for i in range(6):
+            for field in ('project','configuration','runtimeIdentifier','path','pin','restoreLockedMode','witness'):
+                with self.subTest(i=i,field=field):
+                    rows=copy.deepcopy(self.rows);rows[i][field]=self.rows[(i+2)%6][field] if field in ('project','path','pin','witness') else 'WRONG'
+                    with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,rows,self.log)
+            rows=copy.deepcopy(self.rows);rows.pop(i)
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,rows,self.log)
+        with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,None,self.log)
+
+    def test_missing_or_changed_consumed_file(self):
+        for row in self.rows:
+            path=Path(row['path']);data=path.read_bytes()
+            path.unlink()
+            with self.assertRaises((ValueError,OSError)):locks.verify_current(self.mapping)
+            path.write_bytes(data+b'changed')
+            with self.assertRaises(ValueError):locks.verify_current(self.mapping)
+            path.write_bytes(data)
+
+    def test_each_actual_witness_and_log_is_mandatory(self):
+        for row in self.rows:
+            path=self.evidence/'export-lock-witnesses'/row['witness'];data=path.read_bytes()
+            path.unlink()
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log)
+            path.write_bytes(data.replace(b'|true|',b'|false|'))
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log)
+            path.write_bytes(data)
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log.replace(data,b''))
+
+    def test_full_guard_retains_actual_zero_exit_failure_receipt(self):
+        # Use a real isolated Git tree and real child mutation, not a filtered
+        # input-map mock. Every old/new lock and an unrelated source stays guarded.
+        source=self.root/'ordinary-source.txt';source.write_text('original')
+        (self.root/'.gitignore').write_text('.godot/\n')
+        outputs=self.root/'experiments/gamepad-lab/.godot/mono/temp/bin/Debug'
+        outputs.mkdir(parents=True);(outputs/'fixture.dll').write_text('not a real assembly')
+        for parent in ('experiments/gamepad-lab','experiments/gamepad-lab/Core','src/Arcanum.Input'):
+            (self.root/parent/'packages.lock.json').write_text('original')
+        subprocess.run(['git','init','-q',str(self.root)],check=True)
+        subprocess.run(['git','-C',str(self.root),'add','.'],check=True)
+        command=[sys.executable,'-c','from pathlib import Path; import sys; Path(sys.argv[1]).write_text("mutation"); print("actual fixture exit0")']
+        paths=[source,*[Path(r['path']) for r in self.rows],*[self.root/p/'packages.lock.json' for p in ('experiments/gamepad-lab','experiments/gamepad-lab/Core','src/Arcanum.Input')]]
+        # input_map needs HEAD; no project history is affected by this fixture.
+        subprocess.run(['git','-C',str(self.root),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','synthetic policy fixture'],check=True)
+        original=Path.cwd()
+        try:
+            os.chdir(self.root)
+            positive=Path(self.work.name)/'positive';positive.mkdir()
+            self.assertEqual(gates.run_gate(positive,HEAD,'debug-build.log',[sys.executable,'-c','print("unchanged actual fixture exit0")']),0)
+            for i,path in enumerate(paths):
+                evidence=Path(self.work.name)/('gate-'+str(i));evidence.mkdir()
+                self.assertEqual(gates.run_gate(evidence,HEAD,'debug-build.log',command+[str(path)]),1)
+                row=json.loads((evidence/'debug-build.log.result.json').read_text())
+                self.assertEqual((row['exitCode'],row['outcome']),(0,'FAIL'))
+                self.assertEqual(row['bindingFailure'],'complete source inputs changed during build')
+                self.assertNotIn('matrixBuild',row)
+        finally:os.chdir(original)
 
 
 if __name__=='__main__':unittest.main()

@@ -21,6 +21,7 @@ def main() -> int:
     os.chdir(root)
     sys.path.insert(0, str(root))
     from tools.local_dev.gamepad_export_gates import run_gate, validate_reports
+    from tools.local_dev.gamepad_matrix_authority import input_map
     sdk = Path.home() / '.local/share/dotnet'
     dotnet = str(sdk / 'dotnet')
     godot = '/Applications/Godot_mono.app/Contents/MacOS/Godot'
@@ -49,7 +50,7 @@ def main() -> int:
         gate('locked-tests-restore.log', dotnet, 'restore', str(lab / 'Tests/GamepadLab.Tests.csproj'), '--locked-mode')
         gate('release-build.log', dotnet, 'build', str(lab / 'GamepadLab.csproj'), '-c', 'Release', '--no-restore')
         gate('core-harness.log', dotnet, 'run', '--project', str(lab / 'Tests/GamepadLab.Tests.csproj'), '-c', 'Release', '--no-restore', '--', '--all')
-        locks = {p: p.read_bytes() for p in (lab / 'packages.lock.json', lab / 'Core/packages.lock.json')}
+        editor_inputs = input_map(root)
         gate('editor-import.log', godot, '--headless', '--editor', '--path', str(lab), '--quit')
         gate('sdk-editor-bridge.log', godot, '--headless', '--verbose', '--editor', '--path', str(lab), '--build-solutions', '--quit')
         bridge = (evidence / 'sdk-editor-bridge.log').read_text()
@@ -57,11 +58,8 @@ def main() -> int:
                 or 'Running:  ' + dotnet + ' build ' not in bridge
                 or '/opt/homebrew/' in bridge or 'ERROR:' in bridge):
             raise ValueError('editor bridge selected wrong SDK/executable or logged an error')
-        # Godot may rewrite only these task-owned lockfiles during its normal build.
-        # Restore exact captured bytes, never git reset/restore or unrelated changes.
-        for path, data in locks.items():
-            if path.read_bytes() != data:
-                path.write_bytes(data)
+        if input_map(root) != editor_inputs:
+            raise ValueError('complete source inputs changed during editor bridge')
         gate('debug-build.log', dotnet, 'build', str(lab / 'GamepadLab.csproj'), '-c', 'Debug', '--no-restore')
         source = [godot, '--path', str(lab)]
         gate('godot-self-test.log', *source, '--headless', '--', '--self-test')
@@ -72,10 +70,7 @@ def main() -> int:
              'tools.local_dev.test_local_dev', 'tools.local_dev.test_world_zoom_dev', 'tools.local_dev.test_grid_dev',
              'tools.local_dev.test_grid_authority', 'tools.local_dev.test_human_dev', 'tools.local_dev.test_world_runner',
              'tools.local_dev.test_world_dev', 'tools.local_dev.test_gamepad_export_gates', 'tools.local_dev.test_gamepad_matrix_authority')
-        gate('export.log', godot, '--headless', '--path', str(lab), '--export-debug', 'macOS', str(package / 'GamepadLab.app'))
-        for path, data in locks.items():
-            if path.read_bytes() != data:
-                path.write_bytes(data)
+        gate('export.log', godot, '--headless', '--verbose', '--path', str(lab), '--export-debug', 'macOS', str(package / 'GamepadLab.app'))
         app = package / 'GamepadLab.app'
         with (app / 'Contents/Info.plist').open('rb') as stream:
             executable = plistlib.load(stream)['CFBundleExecutable']
