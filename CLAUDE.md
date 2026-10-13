@@ -162,3 +162,16 @@ analyses go next to it as `docs/hermes/<topic>-YYYY-MM-DD.md`.
 
 - Resolved 2026-10-13: GitHub App installed for `arcanum-steamwoven`; all
   `conductor-hermes-*` folders granted; scope of allowed remedies (see §1).
+
+## 10. Owner decisions for remediation planning (2026-10-13)
+
+1. The `kanban-controller` plugin is project code and **may be changed**.
+   Dropping or simplifying it is acceptable only together with another
+   working solution for what it does.
+2. **No fallback model/provider.** When quota is exhausted, everything pauses
+   until it recovers; remedies should make that pause clean (no respawn churn,
+   no latched state), not route around it.
+3. Remediation plan first (in PR #59); later implementation goes as PRs to
+   `ConductorPlatform/conductor-hermes` (profiles, skill, checks, plugins).
+4. Human gates (native GUI observations, merges) **may be redesigned**: propose
+   options with explicit pros/cons and rationale.
