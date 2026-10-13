@@ -130,7 +130,7 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
   checkout may lag `origin/main` (on 2026-10-13 it sat at `11e8099`/PR #46 vs
   `1f3c036`/PR #58). For current code use a fresh cloud clone, or
   `git show origin/main:<path>` locally (only as fresh as the last fetch).
-- `.worktrees/` (~70 Hermes task worktrees, untracked, not in `.gitignore`)
+- `.worktrees/` (~70 Hermes task worktrees, ignored via `.gitignore`)
   and many `arcanum-steamwoven/t_<id>-arc-*` branches belong to Hermes runs.
   Don't modify or delete them; they are evidence. Unmerged in-flight branches
   include ARC-DATA-010 and ARC-GPAD-005.
@@ -139,29 +139,26 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
   C, Sustainable Use License: read to understand original mechanics
   (`src/game/*.c`, `src/ui/*.c`); never copy code or structure into this repo.
 
-## 7. Snapshot of observed problems (2026-10-13 ~19:30 UTC — re-verify, these go stale)
+## 7. Failure analysis
 
-1. **Quota-wall respawn loop.** `t_8b87fdb6` (ARC-DATA-010-PLAN-001, dev-planner)
-   respawns every ~6 min, exits 75 "rate-limited (quota wall)", requeued without
-   failure count — 57 rate_limited runs on 10-13 alone. Provider quota for
-   `openai-codex` is exhausted; cooldown does not back off. (conductor-hermes
-   README itself notes no provider-wide exponential backoff.)
-2. **Agent cannot read its own card.** `t_c1274122` (ARC-GPAD-005-PLAN-005,
-   orchestrator) blocked `capability`: `kanban_show` returns 146k–286k-char
-   single-line JSON; `read_file` truncates lines at ~2k chars; no
-   active+archived enumeration tool. Cause: card bodies/comments grew huge.
-3. **Chained stall.** `t_c32c736e` (ARC-RENDER-007-IMPL-001, developer) blocked
-   `needs_input`, waiting for planner diagnosis routed via manager/orchestrator —
-   which are themselves blocked/rate-limited. `t_db30d95d` (ARC-GPAD-005-IMPL-001)
-   `scheduled` with `block_kind=capability`, recurrences 2.
-4. **Controller gate failing.** Cron `arcanum-controller` (arcanum-manager):
-   `failure_streak` 31, `controller_gate.py` exit 1 →
-   `{"gate_status":"failed","reason":"assessment_offer_unknown","next_action":"Reconcile exact native execution/session proof; do not replay uncertain native actions."}`.
-   So the manager never wakes to route around (1)–(3).
-5. Background noise: Telegram adapter connection errors in `logs/errors.log`
-   (delivery path for controller reports).
+The current deep analysis lives in
+[`docs/hermes/failure-analysis-2026-10-13.md`](docs/hermes/failure-analysis-2026-10-13.md)
+(Russian; catalogue F1–F13, timeline, current stall cascade). Its numbers are a
+dated snapshot — re-verify against the live DB before relying on them. New
+analyses go next to it as `docs/hermes/<topic>-YYYY-MM-DD.md`.
 
-## 8. Open questions for the owner
+## 8. Working practice
+
+- Save main-context: delegate bulk reading (large logs, DB dumps, plugin source,
+  long card bodies) to subagents — e.g. `model: sonnet` — with a precise question,
+  read-only rules and the secrets rule; they return findings, not dumps.
+- Check sizes (`ls -la`, `wc -c`, SQL `length()`) before reading anything
+  yourself; read slices/aggregates, never whole large files.
+- Have an independent subagent fact-check reports before publishing them.
+- While PR #59 is open, add further repo changes to that same PR
+  (branch `claude/add-claude-md`), per owner instruction 2026-10-13.
+
+## 9. Open questions for the owner
 
 - Resolved 2026-10-13: GitHub App installed for `arcanum-steamwoven`; all
   `conductor-hermes-*` folders granted; scope of allowed remedies (see §1).
