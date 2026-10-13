@@ -4,6 +4,7 @@
 /local/
 /artifacts/
 /research-private/
+/.worktrees/
 /tests/fixtures/real/
 
 # Credentials and machine-local settings
