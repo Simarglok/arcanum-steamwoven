@@ -95,7 +95,7 @@ body starts with `Work-Item:` / `Card-Code:` / `Root-Task:` (see
 ## 4. Failure analysis
 
 The current deep analysis lives in
-[`docs/hermes/failure-analysis-2026-10-13.md`](docs/hermes/failure-analysis-2026-10-13.md)
+[`docs/hermes/failure-analysis-2026-10-13.md`](failure-analysis-2026-10-13.md)
 (Russian; catalogue F1–F13, timeline, current stall cascade). Its numbers are a
 dated snapshot — re-verify against the live DB before relying on them. New
 analyses go next to it as `docs/hermes/<topic>-YYYY-MM-DD.md`.
