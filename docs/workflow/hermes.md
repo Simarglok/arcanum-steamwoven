@@ -46,7 +46,7 @@ Roots created before 2026-10-15 are exempt from rules 1-3 and from the root-size
 | Level | Who and when | Evidence |
 | --- | --- | --- |
 | L1 automatic | agent, every correction | synthetic tests, headless checks, frame readback from inside the application, programmatic input |
-| L2 native automatic | agent, before review when the work item requires it | the same build in a real window on the host with a scripted observer (frames, input log, clean exit); an unlocked Mac is a precondition checked before the run |
+| L2 native automatic | agent, before review when the work item requires it | the same build in a real window on the host with a scripted observer (frames, input log, clean exit); a logged-in GUI session is a precondition checked before the run. Verified 2026-10-14 with a GDScript probe: in-application frame readback works from a launchd job in the user's GUI domain without Screen Recording permission. Launch through `godot_canonical` (`docs/workflow/toolchain.md`, sets `DOTNET_ROOT`): without it the mono build cannot load .NET and shows a modal error dialog (a C# project launched this way from launchd is not verified yet) |
 | L3 human | owner, once per work item or milestone, in batches | short owner checklist in a separate owner-validation work item; never gates agent stages or merge |
 
 If an older contract still demands L3 inside an agent stage, the agent records that gate as NOT_VERIFIED and asks the owner once instead of looping.
