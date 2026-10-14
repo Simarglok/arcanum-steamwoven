@@ -175,3 +175,13 @@ analyses go next to it as `docs/hermes/<topic>-YYYY-MM-DD.md`.
    `ConductorPlatform/conductor-hermes` (profiles, skill, checks, plugins).
 4. Human gates (native GUI observations, merges) **may be redesigned**: propose
    options with explicit pros/cons and rationale.
+
+Follow-up decisions (2026-10-14), see `docs/hermes/remediation-plan-2026-10-14.md` §7:
+quota pause is lifted manually by the owner; controller fix A now, rebuild B
+later; read-only git tool + role-split preflight; the owner does not review
+PRs — Hermes PRs merge after a successful independent review; proof budget per
+Work-Item accepted (owner suspects decomposition/acceptance criteria — see
+`docs/hermes/decomposition-analysis-2026-10-14.md`); all `~/.hermes` changes are
+delivered as configuration plus an installer from `conductor-hermes`.
+`conductor-hermes` is cloned in the cloud workspace; the controller source is
+open PR #47 (`codex/arcanum-controller-hooks`), not yet on its `main`.
