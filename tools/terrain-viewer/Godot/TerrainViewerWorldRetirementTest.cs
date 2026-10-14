@@ -162,36 +162,85 @@ public partial class TerrainViewerApp
         // transitions: a Variant's custom Callable does not retain managed
         // Action identity. No other app initialization/await occurs here.
         int Connections() => global::Godot.Input.Singleton.GetSignalConnectionList(global::Godot.Input.SignalName.JoyConnectionChanged).Count;
-        var connectedCount = Connections(); InitializeWorld();
-        Require(_worldInitialized && connectedCount > 0 && Connections() == connectedCount, "repeat initialization changed subscriptions");
+        var nativeWindow = GetWindow();
+        int FocusConnections() => nativeWindow.GetSignalConnectionList(Window.SignalName.FocusExited).Count
+            + nativeWindow.GetSignalConnectionList(Window.SignalName.FocusEntered).Count;
+        var connectedCount = Connections(); var focusCount = FocusConnections(); InitializeWorld();
+        Require(_worldInitialized && connectedCount > 0 && Connections() == connectedCount && FocusConnections() == focusCount,
+            "repeat initialization changed subscriptions");
+        _worldPreferredZoom = 3; _worldZoomPending = true;
         ExitWorld(); ExitWorld();
         Require(_worldActor.Session is null && _worldLifecycleSession is null && !_worldResetPending && !_worldReloadPending
             && ReferenceEquals(aborted.State,abortedState) && aborted.State.Phase == MovementPhase.OutboundBeforeEntry,
             "exit disposal manufactured settlement or retained lifecycle");
         var retiredQueue = _worldGridInput;
-        Require(!_worldInitialized && Connections() == connectedCount - 1 && _worldPanel is null
+        Require(!_worldInitialized && Connections() == connectedCount - 1 && FocusConnections() == focusCount - 2 && _worldPanel is null
             && retiredPanel.GetParent() is null && retiredPanel.IsQueuedForDeletion(), "teardown did not consume panel/subscription ownership");
+        Require(!_worldZoomPending && _worldZoomStore.Load() == 3, "teardown did not flush pending zoom");
         ExitWorld();
         Require(Connections() == connectedCount - 1 && ReferenceEquals(retiredQueue, _worldGridInput) && ReferenceEquals(aborted.State, abortedState), "repeat exit changed disposed state");
+        var focusedAfterExit = _worldFocused;
+        nativeWindow.EmitSignal(Window.SignalName.FocusExited);
+        Require(_worldFocusWindow is null && _worldFocused == focusedAfterExit, "retired window signal retained focus ownership");
+        _Input(new InputEventKey { Keycode=Key.F1, Pressed=true });
+        Require(!retiredPanel.IsOpen && _worldPanel is null, "inactive input opened panel");
         // Legitimate later initialization reacquires exactly one subscription
         // and one live panel. Test the native HUD event, not a direct Toggle call.
         InitializeWorld(); var successorPanel = _worldPanel!; InitializeWorld();
-        Require(_worldInitialized && Connections() == connectedCount && ReferenceEquals(successorPanel, _worldPanel)
-            && !ReferenceEquals(retiredPanel, successorPanel) && GetChildren().OfType<DiagnosticInputSettingsPanel>().Count() == 1,
-            "reinitialization duplicated or lost ownership");
+        Require(_worldInitialized && Connections() == connectedCount && FocusConnections() == focusCount && ReferenceEquals(successorPanel, _worldPanel)
+            && !ReferenceEquals(retiredPanel, successorPanel) && GetChildren().OfType<DiagnosticInputSettingsPanel>().Count() == 1
+            && !_worldGate.IsOpen && _worldPreferredZoom == 3,
+            "reinitialization duplicated or lost ownership or bypassed quarantine");
         var settingsButton = _hud!.GetNode<VBoxContainer>("TerrainDiagnosticPanel/DiagnosticContents")
             .GetChildren().OfType<Button>().Single(button => button.Text == "Input settings (F1 / Start)");
         settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
         Require(successorPanel.IsOpen, "reowned HUD settings subscription absent or duplicated");
         settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
         Require(!successorPanel.IsOpen, "reowned HUD close subscription absent or duplicated");
+        _worldTestTime = SimulationTime.At(0);
+        PublishSyntheticForSelfTest(arguments,result);
+        _worldFocused = true; _worldReducer.SetStartupDevices(Array.Empty<int>()); _worldAdapter.Clear();
+        Frame(1); Require(!_worldGate.IsOpen,"first neutral reinitialization opened gate");
+        Frame(2); Require(_worldGate.IsOpen,"second complete neutral reinitialization did not open gate");
+        // Synthetic signal delivery proves subscription ownership, not OS focus.
+        // Separate native main-window probe observes actual loss/return.
+        var simulation = _worldFocusSimulationForSelfTest;
+        _worldFocusSimulationForSelfTest = false;
+        var positionAfterReinitialization = _worldActor.State.Position;
+        var transitions = 0;
+        _worldInputTraceForSelfTest = line => { if (line.Contains("NativeFocus:transition", StringComparison.Ordinal)) transitions++; };
+        try
+        {
+            nativeWindow.EmitSignal(Window.SignalName.FocusExited);
+            Require(!_worldFocused && !_worldGate.IsOpen && !_camera!.FollowState.RecenterArmed,
+                "reinitialized window loss missed quarantine");
+            nativeWindow.EmitSignal(Window.SignalName.FocusExited);
+            Require(transitions == 1, "duplicate window loss observed twice");
+            nativeWindow.EmitSignal(Window.SignalName.FocusEntered);
+            Require(_worldFocused && !_worldGate.IsOpen && transitions == 2,
+                "window return bypassed neutral or duplicated subscription");
+            Frame(3, held); Frame(4); Frame(5, held);
+            Require(!_worldGate.IsOpen && _worldActor.State.Position == positionAfterReinitialization,
+                "held or one neutral frame rearmed window return");
+            Frame(6); Frame(7);
+            Require(_worldGate.IsOpen, "window return failed two complete neutral rearm");
+        }
+        finally { _worldInputTraceForSelfTest = null; _worldFocusSimulationForSelfTest = simulation; }
+        GD.Print("ARC-WORLD-003 window signal ownership PASS synthetic loss/idempotence/return/held-neutral rearm/retire-reinitialize; OS focus requires separate native probe");
+        _Input(new InputEventKey { Keycode=Key.F1, Pressed=true });
+        Require(successorPanel.IsOpen,"reinitialized settings callback missing or duplicated");
+        _Input(new InputEventKey { Keycode=Key.F1, Pressed=false });
+        ToggleWorldSettings();
         PublishSyntheticForSelfTest(arguments, result); Prepare();
         var reownedSession = _worldActor.Session!; var reownedState = reownedSession.State;
         ExitWorld(); ExitWorld();
-        Require(!_worldInitialized && Connections() == connectedCount - 1 && _worldPanel is null && _worldActor.Session is null
+        Require(!_worldInitialized && Connections() == connectedCount - 1 && FocusConnections() == focusCount - 2 && _worldPanel is null && _worldActor.Session is null
             && ReferenceEquals(reownedSession.State, reownedState) && reownedState.Phase == MovementPhase.OutboundBeforeEntry,
             "reowned disposal manufactured CenterArrived or retained subscriptions");
         Require(oldSession.State.Phase == MovementPhase.OutboundBeforeEntry, "failure disposal manufactured CenterArrived");
-        GD.Print("ARC-WORLD-003 retirement/ownership PASS production R early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/once-owned teardown/reinitialization/native HUD subscription/exit disposal distinct from CenterArrived");
+        // Leave one live initialization with a pending preference: the host
+        // tree exit must flush it and retire children without republishing.
+        InitializeWorld(); _worldZoomPending = true; _worldPreferredZoom = 2;
+        GD.Print("ARC-WORLD-003 retirement/ownership PASS production R early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/once-owned teardown/pending zoom flush/retired window signals/reinitialization/native HUD subscription/exit disposal distinct from CenterArrived");
     }
 }

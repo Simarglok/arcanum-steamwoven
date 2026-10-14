@@ -15,9 +15,9 @@ public sealed class DiagnosticGridActor
     public bool IsPlaying => _timeline.IsPlaying;
     public DiagnosticActorState State => Session is { } session ? RenderState(session.State)
         : new(new(6, 1), 5, ActorDiagnosticAction.Idle);
-    public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null)
+    public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
-        var session = new DiagnosticGridSession(snapshot, time, duration);
+        var session = new DiagnosticGridSession(snapshot, time, duration, limits);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }

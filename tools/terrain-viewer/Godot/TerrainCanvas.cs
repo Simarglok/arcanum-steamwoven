@@ -19,7 +19,7 @@ public partial class TerrainCanvas : Node2D
         TextureFilter = TextureFilterEnum.Nearest;
     }
 
-    public int CommandCount => (_plan?.Commands.Count ?? 0) + (_staticPlan?.Commands.Count ?? 0) + (_actorPlan is null ? 0 : 1);
+    public int CommandCount => (_area?.Commands.Count ?? _plan?.Commands.Count ?? 0) + (_staticPlan?.Commands.Count ?? 0) + (_actorPlan is null ? 0 : 1);
 
     /// <summary>Stable, content-free geometry snapshot used by camera smoke checks.</summary>
     public string GeometrySignature => _plan is null
@@ -88,6 +88,7 @@ public partial class TerrainCanvas : Node2D
 
     public void Publish(TerrainScenePlan plan, TerrainTextureCache textures)
     {
+        ClearArea();
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = null;
         _actorPlan = null;
@@ -97,6 +98,7 @@ public partial class TerrainCanvas : Node2D
 
     public void Publish(DiagnosticScenePlan plan, TerrainTextureCache textures)
     {
+        ClearArea();
         _plan = plan?.Terrain ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = plan.Statics;
         _actorPlan = plan.Actor;
@@ -106,6 +108,7 @@ public partial class TerrainCanvas : Node2D
 
     public void ClearScene()
     {
+        ClearArea();
         _plan = null;
         _staticPlan = null;
         _actorPlan = null;

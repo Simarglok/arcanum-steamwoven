@@ -13,6 +13,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     private int _selected;
     private Label _status = null!;
     private bool _binding;
+    internal Action<string>? InputTraceForSelfTest { get; set; }
     private readonly Dictionary<Control, Action> _actions = new();
     private SpinBox _zoom = null!;
     private Label _zoomStatus = null!;
@@ -80,10 +81,18 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     private void AddToggle(string title, Func<InputSettings, bool> get, Func<InputSettings, bool, InputSettings> set)
     {
         var check = new CheckButton { Name = title.Replace(" ", ""), Text = title };
-        check.Toggled += value => { if (!_binding) Apply(set(Settings, value)); };
+        check.Toggled += value => {
+            InputTraceForSelfTest?.Invoke($"Toggled control={check.Name} value={value} binding={_binding}");
+            if (!_binding) Apply(set(Settings, value));
+        };
         _rows.AddChild(check); _controls.Add(check);
     }
-    private void Apply(InputSettings settings) { Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); Changed?.Invoke(Settings); }
+    private void Apply(InputSettings settings)
+    {
+        InputTraceForSelfTest?.Invoke("Apply:before");
+        Settings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); Changed?.Invoke(Settings);
+        InputTraceForSelfTest?.Invoke("Apply:after");
+    }
     private void AddAction(string title, Action action)
     {
         var button = new Button { Text = title }; button.Pressed += action;
@@ -118,6 +127,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void Confirm()
     {
         SynchronizeSelection();
+        InputTraceForSelfTest?.Invoke($"Confirm selected={_selected} control={_controls[_selected].Name}");
         if (_controls[_selected] is CheckButton check) check.ButtonPressed = !check.ButtonPressed;
         else if (_actions.TryGetValue(_controls[_selected], out var action)) action();
     }

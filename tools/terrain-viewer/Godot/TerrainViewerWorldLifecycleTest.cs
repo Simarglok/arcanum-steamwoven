@@ -151,7 +151,7 @@ public partial class TerrainViewerApp
         var none = new RawInputFrame(-1, default);
         var changes = 0;
         var resets = 0;
-        void Changed(InputSettings _) => changes++;
+        void Changed(InputSettings _) { changes++; TraceWorldInput($"Observer:Changed count={changes}"); }
         void ResetRequested() => resets++;
         _worldPanel!.Changed += Changed;
         _worldPanel.ResetRequested += ResetRequested;
@@ -203,19 +203,29 @@ public partial class TerrainViewerApp
                 Require(_worldSettings == expected && _worldPanel.Settings == expected, "close/reopen changed preferences");
             }
             GD.Print("ARC-WORLD-001 native checkbox clicks PASS all four starting combinations/four axes/one change/persist/reopen/world stopped; SIMULATION not physical evidence");
+            if (System.Environment.GetEnvironmentVariable("ARC_WORLD_INPUT_TRACE") == "1")
+            {
+                var sequence = 0;
+                _worldInputTraceForSelfTest = line => GD.Print($"WORLD_INPUT_TRACE seq={++sequence} frame={Engine.GetProcessFrames()} {line}");
+                _worldPanel.InputTraceForSelfTest = TraceWorldInput;
+            }
             // Native semantic activation is consumed once, even with an echo,
             // held frame, unrelated pointer event and subsequent release.
             SaveWorldSettings(new InputSettings(InvertCameraX: false, InvertCameraY: false)); _worldPanel.Bind(_worldSettings);
             toggles[0].GrabFocus();
-            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+            TraceWorldInput("Keyboard:focus-requested");
+            for (var i = 0; i < 3; i++) { WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1); TraceWorldInput($"Keyboard:neutral{i}"); }
             changes = 0;
+            TraceWorldInput("Keyboard:before-press");
             GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = true });
             GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = true, Echo = true });
             WorldFrameForSelfTest(none with { Confirm = true }, Array.Empty<RawInputFrame>(), 2);
             GetViewport().PushInput(new InputEventMouseMotion { Position = new(799, 599) });
             GetViewport().PushInput(new InputEventKey { Keycode = Key.Space, Pressed = false });
             await NextFrameAsync();
-            Require(_worldSettings.InvertCameraX && !_worldSettings.InvertCameraY && changes == 1, "keyboard/native activation duplicated");
+            TraceWorldInput($"Keyboard:settled changes={changes}");
+            Require(_worldSettings.InvertCameraX && !_worldSettings.InvertCameraY && changes == 1,
+                $"keyboard/native activation duplicated actual={_worldSettings.InvertCameraX}/{_worldSettings.InvertCameraY}/{_worldSettings.InvertActorX}/{_worldSettings.InvertActorY} changes={changes}");
             _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld(); toggles[1].GrabFocus();
             var pad = new RawInputFrame(3, default);
             for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
@@ -240,6 +250,8 @@ public partial class TerrainViewerApp
         }
         finally
         {
+            _worldInputTraceForSelfTest = null;
+            _worldPanel!.InputTraceForSelfTest = null;
             _worldPanel.Changed -= Changed;
             _worldPanel.ResetRequested -= ResetRequested;
             if (WorldModal) ToggleWorldSettings();

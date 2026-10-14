@@ -10,6 +10,40 @@ public static class AreaOriginalValidator
     public static AreaDataOwner Open(AreaInputSet inputs, AreaLoaderOptions? options = null)
         => AreaDataOwner.Open(inputs, OriginalProfile.Plan(), options ?? new());
 
+    /// <summary>Opens the explicit original roles and uniquely selected prototype
+    /// files. Selection belongs to the authenticated Data profile, not a renderer
+    /// resource list. All handles close if assembly or owner creation fails.</summary>
+    public static AreaDataOwner OpenFiles(string module, string resource1, string resource2,
+        string mobile, string prototypeDirectory, AreaLoaderOptions? options = null)
+    {
+        var inputs = new List<AreaInput>();
+        try
+        {
+            inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Module), module));
+            inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Resource1), resource1));
+            inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Resource2), resource2));
+            inputs.Add(AreaInput.FromFile(new(AreaSourceRole.NormalGameMobile), mobile));
+            foreach (var number in OriginalProfile.Prototypes.Keys.Order())
+            {
+                var candidates = Directory.EnumerateFiles(prototypeDirectory, $"{number:D6} - *.pro", SearchOption.TopDirectoryOnly).Take(2).ToArray();
+                if (candidates.Length != 1)
+                    throw new AreaException(new(candidates.Length == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Prototype));
+                inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Prototype, number), candidates[0]));
+            }
+            return Open(new(inputs), options);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            foreach (var input in inputs) input.Stream.Dispose();
+            throw new AreaException(new(AreaErrorCode.MissingSource, AreaStage.Input));
+        }
+        catch
+        {
+            foreach (var input in inputs) input.Stream.Dispose();
+            throw;
+        }
+    }
+
     public static AreaInspection Validate(AreaInputSet inputs, CancellationToken cancellationToken = default)
     {
         using var owner = Open(inputs);

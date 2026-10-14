@@ -8,8 +8,10 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
+regression_task=$task
+if test "$task" = ARC-RENDER-007; then regression_task=ARC-WORLD-003; fi
 if test "$build_root" != "$main_root/artifacts/$artifact_dir/$task/$head"; then printf '%s\n' 'Build root must bind the closed exact-head terrain task.' >&2; exit 2; fi
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
@@ -43,23 +45,25 @@ mkdir -p "$build_root/evidence"
 cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
     src/Arcanum.Simulation/packages.lock.json tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
-  /bin/rm -f "$project_root/SyntheticActorFixture.cs.uid" "$project_root/TerrainDiagnosticHud.cs.uid" \
-    "$project_root/DiagnosticInputSettingsStore.cs.uid" "$project_root/DiagnosticInputSettingsPanel.cs.uid" "$project_root/TerrainViewerWorld.cs.uid" \
-    "$project_root/TerrainViewerWorldLifecycleTest.cs.uid" "$project_root/TerrainViewerWorldSelfTest.cs.uid" "$project_root/TerrainViewerWorldValidation.cs.uid" \
-    "$project_root/TerrainViewerWorldGridTest.cs.uid" "$project_root/TerrainViewerWorldOriginalGridValidation.cs.uid" \
-    "$project_root/TerrainViewerWorldReadbackScope.cs.uid" "$project_root/TerrainViewerWorldRetirementTest.cs.uid" \
-    "$project_root/DiagnosticZoomSettingsStore.cs.uid" "$project_root/TerrainViewerWorldZoomTest.cs.uid" \
-    "$project_root/TerrainViewerWorldZoomBoundaryTest.cs.uid" "$project_root/TerrainViewerHumanValidation.cs.uid"
+  # Godot .uid files are tracked; the export must leave them unchanged.
 }
 trap cleanup_candidate EXIT HUP INT TERM
 run_log() {
   name=$1; shift
-  if test "$task" = ARC-WORLD-003; then
+  if test "$task" = ARC-WORLD-003 || test "$task" = ARC-RENDER-007; then
     (cd "$candidate_root" && /usr/bin/python3 -B -m tools.local_dev.grid_export_gates \
-      --evidence "$build_root/evidence" --head "$head" --log "$name" -- "$@")
+      --evidence "$build_root/evidence" --head "$head" --task "$task" --log "$name" -- "$@")
   else
     "$@" >"$build_root/evidence/$name" 2>&1
   fi
+}
+# One opt-in native AREA probe per call, with owned isolated preferences.
+area_probe() {
+  log=$1; probe=$2; oracle_variable=$3; oracle=$4; shift 4
+  preferences=$(/usr/bin/mktemp -d "$TMPDIR/area-probe.XXXXXX")
+  run_log "$log" /usr/bin/env "$probe=1" "$oracle_variable=$oracle" \
+    "WORLD_DIAGNOSTIC_SETTINGS_TEST_PATH=$preferences/input.json" "WORLD_DIAGNOSTIC_ZOOM_TEST_PATH=$preferences/zoom.json" \
+    "$@" -- --self-test
 }
 run_log locked-restore.log "$DOTNET" restore "$project_root/Arcanum.TerrainViewer.sln" --locked-mode
 run_log locked-build.log "$DOTNET" build "$project_root/Arcanum.TerrainViewer.sln" --no-restore
@@ -75,12 +79,23 @@ if test "$task" != ARC-DEV-001; then
   run_log source-world-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root"
   run_log source-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --kind persistence
 fi
-if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003; then
-  run_log source-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind human --timeout 180
-  run_log human-metadata.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind human-metadata --timeout 180
+if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003 || test "$task" = ARC-RENDER-007; then
+  run_log source-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$regression_task" --kind human --timeout 180
+  run_log human-metadata.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$regression_task" --kind human-metadata --timeout 180
 fi
-if test "$task" = ARC-WORLD-003; then
-  run_log source-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$task" --kind grid-original --timeout 180
+if test "$task" = ARC-WORLD-003 || test "$task" = ARC-RENDER-007; then
+  run_log source-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$regression_task" --kind grid-original --timeout 180
+fi
+if test "$task" = ARC-RENDER-007; then
+  run_log source-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root"
+  # Independent frozen oracles are generated before any native readback.
+  oracles=$(/usr/bin/mktemp -d "$TMPDIR/area-oracles.XXXXXX")
+  /usr/bin/python3 -B "$project_root/tools/area_motion_oracle.py" --output "$oracles/motion.json" >/dev/null
+  /usr/bin/python3 -B "$project_root/tools/area_owner_seam_oracle.py" --output "$oracles/seams.json" >/dev/null
+  /usr/bin/python3 -B "$project_root/tools/area_nearest_oracle.py" --output "$oracles/nearest.json" >/dev/null
+  area_probe source-area-grid.log ARC_AREA_GRID_PROBE ARC_AREA_MOTION_ORACLE "$oracles/motion.json" "$GODOT" --path "$project_root"
+  area_probe source-area-seams.log ARC_AREA_OWNER_SEAM_PROBE ARC_AREA_SEAM_ORACLE "$oracles/seams.json" "$GODOT" --path "$project_root"
+  area_probe source-area-nearest.log ARC_AREA_NEAREST_PROBE ARC_AREA_NEAREST_ORACLE "$oracles/nearest.json" "$GODOT" --path "$project_root"
 fi
 run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export-debug 'macOS debug' "$build_root/ArcanumTerrainViewer.app"
 /usr/bin/grep -F "$DOTNET" "$build_root/evidence/export.log" >/dev/null
@@ -99,11 +114,17 @@ if test "$task" != ARC-DEV-001; then
   run_log exported-world-persistence.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --kind persistence
   run_log hostfxr.log /usr/bin/python3 -B "$project_root/tools/hostfxr_validate.py" "$build_root/ArcanumTerrainViewer.app"
 fi
-if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003; then
-  run_log exported-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task" --kind human --timeout 180
+if test "$task" = ARC-RENDER-006 || test "$task" = ARC-WORLD-003 || test "$task" = ARC-RENDER-007; then
+  run_log exported-human-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$regression_task" --kind human --timeout 180
 fi
-if test "$task" = ARC-WORLD-003; then
-  run_log exported-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task" --kind grid-original --timeout 180
+if test "$task" = ARC-WORLD-003 || test "$task" = ARC-RENDER-007; then
+  run_log exported-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$regression_task" --kind grid-original --timeout 180
+fi
+if test "$task" = ARC-RENDER-007; then
+  run_log exported-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root" --app "$app"
+  area_probe exported-area-grid.log ARC_AREA_GRID_PROBE ARC_AREA_MOTION_ORACLE "$oracles/motion.json" "$app"
+  area_probe exported-area-seams.log ARC_AREA_OWNER_SEAM_PROBE ARC_AREA_SEAM_ORACLE "$oracles/seams.json" "$app"
+  area_probe exported-area-nearest.log ARC_AREA_NEAREST_PROBE ARC_AREA_NEAREST_ORACLE "$oracles/nearest.json" "$app"
 fi
 run_log codesign.log /usr/bin/codesign --verify --deep --strict --verbose=2 "$build_root/ArcanumTerrainViewer.app"
 cleanup_candidate

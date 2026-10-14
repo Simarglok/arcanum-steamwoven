@@ -35,6 +35,8 @@ public partial class TerrainViewerApp : Node
     private DiagnosticScenePlan? _readyDiagnosticPlan;
     private AnimationTimeline? _actorTimeline;
     private TerrainViewerMode _readyMode;
+    private AreaLoadResult? _readyArea;
+    private static bool IsWorldMode(TerrainViewerMode mode) => mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea;
     private long _readyElapsedMilliseconds;
 
     /// <summary>Internal-only bootstrap used by the deterministic SubViewport self-test.</summary>
@@ -82,7 +84,7 @@ public partial class TerrainViewerApp : Node
     {
         if (_exiting) return;
         _hud?.SetMode(arguments.Mode);
-        if (arguments.Mode == TerrainViewerMode.WorldDiagnostic) { InitializeWorld(); QuarantineWorld(); }
+        if (IsWorldMode(arguments.Mode)) { InitializeWorld(); QuarantineWorld(); }
         GD.Print($"ARC-RENDER-004 load stage=begin smoke={orchestrateSmoke}");
         var priorCancellation = Interlocked.Exchange(ref _loadCancellation, new CancellationTokenSource());
         priorCancellation?.Cancel();
@@ -101,7 +103,19 @@ public partial class TerrainViewerApp : Node
             if (_exiting || !_coordinator.TryPublish(requestGeneration, () => PublishReadyResult(arguments, result))) return;
             if (!_exiting && _nativeSmoke && orchestrateSmoke)
             {
-                try { await RunNativeSmokeAsync(result); }
+                try
+                {
+                    if (result.Area is not null)
+                    {
+                        await RunAreaSmokeAsync(result);
+                        // S5 must observe the retired generation become
+                        // collectable; this frame may not keep it reachable.
+                        result = null;
+                        await RunAreaResourcesAsync();
+                        GetTree().Quit(0);
+                    }
+                    else await RunNativeSmokeAsync(result);
+                }
                 catch (TerrainViewerException exception)
                 {
                     // All failures after ready publication while exercising a
@@ -110,7 +124,7 @@ public partial class TerrainViewerApp : Node
                     throw new TerrainViewerException(exception.Error with
                     {
                         Stage = TerrainViewerFailureStage.Readback,
-                        Progress = ProgressFromResult(result)
+                        Progress = result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result)
                     });
                 }
             }
@@ -122,15 +136,31 @@ public partial class TerrainViewerApp : Node
             // generation owns the HUD and scene, and no cancelled load may
             // publish an error over it.
         }
+        catch (Arcanum.Data.Area.AreaException exception)
+        {
+            if (_exiting) return;
+            GD.Print($"ARC-RENDER-007 failure stage={exception.Issue.Stage} code={exception.Issue.Code} ready=False");
+            var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
+                Stage: TerrainViewerFailureStage.Upload, Progress: TerrainViewerProgress.Empty);
+            if (_nativeSmoke) { GetTree().Quit(1); return; }
+            _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
+        }
         catch (TerrainViewerException exception)
         {
             if (_exiting) return;
             if (_nativeSmoke) { GD.Print(FormatFailure(arguments.Mode, exception.Error)); GetTree().Quit(1); return; }
             if (!_coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, exception.Error))) return;
         }
-        catch
+        catch (Exception exception)
         {
             if (_exiting) return;
+            if (arguments.Mode == TerrainViewerMode.CrashSiteArea)
+            {
+                var frontier = exception.Message.StartsWith("AREA_", StringComparison.Ordinal)
+                    && exception.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_')
+                    ? exception.Message : exception.GetType().Name;
+                GD.Print("ARC-RENDER-007 frontier=" + frontier);
+            }
             var error = new TerrainViewerError(TerrainViewerErrorCode.RenderFailure,
                 Stage: TerrainViewerFailureStage.Upload,
                 Progress: result is null ? TerrainViewerProgress.Empty : ProgressFromResult(result));
@@ -146,6 +176,7 @@ public partial class TerrainViewerApp : Node
     /// </summary>
     private void PublishReadyResult(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
+        if (result.Area is not null) { PublishAreaReady(arguments, result); return; }
         _cache.Upload(result.Textures);
         _cache.UploadStatic(result.StaticTextures);
         _cache.UploadActor(result.ActorTextures);
@@ -192,7 +223,7 @@ public partial class TerrainViewerApp : Node
     /// <summary>Sole failure publication route for normal loads and self-test injection.</summary>
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
-        if (mode == TerrainViewerMode.WorldDiagnostic)
+        if (IsWorldMode(mode))
         {
             _worldGate.Close(); _worldReducer.Quarantine();
             _dragging = false; _worldDrag = default; _worldMenuAnalogDirection = 0;
@@ -790,7 +821,7 @@ public partial class TerrainViewerApp : Node
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
-                PublishFailure(TerrainViewerMode.WorldDiagnostic,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
+                PublishFailure(_arguments?.Mode ?? _readyMode,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
             }
             return;
         }
@@ -850,6 +881,7 @@ public partial class TerrainViewerApp : Node
     private void RefreshReadyStatus()
     {
         if (_readySourceId is null || _camera is null) return;
+        if (_readyArea is not null) { RefreshAreaStatus(); return; }
         var mode = ModeName(_readyMode);
         var staticStatus = _readyMode is TerrainViewerMode.CombinedStaticDiagnostic or TerrainViewerMode.WorldDiagnostic
             ? $"static census {_readyStaticCensus}/admitted {_readyStaticAdmittedCount}/outside-scope {_readyStaticOutsideScope}"
@@ -862,6 +894,7 @@ public partial class TerrainViewerApp : Node
 
     private void ClearReadyMetrics()
     {
+        _readyArea = null;
         _readySourceId = null;
         _readyDecodedCount = 0;
         _readyStaticDecodedCount = 0;
@@ -881,7 +914,7 @@ public partial class TerrainViewerApp : Node
         => _hud?.Text.Contains($"zoom {FormatZoom(_camera!.State.Zoom)}", StringComparison.Ordinal) == true
             && _hud.Text.Contains($"cache {textureCount}", StringComparison.Ordinal);
 
-    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
+    private static string ModeName(TerrainViewerMode mode) => mode switch { TerrainViewerMode.CrashSiteArea => "crash-site-area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.CombinedStaticDiagnostic => "combined", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic", _ => "terrain-only" };
     private void SelectActorAction(ActorDiagnosticAction action)
     {
         if (_readyActorInput is null || _readyActorPlan is null) return;
@@ -912,7 +945,7 @@ public partial class TerrainViewerApp : Node
         RefreshReadyStatus();
     }
     private static TerrainViewerProgress ProgressFromResult(TerrainLoadResult result)
-        => new(result.ResolvedCount, result.TileCount, result.FacadeCount,
+        => result.Area is not null ? TerrainViewerProgress.Empty : new(result.ResolvedCount, result.TileCount, result.FacadeCount,
             result.StaticCensusCount, result.StaticPlan?.Commands.Count ?? 0, result.StaticOutsideScopeCount);
     private static string FormatFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
