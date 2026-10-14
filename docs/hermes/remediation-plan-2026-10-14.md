@@ -435,7 +435,7 @@ PASS после исправлений. Отличия от §8:
 - **Guard при создании карточки** (`kanban-naming-guard` 0.2.0, во всех dev-* и `arcanum-manager`).
   После проверки имени `kanban_create` проверяет:
   - новый корень по правилам готовности (`READINESS_INVALID`);
-  - стадию длиннее 8 тыс. символов (`READINESS_INVALID`);
+  - proof-стадию длиннее 8 тыс. символов (`READINESS_INVALID`);
   - стадию под не готовым корнем, если корень создан с 15.10 (`ROOT_NOT_READY`);
   - новую proof-стадию сверх бюджета (`PROOF_BUDGET_EXCEEDED`).
 
@@ -469,7 +469,7 @@ PASS после исправлений. Отличия от §8:
 без разрешения Screen Recording? Проба (ничего не коммитится):
 
 ```sh
-mkdir -p /tmp/rb && cd /tmp/rb && printf '[application]\nconfig/name="rb"\n' > project.godot
+mkdir -p /tmp/rb && cd /tmp/rb && printf 'config_version=5\n[application]\nconfig/name="rb"\n' > project.godot
 cat > probe.gd <<'GD'
 extends SceneTree
 var n := 0
@@ -495,7 +495,8 @@ cat > /tmp/rb/rb.plist <<PL
 <key>RunAtLoad</key><true/><key>StandardOutPath</key><string>/tmp/rb/out.log</string>
 <key>StandardErrorPath</key><string>/tmp/rb/err.log</string></dict></plist>
 PL
-launchctl bootstrap gui/$(id -u) /tmp/rb/rb.plist; sleep 15; launchctl bootout gui/$(id -u)/local.rb.probe; cat /tmp/rb/out.log
+launchctl bootout gui/$(id -u)/local.rb.probe 2>/dev/null; rm -f /tmp/rb/out.log
+launchctl bootstrap gui/$(id -u) /tmp/rb/rb.plist; sleep 30; launchctl bootout gui/$(id -u)/local.rb.probe; cat /tmp/rb/out.log /tmp/rb/err.log
 ```
 
 Ожидание: в обоих случаях `READBACK size=(…) pixel=(1, 0, 0, 1)` и `rc=0`, без запроса разрешений. Если
