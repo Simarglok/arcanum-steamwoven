@@ -189,7 +189,8 @@ delivered as configuration plus an installer from `conductor-hermes`.
 P0 is merged there (PR #48) and installed on the host (2026-10-14 10:40,
 `verify` OK, ESTOP engaged). P1 is merged (PRs #49-#51: installer Python
 re-exec, `plugins/worker-tools` + skill 0.2.2, `cron/merge_reconcile.py`) and
-awaits the owner's install. Host changes: `hosts/install_host.py
+installed (2026-10-14 11:25, `verify` OK). Host changes: `hosts/install_host.py
 plan|apply|verify|restore` with `hosts/arcanum-steamwoven/host.yaml`. The old controller
-(open PR #47) is decommissioned reversibly, not built upon; P2 rebuilds a
-minimal one. Host changes are applied only by the owner via the installer.
+is decommissioned reversibly (PR #47 closed as superseded). P2 is merged (PR #53:
+no-agent `board-watch` cron + `/arc` owner command, no LLM; plan §11) and awaits
+the owner's install; next is P3. Host changes are applied only by the owner via the installer.
