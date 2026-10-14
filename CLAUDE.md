@@ -35,8 +35,11 @@ Default posture:
   proposals per failure. No changes or tuning of Hermes in these phases.
 - The Hermes provider quota is exhausted for the foreseeable future, so nothing
   can be verified by running Hermes. Watch its request logs for recovery.
-- Repo changes go **only through PRs** (never push/merge to `main`). Project-code
-  changes only on explicit owner request; then follow the repo rules in §5.
+- Repo changes go **only through PRs** (never push directly to `main`). The owner
+  does not review PRs: I merge my own PRs once checks pass and an independent
+  subagent review returns PASS (owner decision 2026-10-14; applies to this repo
+  and `conductor-hermes`). Project-code changes only on explicit owner request;
+  then follow the repo rules in §5.
 
 ## 2. Truth hierarchy
 
@@ -155,8 +158,7 @@ analyses go next to it as `docs/hermes/<topic>-YYYY-MM-DD.md`.
 - Check sizes (`ls -la`, `wc -c`, SQL `length()`) before reading anything
   yourself; read slices/aggregates, never whole large files.
 - Have an independent subagent fact-check reports before publishing them.
-- While PR #59 is open, add further repo changes to that same PR
-  (branch `claude/add-claude-md`), per owner instruction 2026-10-13.
+- One PR per coherent change; PR #59 (CLAUDE.md, analysis, plan) is merged.
 
 ## 9. Open questions for the owner
 
@@ -183,5 +185,8 @@ PRs — Hermes PRs merge after a successful independent review; proof budget per
 Work-Item accepted (owner suspects decomposition/acceptance criteria — see
 `docs/hermes/decomposition-analysis-2026-10-14.md`); all `~/.hermes` changes are
 delivered as configuration plus an installer from `conductor-hermes`.
-`conductor-hermes` is cloned in the cloud workspace; the controller source is
-open PR #47 (`codex/arcanum-controller-hooks`), not yet on its `main`.
+`conductor-hermes` is cloned in the cloud workspace (`/home/claude/conductor-hermes`).
+P0 is merged there (PR #48): `plugins/quota-pause`, `hosts/install_host.py`,
+`hosts/arcanum-steamwoven/host.yaml`, `docs/host-install.md`. The old controller
+(open PR #47) is decommissioned reversibly, not built upon; P2 rebuilds a
+minimal one. Host changes are applied only by the owner via the installer.
