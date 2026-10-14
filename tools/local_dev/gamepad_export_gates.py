@@ -277,13 +277,11 @@ def run_gate(evidence: Path, head: str, name: str, command: list[str]) -> int:
         binding = context['binding']
         environment.update(ARCANUM_GAMEPAD_MATRIX_NONCE=binding['nonce'], ARCANUM_GAMEPAD_INPUT_MAP_SHA256=binding['inputMapSha256'],
             ARCANUM_GAMEPAD_BUILD_RECEIPT_SHA256=binding['buildReceiptSha256'], ARCANUM_GAMEPAD_RUNTIME_SHA256=binding['runtimeInventorySha256'])
-    budget = 900 if name in ('source-preset-matrix.log', 'exported-preset-matrix.log') else 180
+    budget = matrix_authority.MATRIX_BUDGET_SECONDS if name in ('source-preset-matrix.log', 'exported-preset-matrix.log') else 180
     with log_path.open('xb') as stream:
         try:
-            # The full 54-tuple O5 sweep awaits rendered frames, so its duration
-            # follows the display's frame pacing: measured 260 s at about 5 s per
-            # tuple, and 695 s at about 13 s per tuple on the same head and Mac.
-            # Keep a finite 900 s matrix budget, 180 s for every other gate.
+            # The frame-paced 54-tuple matrix shares its finite budget with the
+            # runtime receipt check; every other gate keeps 180 s.
             result = subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT, timeout=budget, check=False, env=environment)
             code = result.returncode
         except subprocess.TimeoutExpired:

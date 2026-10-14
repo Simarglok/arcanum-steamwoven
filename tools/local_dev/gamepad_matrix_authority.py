@@ -16,6 +16,10 @@ import uuid
 from . import config
 
 CAP = 134217728
+# The 54-tuple matrix awaits rendered frames, so its duration follows the
+# display's frame pacing (measured 260 s and 695 s for one head on one Mac).
+# The gate timeout and the receipt check below share this finite bound.
+MATRIX_BUDGET_SECONDS = 900
 PROOF = ['faces', 'modal-slots-target-grid', 'wheel', 'lifecycle-projection',
          'physical-targets', 'settings-widgets', 'lifecycle-controls', 'modal-text',
          'labels', 'scale-resize', 'pixels-release-settings']
@@ -140,6 +144,12 @@ def finish(evidence: Path, origin: str, head: str, command: list[str], context: 
         json.dump(authority, stream, indent=2); stream.write('\n')
 
 
+def runtime_window_ok(start, end, build_end) -> bool:
+    """Aware runtime start after the build, nonnegative and within the matrix budget."""
+    return (start.utcoffset() is not None and start >= build_end and end >= start
+            and (end - start).total_seconds() <= MATRIX_BUDGET_SECONDS)
+
+
 def validate_binding(evidence: Path, origin: str, head: str, report: dict, load, *, stable: bool) -> set[str]:
     name = origin + '-matrix-authority.json'; authority = load(evidence / name)
     raw = origin + '-preset-matrix.json'; runtime_name = origin + '-preset-matrix.log.result.json'
@@ -225,7 +235,7 @@ def validate_binding(evidence: Path, origin: str, head: str, report: dict, load,
     try:
         start,end = (datetime.fromisoformat(receipt[k]) for k in ('startedAt','finishedAt'))
         build_end = datetime.fromisoformat(build['finishedAt'])
-        if start.utcoffset() is None or end < start or start < build_end or (end-start).total_seconds()>420:
+        if not runtime_window_ok(start, end, build_end):
             raise ValueError('runtime time budget/build order mismatch')
     except (ValueError, KeyError, TypeError) as error: raise ValueError('invalid actual runtime times') from error
     required = {'evidence/'+n for n in (name, build_name, runtime_name, raw)}

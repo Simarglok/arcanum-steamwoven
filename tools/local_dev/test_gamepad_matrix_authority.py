@@ -43,6 +43,17 @@ def fixture_report():
 
 
 class ObservationPolicyTests(unittest.TestCase):
+    def test_runtime_window_uses_shared_matrix_budget(self):
+        from datetime import datetime, timedelta, timezone
+        build = datetime(2026, 1, 1, tzinfo=timezone.utc); start = build + timedelta(seconds=1)
+        self.assertEqual(gates.matrix_authority.MATRIX_BUDGET_SECONDS, authority.MATRIX_BUDGET_SECONDS)
+        for seconds in (0, 260, 421, 695, authority.MATRIX_BUDGET_SECONDS):
+            self.assertTrue(authority.runtime_window_ok(start, start + timedelta(seconds=seconds), build), seconds)
+        self.assertFalse(authority.runtime_window_ok(start, start + timedelta(seconds=authority.MATRIX_BUDGET_SECONDS + 1), build))
+        self.assertFalse(authority.runtime_window_ok(start, start - timedelta(seconds=1), build))
+        self.assertFalse(authority.runtime_window_ok(build - timedelta(seconds=1), start, build))
+        self.assertFalse(authority.runtime_window_ok(start.replace(tzinfo=None), start.replace(tzinfo=None), build.replace(tzinfo=None)))
+
     def test_complete_literal_fixture(self): authority.validate_observations(fixture_report())
 
     def test_each_required_field_omission(self):
