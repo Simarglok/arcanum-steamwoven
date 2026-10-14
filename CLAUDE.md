@@ -192,5 +192,8 @@ re-exec, `plugins/worker-tools` + skill 0.2.2, `cron/merge_reconcile.py`) and
 installed (2026-10-14 11:25, `verify` OK). Host changes: `hosts/install_host.py
 plan|apply|verify|restore` with `hosts/arcanum-steamwoven/host.yaml`. The old controller
 is decommissioned reversibly (PR #47 closed as superseded). P2 is merged (PR #53:
-no-agent `board-watch` cron + `/arc` owner command, no LLM; plan §11) and awaits
-the owner's install; next is P3. Host changes are applied only by the owner via the installer.
+no-agent `board-watch` cron + `/arc` owner command, no LLM; plan §11) and installed
+(2026-10-14 15:50, `verify` OK). P3 is merged (PR #54: Definition of Ready + proof budget in
+`kanban-naming-guard`, `/arc budget`, skill 0.2.3, developer max_turns 150; plan §12; project rules
+in `docs/workflow/hermes.md` + `readiness.json`) and awaits the owner's install and the L2
+readback experiment. Host changes are applied only by the owner via the installer.

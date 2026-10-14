@@ -23,8 +23,8 @@ ARC-INPUT-001 — Проверить доступ к диагностическ�
 ARC-INPUT-001-PLAN-001 — Согласовать границы проверки палитры
 ```
 
-The root number is allocated by the manager only after checking the live
-board. Reuse the established root for work that belongs to it. A stage keeps
+The root number is allocated by the owner (or an owner-authorized session)
+only after checking the live board. Reuse the established root for work that belongs to it. A stage keeps
 that root number and receives the next unused three-digit index for its stage
 type within that work item. The full `Card-Code` must be unique; sequence
 numbers do not imply ordering across different stage types. `TYPE` identifies
@@ -55,6 +55,10 @@ Work-Item: ARC-INPUT-001
 Card-Code: ARC-INPUT-001-PLAN-001
 Root-Task: t_...
 ```
+
+A new root continues with the readiness headers (`Result:`, `Components:`,
+`Human-Gates:`, optional `Proof-Budget:`) and `AC<n>` criteria described in
+[hermes.md](hermes.md#definition-of-ready-and-proof-budget).
 
 For a new root, `Root-Task: SELF` marks that card as its own root. It is a
 sentinel, not a replacement for the card's native ID. Preserve native `t_...`
