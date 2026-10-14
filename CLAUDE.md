@@ -186,7 +186,10 @@ Work-Item accepted (owner suspects decomposition/acceptance criteria — see
 `docs/hermes/decomposition-analysis-2026-10-14.md`); all `~/.hermes` changes are
 delivered as configuration plus an installer from `conductor-hermes`.
 `conductor-hermes` is cloned in the cloud workspace (`/home/claude/conductor-hermes`).
-P0 is merged there (PR #48): `plugins/quota-pause`, `hosts/install_host.py`,
-`hosts/arcanum-steamwoven/host.yaml`, `docs/host-install.md`. The old controller
+P0 is merged there (PR #48) and installed on the host (2026-10-14 10:40,
+`verify` OK, ESTOP engaged). P1 is merged (PRs #49-#51: installer Python
+re-exec, `plugins/worker-tools` + skill 0.2.2, `cron/merge_reconcile.py`) and
+awaits the owner's install. Host changes: `hosts/install_host.py
+plan|apply|verify|restore` with `hosts/arcanum-steamwoven/host.yaml`. The old controller
 (open PR #47) is decommissioned reversibly, not built upon; P2 rebuilds a
 minimal one. Host changes are applied only by the owner via the installer.
