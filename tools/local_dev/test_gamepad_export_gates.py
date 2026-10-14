@@ -138,6 +138,13 @@ class GamepadGateTests(unittest.TestCase):
         row.update(backend='macos', tuples=[]); path.write_text(json.dumps(row))
         with self.assertRaisesRegex(ValueError, 'tuple'): gates.validate_matrix(self.evidence, 'source', HEAD)
 
+    def test_lifetime_plateau_requires_measured_counts(self):
+        ok = dict(nodes=40, baselineNodes=40, resources=12.0, baselineResources=10.0)
+        self.assertTrue(gates.lifetime_plateau(ok))
+        for weak in ({}, {'resources': 0}, dict(ok, nodes=None, baselineNodes=None), dict(ok, nodes=True, baselineNodes=True),
+                     dict(ok, nodes=41), dict(ok, resources=14.5), dict(ok, baselineResources=None), 'tuple'):
+            self.assertFalse(gates.lifetime_plateau(weak), weak)
+
     def test_capture_traversal_rejected(self):
         for name in ('../bad.png', '/bad.png', 'x/../bad.png', 'bad.txt'):
             with self.assertRaises(ValueError): gates.capture(self.evidence, 'source-images', name, '0' * 64, [1280, 800])

@@ -137,6 +137,16 @@ def validate_witnesses(report: dict) -> None:
         raise ValueError('orphan geometry witness')
 
 
+def lifetime_plateau(entry: object) -> bool:
+    """Every tuple exit must report measured node/resource counts at the native baseline (resources +4)."""
+    if not isinstance(entry, dict):
+        return False
+    nodes, base_nodes, resources, base_resources = (entry.get(k) for k in ('nodes', 'baselineNodes', 'resources', 'baselineResources'))
+    counts = all(type(v) is int and v > 0 for v in (nodes, base_nodes))
+    measured = all(type(v) in (int, float) and v >= 0 for v in (resources, base_resources))
+    return counts and measured and nodes == base_nodes and resources <= base_resources + 4
+
+
 def validate_matrix(evidence: Path, origin: str, head: str, *, stable: bool = True, probe: bool = False) -> set[str]:
     if origin not in ('source', 'exported') or probe and origin != 'source':
         raise ValueError('unsupported matrix origin/scope')
@@ -174,7 +184,7 @@ def validate_matrix(evidence: Path, origin: str, head: str, *, stable: bool = Tr
     if observed != expected:
         raise ValueError('duplicate/missing graphical tuple')
     lifetime = report.get('lifetimes')
-    if not isinstance(lifetime, list) or len(lifetime) != len(expected) or any(x.get('nodes') != x.get('baselineNodes') or x.get('resources', float('inf')) > x.get('baselineResources', 0) + 4 for x in lifetime):
+    if not isinstance(lifetime, list) or len(lifetime) != len(expected) or not all(lifetime_plateau(x) for x in lifetime):
         raise ValueError('native resource plateau missing')
     baseline = report.get('nativeBaseline')
     if not isinstance(baseline, dict): raise ValueError('native baseline missing')

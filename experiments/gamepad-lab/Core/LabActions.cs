@@ -21,7 +21,8 @@ public static class LabActionCatalog
 public sealed record LabWorldTarget(string Id,string Kind,Vec2 Anchor,int CycleOrder,int Revision=1,bool Alive=true,bool Visible=true,bool Interactive=true);
 public sealed record LabEvent(string Kind,string? ActionId=null,string? SlotId=null,string? TargetId=null,Vec2? GroundPoint=null,long EdgeId=0,int ResourceCost=0,Vec2? From=null,Vec2? To=null,int APCost=0);
 
-/// <summary>Explicit synthetic execution only. Action authority never follows automatic presentation fallback.</summary>
+/// <summary>Explicit synthetic execution only. With no lock or selection, the reticle target is adopted once
+/// (ID and revision) as the soft selection; afterwards action authority does not follow presentation changes.</summary>
 public sealed class LabActionExecutor
 {
     private readonly Queue<LabEvent> _journal=new();

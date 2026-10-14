@@ -131,7 +131,7 @@ public partial class LabRoot : Node2D
             else AddLog($"{choice} {_result?.Id ?? "ground"} (synthetic)");
             AddLog($"Menu choice: {choice}"); CloseModal(); return;
         }
-        _settings = (choice switch
+        var next = (choice switch
         {
             "Camera deadzone −" => _settings with { CameraDeadzone = _settings.CameraDeadzone - .05 },
             "Camera deadzone +" => _settings with { CameraDeadzone = _settings.CameraDeadzone + .05 },
@@ -148,7 +148,10 @@ public partial class LabRoot : Node2D
             _ => _settings
         }).Validated();
         if (choice == "Recenter camera") ResetCameraCentered();
-        _settingsStore.Save(_settings); _hud.SetScale(_settings.UiScalePercent); if (choice == "Reset defaults") { ClearWorldIntents("Defaults reset (inverted X/Y); positions/mode/zoom preserved."); } else AddLog($"Saved setting: {choice}");
+        // One committed save path: an I/O failure keeps the previous preferences in memory and on disk.
+        SavePreferences(next);
+        if (choice == "Reset defaults") { ClearWorldIntents(ReferenceEquals(_settings, next) ? "Defaults reset (inverted X/Y); positions/mode/zoom preserved." : "Defaults reset not saved; previous preferences retained."); }
+        else if (ReferenceEquals(_settings, next)) AddLog($"Saved setting: {choice}");
     }
     private void CloseModal() { _hud.HideModal(); ClearWorldIntents("Modal closed; both sticks require neutral."); }
     private void ClearWorldIntents(string log) { CancelMovement(null); _input.Quarantine(); _cameraState = _cameraState with { RecenterArmed = false }; _menuRepeat.Clear(); _actions.Boundary(++_epoch); _presetState = new(ContextEpoch: _epoch, NextEdgeId: _presetState.NextEdgeId); AddLog(log); }
