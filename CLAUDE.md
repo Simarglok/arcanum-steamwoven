@@ -66,6 +66,8 @@ Status vocabularies seen in the DB:
 - `tasks.status`: todo, ready, scheduled, blocked, done, archived (+ `block_kind`: capability, needs_input, …).
 - `task_runs.status`: running, done, completed, blocked, crashed, timed_out, gave_up, rate_limited, reclaimed, review, review_requested, ready, scheduled.
 
+Card readiness (root template, AC labels, Human-Gates, proof budget): `AGENTS.md`
+§ Card readiness; enforced by `kanban-naming-guard` 0.2.0 at `kanban_create`.
 Card naming: `ARC-TYPE-NNN — <Russian result>`, stages `ARC-TYPE-NNN-STAGE-NNN`;
 body starts with `Work-Item:` / `Card-Code:` / `Root-Task:` (see
 `docs/workflow/task-naming.md` on origin/main). Board/role rules:
