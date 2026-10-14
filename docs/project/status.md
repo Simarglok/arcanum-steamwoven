@@ -48,6 +48,8 @@ Unchanged source files/evidence links preserve earlier bounded parser/lab verifi
 
 ## Board work outside the merged baseline
 
+ARC-GPAD-005 candidate adds one synthetic three-template/ten-slot input framework with user-copy validation, lab-only v2 migration, target/ground/grid mock execution and display-provider highlights. [Actual preset contract, boundaries and owner checklist](../input/gamepad-presets.md). It is not delivered merely because source checks or registration pass: exact-head source/export GUI/persistence, ordinary artifact/integrity, independent review, publication and observed merge are separate receipts. Physical XboxBT/comfort/final layout remains owner-pending; no production inventory/spells/skills/combat/party UI or WORLD preset integration is credited. The historical merged catalogue/snapshot below remains dated, not overwritten by this candidate note.
+
 Read-only snapshot **2026-10-09 18:11:36 UTC**. This is an audit observation, not a live task queue or instruction to dispatch. Source/main delivery wins over a root's coordination status. Older cards without explicit FR fields are mapped below by the auditor; these mappings do not amend their contracts.
 
 | Product root(s) | Snapshot finding | Related requirement boundary |

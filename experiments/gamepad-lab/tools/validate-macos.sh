@@ -1,5 +1,5 @@
 #!/bin/sh
-# Candidate-bound local macOS validation for ARC-GPAD-003. No publication.
+# Candidate-bound local macOS validation for closed ARC-GPAD-003/005. No publication.
 set -eu
 
 candidate_root=$(git rev-parse --show-toplevel)
@@ -7,8 +7,15 @@ lab_root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)
 common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
-build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/builds/ARC-GPAD-003/$head"}
-case "$build_root" in "$main_root"/artifacts/builds/ARC-GPAD-003/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be exact-head ARC-GPAD-003 root.' >&2; exit 2 ;; esac
+task=${ARCANUM_GAMEPAD_EXPORT_TASK:-ARC-GPAD-003}
+case "$task" in
+  ARC-GPAD-003) artifact_dir=builds ;;
+  ARC-GPAD-005) artifact_dir=gamepad-builds ;;
+  *) printf '%s\n' 'Gamepad export task must be ARC-GPAD-003 or ARC-GPAD-005.' >&2; exit 2 ;;
+esac
+export ARCANUM_GAMEPAD_EXPORT_TASK="$task"
+build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
+case "$build_root" in "$main_root"/artifacts/"$artifact_dir"/"$task"/"$head") ;; *) printf '%s\n' 'ARCANUM_BUILD_ROOT must be the exact closed task/head root.' >&2; exit 2 ;; esac
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before validating.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   : "${ARCANUM_LOCAL_ROOT_ID:?ARCANUM_LOCAL_ROOT_ID must identify the configured ignored artifact root}"
@@ -20,10 +27,13 @@ if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
   fi
   cd "$candidate_root"
   exec /usr/bin/env ARCANUM_EXPORT_LEASE_HELD=1 /usr/bin/python3 -B -m tools.local_dev.export_endpoint \
-    --tool gamepad --root-id "$ARCANUM_LOCAL_ROOT_ID" --task ARC-GPAD-003 --candidate "$head" \
+    --tool gamepad --root-id "$ARCANUM_LOCAL_ROOT_ID" --task "$task" --candidate "$head" \
     --manifest "$build_root/manifest.json" --temporary-root "$TMPDIR" \
     --write-root "$candidate_root" --write-root "$HOME/.nuget/packages" \
     --write-root "$HOME/Library/Application Support/Godot" "$@" -- /bin/sh "$0"
+fi
+if test "$task" = ARC-GPAD-005 && test "${ARCANUM_EXPORT_PHASE:-}" = validate; then
+  exec /usr/bin/python3 -B "$lab_root/tools/validate_presets.py" "$candidate_root" "$lab_root" "$build_root" "$head"
 fi
 case "${ARCANUM_EXPORT_PHASE:-}" in
   finalize)

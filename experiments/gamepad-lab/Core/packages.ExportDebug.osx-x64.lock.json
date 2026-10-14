@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dependencies": {
+    "net8.0": {
+      "arcanum.input": {
+        "type": "Project"
+      }
+    },
+    "net8.0/osx-x64": {}
+  }
+}

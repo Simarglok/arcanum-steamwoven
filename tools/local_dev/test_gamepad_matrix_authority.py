@@ -1,0 +1,249 @@
+"""Synthetic policy fixtures only: no GUI/build/export acceptance claims."""
+from __future__ import annotations
+import copy
+import hashlib
+import json
+import os
+from pathlib import Path
+import struct
+import tempfile
+import unittest
+import zlib
+from unittest.mock import patch
+from . import gamepad_export_gates as gates
+from . import gamepad_matrix_authority as authority
+from . import gamepad_export_locks as locks
+import subprocess
+import sys
+
+HEAD='a'*40
+
+
+def fixture_report():
+    rect=dict(x=0,y=0,width=200,height=31); clip=dict(x=0,y=0,width=1280,height=800)
+    normal=['interact','inspect','context','back']; first=['slot-01','slot-02','slot-03','slot-04']; second=['slot-05','slot-06','slot-07','slot-08']
+    scenarios=[dict(scenario='bank-'+str(m),prompt=' '.join('['+f+'] '+t for f,t in zip(('A','X','Y','B'),b))) for m,b in enumerate((normal,first,normal,second))]
+    scenarios.append(dict(scenario='full-ten-modal-override',modal='Context',prompt='[A] modal-confirm [B] modal-cancel', controls=[dict(text=f'slot-{n:02}') for n in range(1,11)]))
+    trace=[f'mask{m}/{f}:{t}' for m,b in enumerate((normal,first,normal,second)) for f,t in zip(('A','X','Y','B'),b)]
+    trace+=['slot-09:assign/use:self/actor/1','slot-10:assign/use:self/actor/1','pending:cancel/0;stale:enemy-ash/denied/0','grid:4,4->5,4/cancel0/confirmAP1','labels:projected/Cyrillic/long/packed/removal/reload/release','settings:create/use/reset-copy/reset-defaults/scroll/positions-preserved;bounded-lifetime']
+    obs=[dict(oracle='actual-projection',a=[0,0],b=[-1920,-1200],origin=[640,400],uiReturned=dict(X=-1920,Y=-1200))]
+    obs += [dict(oracle='physical-target-denial',variant=v,before=0,after=0,last=dict(Kind='TargetUnavailable',TargetId='enemy-ash')) for v in ('removed','revision','hidden','dead','ineligible','wrong-kind')]
+    obs += [dict(oracle='individual-lifecycle',boundary=b,control=str(c),before=0,after=1) for b in ('focus','modal','preset','reset','disconnect-reconnect','device-change') for c in range(19)]
+    domains={'Settings':23,'Context':12,'Slot':4,'Assign':13,'Hub':6,'Battle':4,'Follower':2,'Bindings':45,'BindingButton':23}
+    for kind,count in domains.items():
+        obs.append(dict(oracle='modal-title',observation=dict(kind=kind,clip=clip,rect=rect,text='[A/Enter] [B/Esc]',font=16,nativeMinimum=dict(height=23),predicates=dict(enclosed=True,unclipped=True))))
+        obs += [dict(oracle='modal-text',kind=kind,direction=d,index=i,clip=clip,rect=rect,font=18) for d in (1,-1) for i in (range(count) if d==1 else reversed(range(count)))]
+    row=dict(preset='contextual',width=1280,height=800,uiScalePercent=100,zoom=.5,trace=trace,scenarios=scenarios,
+        proof=dict(schema='arcanum-gamepad-o5-proof-v1',completed=['faces','modal-slots-target-grid','wheel','lifecycle-projection','physical-targets','settings-widgets','lifecycle-controls','modal-text','labels','scale-resize','pixels-release-settings']),
+        pixelColorCount=9,labelGeometry=dict(labels=[dict(id='fixture',parent='LabHighlightLayer',fontSize=16,text='fixture',size=dict(x=200,y=31))]),
+        packing=dict(contentWidth=452,labels=[dict(id='fixture',clipText=False,wrapMode='WordSmart',lines=1,minimumHeight=23,maximumWidth=200)]),
+        labels=[dict(id='fixture',text='fixture',fontSize=16,overflow=False,rect=rect)],contractObservations=obs)
+    secondrow=copy.deepcopy(row);secondrow['zoom']=2
+    return dict(witnesses={},tuples=[row,secondrow],lifetimes=[dict(settlementStatus='cancelled',exitedGeneration=1,cancelledGeneration=2)])
+
+
+class ObservationPolicyTests(unittest.TestCase):
+    def test_runtime_window_uses_shared_matrix_budget(self):
+        from datetime import datetime, timedelta, timezone
+        build = datetime(2026, 1, 1, tzinfo=timezone.utc); start = build + timedelta(seconds=1)
+        self.assertEqual(gates.matrix_authority.MATRIX_BUDGET_SECONDS, authority.MATRIX_BUDGET_SECONDS)
+        for seconds in (0, 260, 421, 695, authority.MATRIX_BUDGET_SECONDS):
+            self.assertTrue(authority.runtime_window_ok(start, start + timedelta(seconds=seconds), build), seconds)
+        self.assertFalse(authority.runtime_window_ok(start, start + timedelta(seconds=authority.MATRIX_BUDGET_SECONDS + 1), build))
+        self.assertFalse(authority.runtime_window_ok(start, start - timedelta(seconds=1), build))
+        self.assertFalse(authority.runtime_window_ok(build - timedelta(seconds=1), start, build))
+        self.assertFalse(authority.runtime_window_ok(start.replace(tzinfo=None), start.replace(tzinfo=None), build.replace(tzinfo=None)))
+
+    def test_complete_literal_fixture(self): authority.validate_observations(fixture_report())
+
+    def test_each_required_field_omission(self):
+        for key in ('proof','pixelColorCount','packing','labelGeometry','labels','contractObservations','trace','scenarios'):
+            with self.subTest(key=key):
+                report=fixture_report();del report['tuples'][0][key]
+                with self.assertRaises((ValueError,KeyError)): authority.validate_observations(report)
+
+    def test_all_reached_oracles_required(self):
+        for index in range(11):
+            report=fixture_report();report['tuples'][0]['proof']['completed'].pop(index)
+            with self.assertRaises(ValueError):authority.validate_observations(report)
+
+    def test_each_changed_packing_value(self):
+        for key,value in [('clipText',True),('wrapMode','Off'),('lines',0),('minimumHeight',100),('maximumWidth',201)]:
+            with self.subTest(key=key):
+                report=fixture_report();report['tuples'][0]['packing']['labels'][0][key]=value
+                with self.assertRaises(ValueError):authority.validate_observations(report)
+
+    def test_parent_switch_allowed_same_parent_dimension_rejected(self):
+        report=fixture_report();row=report['tuples'][0]
+        row['labels'][0]['overflow']=True;row['labels'][0]['rect']['width']=452
+        row['labelGeometry']['labels'][0]['parent']='VBoxContainer';row['labelGeometry']['labels'][0]['size']['x']=452
+        row['packing']['labels'][0]['maximumWidth']=452
+        authority.validate_observations(report)
+        row['labels'][0]['overflow']=False;row['labelGeometry']['labels'][0]['parent']='LabHighlightLayer'
+        with self.assertRaises(ValueError):authority.validate_observations(report)
+
+    def test_actual_projection_title_row_denial_lifecycle_adverse(self):
+        for oracle in ('actual-projection','modal-title','modal-text','physical-target-denial','individual-lifecycle'):
+            with self.subTest(oracle=oracle):
+                report=fixture_report();obs=next(o for o in report['tuples'][0]['contractObservations'] if o['oracle']==oracle)
+                if oracle=='actual-projection':obs['b'][0]+=1
+                elif oracle=='modal-title':obs['observation']['predicates']['unclipped']=False
+                elif oracle=='modal-text':obs['font']=17
+                else:obs['after']+=1
+                with self.assertRaises(ValueError):authority.validate_observations(report)
+
+    def test_missing_observation_domains(self):
+        for oracle in ('actual-projection','modal-title','modal-text','physical-target-denial','individual-lifecycle'):
+            report=fixture_report();obs=report['tuples'][0]['contractObservations'];obs.remove(next(o for o in obs if o['oracle']==oracle))
+            with self.assertRaises(ValueError):authority.validate_observations(report)
+
+    def test_trace_glyph_and_modal_negative(self):
+        for index in (0,4):
+            report=fixture_report();report['tuples'][0]['scenarios'][index]['prompt']='invalid'
+            with self.assertRaises(ValueError):authority.validate_observations(report)
+        report=fixture_report();report['tuples'][0]['trace'][0]='wrong'
+        with self.assertRaises(ValueError):authority.validate_observations(report)
+
+
+class AuthorityPolicyTests(unittest.TestCase):
+    def setUp(self):
+        self.work=tempfile.TemporaryDirectory(prefix='gpad-o5-policy-',dir=os.environ.get('TMPDIR'));self.addCleanup(self.work.cleanup)
+        self.root=Path(self.work.name)
+
+    def test_png_copy_bytes_crc_dimensions_and_unsafe_names(self):
+        def chunk(kind,data):return struct.pack('>I',len(data))+kind+data+struct.pack('>I',zlib.crc32(kind+data)&0xffffffff)
+        data=b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',1,1,8,2,0,0,0))+chunk(b'IDAT',zlib.compress(b'\0\xff\0\0'))+chunk(b'IEND',b'')
+        images=self.root/'source-images';images.mkdir();path=images/'native-baseline.png';path.write_bytes(data)
+        sha=hashlib.sha256(data).hexdigest()
+        gates.capture(self.root,'source-images',path.name,sha,[1,1])
+        for name in ('../x.png','/x.png','a/b.png'):
+            with self.assertRaises(ValueError):gates.capture(self.root,'source-images',name,sha,[1,1])
+        with self.assertRaises(ValueError):gates.capture(self.root,'source-images',path.name,sha,[2,1])
+        corrupt=data[:-1]+b'X';path.write_bytes(corrupt)
+        with self.assertRaisesRegex(ValueError,'integrity'):gates.capture(self.root,'source-images',path.name,hashlib.sha256(corrupt).hexdigest(),[1,1])
+        path.unlink();path.symlink_to(images/'missing')
+        with self.assertRaises(ValueError):gates.capture(self.root,'source-images',path.name,sha,[1,1])
+
+    def test_full_map_clean_and_required_source(self):
+        files={p:dict(bytes=1,sha256=hashlib.sha256(b'x').hexdigest()) for p in ['experiments/gamepad-lab/Scripts/'+n for n in ('LabPresetVerification.cs','LabPresetContractVerification.cs','LabPresetSafetyVerification.cs')]+['experiments/gamepad-lab/Scenes/Main.tscn','experiments/gamepad-lab/project.godot','experiments/gamepad-lab/GamepadLab.csproj','global.json','tools/local_dev/gamepad_matrix_authority.py']}
+        mapping=dict(head=HEAD,status='',files=files,workspace=str(self.root))
+        def committed_fixture(command, **kwargs):
+            return '\0'.join(files)+'\0' if 'ls-tree' in command else b'x'
+        with patch.object(authority.subprocess,'check_output',side_effect=committed_fixture):
+            authority.validate_map(mapping,HEAD,True)
+            files['global.json']['sha256']='0'*64
+            with self.assertRaises(ValueError):authority.validate_map(mapping,HEAD,True)
+            files['global.json']['sha256']=hashlib.sha256(b'x').hexdigest()
+        mapping['status']=' M dirty'
+        authority.validate_map(mapping,HEAD,False)
+        with self.assertRaises(ValueError):authority.validate_map(mapping,HEAD,True)
+        mapping['status']='';del files['global.json']
+        with self.assertRaises(ValueError):authority.validate_map(mapping,HEAD,False)
+
+    def test_authority_raw_origin_head_or_receipt_omission_rejected(self):
+        path=self.root/'source-matrix-authority.json';path.write_text('{}')
+        for key,value in [('origin','exported'),('candidateCommit','b'*40),('rawReport','other.json'),('schema',authority.SCHEMA)]:
+            path.write_text(json.dumps({key:value}))
+            with self.assertRaises(ValueError):authority.validate_binding(self.root,'source',HEAD,{},gates.json_authority,stable=False)
+
+    def test_probe_and_old_headless_focused_reports_cannot_register(self):
+        for coverage,backend in [('discriminatory-binding-only','macOS'),('full-tuples/O5-coverage-audit-still-required','macOS'),('focused-layout-only','macOS'),('full-contract-o5','headless')]:
+            path=self.root/'source-preset-matrix.json';path.write_text(json.dumps(dict(schema='arcanum-gamepad-lab-matrix-v1',task='ARC-GPAD-005',status='passed',candidateCommit=HEAD,origin='source',isolatedTestStorage=True,backend=backend,coverage=coverage)))
+            with self.assertRaises(ValueError):gates.validate_matrix(self.root,'source',HEAD)
+
+    def test_witness_depth_and_cycle_rejection(self):
+        value={}
+        for _ in range(130):value={'next':value}
+        report=dict(witnessSchema='arcanum-gamepad-geometry-witnesses-v1',witnesses={'0'*64:'{}'},tuples=[dict(labelGeometry=value,settlement=[],scrollObservations=[])])
+        with self.assertRaises(ValueError):gates.validate_witnesses(report)
+
+
+class ExportLockPolicyTests(unittest.TestCase):
+    """Synthetic lock/receipt policy only, never canonical export evidence."""
+    def setUp(self):
+        self.work=tempfile.TemporaryDirectory(prefix='gpad-lock-policy-',dir=os.environ.get('TMPDIR'))
+        self.addCleanup(self.work.cleanup)
+        self.root=Path(self.work.name)/'candidate';self.root.mkdir()
+        self.evidence=Path(self.work.name)/'evidence';self.evidence.mkdir()
+        self.mapping: dict = dict(workspace=str(self.root),files={})
+        for project in ('experiments/gamepad-lab/GamepadLab.csproj',
+                        'experiments/gamepad-lab/Core/GamepadLab.Core.csproj',
+                        'src/Arcanum.Input/Arcanum.Input.csproj'):
+            for rid in ('osx-x64','osx-arm64'):
+                relative=str(Path(project).parent/('packages.ExportDebug.'+rid+'.lock.json'))
+                path=self.root/relative;path.parent.mkdir(parents=True,exist_ok=True)
+                path.write_text('SYNTHETIC PIN '+project+' '+rid+'\n')
+                self.mapping['files'][relative]=authority.file_pin(path)
+        self.rows=locks.verify_current(self.mapping)
+        directory=self.evidence/'export-lock-witnesses';directory.mkdir()
+        self.log=b''
+        for row in self.rows:
+            line=locks.witness_line(self.mapping,row)+'\n'
+            (directory/row['witness']).write_text(line)
+            self.log+=line.encode()
+
+    def test_exact_six_inputs_and_actual_witnesses(self):
+        self.assertEqual(len(self.rows),6)
+        self.assertEqual(len({r['path'] for r in self.rows}),6)
+        self.assertEqual(len(locks.validate(self.evidence,self.mapping,self.rows,self.log)),6)
+
+    def test_missing_altered_or_cross_project_receipt_pin(self):
+        for i in range(6):
+            for field in ('project','configuration','runtimeIdentifier','path','pin','restoreLockedMode','witness'):
+                with self.subTest(i=i,field=field):
+                    rows=copy.deepcopy(self.rows);rows[i][field]=self.rows[(i+2)%6][field] if field in ('project','path','pin','witness') else 'WRONG'
+                    with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,rows,self.log)
+            rows=copy.deepcopy(self.rows);rows.pop(i)
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,rows,self.log)
+        with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,None,self.log)
+
+    def test_missing_or_changed_consumed_file(self):
+        for row in self.rows:
+            path=Path(row['path']);data=path.read_bytes()
+            path.unlink()
+            with self.assertRaises((ValueError,OSError)):locks.verify_current(self.mapping)
+            path.write_bytes(data+b'changed')
+            with self.assertRaises(ValueError):locks.verify_current(self.mapping)
+            path.write_bytes(data)
+
+    def test_each_actual_witness_and_log_is_mandatory(self):
+        for row in self.rows:
+            path=self.evidence/'export-lock-witnesses'/row['witness'];data=path.read_bytes()
+            path.unlink()
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log)
+            path.write_bytes(data.replace(b'|true|',b'|false|'))
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log)
+            path.write_bytes(data)
+            with self.assertRaises(ValueError):locks.validate(self.evidence,self.mapping,self.rows,self.log.replace(data,b''))
+
+    def test_full_guard_retains_actual_zero_exit_failure_receipt(self):
+        # Use a real isolated Git tree and real child mutation, not a filtered
+        # input-map mock. Every old/new lock and an unrelated source stays guarded.
+        source=self.root/'ordinary-source.txt';source.write_text('original')
+        (self.root/'.gitignore').write_text('.godot/\n')
+        outputs=self.root/'experiments/gamepad-lab/.godot/mono/temp/bin/Debug'
+        outputs.mkdir(parents=True);(outputs/'fixture.dll').write_text('not a real assembly')
+        for parent in ('experiments/gamepad-lab','experiments/gamepad-lab/Core','src/Arcanum.Input'):
+            (self.root/parent/'packages.lock.json').write_text('original')
+        subprocess.run(['git','init','-q',str(self.root)],check=True)
+        subprocess.run(['git','-C',str(self.root),'add','.'],check=True)
+        command=[sys.executable,'-c','from pathlib import Path; import sys; Path(sys.argv[1]).write_text("mutation"); print("actual fixture exit0")']
+        paths=[source,*[Path(r['path']) for r in self.rows],*[self.root/p/'packages.lock.json' for p in ('experiments/gamepad-lab','experiments/gamepad-lab/Core','src/Arcanum.Input')]]
+        # input_map needs HEAD; no project history is affected by this fixture.
+        subprocess.run(['git','-C',str(self.root),'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','-qm','synthetic policy fixture'],check=True)
+        original=Path.cwd()
+        try:
+            os.chdir(self.root)
+            positive=Path(self.work.name)/'positive';positive.mkdir()
+            self.assertEqual(gates.run_gate(positive,HEAD,'debug-build.log',[sys.executable,'-c','print("unchanged actual fixture exit0")']),0)
+            for i,path in enumerate(paths):
+                evidence=Path(self.work.name)/('gate-'+str(i));evidence.mkdir()
+                self.assertEqual(gates.run_gate(evidence,HEAD,'debug-build.log',command+[str(path)]),1)
+                row=json.loads((evidence/'debug-build.log.result.json').read_text())
+                self.assertEqual((row['exitCode'],row['outcome']),(0,'FAIL'))
+                self.assertEqual(row['bindingFailure'],'complete source inputs changed during build')
+                self.assertNotIn('matrixBuild',row)
+        finally:os.chdir(original)
+
+
+if __name__=='__main__':unittest.main()

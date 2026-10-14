@@ -2,4 +2,5 @@
   <PropertyGroup><TargetFramework>net8.0</TargetFramework><AssemblyName>GamepadLab</AssemblyName><RootNamespace>GamepadLab</RootNamespace><RestorePackagesWithLockFile>true</RestorePackagesWithLockFile></PropertyGroup>
   <ItemGroup><Compile Remove="Core/**/*.cs" /><Compile Remove="Tests/**/*.cs" /><ProjectReference Include="Core/GamepadLab.Core.csproj" /></ItemGroup>
   <ItemGroup><Compile Include="../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="Scripts/GodotInputAdapter.cs" /></ItemGroup>
+  <Import Project="tools/ExportLocks.targets" />
 </Project>

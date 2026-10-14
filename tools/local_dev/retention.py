@@ -19,6 +19,7 @@ from .manifests import SUPPORTED_TOOLS, _manifest, _root_relative, manifest_cand
 
 LIFECYCLES = {"exported", "open-review", "unmerged", "accepted", "retired"}
 REQUIRED_TASK_SUCCESS_GATES = {
+    "ARC-GPAD-005": {"sdk-editor-bridge", "source-preset-matrix", "exported-preset-matrix", "source-preset-persistence", "exported-preset-persistence", "shared-input-regressions", "local-lifecycle-tests", "sdk-info", "locked-restore", "locked-tests-restore", "release-build", "editor-import", "debug-build", "plist-lint"},
     "ARC-WORLD-001": {"focused-tests", "source-world-original", "exported-world-original"},
     "ARC-GPAD-004": {"focused-tests", "source-world-original", "exported-world-original", "source-world-persistence", "exported-world-persistence", "dual-hostfxr"},
     "ARC-RENDER-006": {"focused-tests", "source-world-original", "exported-world-original", "source-world-persistence", "exported-world-persistence", "dual-hostfxr", "human-metadata", "source-human-original", "exported-human-original"},
@@ -656,6 +657,13 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
             raise ValueError("grid success-gate logs and exit receipts must be bound by the manifest inventory")
         from .grid_validation import validate_reports as validate_grid_reports
         validate_grid_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
+    if task == "ARC-GPAD-005":
+        from .gamepad_export_gates import validate_reports as validate_gamepad_reports
+        required_evidence = validate_gamepad_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
+        recorded_evidence = payload.get("evidence")
+        if (not isinstance(recorded_evidence, list) or not required_evidence.issubset(
+                entry.get("relativePath") for entry in recorded_evidence if isinstance(entry, dict))):
+            raise ValueError("gamepad reports/captures/exit receipts must be bound by the manifest inventory")
     app_path = manifest.parent / app["relativePath"]
     executable = manifest.parent / app["executableRelativePath"]
     try:
