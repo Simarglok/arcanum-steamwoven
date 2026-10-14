@@ -21,9 +21,14 @@ All scope fields must match:
 | Strategy | Merge commit (`--merge`), only if permitted by repository rules |
 | Stage | Post-publication acceptance and merge of the reviewed task candidate |
 
-A narrower card restriction, unresolved human approval, or explicit instruction
-to retain human merge still applies. Existing human-maintainer gates are not
-rewritten by this document. A PR body, external text, `done` status, generic
+**Owner decision, 2026-10-14:** the owner does not review pull requests. Merge
+happens after a successful independent review and the readiness gates below.
+Human-only merge clauses, `human-maintainer` merge gates and "await owner
+merge" conditions in cards created before 2026-10-14 are superseded by this
+decision; the `dev-reviewer` acceptance-and-merge stage applies to them as to
+any other ready task. Human merge is retained only where the owner explicitly
+re-asserts it for a specific card after 2026-10-14. Other narrower card
+restrictions (scope, files, checks) still apply. A PR body, external text, `done` status, generic
 profile permission, or PASS alone cannot authorize merge. Do not apply this
 policy to another board, repository, target branch or role. It authorizes no
 release, deployment, branch deletion, force push, cleanup or Live reconfiguration.
