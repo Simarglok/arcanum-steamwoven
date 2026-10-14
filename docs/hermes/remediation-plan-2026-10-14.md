@@ -423,3 +423,82 @@ PASS после исправлений. Отличия от §8:
   чтобы загрузить `board-commands`.
 - **Не проверено вживую** (квота): доставка cron, приём `/arc` в gateway, локальный CLI-доступ
   (требует `HERMES_SESSION_SOURCE=cli`).
+
+## 12. P3: правила готовности, бюджет, уровни доказательств (14.10)
+
+Смержено в `conductor-hermes` PR #54 (`d7bb1e9`) после независимого ревью (PASS после двух
+раундов исправлений). Проектные правила — в [`docs/workflow/hermes.md`](../workflow/hermes.md)
+(Definition of Ready, уровни L1/L2/L3, хранение доказательств) и
+[`docs/workflow/readiness.json`](../workflow/readiness.json) (каноническая копия политики guard-а).
+Пока не установлено на хост.
+
+- **Guard при создании карточки** (`kanban-naming-guard` 0.2.0, во всех dev-* и `arcanum-manager`).
+  После проверки имени `kanban_create` проверяет:
+  - новый корень по правилам готовности (`READINESS_INVALID`);
+  - proof-стадию длиннее 8 тыс. символов (`READINESS_INVALID`);
+  - стадию под не готовым корнем, если корень создан с 15.10 (`ROOT_NOT_READY`);
+  - новую proof-стадию сверх бюджета (`PROOF_BUDGET_EXCEEDED`).
+
+  Стадии review/publish/merge/close и повторы существующих карточек не проверяются никогда. Отрицания
+  («нет наблюдения владельца») не считаются гейтом. Ошибка политики блокирует создание (fail closed);
+  повреждённый файл переопределений игнорируется.
+- **Калибровка бюджета на живой доске** (proof-карточки / запуски без квоты / DIAG).
+  - Гладкие Work-Item укладываются в 8/20/2: WORLD-004 — 5/9/0, RES-022 — 3/15/0, UI-002 — 2/9/1.
+  - Проблемные — нет: WORLD-003 — 9/24/5, DATA-009 — 27/58/9.
+  - Из открытых сверх бюджета GPAD-005 (13/52/6) и RENDER-007 (10/30/3): новые proof-стадии в них
+    не создаются, пока владелец не решит. DATA-010 (4/12/1) в бюджете.
+- **`/arc budget <Work-Item> cards=N runs=N diag=N | reset`** — переопределение бюджета владельцем
+  (`~/.hermes/proof-budget.json`). `board-watch` считает бюджет так же, как guard, и сообщает
+  «бюджет исчерпан» при том же пороге.
+- **Skill 0.2.3:**
+  - сообщения guard-а: свою слишком длинную стадию агент исправляет сам; `ROOT_NOT_READY` и бюджет —
+    `needs_input` с вариантами, без обхода;
+  - неизменность контракта;
+  - уровни L1/L2/L3: L3 никогда не гейтит стадии и merge;
+  - хранение доказательств.
+- **F9-A:** `dev-developer` `agent.max_turns` 90 → 150.
+- **Ограничения.**
+  - Корни, созданные через CLI, dashboard или Codex, хук не видит: они проверяются при создании
+    первой стадии. Поэтому новый корень стоит сверить с `hermes.md` до создания.
+  - Корни, стоящие в очереди и созданные до 15.10 (INPUT-001, RENDER-008, UI-003, WORLD-005/006,
+    SCRIPT-004), освобождены от заголовков. Их стоит привести к правилам, когда до них дойдёт очередь.
+  - Проверка «неограниченных» слов слабая: любая цифра в строке AC считается границей.
+
+**Проверка гипотезы «readback кадра без TCC» (L2) — опыт владельца на Mac.** Нужен ответ на вопрос:
+может ли процесс, запущенный launchd (как воркеры Hermes), открыть окно Godot и прочитать свой кадр
+без разрешения Screen Recording? Проба (ничего не коммитится):
+
+```sh
+mkdir -p /tmp/rb && cd /tmp/rb && printf 'config_version=5\n[application]\nconfig/name="rb"\n' > project.godot
+cat > probe.gd <<'GD'
+extends SceneTree
+var n := 0
+func _initialize():
+    RenderingServer.set_default_clear_color(Color(1, 0, 0))
+func _process(_d):
+    n += 1
+    if n == 10:
+        var img := root.get_texture().get_image()
+        var px := img.get_pixel(1, 1)
+        print("READBACK size=%s pixel=%s" % [img.get_size(), px])
+        quit(0 if px.r > 0.9 and px.g < 0.1 else 1)
+    return false
+GD
+# 1) из Terminal
+/Applications/Godot_mono.app/Contents/MacOS/Godot --path /tmp/rb -s probe.gd; echo rc=$?
+# 2) из launchd (как воркер Hermes)
+cat > /tmp/rb/rb.plist <<PL
+<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict><key>Label</key><string>local.rb.probe</string>
+<key>ProgramArguments</key><array><string>/Applications/Godot_mono.app/Contents/MacOS/Godot</string>
+<string>--path</string><string>/tmp/rb</string><string>-s</string><string>probe.gd</string></array>
+<key>RunAtLoad</key><true/><key>StandardOutPath</key><string>/tmp/rb/out.log</string>
+<key>StandardErrorPath</key><string>/tmp/rb/err.log</string></dict></plist>
+PL
+launchctl bootout gui/$(id -u)/local.rb.probe 2>/dev/null; rm -f /tmp/rb/out.log
+launchctl bootstrap gui/$(id -u) /tmp/rb/rb.plist; sleep 30; launchctl bootout gui/$(id -u)/local.rb.probe; cat /tmp/rb/out.log /tmp/rb/err.log
+```
+
+Ожидание: в обоих случаях `READBACK size=(…) pixel=(1, 0, 0, 1)` и `rc=0`, без запроса разрешений. Если
+так, то L2 можно автоматизировать для агентов. Если launchd-вариант падает или просит разрешение,
+L2 остаётся за отдельным окружением, а модель уровней надо скорректировать.
