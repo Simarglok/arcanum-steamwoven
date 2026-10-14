@@ -18,8 +18,8 @@ Card-Code: ARC-TYPE-NNN
 Root-Task: SELF
 Result: <one mergeable result, one PR>
 Components: <at most 3, comma-separated>
-Human-Gates: none | ARC-TYPE-NNN[, ...]
-Proof-Budget: cards=8 runs=20 diag=2
+Human-Gates: none                         (or the owner-validation Work-Item codes, e.g. ARC-INPUT-002)
+Proof-Budget: cards=8 runs=20 diag=2      (optional; these are the defaults)
 
 AC1. <criterion an agent can check itself>
 AC2. ...
