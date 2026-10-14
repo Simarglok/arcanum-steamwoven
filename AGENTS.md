@@ -18,13 +18,14 @@ Card-Code: ARC-TYPE-NNN
 Root-Task: SELF
 Result: <one mergeable result, one PR>
 Components: <at most 3, comma-separated>
-Human-Gates: none                         (or the owner-validation Work-Item codes, e.g. ARC-INPUT-002)
-Proof-Budget: cards=8 runs=20 diag=2      (optional; these are the defaults)
+Human-Gates: none
+Proof-Budget: cards=8 runs=20 diag=2
 
 AC1. <criterion an agent can check itself>
 AC2. ...
 ```
 
+- `Human-Gates:` is `none` or the codes of separate owner-validation work items (e.g. `ARC-INPUT-002`); `Proof-Budget:` is optional (the line above shows the defaults).
 - At most 8 criteria `AC1`..`AC8`. A human, physical-device or native-GUI observation is never an `AC`: it goes into the separate owner-validation work item named in `Human-Gates`, which does not block merge.
 - "Exhaustive", "certificate", "worst-case", "parity", "all possible" need an explicit bound (number, list of cases, limit) on the same line.
 - The contract is fixed at the first run; only an explicit owner amendment on the root changes it.
