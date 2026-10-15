@@ -112,9 +112,10 @@ rule, not a claim that every proprietary renderer implements the same rule.
 
 ## Resource ownership and reports
 
-Each load has one DATA owner, one strict snapshot load and at most one frame
-acquisition/copy per unique required frame. Explicit cumulative DATA usage is
-pre-admitted; leases close before another acquisition. Reload uses a new owner,
+Each load has one DATA owner, one strict snapshot load and one frame batch that
+copies each unique required frame once; nothing is published unless the batch
+completes its final source authentication. Explicit cumulative DATA usage is
+pre-admitted. Reload uses a new owner,
 not refunded read/decode counters on an exhausted owner.
 
 The CPU repository is limited to 2,444 frames and 81,853,096 packed RGBA bytes.
@@ -244,7 +245,7 @@ dotnet test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj
 
 Without opt-in the test is inconclusive, not an authenticated PASS; missing roles
 after opt-in fail. Keep detailed original reports and diagnostic dumps private,
-outside sealed artifacts. Two complete original loads can take several minutes;
+outside sealed artifacts. Two complete original loads take under two minutes;
 the test bounds each awaited load independently. Successful coordinator/source
 checks do not establish the full AREA software-input, resource/reload, final
 export or ordinary-launch gates, nor original-runtime parity.
@@ -306,9 +307,9 @@ must not grow and post-GC managed growth must stay below half of the measured
 repository. The smoke releases its own result reference before this stage.
 Resident size is recorded, not bounded, because freed runtime/driver pages need
 not return to the system. One full original load currently takes
-about five minutes on the development Mac (see the
-[performance diagnosis](../research/crash-site-area-viewer-performance.md)), so
-only one replacement is measured within the 900-second validator bound. Process
+about 50 seconds in a Debug source run on the development Mac (see the
+[performance diagnosis](../research/crash-site-area-viewer-performance.md)); one
+replacement is measured, well within the 900-second validator bound. Process
 figures are measured observations, not a memory guarantee. `area_validate.py` keeps only the
 scalar summary in the safe receipt; the raw report stays in private evidence.
 

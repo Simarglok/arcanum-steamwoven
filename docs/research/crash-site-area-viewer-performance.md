@@ -6,6 +6,9 @@ Measured diagnosis of the `crash-site-area` Terrain Viewer mode
 suspected causes. It changes no code and is not a fix, a performance contract,
 a budget or a regression gate. Numbers are single observations on one machine.
 
+**Update after the frame-batch change.** Cause L1 is addressed by the owner frame
+batch (see [L1 result](#l1-result-frame-batch)); the other causes are unchanged.
+
 ## Scope and method
 
 - Machine: Apple M4 Pro, macOS, Godot 4.7.2 .NET (`gl_compatibility`, OpenGL
@@ -157,13 +160,34 @@ re-uploads: 229 textures created in 8 s at zoom 1, 934 at zoom 0.25
 The idle loop is uncapped in these runs (≈176 FPS, ≈85% CPU of one process
 with no input), so the viewer keeps a core busy while idle.
 
+## L1 result: frame batch
+
+The owner's `BeginFrameBatch` now authenticates each used source once before
+its first frame and once at `Complete`, instead of twice per frame (contract in the
+[loader](../world/crash-site-area-loader.md)). Same machine and method, at
+`origin/main` `8def8c2` plus the change:
+
+| Measurement | Before | After |
+| --- | ---: | ---: |
+| Debug source launch to SOURCE READY | 318 s | 49.9 s |
+| `CopyFrames`, Debug source run | 290.2 s | 22.2 s |
+| `CopyFrames`, probe Debug / Release | 260 / 240 s | 19.7 / 5.2 s |
+| Owner `ReadActual` growth during the copy | 596.1 GB | 1.35 GB |
+| Native `crash-site-area` smoke (two loads) | not timed (two ≈5 min loads) | 109 s |
+
+The remaining copy time is per-frame entry read and payload hash, ART decode and
+pixel hash, about four times slower in Debug; the linear descriptor lookup costs
+0.2 s for all 2,444 keys. It shares its code with I3, so it belongs to cause L2.
+The load now also includes the whole-core step stage (0.2 s) merged after the
+diagnosis.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
 accepted here, and each must keep the existing identity, budget and fail-closed
 contracts that the code currently enforces.
 
-1. **L1, most of 290 s of 318 s.** This is current contract, not an accident:
+1. **L1, most of 290 s of 318 s. Done by the frame batch above.** This was current contract, not an accident:
    the [loader](../world/crash-site-area-loader.md) states that frame
    acquisition reauthenticates the source before and after decoding. Changing it
    needs a deliberate contract revision that answers what whole-archive rehashing
@@ -181,9 +205,9 @@ contracts that the code currently enforces.
 3. **F3, 35 ms+ at zoom ≤ 0.25.** Reduce draw calls: shared material and
    batched or atlased submission, or pre-composited terrain chunks for the
    immutable terrain layer (36,864 of 37,363 commands are terrain).
-4. **L2, ≈18 s of load.** Run original-data loads from optimized assemblies
-   (Release core libraries, or an optimized export), or remove per-byte interface
-   loops in I3 hashing.
+4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy.** Run
+   original-data loads from optimized assemblies (Release core libraries, or an
+   optimized export), or remove per-byte interface loops in decode/pixel hashing.
 5. **F4 (≈2 ms every frame) and F5 (≈3 ms per camera change).** Update the HUD
    only on change; cache the upright order and patch only the actor marker.
 6. **F6 and minor load items.** Keep a bounded LRU of GPU textures instead of
