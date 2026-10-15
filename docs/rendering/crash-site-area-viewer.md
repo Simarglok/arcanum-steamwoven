@@ -299,9 +299,10 @@ must not grow and post-GC managed growth must stay below half of the measured
 repository. The smoke releases its own result reference before this stage.
 Resident size is recorded, not bounded, because freed runtime/driver pages need
 not return to the system. One full original load currently takes
-about five minutes on the development Mac, so only one replacement is measured
-within the 900-second validator bound. Process figures are
-measured observations, not a memory guarantee. `area_validate.py` keeps only the
+about five minutes on the development Mac (see the
+[performance diagnosis](../research/crash-site-area-viewer-performance.md)), so
+only one replacement is measured within the 900-second validator bound. Process
+figures are measured observations, not a memory guarantee. `area_validate.py` keeps only the
 scalar summary in the safe receipt; the raw report stays in private evidence.
 
 ## Source attribution and unknowns
