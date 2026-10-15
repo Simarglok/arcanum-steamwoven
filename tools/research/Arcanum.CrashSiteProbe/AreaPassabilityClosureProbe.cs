@@ -274,7 +274,7 @@ internal static partial class Program
                     f.EndsWith(".sec", StringComparison.OrdinalIgnoreCase)));
             if (looseOverrides != 0) throw new InvalidDataException("LOOSE_OVERRIDE_PRESENT");
             foreach (var sector in snapshot.Sectors.Where(x => x.Present))
-                if (archives.Sum(a => a.Value.Entries.Count(e => ClosureEntryName(e).EndsWith($"/{sector.Key.Packed}.sec", StringComparison.Ordinal))) != 1)
+                if (archives.Sum(a => a.Value.Entries.Count(e => ClosureEntryName(e) == $"maps/arcanum1-024-fixed/{sector.Key.Packed}.sec")) != 1)
                     throw new InvalidDataException("SECTOR_NOT_UNIQUE");
 
             var nameRecords = ClosureMes(resources["art/tile/tilename.mes"].Bytes);
