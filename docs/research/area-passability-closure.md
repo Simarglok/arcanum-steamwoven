@@ -44,10 +44,10 @@ or window flags are relevant because the area has no walls or portals (F5).
 
 | ID | Claim | Source fact | Local observation |
 | --- | --- | --- | --- |
-| F1 | Tile-name flags | [a_name.c 425–532](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L425-L532), [749–780](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L749-L780), [mes.c 287–300, 393](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L287-L300) | All 38,678 cells that the conservative production component reports Unknown resolve; 0 remain unresolved. |
-| F2 | Absent block mask | [sector.c 1453–1717](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1453-L1717), [sector_block_list.c 10–43](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_block_list.c#L10-L43), [tile_block.c 311–327](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_block.c#L311-L327) | The three mask-less sectors are context sectors with version `0xAA0003`. All nine core sectors are `0xAA0004` and have a mask. |
-| F3 | Resource precedence | [map.c 1360–1537](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1360-L1537), [map.c 662–700](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L662-L700), [gamelib.c 417–486](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L417-L486) | Each consumed resource occurs exactly once across all seven archives. No loose override or save difference file exists under the module and data folders. |
-| F4 | Patch file | [map.c 1500–1530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1500-L1530) | The PATCH archive's `map.patch` names 50 objects; none of the 98 core/context mobile records contains any of those IDs. |
+| F1 | Tile-name flags | [a_name.c 425–538](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L425-L538), [749–780](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c#L749-L780), [mes.c 287–300](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L287-L300), [mes.c 393–396](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L393-L396) | All 38,678 cells that the conservative production component reports Unknown resolve; 0 remain unresolved. |
+| F2 | Absent block mask | [sector.c 556–562](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L556-L562), [sector.c 1453–1717](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L1453-L1717), [sector_block_list.c 10–43](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_block_list.c#L10-L43), [tile_block.c 311–327](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_block.c#L311-L327) | The three mask-less sectors are context sectors with version `0xAA0003`. All nine core sectors are `0xAA0004` and have a mask. |
+| F3 | Resource precedence | [map.c 1360–1537](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1360-L1537), [map.c 662–700](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L662-L700), [gamelib.c 417–486](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L417-L486) | The four consumed rule/name resources and every present sector file occur exactly once across all seven archives. No loose override, sector or save difference file exists under the module and data folders. |
+| F4 | Patch file | [map.c 1500–1530](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L1500-L1530), [obj_id.c 103–130, 189–245](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_id.c#L189-L245) | The PATCH archive's `map.patch` names 50 objects; none of the 98 core/context mobile records contains any of those IDs in either byte order. |
 | F5 | Exact-tile registry | [obj.c 3032–3091](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c#L3032-L3091), [sector_object_list.c 115–186, 459–473, 532–560](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c#L459-L473), [object.c 253–284, 3304–3394](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3304-L3394) | 98 mobile records re-verified in place; 0 walls or portals; 123 destination-blocker cells. |
 | F6 | Critter life | [critter.c 608–615](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L608-L615), [object.c 1632–1677](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1632-L1677), [stat.c 43–110, 336–540, 891–960](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L540), [effect.c 257–480, 742–850](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L742-L850), [background.c 312–324](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.c#L312-L324) | 42 visible critters: 38 alive (minimum current HP 10), 4 dead (maximum current HP −31,952). None is Unknown. |
 | F7 | Step composition | [object.c 2962–3283](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L2962-L3283), [location.c 369–416](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/location.c#L369-L416), [tile.c 146–188](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c#L146-L188) | All seven frozen production observations at spawn are reproduced. |
@@ -64,12 +64,14 @@ the tile-name flags of the class-0 tile. The flags are built once from
   four category arrays in ascending order. The array index restarts only at
   exactly 100, 200 and 300, so rank-within-category is the material index
   **only when keys 0, 100, 200 and 300 all exist**. The probe requires them.
+  A bare value shorter than three characters anywhere in 0..399 aborts the
+  whole table; the probe refuses such a table.
 - A value with a `/` has its flags in the characters after the **first** `/`,
   up to the first space or the end. `b` and `f` set the blocking flag. Every
   other character, **including a later `/`**, is ignored. A sound number may
   follow the space.
 - A value without `/` carries no flags. It must have at least three characters
-  (shorter aborts tile-name initialization).
+  (see above).
 - The category is selected by tile bit 8 (outdoor) and bit 7 (flippable); the
   material index is bits 22..27.
 
@@ -79,38 +81,50 @@ every Unknown name value contains a second `/` inside its flag run. One
 blocking value covers 37,364 cells, mostly the all-blocked border sectors.
 Three non-blocking values cover 175 core cells. This includes the historical
 91 unresolved cells of the base sector: they all resolve to non-blocking. The
-tile name table has 88 records in four categories of 31, 6, 2 and 13 entries.
+tile name table has 88 records; 52 of them fall in the four categories (31, 6,
+2 and 13 entries) and the rest are edge records at 400 and above. The other
+1,139 conservative Unknown cells are cells of the three mask-less sectors
+(F2) whose name or facade component was already supported.
 
 ### F2 — absent block mask
 
 A sector file stores a version word (`0xAA0000`..`0xAA0004`). The block list
 is read only for `0xAA0004`. The sector cache initializes the block list to
-zero before loading. A sector of version `0xAA0003` therefore has **no blocked
+zero when the cache entry is created, before loading. A sector of version `0xAA0003` therefore has **no blocked
 mask bits**: the mask component is `NoBlock`, not Unknown. The probe fails if
-a `0xAA0004` sector lacks the mask.
+a `0xAA0004` sector lacks the mask or an older sector reports one.
 
 ### F3 — resource precedence and new-game state
 
 The probe searches module, resource1..4, tig and the PATCH archive. Each of
 `art/tile/tilename.mes` (resource2), `rules/effect.mes` (resource3),
 `rules/gameeffect.mes` (module) and `rules/map.patch` (PATCH archive) occurs
-exactly once. Explicitly supplied loose roots (the module folder and the data
-folder) contain no file of those names and no `.dif` or `.mdy` file. Choosing
-between duplicates is therefore unnecessary for this input. No general
-archive, PATCH or loose-file precedence is inferred.
+exactly once, and so does every present sector file (module). The required
+loose roots (the module folder and the data folder) contain no file of those
+names and no `.sec`, `.dif` or `.mdy` file. Choosing between duplicates is
+therefore unnecessary for this input. The mobile file and prototypes are the
+Area owner's authenticated selection; their shadowing is not re-checked here.
+No general archive, PATCH or loose-file precedence is inferred.
 
-At game initialization and module load, `Save\Current` is emptied, and a new
-map open empties the map's save folder. A new game therefore has no sector
-`.dif`, `mobile.md`, `mobile.des` or `mobile.mdy`. The map's mobile file is read
-in full and `map.patch` is applied before any sector is loaded.
+Game initialization and module load empty `Save\Current`. A new game
+therefore has no sector `.dif`, `mobile.md`, `mobile.des` or `mobile.mdy`. (The
+map open path itself empties the map save folder only after reading those
+files, so the conclusion rests on the `Save\Current` emptying.) The map's
+mobile file is read in full and `map.patch` is applied before any sector is
+loaded.
 
 ### F4 — patch file
 
-`map.patch` lines name an object ID followed by attribute changes. The probe
-matched every named ID as GUID bytes against each core and context mobile
-record's raw bytes, which is a superset of an own-ID match. There are 0 hits.
-Statics are not yet loaded when the patch is applied, so the patch cannot
-reach them.
+`map.patch` lines name an object ID followed by attribute changes. Every line
+of this input is a `G_` GUID line; any other non-comment line fails the probe.
+The pinned string parser stores the 32 hex digits in text order, but the
+observed mobile file stores GUIDs in the mixed-endian Windows layout: 32 of the
+50 targets occur in the file in that layout and none in text order. This
+source/observation discrepancy is recorded, not resolved. The probe therefore
+searches each core and context mobile record's raw bytes for **both** byte
+orders, which is a superset of an own-ID match. There are 0 hits in either
+order. Statics are not yet loaded when the patch is applied, so the patch
+cannot reach them.
 
 ### F5 — exact-tile registry at T0
 
@@ -146,10 +160,14 @@ current = maxhps-effects(WP + 2 × (ST + Level) + 4 + HpAdj + 4 × HpPts) − Hp
   the result is clamped to `[1, race maximum]` for ST and WP and `[0, 51]` for
   Level. An NPC has no background, so no background adjustment applies.
 - Effects come from the critter's effect array, indexing `rules\effect.mes`
-  (50..399) and `rules\gameeffect.mes` (0..49). Changes stack as percent,
-  multiply, divide, add, strongest minimum, strongest maximum.
+  (50..399) and `rules\gameeffect.mes` (0..49). Tokens are separated by
+  spaces and commas. Changes stack as percent, multiply, divide, add,
+  strongest minimum, strongest maximum. The probe admits only add, percent and
+  min/max: the pinned parser reads a `*` or `/` factor as zero, and `-1` is its
+  "unset" bound, so those forms fail closed.
 - Every race maximum is at least 20. The probe therefore computes an exact
-  value inside `[1, 20]` and an interval above it. A `maxhps` effect, an effect
+  ST or WP inside `[1, 20]` and an interval above it. Level's bound does not
+  depend on race and is exact. A `maxhps` effect, an effect
   outside the admitted grammar or vocabulary, a stat array that is not exactly
   28 entries, or an interval that straddles zero all fail closed.
 
@@ -255,11 +273,12 @@ command logs and original text stay local.
 "$DOTNET" run --project tools/research/Arcanum.CrashSiteProbe --no-build -- --area-passability-closure \
   --module MODULE --resource1 RESOURCE1 --resource2 RESOURCE2 --resource3 RESOURCE3 \
   --resource4 RESOURCE4 --tig TIG --patch MODULE_PATCH0 --mobile MOBILE \
-  --prototype-root PROTOTYPES --oracle ORACLE [--loose-root DIR ...]
+  --prototype-root PROTOTYPES --oracle ORACLE --loose-root MODULE_DIR --loose-root DATA_DIR
 ```
 
-The self-test makes 38 synthetic assertions over the F1, F6, F7 and F8 rules,
-the MES and `map.patch` structure. The original run exits 0 only when every
+The self-test makes 45 synthetic assertions over the F1, F6, F7 and F8 rules,
+the MES and `map.patch` structure, including both GUID byte orders. The original run exits 0 only when every
 frozen cross-check matches. It fails closed on any unresolved tile name,
-missing mask in a `0xAA0004` sector, wall or portal, duplicated resource,
-changed input, mobile record mismatch or unknown critter life.
+mask/version mismatch, wall or portal, duplicated resource or sector, loose
+override, unsupported or area-hitting `map.patch` line, changed input, mobile
+record mismatch or unknown critter life.

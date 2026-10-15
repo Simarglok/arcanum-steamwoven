@@ -47,10 +47,12 @@ internal static partial class Program
     }
 
     // Per-category arrays are filled in ascending key order and restart only at keys 0/100/200/300,
-    // so rank-within-category equals the material index only when all four anchors exist.
+    // so rank-within-category equals the material index only when all four anchors exist. A bare
+    // name shorter than three characters anywhere in 0..399 aborts the whole table: also null.
     internal static string[][]? ClosureTileNameCategories(SortedDictionary<int, string> records)
     {
         if (!records.ContainsKey(0) || !records.ContainsKey(100) || !records.ContainsKey(200) || !records.ContainsKey(300)) return null;
+        if (records.Where(r => r.Key is >= 0 and < 400).Any(r => ClosureTileNameBlocks(r.Value) is null)) return null;
         return [.. Enumerable.Range(0, 4).Select(c => records.Where(r => r.Key >= c * 100 && r.Key < (c + 1) * 100).Select(r => r.Value).ToArray())];
     }
 
@@ -62,9 +64,13 @@ internal static partial class Program
         return material < categories[category].Length ? ClosureTileNameBlocks(categories[category][material]) : null;
     }
 
+    // Tokens are separated by spaces and commas only. Admitted operators: signed add, signed percent,
+    // and min/max bounds. Multiply/divide tokens are refused because the pinned parser reads their
+    // factor as zero; a bound of -1 is refused because -1 is the source's "unset" marker.
     internal static IReadOnlyList<ClosureEffectChange>? ClosureParseEffect(string text)
     {
-        var tokens = text.Split([' ', ',', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var tokens = text.Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
+        if (tokens.Any(t => t.Any(c => char.IsWhiteSpace(c) || char.IsControl(c)))) return null;
         var changes = new List<ClosureEffectChange>();
         for (var i = 0; i < tokens.Length; i++)
         {
@@ -72,7 +78,7 @@ internal static partial class Program
             var attribute = tokens[i].ToLowerInvariant(); var op = tokens[++i];
             if (op.Equals("min", StringComparison.OrdinalIgnoreCase) || op.Equals("max", StringComparison.OrdinalIgnoreCase))
             {
-                if (i + 1 >= tokens.Length || !int.TryParse(tokens[++i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var bound)) return null;
+                if (i + 1 >= tokens.Length || !int.TryParse(tokens[++i], NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var bound) || bound == -1) return null;
                 changes.Add(new(attribute, char.ToLowerInvariant(op[1]) == 'i' ? 'n' : 'x', bound));
             }
             else if (op[0] is '+' or '-')
@@ -81,36 +87,21 @@ internal static partial class Program
                 if (!int.TryParse(percent ? op[..^1] : op, NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var amount)) return null;
                 changes.Add(new(attribute, percent ? '%' : '+', amount));
             }
-            else if (op[0] is '*' or '/' && op.Length > 1 && int.TryParse(op[1..], NumberStyles.None, CultureInfo.InvariantCulture, out var factor) && factor != 0)
-                changes.Add(new(attribute, op[0], factor));
             else return null;
         }
         return changes;
     }
 
-    // Stacking order: percent, multiply, divide, add, then the strongest min and max bounds.
+    // Admitted changes compose as: scale by the summed percentage (integer, truncating), add the
+    // summed offsets, then raise to the largest floor and lower to the smallest ceiling.
     internal static int ClosureApplyEffects(IEnumerable<IReadOnlyList<ClosureEffectChange>> effects, string attribute, int value)
     {
-        int adds = 0, mults = 1, divs = 1, percents = 0; int? min = null, max = null;
-        foreach (var change in effects.SelectMany(e => e).Where(c => c.Attribute == attribute))
-        {
-            switch (change.Operator)
-            {
-                case '+': adds += change.Parameter; break;
-                case '%': percents += change.Parameter; break;
-                case '*': mults *= change.Parameter; break;
-                case '/': divs *= change.Parameter; break;
-                case 'n': min = min is { } a && a >= change.Parameter ? a : change.Parameter; break;
-                case 'x': max = max is { } b && b <= change.Parameter ? b : change.Parameter; break;
-            }
-        }
-        if (percents != 0) value = value * (percents + 100) / 100;
-        if (mults != 1) value *= mults;
-        if (divs != 1) value /= divs;
-        value += adds;
-        if (min is { } lo && value < lo) value = lo;
-        if (max is { } hi && value > hi) value = hi;
-        return value;
+        var relevant = effects.SelectMany(e => e).Where(c => c.Attribute == attribute).ToArray();
+        var percent = relevant.Where(c => c.Operator == '%').Sum(c => c.Parameter);
+        var result = (percent == 0 ? value : value * (100 + percent) / 100) + relevant.Where(c => c.Operator == '+').Sum(c => c.Parameter);
+        if (relevant.Where(c => c.Operator == 'n').Select(c => (int?)c.Parameter).Max() is { } floor) result = Math.Max(result, floor);
+        if (relevant.Where(c => c.Operator == 'x').Select(c => (int?)c.Parameter).Min() is { } ceiling) result = Math.Min(result, ceiling);
+        return result;
     }
 
     // The engine clamps to [floor, raceMaximum]; every race maximum is at least the common ceiling,
@@ -139,7 +130,8 @@ internal static partial class Program
         var strength = c.StatBase[ClosureStatStrength] - Math.Min(3, poison / 100);
         var st = ClosureClampInterval(ClosureApplyEffects(effects, "st", strength), 1, 20);
         var wp = ClosureClampInterval(ClosureApplyEffects(effects, "wp", c.StatBase[ClosureStatWillpower]), 1, 20);
-        var level = ClosureClampInterval(ClosureApplyEffects(effects, "level", c.StatBase[ClosureStatLevel]), 0, 51);
+        var exactLevel = Math.Clamp(ClosureApplyEffects(effects, "level", c.StatBase[ClosureStatLevel]), 0, 51); // Race-independent bound.
+        var level = (Min: (long)exactLevel, Max: (long)exactLevel);
         var fixedPart = c.HpAdj + 4 * c.HpPts + 4 - c.HpDamage;
         var min = wp.Min + 2 * (st.Min + level.Min) + fixedPart;
         var max = wp.Max + 2 * (st.Max + level.Max) + fixedPart;
@@ -205,21 +197,27 @@ internal static partial class Program
         return result;
     }
 
-    // Object IDs named by map.patch lines ("G_xxxxxxxx_xxxx_xxxx_xxxx_xxxxxxxxxxxx: ...") as GUID bytes.
-    internal static IReadOnlyList<byte[]> ClosurePatchTargets(string text, out int malformed)
+    // Object IDs named by map.patch lines ("G_xxxxxxxx_xxxx_xxxx_xxxx_xxxxxxxxxxxx: ..."). Both byte orders are
+    // kept: the pinned string parser stores the digits in text order, while the observed map file stores
+    // GUIDs in the mixed-endian Windows layout. Any other non-comment line is malformed (fail closed).
+    internal sealed record ClosurePatchTarget(byte[] TextOrder, byte[] MixedEndian);
+    internal static IReadOnlyList<ClosurePatchTarget> ClosurePatchTargets(string text, out int malformed)
     {
-        var targets = new List<byte[]>(); malformed = 0;
+        var targets = new List<ClosurePatchTarget>(); malformed = 0;
         foreach (var raw in text.Split('\n'))
         {
             var line = raw.Trim();
             if (line.Length == 0 || line[0] == '#') continue;
             var colon = line.IndexOf(':');
-            if (colon < 3 || !line.StartsWith("G_", StringComparison.OrdinalIgnoreCase) ||
-                !Guid.TryParseExact(line[2..colon].Replace('_', '-'), "D", out var guid)) { malformed++; continue; }
-            targets.Add(guid.ToByteArray());
+            var digits = colon > 2 && line.StartsWith("G_", StringComparison.Ordinal) ? line[2..colon] : "";
+            if (digits.Length != 36 || !Guid.TryParseExact(digits.Replace('_', '-'), "D", out var guid)) { malformed++; continue; }
+            targets.Add(new(Convert.FromHexString(digits.Replace("_", "")), guid.ToByteArray()));
         }
         return targets;
     }
+
+    internal static (bool TextOrder, bool MixedEndian) ClosurePatchHits(ReadOnlySpan<byte> record, ClosurePatchTarget target) =>
+        (record.IndexOf(target.TextOrder) >= 0, record.IndexOf(target.MixedEndian) >= 0);
 
     private static int ProbeAreaPassabilityClosure(string[] args)
     {
@@ -231,7 +229,7 @@ internal static partial class Program
             if (args[i] == "--loose-root") looseRoots.Add(args[i + 1]);
             else if (!single.Contains(args[i]) || !options.TryAdd(args[i], args[i + 1])) throw new ArgumentException("CLOSURE_ARGUMENTS");
         }
-        if (options.Count != single.Length) throw new ArgumentException("CLOSURE_ARGUMENTS");
+        if (options.Count != single.Length || looseRoots.Count == 0) throw new ArgumentException("CLOSURE_ARGUMENTS");
         var oracleBefore = InputFingerprint.Create(options["--oracle"]);
         if (oracleBefore.Sha256 != "bfe9770d75a1c1922ca8817fd0c239e589c3de48020022f7de6bd450ef2d2b60") throw new InvalidDataException("ORACLE_IDENTITY");
         using var oracle = JsonDocument.Parse(File.ReadAllBytes(options["--oracle"]));
@@ -272,7 +270,12 @@ internal static partial class Program
             string[] looseNames = ["tilename.mes", "effect.mes", "gameeffect.mes", "map.patch"];
             var looseOverrides = looseRoots.Sum(root => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                 .Count(f => looseNames.Contains(Path.GetFileName(f), StringComparer.OrdinalIgnoreCase) ||
-                    f.EndsWith(".dif", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".mdy", StringComparison.OrdinalIgnoreCase)));
+                    f.EndsWith(".dif", StringComparison.OrdinalIgnoreCase) || f.EndsWith(".mdy", StringComparison.OrdinalIgnoreCase) ||
+                    f.EndsWith(".sec", StringComparison.OrdinalIgnoreCase)));
+            if (looseOverrides != 0) throw new InvalidDataException("LOOSE_OVERRIDE_PRESENT");
+            foreach (var sector in snapshot.Sectors.Where(x => x.Present))
+                if (archives.Sum(a => a.Value.Entries.Count(e => ClosureEntryName(e).EndsWith($"/{sector.Key.Packed}.sec", StringComparison.Ordinal))) != 1)
+                    throw new InvalidDataException("SECTOR_NOT_UNIQUE");
 
             var nameRecords = ClosureMes(resources["art/tile/tilename.mes"].Bytes);
             var categories = ClosureTileNameCategories(nameRecords) ?? throw new InvalidDataException("TILE_NAME_ANCHORS");
@@ -298,7 +301,8 @@ internal static partial class Program
                     var c = report.GetCell(t.LocalX, t.LocalY);
                     var maskBlocked = c.SerializedBlockMask.Disposition == TerrainObstructionDisposition.Blocked;
                     // A sector serialized before block version 0xAA0004 keeps the zero-initialized cache mask.
-                    if (c.SerializedBlockMask.Supportedness != TerrainObstructionSupportedness.Supported && s.Placeholder >= 0xAA0004) throw new InvalidDataException("MASK_EXPECTED");
+                    if ((c.SerializedBlockMask.Supportedness == TerrainObstructionSupportedness.Supported) != (s.Placeholder >= 0xAA0004))
+                        throw new InvalidDataException("MASK_VERSION_MISMATCH");
                     var unknownBefore = new[] { c.SerializedBlockMask, c.FacadeWalkabilityBit, c.TileNameRule }
                         .Any(r => r.Supportedness != TerrainObstructionSupportedness.Supported || r.Applicability == TerrainObstructionApplicability.Unknown);
                     bool blocked;
@@ -352,8 +356,14 @@ internal static partial class Program
 
             var patchText = Encoding.Latin1.GetString(resources["rules/map.patch"].Bytes);
             var patchTargets = ClosurePatchTargets(patchText, out var malformedPatchLines);
-            var patchHits = snapshot.Objects.Where(o => o.Key.Kind == AreaSourceKind.Mobile && o.Scope is AreaScope.Core or AreaScope.Context)
-                .Count(o => patchTargets.Any(g => mobileBytes.AsSpan((int)o.Key.Offset, o.Key.Length).IndexOf(g) >= 0));
+            if (malformedPatchLines != 0) throw new InvalidDataException("PATCH_LINE_UNSUPPORTED");
+            var areaRecords = snapshot.Objects.Where(o => o.Key.Kind == AreaSourceKind.Mobile && o.Scope is AreaScope.Core or AreaScope.Context).ToArray();
+            int Hits(Func<(bool TextOrder, bool MixedEndian), bool> pick) =>
+                areaRecords.Count(o => patchTargets.Any(t => pick(ClosurePatchHits(mobileBytes.AsSpan((int)o.Key.Offset, o.Key.Length), t))));
+            var areaTextHits = Hits(h => h.TextOrder); var areaMixedHits = Hits(h => h.MixedEndian);
+            var fileTextHits = patchTargets.Count(t => ClosurePatchHits(mobileBytes, t).TextOrder);
+            var fileMixedHits = patchTargets.Count(t => ClosurePatchHits(mobileBytes, t).MixedEndian);
+            if (areaTextHits != 0 || areaMixedHits != 0) throw new InvalidDataException("PATCH_TARGETS_AREA_RECORD");
 
             ClosureTerrain Terrain(long x, long y) => terrain.TryGetValue((x, y), out var t) ? t : ClosureTerrain.Missing;
             var spawn = (ClosureSpawnX, ClosureSpawnY);
@@ -382,12 +392,13 @@ internal static partial class Program
                 Effects = new { Defined = effectTable.Count, OutsideGrammar = effectTable.Count(e => e.Value is null) },
                 Sectors = sectorRows,
                 Terrain = new { Cells = terrain.Count, Blocked = terrain.Count(t => t.Value == ClosureTerrain.Blocked),
-                    ConservativeUnknown = conservativeUnknownTotal, UnresolvedBySelectedRule = 0 },
+                    ConservativeUnknown = conservativeUnknownTotal },
                 Objects = new { MobileRecordsVerified = mobileVerified, WallsOrPortals = wallsPortals, InventoryExcluded = inventory, OffOrDestroyedExcluded = offOrDestroyed,
                     ItemTypeExcluded = itemsExcluded, NoBlockScenery = noBlock, BlockerCells = blockers.Count, BlockerTypes = blockerTypes },
                 Critters = lifeRows.GroupBy(r => (r.Scope, r.Life)).OrderBy(g => g.Key.ToString()).Select(g => new { Scope = g.Key.Scope.ToString(), Life = g.Key.Life.ToString(),
                     Count = g.Count(), MinHp = g.Min(r => r.Min), MaxHp = g.Max(r => r.Max) }).ToArray(),
-                MapPatch = new { TargetLines = patchTargets.Count, MalformedLines = malformedPatchLines, AreaRecordHits = patchHits },
+                MapPatch = new { TargetLines = patchTargets.Count, MalformedLines = malformedPatchLines, TargetsFoundInMobileFile = new { TextOrder = fileTextHits, MixedEndian = fileMixedHits },
+                    AreaRecordsHit = new { TextOrder = areaTextHits, MixedEndian = areaMixedHits } },
                 Reachability = new
                 {
                     Spawn = new[] { ClosureSpawnX, ClosureSpawnY },
@@ -450,16 +461,20 @@ internal static partial class Program
         Check(categories[1].Length == 2 && ClosureTileBlocks((1u << 22) | 0x100, categories) == true, "C1_RANK_WITHIN_CATEGORY");
         Check(ClosureTileBlocks(0x180, categories) == true && ClosureTileBlocks((1u << 22) | 0x180, categories) == false, "C1_OUTDOOR_FLIPPABLE");
         Check(ClosureTileBlocks((5u << 22) | 0x80, categories) is null, "C1_MATERIAL_OUT_OF_RANGE");
-        names.Remove(200); Check(ClosureTileNameCategories(names) is null, "C1_ANCHOR_REQUIRED");
+        names[399] = "ab"; Check(ClosureTileNameCategories(names) is null, "C1_SHORT_BARE_NAME_ABORTS_TABLE");
+        names.Remove(399); names.Remove(200); Check(ClosureTileNameCategories(names) is null, "C1_ANCHOR_REQUIRED");
 
         // C2 effect grammar and stacking order.
-        var parsed = ClosureParseEffect("st +2, maxhps +15%, wp min 3, ST -1, level *2, poisonlevel /2")!;
-        Check(parsed.Count == 6 && parsed[1].Operator == '%' && parsed[2].Operator == 'n' && parsed[3].Attribute == "st", "C2_GRAMMAR");
+        var parsed = ClosureParseEffect("st +2, maxhps +15%, wp min 3, ST -1, level max 9")!;
+        Check(parsed.Count == 5 && parsed[1].Operator == '%' && parsed[2].Operator == 'n' && parsed[3].Attribute == "st" && parsed[4].Operator == 'x', "C2_GRAMMAR");
         Check(ClosureParseEffect("unknowntoken +1") is null && ClosureParseEffect("st") is null && ClosureParseEffect("st ?3") is null, "C2_FAIL_CLOSED");
+        Check(ClosureParseEffect("st *3") is null && ClosureParseEffect("st /2") is null, "C2_MULTIPLY_DIVIDE_REFUSED");
+        Check(ClosureParseEffect("st min -1") is null && ClosureParseEffect("st\t+1") is null && ClosureParseEffect("st +1\nwp +1") is null, "C2_SENTINEL_AND_SEPARATORS");
         Check(ClosureParseEffect("") is { Count: 0 }, "C2_EMPTY");
-        IReadOnlyList<ClosureEffectChange>[] stack = [[new("st", '%', 50), new("st", '+', 1)], [new("st", '*', 3), new("st", '/', 2), new("st", 'x', 20)]];
-        Check(ClosureApplyEffects(stack, "st", 4) == 10 && ClosureApplyEffects(stack, "st", 10) == 20 && ClosureApplyEffects(stack, "wp", 4) == 4, "C2_ORDER_AND_BOUND");
-        Check(ClosureApplyEffects([[new("st", '+', -9), new("st", 'n', 2), new("st", 'n', 5)]], "st", 4) == 5, "C2_STRONGEST_MIN");
+        IReadOnlyList<ClosureEffectChange>[] stack = [[new("st", '%', 50), new("st", '+', 1)], [new("st", '+', 2), new("st", 'x', 20)]];
+        Check(ClosureApplyEffects(stack, "st", 4) == 9 && ClosureApplyEffects(stack, "st", 13) == 20 && ClosureApplyEffects(stack, "wp", 4) == 4, "C2_ORDER_AND_BOUND");
+        Check(ClosureApplyEffects([[new("st", '%', -50)]], "st", -3) == -1, "C2_TRUNCATING_PERCENT");
+        Check(ClosureApplyEffects([[new("st", '+', -9), new("st", 'n', 2), new("st", 'n', 5), new("st", 'x', 7), new("st", 'x', 6)]], "st", 4) == 5, "C2_STRONGEST_BOUNDS");
 
         // C3 HP intervals: exact inside common bounds, conservative above them, fail closed on max-HP effects.
         int[] Stats(int st, int wp, int level, int poison = 0) { var s = new int[ClosureStatCount]; s[0] = st; s[6] = wp; s[17] = level; s[24] = poison; return s; }
@@ -504,9 +519,15 @@ internal static partial class Program
         Check(mes.Count == 2 && mes[5] == "x y", "C6_MES");
         var rejected = false; try { ClosureMes(Encoding.ASCII.GetBytes("{1}{a}{1}{b}")); } catch (InvalidDataException) { rejected = true; }
         Check(rejected, "C6_MES_DUPLICATE");
-        var guid = Guid.Parse("01234567-89ab-cdef-0123-456789abcdef");
-        var targets = ClosurePatchTargets("# c\nG_01234567_89AB_CDEF_0123_456789ABCDEF: obj_flag OF_OFF\nbad line\n", out var bad);
-        Check(targets.Count == 1 && targets[0].SequenceEqual(guid.ToByteArray()) && bad == 1, "C6_PATCH_TARGETS");
+        var targets = ClosurePatchTargets("# c\nG_01234567_89AB_CDEF_0123_456789ABCDEF: obj_flag OF_OFF\n", out var bad);
+        Check(targets.Count == 1 && bad == 0 && Convert.ToHexString(targets[0].TextOrder) == "0123456789ABCDEF0123456789ABCDEF" &&
+            Convert.ToHexString(targets[0].MixedEndian) == "67452301AB89EFCD0123456789ABCDEF", "C6_PATCH_BYTE_ORDERS");
+        byte[] record = [0x77, 0, .. targets[0].TextOrder, 0x10];
+        Check(ClosurePatchHits(record, targets[0]) == (true, false), "C6_PATCH_TEXT_ORDER_HIT");
+        record = [.. targets[0].MixedEndian, 0x20];
+        Check(ClosurePatchHits(record, targets[0]) == (false, true), "C6_PATCH_MIXED_ENDIAN_HIT");
+        _ = ClosurePatchTargets("A_00000001: origin 0\nbad\nG_0123: x\n", out bad);
+        Check(bad == 3, "C6_PATCH_OTHER_ID_FORMS_MALFORMED");
         Console.WriteLine($"area-passability-closure-self-test: PASS ({checks} synthetic assertions; rules only, no original data)");
     }
 }
