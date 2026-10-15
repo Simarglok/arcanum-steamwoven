@@ -28,7 +28,7 @@ public partial class TerrainViewerApp
         if (_worldObservationTime.HasValue) { action(); return; }
         _worldObservationTime = WorldTime;
         try { action(); }
-        catch (Exception error) when (error is InvalidOperationException or OverflowException or TerrainViewerException or ArgumentException)
+        catch (Exception error) when (error is InvalidOperationException or GridReplayCapacityException or OverflowException or TerrainViewerException or ArgumentException)
         {
             // Fault disposal is distinct from motion settlement. Do not retry
             // quarantine on an invalid/closed clock or publish trial events.
@@ -39,7 +39,7 @@ public partial class TerrainViewerApp
             if (error.Message.StartsWith("GRID_", StringComparison.Ordinal)
                 && error.Message.All(c => char.IsAsciiLetterOrDigit(c) || c == '_'))
                 GD.Print("ARC-WORLD-003 observation-failure=" + error.Message);
-            PublishFailure(TerrainViewerMode.WorldDiagnostic, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
+            PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan));
             if (SelfTestBootstrap || _nativeSmoke) throw;
         }
         finally { _worldObservationTime = null; }
@@ -59,11 +59,31 @@ public partial class TerrainViewerApp
     private InputSettings _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
     private Vec2 _worldDrag;
     private bool _worldFocused = true;
+    private Window? _worldFocusWindow;
+    // One initialization owns the panel and every subscription; ExitWorld
+    // consumes it once and a later InitializeWorld acquires a fresh set.
     private bool _worldInitialized;
+    private Action<string>? _worldInputTraceForSelfTest;
+    private void TraceWorldInput(string seam)
+    {
+        if (_worldInputTraceForSelfTest is null) return;
+        var focus = GetViewport().GuiGetFocusOwner();
+        _worldInputTraceForSelfTest(System.Text.Json.JsonSerializer.Serialize(new {
+            Seam = seam, Host = GetInstanceId(), Viewport = GetViewport().GetInstanceId(),
+            Panel = _worldPanel?.GetInstanceId(), Focus = focus?.GetInstanceId(),
+            FocusClass = focus?.GetClass().ToString(), FocusName = focus?.Name.ToString(),
+            Modal = WorldModal, Initialized = _worldInitialized,
+            Focused = _worldFocused, WindowFocused = GetWindow().HasFocus(),
+            SimulatedFocus = _worldFocusSimulationForSelfTest, TestClock = _worldTestTime.HasValue,
+            Processing = IsProcessing(), ActiveDevice = _worldReducer.ActiveDevice,
+            Settings = _worldSettings, PanelSettings = _worldPanel?.Settings,
+            Gate = _worldGate.IsOpen, Actor = _worldActor.State.Position, Camera = _camera?.State
+        }));
+    }
 
     private bool _worldUiFocused;
     private int _worldMenuAnalogDirection;
-    private bool IsWorld => _arguments?.Mode == TerrainViewerMode.WorldDiagnostic || _readyMode == TerrainViewerMode.WorldDiagnostic;
+    private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool WorldModal => _worldPanel?.IsOpen == true;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => DiagnosticActorMotion.Project(_worldActor.State.Position) + new Vec2(0, 20);
@@ -87,8 +107,14 @@ public partial class TerrainViewerApp
         _worldPanel.FitRequested += FitWorldView;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
+        _worldFocusWindow = GetWindow();
+        _worldFocusWindow.FocusEntered += WorldWindowFocusEntered;
+        _worldFocusWindow.FocusExited += WorldWindowFocusExited;
+        _worldAdapter.Clear();
         _worldReducer.SetStartupDevices(Input.GetConnectedJoypads().Select(id => (int)id));
         _worldFocused = GetWindow().HasFocus();
+        _worldUiFocused = WorldUiFocus;
+        QuarantineWorld();
     }
     private InputContext WorldContext(double delta = 0, bool advance = false) => new(
         CameraDeadzone: _worldSettings.CameraDeadzone, ActorDeadzone: _worldSettings.ActorDeadzone,
@@ -99,12 +125,13 @@ public partial class TerrainViewerApp
     private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
     private void QuarantineWorldObserved()
     {
+        TraceWorldInput("Quarantine");
         _worldGate.Close(); _worldReducer.Quarantine();
         if (_worldActor.Session is { } session && !_exiting)
             _worldGridInput.Observe(session, WorldTime, ActorIntent.Neutral);
         _worldMenuAnalogDirection = 0;
         _dragging = false; _worldDrag = default; _camera?.SafetyResetWorld();
-        if (_readyMode == TerrainViewerMode.WorldDiagnostic && _readyActorPlan is not null) PublishWorldSelection();
+        if (IsWorldMode(_readyMode) && _readyActorPlan is not null) PublishWorldSelection();
     }
     private void ResetWorldScene() => WorldObservation(() => RequestWorldLifecycle(false));
     private void RequestWorldLifecycle(bool reload)
@@ -118,7 +145,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!IsWorld || _worldPanel is null) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); }
@@ -126,16 +153,23 @@ public partial class TerrainViewerApp
     }
     private void SaveWorldSettings(InputSettings settings)
     {
+        TraceWorldInput("Save:before");
         _worldSettings = settings.Validated(DiagnosticWorldPolicy.DefaultInputSettings); QuarantineWorld();
         try { _worldStore.Save(_worldSettings); _worldPanel?.SetSaveStatus(true); }
         catch (InvalidOperationException) { _worldPanel?.SetSaveStatus(false); }
+        TraceWorldInput("Save:after");
     }
     private void ResetWorldSettings()
     {
         SaveWorldSettings(DiagnosticWorldPolicy.DefaultInputSettings); SetPreferredWorldZoom(2);
         _worldPanel?.Bind(_worldSettings); ResetWorldScene();
     }
-    private void BindWorldZoom() => _worldPanel?.BindZoom(_camera?.State.Zoom ?? _worldPreferredZoom, _worldPreferredZoom, _worldFitView, _worldZoomPending, _worldZoomSaveFailed);
+    private void BindWorldZoom()
+    {
+        // Parent _ExitTree may run after the panel has left/freed its children.
+        if (_exiting || _worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel) || !_worldPanel.IsInsideTree()) return;
+        _worldPanel.BindZoom(_camera?.State.Zoom ?? _worldPreferredZoom, _worldPreferredZoom, _worldFitView, _worldZoomPending, _worldZoomSaveFailed);
+    }
     private void SetPreferredWorldZoom(double value) => ApplyPreferredWorldZoom(value, false);
     private void ApplyPreferredWorldZoom(double value, bool continuous)
     {
@@ -165,7 +199,10 @@ public partial class TerrainViewerApp
         _worldZoomSettled = Math.Min(.25, _worldZoomSettled + Math.Min(delta, .25));
         if (_worldZoomSettled >= .25) FlushWorldZoom();
     }
-    private void WorldConnectionChanged(long id, bool connected) => WorldObservation(() => WorldConnectionObserved(id, connected));
+    private void WorldConnectionChanged(long id, bool connected)
+    {
+        if (_worldInitialized) WorldObservation(() => WorldConnectionObserved(id, connected));
+    }
     private void WorldConnectionObserved(long id, bool connected)
     {
         var device = checked((int)id);
@@ -181,20 +218,29 @@ public partial class TerrainViewerApp
     public override void _Notification(int what)
     {
         if (!IsWorld || !_worldInitialized) return;
-        // Only the explicit navigation simulation owns focus while its native
-        // GUI runs. Ordinary/lifecycle routes always retain OS focus quarantine.
-        if (_worldFocusSimulationForSelfTest && (SelfTestBootstrap || _nativeSmoke)) return;
         if (what == NotificationApplicationFocusOut || what == NotificationApplicationFocusIn)
+            ObserveWorldFocus(what == NotificationApplicationFocusIn && GetWindow().HasFocus());
+    }
+    private void WorldWindowFocusEntered() => ObserveWorldFocus(true);
+    private void WorldWindowFocusExited() => ObserveWorldFocus(false);
+    private void ObserveWorldFocus(bool focused)
+    {
+        if (_exiting || !IsWorld || !_worldInitialized) return;
+        // Native window focus can change while the application remains active
+        // (minimize or another window). Application notifications alone miss it.
+        // Only explicitly simulated navigation owns focus during its GUI tests.
+        if (_worldFocusSimulationForSelfTest && (SelfTestBootstrap || _nativeSmoke)) return;
+        if (_worldFocused == focused) return;
+        WorldObservation(() =>
         {
-            WorldObservation(() =>
-            {
-                _worldFocused = what == NotificationApplicationFocusIn;
-                _worldReducer.FocusChanged(_worldFocused); QuarantineWorld(); RefreshReadyStatus();
-            });
-        }
+            _worldFocused = focused;
+            _worldReducer.FocusChanged(focused); QuarantineWorld(); RefreshReadyStatus();
+            TraceWorldInput("NativeFocus:transition");
+        });
     }
     private void HandleWorldPulse(IntentFrame intent, bool ownsMenuAnalog)
     {
+        if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
@@ -271,7 +317,7 @@ public partial class TerrainViewerApp
             && controllers.Where(raw => raw.DeviceId == active).All(raw => !InputStateReducer.HasAnyLevel(raw, context)) && !_dragging;
         var wasOpen = _worldGate.IsOpen;
         _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
-        if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || _readyMode != TerrainViewerMode.WorldDiagnostic)
+        if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
         { _worldDrag = default; AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
@@ -295,22 +341,30 @@ public partial class TerrainViewerApp
             SettleWorldZoom(delta, drive != 0);
             RefreshReadyStatus();
         }
-        catch (TerrainViewerException exception) { PublishFailure(TerrainViewerMode.WorldDiagnostic, exception.Error); }
-        catch (OverflowException) { PublishFailure(TerrainViewerMode.WorldDiagnostic, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan)); }
+        catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
+        catch (OverflowException) { PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan)); }
     }
     private void PublishWorldSelection()
     {
-        if (_readyActorPlan is null || _readyDiagnosticPlan?.IsWorldDiagnostic != true) return;
+        // Child canvases have already left the tree when the parent exits.
+        // Exit quarantine disposes input/runtime, never republishes a scene.
+        if (_exiting) return;
+        if (_readyActorPlan is null || (_readyArea is null && _readyDiagnosticPlan?.IsWorldDiagnostic != true)) return;
         if (_worldActor.Session is null) return;
         var input = _worldActor.Placement();
         var actor = _readyActorPlan.Select(input);
-        var plan = _readyDiagnosticPlan.WithWorldActor(actor);
+        if (_readyArea is not null)
+        {
+            _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
+            _canvas!.PublishArea(_readyArea, actor, input, _cache); return;
+        }
+        var plan = _readyDiagnosticPlan!.WithWorldActor(actor);
         _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current; _readyDiagnosticPlan = plan;
         _canvas!.Publish(plan, _cache);
     }
     private void AdvanceWorldGrid(Vec2 actor)
     {
-        if (_worldActor.Session is not { } session || _readyActorPlan is null || _readyMode != TerrainViewerMode.WorldDiagnostic) return;
+        if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         var time = WorldTime;
         var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
@@ -350,9 +404,13 @@ public partial class TerrainViewerApp
             }
         }
     }
-    private void InputWorld(InputEvent input) => WorldObservation(() => InputWorldObserved(input));
+    private void InputWorld(InputEvent input)
+    {
+        if (_worldInitialized && !_exiting) WorldObservation(() => InputWorldObserved(input));
+    }
     private void InputWorldObserved(InputEvent input)
     {
+        if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         var wasModal = WorldModal;
         var raw = _worldAdapter.Map(input, _worldFocused);
         if (input is InputEventMouseButton)
@@ -366,6 +424,7 @@ public partial class TerrainViewerApp
         }
         if (raw.DeviceId < 0) raw = WorldKeyboardRouting(raw);
         var intent = _worldReducer.Reduce(raw, WorldContext());
+        if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:reduced rawConfirm={raw.Confirm} focused={raw.Focused} connected={raw.Connected} accepted={intent.Accepted} confirm={intent.Confirm}");
         if (input is not InputEventMouse) HandleWorldPulse(intent, _worldReducer.ActiveDevice is null || raw.DeviceId == _worldReducer.ActiveDevice);
         CaptureWorldCallbackActor(raw, intent);
         // Semantic keyboard/controller modal routing is owned above; do not
@@ -375,6 +434,7 @@ public partial class TerrainViewerApp
             || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.Space or Key.Backspace or Key.Q or Key.E));
         if ((wasModal || WorldModal) && (semanticKey || input is InputEventJoypadButton or InputEventJoypadMotion))
             GetViewport().SetInputAsHandled();
+        if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
         var overHud = input is InputEventMouse mouse && _hud?.Rect.HasPoint(mouse.Position) == true;
         if (input is InputEventMouseButton button)
@@ -487,13 +547,25 @@ public partial class TerrainViewerApp
             _worldActor.DisposeSession();
             RetireWorldLifecycle(); _worldGridInput = new();
             Input.JoyConnectionChanged -= WorldConnectionChanged;
+            if (_worldFocusWindow is { } window)
+            {
+                _worldFocusWindow = null;
+                if (GodotObject.IsInstanceValid(window))
+                {
+                    window.FocusEntered -= WorldWindowFocusEntered;
+                    window.FocusExited -= WorldWindowFocusExited;
+                }
+            }
             if (_hud is not null) _hud.SettingsRequested -= ToggleWorldSettings;
             if (_worldPanel is { } panel)
             {
                 _worldPanel = null;
-                panel.Changed -= SaveWorldSettings; panel.CloseRequested -= ToggleWorldSettings; panel.ResetRequested -= ResetWorldSettings;
-                panel.ZoomRequested -= SetPreferredWorldZoom; panel.FitRequested -= FitWorldView;
-                panel.Hide(); RemoveChild(panel); panel.QueueFree();
+                if (GodotObject.IsInstanceValid(panel))
+                {
+                    panel.Changed -= SaveWorldSettings; panel.CloseRequested -= ToggleWorldSettings; panel.ResetRequested -= ResetWorldSettings;
+                    panel.ZoomRequested -= SetPreferredWorldZoom; panel.FitRequested -= FitWorldView;
+                    panel.Hide(); RemoveChild(panel); panel.QueueFree();
+                }
             }
         }
     }

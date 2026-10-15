@@ -6,6 +6,8 @@
 
 Отдельный кандидат ARC-GPAD-005: [три шаблона/десять слотов и чек-лист](../input/gamepad-presets.md) расширяют только synthetic lab/framework для FR-PRODUCT-002/003, FR-UI-002/006/007 и preference-подслучая FR-LIFECYCLE-004. Реальные inventory/spell/skill/combat/party UI и WORLD preset integration не реализованы. Source/export/ordinary/review/merge подтверждаются отдельными exact-head receipts; candidate source не закрывает merged таблицу или физическую XboxBT/comfort/final-layout проверку владельца.
 
+Отдельный кандидат ARC-RENDER-007: [режим crash-site-area](../rendering/crash-site-area-viewer.md) показывает весь внешний Crash Site из DATA-009 (9 core секторов, 36,864 terrain, 499 тел и 15 N/A) и затрагивает интеграцию/проверку FR-SCENE-001..006 и FR-WORLD-002..004 только в этом диагностическом viewer. Зона движения остаётся x4..8/y0..3; крыши/стены/свет, gameplay, пещера и визуальный паритет с оригиналом не реализованы. Строки ниже описывают merged baseline и этим кандидатом не перезаписаны.
+
 ## Мир и переходы
 
 Источник таблицы: [world.md](world.md).

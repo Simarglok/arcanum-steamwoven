@@ -16,7 +16,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
     private TerrainViewerMode _mode;
     private Button? _settings;
     public event Action? SettingsRequested;
-    public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode == TerrainViewerMode.WorldDiagnostic; }
+    public void SetMode(TerrainViewerMode mode) { _mode = mode; if (_settings is not null) _settings.Visible = mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea; }
 
     internal string Text => $"{_sticky?.Text}\n{_detail?.Text}";
     internal Vector2 GlobalPosition => _panel?.GlobalPosition ?? Vector2.Zero;
@@ -83,9 +83,9 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 
     internal void SetDiagnosticText(string detail, bool automatedTestMode)
     {
-        var mode = _mode switch { TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
+        var mode = _mode switch { TerrainViewerMode.CrashSiteArea => "crash-site-area", TerrainViewerMode.WorldDiagnostic => "world-diagnostic", TerrainViewerMode.ActorDiagnostic => "actor-diagnostic",
             TerrainViewerMode.CombinedStaticDiagnostic => "combined", _ => "terrain-only" };
-        var limitation = _mode == TerrainViewerMode.WorldDiagnostic
+        var limitation = _mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea
             ? "\nBounded adjacent grid — original Data admission, not gameplay\nOriginal placement/movement/visual parity: NOT VERIFIED"
             : _mode == TerrainViewerMode.ActorDiagnostic ? "\nOriginal placement parity: NOT VERIFIED" : string.Empty;
         if (_sticky is not null)

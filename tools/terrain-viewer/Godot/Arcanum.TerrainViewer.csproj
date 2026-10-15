@@ -8,6 +8,8 @@
   <ItemGroup>
     <Compile Include="../../../src/Arcanum.Input.Godot/GodotInputAdapter.cs" Link="GodotInputAdapter.cs" />
     <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/GridWireFixture.cs" Link="GridWireFixture.cs" />
+    <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/AreaCompositionFixture.cs" Link="AreaCompositionFixture.cs" />
+    <Compile Include="../../../tests/Arcanum.TerrainViewer.Tests/AreaOwnerFixture.cs" Link="AreaOwnerFixture.cs" />
     <ProjectReference Include="../Core/Arcanum.TerrainViewer.Core.csproj" />
     <ProjectReference Include="../../../src/Arcanum.Presentation/Arcanum.Presentation.csproj" />
   </ItemGroup>

@@ -71,15 +71,17 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     trust boundary.  The actor values are the documented diagnostic defaults,
     never recovered world state.
     """
-    if mode not in {"terrain-only", "combined", "actor-diagnostic", "world-diagnostic"}:
+    if mode not in {"terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         raise ValueError("unsupported terrain diagnostic mode")
-    if mode == "world-diagnostic" and any(value is not None for value in (overrides or {}).values()):
+    if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
     required = ("module", "terrainResource", "sourceId")
-    if mode in {"combined", "actor-diagnostic", "world-diagnostic"}:
+    if mode in {"combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         required += ("prototypes",)
-    if mode in {"actor-diagnostic", "world-diagnostic"}:
+    if mode in {"actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         required += ("actorResource",)
+    if mode == "crash-site-area":
+        required += ("areaMobile",)
     if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
         raise ValueError("configure explicit terrain input roles before launch")
 
@@ -93,10 +95,12 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if not source_id or len(source_id) > 80 or any(character in source_id for character in "/\\\n\r\t"):
         raise ValueError("configured source-id is unsafe")
     arguments = ["--mode", mode, "--module", local_file("module"), "--resource", local_file("terrainResource"), "--source-id", source_id]
-    if mode in {"combined", "actor-diagnostic", "world-diagnostic"}:
+    if mode in {"combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         arguments.extend(("--prototypes", local_file("prototypes", directory=True)))
-    if mode == "world-diagnostic":
+    if mode in {"world-diagnostic", "crash-site-area"}:
         arguments.extend(("--actor-resource", local_file("actorResource")))
+    if mode == "crash-site-area":
+        arguments.extend(("--area-mobile", local_file("areaMobile")))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

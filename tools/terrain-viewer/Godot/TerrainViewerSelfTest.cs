@@ -13,7 +13,72 @@ public static partial class TerrainViewerSelfTest
     {
         try
         {
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_GRID_PROBE") == "1")
+            {
+                if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_GRID_NATIVE_REQUIRED");
+                await AssertAreaGridAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_OWNER_SEAM_PROBE") == "1")
+            {
+                if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_SEAM_NATIVE_REQUIRED");
+                await AssertAreaOwnerSeamsAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_OWNER_PROBE") == "1")
+            {
+                if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_OWNER_NATIVE_REQUIRED");
+                await AssertAreaOwnerAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_COMPOSITION_PROBE") == "1")
+            {
+                if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("AREA_COMPOSITION_NATIVE_REQUIRED");
+                await AssertAreaCompositionMatrixAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_NEAREST_PROBE") == "1")
+            {
+                await AssertAreaNearestHoldoutsAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_WORLD_MAIN_SETTINGS_PROBE") == "1")
+            {
+                if (host is not TerrainViewerApp app) throw new InvalidOperationException("MAIN_SETTINGS_APP_REQUIRED");
+                app.SelfTestBootstrap = true; app.SetProcess(false);
+                var fixture = WorldFixture();
+                app.PublishSyntheticForSelfTest(fixture.Arguments, fixture.Result);
+                var verified = await app.WorldMainSettingsForSelfTestAsync();
+                app.ClearSyntheticForSelfTest();
+                GD.Print("ARC-WORLD-003 main settings focused control " + (verified ? "PASS" : "NOT_VERIFIED") + "; historical cause UNKNOWN; physical usability NOT_VERIFIED");
+                host.GetTree().Quit(verified ? 0 : 2);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_STABILITY_PROBE") == "1")
+            {
+                await AssertAreaIndexStabilityAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_INDEX_PROBE") == "1")
+            {
+                await AssertAreaIndexMappingAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_ADMISSION_PROBE") == "1")
+            {
+                await AssertAreaAdmissionAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
             AssertIndependentGeometryConstants();
+            await AssertAreaRasterAsync(host);
             var frame = ArtDecoder.Decode(SyntheticTerrainFixture.CreateArt(), new ArtFrameSelection(0, 0, 0));
             AssertFrameBytes(frame);
             var keys = CreateKeys();
@@ -29,6 +94,9 @@ public static partial class TerrainViewerSelfTest
             await AssertSyntheticProductionAppAsync(host);
             await AssertSyntheticWorldAppAsync(host);
             await AssertSyntheticWorldRetirementAsync(host);
+            await AssertAreaCanvasAsync(host);
+            if (DisplayServer.GetName() != "headless") await AssertAreaOwnerAsync(host);
+            await AssertAreaCompositionMatrixAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {

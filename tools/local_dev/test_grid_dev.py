@@ -153,7 +153,7 @@ class GridReportTests(unittest.TestCase):
 
 class GridEndpointOrderTests(unittest.TestCase):
     """Actual writer and registry boundaries, using public synthetic reports only."""
-    def test_endpoint_cleanup_removes_new_grid_sidecars_but_not_unrelated_files(self):
+    def test_endpoint_cleanup_restores_locks_and_keeps_tracked_uid_sidecars(self):
         source = Path(__file__).resolve().parents[1] / 'terrain-viewer/Godot/tools/validate-macos.sh'
         cleanup = source.read_text().split('cleanup_candidate() {', 1)[1].split('\n}', 1)[0]
         with tempfile.TemporaryDirectory(dir=os.environ.get('TMPDIR')) as directory:
@@ -171,9 +171,10 @@ class GridEndpointOrderTests(unittest.TestCase):
             subprocess.run(['/bin/sh', str(script)], check=True,
                 env={**os.environ, 'PATH': str(root) + ':/usr/bin:/bin',
                      'project_root': str(root), 'candidate_root': str(root)})
-            for name in names:
-                self.assertFalse((root / (name + '.cs.uid')).exists(), name)
-            self.assertEqual('public synthetic sidecar\n', (root / 'Unrelated.cs.uid').read_text())
+            # Godot .uid sidecars are tracked; deleting them would dirty the
+            # exact candidate after validation.
+            for name in (*names, 'Unrelated'):
+                self.assertEqual('public synthetic sidecar\n', (root / (name + '.cs.uid')).read_text(), name)
             self.assertIn('src/Arcanum.Simulation/packages.lock.json', (root / 'git-args').read_text().splitlines())
 
     root: Path

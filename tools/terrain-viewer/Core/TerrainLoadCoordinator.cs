@@ -28,6 +28,7 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public int StaticCensusCount { get; init; }
     public int StaticOutsideScopeCount { get; init; }
     public CardinalTraversalSnapshot? TraversalSnapshot { get; init; }
+    public AreaLoadResult? Area { get; init; }
 }
 
 /// <summary>
@@ -176,6 +177,8 @@ public sealed class TerrainLoadCoordinator : IDisposable
 
         public TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken cancellationToken)
         {
+            if (arguments.Mode == TerrainViewerMode.CrashSiteArea)
+                return AreaLoadOperation.Execute(generation, arguments, cancellationToken);
             var started = Environment.TickCount64;
             var progress = TerrainViewerProgress.Empty;
             var actorProfile = _admission.ActorProfile(arguments.Mode);

@@ -39,6 +39,11 @@ public sealed class TerrainCameraController
         Fit(viewport);
     }
 
+    public void SetAreaPlan(AreaScenePlan plan, Vector2 viewport)
+    {
+        _world = true; _plan = null; _bounds = plan.WorldBounds; Fit(viewport);
+    }
+
     public void Fit(Vector2 viewport)
     {
         if (_bounds is null || viewport.X <= 64 || viewport.Y <= 64) return;
