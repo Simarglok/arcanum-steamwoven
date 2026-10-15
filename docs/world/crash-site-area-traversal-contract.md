@@ -9,6 +9,17 @@ parity are NOT_VERIFIED. Existing [cardinal assessment](cardinal-traversal-asses
 [grid runtime](grid-movement-runtime.md) and [passability](passability-contract.md)
 retain their narrower policies without reinterpretation.
 
+## Closure research (2026-10-15)
+
+The [passability closure research](../research/area-passability-closure.md)
+resolves, at the new-game initial state T0, the tile-name, absent-mask, registry,
+HP and neighbour frontiers listed below, with zero remaining Unknown cells or
+critters in the surveyed area. It is research only: this contract, its digests
+and the production profiles are unchanged, and whole-area loaded/live readiness
+stays NOT_READY until a separately authorized implementation. Its reachability
+result also shows that the walkable region leaves the surveyed ring to the south,
+so an admitted boundary is an owner decision.
+
 ## Inputs and scope
 
 Use the authenticated [DATA009 owner](crash-site-area-loader.md) and its
