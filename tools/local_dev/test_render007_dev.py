@@ -31,7 +31,7 @@ class Render007DevTests(unittest.TestCase):
 
     def roles(self, area=True):
         inputs = {"sourceId": "public-fixture"}
-        for role in ("module", "terrainResource", "actorResource") + (("areaMobile",) if area else ()):
+        for role in ("module", "terrainResource", "actorResource") + (("areaMobile", "areaEffects", "areaPatch") if area else ()):
             path = self.root / role
             path.write_bytes(b"public fixture")
             inputs[role] = str(path)
@@ -45,7 +45,7 @@ class Render007DevTests(unittest.TestCase):
         self.assertEqual(argv, ["--mode", "crash-site-area", "--module", inputs["module"],
             "--resource", inputs["terrainResource"], "--source-id", "public-fixture",
             "--prototypes", inputs["prototypes"], "--actor-resource", inputs["actorResource"],
-            "--area-mobile", inputs["areaMobile"]])
+            "--area-mobile", inputs["areaMobile"], "--area-effects", inputs["areaEffects"], "--area-patch", inputs["areaPatch"]])
         launch.assert_ordinary(argv)
         for role in inputs:
             with self.subTest(role=role), self.assertRaises(ValueError):
@@ -57,6 +57,8 @@ class Render007DevTests(unittest.TestCase):
             launch.terrain_arguments(inputs, "crash-site-area", {"actor_frame": "0"})
         # The WORLD argv is unchanged by the optional area role.
         self.assertNotIn("--area-mobile", launch.terrain_arguments(inputs, "world-diagnostic"))
+        self.assertNotIn("--area-effects", launch.terrain_arguments(inputs, "world-diagnostic"))
+        self.assertNotIn("--area-patch", launch.terrain_arguments(inputs, "world-diagnostic"))
 
     def test_task_registry_gates_and_retention_bind_the_literal_task(self):
         self.assertIn("ARC-RENDER-007", manifests.SUPPORTED_TOOLS["terrain"])

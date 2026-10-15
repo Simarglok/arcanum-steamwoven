@@ -23,7 +23,7 @@ public partial class TerrainViewerApp
         _worldTestTime = SimulationTime.At(1);
         _Input(new InputEventKey { Keycode = Key.S, Pressed = true }); _Input(new InputEventKey { Keycode = Key.A, Pressed = true });
         WorldFrameForSelfTest(none with {KeyboardActor = new(-1,1), KeyboardActorHeld = true}, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(17,16));
-        var retired = _worldActor.Session!; var epoch = retired.Snapshot.EvidenceEpoch; var previousLoad = _lastLoad;
+        var retired = _worldActor.Session!; var epoch = retired.EvidenceEpoch; var previousLoad = _lastLoad;
         _worldTestTime = SimulationTime.At(9,8); _Input(new InputEventKey { Keycode = Key.L, Pressed = true });
         Require(ReferenceEquals(retired,_worldActor.Session) && _worldReloadPending && ReferenceEquals(previousLoad,_lastLoad), "L loaded before settlement");
         Frame(19); Frame(20);
@@ -34,8 +34,8 @@ public partial class TerrainViewerApp
             && retired.State.CommittedCell == new CellCoord(6,1), "L not started after real arrival");
         await (_lastLoad ?? throw new InvalidOperationException("Reload task missing."));
         var successor = _worldActor.Session;
-        Require(successor is not null && !ReferenceEquals(retired,successor) && successor.Snapshot.EvidenceEpoch > epoch
-            && successor.Snapshot.EvidenceEpoch == _generation && successor.State.LastOpportunity is null
+        Require(successor is not null && !ReferenceEquals(retired,successor) && successor.EvidenceEpoch > epoch
+            && successor.EvidenceEpoch == _generation && successor.State.LastOpportunity is null
             && successor.State.CommittedCell == new CellCoord(6,1) && _worldLifecycleSession is null
             && !_worldReloadPending && !_worldResetPending, "reload epoch/actor/pending ownership");
         Require(!_coordinator.TryPublish(epoch, () => throw new InvalidOperationException("stale reload result published")), "old publication remained current");

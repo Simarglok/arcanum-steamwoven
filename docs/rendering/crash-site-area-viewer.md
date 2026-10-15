@@ -63,11 +63,18 @@ mirrored ART getter or cached render branch.
 The controlled HumanFixed bridge remains a separate session actor, not one of
 DATA-009's NPC/PC occurrences. Its authoritative grid position, event-derived
 animation and existing pure world foot projection are unchanged. Camera motion
-and asset dimensions do not feed back into simulation. Its proven local motion
-zone remains x4..8/y0..3 with the
-[bounded traversal assessment](../world/cardinal-traversal-assessment.md);
-Unknown and Blocked cells remain denied. Being able to inspect the whole exterior
-with the camera is not permission to walk across it.
+and asset dimensions do not feed back into simulation. A production
+`crash-site-area` load now admits motion across all nine core sectors with the
+[whole-core T0 step assessment](../world/area-step-assessment.md), built from the
+same strict Area publication plus `--area-effects` (`arcanum3.dat`) and
+`--area-patch` (`modules/Arcanum.PATCH0`). `AreaGridSession` keeps the chart's
+base-sector-relative cells (spawn 6,1; the western and northern core sectors have
+negative cells) and maps them to map cells for Data. Unknown, Blocked and
+outside-core requests remain denied; the core edge behaves like a map edge.
+The synthetic native AREA probes below still publish the bounded wire snapshot
+(x4..8/y0..3); exactly one movement source is accepted per publication. Being
+able to inspect the whole exterior, including the context ring, is not
+permission to walk outside the core.
 
 Fit uses the complete admitted scene envelope, not one sector or only currently
 visible sprites. The existing minimum zoom is retained. If that limit prevents
@@ -208,12 +215,12 @@ full resource/export/ordinary acceptance remain separate required checks.
 `AreaOriginalCoordinatorTests` is an opt-in real-data check of the default
 `TerrainLoadCoordinator` factory and complete `AreaLoadOperation.Execute` path.
 It loads two fresh serialized generations, checks the full original area census,
-distinct retained frame arrays, the HumanFixed catalogue and authenticated
-bounded-adjacent traversal epoch, then refuses obsolete publication. Literal
-Open, admitted Blocked and outside-zone assessments keep visual area coverage
-separate from locomotion permission. Five negative controls reject mismatched
-generation, source length/hash and resource role at the production traversal
-binding boundary. This is not a synthetic owner envelope or a replacement for
+distinct retained frame arrays, the HumanFixed catalogue and the authenticated
+whole-core step evidence and epoch, then refuses obsolete publication. Literal
+Open, admitted Blocked, a former bounded-zone edge step and an outside-core
+assessment keep visual area coverage separate from locomotion permission.
+Negative controls reject a stale generation and another generation's evidence at
+the production step binding boundary. This is not a synthetic owner envelope or a replacement for
 the production Godot movement/input/UI matrix.
 
 The production loader binds traversal module/resource identities and the
@@ -226,8 +233,8 @@ their full original occurrence/appearance comparison remains independent of
 these binding checks.
 
 To run the coordinator check, supply user-owned read-only paths through
-`ARC_AREA_MODULE`, `ARC_AREA_RESOURCE2`, `ARC_AREA_RESOURCE1`, `ARC_AREA_MOBILE`
-and `ARC_AREA_PROTOTYPES`, set `ARC_AREA_ORIGINAL=1`, then use the pinned .NET
+`ARC_AREA_MODULE`, `ARC_AREA_RESOURCE2`, `ARC_AREA_RESOURCE1`, `ARC_AREA_MOBILE`,
+`ARC_AREA_PROTOTYPES`, `ARC_AREA_EFFECTS` and `ARC_AREA_PATCH`, set `ARC_AREA_ORIGINAL=1`, then use the pinned .NET
 toolchain:
 
 ```sh

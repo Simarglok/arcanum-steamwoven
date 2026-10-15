@@ -9,7 +9,9 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class DiagnosticGridActor
 {
     private AnimationTimeline _timeline = Timeline(ActorDiagnosticAction.Idle);
-    public DiagnosticGridSession? Session { get; private set; }
+    public IGridSession? Session { get; private set; }
+    /// <summary>The bounded single-sector WORLD session, when that profile is configured.</summary>
+    public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
     public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixed;
     public int CurrentFrame => _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
@@ -18,6 +20,11 @@ public sealed class DiagnosticGridActor
     public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
+        Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
+    }
+    public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
+    {
+        var session = new AreaGridSession(snapshot, time, duration, limits);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
@@ -45,12 +52,16 @@ public sealed class DiagnosticGridActor
                 // The action clock stays continuous for Walk->Walk and turns.
             }
             trial.Advance(Seconds(state.Time.Value - cursor.Value));
-            validateSelection?.Invoke(Placement(state, trial.CurrentFrame));
+            validateSelection?.Invoke(Placement(session, state, trial.CurrentFrame));
         });
         if (result.Movement.Status == MovementStatus.Completed) _timeline = trial;
         return result;
     }
-    public ActorDiagnosticPlacementInput Placement() => Placement(Session!.State, CurrentFrame);
+    public ActorDiagnosticPlacementInput Placement() => Placement(Session!, Session!.State, CurrentFrame);
+    // The area profile places the actor anywhere in the admitted core chart; WORLD keeps one sector.
+    private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession
+        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, AreaGridSession.MinimumChartCell, AreaGridSession.MaximumChartCell)
+        : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
     public static DiagnosticActorState RenderState(MovementState state) => new(
         new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action));

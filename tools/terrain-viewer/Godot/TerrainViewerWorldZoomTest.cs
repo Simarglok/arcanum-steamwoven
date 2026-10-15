@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
         string RunActor(bool zoom)
         {
             // Independent equal receipt timestamps, NOT equal camera delta.
-            var snapshot = _worldActor.Session!.Snapshot;
+            var snapshot = _worldActor.CardinalSession!.Snapshot;
             _worldActor.Configure(snapshot, Arcanum.Simulation.Movement.SimulationTime.At(0));
             _worldGridInput = new(); _worldTestTime = Arcanum.Simulation.Movement.SimulationTime.At(0);
             RetireWorldLifecycle(); _worldAdapter.Clear(); QuarantineWorld();
@@ -69,11 +69,11 @@ public partial class TerrainViewerApp
             foreach(var dt in new[]{.04,.06,.17,.23,.5})
             {
                 Frame(pad with {LeftStick=new(1,0),RightTrigger=zoom?1:0},dt);
-                var advance = _worldActor.Session.LastAdvance!;
+                var advance = _worldActor.Session!.LastAdvance!;
                 events.AddRange(advance.Movement.Events); evidence.AddRange(advance.Evidence);
             }
             return System.Text.Json.JsonSerializer.Serialize(new {
-                snapshot = Arcanum.Simulation.Movement.MovementRuntime.QuerySnapshot(_worldActor.Session.State),
+                snapshot = Arcanum.Simulation.Movement.MovementRuntime.QuerySnapshot(_worldActor.Session!.State),
                 events, evidence, frame = _worldActor.CurrentFrame, placement = _readyActorInput
             });
         }

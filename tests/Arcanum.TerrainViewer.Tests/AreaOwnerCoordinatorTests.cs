@@ -10,7 +10,7 @@ public sealed class AreaOwnerCoordinatorTests
 {
     private static TerrainViewerArguments Arguments => TerrainViewerArguments.Parse([
         "--mode","crash-site-area","--module","synthetic-module","--resource","synthetic-resource",
-        "--actor-resource","synthetic-actor","--area-mobile","synthetic-mobile","--prototypes","synthetic-prototypes",
+        "--actor-resource","synthetic-actor","--area-mobile","synthetic-mobile","--area-effects","synthetic-effects","--area-patch","synthetic-patch","--prototypes","synthetic-prototypes",
         "--source-id","public-fixture"]);
 
     [TestMethod]

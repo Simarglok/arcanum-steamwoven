@@ -91,12 +91,17 @@ public sealed class AreaScenePlanTests
     [TestMethod]
     public void AreaModeRequiresAllRolesAndRejectsCallerActorOverrides()
     {
-        var args = new[] { "--mode","crash-site-area","--module","module","--resource","resource2","--actor-resource","resource1","--prototypes","directory","--area-mobile","mobile","--source-id","synthetic" };
+        var args = new[] { "--mode","crash-site-area","--module","module","--resource","resource2","--actor-resource","resource1","--prototypes","directory","--area-mobile","mobile","--area-effects","resource3","--area-patch","patch","--source-id","synthetic" };
         var parsed = TerrainViewerArguments.Parse(args);
         Assert.AreEqual(TerrainViewerMode.CrashSiteArea,parsed.Mode); Assert.AreEqual("mobile",parsed.AreaMobilePath);
         Assert.AreEqual(ActorDiagnosticAction.Idle,parsed.ActorInput!.Action);
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Concat(new[]{"--actor-facing","5"}).ToArray()));
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Where((_,i)=>i!=10&&i!=11).ToArray()));
         Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Concat(new[]{"--area-mobile","second"}).ToArray()));
+        Assert.AreEqual(("resource3","patch"),(parsed.AreaEffectsPath,parsed.AreaPatchPath));
+        Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Where((_,i)=>i!=12&&i!=13).ToArray()));
+        Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Where((_,i)=>i!=14&&i!=15).ToArray()));
+        Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(args.Concat(new[]{"--area-patch","second"}).ToArray()));
+        Assert.ThrowsExactly<ArgumentException>(()=>TerrainViewerArguments.Parse(["--mode","world-diagnostic","--module","m","--resource","r","--actor-resource","a","--prototypes","p","--area-effects","e","--source-id","s"]));
     }
 }

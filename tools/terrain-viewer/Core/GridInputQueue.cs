@@ -8,10 +8,10 @@ public sealed class GridInputQueue
     private readonly SortedDictionary<SimulationTime, List<MovementInput>> _pending = new(Comparer<SimulationTime>.Create((a,b)=>a.Value.CompareTo(b.Value)));
     private long _sequence;
     private ActorIntent _lastIntent = ActorIntent.Neutral;
-    private DiagnosticGridSession? _owner;
+    private IGridSession? _owner;
     private SimulationTime? _newest;
     public SimulationTime? CompleteFrontier { get; private set; }
-    public void Observe(DiagnosticGridSession session, SimulationTime time, ActorIntent intent)
+    public void Observe(IGridSession session, SimulationTime time, ActorIntent intent)
     {
         if (_owner is not null && !ReferenceEquals(_owner, session))
             throw new InvalidOperationException("GRID_OBSERVATION_RETIRED_SESSION");

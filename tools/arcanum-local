@@ -55,6 +55,10 @@ def command_configure(args: argparse.Namespace) -> None:
                           "sourceId": config.safe_source_id(args.source_id or "local-input")}
         if args.area_mobile is not None:
             conf["inputs"]["areaMobile"] = str(config.canonical_existing(args.area_mobile, directory=False))
+        if args.area_effects is not None:
+            conf["inputs"]["areaEffects"] = str(config.canonical_existing(args.area_effects, directory=False))
+        if args.area_patch is not None:
+            conf["inputs"]["areaPatch"] = str(config.canonical_existing(args.area_patch, directory=False))
         config.save_config(conf); emit({"configured": sorted(conf["inputs"])})
     elif args.configure == "add-artifact-root":
         root = config.canonical_existing(args.path, directory=True)
@@ -174,6 +178,8 @@ def parser() -> argparse.ArgumentParser:
     discover = configure_sub.add_parser("discover"); discover.add_argument("--game-root", required=True)
     inputs = configure_sub.add_parser("inputs"); inputs.add_argument("--module", required=True); inputs.add_argument("--terrain-resource", required=True); inputs.add_argument("--actor-resource", required=True); inputs.add_argument("--prototypes", required=True); inputs.add_argument("--source-id")
     inputs.add_argument("--area-mobile")
+    inputs.add_argument("--area-effects")
+    inputs.add_argument("--area-patch")
     artifact = configure_sub.add_parser("add-artifact-root"); artifact.add_argument("--id", required=True); artifact.add_argument("path")
     selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)

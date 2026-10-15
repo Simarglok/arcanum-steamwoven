@@ -81,7 +81,7 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if mode in {"actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         required += ("actorResource",)
     if mode == "crash-site-area":
-        required += ("areaMobile",)
+        required += ("areaMobile", "areaEffects", "areaPatch")
     if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
         raise ValueError("configure explicit terrain input roles before launch")
 
@@ -100,7 +100,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if mode in {"world-diagnostic", "crash-site-area"}:
         arguments.extend(("--actor-resource", local_file("actorResource")))
     if mode == "crash-site-area":
-        arguments.extend(("--area-mobile", local_file("areaMobile")))
+        arguments.extend(("--area-mobile", local_file("areaMobile"), "--area-effects", local_file("areaEffects"),
+                          "--area-patch", local_file("areaPatch")))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

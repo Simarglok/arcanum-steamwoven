@@ -68,7 +68,7 @@ public partial class TerrainViewerApp
         await first; await second;
         Require(_readyArea is not null && !ReferenceEquals(_readyArea, old.Result.Target) && secondGeneration > firstGeneration
             && firstGeneration > old.Generation && _readyArea.Generation == secondGeneration
-            && _worldActor.Session?.Snapshot.EvidenceEpoch == secondGeneration, "STALE_PUBLICATION");
+            && _worldActor.Session?.EvidenceEpoch == secondGeneration, "STALE_PUBLICATION");
         Require(_readyArea!.InitialUsage == old.InitialUsage && _readyArea.FinalUsage == old.FinalUsage
             && _readyArea.Frames.Count == old.CpuFrames && _readyArea.CpuRgbaBytes == old.CpuBytes, "FRESH_OWNER_COUNTERS");
         var reloadMilliseconds = _readyArea.ElapsedMilliseconds;

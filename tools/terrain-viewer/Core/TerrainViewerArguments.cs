@@ -7,11 +7,15 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     string? ExpectedActorResourceSha256, ActorDiagnosticPlacementInput? ActorInput)
 {
     public string? AreaMobilePath { get; init; }
+    /// <summary>Archive holding rules/effect.mes for whole-core critter life (original: resource3).</summary>
+    public string? AreaEffectsPath { get; init; }
+    /// <summary>Module patch archive holding rules/map.patch (original: modules/Arcanum.PATCH0).</summary>
+    public string? AreaPatchPath { get; init; }
     public static TerrainViewerArguments Parse(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
         string? module = null, resource = null, sourceId = null, prototypes = null, moduleHash = null, resourceHash = null,
-            actorResource = null, actorResourceHash = null, areaMobile = null;
+            actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null;
         long? actorMapX = null, actorMapY = null, actorOriginX = null, actorOriginY = null;
         int? actorOffsetX = null, actorOffsetY = null, actorScale = null, actorFacing = null, actorFrame = null;
         ActorDiagnosticRenderBranch? actorBranch = null;
@@ -38,6 +42,8 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--expect-resource-sha256": resourceHash = Unique(resourceHash, ValidateHash(value)); break;
                 case "--actor-resource": actorResource = Unique(actorResource, value); break;
                 case "--area-mobile": areaMobile = Unique(areaMobile, value); break;
+                case "--area-effects": areaEffects = Unique(areaEffects, value); break;
+                case "--area-patch": areaPatch = Unique(areaPatch, value); break;
                 case "--expect-actor-resource-sha256": actorResourceHash = Unique(actorResourceHash, ValidateHash(value)); break;
                 case "--actor-map-x": actorMapX = Unique(actorMapX, ParseInt64(value)); break;
                 case "--actor-map-y": actorMapY = Unique(actorMapY, ParseInt64(value)); break;
@@ -62,8 +68,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (mode == TerrainViewerMode.CombinedStaticDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || actorSpecified || actorArchiveSpecified))
             || (mode == TerrainViewerMode.ActorDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || !actorSpecified))
             || (mode == TerrainViewerMode.WorldDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || actorSpecified))
-            || (mode == TerrainViewerMode.CrashSiteArea && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile) || actorSpecified))
-            || (mode != TerrainViewerMode.CrashSiteArea && areaMobile is not null))
+            || (mode == TerrainViewerMode.CrashSiteArea && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
+                || string.IsNullOrWhiteSpace(areaEffects) || string.IsNullOrWhiteSpace(areaPatch) || actorSpecified))
+            || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null)))
             throw new ArgumentException("Usage");
         ActorDiagnosticPlacementInput? actor = null;
         if (mode == TerrainViewerMode.ActorDiagnostic)
@@ -76,7 +83,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         if (mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea)
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
-        return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile };
+        return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch };
     }
 
     private static string ValidateHash(string value) => value.Length == 64 && value.All(Uri.IsHexDigit)
