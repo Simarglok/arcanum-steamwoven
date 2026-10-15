@@ -41,6 +41,8 @@ public sealed class AreaStepOriginalDataTests
             Assert.AreEqual(disposition, result.Disposition, direction.ToString());
             Assert.AreEqual(0, result.Gaps.Count);
         }
+        var back = snapshot.Assess(snapshot.Request(Step(Spawn, CardinalTraversalDirection.XPlus), Spawn, CardinalTraversalDirection.XMinus));
+        Assert.AreEqual((CardinalTraversalCoverage.Supported, (CardinalTraversalDisposition?)CardinalTraversalDisposition.Open), (back.Coverage, back.Disposition), "Reverse step back to spawn.");
 
         // Breadth-first reachability inside the admitted core equals the research's core share (F8: 7,150 cells).
         var reached = new HashSet<AreaStepCell> { Spawn }; var queue = new Queue<AreaStepCell>([Spawn]); var refused = new Dictionary<string, int>();

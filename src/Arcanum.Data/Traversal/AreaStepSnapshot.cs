@@ -91,16 +91,17 @@ public sealed class AreaStepSnapshot
         if (r.EvidenceSha256 != EvidenceSha256) return "EVIDENCE_IDENTITY_MISMATCH";
         if (r.EvidenceEpoch != EvidenceEpoch) return "EPOCH_MISMATCH";
         if ((uint)r.Direction >= 8) return "DIRECTION_UNSUPPORTED";
+        // Admission first: admitted cells are bounded, so the deltas below cannot overflow.
+        if (!IsAdmitted(r.From)) return "SOURCE_OUTSIDE_ADMITTED_AREA";
+        if (!IsAdmitted(r.To)) return "DESTINATION_OUTSIDE_ADMITTED_AREA";
         var dx = r.To.X - r.From.X; var dy = r.To.Y - r.From.Y;
         if (dx == 0 && dy == 0) return "SAME_CELL_UNSUPPORTED";
-        if (Math.Abs(dx) > 1 || Math.Abs(dy) > 1) return "NONADJACENT_UNSUPPORTED";
+        if (dx is < -1 or > 1 || dy is < -1 or > 1) return "NONADJACENT_UNSUPPORTED";
         if (dx != Deltas[(int)r.Direction].Dx || dy != Deltas[(int)r.Direction].Dy) return "DIRECTION_MISMATCH";
         var c = r.Context;
         if (c.ContextId != DeclaredContext.ContextId || c.ActorKind != 15 || c.CurrentArtClass != 2 || c.SpellFlags != 0 ||
             (c.PathFlags != 0 && c.PathFlags != 0x1000) || c.Polymorph || c.Editor ||
             c.ActorState != CardinalTraversalActorState.OrdinaryGround || c.SupplementalRegistryCount != 0) return "CONTEXT_UNSUPPORTED";
-        if (!IsAdmitted(r.From)) return "SOURCE_OUTSIDE_ADMITTED_AREA";
-        if (!IsAdmitted(r.To)) return "DESTINATION_OUTSIDE_ADMITTED_AREA";
         // Shoulders of an admitted diagonal lie in the same sector rectangle hull; checked anyway, never assumed.
         if (((int)r.Direction & 1) == 0 && (!IsAdmitted(Neighbor(r.From, ((int)r.Direction + 7) % 8)) || !IsAdmitted(Neighbor(r.From, (int)r.Direction + 1))))
             return "SHOULDER_OUTSIDE_ADMITTED_AREA";

@@ -38,9 +38,11 @@ AreaStepAssessment AreaStepSnapshot.Assess(AreaStepRequest request);
 
 Types live in `Arcanum.Data.Traversal`. Cells are map coordinates
 (`AreaStepCell(long X, long Y)`). Coverage, disposition, direction and context
-reuse the cardinal enums and context class. The original factory requires the
-strict original Area snapshot (`arc-data-009-complete-file-effective-source-v1`)
-with exactly the nine core sectors. It reads these resources from the named
+reuse the cardinal enums and context class. Both factories require a
+snapshot that its owner published as strict-complete (`LoadStrict`); an
+inspected snapshot with issues is refused. The original factory also requires
+the original profile (`arc-data-009-complete-file-effective-source-v1`) with
+exactly the nine core sectors. It reads these resources from the named
 archives and requires each to match its pinned payload identity:
 
 | Resource | Archive (original installation) | Bytes | SHA-256 |
@@ -61,8 +63,9 @@ in the module as in the source.
 
 Construction evaluates every admitted cell and every registered object located
 in it, then owns the results (no source retention, no query-time I/O). The
-evidence digest covers source identities, admitted sectors, every terrain
-verdict and every object verdict. A request must carry the snapshot's profile,
+evidence digest covers every Area input identity, the mobile file and rule
+payload identities, admitted sectors, every terrain verdict and every object
+verdict. A request must carry the snapshot's profile,
 digest and epoch.
 
 - **Destination terrain** (research F1, F2): a set serialized mask bit blocks;
@@ -85,7 +88,25 @@ digest and epoch.
   Any remaining gap returns `Unknown/null`. Only complete non-blocking evidence
   returns `Supported/Open`.
 
-Reason codes: `DESTINATION_TERRAIN_BLOCKED`, `DESTINATION_OBJECT_BLOCKER`,
+Shoulder object roles are named `CounterClockwiseShoulder` and
+`ClockwiseShoulder` after the source's rotation order; they correspond to the
+cardinal API's object-only shoulder legs.
+
+Terrain evidence codes: `SERIALIZED_BLOCK_MASK`, `FACADE_WALKABILITY_BIT`,
+`TILE_NAME_FLAGS` (supported); `MASK_VERSION_MISMATCH`,
+`TILE_NAME_TABLE_UNSUPPORTED`, `TILE_NAME_MAPPING_UNRESOLVED`,
+`TILE_ART_CLASS_UNSUPPORTED` (Unknown). Object evidence codes: `OBJECT_BLOCKS`,
+`NO_BLOCK_FLAG`, `CRITTER_ALIVE`, `CRITTER_DEAD` (applicable);
+`INVENTORY_NOT_LISTED`, `DESTROYED_OR_OFF_NOT_LISTED`, `ITEM_TYPE_NOT_QUERIED`
+(not applicable); `MAP_PATCH_TARGETS_OBJECT`, `MAP_PATCH_LINE_UNSUPPORTED`,
+`WALL_OR_PORTAL_UNSUPPORTED`, `FLAGS_UNRESOLVED`, `PC_RECORD_UNSUPPORTED`,
+`OBJECT_TYPE_UNSUPPORTED`, `CRITTER_STATS_UNRESOLVED`,
+`CRITTER_EFFECT_INDEX_UNSUPPORTED`, `CRITTER_EFFECT_UNSUPPORTED`,
+`CRITTER_MAX_HP_EFFECT_UNSUPPORTED`, `CRITTER_LIFE_INTERVAL_UNRESOLVED`
+(Unknown). A gap repeats the Unknown component's code with its cell, object and
+role.
+
+Assessment codes: `DESTINATION_TERRAIN_BLOCKED`, `DESTINATION_OBJECT_BLOCKER`,
 `SHOULDER_OBJECT_BLOCKER`, `REQUIRED_EVIDENCE_UNAVAILABLE`,
 `COMPLETE_NONBLOCKING_EVIDENCE`, `PATH_BRANCH_UNAVAILABLE`, and the unsupported
 codes `PROFILE_UNSUPPORTED`, `EVIDENCE_IDENTITY_MISMATCH`, `EPOCH_MISMATCH`,
@@ -98,9 +119,13 @@ only; they never become evidence.
 ## Verification
 
 Synthetic tests (`AreaStepTests`) cover the tile-name, effect, HP, patch and MES
-rules, every step composition branch, gap retention, unsupported requests, and
-structural inspection through the Area owner fixture (masks, tile names, object
-registration, patch targets and identity failures).
+rules; object evaluation through the documented field slots (flags 18, HP 26..28,
+stat base 38, effects 46) and every type/flag filter; every step composition
+branch, gap retention and unsupported request, including non-rectangular
+admission and extreme coordinates; and structural inspection through the Area
+owner fixture: version-3 (absent) and version-4 (serialized) masks, a forged
+version mismatch, tile names, object registration and skipping, patch targets,
+strict-publication and identity failures.
 
 The opt-in original check needs the Area variables plus `ARC_AREA_EFFECTS`
 (`arcanum3.dat`) and `ARC_AREA_PATCH` (`modules/Arcanum.PATCH0`):
@@ -111,8 +136,8 @@ The opt-in original check needs the Area variables plus `ARC_AREA_EFFECTS`
 ```
 
 On the owner's installation it observed 36,864 admitted cells, 29,063 blocked
-tiles, 115 object-blocker cells, zero Unknown cells or objects, all six spawn
-observations of the frozen profile, deterministic repeat construction, and
+tiles, 115 object-blocker cells, zero Unknown cells or objects, all seven spawn
+observations of the frozen profile (including the reverse step back to spawn), deterministic repeat construction, and
 **7,150** cells reachable from spawn `(92934,82561)` inside the core, equal to
 the research's core share. The only refusals at the reachable boundary are
 `DESTINATION_OUTSIDE_ADMITTED_AREA`.

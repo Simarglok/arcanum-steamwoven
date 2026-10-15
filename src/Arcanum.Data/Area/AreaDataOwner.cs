@@ -146,7 +146,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (inspection.IsComplete)
                 {
                     var oldBytes = _publishedBytes;
-                    _generation++; _published = inspection.Snapshot;
+                    _generation++; _published = inspection.Snapshot; _published!.MarkStrictlyPublished();
                     _publishedBytes = output.Detach();
                     // The owner no longer references the old publication. Caller
                     // metadata remains valid but does not refund allocation work.

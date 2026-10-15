@@ -225,6 +225,142 @@ public sealed class AreaStepTests
             Throws<AreaStepInvocationException>(() => AreaStepInspector.Inspect(area, module, names, effects, null, mobileFile[..^1], 3)).Code);
     }
 
+    [TestMethod]
+    public void Object_evaluation_reads_the_documented_slots_and_filters()
+    {
+        var table = new Dictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?> { [70] = [new("st", '+', 4)] };
+        AreaStepObjectEvaluation Eval(int type, params AreaFieldValue[] fields) =>
+            AreaStepInspector.Evaluate(Object(type, fields), new(64, 64), default, [], 0, table);
+        Assert.AreEqual((CardinalTraversalDisposition.Blocked, "OBJECT_BLOCKS"), Disposition(Eval(3, Value(18, 0))));
+        Assert.AreEqual((CardinalTraversalDisposition.Open, "NO_BLOCK_FLAG"), Disposition(Eval(2, Value(18, 0x400))));
+        Assert.AreEqual((CardinalTraversalDisposition.Open, "NO_BLOCK_FLAG"), Disposition(Eval(17, Value(18, 0x400))));
+        Assert.AreEqual((CardinalTraversalDisposition.Blocked, "OBJECT_BLOCKS"), Disposition(Eval(4, Value(18, 0x40))));
+        foreach (var (type, flags, reason) in new[] { (3, 0x1400L, "INVENTORY_NOT_LISTED"), (3, 0x1L, "DESTROYED_OR_OFF_NOT_LISTED"), (16, 0x2L, "DESTROYED_OR_OFF_NOT_LISTED"),
+            (5, 0L, "ITEM_TYPE_NOT_QUERIED"), (14, 0L, "ITEM_TYPE_NOT_QUERIED") })
+        {
+            var excluded = Eval(type, Value(18, flags));
+            Assert.AreEqual((CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.NotApplicable, (CardinalTraversalDisposition?)null, reason),
+                (excluded.Coverage, excluded.Applicability, excluded.Disposition, excluded.Reason), reason);
+        }
+        foreach (var (type, fields, reason) in new[] { (0, new[] { Value(18, 0) }, "WALL_OR_PORTAL_UNSUPPORTED"), (1, [Value(18, 0)], "WALL_OR_PORTAL_UNSUPPORTED"),
+            (15, [Value(18, 0)], "PC_RECORD_UNSUPPORTED"), (3, [Value(19, 0)], "FLAGS_UNRESOLVED"), (16, [Value(18, 0)], "CRITTER_STATS_UNRESOLVED") })
+        {
+            var unknown = Eval(type, fields);
+            Assert.AreEqual((CardinalTraversalCoverage.Unknown, reason), (unknown.Coverage, unknown.Reason), reason);
+        }
+        // NPC: stat base slot 38 (28 entries), effects slot 46, HP points/adjustment/damage slots 26/27/28.
+        AreaFieldValue[] Npc(long damage, AreaFieldValue? effects, int statSlot = 38, int damageSlot = 28) =>
+            [Value(18, 0), Value(26, 0), Value(27, 2), Value(damageSlot, damage), Stats(statSlot, 8, 8, 1), .. effects is null ? Array.Empty<AreaFieldValue>() : [effects]];
+        var alive = Eval(16, Npc(10, ArrayValue(46, 70)));
+        Assert.AreEqual((CardinalTraversalDisposition.Blocked, "CRITTER_ALIVE", 30L, 30L), (alive.Disposition, alive.Reason, alive.HpMinimum, alive.HpMaximum));
+        Assert.AreEqual((CardinalTraversalDisposition.Open, "CRITTER_DEAD"), Disposition(Eval(16, Npc(32000, null))));
+        Assert.AreEqual((CardinalTraversalDisposition.Blocked, "CRITTER_ALIVE"), Disposition(Eval(16, Npc(10, new(46, AreaPresence.Null, AreaValueOrigin.Prototype, null, [], null)))));
+        Assert.AreEqual("CRITTER_STATS_UNRESOLVED", Eval(16, Npc(10, null, statSlot: 39)).Reason);
+        Assert.AreEqual("CRITTER_STATS_UNRESOLVED", Eval(16, Npc(10, null, damageSlot: 29)).Reason);
+        Assert.AreEqual("CRITTER_STATS_UNRESOLVED", Eval(16, Npc(10, new(46, AreaPresence.Array, AreaValueOrigin.Instance, null, [new(1, [70])], null))).Reason);
+
+        var record = new byte[] { 9, 0x2A, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9 };
+        var text = AreaStepRules.PatchTargets("G_2A000000_0000_0000_0000_000000000000: x\n", out _);
+        var mixed = AreaStepRules.PatchTargets("G_0000002A_0000_0000_0000_000000000000: x\n", out _);
+        var other = AreaStepRules.PatchTargets("G_2B000000_0000_0000_0000_000000000000: x\n", out _);
+        Assert.AreNotEqual(Convert.ToHexString(text[0].TextOrder), Convert.ToHexString(mixed[0].TextOrder));
+        var mobile = Object(3, [Value(18, 0)], AreaSourceKind.Mobile);
+        Assert.AreEqual("MAP_PATCH_TARGETS_OBJECT", AreaStepInspector.Evaluate(mobile, new(64, 64), record, text, 0, table).Reason);
+        Assert.AreEqual("MAP_PATCH_TARGETS_OBJECT", AreaStepInspector.Evaluate(mobile, new(64, 64), record, mixed, 0, table).Reason);
+        Assert.AreEqual("OBJECT_BLOCKS", AreaStepInspector.Evaluate(mobile, new(64, 64), record, other, 0, table).Reason);
+        Assert.AreEqual("MAP_PATCH_LINE_UNSUPPORTED", AreaStepInspector.Evaluate(mobile, new(64, 64), record, other, 1, table).Reason);
+        Assert.AreEqual("OBJECT_BLOCKS", AreaStepInspector.Evaluate(Object(3, [Value(18, 0)]), new(64, 64), record, text, 1, table).Reason, "Statics are loaded after the patch.");
+    }
+
+    [TestMethod]
+    public void Inspection_requires_a_strict_publication_and_located_core_objects_and_skips_others()
+    {
+        var noBlock = Fields((1, Location(0)), (18, I32Bytes(0x400)));
+        var moduleBytes = Dat(("maps/test/67108865.sec", Sector(Record(Id(0)), noBlock)));
+        using var fixture = new Fixture([(67108865, [])], moduleBytes: moduleBytes);
+        var area = fixture.Owner.LoadStrict();
+        using var module = DatArchive.Open(new MemoryStream(moduleBytes));
+        using var names = DatArchive.Open(new MemoryStream(Dat(("art/tile/tilename.mes", Encoding.ASCII.GetBytes("{0}{grs}{100}{rck}{200}{flr}{300}{stn}")))));
+        using var effects = DatArchive.Open(new MemoryStream(Dat(("rules/effect.mes", Encoding.ASCII.GetBytes("{50}{st +1}")))));
+        AreaStepSnapshot Inspect(AreaSnapshot snapshot) => AreaStepInspector.Inspect(snapshot, module, names, effects, null, ReadOnlyMemory<byte>.Empty, 3);
+        var baseline = Inspect(area);
+        Assert.AreEqual((1, 0), (baseline.ObjectBlockerCells, baseline.UnknownObjects), "Two registrations share (64,64); NO_BLOCK does not hide the blocker.");
+
+        AreaSnapshot Copy(IEnumerable<AreaSectorRecord>? sectors = null, IEnumerable<AreaObjectRecord>? objects = null, bool publish = true)
+        {
+            var copy = new AreaSnapshot(new object(), 1, fixture.Plan, sectors ?? area.Sectors, area.Terrain, objects ?? area.Objects, area.Visuals, area.Reconciliation, area.Endpoints);
+            if (publish) copy.MarkStrictlyPublished();
+            return copy;
+        }
+        Assert.AreEqual(AreaStepInvocationCode.InvalidSelection, Throws<AreaStepInvocationException>(() => Inspect(Copy(publish: false))).Code);
+        var outside = area.Objects[0] with { WorldX = 10, WorldY = 70 };
+        Assert.AreEqual(0, Inspect(Copy(objects: [outside])).ObjectBlockerCells, "An object outside the admitted sectors is not registered here.");
+        var unlocated = Throws<AreaStepInvocationException>(() => Inspect(Copy(objects: [area.Objects[0] with { WorldX = null }])));
+        Assert.AreEqual((AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Objects), (unlocated.Code, unlocated.Stage));
+        var forged = Inspect(Copy(sectors: area.Sectors.Select(s => s.Scope == AreaScope.Core ? s with { Placeholder = 0xAA0004 } : s)));
+        Assert.AreEqual(4096, forged.TerrainUnknownCells, "A version that promises a mask the payload lacks is never silently clear.");
+        var moved = Throws<AreaStepInvocationException>(() => Inspect(Copy(sectors: area.Sectors.Select(s => s with { DatOrdinal = 7 }))));
+        Assert.AreEqual((AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Terrain), (moved.Code, moved.Stage));
+    }
+
+    [TestMethod]
+    public void Serialized_masks_from_version_four_sectors_block_their_bits()
+    {
+        var mask = new byte[512]; mask[0] = 0b0000_0101; // ordinals 0 and 2 → cells (64,64) and (66,64).
+        var moduleBytes = Dat(("maps/test/67108865.sec", MaskedSector(mask)));
+        using var fixture = new Fixture([(67108865, [])], moduleBytes: moduleBytes);
+        var inspection = fixture.Owner.Inspect(); Assert.IsTrue(inspection.IsComplete, string.Join(',', inspection.Issues)); var area = fixture.Owner.LoadStrict();
+        using var module = DatArchive.Open(new MemoryStream(moduleBytes));
+        using var names = DatArchive.Open(new MemoryStream(Dat(("art/tile/tilename.mes", Encoding.ASCII.GetBytes("{0}{grs}{100}{rck}{200}{flr}{300}{stn}")))));
+        using var effects = DatArchive.Open(new MemoryStream(Dat(("rules/effect.mes", Encoding.ASCII.GetBytes("{50}{st +1}")))));
+        var snapshot = AreaStepInspector.Inspect(area, module, names, effects, null, ReadOnlyMemory<byte>.Empty, 3);
+        Assert.AreEqual((2, 0), (snapshot.TerrainBlockedCells, snapshot.TerrainUnknownCells));
+        var blocked = snapshot.Assess(snapshot.Request(new(65, 64), new(66, 64), CardinalTraversalDirection.XPlus));
+        Assert.AreEqual((CardinalTraversalDisposition.Blocked, AreaStepTerrainSource.SerializedMask), (blocked.Disposition, blocked.DestinationTerrain!.Source));
+    }
+
+    [TestMethod]
+    public void Non_rectangular_admission_refuses_shoulders_and_invalid_directions()
+    {
+        var snapshot = Synthetic(sectors: [(1, 1), (2, 1), (1, 2)]);
+        Assess(snapshot, new(127, 128), CardinalTraversalDirection.XPlusYMinus, CardinalTraversalCoverage.Unsupported, null, "SHOULDER_OUTSIDE_ADMITTED_AREA");
+        Assess(snapshot, new(127, 127), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        Assert.AreEqual("DIRECTION_UNSUPPORTED", snapshot.Assess(snapshot.Request(new(64, 64), new(65, 64), (CardinalTraversalDirection)8)).ReasonCode);
+        var far = snapshot.Assess(snapshot.Request(new(64, 64), new(long.MinValue, 64), CardinalTraversalDirection.XMinus));
+        Assert.AreEqual("DESTINATION_OUTSIDE_ADMITTED_AREA", far.ReasonCode, "Extreme coordinates are refused without arithmetic overflow.");
+        Assert.AreEqual("SOURCE_OUTSIDE_ADMITTED_AREA", snapshot.Assess(snapshot.Request(new(long.MaxValue, 0), new(64, 64), CardinalTraversalDirection.XMinus)).ReasonCode);
+    }
+
+    private static (CardinalTraversalDisposition?, string) Disposition(AreaStepObjectEvaluation e) => (e.Disposition, e.Reason);
+    private static AreaFieldValue Value(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
+    private static AreaFieldValue ArrayValue(int slot, params long[] values) =>
+        new(slot, AreaPresence.Array, AreaValueOrigin.Instance, null, [.. values.Select((v, i) => new AreaSparseElement(i, [v]))], null);
+    private static AreaFieldValue Stats(int slot, int st, int wp, int level)
+    {
+        var values = new long[28]; values[0] = st; values[6] = wp; values[17] = level; return ArrayValue(slot, values);
+    }
+    private static AreaObjectRecord Object(int type, AreaFieldValue[] fields, AreaSourceKind kind = AreaSourceKind.Static) =>
+        new(new("fixture", 1, kind, kind == AreaSourceKind.Static ? 67108865 : null, 0, 0, "id", 18), 119, type, 7001, "p", "p", "r", "s", AreaScope.Core,
+            0, 64, 64, AreaDisposition.BodyEligibleConditionally, fields, fields, true, true, true);
+    private static byte[] Fields(params (int Slot, byte[] Bytes)[] values)
+    {
+        using var s = new MemoryStream(); I32(s, 119); s.Write(Id(1, 7001)); s.Write(Id(0)); I32(s, 3);
+        s.WriteByte((byte)values.Length); s.WriteByte(0);
+        I32(s, values.Where(v => v.Slot < 32).Aggregate(0, (mask, v) => mask | 1 << v.Slot));
+        I32(s, values.Where(v => v.Slot is >= 32 and < 36).Aggregate(0, (mask, v) => mask | 1 << (v.Slot - 32)));
+        I32(s, values.Where(v => v.Slot >= 36).Aggregate(0, (mask, v) => mask | 1 << (v.Slot - 36)));
+        foreach (var v in values.OrderBy(v => v.Slot)) s.Write(v.Bytes); return s.ToArray();
+    }
+    private static byte[] Location(long value) { using var s = new MemoryStream(); s.WriteByte(1); I64(s, value); return s.ToArray(); }
+    private static byte[] I32Bytes(int value) { using var s = new MemoryStream(); I32(s, value); return s.ToArray(); }
+    private static byte[] MaskedSector(byte[] mask)
+    {
+        // The fixture's version-3 layout (core townmap 2) followed by the version-4 block list.
+        using var s = new MemoryStream(); I32(s, 0); s.Write(new byte[16384]); I32(s, 1); I32(s, 0xAA0004);
+        I32(s, 0); s.Write(new byte[12]); I32(s, 2); s.Write(new byte[20]);
+        s.Write(mask); I32(s, 0); return s.ToArray();
+    }
+
     private static AreaStepAssessment Assess(AreaStepSnapshot snapshot, AreaStepCell from, CardinalTraversalDirection direction,
         CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition, string reason)
     {
@@ -236,11 +372,13 @@ public sealed class AreaStepTests
     }
 
     private static AreaStepSnapshot Synthetic(AreaStepCell[]? blockedTerrain = null, AreaStepCell[]? unknownTerrain = null,
-        AreaStepCell[]? blockers = null, AreaStepCell[]? open = null, AreaStepCell[]? unknownObjects = null)
+        AreaStepCell[]? blockers = null, AreaStepCell[]? open = null, AreaStepCell[]? unknownObjects = null, (long X, long Y)[]? sectors = null)
     {
+        sectors ??= [(1, 1)];
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
-        for (var x = 64; x < 128; x++)
-            for (var y = 64; y < 128; y++)
+        foreach (var (sx, sy) in sectors)
+        for (var x = sx * 64; x < sx * 64 + 64; x++)
+            for (var y = sy * 64; y < sy * 64 + 64; y++)
             {
                 AreaStepCell cell = new(x, y);
                 terrain[cell] = unknownTerrain?.Contains(cell) == true
@@ -254,6 +392,6 @@ public sealed class AreaStepTests
         foreach (var cell in blockers ?? []) objects[cell] = [new(Key(), cell, 3, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "OBJECT_BLOCKS")];
         foreach (var cell in open ?? []) objects[cell] = [new(Key(), cell, 16, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Open, "CRITTER_DEAD", -5, -5)];
         foreach (var cell in unknownObjects ?? []) objects[cell] = [new(Key(), cell, 16, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, "FIXTURE_OBJECT_UNKNOWN")];
-        return new(new(AreaStepInputKind.Structural, "fixture", [new("module", 1, "aa")], "f00d"), 3, [(1, 1)], terrain, objects);
+        return new(new(AreaStepInputKind.Structural, "fixture", [new("module", 1, "aa")], "f00d"), 3, sectors, terrain, objects);
     }
 }

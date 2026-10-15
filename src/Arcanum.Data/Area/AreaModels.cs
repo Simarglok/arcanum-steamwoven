@@ -77,6 +77,9 @@ public sealed class AreaSnapshot
     }
     internal object Owner { get; }
     internal int Generation { get; }
+    /// <summary>Set once the owner publishes this snapshot as strict-complete; an inspected snapshot with issues never is.</summary>
+    internal bool StrictlyPublished { get; private set; }
+    internal void MarkStrictlyPublished() => StrictlyPublished = true;
     public int CatalogueMap { get; }
     public int RuntimeMap { get; }
     public string Profile { get; }

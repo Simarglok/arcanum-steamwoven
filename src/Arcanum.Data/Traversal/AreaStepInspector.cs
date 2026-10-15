@@ -29,7 +29,8 @@ public static class AreaStepInspector
         ArgumentNullException.ThrowIfNull(area); ArgumentNullException.ThrowIfNull(module);
         ArgumentNullException.ThrowIfNull(tileNameArchive); ArgumentNullException.ThrowIfNull(effectArchive);
         if (evidenceEpoch < 0) throw new ArgumentOutOfRangeException(nameof(evidenceEpoch));
-        return Sanitize(() => Build(AreaStepInputKind.Structural, area, module, tileNameArchive, effectArchive, patchArchive, mobileFile, evidenceEpoch));
+        var stage = new StageCursor();
+        return Sanitize(stage, () => Build(stage, AreaStepInputKind.Structural, area, module, tileNameArchive, effectArchive, patchArchive, mobileFile, evidenceEpoch));
     }
 
     /// <summary>Authenticated original Crash Site profile: the strict original Area snapshot, its nine core sectors,
@@ -42,18 +43,23 @@ public static class AreaStepInspector
         ArgumentException.ThrowIfNullOrEmpty(effectResourcePath); ArgumentException.ThrowIfNullOrEmpty(patchArchivePath);
         ArgumentException.ThrowIfNullOrEmpty(mobilePath);
         if (evidenceEpoch < 0) throw new ArgumentOutOfRangeException(nameof(evidenceEpoch));
-        return Sanitize(() =>
+        var stage = new StageCursor();
+        return Sanitize(stage, () =>
         {
             if (area.Profile != OriginalAreaProfile) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             var core = area.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
             if (core.Count != 9 || !core.SetEquals(from x in new long[] { 1451, 1452, 1453 } from y in new long[] { 1289, 1290, 1291 } select (x, y)))
                 throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+            // Bound the read by the authenticated Area identity before reading the whole mobile file.
+            var mobileInput = area.Inputs.SingleOrDefault(i => i.Key.Role == AreaSourceRole.NormalGameMobile)
+                ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+            if (new FileInfo(mobilePath).Length != mobileInput.Length) throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Fingerprint);
             var mobile = File.ReadAllBytes(mobilePath);
             using var module = DatArchive.Open(modulePath);
             using var names = DatArchive.Open(tileNameResourcePath);
             using var effects = DatArchive.Open(effectResourcePath);
             using var patch = DatArchive.Open(patchArchivePath);
-            var snapshot = Build(AreaStepInputKind.AuthenticatedOriginal, area, module, names, effects, patch, mobile, evidenceEpoch);
+            var snapshot = Build(stage, AreaStepInputKind.AuthenticatedOriginal, area, module, names, effects, patch, mobile, evidenceEpoch);
             foreach (var (path, pin) in OriginalPayloads)
                 if (!snapshot.InputIdentity.Sources.Any(s => s.Role == path && s.Length == pin.Length && s.Sha256 == pin.Sha256))
                     throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Fingerprint);
@@ -61,9 +67,13 @@ public static class AreaStepInspector
         });
     }
 
-    private static AreaStepSnapshot Build(AreaStepInputKind kind, AreaSnapshot area, DatArchive module, DatArchive tileNameArchive,
+    private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module, DatArchive tileNameArchive,
         DatArchive effectArchive, DatArchive? patchArchive, ReadOnlyMemory<byte> mobileFile, long epoch)
     {
+        stage.Current = AreaStepInvocationStage.Selection;
+        // Only a strict-complete publication: an inspected snapshot with issues may omit unlocated objects.
+        if (!area.StrictlyPublished) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+        if (area.Inputs.GroupBy(i => i.Key).Any(g => g.Count() != 1)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
         var sectors = area.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).ToArray();
         if (sectors.Length == 0) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
         var moduleInput = area.Inputs.SingleOrDefault(i => i.Key.Role == AreaSourceRole.Module) ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
@@ -73,7 +83,10 @@ public static class AreaStepInspector
             throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Fingerprint);
 
         // Rule sources: each consumed resource exactly once in its named archive; module effects and the patch are optional.
-        var sources = new List<AreaStepSourceIdentity> { new("module", moduleInput.Length, moduleInput.Sha256), new("mobile", mobileFile.Length, mobileSha) };
+        // Area inputs are bound by their authenticated identities; the opened archives are bound by payload hashes below.
+        var sources = area.Inputs.Select(i => new AreaStepSourceIdentity($"area-{i.Key.Role}-{i.Key.Number}".ToLowerInvariant(), i.Length, i.Sha256)).ToList();
+        sources.Add(new("mobile-file", mobileFile.Length, mobileSha));
+        stage.Current = AreaStepInvocationStage.Rules;
         byte[]? Resource(DatArchive archive, string path, bool required)
         {
             var hits = archive.Entries.Where(e => Name(e) == path).ToArray();
@@ -96,6 +109,7 @@ public static class AreaStepInspector
         if (patchArchive is not null && Resource(patchArchive, PatchPath, false) is { } patch)
             patchTargets = AreaStepRules.PatchTargets(Encoding.Latin1.GetString(patch), out patchMalformed);
 
+        stage.Current = AreaStepInvocationStage.Terrain;
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
         var terrainByCell = area.Terrain.GroupBy(t => t.Key.Sector).ToDictionary(g => g.Key, g => g.ToArray());
         foreach (var sector in sectors)
@@ -134,6 +148,7 @@ public static class AreaStepInspector
             }
         }
 
+        stage.Current = AreaStepInvocationStage.Objects;
         var admitted = sectors.Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
         var objects = new Dictionary<AreaStepCell, List<AreaStepObjectEvaluation>>();
         foreach (var o in area.Objects)
@@ -162,7 +177,7 @@ public static class AreaStepInspector
         return new(new(kind, area.Profile, sources, digest), epoch, admitted, terrain, frozenObjects);
     }
 
-    private static AreaStepObjectEvaluation Evaluate(AreaObjectRecord o, AreaStepCell cell, ReadOnlySpan<byte> record,
+    internal static AreaStepObjectEvaluation Evaluate(AreaObjectRecord o, AreaStepCell cell, ReadOnlySpan<byte> record,
         IReadOnlyList<AreaStepRules.PatchTarget> patch, int patchMalformed, IReadOnlyDictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?> effects)
     {
         AreaStepObjectEvaluation Unknown(string reason) => new(o.Key, cell, o.Type, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, reason);
@@ -250,16 +265,18 @@ public static class AreaStepInspector
     private static string Sha(ReadOnlySpan<byte> bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
     private static AreaStepInvocationException Fail(AreaStepInvocationCode code, AreaStepInvocationStage stage) => new(code, stage);
 
-    private static T Sanitize<T>(Func<T> operation)
+    private sealed class StageCursor { internal AreaStepInvocationStage Current = AreaStepInvocationStage.Selection; }
+
+    // Every failure becomes a code plus the stage that was running; no message, path or inner exception survives.
+    private static T Sanitize<T>(StageCursor stage, Func<T> operation)
     {
         try { return operation(); }
         catch (AreaStepInvocationException) { throw; }
-        catch (TerrainException e) { throw Fail(e.Code == TerrainErrorCode.LimitExceeded ? AreaStepInvocationCode.LimitExceeded : AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Terrain); }
-        catch (DatLimitExceededException) { throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Selection); }
-        catch (DatException) { throw Fail(AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Selection); }
-        catch (OverflowException) { throw Fail(AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Objects); }
-        catch (IOException) { throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Selection); }
-        catch (UnauthorizedAccessException) { throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Selection); }
-        catch (ObjectDisposedException) { throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Selection); }
+        catch (TerrainException e) { throw Fail(e.Code == TerrainErrorCode.LimitExceeded ? AreaStepInvocationCode.LimitExceeded : AreaStepInvocationCode.MalformedSource, stage.Current); }
+        catch (DatLimitExceededException) { throw Fail(AreaStepInvocationCode.LimitExceeded, stage.Current); }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or ObjectDisposedException)
+        { throw Fail(AreaStepInvocationCode.InputUnavailable, stage.Current); }
+        catch (Exception e) when (e is DatException or OverflowException or InvalidOperationException or ArgumentException or FormatException)
+        { throw Fail(AreaStepInvocationCode.MalformedSource, stage.Current); }
     }
 }
