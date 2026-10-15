@@ -235,7 +235,8 @@ These facts are **not** closed and need separate work:
 ## Proposed implementation (not authorized)
 
 Nothing below is delivered by this research. Each stage needs its own owner
-approval.
+approval. The owner chose option (a), core only, with T0-fixed NPCs; stage 1 is
+now the [whole-core step assessment](../world/area-step-assessment.md).
 
 1. **Data**: an immutable area-wide step assessment built from the Area owner,
    using the F1/F2 terrain rule, the F5 registry and the F6 life verdicts at

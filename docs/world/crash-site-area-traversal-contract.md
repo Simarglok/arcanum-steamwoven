@@ -18,7 +18,8 @@ critters in the surveyed area. It is research only: this contract, its digests
 and the production profiles are unchanged, and whole-area loaded/live readiness
 stays NOT_READY until a separately authorized implementation. Its reachability
 result also shows that the walkable region leaves the surveyed ring to the south,
-so an admitted boundary is an owner decision.
+so an admitted boundary is an owner decision. The owner chose the nine core sectors;
+the [whole-core step assessment](area-step-assessment.md) implements that Data stage.
 
 ## Inputs and scope
 

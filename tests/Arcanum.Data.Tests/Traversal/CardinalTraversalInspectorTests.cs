@@ -164,7 +164,7 @@ public sealed class CardinalTraversalInspectorTests
         Throws<NotSupportedException>(() => ((IList<CardinalTraversalProvenance>)a.Components[0].Provenance).Clear());
         Throws<NotSupportedException>(() => ((IList<string>)a.StepEvidence.Provenance).Clear());
         var types = typeof(CardinalTraversalSnapshot).Assembly.GetTypes().Where(t => t.Namespace == "Arcanum.Data.Traversal" && t.IsPublic && t.IsClass && !typeof(Exception).IsAssignableFrom(t));
-        foreach (var t in types) { Assert.IsTrue(t.IsSealed, t.Name); Assert.IsTrue(t.GetProperties().All(p => p.SetMethod is null), t.Name); if (t != typeof(CardinalTraversalContext) && t != typeof(CardinalTraversalRequest) && t != typeof(CardinalTraversalInspector)) Assert.AreEqual(0, t.GetConstructors().Length, t.Name); }
+        foreach (var t in types) { Assert.IsTrue(t.IsSealed, t.Name); Assert.IsTrue(t.GetProperties().All(p => p.SetMethod is null), t.Name); if (t != typeof(CardinalTraversalContext) && t != typeof(CardinalTraversalRequest) && t != typeof(CardinalTraversalInspector) && t != typeof(AreaStepRequest) && t != typeof(AreaStepInspector)) Assert.AreEqual(0, t.GetConstructors().Length, t.Name); }
     }
 
     [TestMethod]
