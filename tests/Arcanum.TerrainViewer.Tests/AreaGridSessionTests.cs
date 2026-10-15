@@ -66,6 +66,28 @@ public sealed class AreaGridSessionTests
     }
 
     [TestMethod]
+    public void ActorPlacementFollowsTheAreaSessionOutsideTheBaseSector()
+    {
+        var actor = new DiagnosticGridActor(); actor.Configure(Steps(), SimulationTime.At(0), StepDuration.Of(8));
+        var placements = new List<ActorDiagnosticPlacementInput>();
+        // East across x = 64 (sector 1453,1290) through the production presentation callback.
+        var east = actor.Advance(SimulationTime.At(1 + 8 * 58), [Input(0, 0, NeighborDirection.XPlus)], placements.Add);
+        Assert.AreEqual(MovementStatus.Completed, east.Movement.Status);
+        Assert.AreEqual(new CellCoord(64, 1), actor.Session!.State.CommittedCell);
+        Assert.IsTrue(actor.Placement().MapX >= 64 && placements.Count != 0);
+        // North into y = -1 lies in absent sector 1452,1289 here: refused by Data, placement stays valid at y = 0.
+        actor.Configure(Steps(), SimulationTime.At(0), StepDuration.Of(8));
+        var north = actor.Advance(SimulationTime.At(1 + 8 * 2), [Input(0, 0, NeighborDirection.YMinus)], placements.Add);
+        Assert.AreEqual(MovementStatus.Completed, north.Movement.Status);
+        Assert.AreEqual(0L, actor.Placement().MapY);
+        // The chart range admits negative and > 63 cells; one-sector WORLD placement still rejects them.
+        var outside = new DiagnosticActorState(new(-3.5, 100), 5, ActorDiagnosticAction.Walk);
+        Assert.AreEqual((-4L, 100L), (DiagnosticActorMotion.ToPlacement(outside, 0, -64, 127).MapX, DiagnosticActorMotion.ToPlacement(outside, 0, -64, 127).MapY));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DiagnosticActorMotion.ToPlacement(outside, 0));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => DiagnosticActorMotion.ToPlacement(outside with { Position = new(-65, 0) }, 0, -64, 127));
+    }
+
+    [TestMethod]
     public void AreaSessionRequiresAnAdmittedSpawnAndValidDuration()
     {
         var steps = Steps();

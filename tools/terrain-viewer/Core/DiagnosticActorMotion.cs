@@ -83,9 +83,13 @@ public sealed class DiagnosticActorMotion
         return (int)Math.Floor(octant + .5 + 1e-12) % 8;
     }
 
-    public static ActorDiagnosticPlacementInput ToPlacement(DiagnosticActorState state, int frame)
+    /// <summary>Pure placement inside a closed cell-center range: one sector (0..63) by default; the
+    /// whole-core area profile passes its base-sector-relative range.</summary>
+    public static ActorDiagnosticPlacementInput ToPlacement(DiagnosticActorState state, int frame, int minimumCell = 0, int maximumCell = 63)
     {
-        if (!ValidPosition(state.Position) || state.Facing is < 0 or > 7 || !Enum.IsDefined(state.Action) || frame < 0)
+        if (minimumCell > maximumCell || !double.IsFinite(state.Position.X) || !double.IsFinite(state.Position.Y) ||
+            state.Position.X < minimumCell || state.Position.X > maximumCell || state.Position.Y < minimumCell || state.Position.Y > maximumCell ||
+            state.Facing is < 0 or > 7 || !Enum.IsDefined(state.Action) || frame < 0)
             throw new ArgumentOutOfRangeException(nameof(state));
         var x = checked((long)Math.Floor(state.Position.X)); var y = checked((long)Math.Floor(state.Position.Y));
         var residual = Project(new(state.Position.X - x, state.Position.Y - y));

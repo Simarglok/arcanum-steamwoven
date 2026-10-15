@@ -52,12 +52,16 @@ public sealed class DiagnosticGridActor
                 // The action clock stays continuous for Walk->Walk and turns.
             }
             trial.Advance(Seconds(state.Time.Value - cursor.Value));
-            validateSelection?.Invoke(Placement(state, trial.CurrentFrame));
+            validateSelection?.Invoke(Placement(session, state, trial.CurrentFrame));
         });
         if (result.Movement.Status == MovementStatus.Completed) _timeline = trial;
         return result;
     }
-    public ActorDiagnosticPlacementInput Placement() => Placement(Session!.State, CurrentFrame);
+    public ActorDiagnosticPlacementInput Placement() => Placement(Session!, Session!.State, CurrentFrame);
+    // The area profile places the actor anywhere in the admitted core chart; WORLD keeps one sector.
+    private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession
+        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, AreaGridSession.MinimumChartCell, AreaGridSession.MaximumChartCell)
+        : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
     public static DiagnosticActorState RenderState(MovementState state) => new(
         new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action));

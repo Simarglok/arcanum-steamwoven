@@ -42,6 +42,7 @@ internal static class AreaLoadOperation
         VerifyRequested(actorIdentity, arguments.ExpectedActorResourceSha256);
         token.ThrowIfCancellationRequested();
         // Whole-core T0 step evidence from this same strict publication and the pinned rule payloads.
+        // The Data construction is not cancellable; cancellation is observed right after it.
         var traversal = AreaStepInspector.ValidateOriginalData(snapshot, arguments.ModulePath, arguments.ResourcePath,
             arguments.AreaEffectsPath!, arguments.AreaPatchPath!, arguments.AreaMobilePath!, generation);
         Console.WriteLine($"ARC-RENDER-007 load stage=area-steps cells={traversal.AdmittedCells} unknown={traversal.TerrainUnknownCells + traversal.UnknownObjects}");
@@ -76,8 +77,9 @@ internal static class AreaLoadOperation
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
     }
 
-    // Bind the whole-core step evidence to this AREA generation and every
-    // authenticated Area input identity; visuals never grant movement.
+    // Bind the whole-core step evidence to this AREA generation. The source check is a
+    // consistency check (sources derive from the same Area inputs); the inspector's own
+    // payload pins and strict-publication check are the authentication. Visuals never grant movement.
     internal static void VerifyAreaSteps(long generation, AreaSnapshot area, AreaStepSnapshot steps)
     {
         if (steps.EvidenceEpoch != generation || steps.InputIdentity.Kind != AreaStepInputKind.AuthenticatedOriginal ||

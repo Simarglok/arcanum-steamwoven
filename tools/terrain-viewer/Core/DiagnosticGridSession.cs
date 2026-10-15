@@ -79,7 +79,9 @@ public sealed class DiagnosticGridSession : IGridSession
 /// (92928,82560), so negative coordinates address the western/northern core sectors.</summary>
 public sealed class AreaGridSession : IGridSession
 {
-    public const long ChartOriginX = 92928, ChartOriginY = 82560;
+    public const long ChartOriginX = AreaScenePlan.CameraOriginX, ChartOriginY = AreaScenePlan.CameraOriginY;
+    /// <summary>Chart-relative cell range of the nine core sectors around the base sector.</summary>
+    public const int MinimumChartCell = -64, MaximumChartCell = 127;
     public static CellCoord Spawn => new(6, 1);
     public AreaStepSnapshot Snapshot { get; }
     public MovementState State { get; private set; }
