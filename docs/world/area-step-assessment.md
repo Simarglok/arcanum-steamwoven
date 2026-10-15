@@ -2,7 +2,8 @@
 
 Status: **Implemented Data component**, stage 1 of the
 [closure research](../research/area-passability-closure.md#proposed-implementation-not-authorized).
-It is not connected to Simulation, the viewer or any input yet. The
+Stage 2 connects it to the `crash-site-area` viewer through `AreaGridSession`
+([viewer](../rendering/crash-site-area-viewer.md#one-chart-separate-visual-and-motion-domains)). The
 [production cardinal assessment](cardinal-traversal-assessment.md) and its
 x4..8/y0..3 profile are unchanged. Original executable parity remains
 **NOT_VERIFIED**.
@@ -144,6 +145,7 @@ the research's core share. The only refusals at the reachable boundary are
 
 ## Not delivered
 
-No Simulation binding, viewer movement, input, route search, state after T0,
-context-ring or southern admission, other actors or original executable
-comparison. The viewer integration is the next separately reviewed stage.
+No route search, state after T0, context-ring or southern admission, other
+actors or original executable comparison. The native synthetic AREA probes and
+the export gate matrix still exercise the bounded wire snapshot; moving them to
+whole-core evidence is a separate stage.

@@ -16,7 +16,7 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("GRID observation: " + why); }
         var none = new RawInputFrame(-1, default);
         var observed = none;
-        var snapshot = _worldActor.Session!.Snapshot;
+        var snapshot = _worldActor.CardinalSession!.Snapshot;
         var events = new List<MovementEvent>();
         void Frame(int time, bool complete = true, params RawInputFrame[] pads)
         {

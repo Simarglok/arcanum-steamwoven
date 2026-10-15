@@ -41,10 +41,12 @@ internal static class AreaLoadOperation
         VerifyRequested(resourceIdentity, arguments.ExpectedResourceSha256);
         VerifyRequested(actorIdentity, arguments.ExpectedActorResourceSha256);
         token.ThrowIfCancellationRequested();
-        var traversal = CardinalTraversalInspector.ValidateOriginalData(arguments.ModulePath, arguments.ResourcePath, arguments.PrototypePath!, generation,
-            policy: CardinalTraversalAdmissionPolicy.BoundedAdjacent);
+        // Whole-core T0 step evidence from this same strict publication and the pinned rule payloads.
+        var traversal = AreaStepInspector.ValidateOriginalData(snapshot, arguments.ModulePath, arguments.ResourcePath,
+            arguments.AreaEffectsPath!, arguments.AreaPatchPath!, arguments.AreaMobilePath!, generation);
+        Console.WriteLine($"ARC-RENDER-007 load stage=area-steps cells={traversal.AdmittedCells} unknown={traversal.TerrainUnknownCells + traversal.UnknownObjects}");
         token.ThrowIfCancellationRequested();
-        VerifyTraversal(generation, moduleIdentity, resourceIdentity, traversal);
+        VerifyAreaSteps(generation, snapshot, traversal);
         using var module = DatArchive.Open(arguments.ModulePath, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
         using var actorResource = DatArchive.Open(arguments.ActorResourcePath!, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
         var actor = ActorDiagnosticSource.Create(module, actorResource, arguments.ActorInput!, 0, 0, token, mode: TerrainViewerMode.WorldDiagnostic);
@@ -70,8 +72,19 @@ internal static class AreaLoadOperation
         return new(generation, terrain, new Dictionary<TerrainTextureKey, DecodedTerrainTexture>(), terrainCommands.Length,
             terrainCommands.Count(command => command.Phase == 0), terrainCommands.Count(command => command.Phase == 1), 0, 0,
             mf, rf, mf, rf, retained + actor.CheckedRgbaBytes, elapsed, 1)
-        { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, TraversalSnapshot = traversal,
+        { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
+    }
+
+    // Bind the whole-core step evidence to this AREA generation and every
+    // authenticated Area input identity; visuals never grant movement.
+    internal static void VerifyAreaSteps(long generation, AreaSnapshot area, AreaStepSnapshot steps)
+    {
+        if (steps.EvidenceEpoch != generation || steps.InputIdentity.Kind != AreaStepInputKind.AuthenticatedOriginal ||
+            steps.InputIdentity.AreaProfile != area.Profile || steps.AdmittedSectors.Count != 9 ||
+            !area.Inputs.All(i => steps.InputIdentity.Sources.Any(s => s.Length == i.Length && s.Sha256 == i.Sha256)) ||
+            !steps.IsAdmitted(AreaGridSession.Cell(AreaGridSession.Spawn)))
+            throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Publication));
     }
 
     // Bind the separately authenticated traversal to this AREA generation and

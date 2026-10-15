@@ -28,7 +28,7 @@ public static partial class TerrainViewerSelfTest
         var result = human.Result with { Generation = 7, Area = area, TraversalSnapshot = grid.Snapshot };
         var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "synthetic-module",
             "--resource", "synthetic-terrain", "--actor-resource", "synthetic-actor", "--prototypes", "synthetic-prototypes",
-            "--area-mobile", "synthetic-mobile", "--source-id", "synthetic"]);
+            "--area-mobile", "synthetic-mobile", "--area-effects", "synthetic-effects", "--area-patch", "synthetic-patch", "--source-id", "synthetic"]);
         var viewport = new SubViewport { Size = new(800,600), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var app = new TerrainViewerApp { SelfTestBootstrap = true };
         viewport.AddChild(app); host.AddChild(viewport);

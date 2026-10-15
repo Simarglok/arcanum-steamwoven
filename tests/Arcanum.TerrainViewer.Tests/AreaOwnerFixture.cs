@@ -118,7 +118,7 @@ internal sealed class AreaOwnerFixture : IDisposable
                 : body && x>=width/2 ? (byte)2 : (byte)1;
         return bytes;
     }
-    private static byte[] Dat(params (string Name,byte[] Bytes)[] entries)
+    internal static byte[] Dat(params (string Name,byte[] Bytes)[] entries)
     {
         using var stream=new MemoryStream(); using var writer=new BinaryWriter(stream);
         var offsets=new int[entries.Length];

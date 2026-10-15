@@ -18,7 +18,7 @@ public partial class TerrainViewerApp
     private GridInputQueue _worldGridInput = new();
     private bool _worldResetPending;
     private bool _worldReloadPending;
-    private DiagnosticGridSession? _worldLifecycleSession;
+    private IGridSession? _worldLifecycleSession;
     private string _worldGridDiagnostic = "No step assessment yet";
     private SimulationTime? _worldTestTime;
     private SimulationTime? _worldObservationTime;
@@ -373,10 +373,21 @@ public partial class TerrainViewerApp
         if (advance.Movement.Status != MovementStatus.Completed)
             throw new InvalidOperationException($"GRID_RUNTIME_{advance.Movement.Status}_{advance.Movement.Failure?.Kind}");
         _worldGridInput.PublishedThrough(frontier);
+        foreach (var evidence in advance.AreaEvidence)
+        {
+            var assessment = evidence.Assessment;
+            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
+            // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
+            GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
+                evidence.Key, coverage=assessment.Coverage.ToString(), disposition=assessment.Disposition?.ToString(),
+                assessment.ReasonCode, objects=assessment.Objects.Count, gaps=assessment.Gaps.Count,
+                terrain=assessment.DestinationTerrain?.ReasonCode, evidenceSha256=assessment.EvidenceSha256
+            }));
+        }
         foreach (var evidence in advance.Evidence)
         {
             var assessment = evidence.Assessment;
-            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} records={assessment.RecordAssessments.Count} gaps={assessment.Gaps.Count} epoch={session.Snapshot.EvidenceEpoch}";
+            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} records={assessment.RecordAssessments.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
             // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
             GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
                 evidence.Key, coverage=assessment.Coverage.ToString(), disposition=assessment.Disposition?.ToString(),
@@ -398,7 +409,9 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                _worldActor.Configure(session.Snapshot, time); _worldGridInput = new(); _worldGate.Close();
+                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time);
+                else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
+                _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
                 GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
             }

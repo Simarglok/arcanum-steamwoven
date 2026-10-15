@@ -9,7 +9,9 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class DiagnosticGridActor
 {
     private AnimationTimeline _timeline = Timeline(ActorDiagnosticAction.Idle);
-    public DiagnosticGridSession? Session { get; private set; }
+    public IGridSession? Session { get; private set; }
+    /// <summary>The bounded single-sector WORLD session, when that profile is configured.</summary>
+    public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
     public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixed;
     public int CurrentFrame => _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
@@ -18,6 +20,11 @@ public sealed class DiagnosticGridActor
     public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
+        Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
+    }
+    public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
+    {
+        var session = new AreaGridSession(snapshot, time, duration, limits);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }

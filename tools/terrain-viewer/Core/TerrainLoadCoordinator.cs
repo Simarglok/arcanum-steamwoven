@@ -28,6 +28,8 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public int StaticCensusCount { get; init; }
     public int StaticOutsideScopeCount { get; init; }
     public CardinalTraversalSnapshot? TraversalSnapshot { get; init; }
+    /// <summary>Whole-core T0 step evidence of a crash-site-area load; the bounded cardinal snapshot stays WORLD-only.</summary>
+    public AreaStepSnapshot? AreaStepSnapshot { get; init; }
     public AreaLoadResult? Area { get; init; }
 }
 

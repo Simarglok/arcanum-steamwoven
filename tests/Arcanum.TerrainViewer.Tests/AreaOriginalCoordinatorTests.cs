@@ -21,6 +21,7 @@ public sealed class AreaOriginalCoordinatorTests
         return TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", Required("ARC_AREA_MODULE"),
             "--resource", Required("ARC_AREA_RESOURCE2"), "--actor-resource", Required("ARC_AREA_RESOURCE1"),
             "--area-mobile", Required("ARC_AREA_MOBILE"), "--prototypes", Required("ARC_AREA_PROTOTYPES"),
+            "--area-effects", Required("ARC_AREA_EFFECTS"), "--area-patch", Required("ARC_AREA_PATCH"),
             "--source-id", "ORIGINAL_AREA_COORDINATOR"]);
     }
 
@@ -42,7 +43,7 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.AreEqual(1, coordinator.MaximumObservedConcurrency);
         AssertComplete(stale, old); AssertComplete(result, current);
         Assert.AreNotSame(stale.Area!.Snapshot, result.Area!.Snapshot);
-        Assert.AreNotSame(stale.TraversalSnapshot, result.TraversalSnapshot);
+        Assert.AreNotSame(stale.AreaStepSnapshot, result.AreaStepSnapshot);
         Assert.AreNotSame(stale.ActorPlan, result.ActorPlan);
         var firstKey = result.Area.Frames.Keys.First();
         Assert.AreNotSame(stale.Area.Frames[firstKey].Rgba, result.Area.Frames[firstKey].Rgba);
@@ -51,31 +52,28 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.IsTrue(coordinator.TryPublish(current, () => published = result));
         Assert.AreSame(result, published);
 
-        var snapshot = result.TraversalSnapshot!;
-        var module = result.Area.Snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Module);
-        var resource = result.Area.Snapshot.Inputs.Single(i => i.Key.Role == AreaSourceRole.Resource2);
-        AreaLoadOperation.VerifyTraversal(current, module, resource, snapshot);
-        // Genuine authenticated snapshot, but wrong generation/source/role must
+        var steps = result.AreaStepSnapshot!;
+        AreaLoadOperation.VerifyAreaSteps(current, result.Area.Snapshot, steps);
+        // Genuine authenticated evidence, but a wrong generation or another area must
         // fail at the same production binding boundary, not produce permission.
-        Refused(() => AreaLoadOperation.VerifyTraversal(old, module, resource, snapshot));
-        Refused(() => AreaLoadOperation.VerifyTraversal(current, module with { Length = module.Length - 1 }, resource, snapshot));
-        Refused(() => AreaLoadOperation.VerifyTraversal(current, module with { Sha256 = new string('0', 64) }, resource, snapshot));
-        Refused(() => AreaLoadOperation.VerifyTraversal(current, module, resource with { Sha256 = new string('0', 64) }, snapshot));
-        Refused(() => AreaLoadOperation.VerifyTraversal(current, module, resource with { Key = new(AreaSourceRole.Resource1) }, snapshot));
-        Assert.AreEqual("COMPLETE_NONBLOCKING_EVIDENCE", Assess(snapshot, 6, 1, 7, 1).ReasonCode);
-        var blocked = Assess(snapshot, 6, 1, 5, 1);
+        Refused(() => AreaLoadOperation.VerifyAreaSteps(old, result.Area.Snapshot, steps));
+        Refused(() => AreaLoadOperation.VerifyAreaSteps(current, result.Area.Snapshot, stale.AreaStepSnapshot!));
+        Assert.AreEqual("COMPLETE_NONBLOCKING_EVIDENCE", Assess(steps, 6, 1, 7, 1).ReasonCode);
+        var blocked = Assess(steps, 6, 1, 5, 1);
         Assert.AreEqual(CardinalTraversalCoverage.Supported, blocked.Coverage);
         Assert.AreEqual(CardinalTraversalDisposition.Blocked, blocked.Disposition);
-        Assert.AreEqual("ADMITTED_DESTINATION_SCENERY_BLOCKER", blocked.ReasonCode);
-        var outside = Assess(snapshot, 8, 1, 9, 1);
+        Assert.AreEqual("DESTINATION_OBJECT_BLOCKER", blocked.ReasonCode);
+        // Former bounded-zone edge (8,1)->(9,1) is now an ordinary whole-core step.
+        Assert.AreEqual(CardinalTraversalCoverage.Supported, Assess(steps, 8, 1, 9, 1).Coverage);
+        var outside = steps.Assess(steps.Request(new(92928 - 65, 82561), new(92928 - 66, 82561), CardinalTraversalDirection.XMinus));
         Assert.AreEqual(CardinalTraversalCoverage.Unsupported, outside.Coverage);
-        Assert.IsNull(outside.Disposition); Assert.AreEqual("ZONE_UNSUPPORTED", outside.ReasonCode);
-        Console.WriteLine("AREA original coordinator PASS: two complete serialized loads; fresh owner payloads; current/stale generation; authenticated chart/traversal/HumanFixed; five binding refusals; Open/Blocked/outside-zone denial. Not an AREA input/UI or resource matrix.");
+        Assert.AreEqual("SOURCE_OUTSIDE_ADMITTED_AREA", outside.ReasonCode);
+        Console.WriteLine("AREA original coordinator PASS: two complete serialized loads; fresh owner payloads; current/stale generation; authenticated chart/traversal/HumanFixed; five binding refusals; Open/Blocked/outside-core denial on whole-core T0 steps. Not an AREA input/UI or resource matrix.");
     }
 
-    private static CardinalTraversalAssessment Assess(CardinalTraversalSnapshot snapshot, int x, int y, int tx, int ty)
-        => snapshot.Assess(new(snapshot.ProfileId, snapshot.InputIdentity, snapshot.EvidenceEpoch, 1452, 1290,
-            new(x, y), new(tx, ty), tx > x ? CardinalTraversalDirection.XPlus : CardinalTraversalDirection.XMinus, snapshot.DeclaredContext));
+    private static AreaStepAssessment Assess(AreaStepSnapshot snapshot, int x, int y, int tx, int ty)
+        => snapshot.Assess(snapshot.Request(AreaGridSession.Cell(new(x, y)), AreaGridSession.Cell(new(tx, ty)),
+            tx > x ? CardinalTraversalDirection.XPlus : CardinalTraversalDirection.XMinus));
 
     private static void Refused(Action action)
     {
@@ -105,18 +103,15 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.AreEqual(result.ModuleFingerprint, result.ModuleFingerprintAfter);
         Assert.AreEqual(result.ResourceFingerprint, result.ResourceFingerprintAfter);
         Assert.AreEqual(result.ActorResourceFingerprint, result.ActorResourceFingerprintAfter);
-        Assert.IsNotNull(result.TraversalSnapshot);
-        var traversal = result.TraversalSnapshot;
+        Assert.IsNull(result.TraversalSnapshot, "The bounded cardinal snapshot is WORLD-only.");
+        Assert.IsNotNull(result.AreaStepSnapshot);
+        var traversal = result.AreaStepSnapshot;
         Assert.AreEqual(generation, traversal.EvidenceEpoch);
-        Assert.AreEqual(CardinalTraversalInputKind.AuthenticatedOriginal, traversal.InputIdentity.Kind);
-        Assert.AreEqual(CardinalTraversalAdmissionPolicy.BoundedAdjacent, traversal.AdmissionPolicy);
-        Assert.AreEqual("BASE_SECTOR_1452_1290_ADJACENT_V1", traversal.ProfileId);
-        Assert.AreEqual(317, traversal.TerminalRecordCount);
-        var identity = traversal.InputIdentity.OriginalIdentity!;
-        Assert.AreEqual((result.ModuleFingerprint.Size, result.ModuleFingerprint.Sha256), (identity.Module.Length, identity.Module.Sha256));
-        Assert.AreEqual((result.ResourceFingerprint.Size, result.ResourceFingerprint.Sha256), (identity.Resource.Length, identity.Resource.Sha256));
-        Assert.AreEqual((1452, 1290, 92928, 82560), (traversal.InputIdentity.Sector.SectorX,
-            traversal.InputIdentity.Sector.SectorY, traversal.InputIdentity.Sector.OriginX, traversal.InputIdentity.Sector.OriginY));
+        Assert.AreEqual(AreaStepInputKind.AuthenticatedOriginal, traversal.InputIdentity.Kind);
+        Assert.AreEqual("CRASH_SITE_CORE_T0_V1", traversal.ProfileId);
+        Assert.AreEqual((36864, 0, 0), (traversal.AdmittedCells, traversal.TerrainUnknownCells, traversal.UnknownObjects));
+        Assert.IsTrue(traversal.InputIdentity.Sources.Any(s => s.Length == result.ModuleFingerprint.Size && s.Sha256 == result.ModuleFingerprint.Sha256));
+        Assert.IsTrue(traversal.InputIdentity.Sources.Any(s => s.Length == result.ResourceFingerprint.Size && s.Sha256 == result.ResourceFingerprint.Sha256));
         Assert.IsNotNull(result.ActorPlan);
         Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, result.ActorPlan.Profile.Id);
         Assert.AreEqual(55, result.ActorTextures.Count);

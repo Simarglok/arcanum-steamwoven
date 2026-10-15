@@ -145,6 +145,16 @@ public partial class TerrainViewerApp : Node
             if (_nativeSmoke) { GetTree().Quit(1); return; }
             _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
         }
+        catch (Arcanum.Data.Traversal.AreaStepInvocationException exception)
+        {
+            if (_exiting) return;
+            GD.Print($"ARC-RENDER-007 failure stage=AreaSteps.{exception.Stage} code={exception.Code} ready=False");
+            var error = new TerrainViewerError(exception.Code == Arcanum.Data.Traversal.AreaStepInvocationCode.InputUnavailable
+                ? TerrainViewerErrorCode.InputUnavailable : TerrainViewerErrorCode.FingerprintMismatch,
+                Stage: TerrainViewerFailureStage.Fingerprint, Progress: TerrainViewerProgress.Empty);
+            if (_nativeSmoke) { GetTree().Quit(1); return; }
+            _coordinator.TryPublish(requestGeneration, () => PublishFailure(arguments.Mode, error));
+        }
         catch (TerrainViewerException exception)
         {
             if (_exiting) return;
