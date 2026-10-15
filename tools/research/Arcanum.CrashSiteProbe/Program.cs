@@ -52,6 +52,8 @@ internal static partial class Program
         {
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
             if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--area-passability-closure") return ProbeAreaPassabilityClosure(args[1..]);
+            if (args.SequenceEqual(["--area-passability-closure-self-test"])) { AreaPassabilityClosureSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-traversal-research") return ProbeAreaTraversal(args[1..]);
             if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
@@ -78,6 +80,9 @@ internal static partial class Program
         {
             Console.Error.WriteLine(args.Any(arg => arg.StartsWith("--time-lighting", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {TimeLightingProbe.Diagnostic(exception)}"
+                : args.Any(a => a.StartsWith("--area-passability-closure", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception is InvalidDataException or ArgumentException && exception.Message.All(c => c is '_' || char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c)) ||
+                    exception is InvalidOperationException && exception.Message.StartsWith("closure self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AREA_CLOSURE_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: AREA_TRAVERSAL_INVOCATION_FAILED"
                 : args.Contains("--cardinal-traversal")
