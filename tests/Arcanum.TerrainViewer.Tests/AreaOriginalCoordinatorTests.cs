@@ -68,7 +68,7 @@ public sealed class AreaOriginalCoordinatorTests
         var outside = steps.Assess(steps.Request(new(92928 - 65, 82561), new(92928 - 66, 82561), CardinalTraversalDirection.XMinus));
         Assert.AreEqual(CardinalTraversalCoverage.Unsupported, outside.Coverage);
         Assert.AreEqual("SOURCE_OUTSIDE_ADMITTED_AREA", outside.ReasonCode);
-        Console.WriteLine("AREA original coordinator PASS: two complete serialized loads; fresh owner payloads; current/stale generation; authenticated chart/traversal/HumanFixed; five binding refusals; Open/Blocked/outside-core denial on whole-core T0 steps. Not an AREA input/UI or resource matrix.");
+        Console.WriteLine("AREA original coordinator PASS: two complete serialized loads; fresh owner payloads; current/stale generation; authenticated chart/traversal/HumanFixed; two binding refusals; Open/Blocked/outside-core denial on whole-core T0 steps. Not an AREA input/UI or resource matrix.");
     }
 
     private static AreaStepAssessment Assess(AreaStepSnapshot snapshot, int x, int y, int tx, int ty)
