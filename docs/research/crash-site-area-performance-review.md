@@ -248,14 +248,35 @@ view spans more grid cells than half the occupied cells (the lowest zooms), the 
 scans every command as before; at low zoom most of the remaining canvas update is the
 per-item work, which grows with the visible count.
 
+## L-B result: one read per ART entry
+
+Instead of keeping decoded pixels from the strict build (the original L-B), the owner
+now reads, inflates and payload-hashes each ART entry once per authenticated bracket
+(strict build or frame batch) and shares it between the frames selected from it; see
+the [loader contract](../world/crash-site-area-loader.md). The 1,975 selected frames
+come from only 335 entries (218 MB of decoded entry bytes per load before, 4.7 MB
+after), and the strict build's 2,444 visuals from 345. Same test-host method, two runs
+each, at `d99cc8d` plus the change (before = the load table above):
+
+| Stage | Debug before | Debug after | Release before | Release after |
+| --- | ---: | ---: | ---: | ---: |
+| Strict snapshot | 9.5–10.1 s | 1.9–2.0 s | 4.3–5.7 s | 1.2–1.9 s |
+| Frame copy | 8.5–8.8 s | 1.1 s | 3.6–3.7 s | 0.7–0.8 s |
+| **Whole load** | **22.1–22.8 s** | **7.0–8.4 s** | **11.6–13.4 s** | **5.3–6.6 s** |
+| Managed allocation per load | 2.3 GB | 1.4 GB | 2.3 GB | 1.4 GB |
+
+The largest remaining step is the 1.8–2.8 s between the lighting stage and the cave
+snapshot: `VerifyFile` ×3 and the cave owner's own authentication passes over inputs
+already authenticated in the same load (L-C, not done).
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only (done).
 2. L-A Release assemblies for daily runs: halves the load (done, release export).
 3. F-C chunk composition (done as parallel composition), then F-B spatial index (done):
    most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
-4. L-B and L-C: reuse decoded frames and share authentication, about 4–6 s Debug
-   together; both change the loader contract.
+4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (share
+   authentication, about 1.5–2 s more; not done).
 5. D-A, I-A, M-A: small comfort items.
 6. Later, only if needed: L-D parallel decode, F-D body batching, L-F persistent
    cache.

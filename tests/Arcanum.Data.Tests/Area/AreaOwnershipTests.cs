@@ -375,6 +375,31 @@ public sealed class AreaOwnershipTests
     }
 
     [TestMethod]
+    public void Frame_batch_reads_an_entry_once_for_every_frame_selected_from_it()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict();
+        var key = snapshot.Visuals[0].Key; var source = streams[snapshot.Visuals[0].Entry.Source.Role];
+        byte[] first, second; int afterFirst, afterSecond; var held = fixture.Owner.Usage.RetainedReserved;
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            first = batch.CopySelectedFrame(key); afterFirst = source.Reads.Count;
+            second = batch.CopySelectedFrame(key); afterSecond = source.Reads.Count;
+            batch.Complete();
+        }
+        // The entry memo serves the second frame of the same entry without another read;
+        // it is released with the batch.
+        Assert.AreEqual(afterFirst, afterSecond);
+        CollectionAssert.AreEqual(first, second);
+        Assert.AreEqual(held, fixture.Owner.Usage.RetainedReserved);
+        // A lease keeps no memo: each acquisition reads the entry again.
+        var leaseReads = source.Reads.Count;
+        using (var lease = fixture.Owner.AcquireSelectedFrame(snapshot, key)) CollectionAssert.AreEqual(first, lease.CopyRgba());
+        Assert.IsTrue(source.Reads.Count > leaseReads);
+    }
+
+    [TestMethod]
     public void Frame_batch_occupies_the_lease_slot_and_detects_mutation_between_frames_at_complete()
     {
         var streams = new Dictionary<AreaSourceRole, ProbeStream>();

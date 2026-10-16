@@ -177,7 +177,7 @@ public sealed partial class AreaDataOwner
         token.ThrowIfCancellationRequested();
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
         _budget.StartFrame(entry.StoredBytes, entry.DecodedBytes);
-        var bytes = ReadEntry(entry); var sha = ObjectWireReader.Hash(bytes); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
+        var (bytes, sha) = ReadFrameEntry(entry); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
         // A wall is drawn from group 0 only when its ART holds a single rotation; an
         // eight-rotation wall ART would need the rotation's own group, which is not admitted.
         if (raw >> 28 == 1 && (bytes.Length < 4 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 0))
@@ -206,8 +206,8 @@ public sealed partial class AreaDataOwner
         _budget.StartFrame(descriptor.Entry.StoredBytes, descriptor.Entry.DecodedBytes, descriptor.RgbaBytes, descriptor.EncodedBytes);
         var identity = Identity(descriptor.Entry.Source);
         if (authenticateBefore) Authenticate(identity, token);
-        var bytes = ReadEntry(descriptor.Entry);
-        if (ObjectWireReader.Hash(bytes) != descriptor.PayloadSha256 || descriptor.ViewLength < 0 || descriptor.ViewLength > bytes.Length)
+        var (bytes, payloadSha) = ReadFrameEntry(descriptor.Entry);
+        if (payloadSha != descriptor.PayloadSha256 || descriptor.ViewLength < 0 || descriptor.ViewLength > bytes.Length)
             throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame);
         var metadata = InspectFrame(bytes.AsSpan(0, descriptor.ViewLength), descriptor.PhysicalGroup, descriptor.Frame, descriptor.RequestedPalette);
         if (metadata.Metadata.Width != descriptor.Width || metadata.Metadata.Height != descriptor.Height || metadata.Metadata.HotX != descriptor.HotX || metadata.Metadata.HotY != descriptor.HotY ||

@@ -20,6 +20,7 @@ public sealed partial class AreaDataOwner
             if (_lease is not null || _batch is not null) throw Fail(AreaErrorCode.LeaseLimit, AreaStage.Frame);
             _batchAuthenticated.Clear();
             _batch = new AreaFrameBatch(this, snapshot);
+            BeginEntryMemo();
             return _batch;
         }
     }
@@ -60,7 +61,7 @@ public sealed partial class AreaDataOwner
                 }
                 finally { _budget.Release(held); }
             }
-            catch { batch.MarkFaulted(); throw; }
+            catch { batch.MarkFaulted(); EndEntryMemo(); throw; }
         }
     }
 
@@ -76,15 +77,16 @@ public sealed partial class AreaDataOwner
                 _budget.BeginPhase(AreaBudgetPhase.F);
                 foreach (var identity in _plan.Identities)
                     if (_batchAuthenticated.Contains(identity.Key)) Authenticate(identity, token);
+                EndEntryMemo();
                 batch.MarkCompleted();
             }
-            catch { batch.MarkFaulted(); throw; }
+            catch { batch.MarkFaulted(); EndEntryMemo(); throw; }
         }
     }
 
     internal void BatchRelease(AreaFrameBatch batch)
     {
-        lock (_gate) { if (ReferenceEquals(_batch, batch)) { batch.Revoke(); _batch = null; _batchAuthenticated.Clear(); } }
+        lock (_gate) { if (ReferenceEquals(_batch, batch)) { batch.Revoke(); _batch = null; _batchAuthenticated.Clear(); EndEntryMemo(); } }
     }
 
     private void RequirePublished(AreaSnapshot snapshot)
