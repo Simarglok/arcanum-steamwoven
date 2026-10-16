@@ -167,6 +167,9 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
             var none = new RawInputFrame(-1, default);
+            // The key and click events above were observed at real time; the simulated frames continue after the newest
+            // of them (from the session's start time they would race the 0.1 s step and be refused as non-monotonic).
+            _worldTestTime ??= WorldTime;
             for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
             foreach (var held in new[] { none with { Cancel = true }, none with { Confirm = true }, none with { MenuDown = true }, none with { MenuUp = true } })
             {

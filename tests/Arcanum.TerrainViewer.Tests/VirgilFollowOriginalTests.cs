@@ -36,7 +36,8 @@ public sealed class VirgilFollowOriginalTests
         var host = new AreaConversationHost(area, Required("ARC_AREA_RESOURCE2"), Required("ARC_AREA_EFFECTS"), session, party: true);
         var speaker = host.Speakers.Single();
         Assert.AreSame(AreaCompanionRoster.Virgil, AreaCompanionRoster.For(speaker), "the only speaker is Virgil (prototype 17102, script 1324)");
-        var group = AreaCompanionGroup.Create(host.Speakers, steps, AreaChart.Exterior, session, new(area.RuntimeMap), SimulationTime.At(0));
+        var templates = AreaCompanionTemplate.From(host.Speakers, result.Area.Plan, area.Visuals, AreaChart.Exterior, new(area.RuntimeMap));
+        var group = AreaCompanionGroup.Create(templates, steps, AreaChart.Exterior, session, new(area.RuntimeMap), SimulationTime.At(0));
         var virgil = group.Companions.Single();
         var origin = virgil.Grid.State.CommittedCell;
         Console.WriteLine($"Virgil T0 chart cell {origin.X},{origin.Y}");
@@ -76,14 +77,14 @@ public sealed class VirgilFollowOriginalTests
         Assert.AreNotEqual(origin, cell);
         // His upright T0 body command is drawn at his cell: moved by the projected offset, ordered at the new cell.
         var t0 = result.Area.Plan.Commands.Single(c => c.Identity == virgil.Key);
-        var moved = group.Commands(result.Area.Plan).Single();
+        var moved = group.Commands().Single();
         Assert.AreEqual((4, t0.Destination.X - 40 * (cell.X - origin.X) + 40 * (cell.Y - origin.Y), t0.Destination.Y + 20 * (cell.X - origin.X + cell.Y - origin.Y)),
             (moved.Phase, moved.Destination.X, moved.Destination.Y));
 
         // Saved and loaded: he stands where he stopped, still following.
         Assert.AreEqual(GameSessionFailure.None, group.Record(session));
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
-        var restored = AreaCompanionGroup.Create(host.Rebind(loaded).Speakers, steps, AreaChart.Exterior, loaded, new(area.RuntimeMap), SimulationTime.At(0));
+        var restored = AreaCompanionGroup.Create(AreaCompanionTemplate.From(host.Rebind(loaded).Speakers, result.Area.Plan, area.Visuals, AreaChart.Exterior, new(area.RuntimeMap)), steps, AreaChart.Exterior, loaded, new(area.RuntimeMap), SimulationTime.At(0));
         Assert.AreEqual((cell, CompanionStanding.Following), (restored.Companions.Single().Grid.State.CommittedCell, restored.Companions.Single().Standing));
     }
 

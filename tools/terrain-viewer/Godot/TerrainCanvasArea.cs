@@ -10,6 +10,9 @@ public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaV
 {
     /// <summary>ARC-RENDER-012 stationary lights of the shown map at this hour; null draws ambient only.</summary>
     public AreaLocalLightView? Local { get; init; }
+    /// <summary>ARC-WORLD-017: the light of a moved companion body where it stands now (null for any other command);
+    /// absent lights moved bodies by their T0 visual like the plan's.</summary>
+    public Func<AreaDrawCommand, AreaLitColors?>? Moving { get; init; }
 }
 
 public partial class TerrainCanvas
@@ -19,7 +22,10 @@ public partial class TerrainCanvas
     private IReadOnlySet<AreaObjectKey>? _areaHidden;
     // ARC-WORLD-016: bodies drawn where their live actor stands (companions), replacing their T0 command.
     private IReadOnlyList<AreaDrawCommand>? _areaMoving;
+    private IReadOnlySet<AreaObjectKey?> _areaMovingKeys = new HashSet<AreaObjectKey?>();
     private int _areaMovingStamp;
+    // ARC-WORLD-017: companions of this map standing on another one; their T0 body is not drawn.
+    private IReadOnlySet<AreaObjectKey>? _areaAbsent;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -115,9 +121,17 @@ public partial class TerrainCanvas
     {
         if (moving is null or { Count: 0 } && _areaMoving is null or { Count: 0 }) return;
         if (_areaMoving is { } old && moving is { } next && old.SequenceEqual(next)) return;
-        _areaMoving = moving; _areaMovingStamp++; _areaView = null; QueueRedraw();
+        _areaMoving = moving; _areaMovingKeys = (moving ?? []).Select(command => command.Identity).ToHashSet();
+        _areaMovingStamp++; _areaView = null; QueueRedraw();
     }
-    internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && _areaHidden?.Contains(key) == true;
+    /// <summary>ARC-WORLD-017: this map's companions that stand on another map, from the next submission (null = none).</summary>
+    public void SetAreaAbsent(IReadOnlySet<AreaObjectKey>? absent)
+    {
+        if (absent is null or { Count: 0 } && _areaAbsent is null or { Count: 0 }) return;
+        if (_areaAbsent is { } old && absent is { } next && old.SetEquals(next)) return;
+        _areaAbsent = absent; _areaView = null; QueueRedraw();
+    }
+    internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && (_areaHidden?.Contains(key) == true || _areaAbsent?.Contains(key) == true);
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
@@ -136,6 +150,12 @@ public partial class TerrainCanvas
     // colour (walls a two-end gradient), the actor its colour at the current placement.
     private (Color Left, Color Right, AreaLatticeBinding? Lattice) AreaItemLight(AreaDrawCommand command, bool isActor)
     {
+        // ARC-WORLD-017: a moved companion body is lit where it stands, by its own visual (it may come from another map).
+        if (!isActor && _areaAmbient?.Moving is { } moving && _areaMovingKeys.Contains(command.Identity) && moving(command) is { } lit)
+        {
+            static Color Lit(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
+            return (Lit(lit.Left), Lit(lit.Right), null);
+        }
         var ambient = AreaAmbientColor(command, isActor);
         if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null);
         static Color Of(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
@@ -293,7 +313,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; _areaMovingKeys = new HashSet<AreaObjectKey?>(); _areaAbsent = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

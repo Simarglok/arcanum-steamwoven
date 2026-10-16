@@ -96,6 +96,16 @@ public sealed class AreaLocalLighting
         if (command.Identity is null) throw new ArgumentException("A body command is required.", nameof(command));
         if (artChannel == AreaAmbientChannel.Unlit) return AreaLitColors.Neutral;
         if (!_visuals.TryGetValue(command.Visual, out var visual)) throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED");
+        return Body(command, visual, artChannel, pair, lit);
+    }
+
+    /// <summary>ARC-WORLD-017: the same rule for a body whose visual record comes from another map (a companion
+    /// standing here): the colour is taken at the command's cell on this map.</summary>
+    public AreaLitColors Body(AreaDrawCommand command, AreaVisualRecord visual, AreaAmbientChannel artChannel, AmbientPair pair, bool lit = true)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(visual);
+        if (command.Identity is null) throw new ArgumentException("A body command is required.", nameof(command));
+        if (artChannel == AreaAmbientChannel.Unlit) return AreaLitColors.Neutral;
         if (visual.RawArt >> 28 == 1) return Wall(command, visual, pair, lit);
         var color = lit ? Point(command.MapX, command.MapY, visual.ObjectOffsetX, visual.ObjectOffsetY, pair)
             : Ambient(TileChannel(command.MapX, command.MapY), pair);

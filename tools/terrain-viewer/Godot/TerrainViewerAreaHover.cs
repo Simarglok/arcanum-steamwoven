@@ -82,7 +82,8 @@ public partial class TerrainViewerApp
         if (_readyArea is not { } area) return null;
         if (_hoverIndex is null || !ReferenceEquals(_hoverIndexArea, area))
         {
-            _hoverIndex = new(area.Snapshot.Objects, area.Plan.Commands, _hoverNames?.Catalog);
+            // ARC-WORLD-017: a companion from another map is named and picked where it is drawn here.
+            _hoverIndex = new(area.Snapshot.Objects, area.Plan.Commands, _hoverNames?.Catalog, _companionTemplates.Select(t => t.Speaker.Row));
             _hoverIndexArea = area; _hoverStamp = null;
         }
         return _hoverIndex;
@@ -97,7 +98,9 @@ public partial class TerrainViewerApp
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
         // ARC-UI-004: an item the PC took is no longer in the world.
         // ARC-WORLD-016: a companion is picked where it is drawn now, never on its T0 cell.
-        return index.Pick(command => !AreaTakenByPc(command) && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
+        // ARC-WORLD-017: a companion standing on another map is not picked on its T0 cell here.
+        return index.Pick(command => !AreaTakenByPc(command) && _areaCompanions?.Absent.Contains(command.Identity!.Value) != true
+            && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
             && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None, AreaCompanionCommands());
     }
 
@@ -120,7 +123,7 @@ public partial class TerrainViewerApp
         var open = visible && WorldClickInputOpen && _areaTransitions?.Pending is null;
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
-            _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State);
+            _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions);
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -135,7 +138,7 @@ public partial class TerrainViewerApp
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         if (key is { } hit)
         {
-            if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit) is { } speaker)
+            if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit && SpeakerPresent(s)) is { } speaker)
                 return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
             if (_areaTransitions is not null && _areaTransitions.Triggers().Any(t => t.Trigger.Key == hit))
             {

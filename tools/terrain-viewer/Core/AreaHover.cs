@@ -56,7 +56,10 @@ public sealed class AreaHoverIndex
 
     /// <param name="objects">The map's object rows (<see cref="AreaSnapshot.Objects"/>).</param>
     /// <param name="commands">The map's plan commands in draw order (<see cref="AreaScenePlan.Commands"/>).</param>
-    public AreaHoverIndex(IEnumerable<AreaObjectRecord> objects, IReadOnlyList<AreaDrawCommand> commands, ObjectDescriptionCatalog? catalog)
+    /// <param name="visitors">ARC-WORLD-017: rows of objects from another map that may stand here (companions); they are
+    /// named and picked only where a moving command draws them, never from this map's plan.</param>
+    public AreaHoverIndex(IEnumerable<AreaObjectRecord> objects, IReadOnlyList<AreaDrawCommand> commands, ObjectDescriptionCatalog? catalog,
+        IEnumerable<AreaObjectRecord>? visitors = null)
     {
         ArgumentNullException.ThrowIfNull(objects);
         ArgumentNullException.ThrowIfNull(commands);
@@ -64,6 +67,7 @@ public sealed class AreaHoverIndex
         Catalog = catalog;
         // Plan order is draw order (the upright actor marker is inserted elsewhere), so the last hit is frontmost.
         Bodies = Array.AsReadOnly(commands.Where(command => command.Identity is { } key && _rows.TryGetValue(key, out var row) && !ClickThrough(row)).ToArray());
+        foreach (var row in visitors ?? []) _rows.TryAdd(row.Key, row);
     }
 
     public ObjectDescriptionCatalog? Catalog { get; }

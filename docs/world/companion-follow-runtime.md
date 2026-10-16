@@ -6,11 +6,13 @@ ARC-RES-024). After Virgil joins the [session party](party-runtime.md) (ARC-WORL
 `crash-site-area` viewer: Godot-free follow rules in `Arcanum.Simulation.Party`, a second moving actor and the live
 actor overlay in Terrain Viewer Core, and the viewer wiring (his dialog now runs through the session party port). It
 covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social-003) and the waiting part of
-[FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005) in the viewer.
+[FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005) in the viewer. ARC-WORLD-017 (slice 4) carries him
+through the cave entrance and exit with the PC ([map change](#map-change-arc-world-017)), the bounded
+[FR-WORLD-010](../requirements/world.md#fr-world-010) A→B→A case for one follower.
 
 **NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), no running speed (the source's
-run-near goal moves at the diagnostic walking speed), no carrying across a map change (in the cave he is not there;
-he waits on the exterior where he stood, ARC-WORLD-017), no orders, loyalty, wait timer, combat or turn-based cost, no
+run-near goal moves at the diagnostic walking speed), only the two cave endpoints carry him (no other map, no
+follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, loyalty, wait timer, combat or turn-based cost, no
 refusal line text, and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
 the session hero. Distances and order are source claims read in CE at `a7ff41b300ef712f0e7d088183a3d08957110cdd`;
 original executable parity is **NOT_VERIFIED**.
@@ -81,6 +83,40 @@ placement it is written only at a boundary: F7 (a refused write refuses the save
 rebuilt from the session whenever the PC's grid session is (spawn, Reset scene, Reload, a transfer, F8); a placement
 the chart cannot stand is skipped and reported, not guessed.
 
+## Map change (ARC-WORLD-017)
+
+Source claims C15, C16 and V4 of the [companion research](../research/companion-follow-evidence.md#findings): a
+teleport carries every non-waiting follower, at any distance from the PC, onto the **same** arrival cell; waiting
+followers stay on the source map with their leader kept. Both cave scripts teleport with flags 0, so a following
+Virgil arrives on (2087,2018) in the cave and on (92913,82598) back outside. On the shared cell the next follow decision
+steps him to an Open neighbour (`Separate`, C10). Parity NOT_VERIFIED.
+
+**Where a companion is** (project policy, map-local changes, no snapshot schema change): on its home map (the map of
+its T0 record, the exterior for Virgil) unless the home map's entity change `npc.map` names another runtime map; there
+its cell is that map's `npc.cell` (absent on the home map = its T0 cell, required on any other map).
+`AreaCompanionPlacement.Where` reads it; an unreadable value (an `npc.map` naming the home map, a missing or unpackable
+cell) is reported and the companion is skipped, never guessed. One identity stands on exactly one map.
+
+**The transfer** is one atomic session step: `AreaCompanionGroup.Carry(session, destination, arrival)` lists the
+changes (for each following companion: clear its cell on the map it leaves, write the arrival cell on the destination
+with its own facing, set `npc.map` to the destination or clear it when the destination is home; every other companion
+records where it stands), and `AreaTransitionCoordinator.Process(facing, changes)` applies them with the PC's placement
+in one `GameSessionOwner.ApplyChanges` ([session runtime](game-session-runtime.md#api)): one revision, or nothing.
+
+**On each map** the group is rebuilt from the session (`AreaCompanionGroup.Create(templates, …)`):
+
+- `AreaCompanionTemplate` holds a roster companion's home data: its speaker row, its T0 body commands and their
+  visuals, its home T0 chart cell. Body commands are shifted from that cell to where the actor stands; the charts share
+  one projection, so the same shift stands a visitor on the cave chart. The cave's frame repository gets the
+  companions' T0 frames once at load (`AreaCompanionTemplate.Frames`).
+- A companion standing on another map is **absent** from its home map: its T0 body is not drawn, picked, named or
+  talked to there, and its T0 record does not block (it is in the overlay's moved records).
+- A **visitor** walks, follows, waits and blocks like at home. Its body is lit where it stands with its own visual
+  (`AreaCompanionGroup.Light`: the CE object colour at its current cell over the map's tile classes and stationary
+  lights); moved companion bodies on the exterior are lit at their current cell the same way. The hover index names and
+  picks it where it is drawn, and a click talks to it through the exterior conversation host (its dialog state stays
+  on the exterior map).
+
 ## Viewer binding
 
 - `AreaConversationHost(…, party: true)`: a roster speaker talks with `SessionDialogPartyPort` and his measured facts
@@ -92,8 +128,11 @@ the chart cannot stand is skipped and reported, not guessed.
 - The PC's click route is planned around the companions as they stand at planning time. When one then steps into it
   and the step is denied by the live overlay (`DESTINATION_ACTOR_OCCUPIED`, `SHOULDER_ACTOR_OCCUPIED`), the same goal
   is planned again, at most 8 times per goal.
-- HUD: `companion script 1324 <standing> at (x,y) <phase> follow=<action> route=<status> jumps=<n>`; the log prints
-  `ARC-WORLD-016 companion …` step lines.
+- HUD: `companion script 1324 <standing> at (x,y) [visiting] <phase> follow=<action> route=<status> jumps=<n>` and
+  `n companion(s) away on another map`; the log prints `ARC-WORLD-016 companion …` step lines and `ARC-WORLD-017
+  companions carried {…}` at each transfer.
+- ARC-WORLD-017: the transfer carries the following companions (above). In the cave a visiting companion is the only
+  dialog NPC; on the exterior an absent one is not a speaker.
 
 ## Tests
 
@@ -107,6 +146,18 @@ the chart cannot stand is skipped and reported, not guessed.
   `ARC_AREA_*` roles): on the authenticated exterior the viewer host joins Virgil through his first talk, node 385
   then opens, and from his T0 chart cell (31,34) he follows a PC at (42,33) to (40,34) in two plans; the cell survives
   a save and load. Development Mac, 2026-10-16.
+- ARC-WORLD-017, `AreaCompanionTests` (synthetic, the fixture standing for both maps): a follower carried to the
+  arrival cell and back in one revision each, absent at home meanwhile, steps off the shared cell, drawn and lit there,
+  survives a save and load; a waiting one stays; unreadable or missing away placements are reported; template frames.
+  `tests/Arcanum.Session.Tests/SessionOwnerTests.cs`: `ApplyChanges` atomicity, refusals and the end-state budget.
+- `tests/Arcanum.TerrainViewer.Tests/VirgilCaveOriginalTests.cs` (opt-in `RealData`, `ARC_AREA_ORIGINAL=1`, the
+  `ARC_AREA_*` roles and `ARC_CAVE_MOBILE`): a following Virgil goes from his T0 cell (31,34) through the entrance onto
+  (2087,2018), steps off to an Open neighbour ((2086,2018) in the native smoke), is absent from the exterior meanwhile, and comes back onto (92913,82598)
+  through the exit; nothing of him stays in the cave map's changes. Development Mac, 2026-10-16.
+- Native smoke `ARC-WORLD-017 native-smoke cave PASS` (after the follow stage, through the production use click):
+  Virgil follows into the cave, steps off the arrival cell, is drawn, picked and talked to there; waiting in the cave he
+  stays while the PC leaves and the exterior has no T0 Virgil; following again he comes back out and steps off next to
+  the PC. `ARC_AREA_CAVE_FOLLOW_CAPTURE=<png>` saves the cave frame.
 - Native smoke (`--native-smoke --mode crash-site-area` with the original roles): `ARC-WORLD-016 native-smoke follow
   PASS` after the quick-save stage: Virgil joins through his dialog in the running viewer, follows the PC to within 2,
   is drawn on his new cell only, his cell is in the session, and a waiting Virgil stays while the PC is farther than 4.
@@ -117,9 +168,12 @@ the chart cannot stand is skipped and reported, not guessed.
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests --no-build --filter "FullyQualifiedName~AreaCompanion"
 ARC_AREA_ORIGINAL=1 ARC_AREA_MODULE=… ARC_AREA_RESOURCE1=… ARC_AREA_RESOURCE2=… ARC_AREA_MOBILE=… ARC_AREA_PROTOTYPES=… \
   ARC_AREA_EFFECTS=… ARC_AREA_PATCH=… "$DOTNET" test tests/Arcanum.TerrainViewer.Tests --no-build --filter "FullyQualifiedName~VirgilFollow"
+ARC_AREA_ORIGINAL=1 ARC_CAVE_MOBILE=… ARC_AREA_MODULE=… (same roles) \
+  "$DOTNET" test tests/Arcanum.TerrainViewer.Tests --no-build --filter "FullyQualifiedName~VirgilCave"
 ```
 
 ## Next
 
-ARC-WORLD-017: carry the non-waiting followers to the arrival cell of a map change and back (slice 4), then orders,
-loyalty and the wait timer (slice 5), a walk cycle for NPC bodies, and the session hero as the PC side of the check.
+Orders, loyalty and the wait timer (slice 5), a walk cycle for NPC bodies, the session hero as the PC side of the
+check, and a general map-change carry once more maps load (followers of followers, unconscious followers, carried
+inventory).
