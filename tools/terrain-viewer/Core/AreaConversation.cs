@@ -4,6 +4,7 @@ using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.NpcDialog;
+using Arcanum.Scripting.Scr;
 using Arcanum.Session;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -30,6 +31,16 @@ public enum AreaConversationStartStatus
     EntryError,
     DialogResourceMismatch,
     DialogUnreadable,
+    /// <summary>ARC-SCRIPT-009: the dialog script ran default (the original shows the generic greeting).</summary>
+    GenericGreeting,
+    /// <summary>ARC-SCRIPT-009: the dialog script ended with skip default and started no conversation.</summary>
+    ScriptEnded,
+    /// <summary>ARC-SCRIPT-009: the session refused the script's effects.</summary>
+    ScriptEffectsRejected,
+    /// <summary>ARC-SCRIPT-009: the script or dialog archive differs from the one the area was loaded and first talked with.</summary>
+    SourceChanged,
+    /// <summary>ARC-SCRIPT-009: a resumption found no script in the slot (it removed itself); nothing ran.</summary>
+    ScriptRemoved,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -38,10 +49,10 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
     SessionDialogPartyPort? Party = null);
 
 /// <summary>
-/// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR entry (ARC-SCRIPT-002 resolver) →
-/// authenticated DLG member → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
+/// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR dispatcher (ARC-SCRIPT-009) →
+/// DLG member of the dialog action → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
 /// <see cref="GameSessionOwner"/> (ARC-SCRIPT-006), so they persist across talks, map changes and snapshots.
-/// The host does not own the session. Synchronous, single-threaded; Begin re-authenticates the selected archives every time.
+/// The host does not own the session. Synchronous, single-threaded; Begin and Resume authenticate and read the selected archives every time.
 /// </summary>
 public sealed class AreaConversationHost
 {
@@ -50,9 +61,6 @@ public sealed class AreaConversationHost
     private readonly string _scriptArchive;
     private readonly string _dialogArchive;
     private (long Length, string Sha256)? _dialogIdentity;
-    private readonly NpcDialogWorldId _world = new(Guid.NewGuid());
-    private readonly NpcDialogMapId _map;
-    private readonly NpcDialogPcId _pc;
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
 
@@ -70,13 +78,12 @@ public sealed class AreaConversationHost
         _dialogArchive = dialogArchive ?? throw new ArgumentNullException(nameof(dialogArchive));
         Profile = profile ?? AreaConversationProfile.Diagnostic;
         _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
-        _map = new NpcDialogMapId(snapshot.RuntimeMap, snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256);
-        _pc = new NpcDialogPcId(_world, _map, Guid.NewGuid());
         Speakers = FindSpeakers(snapshot);
         _party = party;
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => AreaCompanionRoster.For(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
+        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, scriptArchive);
     }
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
@@ -147,64 +154,66 @@ public sealed class AreaConversationHost
     public AreaConversationStart Begin(AreaSpeaker? speaker, CancellationToken token = default)
     {
         if (speaker is null) return new(AreaConversationStartStatus.NoSpeaker, null, null, "no dialog NPC within reach");
-        var row = speaker.Row;
-        // The area's second resource archive is the script archive; Prepare re-authenticates both by full hash.
+        return Run(speaker, 0, token);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-009: continues the speaker's dialog script after a conversation ended with "return to script"
+    /// (<see cref="DialogEndKind.ReturnToScript"/>): line N for a response of −N, the line after the dialog action for
+    /// 0. The script may start another conversation, which is returned like <see cref="Begin"/>.
+    /// </summary>
+    public AreaConversationStart Resume(AreaSpeaker speaker, DialogScriptLine line, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(speaker);
+        return Run(speaker, line.Value, token);
+    }
+
+    /// <summary>The last dialog script run of <see cref="Begin"/> or <see cref="Resume"/> (outcome, stop, trace).</summary>
+    public ScrRunResult? LastRun { get; private set; }
+
+    /// <summary>The dispatcher's host over this area and session.</summary>
+    public AreaScriptHost Scripts { get; }
+
+    // Talk request and resumption run SAP_DIALOG through the SCR dispatcher (ARC-SCRIPT-009): run default is the
+    // original's generic greeting (not modelled here), a dialog action starts the DLG of the run's script.
+    private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        // As before ARC-SCRIPT-009: the script archive must be the area's second resource input, and the dialog
+        // archive the file first seen here, both by full SHA-256, on every talk and resumption.
         var scriptIdentity = _snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Resource2);
-        var prototypeIdentity = _snapshot.Inputs.SingleOrDefault(input => input.Key == new AreaInputKey(AreaSourceRole.Prototype, row.PrototypeNumber));
-        if (scriptIdentity is null || prototypeIdentity is null)
-            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker, "area snapshot lacks the script or prototype input");
-        _dialogIdentity ??= Fingerprint(_dialogArchive);
-        var dialogIdentity = _dialogIdentity.Value;
-        var scriptId = Guid.NewGuid(); var dialogId = Guid.NewGuid();
-        var bindings = _snapshot.Inputs.Select(input => new NpcDialogSourceBinding(NpcDialogEntryResolver.AreaRole(input.Key), Guid.NewGuid(), input.Length, input.Sha256)).ToList();
-        bindings.Add(new("Script", scriptId, scriptIdentity.Length, scriptIdentity.Sha256));
-        bindings.Add(new("Dialog", dialogId, dialogIdentity.Length, dialogIdentity.Sha256));
-        var version = new NpcDialogSourceVersion(Guid.NewGuid(), NpcDialogResourcePolicy.ExplicitSelectedArchives, bindings);
-        var npc = new NpcDialogNpcId(_world, _map, row.Key, row.RawSha256, row.SemanticSha256);
-        var prototype = new NpcDialogPrototypeId(row.PrototypeNumber, row.PrototypeOwnSha256, prototypeIdentity.Sha256);
-        var invocation = new NpcDialogInvocation(_world, _map, npc, prototype, _pc, NpcDialogEvent.Dialog, new(0), version,
-            State.StateVersion, State.AttachmentVersion);
+        if (scriptIdentity is null || Fingerprint(_scriptArchive) != (scriptIdentity.Length, scriptIdentity.Sha256))
+            return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the script archive is not the area's resource input");
+        var dialogIdentity = Fingerprint(_dialogArchive);
+        _dialogIdentity ??= dialogIdentity;
+        if (dialogIdentity != _dialogIdentity) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the dialog archive changed");
+        token.ThrowIfCancellationRequested();
+        State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
+        var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
+            new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
+        LastRun = result;
+        if (result.Outcome == ScrOutcome.Refused)
+            return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
+                $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
+        if (!Scripts.Apply(result.Effects))
+            return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
+        if (result.Effects.Dialog is not { } dialog)
+            return line != 0 && result.Stop == ScrStop.NoScript
+                ? new(AreaConversationStartStatus.ScriptRemoved, null, speaker, "the dialog slot holds no script: nothing to resume")
+                : result.Outcome == ScrOutcome.RunDefault
+                ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
+                : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
+        token.ThrowIfCancellationRequested();
 
-        NpcDialogEntryPlan plan;
-        using (var scripts = File.OpenRead(_scriptArchive))
-        using (var dialogs = File.OpenRead(_dialogArchive))
-        {
-            var policy = new NpcDialogResourcePolicy(NpcDialogResourcePolicy.ExplicitSelectedArchives, version, scriptId, dialogId,
-                [new(scriptId, scripts, scriptIdentity.Length, scriptIdentity.Sha256), new(dialogId, dialogs, dialogIdentity.Length, dialogIdentity.Sha256)]);
-            var preparation = NpcDialogEntryResolver.Prepare(_snapshot, invocation, policy, new(), token);
-            if (preparation.Admission != NpcDialogAdmission.Admitted || preparation.Plan is null)
-                return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
-                    $"{preparation.Admission} {preparation.Error?.Code ?? preparation.Frontier?.Code}".Trim());
-            plan = preparation.Plan;
-        }
+        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_dialogArchive, dialog.Script, dialog.Node);
+        if (dialogStatus != AreaConversationStartStatus.Started) return new(dialogStatus, null, speaker, dialogDetail);
 
-        State.Bind(speaker.Index, plan.Attachment);
-        var resolution = NpcDialogEntryResolver.Resolve(plan, new EntryQueries(State, speaker.Index, invocation), new(), token);
-        if (resolution.Kind == NpcDialogResolutionKind.Frontier)
-            return new(AreaConversationStartStatus.EntryFrontier, null, speaker, $"{resolution.Frontier!.Stage} {resolution.Frontier.Code}");
-        if (resolution.Kind != NpcDialogResolutionKind.Resolved || resolution.Entry is null)
-            return new(AreaConversationStartStatus.EntryError, null, speaker, $"{resolution.Error?.Stage} {resolution.Error?.Code}");
-        var entry = resolution.Entry;
-
-        DlgDocument document;
-        using (var archive = DatArchive.Open(_dialogArchive, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 }))
-        {
-            var member = archive.Entries.SingleOrDefault(candidate => candidate.Ordinal == entry.DialogResource.Ordinal);
-            if (member is null)
-                return new(AreaConversationStartStatus.DialogResourceMismatch, null, speaker, "dialog member ordinal not found");
-            var bytes = archive.ReadEntry(member);
-            if (Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant() != entry.DialogResource.PayloadSha256)
-                return new(AreaConversationStartStatus.DialogResourceMismatch, null, speaker, "dialog payload differs from the resolved entry");
-            try { document = DlgReader.Read(bytes); }
-            catch (DlgException exception) { return new(AreaConversationStartStatus.DialogUnreadable, null, speaker, exception.GetType().Name); }
-        }
-
-        var participants = new DialogParticipants(new DialogId(speaker.ScriptId), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
+        var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
-        var conversation = DialogConversation.Start(document,
-            new DialogConversationRequest(new DialogNodeId(entry.DlgNode.Value), participants, new DialogScriptLine(entry.ScrLine.Value), Profile.Pc, Profile.Names),
+        var conversation = DialogConversation.Start(document!,
+            new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity)));
-        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {speaker.ScriptId} SCR line {entry.ScrLine.Value} -> DLG node {entry.DlgNode.Value}", party);
+        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party);
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
@@ -225,17 +234,6 @@ public sealed class AreaConversationHost
     {
         using var stream = File.OpenRead(path);
         return (stream.Length, Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant());
-    }
-
-    private sealed class EntryQueries(AreaConversationState state, int speaker, NpcDialogInvocation invocation) : INpcDialogEntryQueries
-    {
-        public NpcDialogVersionReply ReadVersions(NpcDialogQueryContext context) =>
-            new(context, NpcDialogVersionStatus.Known, invocation.SourceVersion, state.StateVersion, state.AttachmentVersion);
-        public NpcDialogQueryReply Following(NpcDialogQueryContext context, NpcDialogNpcId npc, NpcDialogPcId pc) =>
-            new(context, state.Follows(speaker) ? NpcDialogQueryStatus.KnownTrue : NpcDialogQueryStatus.KnownFalse);
-        public NpcDialogQueryReply Jilted(NpcDialogQueryContext context, NpcDialogNpcId npc) => new(context, NpcDialogQueryStatus.KnownFalse);
-        public NpcDialogQueryReply LocalFlag(NpcDialogQueryContext context, NpcDialogAttachmentId attachment, NpcDialogLocalFlag flag) =>
-            new(context, state.LocalFlag(speaker, flag.Value) ? NpcDialogQueryStatus.KnownTrue : NpcDialogQueryStatus.KnownFalse);
     }
 }
 
@@ -285,7 +283,10 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
             var lf = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
             var reaction = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, ReactionProperty));
             var follow = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, FollowProperty));
-            if (lf is < 0 or > uint.MaxValue || reaction is < int.MinValue or > int.MaxValue || follow is not (null or 1))
+            var counters = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.CountersProperty));
+            var script = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.ScriptProperty));
+            if (lf is < 0 or > uint.MaxValue || reaction is < int.MinValue or > int.MaxValue || follow is not (null or 1)
+                || counters is < 0 or > uint.MaxValue || script is < int.MinValue or > int.MaxValue)
                 throw new ArgumentException("AREA_SESSION_DIALOG_STATE_INVALID", nameof(session));
         }
     }
@@ -309,7 +310,7 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public int Reaction(int speaker) => Read(speaker, ReactionProperty) is { } value ? checked((int)value) : _initialReaction;
 
     /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
-    internal void Bind(int speaker, NpcDialogAttachmentId attachment) => _baseline[speaker] = attachment.Flags;
+    internal void Bind(int speaker, uint loadedFlags) => _baseline[speaker] = loadedFlags;
 
     private uint LocalFlags(int speaker) => Read(speaker, LocalFlagsProperty) is { } value ? checked((uint)value) : _baseline.GetValueOrDefault(speaker);
 

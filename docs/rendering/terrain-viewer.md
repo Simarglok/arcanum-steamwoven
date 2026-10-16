@@ -135,7 +135,9 @@ attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (
 diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
-closes the dialog. The HUD says whether a dialog NPC is in reach and what the dialogs left in
+closes the dialog. Since ARC-SCRIPT-009 the talk request and the script's continuation after a
+"return to script" end run through the [SCR dispatcher](../scripting/scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3):
+a further dialog action opens the next conversation, anything else is a HUD notice. The HUD says whether a dialog NPC is in reach and what the dialogs left in
 the game session (quests, rumors, followers; ARC-SCRIPT-006). Rules, state profile and
 limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
 self-test covers a synthetic panel, an off-NPC click, keyboard events and polled levels, and the

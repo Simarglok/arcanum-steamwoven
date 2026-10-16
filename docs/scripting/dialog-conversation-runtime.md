@@ -56,8 +56,10 @@ instead of the world port; `IN` then needs only one of the two.
 
 Source references are the pinned CE lineage below; implementation is independent.
 
-1. **Entry** — the caller supplies the checked NPC node (in the viewer: the
-   [entry resolver](npc-dialog-entry-runtime.md)'s computed `DlgNode` and `ScrLine`).
+1. **Entry** — the caller supplies the checked NPC node (in the viewer: the dialog
+   action the [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)
+   reached, with its line; ARC-SCRIPT-009 replaced the [entry resolver](npc-dialog-entry-runtime.md)
+   there). A "return to script" end resumes the dialog script through the dispatcher.
 2. **Static step plan before any effect** — NPC action grammar, NPC text, the whole reply
    group (gender selector, condition grammar, text, markers, response targets) are checked
    before the NPC action runs. Unsupported → frontier, malformed → failure, zero effects.
@@ -144,12 +146,13 @@ cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard 
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
 closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) re-authenticates the
-selected archives on every talk (`arcanum2.dat` as Script, `arcanum3.dat` as Dialog; the original
+selected archives on every talk and resumption (`arcanum2.dat` as Script, checked against the area's second
+resource input, and `arcanum3.dat` as Dialog, checked against its first fingerprint; the original
 game opens Virgil's script from `Arcanum4.dat`, which shadows this copy, see
-[content precedence](../research/content-precedence.md#crash-site-impact)), resolves
-the entry through the SCR resolver (Following from the session, Jilted false, LF from the
-session's attachment flags seeded from the loaded attachment), reads the resolved DLG member
-by ordinal and checks its payload SHA-256 before parsing.
+[content precedence](../research/content-precedence.md#crash-site-impact)), runs SAP_DIALOG through the
+[SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) (ARC-SCRIPT-009: Following from
+the session, Jilted false, the dialog slot from the session's keys over the loaded attachment), and reads the
+one DLG member whose number is the script's, refusing a node that is not an NPC record.
 
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
@@ -171,7 +174,8 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, reaction outside `int`, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
 
-The SCR entry resolver reads Following and LF from the same session, so Virgil's
+The SCR dispatcher's viewer host (ARC-SCRIPT-009) reads Following and LF from the same session, and also
+stores the dialog slot's counters and number as `dialog.counters` and `dialog.script`, so Virgil's
 follow consent picks his follower entry after a round trip to the cave or a restore. The
 HUD status shows the session story (quests, rumors, followers). In the synthetic
 self-test without area lighting the session clock is an invented synthetic profile.

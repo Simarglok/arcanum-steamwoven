@@ -15,6 +15,8 @@ internal sealed class ScrInterpreter
     private readonly ScrSlot _slot;
     private readonly uint _ownFileFlags;
     private readonly IScrHost _host;
+    private readonly ScrDispatcher.ScrRoles _roles;
+    private ScrDialogStart? _dialog;
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -24,15 +26,16 @@ internal sealed class ScrInterpreter
     // The original's "no change" sentinel for remove/change this script.
     private int _changedNumber = -1;
 
-    internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, IScrHost host, ScrRunOptions options)
+    internal ScrInterpreter(ScrAdmittedProgram admitted, int number, ScrSlot slot, uint ownFileFlags, ScrDispatcher.ScrRoles roles, IScrHost host, ScrRunOptions options)
     {
-        _admitted = admitted; _number = number; _slot = slot; _ownFileFlags = ownFileFlags; _host = host; _options = options;
+        _admitted = admitted; _number = number; _slot = slot; _ownFileFlags = ownFileFlags; _roles = roles; _host = host; _options = options;
         _localFlags = slot.LocalFlags; _counters = slot.Counters;
     }
 
-    private sealed class IndexStop(int line) : Exception { internal int Line { get; } = line; }
+    private class IndexStop(int line) : Exception { internal int Line { get; } = line; }
+    private sealed class MissingObjectStop(int line) : IndexStop(line);
 
-    private enum Step { Next, Jump, ReturnSkip, ReturnRun }
+    private enum Step { Next, Jump, ReturnSkip, ReturnRun, Dialog }
 
     internal ScrDispatcher.Run Run(int line)
     {
@@ -61,23 +64,24 @@ internal sealed class ScrInterpreter
                 }
                 if (step == Step.Jump) { _trace.Add(new(line, row.Condition.Type, held, action.Type, target)); line = target; continue; }
                 _trace.Add(new(line, row.Condition.Type, held, action.Type, null));
-                stop = step == Step.ReturnRun ? ScrStop.ReturnRunDefault : ScrStop.ReturnSkipDefault; stopLine = line;
+                stop = step switch { Step.ReturnRun => ScrStop.ReturnRunDefault, Step.Dialog => ScrStop.Dialog, _ => ScrStop.ReturnSkipDefault }; stopLine = line;
                 break;
             }
         }
+        catch (MissingObjectStop s) { stop = ScrStop.MissingObject; stopLine = s.Line; }
         catch (IndexStop s) { stop = ScrStop.IndexOutOfRange; stopLine = s.Line; }
 
         var number = _slot.Script;
         // A return, or running past the last line, clears an auto-removing script (E8); a budget, a bad line or a
         // project bound does not (E9).
-        if (stop is ScrStop.ReturnSkipDefault or ScrStop.ReturnRunDefault or ScrStop.FellOffEnd && (_ownFileFlags & ScrCatalogue.FileFlag.AutoRemoving) != 0) number = 0;
+        if (stop is ScrStop.ReturnSkipDefault or ScrStop.ReturnRunDefault or ScrStop.FellOffEnd or ScrStop.Dialog && (_ownFileFlags & ScrCatalogue.FileFlag.AutoRemoving) != 0) number = 0;
         // Remove or change this script takes effect after the run, over the auto-removal (E10).
         if (_changedNumber != -1) number = _changedNumber;
         var outcome = stop == ScrStop.ReturnRunDefault ? ScrOutcome.RunDefault : ScrOutcome.SkipDefault;
         var flags = _flags.Where(p => p.Value != _host.GlobalFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
-        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story);
+        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog);
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -86,6 +90,9 @@ internal sealed class ScrInterpreter
         ScrCatalogue.Condition.Equal => Get(c, 0) == Get(c, 1),
         ScrCatalogue.Condition.LessOrEqual => Get(c, 0) <= Get(c, 1),
         ScrCatalogue.Condition.GlobalFlag => Flag(GlobalFlag(Get(c, 0), line)),
+        // Following: the first object's leader is the second object (both single objects in the set).
+        ScrCatalogue.Condition.FollowingPc => _host.Leader(Object(c, 0, line)) == Object(c, 1, line),
+        ScrCatalogue.Condition.Jilted => _host.IsJilted(Object(c, 0, line)),
         _ => throw new InvalidOperationException("Condition outside the interpreter's set."),
     };
 
@@ -97,6 +104,13 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.ReturnSkipDefault: return (Step.ReturnSkip, 0);
             case ScrCatalogue.Action.ReturnRunDefault: return (Step.ReturnRun, 0);
             case ScrCatalogue.Action.Goto: return (Step.Jump, Get(a, 0));
+            case ScrCatalogue.Action.Dialog:
+            {
+                // The conversation starts only for a PC triggerer; the action ends the run with skip default either way.
+                var node = Get(a, 0);
+                if (_roles.Triggerer is { } pc && _host.IsPc(pc)) _dialog = new(pc, _roles.Attachee, _number, line, node);
+                return (Step.Dialog, 0);
+            }
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
@@ -171,6 +185,15 @@ internal sealed class ScrInterpreter
         _flags[index] = ((bits >> bit) & 1) != 0;
         for (var j = bit + 1; j < 32; j++) if (((bits >> j) & 1) != 0) _flags[word + j] = true;
     }
+
+    private ScrObjectRef Object(ScrClause c, int slot, int line) => (ScrFocusKind)c.Kind(slot) switch
+    {
+        ScrFocusKind.Triggerer => _roles.Triggerer,
+        ScrFocusKind.Attachee => _roles.Attachee,
+        ScrFocusKind.ExtraObject => _roles.Extra,
+        ScrFocusKind.Player => _host.Player(),
+        _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
+    } ?? throw new MissingObjectStop(line);
 
     private bool Flag(int index) => _flags.TryGetValue(index, out var value) ? value : _host.GlobalFlag(index);
 

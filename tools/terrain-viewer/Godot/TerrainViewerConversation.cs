@@ -1,4 +1,5 @@
 using Arcanum.Data;
+using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
@@ -33,7 +34,8 @@ public partial class TerrainViewerApp
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
-            _conversationPanel.CloseRequested += EndConversation;
+            // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
+            _conversationPanel.CloseRequested += () => EndConversation(resume: true);
         }
     }
 
@@ -120,14 +122,25 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
-        _conversationParty = start.Party;
-        var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
-        _conversationPanel.Open(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+        OpenConversation(speaker, start);
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
         RefreshReadyStatus();
     }
 
-    private void EndConversation()
+    private void OpenConversation(AreaSpeaker speaker, AreaConversationStart start)
+    {
+        _conversationParty = start.Party;
+        _conversationSpeaker = speaker;
+        var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
+        _conversationPanel!.Open(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
+    }
+
+    // ARC-SCRIPT-009: the speaker of the open conversation, whose dialog script resumes when the DLG returns to it.
+    private AreaSpeaker? _conversationSpeaker;
+
+    private void EndConversation() => EndConversation(resume: false);
+
+    private void EndConversation(bool resume)
     {
         if (_conversationPanel is null || !_conversationPanel.IsOpen) return;
         var conversation = _conversationPanel.Conversation;
@@ -137,6 +150,21 @@ public partial class TerrainViewerApp
         if (_conversationParty?.LastRefusal is { } refused) _conversationNotice = $"follow refused: {refused}";
         _conversationParty = null;
         if (_areaSession is { } party) _areaCompanions?.Refresh(party);
+        // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
+        // dialog action opens the next conversation, anything else is a notice.
+        var speaker = _conversationSpeaker; _conversationSpeaker = null;
+        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && _conversationHost is not null)
+        {
+            AreaConversationStart resumed;
+            try { resumed = _conversationHost.Resume(speaker, line); }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or DatException)
+            {
+                resumed = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
+            }
+            GD.Print($"ARC-SCRIPT-009 script resumed line={line.Value} status={resumed.Status} detail={resumed.Detail}");
+            if (resumed.Status == AreaConversationStartStatus.Started) { OpenConversation(speaker, resumed); RefreshReadyStatus(); return; }
+            _conversationNotice = $"script continued: {resumed.Status}: {resumed.Detail}";
+        }
         QuarantineWorld(); RefreshReadyStatus();
     }
 

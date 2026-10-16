@@ -85,6 +85,14 @@ public interface IScrHost
     ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee);
     /// <summary>A trap object (destroyed instead of written back when its script becomes 0, E3).</summary>
     bool IsTrapObject(ScrObjectRef attachee);
+    /// <summary>The player character the player focus names, or null when there is none.</summary>
+    ScrObjectRef? Player();
+    /// <summary>The critter's leader, or null when it follows no one.</summary>
+    ScrObjectRef? Leader(ScrObjectRef critter);
+    /// <summary>An NPC with the jilted flag; false for anything that is not an NPC.</summary>
+    bool IsJilted(ScrObjectRef critter);
+    /// <summary>A player character (the dialog action starts a conversation only for one).</summary>
+    bool IsPc(ScrObjectRef critter);
 }
 
 /// <summary>What the caller does after the event: its normal behaviour, not, or nothing ran because the script is
@@ -122,6 +130,12 @@ public enum ScrStop
     LineOutOfRange,
     /// <summary>The executed-line budget ran out (skip default, no auto-removal, E9).</summary>
     Budget,
+    /// <summary>A dialog action ended the run (skip default; auto-removal applies). The conversation to start, if the
+    /// triggerer is a PC, is in <see cref="ScrEffects.Dialog"/>.</summary>
+    Dialog,
+    /// <summary>An object operand names a role the event does not have (no triggerer, attachee, extra or player); the
+    /// original would pass a null handle (both fixed), the run stops with skip default.</summary>
+    MissingObject,
     /// <summary>A computed global flag number outside 0..3199, which the original would access outside its flag store
     /// (both fixed); the run stops with skip default.</summary>
     IndexOutOfRange,
@@ -134,6 +148,11 @@ public enum ScrStop
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
 public sealed record ScrWriteback(ScrSource Source, ScrObjectRef? Attachee, int Point, ScrSlot Slot);
 
+/// <summary>A conversation for the caller to start after it applied the writeback (the original's dialog action stores
+/// the slot before its start callback, 0x4472F1): the DLG of <paramref name="Script"/> at <paramref name="Node"/>, between the PC
+/// triggerer and the attachee; a DLG end of 0 resumes the same dialog script at <paramref name="Line"/> + 1.</summary>
+public sealed record ScrDialogStart(ScrObjectRef Pc, ScrObjectRef? Npc, int Script, int Line, int Node);
+
 /// <summary>The final value of a global flag the run changed.</summary>
 public readonly record struct ScrFlagWrite(int Index, bool Value);
 
@@ -143,9 +162,9 @@ public readonly record struct ScrFlagWrite(int Index, bool Value);
 /// </summary>
 public sealed class ScrEffects
 {
-    internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState)
+    internal ScrEffects(ScrWriteback? writeback, ScrObjectRef? destroyTrapObject, IReadOnlyList<ScrFlagWrite> globalFlags, int? storyState, ScrDialogStart? dialog = null)
     {
-        Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState;
+        Writeback = writeback; DestroyTrapObject = destroyTrapObject; GlobalFlags = globalFlags; StoryState = storyState; Dialog = dialog;
     }
 
     public static ScrEffects None { get; } = new(null, null, Array.Empty<ScrFlagWrite>(), null);
@@ -153,7 +172,9 @@ public sealed class ScrEffects
     public ScrObjectRef? DestroyTrapObject { get; }
     public IReadOnlyList<ScrFlagWrite> GlobalFlags { get; }
     public int? StoryState { get; }
-    public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null;
+    /// <summary>The conversation to start, applied after everything else.</summary>
+    public ScrDialogStart? Dialog { get; }
+    public bool IsEmpty => Writeback is null && DestroyTrapObject is null && GlobalFlags.Count == 0 && StoryState is null && Dialog is null;
 }
 
 /// <summary>One executed line: the condition, whether it held, the action of the branch taken and where the run went
@@ -179,14 +200,15 @@ public sealed class ScrRunResult
     public ScrEffects Effects { get; }
 }
 
-/// <summary>How a dispatch runs: the rule mode's script switches, the admitted set and the executed-line budget.</summary>
+/// <summary>How a dispatch runs: the rule mode's script switches, the admitted set (default <see cref="ScrAdmissionSet.S3"/>,
+/// admitted for the lines reachable from the event's line) and the executed-line budget.</summary>
 public sealed record ScrRunOptions
 {
     /// <summary>The original stops a run after 1,000 executed lines.</summary>
     public const int OriginalLineBudget = 1000;
 
     public ScrRuleProfile Rules { get; init; } = ScrRuleProfile.Steamwoven;
-    public ScrAdmissionSet Admission { get; init; } = ScrAdmissionSet.S2;
+    public ScrAdmissionSet Admission { get; init; } = ScrAdmissionSet.S3;
     /// <summary>1..1000; lower values are for tests and tools.</summary>
     public int MaxExecutedLines { get; init; } = OriginalLineBudget;
 
@@ -195,6 +217,6 @@ public sealed record ScrRunOptions
         ArgumentNullException.ThrowIfNull(Rules);
         ArgumentNullException.ThrowIfNull(Admission);
         if (MaxExecutedLines is <= 0 or > OriginalLineBudget) throw new ArgumentOutOfRangeException(nameof(MaxExecutedLines), "The line budget is 1..1000.");
-        if (!Admission.IsSubsetOf(ScrAdmissionSet.S2)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S2.", nameof(Admission));
+        if (!Admission.IsSubsetOf(ScrAdmissionSet.S3)) throw new ArgumentException("The interpreter runs only the commands of ScrAdmissionSet.S3.", nameof(Admission));
     }
 }
