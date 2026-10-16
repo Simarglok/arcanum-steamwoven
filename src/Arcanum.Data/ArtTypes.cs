@@ -11,6 +11,11 @@ public sealed class ArtDecoderOptions
     public int MaxFramePixels { get; init; } = 16 * 1024 * 1024;
     public int MaxRgbaBytes { get; init; } = 64 * 1024 * 1024;
     public int MaxEncodedFrameBytes { get; init; } = 64 * 1024 * 1024;
+    /// <summary>Accept bytes after the last frame payload. The original reader reads the
+    /// frames in order and never checks the end of the file, and 437 installed files carry
+    /// such a tail (docs/formats/art.md, ARC-DATA-016). Off by default: the strict form stays
+    /// the contract of existing callers. The count is reported as <see cref="ArtMetadata.TrailingBytes"/>.</summary>
+    public bool AllowTrailingBytes { get; init; }
 
     internal void Validate()
     {
@@ -122,11 +127,16 @@ public sealed class ArtFrameMetadata
 
 public sealed class ArtMetadata
 {
-    internal ArtMetadata(ArtHeader header, ArtFrameMetadata[] frames)
+    internal ArtMetadata(ArtHeader header, ArtFrameMetadata[] frames, int trailingBytes)
     {
         Header = header;
         Frames = Array.AsReadOnly(frames);
+        TrailingBytes = trailingBytes;
     }
+
+    /// <summary>Bytes after the last frame payload; non-zero only with
+    /// <see cref="ArtDecoderOptions.AllowTrailingBytes"/>.</summary>
+    public int TrailingBytes { get; }
 
     public ArtHeader Header { get; }
     // Frames are group-major: group * FramesPerGroup + frame.
