@@ -5,6 +5,9 @@ namespace Arcanum.Godot;
 public partial class FrameCanvas : Control
 {
     private Texture2D? _texture;
+    // ARC-RENDER-015: the HD frame of the current Legacy frame, sized (by its size override)
+    // to the Legacy frame so it occupies exactly the same world rectangle.
+    private Texture2D? _hd;
     private FrameHotspot _hotspot;
     private FrameCanvasGroupLayout? _groupLayout;
     private Vector2 _pan;
@@ -30,12 +33,40 @@ public partial class FrameCanvas : Control
     internal FrameCanvasGroupLayout? PublishedGroupLayout => _groupLayout;
     public FrameAlignment Alignment { get; private set; } = FrameAlignment.RawHotspot;
     public bool AnchorMarkerVisible { get; private set; } = true;
+    public FrameView View { get; private set; } = FrameView.Legacy;
+    public string Caption { get; private set; } = string.Empty;
+    internal Texture2D? HdTexture => _hd;
+    /// <summary>The texture drawn at the frame's place: HD in the HD view when one is set,
+    /// otherwise Legacy. The split view draws both side by side.</summary>
+    internal Texture2D? DisplayedTexture => View == FrameView.Hd && _hd is not null ? _hd : _texture;
+
+    /// <summary>Sets (or clears) the HD frame for the Legacy frame currently shown. The
+    /// caller clears it whenever the Legacy frame changes.</summary>
+    public void SetHd(Texture2D? hd)
+    {
+        _hd = hd;
+        QueueRedraw();
+    }
+
+    public void SetView(FrameView view)
+    {
+        if (!Enum.IsDefined(view)) throw new ArgumentOutOfRangeException(nameof(view));
+        View = view;
+        QueueRedraw();
+    }
+
+    public void SetCaption(string caption)
+    {
+        Caption = caption ?? string.Empty;
+        QueueRedraw();
+    }
 
     public void ResetAsset(Texture2D texture, FrameHotspot hotspot, FrameCanvasGroupLayout groupLayout)
     {
         ArgumentNullException.ThrowIfNull(texture);
         ArgumentNullException.ThrowIfNull(groupLayout);
         _texture = texture;
+        _hd = null;
         _hotspot = hotspot;
         _groupLayout = groupLayout;
         _pan = Vector2.Zero;
@@ -53,6 +84,7 @@ public partial class FrameCanvas : Control
         }
 
         _texture = texture;
+        _hd = null;
         _hotspot = hotspot;
         QueueRedraw();
     }
@@ -86,6 +118,7 @@ public partial class FrameCanvas : Control
         }
 
         var previousTexture = _texture;
+        var previousHd = _hd;
         var previousHotspot = _hotspot;
         var previousLayout = _groupLayout;
         var previousPan = _pan;
@@ -94,6 +127,8 @@ public partial class FrameCanvas : Control
         try
         {
             _texture = texture;
+            // A new Legacy frame never shows the previous frame's HD texture.
+            _hd = null;
             _hotspot = hotspot;
             if (resetAsset)
             {
@@ -122,6 +157,7 @@ public partial class FrameCanvas : Control
         catch
         {
             _texture = previousTexture;
+            _hd = previousHd;
             _hotspot = previousHotspot;
             _groupLayout = previousLayout;
             _pan = previousPan;
@@ -135,12 +171,14 @@ public partial class FrameCanvas : Control
     public void ClearFrame()
     {
         _texture = null;
+        _hd = null;
         QueueRedraw();
     }
 
     public void ClearAsset()
     {
         _texture = null;
+        _hd = null;
         _hotspot = FrameHotspot.Zero;
         _groupLayout = null;
         _pan = Vector2.Zero;
@@ -331,11 +369,23 @@ public partial class FrameCanvas : Control
 
         if (_texture is null)
         {
+            DrawCaption();
             return;
         }
 
         var origin = GetScreenPositionForWorld(GetFrameTopLeftWorld());
-        DrawTextureRect(_texture, new Rect2(origin, _texture.GetSize() * _zoom), false);
+        var size = _texture.GetSize() * _zoom;
+        if (View == FrameView.Split && _hd is not null)
+        {
+            // Before on the left, after on the right, each shifted half a frame plus a gap.
+            var shift = new Vector2((size.X / 2f) + 4f, 0f);
+            DrawTextureRect(_texture, new Rect2(origin - shift, size), false);
+            DrawTextureRect(_hd, new Rect2(origin + shift, size), false);
+        }
+        else
+        {
+            DrawTextureRect(DisplayedTexture!, new Rect2(origin, size), false);
+        }
         if (AnchorMarkerVisible)
         {
             var anchor = GetScreenPositionForWorld(Vector2.Zero);
@@ -343,9 +393,30 @@ public partial class FrameCanvas : Control
             DrawLine(anchor - new Vector2(6f, 0f), anchor + new Vector2(6f, 0f), marker, 1.5f);
             DrawLine(anchor - new Vector2(0f, 6f), anchor + new Vector2(0f, 6f), marker, 1.5f);
         }
+
+        DrawCaption();
+    }
+
+    private void DrawCaption()
+    {
+        if (Caption.Length == 0) return;
+        var font = ThemeDB.FallbackFont;
+        const int fontSize = 20;
+        var text = font.GetStringSize(Caption, HorizontalAlignment.Left, -1, fontSize);
+        DrawRect(new Rect2(8f, 8f, text.X + 16f, text.Y + 10f), new Color(0f, 0f, 0f, 0.65f));
+        DrawString(font, new Vector2(16f, 13f + font.GetAscent(fontSize)), Caption, HorizontalAlignment.Left, -1, fontSize, Colors.White);
     }
 
     private Vector2 ToWorldSpace(Vector2 screen) => (screen - (Size / 2f) - _pan) / _zoom;
+}
+
+/// <summary>ARC-RENDER-015 before/after view: Legacy, HD (Legacy where the frame has no
+/// HD), or both side by side.</summary>
+public enum FrameView
+{
+    Legacy,
+    Hd,
+    Split,
 }
 
 internal enum FrameCanvasPublicationEffect

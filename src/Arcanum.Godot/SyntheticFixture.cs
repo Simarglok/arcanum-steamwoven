@@ -257,6 +257,7 @@ internal static class GodotSelfTest
         RequireThrows<DatLimitExceededException>(() => oversize.ReadEntry(oversize.Entries[0]), "oversize viewer entry limit");
 
         VerifyViewerSessionPublicationBoundary(archive, entries);
+        var hdReview = HdReviewSelfTest.Run(archive, entries);
 
         using var image = Image.CreateFromData(raw.Width, raw.Height, false, Image.Format.Rgba8, raw.Rgba.ToArray());
         using var texture = ViewerApp.CreateFrameTexture(raw);
@@ -333,7 +334,7 @@ internal static class GodotSelfTest
         RequireThrows<FrameCanvasGeometryLimitException>(() => new FrameCanvasGroupLayout([new FrameCanvasFrame(1, 1, int.MinValue, 0)]), "FrameCanvas geometry precision limit");
         canvas.Free();
 
-        return "Godot synthetic DAT/ART self-test passed: duplicate ordinals, raw/RLE, unequal signed hotspots and common-anchor marker, queue stale suppression/recovery, palettes/fallback, limits, RGBA8 texture, and FrameCanvas raw signed-hotspot geometry.";
+        return "Godot synthetic DAT/ART self-test passed: duplicate ordinals, raw/RLE, unequal signed hotspots and common-anchor marker, queue stale suppression/recovery, palettes/fallback, limits, RGBA8 texture, and FrameCanvas raw signed-hotspot geometry. " + hdReview;
     }
 
 
