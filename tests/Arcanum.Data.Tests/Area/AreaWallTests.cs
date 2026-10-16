@@ -53,6 +53,32 @@ public sealed class AreaWallTests
         using (var missingName = Make(Wall(1, 0, 1), "art/wall/aa1bseu0.art")) Reject(missingName, AreaErrorCode.MissingSource);
         using (var ambiguous = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", names: "{0}{Aa10}{1}{aa12}")) Reject(ambiguous, AreaErrorCode.AmbiguousSource);
         using (var file = Make(Wall(0, 0, 1), "art/wall/aa1bseu1.art")) Reject(file, AreaErrorCode.MissingSource);
+        using (var heavy = Make(Wall(0, 0, 1, damage: 0x400), "art/wall/aa1bseu0.art")) Reject(heavy, AreaErrorCode.UnsupportedArtClassOrState);
+        using (var flags = Make(Wall(0, 0, 1, flags: 2), "art/wall/aa1bseu0.art")) Reject(flags, AreaErrorCode.UnsupportedArtClassOrState);
+        using (var oneToken = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", structure: "{0}{Aa10}")) Reject(oneToken, AreaErrorCode.MalformedRecord);
+        using (var shortSide = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", structure: "{0}{Aa Bb10 nul nul}")) Reject(shortSide, AreaErrorCode.MalformedRecord);
+        // Rows are positional in the source: a gap below key 1000 is refused, not looked up by key.
+        using (var gap = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", structure: "{0}{Aa10 Bb10 nul nul}{2}{Aa10 Bb10 nul nul}")) Reject(gap, AreaErrorCode.MalformedRecord);
+    }
+
+    [TestMethod]
+    public void Eight_rotation_wall_art_is_never_read_as_group_zero()
+    {
+        var art = Art(); BinaryPrimitives.WriteInt32LittleEndian(art, 0); // header bit 0 clear: eight rotations
+        using var f = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", art: art);
+        Reject(f, AreaErrorCode.UnsupportedPhysicalSelection);
+    }
+
+    [TestMethod]
+    public void A_plan_binding_only_one_wall_table_refuses_walls()
+    {
+        foreach (var roles in new[] { new[] { AreaMappingRole.WallStructure }, new[] { AreaMappingRole.WallName } })
+        {
+            using var f = Make(Wall(0, 0, 1), "art/wall/aa1bseu0.art", extraRoles: roles);
+            var report = f.Owner.Inspect();
+            Assert.IsFalse(report.IsComplete);
+            Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.UnsupportedVersionOrSchema), string.Join(',', report.Issues));
+        }
     }
 
     [TestMethod]
@@ -72,17 +98,20 @@ public sealed class AreaWallTests
         Assert.IsNull(f.Owner.PublishedSnapshot); Throws<AreaIncompleteException>(() => f.Owner.LoadStrict());
     }
 
-    private static Fixture Make(uint raw, string file, string names = Names, bool wallTables = true)
+    private static Fixture Make(uint raw, string file, string names = Names, bool wallTables = true, string structure = Structure, byte[]? art = null,
+        AreaMappingRole[]? extraRoles = null)
     {
         var entries = new List<(string Name, byte[] Payload)>
         {
             ("tile.mes", Encoding.ASCII.GetBytes("{0}{stone}{100}{stone}{200}{stone}{300}{stone}{400}{end}")),
             ("facade.mes", Encoding.ASCII.GetBytes("{0}{fixture}")), ("scenery.mes", Encoding.ASCII.GetBytes("{0}{fixture.art}")),
-            ("structure.mes", Encoding.ASCII.GetBytes(Structure)), ("wallname.mes", Encoding.ASCII.GetBytes(names)),
-            ("art/tile/stonebse0a.art", Art()), (file, Art()),
+            ("structure.mes", Encoding.ASCII.GetBytes(structure)), ("wallname.mes", Encoding.ASCII.GetBytes(names)),
+            ("art/tile/stonebse0a.art", Art()), (file, art ?? Art()),
         };
-        AreaMappingRole[] roles = wallTables
-            ? [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.WallStructure, AreaMappingRole.WallName]
+        if (extraRoles is { Length: 1 } && extraRoles[0] == AreaMappingRole.WallName)
+            (entries[3], entries[4]) = (entries[4], entries[3]); // the single bound table must sit at mapping index 3
+        AreaMappingRole[] roles = extraRoles is not null ? [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, .. extraRoles]
+            : wallTables ? [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.WallStructure, AreaMappingRole.WallName]
             : [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery];
         return new([(67108865, [WallRecord(Id(0))])], prototype: WallPrototype(raw), resourceEntries: entries.ToArray(), mappingRoles: roles);
     }

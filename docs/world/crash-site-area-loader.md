@@ -82,9 +82,13 @@ selector (art class 1) chooses one file: the structure row for its wall number g
 an interior name (rotations 0, 1, 6, 7) or an exterior name (2–5), matched by its
 first three characters to exactly one wall-name row; then the piece code, damage
 letter `u` and the variation digit. Damaged walls (selector bits 0x480), unknown
-pieces, missing rows and ambiguous names fail. The visual is physical group 0,
-frame 0, requested palette from bits 4–5; `NominalFacing` keeps the rotation and
-`Mirrored` keeps the flip bit (bit 0). The loader does not move hotspots: drawing
+pieces, other flag bits (1–3, 6), missing rows and ambiguous names fail. Structure
+rows are positional in the source, so a table whose keys below 1000 are not exactly
+0..n−1 is refused. The visual is physical group 0 of a single-rotation ART (an
+eight-rotation wall ART fails), frame 0, requested palette from bits 4–5;
+`NominalFacing` keeps the rotation and `Mirrored` keeps the flip bit (bit 0). For a
+wall, `Mirrored` means that flip bit, whose hotspot rule (width − hotX − 2) differs
+from the critter rotation alias. The loader does not move hotspots: drawing
 a wall (hotspot adjustment for rotations 0, 1, 6, 7 and the flip) and wall edge
 blocking are the next ARC-WORLD-009 steps.
 
@@ -169,7 +173,10 @@ population, exact record advancement and instance/editor bijection are validated
 there is no scan-to-next-version recovery or unchecked native handle restoration.
 
 Appearance resolution covers the admitted tile/facade and class4/7 scenery/container,
-class6 ground-item and class2/12/13 NPC source rules. The original profile has two
+class6 ground-item, class2/12/13 NPC and, where a plan binds both wall tables, class1
+wall source rules (see the cave profile). Object types 2, 3, 5–9, 13, 14 and 16 are
+admitted bodies, plus type 0 under the same wall condition; ammo (type 6) was added
+with the cave, which carries two. The original profile has two
 **exact-identity-only** exceptions: four specific item records use an authenticated
 1,418-byte ART view of a 1,419-byte entry, and one specific unique NPC aliases its
 nominal facing5 to physical group0 in an authenticated single-group entry. Raw
@@ -230,7 +237,7 @@ keys, checked section/count/range framing and the shared bounded ART decoder
 (4,096 frames/dimension, 256 KiB frame table, 4 Mi pixels, 16 MiB RGBA).
 The component reservation limit can reject a frame below those individual decoder
 limits. `Open` checks at most four non-prototype sources plus `MaxPrototypes`,
-eight mapping roles and `MaxVisuals` explicit ART bindings before authentication.
+one binding per mapping role (ten roles) and `MaxVisuals` explicit ART bindings before authentication.
 Caller-created source plans/input sets are outside the owner's allocation accounting;
 callers must not construct unlimited enumerables and expect `Open` to undo that work.
 
@@ -292,6 +299,10 @@ phase cancellation and lease/batch/disposal. Run with the pinned [toolchain](../
 "$DOTNET" test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --no-restore \
   --filter 'FullyQualifiedName~.Area.&TestCategory!=RealData'
 ```
+
+The cave's opt-in check (`FullyQualifiedName~AreaCaveOriginalTests&TestCategory=RealData`)
+uses `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`,
+`ARC_AREA_PROTOTYPES` and `ARC_CAVE_MOBILE`, the cave's game-generated object file.
 
 For the opt-in full-original check, set `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`,
 `ARC_AREA_RESOURCE2`, `ARC_AREA_MOBILE`, `ARC_AREA_PROTOTYPES` and `ARC_AREA_ORACLE`

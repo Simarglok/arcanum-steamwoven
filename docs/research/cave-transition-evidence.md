@@ -184,7 +184,8 @@ The following steps are separate PRs under ARC-WORLD-009, in this order:
    one sector, 4,096 class-0 terrain cells, 125 walls, 13 scenery, the 39
    aggregate objects, 4 lights (data only, no lighting) and no roofs,
    portals or jump points. It publishes both endpoints as data.
-2. **Walls** (Data + viewer). Resolve wall art (number 11 only) and draw the
+2. **Walls** (Data + viewer). Resolve wall art (done in the loader step for any
+   wall number whose tables resolve; the cave uses only number 11) and draw the
    walls in the area view; add edge blocking (T7) to the step model for the
    cave. Corners where two walls share a tile are drawn and checked
    independently.
