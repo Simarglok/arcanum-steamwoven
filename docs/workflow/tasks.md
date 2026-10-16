@@ -5,8 +5,11 @@ Project: **Arcanum Steamwoven**, repository `Simarglok/arcanum-steamwoven`.
 ## Task authority
 
 Work starts only from an explicit request by the owner: a direct instruction, a
-Claude project thread, or a named `ARC-*` work item. The request defines the
-outcome, scope and relevant checks. Repository documents govern implementation;
+Claude project thread, or a named `ARC-*` work item. The request, or the task
+contract written from it, defines the code and title, context, goal, allowed
+scope, sources and provenance, dependencies, acceptance criteria, checks,
+documentation deliverables and publication authority. Record base, head,
+workspace and reviewer findings at handoff. Repository documents govern implementation;
 Obsidian holds research and discussions; the [roadmap](../project/roadmap.md) and
 [vision](../project/vision.md) explain sequencing. None of them creates,
 prioritizes or dispatches work. Do not queue the whole product vision or start
@@ -86,12 +89,14 @@ committed files. Do not copy the game or the full vault into each worktree.
 - Merge authority comes from the owner: by default the owner merges. An agent
   merges only when the owner authorized it for the task or as a standing project
   instruction, and only after the task's acceptance criteria, its checks and the
-  root checks pass and the review is addressed.
+  root checks pass and the review is addressed. A PR body, a review PASS or a
+  finished status alone never authorizes a merge.
 - An agent merge uses a merge commit for the exact reviewed head, for example
   `gh pr merge <url> --merge --match-head-commit <reviewed-sha>`, after checking
   that `gh api user --jq .login` returns `Simarglok`. Never use `--admin`,
-  `--auto`, a force option or another strategy as a workaround, and never
-  force-push. If the merge is refused or its result is unclear, read the PR state
-  first instead of retrying, and report what was observed.
+  `--auto`, `--delete-branch`, a force option, a merge queue or another strategy
+  as a workaround, and never force-push. If the merge is refused or its result is
+  unclear, read the PR state first instead of retrying. After a merge, read back
+  the MERGED state and merge commit, and report the merged PR.
 - Report Implemented, Not implemented, Remaining work, the checks run with their
   results, and material uncertainties.

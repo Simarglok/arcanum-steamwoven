@@ -25,14 +25,14 @@ renamed.
 
 ## Titles and names
 
-The code always comes first.
+The code comes first; a PR title or commit subject may put a short area prefix before it, as in `research: ARC-RES-035 map catalogue and transition graph` or `perf(viewer): ARC-RENDER-009 ...`.
 
 | Where | Form | Example |
 | --- | --- | --- |
 | Human title (task, project thread) | `ARC-TYPE-NNN — short Russian result` | `ARC-INPUT-001 — Проверить доступ к диагностической палитре` |
-| Pull request title | `ARC-TYPE-NNN: short English result` | `ARC-WORLD-015: pre-made starting hero in the game session` |
+| Pull request title | `ARC-TYPE-NNN: short English result`, optionally after an area prefix | `ARC-WORLD-015: pre-made starting hero in the game session` |
 | Branch | `arc-type-nnn-short-slug`, unless the environment assigns a branch | `arc-world-015-starting-hero` |
-| Commit subject | `ARC-TYPE-NNN: ...`, optionally after an area prefix | `research: ARC-RES-035 map catalogue and transition graph` |
+| Commit subject | `ARC-TYPE-NNN: ...`, optionally after an area prefix | `ARC-DATA-015: universal map catalogue over the content stack` |
 
 The text after the code in a human title is a concise, readable Russian
 description of the outcome. It must contain at least one Russian Cyrillic letter
