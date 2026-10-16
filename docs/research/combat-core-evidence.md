@@ -65,8 +65,9 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
 - **Damage.** Each of five damage types (normal, poison, electrical, fire,
   fatigue) is rolled uniformly in the weapon's range; melee adds the damage
   bonus. Resistance removes a percentage (fatigue uses ¾ of normal
-  resistance), easy/hard difficulty scales a PC's damage ×1.5/×0.75, a
-  critical multiplies by 1.5, 2 or 3. Normal + electrical + fire reduce hit
+  resistance), easy/hard difficulty scales a PC's damage ×1.5/×0.75, and a
+  critical may multiply it by 3, 2 or 1.5 (never when an NPC hits a PC, see
+  C20). Normal + electrical + fire reduce hit
   points, fatigue damage reduces fatigue, poison raises the poison level.
 - **Outcomes.** Dead means current HP ≤ 0. Unconscious means current fatigue
   ≤ 0 and the critter is not undead. A critical can stun, knock down or (for
@@ -104,7 +105,7 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   follower, that PC ([attack approach][mode-on-attack]); the AI's attack
   setup also activates its attacker ([AI attack][ai-attacked]). Combat mode
   cannot be entered while stoned, paralysed or otherwise inactive, nor left
-  while stunned ([toggle][toggle-mode]).
+  while stoned, paralysed or stunned ([toggle][toggle-mode]).
 - **C3** With `turn_based` on, the local PC entering combat mode starts a round
   and takes the first turn; leaving combat mode ends the round
   ([toggle][toggle-mode]). Switching `turn_based` while the PC is in combat
@@ -122,9 +123,10 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   target while combat mode and the `auto_attack` setting are on, the target is
   alive and not busted, no round is active, the PC is not flagged non-lethal
   and no boomerang is in flight ([auto attack][auto-repeat],
-  [setting][auto-attack-get]). In real time pistols, rifles and bows also
-  rewind three frames after the shot frame and fire again while ammunition and
-  a valid target remain ([attack update][attack-begin]).
+  [setting][auto-attack-get]). In real time pistols and rifles (two frames
+  after the action frame) and bows (at the action frame) rewind three frames
+  and fire again while ammunition and a valid target remain
+  ([attack update][attack-begin]).
 
 ### Turn order (FR-COMBAT-002)
 
@@ -137,16 +139,18 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   the list in the same way, and starts at the first participant that is active
   and drawn. Inactive means destroyed or off, dead, unconscious, stunned,
   paralysed or stoned ([states][states]); a not-drawn critter that is not
-  sleeping is also skipped ([skip][tb-round]). If nobody qualifies but the PC
+  sleeping is also skipped ([skip][tb-skip]). If nobody qualifies but the PC
   is active, the PC acts alone; otherwise the round ends.
 - **C8** A subturn sets AP to `max(5, Speed)` ([whose turn][whos-turn]).
-  For an NPC it runs the heartbeat script, then AI; if the AI started no
-  animation its AP become 0 (reading of `sub_423300`). After every animation completes a 2 ms timer
+  For an NPC (not during a load) it runs the heartbeat script and, when that
+  returns 1, the AI; if no animation was started its AP become 0 (reading of
+  `sub_423300`). After every animation completes a 2 ms timer
   checks the budget: the PC keeps its turn while AP > 0; an NPC whose AP did not
   change since the previous check is forced to spend the rest, and AP ≤ 0
   advances to the next participant ([anim completion][tb-anims]).
 - **C9** [`combat_turn_based_next_subturn`][tb-next] skips inactive entries;
-  past the last entry the clock advances **1000 ms** and a new round begins.
+  past the last entry the clock advances **1000 ms** and a new round begins
+  (see anomaly A9).
   An NPC that ends its subturn runs its end-combat script. Fast turn-based mode
   (and an NPC that is not in combat mode, attacking or backing off) moves the
   current critter several path steps in one goal while AP remain
@@ -160,10 +164,14 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
 ### Action points (FR-COMBAT-003)
 
 - **C11** A goal is refused before it starts when its actor is inactive, or in
-  a round when it is not the actor's turn, or an NPC lacks the AP
-  ([goal start][goal-start]). The PC may start with fewer AP (see C13).
-- **C12** Costs ([costs][ap-costs], [path length][path-len],
-  [step][step-ap], [walk or run][run-walk]):
+  a round when it is not the actor's turn, or an NPC lacks the AP while its
+  current fatigue is at most 35 % of maximum ([goal start][goal-start]). An
+  NPC above 35 % may start anyway; the later charge then fails and ends its
+  subturn (C13). Any non-NPC passes this gate.
+- **C12** Costs. `combat_check_*` is the cost the UI previews
+  ([costs][ap-costs]); the animation goals charge it
+  ([attack][attack-begin], [step][step-ap], [path length][path-len],
+  [walk or run][run-walk], [item use][item-use]):
 
   | Action | AP |
   | --- | --- |
@@ -174,7 +182,8 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   | Melee attack on a target farther than 1 | attack + adjacent-path estimate |
   | Use object | 2 + path estimate when not on the same cell |
   | Pick up item | 1 + path estimate when not on the same cell |
-  | Cast spell, use skill, use item | 4 |
+  | Cast spell, use skill | 4 |
+  | Use an item on an object or location | 4 (charged by the item use itself) |
 
   Weapon speed is the weapon's speed factor plus its magic speed adjustment,
   **+5** when the wielder has at least apprentice training in the weapon's
@@ -182,8 +191,8 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
 - **C13** Overexertion: when the cost exceeds the AP left, the local PC with
   AP > 0 and current fatigue > 1 still acts; it takes 2 fatigue damage through
   the normal damage path (so fatigue resistance applies) and its AP become 0.
-  Anyone else, or a PC with no AP, ends the subturn and the action fails
-  ([consume][ap-consume]).
+  Anyone else, or a PC with no AP or fatigue ≤ 1, ends the subturn and the
+  action fails ([consume][ap-consume]).
 - **C14** A critter that falls unconscious ends its own subturn at once
   ([fatigue set][fatigue-set]).
 
@@ -202,7 +211,8 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
 - **C17** A scenery target occupied by a sleeper (a bed) is replaced by the
   sleeper, who leaves the bed; the attack then gets a `−30` difficulty modifier
   ([resolution][resolve]). Non-critter targets (portals, containers, scenery)
-  are hit automatically.
+  are hit automatically once the technology and magick rolls (steps 3–4
+  below) have passed.
 
 ### Hit, dodge and critical (FR-COMBAT-005)
 
@@ -218,9 +228,11 @@ Order of resolution in [`sub_4B3170`][resolve]:
 3. **Technology failure.** A technological weapon in the hands of a magickal
    user fails critically with chance `−complexity × aptitude / 100`
    ([aptitude][aptitude]); this becomes a critical miss.
-4. **Magick against technology.** Otherwise a d100 against the target's
-   opposing aptitude (a technological target against a magickal weapon, a
-   magickal target against a technological one) may cancel the weapon: a
+4. **Magick against technology.** Otherwise a ranged attack whose line of
+   fire is blocked is first retargeted to the blocking object. Then a d100
+   against the target's opposing aptitude, scaled by the attacker's own
+   aptitude (a technological target against a magickal weapon, a magickal
+   target against a technological one), may cancel the weapon: a
    magickal melee weapon still swings without its magical bonuses, any other
    attack simply misses ([aptitude][aptitude], [resolution][resolve]).
 5. **Skill roll** ([run][skill-run]): `success = difficulty + d100 ≤
@@ -240,8 +252,8 @@ Order of resolution in [`sub_4B3170`][resolve]:
      nor hear the attacker;
    - aimed: minus the location penalty (two thirds of it for an expert
      firearms user);
-   - armour: `effectiveness × (AC/2) / 100`, skipped for a backstab by a
-     trained backstabber. AC = base AC + worn items + `AcAdjustment` and
+   - armour: `effectiveness × (AC/2) / 100`, skipped for a true backstab
+     (see below). AC = base AC + worn items + `AcAdjustment` and
      effects, clamped 0..95 ([AC][ac]);
    - bow, throwing, firearms only: out of range or a blocking object makes the
      hit impossible; each cell beyond `PE/2` adds 5 (not for masters); cover
@@ -261,8 +273,8 @@ Order of resolution in [`sub_4B3170`][resolve]:
    dodge makes it a critical miss with chance 0/10/50/100 % by dodge training
    ([resolution][resolve]).
 9. **Fate.** A PC attacker with an armed critical-hit fate always hits
-   critically; otherwise a PC target with an armed critical-miss fate makes the
-   attack a critical miss ([resolution][resolve], [fate][fate]).
+   critically; when the attacker is not a PC, a PC target with an armed
+   critical-miss fate makes the attack a critical miss ([resolution][resolve], [fate][fate]).
 10. A critical miss turns the attack on the attacker ([crit miss][crit-miss]):
     it always strikes itself with a normal damage roll, and with chance 50 %
     the self-hit is also critical, adding chances to destroy or explode the
@@ -293,7 +305,8 @@ neither see nor hear the attacker; then the critical chance gains
 - **C19** Application ([damage][dmg]): the target's taking-damage script may
   veto; destroyed or invulnerable targets and walls take nothing; a
   nigh-invulnerable critter takes nothing from a non-uber weapon; a stoned
-  critter takes nothing. Then critical effects, then resistance
+  critter's rolled damage is zeroed, though critical effects and full or death
+  damage still apply. Then critical effects, then resistance
   ([resistance][resist]): each type loses `resistance %`, fatigue against
   `¾` of normal resistance, unless ignored by flag. Resistance = base + worn
   armour + armour magic + `5 × (CN − 4)` for poison when positive + effects,
@@ -302,16 +315,23 @@ neither see nor hear the attacker; then the critical chance gains
   and resistance (damage).
 - **C20** HP damage is `normal + electrical + fire` (the full current HP for a
   death or full-damage flag). A PC attacker's HP damage is ×1.5 on easy and
-  ×0.75 on hard; a critical bonus multiplies ×3, ×2 or ×1.5. Fatigue damage
+  ×0.75 on hard. A critical hit multiplies HP damage by 3 when
+  `d100 ≤ chance + 10`, else by 2 when a new `d100 ≤ chance + 30`, else by
+  1.5 when a third `d100 ≤ chance + 60`; these rolls are skipped when an NPC
+  hits a PC, and ×1.5 is also the fallback when the critical produced no
+  other effect at all ([crit hit][crit-hit]). A critical can therefore carry
+  no multiplier. Fatigue damage
   is added unless the target is fatigue-immune; poison raises the poison level.
   Fire damage or a damage-armour weapon also wears the armour at the hit
   location by 10 HP ([armour slot][armor-slot]).
-- **C21** Side effects ([vitals][dmg-vitals]): the NPC's experience pool pays
-  the PC attacker `worth × damage% / 100`; a PC follower dropping below 20 %
+- **C21** Side effects ([vitals][dmg-vitals]): any attacker drains
+  `worth × damage% / 100` from the NPC's experience pool, and only a PC
+  attacker is paid it; a PC follower dropping below 20 %
   HP triggers its near-death reaction; a melee hit wears the weapon by the
   target's material, or hurts an unarmed attacker but never kills it
   ([wear][wear]). Portals and containers subtract a material reduction (stone,
-  brick, metal, force 10; wood 5) and are busted, triggering any trap, at 0 HP.
+  brick, metal, force 10; wood 5) and are busted, triggering any trap, at 0 HP
+  ([damage][dmg]).
 
 ### Fatigue, knockout and death (FR-COMBAT-010)
 
@@ -319,17 +339,21 @@ neither see nor hear the attacker; then the critical chance gains
   non-undead critter; active excludes both and stunned, paralysed, stoned
   ([states][states]). The fatigue and HP pools are independent: no damage
   converts between them.
-- **C23** Going unconscious (fatigue damage crossing to ≤ 0) demaintains the
+- **C23** Going unconscious (a non-zero fatigue-damage write that brings
+  current fatigue to ≤ 0, i.e. damage reaching the maximum) demaintains the
   critter's spells, notifies its items, plays the knockdown and ends its
   subturn ([fatigue set][fatigue-set]).
 - **C24** Critical outcomes ([crit hit][crit-hit]): stun when
   `d100 ≤ chance + 5` (+10 crushing or electrical, +10 head without helmet)
   and the target fails a CN check at −5; for an NPC that is not fatigue-immune
-  a second such roll turns it into a **knockout**, which sets fatigue damage to
+  a second roll (`d100 < chance + 5 …`, strict) with another failed CN check
+  turns it into a **knockout**, which sets fatigue damage to
   `max fatigue + 10..20` ([damage][dmg]). Undead and amorphous targets are
   never stunned or knocked out, and a PC is never knocked out by a critical.
   Bipeds can be knocked down (`chance + 5`, +5 crushing, +10 leg). `chance`
-  is the weapon's magic critical-effect value plus effects, +10 when aimed.
+  is the weapon's magic critical-effect value (0 unarmed) plus effects, +10
+  when aimed; with a weapon whose magic was cancelled it is undefined
+  (anomaly A8).
 - **C25** Recovery ([fatigue event][fatigue-event], [time][time]): any non-zero
   fatigue damage schedules one recovery event per critter 80 000 ms of game
   time ahead. It removes `HealRate × max(1, elapsed seconds/80)` fatigue damage;
@@ -352,8 +376,9 @@ neither see nor hear the attacker; then the critical chance gains
   heal also clears injuries. Resurrection of a dead critter is gated by its
   resurrect script and the unrevivifiable/unresurrectable flags, resets
   fatigue damage to 10 and rejoins its leader when the follow check passes.
-- **C29** The `non-lethal combat` flag only stops automatic attack repetition
-  (C5); no reviewed damage branch converts lethal damage to knockout
+- **C29** The `non-lethal combat` flag stops automatic attack repetition (C5)
+  and makes the AI reject an unconscious target ([AI target][ai-nonlethal]);
+  no reviewed damage branch converts lethal damage to knockout
   ([auto attack][auto-repeat], [damage][dmg]).
 
 ### Persistence (FR-COMBAT-001)
@@ -374,9 +399,12 @@ neither see nor hear the attacker; then the critical chance gains
 - **A3** Getting up in a round is refused on the critter's own subturn and
   free on any other subturn; the 5 AP charge is unreachable
   ([get up][getup]).
-- **A4** The every-fifth-run-step fatigue charge in combat mode writes back
-  the unchanged fatigue damage, so running never costs fatigue
-  ([step][step-ap]).
+- **A4** The every-fifth-run-step fatigue charge in combat mode (every 20th
+  for fatigue-limiting, every 1–2nd for fatigue-draining critters) writes back
+  the unchanged fatigue damage, so running never costs fatigue; and because
+  the write returns the stored value, a critter with no fatigue damage fails
+  that step without paying AP. What the failed step does next was not traced
+  ([step][step-ap], [fatigue set][fatigue-set]).
 - **A5** A crippled-arm critical drops the **weapon** handle when only the
   shield qualifies; partial healing of crippled legs clears blindness instead
   ([damage][dmg], [heal][heal]).
@@ -385,6 +413,13 @@ neither see nor hear the attacker; then the critical chance gains
 - **A7** On a critical self-hit the critical-hit effects are rolled twice: once
   inside the critical-miss branch and again when the damage is applied
   ([crit miss][crit-miss], [damage][dmg]).
+- **A8** The critical-hit `chance` is never assigned when the weapon's magic
+  was cancelled (step 4), while the critical-miss path sets it to 0
+  ([crit hit][crit-hit], [crit miss][crit-miss]).
+- **A9** When the skip loop of `combat_turn_based_next_subturn` runs past the
+  last entry, the new round already starts its first subturn and the function
+  then starts it a second time, so an NPC acting first runs its heartbeat
+  script and AI twice ([next subturn][tb-next], [round][tb-round]).
 
 ## Open questions
 
@@ -429,7 +464,7 @@ take randomness from an injected, seedable source so tests can pin every roll.
    records (skill level and training, AC, resistances, flags, light, distance)
    returning hit location, hit/miss/dodge, critical and the per-type damage
    with the difficulty and resistance steps (C17–C21), with the critical-effect
-   table left as an injected FR-COMBAT-009 hook. Anomalies A1–A7 are settled
+   table left as an injected FR-COMBAT-009 hook. Anomalies A1–A9 are settled
    by an explicit owner decision, not copied.
 3. **Turn-based round**: participants, skip rules, AP grant and costs,
    overexertion, end of round +1 s and save/restore of round state as a new
@@ -495,7 +530,7 @@ could not settle.
 [hp]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1632-L1677
 [resistance]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1680-L1730
 [ac]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1733-L1763
-[fatigue-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L463-L495
+[fatigue-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L462-L495
 [fatigue-max]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L502-L534
 [states]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L569-L615
 [kill]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L622-L757
@@ -527,3 +562,6 @@ could not settle.
 [dialog-exit]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c#L136-L145
 [sleep-exit]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/sleep_ui.c#L297-L305
 [wmap-exit]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_ui.c#L1182-L1190
+[tb-skip]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L3584-L3591
+[item-use]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1415-L1560
+[ai-nonlethal]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2066-L2076
