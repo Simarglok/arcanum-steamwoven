@@ -97,7 +97,9 @@ slice widens admission by publishing a larger set, not by changing the rules.
 
 `ScrAdmission.AdmitFrom(program, set, line)` (ARC-SCRIPT-009) is the region
 admission the dispatcher uses: only the lines a run from `line` can reach, with
-the same rules and the same first-refusal order; `ScrAdmittedProgram.EntryLine`
+the same rules; the refusal reported is the lowest-numbered refused line among
+those reached through admitted lines (a refused line's successors are not
+explored); `ScrAdmittedProgram.EntryLine`
 and `Region` record what was admitted. `ScrAdmissionSet.S3` adds the follower and
 jilted conditions, the dialog action and the single-object focus kinds
 ([dispatcher dialogue](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)).

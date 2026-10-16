@@ -34,7 +34,8 @@ public partial class TerrainViewerApp
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
-            _conversationPanel.CloseRequested += EndConversation;
+            // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
+            _conversationPanel.CloseRequested += () => EndConversation(resume: true);
         }
     }
 
@@ -137,7 +138,9 @@ public partial class TerrainViewerApp
     // ARC-SCRIPT-009: the speaker of the open conversation, whose dialog script resumes when the DLG returns to it.
     private AreaSpeaker? _conversationSpeaker;
 
-    private void EndConversation()
+    private void EndConversation() => EndConversation(resume: false);
+
+    private void EndConversation(bool resume)
     {
         if (_conversationPanel is null || !_conversationPanel.IsOpen) return;
         var conversation = _conversationPanel.Conversation;
@@ -150,7 +153,7 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-009: a "return to script" end resumes the speaker's dialog script through the dispatcher; a new
         // dialog action opens the next conversation, anything else is a notice.
         var speaker = _conversationSpeaker; _conversationSpeaker = null;
-        if (conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && _conversationHost is not null)
+        if (resume && conversation?.End is { Kind: DialogEndKind.ReturnToScript, ScriptLine: { } line } && speaker is not null && _conversationHost is not null)
         {
             AreaConversationStart resumed;
             try { resumed = _conversationHost.Resume(speaker, line); }

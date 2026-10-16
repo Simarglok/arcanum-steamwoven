@@ -156,9 +156,10 @@ public static class ScrAdmission
     /// Region admission (ARC-SCRIPT-009): the lines a run that starts at <paramref name="entryLine"/> can reach, found
     /// by following each admitted action (a literal goto, the next line, or the end of the run for a return or a
     /// dialog action), all run under the set. The run of an admitted region can only reach lines inside it, so it still
-    /// never stops half-way on something unsupported; lines outside it are never read. The first refusal is reported
-    /// in line order, as for <see cref="Admit"/>. An entry outside the script admits an empty region (such a run ends on
-    /// an unreadable line).
+    /// never stops half-way on something unsupported; lines outside it are never read. The refusal reported is the
+    /// lowest-numbered refused line among those reached through admitted lines (a refused line's successors are not
+    /// explored), with the clause order of <see cref="Admit"/>. An entry outside the script admits an empty region
+    /// (such a run ends on an unreadable line).
     /// </summary>
     public static ScrAdmissionResult AdmitFrom(ScrProgram program, ScrAdmissionSet set, int entryLine)
     {

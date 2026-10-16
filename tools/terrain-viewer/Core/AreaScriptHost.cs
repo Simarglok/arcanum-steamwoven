@@ -88,6 +88,33 @@ public sealed class AreaScriptHost : IScrHost
         return digits.Length is > 0 and <= 5 ? int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) : null;
     }
 
+    /// <summary>The dialog number of an archive member named <c>dlg\</c> + digits + anything + <c>.dlg</c>, else null.</summary>
+    public static int? DialogNumber(DatEntry entry)
+    {
+        var name = System.Text.Encoding.Latin1.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0');
+        if (!name.StartsWith("dlg\\", StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".dlg", StringComparison.OrdinalIgnoreCase) || name.IndexOf('\\', 4) >= 0) return null;
+        var digits = name[4..].TakeWhile(char.IsAsciiDigit).ToArray();
+        return digits.Length is > 0 and <= 5 ? int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) : null;
+    }
+
+    /// <summary>
+    /// The DLG a dialog action names: exactly one archive member <c>dlg\NNNNN*.dlg</c>, read strictly, whose
+    /// <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/> with the document,
+    /// or the typed reason.
+    /// </summary>
+    public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(string dialogArchive, int script, int node)
+    {
+        using var archive = DatArchive.Open(dialogArchive, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
+        var members = archive.Entries.Where(entry => DialogNumber(entry) == script).Take(2).ToArray();
+        if (members.Length != 1) return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {members.Length} archive members");
+        DlgDocument document;
+        try { document = DlgReader.Read(archive.ReadEntry(members[0])); }
+        catch (DlgException exception) { return (AreaConversationStartStatus.DialogUnreadable, null, exception.GetType().Name); }
+        if (!document.TryGetRecord(node, out var record) || record!.Role != DlgRecordRole.Npc)
+            return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script} has no NPC node {node}");
+        return (AreaConversationStartStatus.Started, document, string.Empty);
+    }
+
     public bool GlobalFlag(int index)
     {
         var flags = _session.Flags;

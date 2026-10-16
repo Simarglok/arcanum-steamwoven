@@ -37,6 +37,10 @@ public enum AreaConversationStartStatus
     ScriptEnded,
     /// <summary>ARC-SCRIPT-009: the session refused the script's effects.</summary>
     ScriptEffectsRejected,
+    /// <summary>ARC-SCRIPT-009: the script or dialog archive differs from the one the area was loaded and first talked with.</summary>
+    SourceChanged,
+    /// <summary>ARC-SCRIPT-009: a resumption found no script in the slot (it removed itself); nothing ran.</summary>
+    ScriptRemoved,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -48,7 +52,7 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR dispatcher (ARC-SCRIPT-009) →
 /// DLG member of the dialog action → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
 /// <see cref="GameSessionOwner"/> (ARC-SCRIPT-006), so they persist across talks, map changes and snapshots.
-/// The host does not own the session. Synchronous, single-threaded; Begin and Resume read the selected archives every time.
+/// The host does not own the session. Synchronous, single-threaded; Begin and Resume authenticate and read the selected archives every time.
 /// </summary>
 public sealed class AreaConversationHost
 {
@@ -56,6 +60,7 @@ public sealed class AreaConversationHost
     private readonly GameSessionOwner _session;
     private readonly string _scriptArchive;
     private readonly string _dialogArchive;
+    private (long Length, string Sha256)? _dialogIdentity;
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
 
@@ -174,6 +179,15 @@ public sealed class AreaConversationHost
     private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
+        // As before ARC-SCRIPT-009: the script archive must be the area's second resource input, and the dialog
+        // archive the file first seen here, both by full SHA-256, on every talk and resumption.
+        var scriptIdentity = _snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Resource2);
+        if (scriptIdentity is null || Fingerprint(_scriptArchive) != (scriptIdentity.Length, scriptIdentity.Sha256))
+            return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the script archive is not the area's resource input");
+        var dialogIdentity = Fingerprint(_dialogArchive);
+        _dialogIdentity ??= dialogIdentity;
+        if (dialogIdentity != _dialogIdentity) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the dialog archive changed");
+        token.ThrowIfCancellationRequested();
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
@@ -184,38 +198,22 @@ public sealed class AreaConversationHost
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
         if (result.Effects.Dialog is not { } dialog)
-            return result.Outcome == ScrOutcome.RunDefault
+            return line != 0 && result.Stop == ScrStop.NoScript
+                ? new(AreaConversationStartStatus.ScriptRemoved, null, speaker, "the dialog slot holds no script: nothing to resume")
+                : result.Outcome == ScrOutcome.RunDefault
                 ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         token.ThrowIfCancellationRequested();
 
-        DlgDocument document;
-        using (var archive = DatArchive.Open(_dialogArchive, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 }))
-        {
-            var members = archive.Entries.Where(entry => DialogNumber(entry) == dialog.Script).Take(2).ToArray();
-            if (members.Length != 1)
-                return new(AreaConversationStartStatus.DialogResourceMismatch, null, speaker, $"dialog {dialog.Script}: {members.Length} archive members");
-            try { document = DlgReader.Read(archive.ReadEntry(members[0])); }
-            catch (DlgException exception) { return new(AreaConversationStartStatus.DialogUnreadable, null, speaker, exception.GetType().Name); }
-        }
-        if (!document.TryGetRecord(dialog.Node, out var record) || record!.Role != DlgRecordRole.Npc)
-            return new(AreaConversationStartStatus.DialogResourceMismatch, null, speaker, $"dialog {dialog.Script} has no NPC node {dialog.Node}");
+        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_dialogArchive, dialog.Script, dialog.Node);
+        if (dialogStatus != AreaConversationStartStatus.Started) return new(dialogStatus, null, speaker, dialogDetail);
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
-        var conversation = DialogConversation.Start(document,
+        var conversation = DialogConversation.Start(document!,
             new DialogConversationRequest(new DialogNodeId(dialog.Node), participants, new DialogScriptLine(dialog.Line), Profile.Pc, Profile.Names),
             new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {dialog.Script} SCR line {dialog.Line} -> DLG node {dialog.Node}", party);
-    }
-
-    /// <summary>The dialog number of an archive member named <c>dlg\</c> + digits + anything + <c>.dlg</c>, else null.</summary>
-    private static int? DialogNumber(DatEntry entry)
-    {
-        var name = System.Text.Encoding.Latin1.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0');
-        if (!name.StartsWith("dlg\\", StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".dlg", StringComparison.OrdinalIgnoreCase) || name.IndexOf('\\', 4) >= 0) return null;
-        var digits = name[4..].TakeWhile(char.IsAsciiDigit).ToArray();
-        return digits.Length is > 0 and <= 5 ? int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) : null;
     }
 
     /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>

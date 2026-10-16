@@ -164,14 +164,15 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal && _conversationHost.Speakers.Count == 0, "closed at publication; the synthetic core has no dialog NPC");
             Click(GetViewport().GetVisibleRect().Size / 2); Press(Key.T);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and the reserved T key do not open a dialog");
-            // A row standing in for a speaker; it has no dialog slot (ARC-SCRIPT-009: the dispatcher runs default, the
-            // generic greeting) or the synthetic archive paths do not exist, so the start is a typed status.
+            // A row standing in for a speaker; the synthetic area has no script resource input and its archive paths do
+            // not exist (ARC-SCRIPT-009: the archive check refuses first), so the start is a typed status.
             var row = _readyArea.Snapshot.Objects[0];
             BeginConversation(new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0));
             TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
-                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))), "the modal panel opens with the typed start status");
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))), "the modal panel opens with the typed start status");
             foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.

@@ -166,7 +166,14 @@ status, not modelled); a skip default without a dialog action ends the talk; a
 refusal is `EntryNotAdmitted` with the line, code and type. The session applies
 global flags and the slot as separate steps (it has no transaction across its
 flag owner and its map changes); a refused step stops the later ones and is
-reported as `ScriptEffectsRejected`.
+reported as `ScriptEffectsRejected`. Before every talk and resumption the host
+checks the script archive against the area's second resource input and the
+dialog archive against its first fingerprint by full SHA-256 (`SourceChanged`),
+as the old resolver path did; a resumption that finds no script in the slot
+(it removed itself) is `ScriptRemoved`. The DLG is the one archive member whose
+number is the script's (`dlg\NNNNN*.dlg`) and its node must be an NPC record.
+In the Godot viewer only the player's close of a finished conversation resumes
+the script; a reset, reload or map change closes the panel without resuming.
 
 ## Checks
 
@@ -183,7 +190,21 @@ reported as `ScriptEffectsRejected`.
   four that remove or change themselves); 116 end on a return, 25 empty scripts
   on an unreadable line 0, the seven trap scripts (30000..30006) go to trap code
   without running, 2,251 are refused before running; both modes end every run
-  the same way.
+  the same way. Since ARC-SCRIPT-009 the dispatch admits the S3 region from
+  line 0: 376 scripts run (160 end on a return, 184 on a dialog action, 25 on an
+  unreadable line 0, the seven trap scripts go to trap code), 2,023 are refused;
+  the whole-script S2 count stays 148.
+- `tests/Arcanum.Scripting.Tests/Scr/ScrDialogueDispatchTests.cs` (ARC-SCRIPT-009):
+  region admission (reached lines, both branches, the dead false action, two
+  refusals, entry outside the script), Virgil-like entries and resumption, the
+  dialog action for a PC and a non-PC, mind control, object roles and
+  `MissingObject`, the S3 set.
+- `tests/Arcanum.TerrainViewer.Tests/AreaScriptHostTests.cs`: the viewer host's
+  slot over the session keys, writeback and baseline clearing, refusals in
+  `Apply`, invalid stored keys, scripts and dialogs found by number once, the
+  NPC-node check. `AreaConversationTests` (opt-in original): Virgil's talk runs
+  lines 0..4 to node 1, resumption at line 5 returns, a resumption at line 16 is
+  refused, following picks line 6 → node 385.
 
 ## Not ready
 

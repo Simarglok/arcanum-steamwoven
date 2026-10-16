@@ -148,8 +148,8 @@ public enum ScrStop
 /// <summary>A slot to store after the run: the object's slot for the point, or the tile's or sector's attachment.</summary>
 public sealed record ScrWriteback(ScrSource Source, ScrObjectRef? Attachee, int Point, ScrSlot Slot);
 
-/// <summary>A conversation for the caller to start after it applied the writeback (the original stores the slot
-/// before the start callback, X1): the DLG of <paramref name="Script"/> at <paramref name="Node"/>, between the PC
+/// <summary>A conversation for the caller to start after it applied the writeback (the original's dialog action stores
+/// the slot before its start callback, 0x4472F1): the DLG of <paramref name="Script"/> at <paramref name="Node"/>, between the PC
 /// triggerer and the attachee; a DLG end of 0 resumes the same dialog script at <paramref name="Line"/> + 1.</summary>
 public sealed record ScrDialogStart(ScrObjectRef Pc, ScrObjectRef? Npc, int Script, int Line, int Node);
 

@@ -73,9 +73,21 @@ public sealed class ScrDialogueDispatchTests
         Assert.AreEqual((1, 44), (r.Refusal!.Line, r.Refusal.Type));
         var fromThree = ScrAdmission.AdmitFrom(program, ScrAdmissionSet.S3, 3);
         CollectionAssert.AreEqual(new[] { 3, 5 }, fromThree.Admitted!.Region.ToArray());
-        // The dead false action of an always-true line is not followed.
+        // The dead false action of an always-true line is neither checked nor followed.
         var dead = Program(L(C(0), C(1), C(3, N(1))), Do(C(23, N(1), (Attachee, 0))));
         CollectionAssert.AreEqual(new[] { 0 }, ScrAdmission.AdmitFrom(dead, ScrAdmissionSet.S3, 0).Admitted!.Region.ToArray());
+        Assert.IsTrue(ScrAdmission.AdmitFrom(Program(L(C(0), C(1), C(44, (21, 0), N(1), N(1), N(1)))), ScrAdmissionSet.S3, 0).IsAdmitted);
+        // Two refusals in the region: the lower line is reported, whatever order the walk met them in; a refused
+        // line's successors are not explored (line 4 behind refused line 3 is never reached).
+        var two = Program(
+            L(C(3, N(0)), C(3, N(3)), C(3, N(2))),
+            Do(C(1)),
+            Do(C(23, N(1), (Attachee, 0))),
+            Do(C(44, (21, 0), N(1), N(1), N(1))),
+            Do(C(18, (1, 0))));
+        var first = ScrAdmission.AdmitFrom(two, ScrAdmissionSet.S3, 0).Refusal!;
+        Assert.AreEqual((2, 23), (first.Line, first.Type));
+        Assert.AreEqual((3, 44), (ScrAdmission.AdmitFrom(two, ScrAdmissionSet.S3, 3).Refusal!.Line, ScrAdmission.AdmitFrom(two, ScrAdmissionSet.S3, 3).Refusal!.Type));
     }
 
     [TestMethod]
