@@ -198,9 +198,12 @@ against the installation, not for reproducing someone else's pixels.
    is kept (`AlreadyExists`) unless `replace` is set, also when another import installed
    it in the meantime. With `replace`, an installed pack of the same identity that is
    intact is still kept (`AlreadyExists`; this also stops a pack reached through a link
-   from replacing itself), while a damaged one is repaired; a source inside the installed
-   pack's directory is refused (`SourceInvalid`). Otherwise the old pack is moved aside to a hidden
-   `.replaced-<guid>`, replaced and deleted, and moved back if the rename fails. If even
+   from replacing itself), while a damaged one is repaired. Otherwise the old pack is
+   moved aside to a hidden `.replaced-<guid>`, replaced and deleted, and moved back if the
+   rename fails. A source inside `<collection>/<id>` is always refused (`SourceInvalid`):
+   by path before copying, and, for one reached through a link or a differently spelt
+   path, by finding its manifest gone once the old pack moved aside, which moves the old
+   pack straight back before anything is deleted. If even
    that fails, the result names the hidden directory that still holds it; such a
    directory is never removed automatically. A copy that is in place but does not open
    there is `InstalledButUnreadable`. Staging directories older than a day, left by an

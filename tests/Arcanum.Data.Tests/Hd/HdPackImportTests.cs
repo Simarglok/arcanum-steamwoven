@@ -108,6 +108,20 @@ public sealed class HdPackImportTests
         inner.Write();
         Assert.AreEqual(HdImportStatus.SourceInvalid, HdPackImport.Import(inner.Directory, collection, replace: true).Status);
         Assert.IsTrue(HdPack.Open(inner.Directory).Pack!.VerifyIntegrity().Intact, "the source survives");
+        if (!OperatingSystem.IsWindows())
+        {
+            // The same source reached through a link passes the path check; it is caught
+            // once the old pack moves aside, and both are put back untouched.
+            File.WriteAllText(Path.Combine(inner.Directory, "notes.txt"), "not copied");
+            var link = Path.Combine(_root, "link-to-inner");
+            Directory.CreateSymbolicLink(link, inner.Directory);
+            var installedBefore = HdPack.Open(Path.Combine(collection, "synthetic-pack")).Pack!.Identity;
+            Assert.AreEqual(HdImportStatus.SourceInvalid, HdPackImport.Import(link, collection, replace: true).Status);
+            Assert.IsTrue(File.Exists(Path.Combine(inner.Directory, "notes.txt")), "nothing of the source is lost");
+            Assert.AreEqual(installedBefore, HdPack.Open(Path.Combine(collection, "synthetic-pack")).Pack!.Identity, "the old pack is back");
+            Assert.IsFalse(Directory.EnumerateDirectories(collection).Any(d => Path.GetFileName(d).StartsWith('.')), "no staging or replaced copy left");
+            Directory.Delete(link);
+        }
         Directory.Delete(inner.Directory, recursive: true);
 
         var damaged = Built("damaged", "damaged-pack").Pack;
@@ -167,5 +181,22 @@ public sealed class HdPackImportTests
         Directory.CreateDirectory(empty);
         File.WriteAllBytes(Path.Combine(empty, "manifest.json"), []);
         Assert.AreEqual(HdPackOpenStatus.Unreadable, HdPack.Open(empty).Status);
+        if (!OperatingSystem.IsWindows())
+        {
+            // A FIFO is refused without being opened (opening one would block).
+            var fifo = Path.Combine(_root, "fifo-pack");
+            Directory.CreateDirectory(fifo);
+            using (var mkfifo = System.Diagnostics.Process.Start("mkfifo", Path.Combine(fifo, "manifest.json"))) mkfifo.WaitForExit();
+            Assert.AreEqual(HdPackOpenStatus.Unreadable, HdPack.Open(fifo).Status);
+
+            // A manifest that is a link is listed (and refused), not silently skipped.
+            var linked = Built("d", "linked").Pack.Directory;
+            var real = Path.Combine(_root, "real-manifest.json");
+            File.Move(Path.Combine(linked, "manifest.json"), real);
+            File.CreateSymbolicLink(Path.Combine(linked, "manifest.json"), real);
+            Directory.Move(linked, Path.Combine(collection, "linked"));
+            Assert.AreEqual(HdPackOpenStatus.Unreadable,
+                HdPack.Discover([new(HdPackLocationKind.Collection, collection)]).Single(f => Path.GetFileName(f.Directory) == "linked").Result.Status);
+        }
     }
 }

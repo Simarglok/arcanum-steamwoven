@@ -82,6 +82,14 @@ public static class HdPackImport
                 var aside = Path.Combine(root, ReplacedPrefix + Guid.NewGuid().ToString("N"));
                 Directory.Move(target, aside);
                 previous = aside; // only once the old pack has really moved
+                // A source inside the old pack (through a link, other case or Unicode form
+                // the path check above cannot see) has moved with it: put it back, refuse.
+                if (!File.Exists(Path.Combine(source.Directory, HdPack.ManifestFile)))
+                {
+                    Directory.Move(aside, target);
+                    Delete(staging);
+                    return new(HdImportStatus.SourceInvalid, null, report, "source is inside the target");
+                }
             }
             Directory.Move(staging, target);
         }
