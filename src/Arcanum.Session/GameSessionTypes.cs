@@ -119,6 +119,8 @@ public enum GameSessionFailure
     InvalidRoll, RandomExhausted,
     // Life domain (ARC-COMBAT-002).
     InvalidLifeTarget, InvalidLifeFacts, InvalidLifeState, InvalidLifeAmount,
+    // Event queue (ARC-WORLD-024).
+    EventBudgetExceeded, EventConflict, InvalidEventPass, InvalidEvents,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -219,17 +221,18 @@ public sealed class GameSessionSnapshot
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
     /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 added
     /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 added <see cref="Random"/>
-    /// (ARC-WORLD-019); schema 8 adds <see cref="Life"/> (ARC-COMBAT-002). Schemas 1..7 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 8;
+    /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 adds <see cref="Events"/> (ARC-WORLD-024).
+    /// Schemas 1..8 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 9;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
-        SessionLifeState life, SessionLightingState? lighting)
+        SessionLifeState life, SessionEventState events, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Random = random; Life = life; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Random = random; Life = life; Events = events; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -248,6 +251,8 @@ public sealed class GameSessionSnapshot
     public SessionRandomState Random { get; }
     /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>
     public SessionLifeState Life { get; }
+    /// <summary>The pending game events (ARC-WORLD-024).</summary>
+    public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
 }

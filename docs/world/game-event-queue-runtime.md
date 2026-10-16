@@ -1,14 +1,15 @@
-# Game event queue runtime (core)
+# Game event queue runtime
 
-Status: **Implemented bounded component**, ARC-WORLD-022, slice E1 of the
-[event queue research](../research/game-event-queue.md) (ARC-RES-046, top-20 item 3). It is a pure, Godot-free and
-session-free queue in `Arcanum.Simulation.Events`: kinds, ordering, scheduling, cancellation, the due pass and a
-detached snapshot with strict restore. **Not wired**: the game session does not own a queue, no snapshot schema carries
-it, no host calls a pass and no gameplay kind exists yet. Those are slices E2 (session owner and snapshot section,
-after top-20 item 2, life state, ARC-COMBAT-002, in the schema lane), E3 (host pump) and E4 (the consumers' kinds).
+Status: **Implemented bounded component.** ARC-WORLD-022 is slice E1 of the
+[event queue research](../research/game-event-queue.md) (ARC-RES-046, top-20 item 3): a pure, Godot-free and
+session-free queue in `Arcanum.Simulation.Events` (kinds, ordering, scheduling, cancellation, relocation, the due pass
+and a detached snapshot with strict restore). ARC-WORLD-024 is slice E2 with the life-state timers of ARC-COMBAT-002:
+the [game session](game-session-runtime.md) owns one queue, saves it in snapshot schema 9 and runs a pass on its
+clock ([session wiring](#session-wiring-arc-world-024)). **Not wired yet**: no host calls the pass (E3), and the other
+gameplay kinds (AI tick, script calls, effects) belong to their slices (E4).
 
 Requirements served in part: [FR-SCRIPT-003](../requirements/story-social-ai.md#fr-script-003) (deferred calls that
-survive a save: the queue and its snapshot, not yet saved with the session) and
+survive a save: the queue is saved with the session; no script-call kind yet) and
 [FR-RUNTIME-001](../requirements/world-travel-runtime.md#fr-runtime-001) (only due work runs, independent of frame
 rate: the pass, not yet pumped by a frame).
 
@@ -44,6 +45,7 @@ seeing the final time.
 | `GameEventQueue(registry, limits)` | An empty queue. `GameEventQueueLimits` defaults: 16,384 pending events, 500 per pass, 4 entity and 8 value slots per event. Limits out of range, or a kind wider than them, throw `ArgumentException`. |
 | `ScheduleAfter(kind, payload, delayMs, now)` / `ScheduleAt(kind, payload, deadlineMs)` | `GameEventScheduleResult`: `Added`, `Replaced` (new deadline and sequence; `Previous` is the old event), `KeptExisting` (the pending event, nothing added), `Merged` (the pending event with the merged payload, same deadline and sequence) or `Rejected` with a failure: `UnknownKind`, `InvalidPayload` (slot counts, map below 1, entity code, value check), `InvalidScope` (a scoped event's entities on two maps), `InvalidDelay`, `InvalidDeadline`, `InvalidClocks`, `TimeOverflow`, `InvalidMerge` (the merge result fails the checks or changes the key or map), `QueueFull`, `SequenceExhausted`. A refusal changes nothing. Kept and merged requests take no sequence number; a replacement needs no free slot. |
 | `Any(kind, match)` / `RemoveFirst(kind, match)` / `RemoveAll(kind, match)` | Queries and cancellation in queue order. An unregistered kind throws `ArgumentException`. |
+| `Relocate(fromMap, toMap, travels)` | ARC-WORLD-024: moves every event whose entities are all on `fromMap` and all travel to `toMap` (entity maps and, when scoped, the scope map), keeping kind, deadline, sequence and values. Atomic: a key collision moves nothing (`DuplicateKey`); maps below 1 are `InvalidScope`; from a handler `PassInProgress`. |
 | `ProcessDue(GameEventPassRequest)` | One pass with the three clocks, the active map (0: none, only global events), a budget of 1..`MaxPerPass` and an entity-existence check. Returns `GameEventPassResult(Failure, Outcomes, BudgetExhausted)`. A pass started from a handler is `PassInProgress`; a bad request is `InvalidPass`. Each event leaves the queue before its handler runs; a handler may schedule and cancel; a handler exception (or one from the entity check) propagates with its event consumed, and the outcomes of the earlier events of the pass are not returned. The pass draws no randomness. |
 | `QueryPending()` | All pending events, in queue order (domain, deadline, sequence). |
 | `CaptureSnapshot()` | `GameEventQueueSnapshot(RegistryVersion, NextSequence, Events)`: events of saved kinds in queue order. Detached immutable records. Throws `InvalidOperationException` during a pass. |
@@ -63,14 +65,105 @@ Programming errors throw instead of returning a typed failure: an invalid regist
 unregistered kind, a snapshot taken from a handler. Everything that depends on data or timing (scheduling, passes,
 restore of saved data) returns a typed result.
 
-Deliberate differences from the shared rules of research section 8, for E2 to revisit:
+Deliberate differences from the shared rules of research section 8 (E2 kept them, see the session wiring):
 
-- `ProcessDue` takes no expected version and the queue has no revision token; the session owner of E2 gives the pass
-  its version check.
-- An event leaves the queue before its handler runs, rather than in one commit with the handler's session changes;
-  E2 makes the handler's changes and the removal one session step.
+- `ProcessDue` takes no expected version and the queue has no revision token. The session pass takes none either, like
+  a clock advance; each life step a timer makes is versioned as any session step.
+- An event leaves the queue before its handler runs, rather than in one commit with the handler's session changes. A
+  session handler whose life step is refused is reported as `HandlerRefused`, and the timer is consumed.
 - Cancellation and queries go by kind and a predicate over the payload; a uniqueness key is a predicate on its slots.
   There is no keyed lookup method.
+
+## Session wiring (ARC-WORLD-024)
+
+`GameSessionOwner` owns one queue with the registry `SessionEventKinds` (version 1). Its kinds are the life-state timers
+that ARC-COMBAT-002 left for the queue. All run on game time, are saved, and keep one pending event per critter and kind
+(the source checks for an existing one too). Each event's only value is the game time it was set at.
+
+| Kind | Who | Set when | Delay | When it fires |
+| --- | --- | --- | --- | --- |
+| `life.hero.fatigue`, `life.npc.fatigue` | hero / NPC | fatigue damage is written with a positive value | 80 s | a living critter with fatigue damage recovers `HealRate × max(1, elapsed s / 80)` ([life state](life-state-runtime.md)); a positive result sets the next |
+| `life.hero.poison-damage`, `life.npc.poison-damage` | hero / NPC | the poison level is written with a positive value | 15 s | while poisoned: the poison damage tick (which may kill), then the next tick |
+| `life.hero.poison-recovery`, `life.npc.poison-recovery` | hero / NPC | as above | 120 s | while poisoned: the level loses PoisonRecovery; while it stays positive the next tick |
+| `life.npc.resting` | NPC | hit-point damage is written with a positive value | 1 h | a living NPC without a PC leader (free, not following or waiting) heals `HealRate × max(1, elapsed h)` hit points and three times that fatigue; positive writes set their timers again |
+
+A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
+found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
+damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that
+changes neither still sets a missing resting or poison timer; the session sets timers only on a change. It matters
+only for a critter that already has damage or poison but no pending timer: an NPC whose map data loads it wounded or
+poisoned, or a follower whose resting timer ended while it had a PC leader and who then left the party. The next
+change of the value sets the timer. The hero gets no resting timer: the source schedules one but its handler heals
+only NPCs. Sources: [fatigue][cr-fatigue], [resting][cr-rest], [poison][st-poison],
+[poison schedule][st-poison-sched], [hit-point write][hp-set], [poison write][stat-set].
+
+Rules of the wiring:
+
+- **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
+  step. The session's queue holds 16,387 events (`SessionEventKinds.MaxPending`: four per NPC life record and three for
+  the hero), so the timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the
+  clock's range, is refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
+- **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
+  map the PC is on), the timer's own map when a handler sets the next one. An NPC keeps all its timers on one map and
+  one per kind whatever the map: a life step on another map than its pending timers' (a move the session did not see,
+  such as a script teleport) takes them along to that map in the same step. Restore refuses an NPC with timers on two
+  maps.
+- **Pass.** `ProcessEvents(world, budget)` runs one pass at the session's game time with the actor's map as the active
+  map. Hero timers run on any map; an NPC timer waits while its map is not active and fires late on return, with the
+  elapsed time. The host's `ISessionEventWorld.CritterFacts(map, entity)` gives the NPC's life facts; an NPC it does not
+  report, or one without a session life record, is dropped (`EntityMissing`). Each fired timer is one life step, so a
+  changed record adds one revision; the pass itself takes no expected version, like a clock advance. A pass can change
+  the saved queue without moving any revision (a dropped or ended timer, a timer set again after a step that changed
+  nothing), so the revision is not a "nothing to save" signal. A pass while paused
+  or in turn-based mode still fires due timers. Real and animation time are 0 in a session pass: no session kind uses them.
+- **Map change.** `PlaceActor` and `ApplyChanges` to another map move the pending timers of the PC's followers to that
+  map (`GameEventQueue.Relocate`; an event moves only when every entity it names is on the old map and travels). A key
+  collision on the new map refuses the whole step (`EventConflict`; the one-map-per-NPC rule leaves no way to reach it),
+  and a call from the host's world port during a pass is `InvalidEventPass` (so is a life step from it that would move
+  an NPC's timers). Waiting and free NPCs keep their timers
+  on their map. The source makes unconscious followers wait before the PC leaves; the session moves the timers of every
+  follower in the party list, so a host that leaves an unconscious follower behind makes it wait first.
+- **Long waits.** A wait that advances many hours and then runs one pass fires each timer once, late: fatigue and resting
+  count the elapsed time, a poison tick applies one step. Stepping a long wait (the source sleeps one hour per step) is
+  the host pump's job (E3).
+- **Rule mode.** A restore uses the event profile of the options' rule mode (`GameRules.For(options.Rules).Events`,
+  ARC-WORLD-023); no session kind is `SavedUnlessRebuilt` yet (the AI tick arrives with I6), so both modes restore the
+  same timers. The poison recovery timer reads the session's current rules when it fires (`PoisonRecoveryTwice`, TE10).
+- **Poison recovery value.** A recovery timer carries a second value: 1 when a poison write set it, 2 when the recovery
+  tick set the next one (it then stands for the source's two events). In the Steamwoven mode a timer applies one tick;
+  in the Original mode a timer with 2 applies the tick twice, the second only while poison remains. The value does not
+  depend on the mode, so switching modes converts nothing.
+
+Anomaly **TE10** (new, recorded in the [research note](../research/game-event-queue.md#7-ce-anomalies-recorded-not-adopted)
+and the [verification ledger](../research/original-verification-ledger.md)): the source's poison recovery handler
+writes the new level, which schedules a recovery event because none is pending (the firing one already left the list),
+and then adds another one itself, so after the first tick two recovery events run every 120 s and the level falls
+twice as fast. The retail 1.0.7.4 executable does the same (read at `stat_poison_timeevent_process` 0x4B1170,
+`stat_base_set` 0x4B0980 and `poison_timeevent_schedule` 0x4B1350): a bug of the original. Decision of this task under
+D2: the Steamwoven mode applies one tick per period, the Original mode keeps two (rule switch `PoisonRecoveryTwice`).
+
+### Snapshot schema 9
+
+`events` is encoded between `life` and `lighting`:
+
+```json
+"events":{"registry":1,"nextSequence":3,"pending":[
+  {"sequence":1,"kind":"life.npc.fatigue","deadlineMs":54080000,"entities":[{"map":79,"entity":"oid:wolf"}],"values":[54000000]},
+  {"sequence":2,"kind":"life.npc.resting","deadlineMs":57600000,"entities":[{"map":79,"entity":"oid:wolf"}],"values":[54000000]}]}
+```
+
+Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
+16,387 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+(`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
+registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
+value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was
+set after the saved clock, a hero timer without a hero, an NPC timer without the NPC's life record, and everything the
+queue's own restore refuses (sequences, order, payloads, keys); more events than the queue holds is
+`EventBudgetExceeded`.
+
+**Migration decision: none.** Schemas 1..8 are `UnsupportedSchema`. A schema-8 quick save loads as "written by an
+incompatible version" with the running session kept, and the next F7 overwrites it. No host kept timers before, so
+nothing is lost.
 
 ## Tests
 
@@ -80,4 +173,18 @@ deadline), budget carry-over across domains, domain order and frozen game time, 
 and the inactive map, missing entities and handler refusals, the four uniqueness policies and a bad merge, removal and
 queries, nested passes and handler exceptions, every scheduling refusal, registry and limit errors, the checked
 real-seconds delay, detached snapshots, restore under both settings and the profile names, every restore refusal and the
-last sequence number.
+last sequence number, and relocation (only events whose entities all travel, scope and key index follow, an atomic
+collision refusal). `tests/Arcanum.Session.Tests/SessionEventTests`: hero fatigue recovery and a long wait, poison
+damage and recovery with one timer of each kind, NPC timers that wait for their map and followers that carry theirs,
+resting skipped for a follower and a dead NPC, a missing NPC dropped, a pass while paused, a queue that holds every
+timer the life records can need (and restores full), a dead critter's fatigue timer ending, an NPC's timers following
+it to another map, a map transfer step that carries followers' timers but not a waiting NPC's, a callback from the
+world port that cannot move the PC, the TE10 switch in both modes, the canonical `events` text, restore under both
+modes and the same firing afterwards, decode and restore refusals.
+
+[cr-fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1304-L1371
+[cr-rest]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1421-L1526
+[st-poison]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1007-L1082
+[st-poison-sched]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1092-L1135
+[hp-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1608-L1628
+[stat-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L774-L783

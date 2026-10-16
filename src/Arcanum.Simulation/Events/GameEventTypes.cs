@@ -202,6 +202,10 @@ public sealed record GameEventPassResult(GameEventFailure Failure, ImmutableArra
     public int Dropped => Outcomes.Length - Fired;
 }
 
+/// <summary>The result of <see cref="GameEventQueue.Relocate"/>: the moved events as they now are, or a failure with none
+/// moved.</summary>
+public sealed record GameEventRelocateResult(GameEventFailure Failure, ImmutableArray<GameEvent> Moved);
+
 /// <summary>
 /// Detached persisted state: the registry version, the next sequence number and the pending events of saved kinds in
 /// queue order (domain, deadline, sequence).
@@ -210,8 +214,9 @@ public sealed record GameEventQueueSnapshot(int RegistryVersion, long NextSequen
 
 /// <summary>
 /// The two event queue rule settings of owner decision D8, shaped like the combat profile:
-/// <see cref="Steamwoven"/> (the default) and <see cref="Original"/>. The only switch is the AI-tick rule of owner
-/// decision OQ2. The profile holds no state and is not saved (D4): any snapshot restores under either setting.
+/// <see cref="Steamwoven"/> (the default) and <see cref="Original"/>. Switches: the AI-tick rule of owner decision OQ2
+/// and the doubled poison recovery of the session's life timers (TE10, ARC-WORLD-024). The profile holds no state and is
+/// not saved (D4): any snapshot restores under either setting.
 /// Equal-deadline order is FIFO under both (owner decision OQ1 has no switch).
 /// </summary>
 public sealed record GameEventQueueProfile
@@ -224,11 +229,18 @@ public sealed record GameEventQueueProfile
     /// back for a fresh schedule, as the source rebuilds every NPC's AI tick on load.</summary>
     public bool RebuildOnLoad { get; init; }
 
-    /// <summary>Saved AI ticks restore with their timing; the default setting.</summary>
+    /// <summary>
+    /// TE10 (a bug of the original 1.0.7.4 executable, checked at 0x4B1170): the poison recovery handler writes the new
+    /// level, which schedules a recovery event, and then adds a second one itself, so from the second tick on the level
+    /// falls by PoisonRecovery twice every 120 seconds. Steamwoven applies one tick per period.
+    /// </summary>
+    public bool PoisonRecoveryTwice { get; init; }
+
+    /// <summary>Saved AI ticks restore with their timing and poison recovers once per period; the default setting.</summary>
     public static readonly GameEventQueueProfile Steamwoven = new() { Name = "steamwoven" };
 
-    /// <summary>The source behaviour: AI ticks are rebuilt on load.</summary>
-    public static readonly GameEventQueueProfile Original = new() { Name = "original", RebuildOnLoad = true };
+    /// <summary>The retail behaviour: AI ticks are rebuilt on load and poison recovers twice per period after the first.</summary>
+    public static readonly GameEventQueueProfile Original = new() { Name = "original", RebuildOnLoad = true, PoisonRecoveryTwice = true };
 
     /// <summary>Both settings, default first.</summary>
     public static IReadOnlyList<GameEventQueueProfile> All { get; } = new[] { Steamwoven, Original };

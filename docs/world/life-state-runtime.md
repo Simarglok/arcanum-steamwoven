@@ -11,7 +11,7 @@ Two layers, both Godot-free:
 - `Arcanum.Simulation.Combat.LifeRules`: pure functions over one critter's `LifeState` (hit-point damage, fatigue
   damage, poison level, stun and injury conditions, scars) and its `LifeFacts` (pools, effective stats, traits).
 - `GameSessionOwner` life domain: the hero's life and every NPC life the session changed, with the session's version
-  guard, revision, seeded rolls and snapshot schema 8.
+  guard, revision, seeded rolls and snapshot schema 8 (schema 9 since ARC-WORLD-024 adds the timers' event queue).
 
 Numbers and order are the CE reading at `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, read only,
 nothing copied). The fatigue recovery step was also checked in the original 1.0.7.4 executable (`Arcanum.exe` at
@@ -61,7 +61,7 @@ the caller passes the hero's poison level and legs (`QueryHeroLife().Record.Stat
 | --- | --- |
 | `SessionLifeTarget.Hero` / `SessionLifeTarget.Critter(entity, facts, loaded)` | The hero, or an NPC by entity id with the host's facts and the state its map data loads with (stored HP and fatigue damage, poison level, injury flags). The loaded state counts only until the session holds a record for the entity. |
 | `QueryHeroLife()` / `QueryLife(target)` / `QueryLifeRecord(entity)` | `SessionLifeView(Record, Status, Recorded)`; null without a hero; the stored record or null for an NPC the session never changed. |
-| `ApplyDamage`, `Kill`, `Heal`, `RecoverFatigue(scheduledAtGameMs)`, `RestHeal(hours)`, `PoisonDamageTick`, `PoisonRecoveryTick`, `ClearStun` | Take the expected `GameSessionVersion`. Order: `InvalidLifeTarget` (no hero, bad entity id), `InvalidLifeFacts`, `InvalidLifeState` (loaded state), `InvalidLifeAmount` (amounts, undefined effect bits or location, hours, a recovery scheduled after the clock), `StaleVersion`; then the step on a trial copy of the generator (`RandomExhausted` when it runs out); a step that changes nothing is NoChange and still returns its outcome (a knockdown on a new NPC with the record budget full still reports `KnockedDown`); then `BudgetExceeded` (a new NPC record over `MaxLifeRecords`, policy 4096) and `RevisionExhausted`. A refusal draws nothing; a change adds one revision. A death stamps the record with the clock's game time. `SessionLifeTarget.Critter` throws on a null entity id or facts, so an unresolved id never reaches the hero. |
+| `ApplyDamage`, `Kill`, `Heal`, `RecoverFatigue(scheduledAtGameMs)`, `RestHeal(hours)`, `PoisonDamageTick`, `PoisonRecoveryTick`, `ClearStun` | Take the expected `GameSessionVersion`. Order: `InvalidLifeTarget` (no hero, bad entity id), `InvalidLifeFacts`, `InvalidLifeState` (loaded state), `InvalidLifeAmount` (amounts, undefined effect bits or location, hours, a recovery scheduled after the clock), `StaleVersion`; then the step on a trial copy of the generator (`RandomExhausted` when it runs out); a step that changes nothing is NoChange and still returns its outcome (a knockdown on a new NPC with the record budget full still reports `KnockedDown`); then `EventBudgetExceeded` (since ARC-WORLD-024: the step's new timers do not fit in the event queue, or their deadline would pass the clock's range; the queue is sized so that the first cannot happen under the policy limits), `BudgetExceeded` (a new NPC record over `MaxLifeRecords`, policy 4096) and `RevisionExhausted`. Since ARC-WORLD-024 the session's event queue fires `RecoverFatigue`, `RestHeal` (for NPCs), `PoisonDamageTick` and `PoisonRecoveryTick` itself when the host runs a pass; a host that also calls them for the same timer applies the step twice. A refusal draws nothing; a change adds one revision. A death stamps the record with the clock's game time. `SessionLifeTarget.Critter` throws on a null entity id or facts, so an unresolved id never reaches the hero. |
 
 The hero's facts come from the character owner: level, effective ST (and under each poison penalty), CN, WP, HealRate,
 PoisonRecovery, with crippled legs as a query condition; pools are 0, because every pre-made PC prototype stores no HP
@@ -75,7 +75,8 @@ only when the step runs to the end; a refusal draws nothing. As in the source, a
 
 ## Snapshot schema 8
 
-`life` is encoded between `random` and `lighting`:
+`life` is encoded between `random` and `lighting` (since schema 9 `events` follows it,
+[event queue](game-event-queue-runtime.md#snapshot-schema-9)):
 
 ```json
 "life":{"hero":{"hpDamage":4,"fatigueDamage":6,"poison":0,"conditions":[],"scars":0,"deathTimeMs":null},
@@ -98,9 +99,10 @@ before this schema, so nothing is lost.
 ## Not implemented
 
 - No host calls it: the viewer applies no damage, the attack resolver's output is applied only in tests.
-- Timers: the 80-second fatigue recovery, 15/120-second poison ticks, the hourly NPC resting heal and body decay are
-  scheduled by the game event queue (ARC-RES-046, slices E2/E4); this task ships the steps they call. Pending events are
-  not saved yet.
+- Timers: since ARC-WORLD-024 the 80-second fatigue recovery, the 15/120-second poison ticks and the hourly NPC resting
+  heal are scheduled by every life step on the session's game event queue and saved with it
+  ([session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024)); no host runs the pass yet. Body decay,
+  encumbrance fatigue damage and the combat-focus wipe have no timer.
 - What other owners do on these events: experience and alignment on a kill, the party leaving of a dead follower,
   AI focus and near-death reactions, spell demaintenance on unconsciousness, item drops and wear, the death slide and
   return to the main menu for a dead PC, logbook injuries.

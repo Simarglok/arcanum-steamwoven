@@ -7,6 +7,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -21,17 +22,18 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 8. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 9. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
-/// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
+/// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
+/// needs the kind registry) stays with <see cref="GameSessionOwner.Restore"/>.
 /// </summary>
 public static class GameSessionSnapshotCodec
 {
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -59,6 +61,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LifeFields = ["hero", "critters"];
     private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
     private static readonly string[] CritterLifeFields = ["entity", "hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
+    private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
+    private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
+    private static readonly string[] EventEntityFields = ["map", "entity"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -265,6 +270,33 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("events");
+            w.WriteNumber("registry", snapshot.Events.Registry);
+            w.WriteNumber("nextSequence", snapshot.Events.NextSequence);
+            w.WriteStartArray("pending");
+            foreach (var pending in snapshot.Events.Pending)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("sequence", pending.Sequence);
+                w.WriteString("kind", pending.Kind);
+                w.WriteNumber("deadlineMs", pending.DeadlineMs);
+                w.WriteStartArray("entities");
+                foreach (var entity in pending.Entities)
+                {
+                    w.WriteStartObject();
+                    w.WriteNumber("map", entity.Map);
+                    w.WriteString("entity", entity.Code);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteStartArray("values");
+                foreach (var value in pending.Values) w.WriteNumberValue(value);
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -351,7 +383,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Events(f["events"]), Lighting(f["lighting"]));
     }
 
     // Ranges and canonical spelling; the hero's presence, death times against the clock and budgets are Restore's.
@@ -396,6 +428,38 @@ public static class GameSessionSnapshotCodec
                 Int(f["poison"], path + ".poison", 0, LifeLimits.MaxPoisonLevel), conditions,
                 Int(f["scars"], path + ".scars", 0, LifeLimits.MaxScars)),
             death.ValueKind == JsonValueKind.Null ? null : Long(death, path + ".deathTimeMs", 0, long.MaxValue));
+    }
+
+    // Shapes and ranges only: kinds, sequence order, deadlines against the clock and the NPCs' records are Restore's.
+    private static SessionEventState Events(JsonElement element)
+    {
+        const string p = "$.events";
+        var f = Fields(element, p, EventsFields);
+        var registry = Int(f["registry"], p + ".registry", 1, int.MaxValue);
+        var next = Long(f["nextSequence"], p + ".nextSequence", 1, long.MaxValue);
+        var items = Array(f["pending"], p + ".pending", SessionEventKinds.MaxPending);
+        var pending = new SessionPendingEvent[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.pending[{i}]";
+            var item = Fields(items[i], path, PendingEventFields);
+            var kind = String(item["kind"], path + ".kind");
+            if (!SessionValidation.Code(kind, GameEventRegistry.MaxNameCharacters)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".kind");
+            var entityItems = Array(item["entities"], path + ".entities", GameEventQueueLimits.Default.MaxEntitiesPerEvent);
+            var entities = ImmutableArray.CreateBuilder<GameEventEntity>(entityItems.Length);
+            for (var j = 0; j < entityItems.Length; j++)
+            {
+                var at = $"{path}.entities[{j}]";
+                var entity = Fields(entityItems[j], at, EventEntityFields);
+                entities.Add(new(Int(entity["map"], at + ".map", 1, int.MaxValue), Entity(entity["entity"], at + ".entity")));
+            }
+            var valueItems = Array(item["values"], path + ".values", GameEventQueueLimits.Default.MaxValuesPerEvent);
+            var values = ImmutableArray.CreateBuilder<long>(valueItems.Length);
+            for (var j = 0; j < valueItems.Length; j++) values.Add(Long(valueItems[j], $"{path}.values[{j}]", long.MinValue, long.MaxValue));
+            pending[i] = new(Long(item["sequence"], path + ".sequence", 1, long.MaxValue), kind,
+                Long(item["deadlineMs"], path + ".deadlineMs", 0, long.MaxValue), entities.MoveToImmutable(), values.MoveToImmutable());
+        }
+        return new(registry, next, pending);
     }
 
     private static SessionRandomState Random(JsonElement element)

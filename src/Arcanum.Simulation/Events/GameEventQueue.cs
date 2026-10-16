@@ -101,6 +101,43 @@ public sealed class GameEventQueue
         return removed;
     }
 
+    /// <summary>
+    /// Moves the events of travelling entities to another map (a PC map change that its followers take part in, slice
+    /// E2): every pending event that names at least one entity, all of them on <paramref name="fromMap"/> and all
+    /// <paramref name="travels"/>, gets <paramref name="toMap"/> for its entities and, when scoped, as its scope map. Kind,
+    /// deadline, sequence and values stay. Atomic: when a moved event's key would equal a pending one, nothing moves
+    /// (<see cref="GameEventFailure.DuplicateKey"/>). Maps below 1 are <see cref="GameEventFailure.InvalidScope"/>; a call from
+    /// a handler is <see cref="GameEventFailure.PassInProgress"/>. Returns the moved events as they now are, in queue order.
+    /// </summary>
+    public GameEventRelocateResult Relocate(int fromMap, int toMap, Func<GameEventEntity, bool> travels)
+    {
+        ArgumentNullException.ThrowIfNull(travels);
+        if (_passing) return new(GameEventFailure.PassInProgress, ImmutableArray<GameEvent>.Empty);
+        if (fromMap < 1 || toMap < 1) return new(GameEventFailure.InvalidScope, ImmutableArray<GameEvent>.Empty);
+        if (fromMap == toMap) return new(GameEventFailure.None, ImmutableArray<GameEvent>.Empty);
+        var moving = QueryPending().Where(e => e.Payload.Entities.Length > 0 &&
+            e.Payload.Entities.All(entity => entity.Map == fromMap && travels(entity))).ToArray();
+        var moved = moving.Select(e =>
+        {
+            var payload = e.Payload with { Entities = e.Payload.Entities.Select(entity => entity with { Map = toMap }).ToImmutableArray() };
+            return e with { Payload = payload, ScopeMap = e.ScopeMap == 0 ? 0 : toMap };
+        }).ToArray();
+        var freed = new HashSet<string>(StringComparer.Ordinal);
+        var taken = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var e in moving)
+            if (Kind(e.Kind) is { Uniqueness: not GameEventUniqueness.Many } kind) freed.Add(Key(kind, e.Payload));
+        foreach (var e in moved)
+        {
+            if (Kind(e.Kind) is not { Uniqueness: not GameEventUniqueness.Many } kind) continue;
+            var key = Key(kind, e.Payload);
+            if (!taken.Add(key) || (_byKey.ContainsKey(key) && !freed.Contains(key)))
+                return new(GameEventFailure.DuplicateKey, ImmutableArray<GameEvent>.Empty);
+        }
+        foreach (var e in moving) Remove(e);
+        foreach (var e in moved) Insert(e);
+        return new(GameEventFailure.None, moved.ToImmutableArray());
+    }
+
     /// <summary>All pending events, saved or not, in queue order (domain, deadline, sequence). Detached.</summary>
     public ImmutableArray<GameEvent> QueryPending() =>
         PassOrder.SelectMany(d => DomainSet(d)).Select(o => _events[o.Sequence]).ToImmutableArray();

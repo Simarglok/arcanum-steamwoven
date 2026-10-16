@@ -1,7 +1,8 @@
 # Game session state runtime
 
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
-inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002.
+inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
+event queue ARC-WORLD-024.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -9,7 +10,8 @@ quest states, known rumors), the PC's [party](party-runtime.md) (followers, wait
 [player character](starting-hero-runtime.md) (stats, level, alignment, gold and starting kit), the items the PC
 took from the world ([inventory](inventory-runtime.md): pickup, loot, negative dialog `IN`), the seeded gameplay
 generator with labelled rolls ([session randomness](session-random-runtime.md)), the life of the hero and the NPCs it
-changed ([life state](life-state-runtime.md): hit points, fatigue, poison, injuries, knockout, death), plus a
+changed ([life state](life-state-runtime.md): hit points, fatigue, poison, injuries, knockout, death), the game event
+queue of their timers ([event queue](game-event-queue-runtime.md#session-wiring-arc-world-024)), plus a
 versioned snapshot schema with a strict JSON codec.
 The AREA viewer keeps every [dialog consequence](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic)
 it can store here. It covers the state boundary of
@@ -30,15 +32,18 @@ saved clock is rebuilt with the same validation as bootstrap. No public clock AP
 ## API
 
 Namespace `Arcanum.Session`. The caller serializes **all** calls, as with the clock
-and GF owners. There are no locks, events, timers, files or Godot types. The one callback is the host's insert check
-during an inventory transfer; a call back into the owner from it makes that transfer `StaleVersion` with no effect.
+and GF owners. There are no locks, host events, threads, files or Godot types; game timers are queue events that fire
+only when the host runs a pass. Two callbacks reach the host: the insert check during an inventory transfer (a call
+back into the owner from it makes that transfer `StaleVersion` with no effect) and `ISessionEventWorld.CritterFacts`
+during an event pass, which must not call back into the owner (a `PlaceActor` or `ApplyChanges` from it is
+`InvalidEventPass`; a `Capture` from it throws).
 
 | Entry | Contract |
 | --- | --- |
 | `GameSessionOwner.Create(GameSessionDescriptor)` | Clock `ProfileBinding`, GF descriptor, initial `ActorPlacement`, optional limits, optional hero (ARC-WORLD-015) the random seed (ARC-WORLD-019, default 0) and the rule mode (ARC-WORLD-023, default Steamwoven; undefined is `InvalidDescriptor`). Validates the actor and the hero (`InvalidHero`), bootstraps the clock, then creates the GF owner. Any rejection returns no owner, a `GameSessionFailure`, and the inner `ClockFailure` / `GlobalFlagReason`; a clock already built is disposed. |
-| `GameSessionOwner.Restore(GameSessionSnapshot, GameSessionRestoreOptions)` | Checks the options' rule mode (undefined is `InvalidDescriptor`; the snapshot holds none), schema, world, module, the exact clock profile, actor, map keys, budgets, story, party, hero and inventory **before** building anything, then rebuilds clock (saved time, pause, revision) and GF (saved domain, known values, revision, new epoch). Never touches an existing owner. |
+| `GameSessionOwner.Restore(GameSessionSnapshot, GameSessionRestoreOptions)` | Checks the options' rule mode (undefined is `InvalidDescriptor`; the snapshot holds none), schema, world, module, the exact clock profile, actor, map keys, budgets, story, party, hero, inventory, life and the pending events (under the mode's event profile) **before** building anything, then rebuilds clock (saved time, pause, revision) and GF (saved domain, known values, revision, new epoch). Never touches an existing owner. |
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
-| `ApplyChanges(expected, actor?, changes)` | ARC-WORLD-017: one guarded atomic step over the actor (when given) and a list of `MapChangeEdit(Map, Key, Value?)` (null clears the key). Validates the actor, every map and key and that no key is listed twice, then the version; NoChange when nothing would differ; the budget is checked on the state after the whole step (an update or a move of a key never needs room); then revision capacity. A refusal applies nothing; otherwise everything applies with one revision. The viewer's map transfer carries the PC's followers with it ([companion map change](companion-follow-runtime.md#map-change-arc-world-017)). |
+| `ApplyChanges(expected, actor?, changes)` | ARC-WORLD-017: one guarded atomic step over the actor (when given) and a list of `MapChangeEdit(Map, Key, Value?)` (null clears the key). Validates the actor, every map and key and that no key is listed twice, then the version; NoChange when nothing would differ; the budget is checked on the state after the whole step (an update or a move of a key never needs room); then revision capacity, then (ARC-WORLD-024) the move of the followers' pending timers (`EventConflict`, `InvalidEventPass`). A refusal applies nothing; otherwise everything applies with one revision. The viewer's map transfer carries the PC's followers with it ([companion map change](companion-follow-runtime.md#map-change-arc-world-017)). |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
 | `QueryClockSnapshot` / `AdvanceGameTime` / `SetPaused` | Forwarded to the session's clock with the clock's own token contract. Clock changes do not move the session revision. |
 | `QueryLighting` / `RecordLighting` | Applied ambient lighting (ARC-WORLD-010, FR-LIGHT-012): `SessionLightingState(SchemeId ≥1, Hour 0..23)` or `null` when none was recorded. `RecordLighting` refuses (`InvalidLighting`) a value whose hour is not the clock's current hour, and a changed `AdvanceGameTime` that leaves the recorded hour clears the record, so a capture never pairs a time with another hour's scheme (it carries `null` until the host records the new hour). Equal value is NoChange. It does not move the session revision. |
@@ -51,6 +56,7 @@ during an inventory transfer; a call back into the owner from it makes that tran
 | `Roll` / `QueryRandom` / `CombatRolls` | Session randomness (ARC-WORLD-019): one labelled uniform roll in an inclusive range, the generator's seed and position, and the generator as the attack resolver's roll source. A roll takes no expected version and does not move the revision. See [session randomness](session-random-runtime.md). |
 | `QueryHeroLife` / `QueryLife` / `QueryLifeRecord` / `ApplyDamage` / `Kill` / `Heal` / `RecoverFatigue` / `RestHeal` / `PoisonDamageTick` / `PoisonRecoveryTick` / `ClearStun` | Life domain (ARC-COMBAT-002): the hero, or an NPC with the host's facts and loaded state; mutations take the expected version, refuse before any roll, add one revision per change and draw their knockout and second-arm rolls from the session generator. See [life state runtime](life-state-runtime.md). |
 | `Rules` / `SelectRules(mode)` | Rule mode (ARC-WORLD-023, [contract](rule-modes.md)): the active `GameRules` (Steamwoven or Original) every domain reads at its decision, and an immediate switch (`Changed`, `NoChange`, `Rejected` for an undefined mode). Starts from `GameSessionDescriptor.Rules` or `GameSessionRestoreOptions.Rules` (default Steamwoven). A setting, not state: no revision, not in the snapshot. |
+| `QueryEvents` / `ProcessEvents(world, budget)` | Event queue (ARC-WORLD-024): the pending timers in queue order, and one pass at the session's game time on the actor's map with the host's `ISessionEventWorld` for NPC facts. Life steps set their timers in the same step (`EventBudgetExceeded` when they do not fit); `PlaceActor` and `ApplyChanges` to another map move the followers' timers (`EventConflict` on a collision). See [session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
 | `Dispose()` | Idempotent; disposes the clock and GF owner. Every later call except `Dispose` throws `ObjectDisposedException`. |
 
@@ -127,7 +133,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 8
+## Snapshot schema 9
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -139,13 +145,14 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
-`Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8))
+`Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
+`Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":8,
+{"format":"arcanum-steamwoven-session","schemaVersion":9,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -163,6 +170,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
  "random":{"seed":"0000000000000000","draws":0},
  "life":{"hero":null,"critters":[]},
+ "events":{"registry":1,"nextSequence":1,"pending":[]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
 
@@ -192,8 +200,10 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 8 is the only accepted version. ARC-COMBAT-002 added the
-required `life` section; schema 7 is refused like the earlier ones (see
+**Migration decision: none.** Schema 9 is the only accepted version. ARC-WORLD-024 added the
+required `events` section; schema 8 is refused like the earlier ones (see
+[event queue](game-event-queue-runtime.md#snapshot-schema-9)). ARC-COMBAT-002 had added the
+required `life` section and refused schema 7 (see
 [life state](life-state-runtime.md#snapshot-schema-8)). ARC-WORLD-019 had added the
 required `random` section and refused schema 6 (see
 [session randomness](session-random-runtime.md#snapshot-schema-7)). ARC-WORLD-015 had added the
@@ -205,10 +215,10 @@ required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of schema 1..7 (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of schema 1..8 (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
-dialog. Adding another domain needs schema 9 with its own explicit migration decision.
+dialog. Adding another domain needs schema 10 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -248,6 +258,7 @@ and a literal, independently written canonical JSON text:
 - `LifeStateTests`: the life domain (see [life state](life-state-runtime.md#tests)).
 - `RuleModeTests`: the rule mode composition and names, create and restore under either mode, switching without a
   revision or snapshot change, disposal, and the setting codec (see [rule modes](rule-modes.md)).
+- `SessionEventTests`: the event queue and its life timers (see [event queue](game-event-queue-runtime.md#tests)).
 - `SaveSlotTests`: the file is exactly the codec text and restores the same session;
   missing file or directory, a directory at the slot path; overwrite; a failure before the replace keeps the previous
   save and removes the temporary file; an unwritable slot; a stale temporary file;
