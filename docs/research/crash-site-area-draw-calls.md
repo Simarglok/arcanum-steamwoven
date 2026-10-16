@@ -73,7 +73,7 @@ full-resolution chunk.
 
 | Option | Draw calls at zoom 0.25 | Memory | Exactness | Size of change |
 | --- | --- | --- | --- | --- |
-| A. Terrain chunks, 512 px, built on demand for visible chunks, GPU and CPU LRU | up to about 90 terrain chunks at 1280×800 + bodies | 1 MiB per visible chunk at full resolution (1,024 px chunks would exceed the 8,192 px row cap at zoom 8) | exact by the argument above; seams and mirroring tested against per-item rendering | medium: chunk compositor, LRU, Fit path; bodies unchanged |
+| A. Terrain chunks, 512 px, composed on demand for visible chunks, GPU LRU | up to about 90 terrain chunks at 1280×800 + bodies | 1 MiB per visible chunk at full resolution (1,024 px chunks would exceed the 8,192 px row cap at zoom 8) | exact by the argument above; seams and mirroring tested against per-item rendering | medium: chunk compositor, LRU, Fit path; bodies unchanged |
 | B. A + decimated chunks for dyadic zooms ≤ 0.5 | same | 1/4 to 1/64 of A at 0.5 to 0.125 | exact only at dyadic zooms with integer origin | small on top of A |
 | C. Batch all sprites (frame atlas, one material, per-instance data through MultiMesh, index rows in a row atlas) | a few | atlas of 24.7 MiB frames + rows | must re-prove the rule with per-instance integer data | large: rewrites the compositor and its native probes |
 | D. Clamp the minimum zoom or limit Fit | unchanged per sprite | none | n/a | trivial, but changes the agreed camera policy |
@@ -94,6 +94,19 @@ Also in scope of F3/F6 and cheap once A exists:
   in the same runs,
   keeping the resource smoke's eviction check by bounding the LRU;
 - cap the idle frame rate (the same runs rendered about 500 FPS when idle).
+
+## Implemented
+
+Option A with the decimated levels of option B now draws the terrain
+([viewer contract](../rendering/crash-site-area-viewer.md)). A CPU raster test
+compares chunk drawing with per-command drawing under the exact rule, with zero and
+non-zero source crops: full-resolution chunks at zooms 1, 2, 1.2651956 and 0.8 and at
+fractional origins at zooms 1 and 0.5, decimated chunks at 0.5, 0.25 and 0.125 with
+integer origins. The native owner fixture compares whole chunked and per-command
+readbacks at 15 views (levels 0 to 3) and checks frozen pixels in both modes; the
+seam fixture and the original-data smoke run in chunk mode, and the resource smoke
+checks that the chunk cache stays within its caps and evicts during the sweep. The
+measured result is in the [performance diagnosis](crash-site-area-viewer-performance.md#f3-result-terrain-chunks).
 
 ## Not established
 

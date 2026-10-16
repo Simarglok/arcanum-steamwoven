@@ -31,7 +31,7 @@ public static partial class TerrainViewerSelfTest
         cache.UploadActor(actor.Result.ActorTextures);
         var viewport=new SubViewport { Size=new(480,400),TransparentBg=true,RenderTargetUpdateMode=SubViewport.UpdateMode.Always };
         var canvas=new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
-        var views=0; var samples=0;
+        var views=0; var samples=0; var compared=0;
         async Task Settle()
         {
             await host.ToSignal(host.GetTree(),SceneTree.SignalName.ProcessFrame);
@@ -48,19 +48,44 @@ public static partial class TerrainViewerSelfTest
             catch(Exception error) { throw new InvalidOperationException($"AREA_OWNER_PIXEL world={x}/{y} screen={sx}/{sy} winner={winner}",error); }
             samples++;
         }
+        // The whole readback with terrain chunks must equal the per-command readback.
+        async Task SameAsPerCommand(string view,int level)
+        {
+            if(canvas.AreaChunkCount==0 || canvas.AreaChunkLevel!=level)
+                throw new InvalidOperationException($"AREA_OWNER_CHUNK_LEVEL {view} chunks={canvas.AreaChunkCount} level={canvas.AreaChunkLevel}");
+            byte[] chunkedPixels; using(var image=viewport.GetTexture().GetImage()) chunkedPixels=image.GetData();
+            canvas.AreaTerrainChunksEnabled=false; await Settle();
+            byte[] commandPixels; using(var image=viewport.GetTexture().GetImage()) commandPixels=image.GetData();
+            canvas.AreaTerrainChunksEnabled=true; await Settle();
+            if(chunkedPixels.Length!=commandPixels.Length) throw new InvalidOperationException($"AREA_OWNER_CHUNK_READBACK {view}");
+            var opaque=0;
+            for(var i=0;i<chunkedPixels.Length;i++)
+            {
+                if(chunkedPixels[i]!=commandPixels[i]) throw new InvalidOperationException($"AREA_OWNER_CHUNK_PIXEL {view} byte={i}");
+                if(i%4==3 && chunkedPixels[i]==255) opaque++;
+            }
+            if(opaque<1000) throw new InvalidOperationException($"AREA_OWNER_CHUNK_EMPTY {view}");
+            compared++;
+        }
         try
         {
             canvas.SetActorVisibilityForReadback(false);
+            // Every view twice: terrain as pre-composed chunks (production default) and
+            // per command. Both must show the same frozen pixels.
+            foreach(var chunked in new[]{true,false})
             foreach(var zoom in new[]{.5f,1f,2f})
             foreach(var pan in new[]{Vector2.Zero,new Vector2(13,-11),new Vector2(-17,9)})
             {
                 var origin=(zoom==.5f?new Vector2(59.75f,100.25f):new Vector2(60,100))+pan-new Vector2(0,2520*zoom);
                 viewport.CanvasTransform=new Transform2D(0,new(zoom,zoom),0,origin);
+                canvas.AreaTerrainChunksEnabled=chunked;
                 canvas.PublishArea(plan,frames,actor.Result.ActorPlan!,actor.Arguments.ActorInput!,cache);
                 canvas.SetStaticVisibilityForReadback(true); await Settle();
                 if(canvas.AreaVisibleCommands.Select(c=>c.Visual).Distinct().Count()!=canvas.AreaVisibleCount
-                    || canvas.AreaVisibleCount+canvas.AreaCulledCount!=16389 || cache.AreaCount!=2)
+                    || canvas.AreaVisibleCount+canvas.AreaCulledCount!=16389 || (canvas.AreaChunkCount>0)!=chunked
+                    || cache.AreaCount!=(chunked?1:2))
                     throw new InvalidOperationException("AREA_OWNER_VISIBLE_RECONCILIATION");
+                if(chunked) await SameAsPerCommand($"zoom {zoom} pan {pan}",0);
                 using(var image=viewport.GetTexture().GetImage())
                 {
                     // Frozen world points around independently calculated X/Y
@@ -86,6 +111,17 @@ public static partial class TerrainViewerSelfTest
                 using(var image=viewport.GetTexture().GetImage()) Pixel(image,zoom,origin,80,2580,"left");
                 views++;
             }
+            // Decimated chunk levels need an integer raster origin at zoom 2^-k.
+            foreach(var (zoom,level) in new[]{(.5f,1),(.25f,2),(.125f,3)})
+            foreach(var pan in new[]{Vector2.Zero,new Vector2(7,-5)})
+            {
+                viewport.CanvasTransform=new Transform2D(0,new(zoom,zoom),0,new Vector2(240,200)+pan-new Vector2(0,MathF.Round(2520*zoom)));
+                canvas.AreaTerrainChunksEnabled=true;
+                canvas.PublishArea(plan,frames,actor.Result.ActorPlan!,actor.Arguments.ActorInput!,cache); await Settle();
+                await SameAsPerCommand($"decimated zoom {zoom} pan {pan}",level);
+                views++;
+            }
+            canvas.AreaTerrainChunksEnabled=true;
             // B's logical center anchor (9,2547) is left of this world view.
             // Its selected canopy still covers the literal sample (20,2540).
             viewport.CanvasTransform=new Transform2D(0,Vector2.One,0,new(-15,-2400));
@@ -96,7 +132,7 @@ public static partial class TerrainViewerSelfTest
             views++;
             if(fixture.Owner.Usage!=usage || fixture.Streams.Values.Any(s=>s.DisposeCount!=1))
                 throw new InvalidOperationException("AREA_OWNER_PAN_REDECODE");
-            GD.Print($"ARC-RENDER-007 owner fixture PASS sectors=4 terrain=16384 bodies=5 commands=16389 frames=2 cpuBytes=94720 views={views} samples={samples} viewport=480x400 mainViewport={host.GetViewport().GetVisibleRect().Size}; disposed-provider pans no re-decode; original parity NOT_VERIFIED");
+            GD.Print($"ARC-RENDER-007 owner fixture PASS sectors=4 terrain=16384 bodies=5 commands=16389 frames=2 cpuBytes=94720 views={views} samples={samples} chunkReadbacks={compared} viewport=480x400 mainViewport={host.GetViewport().GetVisibleRect().Size}; disposed-provider pans no re-decode; original parity NOT_VERIFIED");
         }
         finally
         {
