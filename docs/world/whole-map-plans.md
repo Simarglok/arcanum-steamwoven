@@ -11,21 +11,30 @@ original-data oracles. No viewer, launcher or session file changes here.
 
 ## API
 
-`AreaMapPlans.Create(stack, catalog, mapName)` returns an `AreaMapPlan` (or a
-typed `AreaMapPlanStatus`): the structural `AreaSourcePlan`, the input files and
+`AreaMapPlans.Create(stack, catalog, mapName)` returns an `AreaMapPlan` or a
+typed `AreaMapPlanStatus` (unknown map, no sectors, more than 256 sector files,
+missing or unsupported source, unreadable input; I/O and archive errors are
+reported, not thrown): the structural `AreaSourcePlan`, the input files and
 `AreaLoaderOptions` sized for the map. `AreaMapPlan.Open()` opens the inputs and
-the owner; the owner authenticates every input against the plan as before.
+the owner; the owner authenticates every input against the plan as before. The
+snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
+`arc-data-019-whole-map-v1` without the ART rules).
 
 - **Inputs:** the module archive, `arcanum1.dat`, `arcanum2.dat`, the map's
   mobile aggregate and every prototype the map's objects name (from the
   catalogue's own reads), each hashed when the plan is made. No hash is pinned.
+  A sector file overridden outside the module archive is refused, because the
+  owner reads sectors from the module archive.
 - **Mappings:** the ten MES/policy files the pinned profiles bind, located by
   name in the two base archives.
-- **Map numbers:** from `rules/maplist.mes` (catalogue number from 5000,
-  runtime = catalogue − 4999); 0/0 for an unlisted map.
+- **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
+  missing number (at most 200), as the original does; runtime = catalogue − 4999;
+  0/0 for an unlisted map or a list that does not parse.
 - **Start:** the sector of `startloc.txt` when it has a file, else the first one.
-- **Limits:** the exterior profile's limits scaled by the map's size (sectors,
-  objects, prototypes, aggregate).
+- **Limits:** count limits follow the map exactly; byte budgets are the exterior
+  profile's (20 present sectors, 524 objects) scaled by the map's sectors or
+  objects, whichever grows more, at most 16×, so an oversized map fails with a
+  budget error instead of exhausting memory.
 
 ## Rules of a whole-map plan
 
@@ -57,14 +66,16 @@ pinned by the test (a map that starts publishing joins the list). The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
-What stops the other 61, measured once (counts of issues, not maps):
+What stops the other 61 (counts of issues, not maps; a one-off measurement
+with a scratch runner over `AreaMapPlans` on the installed original at the PR
+head, not asserted by tests):
 
 | Cause | Issues | Next |
 | --- | ---: | --- |
 | Object types the owner does not draw yet (portals, keys, keyrings, scrolls, traps, PC) | 2,568 | generalised object model |
 | ART path of an object not found in `arcanum1/2.dat` | 115 | stack-order resources (ARC-DATA-018) |
 | Unsupported art states (eye-candy overlays, critter poses beyond the admitted set) | 138 | generalised object model |
-| An entry over the 1 MiB read cap | 31 | raise the cap for whole maps |
+| Read budget: entries over the 1 MiB cap (31) and the capped byte budgets of the two largest maps (K'na Tha, Void) | 16,589 | raise the entry cap; stream large maps |
 
 ## Limits
 

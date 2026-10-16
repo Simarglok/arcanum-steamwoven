@@ -160,6 +160,8 @@ public sealed class AreaSourcePlan
     {
         OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
         OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
+        _ when Selection == AreaSectorSelection.AllSectors && AllowArtTrailingBytes => "arc-data-019-whole-map-original-rules-v1",
+        _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-v1",
         _ => "structural-file-effective-v1",
     };
     /// <summary>How core sectors are chosen: the start sector's four-neighbour component with the

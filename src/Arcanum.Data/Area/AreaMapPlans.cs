@@ -6,7 +6,7 @@ using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Area;
 
-public enum AreaMapPlanStatus { Ready, UnknownMap, NoSectors, MissingSource, UnsupportedSource }
+public enum AreaMapPlanStatus { Ready, UnknownMap, NoSectors, TooLarge, MissingSource, UnsupportedSource, Unreadable }
 
 /// <summary>A structural plan for one whole map, its inputs and loader limits sized for it.
 /// <see cref="Open"/> transfers the inputs to a new <see cref="AreaDataOwner"/>.</summary>
@@ -45,6 +45,13 @@ public sealed record AreaMapPlanResult(AreaMapPlanStatus Status, AreaMapPlan? Pl
 /// stack order; overrides in later archives or loose folders are not seen (ARC-DATA-018).</summary>
 public static class AreaMapPlans
 {
+    /// <summary>Largest map a whole-map plan loads at once (the largest interior has 79 sector
+    /// files). The main map is generated and streamed, not loaded whole.</summary>
+    public const int MaxSectorFiles = 256;
+    /// <summary>The scale factor of the limits never exceeds this, so a big or malformed map
+    /// fails with a budget error instead of exhausting memory.</summary>
+    internal const double MaxLimitScale = 16;
+
     private static readonly (AreaMappingRole Role, int Resource, string Path)[] MappingPaths =
     [
         (AreaMappingRole.Tile, 2, "art/tile/tilename.mes"),
@@ -65,10 +72,22 @@ public static class AreaMapPlans
         var map = catalog.Find(mapName);
         if (map is null) return new(AreaMapPlanStatus.UnknownMap, null);
         if (map.SectorFiles.Count == 0) return new(AreaMapPlanStatus.NoSectors, null);
+        if (map.SectorFiles.Count > MaxSectorFiles) return new(AreaMapPlanStatus.TooLarge, null, $"{map.SectorFiles.Count} sector files");
+        try { return CreateChecked(stack, catalog, map); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or DatException or InvalidOperationException)
+        { return new(AreaMapPlanStatus.Unreadable, null, error.GetType().Name); }
+    }
 
+    private static AreaMapPlanResult CreateChecked(ContentStack stack, WorldCatalog catalog, WorldMap map)
+    {
         var module = stack.Plan.SearchOrder.SingleOrDefault(s => s.Role == ContentSourceRole.ModuleArchive);
         var resource1 = BaseArchive(stack, "arcanum1.dat"); var resource2 = BaseArchive(stack, "arcanum2.dat");
         if (module is null || resource1 is null || resource2 is null) return new(AreaMapPlanStatus.MissingSource, null, "module archive, arcanum1.dat or arcanum2.dat");
+        // The owner reads sectors from the module archive; a sector overridden elsewhere in the
+        // stack would make the plan's prototype set describe different objects.
+        foreach (var coordinate in map.SectorFiles)
+            if (stack.Resolve($"{map.Folder}/{coordinate.Id}.sec").Winner?.Source != module)
+                return new(AreaMapPlanStatus.UnsupportedSource, null, "a sector file is overridden outside the module archive");
 
         // Prototypes and object counts come from the catalogue's own reads of the map.
         var prototypes = new SortedSet<int>(); long objects = 0;
@@ -130,26 +149,29 @@ public static class AreaMapPlans
         return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count)));
     }
 
-    /// <summary>Limits scaled from the pinned exterior profile by the map's size, so a small
-    /// interior keeps the exterior's envelope and a large one grows with it.</summary>
+    /// <summary>Limits scaled from the pinned exterior profile (20 present sectors, 524
+    /// objects) by the map's sectors or objects, whichever grows more, capped at
+    /// <see cref="MaxLimitScale"/>. Count limits follow the map exactly.</summary>
     internal static AreaLoaderOptions Limits(int sectors, long objects, int mobiles, long aggregateBytes, int prototypes)
     {
         var baseline = new AreaLoaderOptions();
-        var visuals = checked(sectors * 4096L + objects * 4 + 64);
-        var factor = Math.Max(1.0, (double)visuals / baseline.MaxVisuals);
-        long Scale(long value) => (long)Math.Min(long.MaxValue / 4, Math.Ceiling(value * factor));
+        var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
+        long Scale(long value) => (long)Math.Ceiling(value * factor);
+        var visuals = Math.Min(int.MaxValue, checked(sectors * 4096L + objects * 4 + 64));
         return new()
         {
             MaxManagedBytes = Scale(baseline.MaxManagedBytes), MaxRetainedBytes = Scale(baseline.MaxRetainedBytes), MaxBuildPhaseBytes = Scale(baseline.MaxBuildPhaseBytes),
             MaxFrameRequests = Scale(baseline.MaxFrameRequests), MaxFrameStoredBytes = Scale(baseline.MaxFrameStoredBytes), MaxFrameDecodedBytes = Scale(baseline.MaxFrameDecodedBytes),
             MaxFrameRgbaBytes = Scale(baseline.MaxFrameRgbaBytes), MaxFrameEncodedBytes = Scale(baseline.MaxFrameEncodedBytes),
-            MaxSurvey = sectors, MaxPresentSectors = sectors, MaxAggregateRecords = Math.Max(1, mobiles), MaxAggregateBytes = (int)Math.Max(16, aggregateBytes),
-            MaxPrototypes = Math.Max(1, prototypes), MaxObjects = (int)Math.Min(int.MaxValue, objects + 1), MaxVisuals = (int)Math.Min(int.MaxValue, visuals),
+            MaxSurvey = sectors, MaxPresentSectors = sectors, MaxAggregateRecords = Math.Max(1, mobiles),
+            MaxAggregateBytes = (int)Math.Clamp(aggregateBytes, 16, int.MaxValue),
+            MaxPrototypes = Math.Max(1, prototypes), MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,
         };
     }
 
-    /// <summary><c>rules/maplist.mes</c> numbers maps from 5000; the runtime map number is the
-    /// catalogue number minus 4999 (pinned CE <c>map_list_info_load</c>). 0/0 when the map is not listed.</summary>
+    /// <summary><c>rules/maplist.mes</c> numbers maps from 5000 without gaps, at most 200 (pinned
+    /// CE <c>map_list_info_load</c> stops at the first missing number); the runtime map number is
+    /// the catalogue number minus 4999. 0/0 when the map is not listed or the list does not parse.</summary>
     internal static (int Catalogue, int Runtime) CatalogueNumbers(ContentStack stack, string mapName)
     {
         var winner = stack.Resolve("rules/maplist.mes").Winner;
@@ -158,10 +180,11 @@ public static class AreaMapPlans
         if (read.Status != ContentReadStatus.Read) return (0, 0);
         var parsed = MesFile.Parse(read.Bytes!);
         if (parsed.Status != MesParseStatus.Parsed) return (0, 0);
-        foreach (var message in parsed.File!.Messages.Where(m => m.Number >= 5000))
+        for (var number = 5000; number < 5200; number++)
         {
+            if (parsed.File!.Find(number) is not { } message) break;
             var name = Encoding.Latin1.GetString(message.Bytes.Span).Split(',')[0].Trim();
-            if (string.Equals(name, mapName, StringComparison.OrdinalIgnoreCase)) return (message.Number, message.Number - 4999);
+            if (string.Equals(name, mapName, StringComparison.OrdinalIgnoreCase)) return (number, number - 4999);
         }
         return (0, 0);
     }

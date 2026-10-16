@@ -20,7 +20,7 @@ public sealed class AreaWholeMapTests
         Assert.AreEqual(0, s.Reconciliation.ContextPresent);
         Assert.AreEqual(0, s.Reconciliation.ContextMissing);
         Assert.IsTrue(s.Sectors.All(row => row.Scope == AreaScope.Core && row.Present));
-        Assert.AreEqual("structural-file-effective-v1", s.Profile);
+        Assert.AreEqual("arc-data-019-whole-map-v1", s.Profile);
     }
 
     [TestMethod]
