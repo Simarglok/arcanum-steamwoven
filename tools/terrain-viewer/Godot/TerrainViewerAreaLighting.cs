@@ -7,7 +7,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-RENDER-010: day/night in crash-site-area. One WORLD-004 clock per load generation,
 // advanced only by explicit whole hours from the diagnostic palette, which can also switch
 // the ambient multiplier off to show unlit source pixels. The active sector follows the
-// actor's committed cell.
+// actor's committed cell. ARC-RENDER-012: each map (exterior, cave) brings its own ambient source
+// and stationary lights; a transfer rebinds them on the same clock.
 public partial class TerrainViewerApp
 {
     private AreaAmbientDriver? _areaAmbient;
@@ -27,24 +28,37 @@ public partial class TerrainViewerApp
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
 
+    // The sector under the actor's committed cell on the shown map's own chart (the exterior spawn
+    // before the first session exists).
     private long ActiveAreaSector()
     {
-        // The lighting source is the exterior's; in the cave the exterior sector last selected stays.
-        var cell = InCave ? AreaGridSession.Cell(AreaGridSession.Spawn) : AreaGridSession.Cell(_worldActor.Session?.State.CommittedCell ?? AreaGridSession.Spawn);
+        var cell = _worldActor.Session is AreaGridSession session ? session.Chart.ToWorld(session.State.CommittedCell) : AreaGridSession.Cell(AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
 
     // FR-LIGHT-007: re-select when the actor commits into another sector, at the same hour.
     private void FollowAreaAmbient()
     {
-        if (_areaAmbient is null || InCave) return;
+        if (_areaAmbient is null) return;
         if (_areaAmbient.Apply(ActiveAreaSector())) { PushAreaAmbient(); GD.Print("ARC-RENDER-010 lighting-sector " + AreaAmbientReceipt()); }
     }
 
+    // ARC-RENDER-012: a map transfer switches to the destination map's ambient source and lights on the
+    // same clock (the cave has its own map default scheme and stationary lights).
+    private void RebindAreaAmbient()
+    {
+        if (_areaAmbient is null) return;
+        // A map without lighting inputs is drawn unlit; the driver never stays bound to the other map.
+        if (_readyArea?.Lighting is not { } lighting) { StopAreaAmbient(); GD.Print("ARC-RENDER-012 lighting-map none (unlit)"); return; }
+        _areaAmbient.Rebind(lighting.Source, ActiveAreaSector());
+        PushAreaAmbient(); BindAreaAmbientPalette();
+        GD.Print("ARC-RENDER-012 lighting-map " + AreaAmbientReceipt());
+    }
+
     // Off sends no ambient at all (identical white pixels), so unlit views keep terrain chunks
-    // even where a chunk mixes indoor and outdoor tiles.
+    // even where a chunk mixes indoor and outdoor tiles. Local lights are part of the lit view only.
     private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
-        ? new AreaAmbientView(driver.Effective, lighting.Channels) : null);
+        ? new AreaAmbientView(driver.Effective, lighting.Channels) { Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective) } : null);
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).
     private void PaletteGameHour()
@@ -74,8 +88,10 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) return " | lighting: not loaded (unlit)";
         var clock = driver.Clock; var selection = driver.Selection;
+        var lights = _readyArea?.Lighting?.Local?.LightCount ?? 0;
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
+            + $" | stationary lights {lights}"
             + " | palette: Game time +1 hour, Ambient lighting on/off | hourly discrete, original night/visual parity NOT_VERIFIED";
     }
 
@@ -86,6 +102,7 @@ public partial class TerrainViewerApp
         return System.Text.Json.JsonSerializer.Serialize(new {
             driver.Clock.GameTimestampMs, driver.Clock.Hour, driver.Clock.IsDay, ClockRevision = driver.Clock.Revision,
             selection.SchemeId, selection.FromMapDefault, selection.Sector, AmbientRevision = driver.Revision, driver.Enabled,
+            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0,
             TerrainChunks = _canvas?.AreaChunkCount ?? 0 });
     }
 

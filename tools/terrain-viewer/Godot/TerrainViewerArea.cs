@@ -63,7 +63,7 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(InCave ? "movement: cave sector at new-game T0, walls block tile edges | cave walls drawn; roofs/portals/active composites absent | cave unlit" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")} | cave transfer by use, no gameplay | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{WorldStatus()}");
+        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(InCave ? "movement: cave sector at new-game T0, walls block tile edges | cave walls drawn; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")} | cave transfer by use, no gameplay | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{WorldStatus()}");
     }
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {
@@ -174,7 +174,8 @@ public partial class TerrainViewerApp
     // native fixtures. The fixture must still publish via the real compositor.
     internal static bool TryAreaPixel(AreaDrawCommand command, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         IReadOnlyList<AreaDrawCommand> ordered, Image image, Viewport viewport, Rect2? hud, Rect2? actor,
-        double zoom, out object sample, out AreaPixelDiagnostics diagnostics, Arcanum.Data.Lighting.AmbientColor? ambient = null)
+        double zoom, out object sample, out AreaPixelDiagnostics diagnostics, Arcanum.Data.Lighting.AmbientColor? ambient = null,
+        Func<Vector2, (double R, double G, double B)>? tintAt = null)
     {
         sample = null!;
         var frame = frames[command.Frame]; var destination = command.Destination;
@@ -199,7 +200,6 @@ public partial class TerrainViewerApp
             diagnostics.UniqueScreenCenters++;
             if (sx < 0 || sy < 0 || sx >= image.GetWidth() || sy >= image.GetHeight()) { diagnostics.Reject("bounds"); continue; }
             if (hud is { } h && h.HasPoint(new(sx,sy))) { diagnostics.Reject("hud"); continue; }
-            var actualWorld = inverse * new Vector2(sx + .5f, sy + .5f);
 
             // A later sprite's transparent bounding rectangle is not an
             // occluder. Consult its sampled source alpha at this screen point;
@@ -210,8 +210,15 @@ public partial class TerrainViewerApp
             if (px < 0 || py < 0) { diagnostics.Reject("crop"); continue; }
             var at = checked((py * frame.Width + px) * 4);
             if (frame.Rgba[at + 3] != 255) { diagnostics.Reject("target-alpha"); continue; }
+            var actualWorld = inverse * new Vector2(sx + .5f, sy + .5f);
+            // ARC-RENDER-012: a per-pixel tint (local light) counts only where it differs visibly from the
+            // plain ambient, so a renderer without the lights cannot pass.
+            var local = tintAt?.Invoke(actualWorld);
+            if (local is { } pixelTint && ambient is { } plain && Math.Max(Math.Abs(frame.Rgba[at] * (pixelTint.R - plain.R) / 255d), Math.Max(
+                    Math.Abs(frame.Rgba[at + 1] * (pixelTint.G - plain.G) / 255d), Math.Abs(frame.Rgba[at + 2] * (pixelTint.B - plain.B) / 255d))) <= 6)
+            { diagnostics.Reject("light-not-observable"); continue; }
             // A lit observation counts only where the tint is visible beyond the tolerance.
-            if (ambient is { } lit && Math.Max(Math.Abs(frame.Rgba[at] * lit.R / 255d - frame.Rgba[at]), Math.Max(
+            if (local is null && ambient is { } lit && Math.Max(Math.Abs(frame.Rgba[at] * lit.R / 255d - frame.Rgba[at]), Math.Max(
                     Math.Abs(frame.Rgba[at + 1] * lit.G / 255d - frame.Rgba[at + 1]), Math.Abs(frame.Rgba[at + 2] * lit.B / 255d - frame.Rgba[at + 2]))) <= 3)
             { diagnostics.Reject("tint-not-observable"); continue; }
             // The compositor uses exact CPU integer index rows and texelFetch.
@@ -223,7 +230,8 @@ public partial class TerrainViewerApp
             var observed = image.GetPixel(sx, sy);
             // Lit observation (ARC-RENDER-010): source channel times the applied ambient channel / 255.
             var tint = ambient ?? Arcanum.Data.Lighting.AmbientColor.Neutral;
-            var expected = new[] { frame.Rgba[at] * tint.R / 255d, frame.Rgba[at + 1] * tint.G / 255d, frame.Rgba[at + 2] * tint.B / 255d };
+            var (tr, tg, tb) = local ?? (tint.R, tint.G, tint.B);
+            var expected = new[] { frame.Rgba[at] * tr / 255d, frame.Rgba[at + 1] * tg / 255d, frame.Rgba[at + 2] * tb / 255d };
             sample = new { command.Visual, command.Identity, command.Frame, command.Destination, Zoom = zoom,
                 command.Source, command.FlipX, command.FlipY, RasterTransform = transform.ToString(),
                 SourceU = xAxis.CoordinateRatio(sx), SourceV = yAxis.CoordinateRatio(sy), SamplingDomain = "exact-binary-rational-center-discrete-reflection-v1",

@@ -215,8 +215,9 @@ projection digest. Their flags are 0: additive/custom-tint disposition, no actua
 OFF/DARK/indoor/outdoor example. Record 0 at offset 4 has SHA-256
 `11ad9c3e3406e6b5f9d301aca67eaa063ddd7dae282c1250b40cb46f83919b8e`;
 records 1..3 begin at 52, 100, 148. Unknown padding/palette words are nonzero in
-three records. Their runtime placement/mask remains **NOT_READY**. No pixel
-acquisition, mask export or visual parity is asserted.
+three records. Their runtime placement/mask was NOT_READY here; [ARC-RENDER-012](../rendering/area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012)
+later adopted an in-sector absolute-location policy and draws them. No pixel
+acquisition, mask export or visual parity is asserted by this research.
 
 ### Primary, overlay and carried descriptions are separate
 

@@ -1,4 +1,4 @@
-# Crash Site day/night ambient lighting (ARC-RENDER-010)
+# Crash Site day/night ambient and cave lighting (ARC-RENDER-010, ARC-RENDER-012)
 
 Status: **implemented bounded component** for the `crash-site-area` diagnostic
 viewer. It applies the hourly ambient scheme of the loaded area to drawn terrain,
@@ -90,6 +90,64 @@ both actions report "unavailable". No launch argument or key binding was added.
   screenshot per checked hour (local evidence only, never committed).
 
 Original night appearance, TIG multiply rounding, palette/BPP behaviour and
-gameplay effects of darkness remain NOT_VERIFIED. Light sources (FR-LIGHT-008..010),
-luminance checks (FR-LIGHT-011) and saving the clock/scheme (FR-LIGHT-012) are
-separate work.
+gameplay effects of darkness remain NOT_VERIFIED. Stationary sector lights are
+covered below (ARC-RENDER-012); object/carried lights (FR-LIGHT-009), luminance
+checks (FR-LIGHT-011) and saving the clock/scheme (FR-LIGHT-012) are separate work.
+
+## Cave ambient and stationary sector lights (ARC-RENDER-012)
+
+Status: **implemented bounded component** for the same viewer. Every loaded map
+(the exterior and the [ARC-WORLD-009 cave](terrain-viewer.md#crash-site-cave-and-return-arc-world-009))
+now carries its own ambient source and its stationary sector lights, so the cave is
+no longer drawn unlit. It covers the stationary part of FR-LIGHT-008, the
+surface rule of FR-LIGHT-006 for lit bodies and walls, and the time behaviour of
+stationary lights in FR-LIGHT-010. Source analysis follows the same RES-018
+lineage (CE/TIG `a7ff41b`: `light.c` `light_read`, `light_get_rect_internal`,
+`light_render_internal`, `sub_4D89E0`, `sub_4DA360`, `sub_4DC210`,
+`sub_4DE390`; `sector_light_list.c`; `tile.c` `tile_draw_iso`; TIG `color.h`,
+`art.c`); independently written, nothing copied or translated.
+
+| Requirement | Implemented subset | Not implemented / NOT_VERIFIED |
+| --- | --- | --- |
+| FR-LIGHT-007 per map | The cave reads its own map default (`maps/<cave dir>/mapinfo.txt`) and sector word through the ARC-RENDER-010 reader. A transfer rebinds the ambient driver to the destination map's source on the **same** clock (module and startup declaration must match), so time is shared and the scheme follows the map. | No fade; the hour is whatever the clock says on arrival. |
+| FR-LIGHT-008 stationary lights | `StationaryLightReader` decodes the 12 raw words the strict snapshot retained per core sector: owner word 0 only (object lights refused), the raw location as the absolute world cell **inside its own sector** (an adopted project policy, NOT_VERIFIED: the decompiled sector-relative rebuild is marked TODO in the source and is not taken literally; a location outside the record's own sector is refused), signed screen offset, flags OFF/DARK/INDOOR/OUTDOOR only (other bits refused), a plain light ART id (type 9, frame/rotation/flags 0) and the colour stored **r,b,g**. Tint, palette and padding words are bound through a record digest, not interpreted. The ART number resolves through `art/light/light.mes` in the terrain resource (Resource2); only a one-group one-frame (static) light ART is admitted. Pixels equal to palette index 0's colour (the ART colour key) contribute nothing. | Animated lights, object/overlay/carried lights (FR-LIGHT-009), DIF/save overrides, neighbour-sector emitters of other maps. |
+| Composition | `StationaryLightField`: a light covers its frame rectangle anchored like a body (tile + offset + (40,20) − hotspot). A contribution is the frame pixel, multiplied by the tint (`c·t/255`, truncated) unless the tint is white; INDOOR/OUTDOOR take the tint from the hour's pair (INDOOR first); OFF contributes nothing. **Terrain:** lighter and darker sums at the 40×20 screen lattice, each node composed as `max(min(ambient + lighter, 255) − darker, 0)` over the tile's own channel, interpolated bilinearly between the four surrounding nodes in the area shader (the source LERPs each 40×20 tile quadrant between its corner nodes). **Bodies:** the source's object colour, the ambient of the tile class under the body's cell plus the lights at its anchor, added or (DARK) subtracted in source order. **Walls:** the base line sampled at the sprite's two ends from lights on the wall's front side only (by tile coordinate), tile-class ambient for rotations 0/6 and outdoor for 2/4, drawn as a horizontal two-colour gradient (the source's hardware path). The actor is coloured like a body at its current placement. ART channels that ARC-RENDER-010 leaves unlit stay unlit. | TIG integer LERP and rounding (the shader interpolates floats), the software per-column wall array, the decompiled wall base-line shift (followed literally, NOT_VERIFIED), roof modes, shadows, light animation, original visual parity. |
+| FR-LIGHT-010 stationary lights and time | Stationary sector lights are not time-gated in the source (the renderer checks only OFF). The lattice and body colours are recomposed at every hour change over the new ambient; INDOOR/OUTDOOR-flagged lights change colour with the hour (synthetic only: the four cave lights have flags 0). | Nocturnal scenery gating and object-light refresh (they belong to object lights, FR-LIGHT-009). |
+
+Rule change for bodies: ARC-RENDER-010 tinted every lit body by its ART channel.
+The body colour now uses the **tile class under the body** (the source's object
+colour); for bodies on outdoor tiles with outdoor-type ART the two rules agree. On
+the original data all 514 placed exterior core objects stand on outdoor-class cells
+(all 36,864 exterior core terrain ids are outdoor class), so the exterior is
+unchanged; in the cave all 177 placed objects stand on indoor-class cells.
+
+On the original data (opt-in tests and native smoke): exterior map 5000 has **no**
+stationary lights in its nine core sectors; cave map 5078 uses map-default scheme
+**2** and has **4** stationary lights in sector 2080374816, flags 0. Three use
+light ART 5 (`disk5x5`, 450×225, hotspot 225,112) and one ART 2 (`disk3x3`,
+233×117, hotspot 115,57), both static; `light.mes` SHA-256
+`a6c9f3df3ecdf6b7b6c522138f6c64376e3236c6d2ea4f7eae08aabd1f15606c`. Record 0's
+digest equals the RES-018 receipt `11ad9c3e…`. The lit lattice is 28×29 nodes.
+No colour values or pixels are committed.
+
+API: `Arcanum.Data.Lighting.StationaryLight`, `StationaryLightFrame`,
+`AreaStationaryLightSource` (`Create` for synthetic fixtures),
+`StationaryLightReader` (`Read`, `TryDecode`; caps 256 lights, 16 frames, 1024 px
+frame side, ±16384 offset), `StationaryLightField` (`Point`, `Lattice`,
+`TerrainPixel` reference, `Compose`); viewer Core `AreaLocalLighting` (tile
+channels, body/wall/actor colours, `View`) attached as `AreaLightingPlan.Local`;
+`AreaAmbientDriver.Rebind`. The area shader gains a light mode (constant, wall
+gradient, terrain lattice); items without local light keep the constant ambient
+and send no per-camera uniform.
+
+Verification: `tests/Arcanum.Data.Tests/Lighting/StationaryLightTests.cs`
+(literal wires, refusal cases, field arithmetic, reader over a synthetic DAT/ART,
+opt-in `RealData` cave test); `tests/Arcanum.TerrainViewer.Tests/AreaLocalLightingTests.cs`
+(body/wall/actor rules, view, driver rebind); Godot self-test
+`AssertAreaLocalLightingAsync` (literal lattice and gradient pixels through the
+production compositor); `--native-smoke` in `crash-site-area` with
+`--area-cave-mobile`: after the transfer into the cave, map-default scheme 2 is
+applied, terrain near lights and a lit body and a lit wall read back as
+`source × composed light / 255` (±2) at pixels where the lights change the colour
+beyond the plain ambient, at two hours, with the lattice unchanged between them
+(`ARC-RENDER-012 native-smoke cave lighting PASS`).

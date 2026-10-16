@@ -401,7 +401,7 @@ and its step evidence with wall edges.
   arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
-- **Cave view.** The cave is drawn unlit; walls are drawn with the wall hotspot rule.
+- **Cave view.** The cave is lit by its own map-default ambient scheme and its four stationary sector lights ([ARC-RENDER-012](area-lighting.md#cave-ambient-and-stationary-sector-lights-arc-render-012)); walls are drawn with the wall hotspot rule.
   The original fades walls that hide the player (the source's wall check); that is
   not implemented, so walls and the exit facade can cover the actor in the corridor
   near the arrival.

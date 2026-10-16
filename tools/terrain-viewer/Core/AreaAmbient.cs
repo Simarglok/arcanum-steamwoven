@@ -48,7 +48,11 @@ public static class AreaAmbientPolicy
 }
 
 /// <summary>Area lighting attached to one load generation: the detached source and per-command channels.</summary>
-public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels);
+public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels)
+{
+    /// <summary>ARC-RENDER-012 stationary lights and tile channels of this map; absent for fixtures without them.</summary>
+    public AreaLocalLighting? Local { get; init; }
+}
 
 /// <summary>
 /// Viewer wiring of day/night: one WORLD-004 clock owner bootstrapped from the module's startup
@@ -61,15 +65,16 @@ public sealed class AreaAmbientDriver : IDisposable
     public const string ClockSourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     public const long HourMilliseconds = 3_600_000;
     private readonly GameClockOwner _clock;
-    private readonly AmbientLightingState _state;
-    private readonly AreaLightingSource _source;
+    private AmbientLightingState _state;
+    private AreaLightingSource _source;
 
     private AreaAmbientDriver(AreaLightingSource source, GameClockOwner clock, AmbientLightingState state, ClockSnapshot snapshot)
     { _source = source; _clock = clock; _state = state; Clock = snapshot; }
 
     public ClockSnapshot Clock { get; private set; }
     public AmbientSelection Selection => _state.Current ?? throw new InvalidOperationException("AREA_AMBIENT_NOT_APPLIED");
-    public long Revision => _state.Revision;
+    private long _revisionBase;
+    public long Revision => _revisionBase + _state.Revision;
     /// <summary>Viewer toggle: off shows the unlit source pixels (neutral pair).</summary>
     public bool Enabled { get; set; } = true;
     public AmbientPair Effective => Enabled ? Selection.Pair : AmbientPair.Neutral;
@@ -108,6 +113,20 @@ public sealed class AreaAmbientDriver : IDisposable
         var failure = _state.Apply(Clock.Hour, activeSector, out var changed);
         if (failure != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + failure);
         return changed;
+    }
+
+    /// <summary>ARC-RENDER-012: switch to another map's lighting source (a map transfer) on the same clock,
+    /// selecting its scheme for the active sector at the current hour. The module and startup declaration
+    /// must be the clock's own; on a refusal the previous source stays.</summary>
+    public void Rebind(AreaLightingSource source, long activeSector)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        if (ReferenceEquals(source, _source)) { Apply(activeSector); return; }
+        if (source.ModuleSha256 != _source.ModuleSha256 || source.Startup != _source.Startup) throw new InvalidOperationException("AREA_AMBIENT_SOURCE_MISMATCH");
+        var state = new AmbientLightingState(source);
+        var failure = state.Apply(Clock.Hour, activeSector, out _);
+        if (failure != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + failure);
+        _revisionBase = Revision; _source = source; _state = state;
     }
 
     public void Dispose() => _clock.Dispose();
