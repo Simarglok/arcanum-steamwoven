@@ -60,7 +60,7 @@ internal static partial class Program
             }
             else
             {
-                names = Directory.EnumerateFiles(source.Path, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = 0 })
+                names = Directory.EnumerateFiles(source.Path, "*", new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint })
                     .Select(f => Path.GetRelativePath(source.Path, f).Replace('/', '\\')).ToArray();
             }
             foreach (var name in names)
@@ -94,30 +94,40 @@ internal static partial class Program
         var categories = new CensusTally(); var categoryBytes = new CensusTally();
         foreach (var (key, winner) in keys) { var c = CensusCategory(key); categories.Add(c); categoryBytes.Add(c, winner.Length); }
 
-        byte[] Read(ContentCandidate candidate)
+        var refusals = new CensusTally();
+        // Every read goes through here, so a TooLarge or unreadable member is one refusal
+        // bucket for its role, never an aborted run.
+        byte[]? Read(ContentCandidate candidate, string role)
         {
             var result = stack.Read(candidate);
-            if (result.Status != ContentReadStatus.Read) throw new InvalidDataException($"CENSUS_READ_{result.Status}");
-            return result.Bytes!;
+            if (result.Status == ContentReadStatus.Read) return result.Bytes!;
+            refusals.Add($"{role}|CENSUS_READ_{result.Status}");
+            return null;
         }
 
-        // Maps: every folder under maps\ that holds at least one sector or map file.
+        // Maps: every folder directly under maps/ (each holds a map's files).
         var mapFiles = keys.Where(k => k.Key.StartsWith("maps/", StringComparison.Ordinal) && k.Key.Count(c => c == '/') == 2)
             .GroupBy(k => k.Key.Split('/')[1]).OrderBy(g => g.Key, StringComparer.Ordinal).ToArray();
         var mapRows = new List<object>(); var sectorTotals = new CensusTally(); var objectTypes = new CensusTally();
-        var mobileTypes = new CensusTally(); var refusals = new CensusTally();
+        var mobileTypes = new CensusTally();
         foreach (var map in mapFiles)
         {
             var row = new CensusTally();
             foreach (var (key, winner) in map)
             {
                 var file = key.Split('/')[2];
-                if (file.EndsWith(".sec", StringComparison.Ordinal)) CensusSector(Read(winner), row, sectorTotals, objectTypes, refusals, "map-sector");
-                else if (file.EndsWith(".mob", StringComparison.Ordinal)) CensusMobile(Read(winner), row, mobileTypes, refusals);
-                else if (file == "terrain.tdf") CensusTerrain(Read(winner), row, refusals);
-                else if (file == "map.jmp") CensusJump(Read(winner), row, refusals);
-                else if (file == "map.prp") CensusProperties(Read(winner), row, refusals);
-                else row.Add($"file|{Path.GetExtension(file)}");
+                var role = file.EndsWith(".sec", StringComparison.Ordinal) ? "map-sector" : file.EndsWith(".mob", StringComparison.Ordinal) ? "mobile"
+                    : file switch { "terrain.tdf" => "terrain", "map.jmp" => "jump", "map.prp" => "properties", _ => null };
+                if (role is null) { row.Add($"file|{Path.GetExtension(file)}"); continue; }
+                if (Read(winner, role) is not { } bytes) { row.Add("read_refused"); continue; }
+                switch (role)
+                {
+                    case "map-sector": CensusSector(bytes, row, sectorTotals, objectTypes, refusals, role); break;
+                    case "mobile": CensusMobile(bytes, row, mobileTypes, refusals); break;
+                    case "terrain": CensusTerrain(bytes, row, refusals); break;
+                    case "jump": CensusJump(bytes, row, refusals); break;
+                    default: CensusProperties(bytes, row, refusals); break;
+                }
             }
             var snapshot = row.Snapshot();
             mapRows.Add(new { map = map.Key, counts = snapshot });
@@ -130,9 +140,9 @@ internal static partial class Program
         {
             var selector = key[5..];
             var owner = mapNames.Where(name => string.Equals(CaveAggregateSelector(name), selector, StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (Read(winner, "aggregate") is not { } bytes) { aggregates.Add(new { owner_map_matches = owner.Length, owner_map = owner.FirstOrDefault(), refused = true }); continue; }
             try
             {
-                var bytes = Read(winner);
                 var records = FrameAggregate(bytes, CensusMaxAggregateBytes);
                 foreach (var record in records) aggregateTypes.Add($"type={record.Instance.Type}");
                 aggregates.Add(new { owner_map_matches = owner.Length, owner_map = owner.FirstOrDefault(), bytes = bytes.Length, records = records.Count });
@@ -147,14 +157,15 @@ internal static partial class Program
         // Terrain template sectors used to generate absent sectors of a map.
         var templateTotals = new CensusTally(); var templateTypes = new CensusTally();
         foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("terrain/", StringComparison.Ordinal) && k.Key.EndsWith(".sec", StringComparison.Ordinal)))
-            CensusSector(Read(winner), templateTotals, null, templateTypes, refusals, "template-sector");
+            if (Read(winner, "template-sector") is { } bytes) CensusSector(bytes, templateTotals, null, templateTypes, refusals, "template-sector");
 
         // Prototypes.
         var prototypeTypes = new CensusTally();
         foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("proto/", StringComparison.Ordinal) && k.Key.EndsWith(".pro", StringComparison.Ordinal)))
         {
-            try { prototypeTypes.Add($"type={ObjectWire.ParsePrototype(Read(winner)).Type}"); }
-            catch (Exception error) when (error is InvalidDataException or OverflowException) { refusals.Add($"prototype|{CensusBucket(error)}"); }
+            if (Read(winner, "prototype") is not { } bytes) continue;
+            try { prototypeTypes.Add($"type={ObjectWire.ParsePrototype(bytes).Type}"); }
+            catch (Exception error) when (error is InvalidDataException or OverflowException or ArgumentException) { refusals.Add($"prototype|{CensusBucket(error)}"); }
         }
 
         // ART: header, palettes and frame table of every file.
@@ -162,9 +173,10 @@ internal static partial class Program
         foreach (var (key, winner) in keys.Where(k => k.Key.EndsWith(".art", StringComparison.Ordinal)))
         {
             var group = key.StartsWith("art/", StringComparison.Ordinal) && key.Count(c => c == '/') >= 2 ? key.Split('/')[1] : "<other>";
+            if (Read(winner, "art") is not { } bytes) { art.Add($"{group}|refused"); continue; }
             try
             {
-                var metadata = ArtDecoder.Inspect(Read(winner));
+                var metadata = ArtDecoder.Inspect(bytes);
                 art.Add($"{group}|inspected"); art.Add($"{group}|frames", metadata.Frames.Count);
             }
             catch (Exception error) when (error is ArtException or InvalidDataException) { art.Add($"{group}|refused"); refusals.Add($"art|{CensusBucket(error)}"); }
@@ -173,21 +185,23 @@ internal static partial class Program
         var mes = new CensusTally();
         foreach (var (key, winner) in keys.Where(k => k.Key.EndsWith(".mes", StringComparison.Ordinal)))
         {
-            var result = MesFile.Parse(Read(winner));
-            mes.Add($"status={result.Status}");
+            if (Read(winner, "mes") is not { } bytes) continue;
+            mes.Add($"status={MesFile.Parse(bytes).Status}");
         }
 
         var dlg = new CensusTally();
         foreach (var (key, winner) in keys.Where(k => k.Key.EndsWith(".dlg", StringComparison.Ordinal)))
         {
-            try { _ = DlgReader.Read(Read(winner)); dlg.Add("read"); }
+            if (Read(winner, "dlg") is not { } bytes) { dlg.Add("refused"); continue; }
+            try { _ = DlgReader.Read(bytes); dlg.Add("read"); }
             catch (Exception error) when (error is DlgException or InvalidDataException) { dlg.Add("refused"); refusals.Add($"dlg|{CensusBucket(error)}"); }
         }
 
         var scr = new CensusTally();
         foreach (var (key, winner) in keys.Where(k => k.Key.EndsWith(".scr", StringComparison.Ordinal)))
         {
-            try { var (_, lines, _) = CaveScriptFraming(Read(winner)); scr.Add("framed"); scr.Add("lines", lines); }
+            if (Read(winner, "scr") is not { } bytes) { scr.Add("refused"); continue; }
+            try { var (_, lines, _) = CaveScriptFraming(bytes); scr.Add("framed"); scr.Add("lines", lines); }
             catch (InvalidDataException error) { scr.Add("refused"); refusals.Add($"scr|{CensusBucket(error)}"); }
         }
 
@@ -238,7 +252,7 @@ internal static partial class Program
             Both("objects_parsed", instances.Count);
             foreach (var instance in instances) types.Add($"type={instance.Type}");
         }
-        catch (Exception error) when (error is InvalidDataException or OverflowException)
+        catch (Exception error) when (error is InvalidDataException or OverflowException or ArgumentException)
         {
             Both("object_windows_refused");
             refusals.Add($"{role}|objects|{CensusBucket(error)}");
@@ -254,7 +268,7 @@ internal static partial class Program
             if (consumed != bytes.Length) throw new InvalidDataException("CENSUS_MOBILE_TRAILING_BYTES");
             types.Add($"type={instance.Type}");
         }
-        catch (Exception error) when (error is InvalidDataException or OverflowException)
+        catch (Exception error) when (error is InvalidDataException or OverflowException or ArgumentException)
         {
             row.Add("mobiles_refused"); refusals.Add($"mobile|{CensusBucket(error)}");
         }
@@ -313,16 +327,16 @@ internal static partial class Program
 
     private static void CensusJump(byte[] bytes, CensusTally row, CensusTally refusals)
     {
-        if (bytes.Length < 4) { refusals.Add("jump|CENSUS_JMP_TRUNCATED"); return; }
+        if (bytes.Length < 4) { row.Add("jump_refused"); refusals.Add("jump|CENSUS_JMP_TRUNCATED"); return; }
         var count = BinaryPrimitives.ReadInt32LittleEndian(bytes);
         row.Add("jump_points", count);
         if (count > 0) row.Add($"jump_entry_bytes={(bytes.Length - 4) / count}");
-        if (count < 0 || (count > 0 && (bytes.Length - 4) % count != 0) || (count == 0 && bytes.Length != 4)) refusals.Add("jump|CENSUS_JMP_FRAMING");
+        if (count < 0 || (count > 0 && (bytes.Length - 4) % count != 0) || (count == 0 && bytes.Length != 4)) { row.Add("jump_refused"); refusals.Add("jump|CENSUS_JMP_FRAMING"); }
     }
 
     private static void CensusProperties(byte[] bytes, CensusTally row, CensusTally refusals)
     {
-        if (bytes.Length != 24) { refusals.Add("properties|CENSUS_PRP_LENGTH"); return; }
+        if (bytes.Length != 24) { row.Add("properties_refused"); refusals.Add("properties|CENSUS_PRP_LENGTH"); return; }
         row.Add($"prp_base_terrain={BinaryPrimitives.ReadInt32LittleEndian(bytes)}");
         row.Add("prp_width_tiles", BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(8)));
         row.Add("prp_height_tiles", BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(16)));

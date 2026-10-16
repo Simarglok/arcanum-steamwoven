@@ -34,7 +34,7 @@ dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --data-census --ga
 dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --data-census-self-test
 ```
 
-The report is canonical JSON (sorted keys, maps in name order). On the owner's
+The report is deterministic JSON (fixed field order, tallies sorted by key, maps in name order). A member the stack cannot read becomes a refusal bucket for its role; the run does not stop. On the owner's
 installation two runs of the `Arcanum` module gave the same SHA-256
 `eae72084a51df92d2838634da2e042a6b02e3730324d397a838e49035cfd3134` in about
 7 s. The stack does not expose its index, so the probe gathers names from every
@@ -60,12 +60,13 @@ TDF check (header version 1.2, raw words or length-prefixed zlib rows).
   terrain template sectors (53,815 walls and scenery) frame and parse. The main
   map's `terrain.tdf` describes 2,000 × 2,000 sectors; only 621 have files.
   Several interiors also have a larger TDF grid than files (for example 625
-  grid sectors and 77 files), so absent interior sectors are generated as well.
+  grid sectors and 77 files); that absent interior sectors are generated too
+  is inferred from the grid size, not measured (U1).
   The generation rule is [ARC-RES-034](#unknowns-u).
 - **Refusals are few and confined to presentation data (D).** 437 of 13,993 ART
   files (3.1%), 38 of 709 DLG files and 1 of 239 MES files are refused by the
-  current strict readers. No SCR, prototype, sector, mobile, aggregate or TDF
-  file is refused.
+  current strict readers. No prototype, sector, mobile, aggregate or TDF file
+  is refused, and every SCR file frames (header and line size only).
 - **A universal loader is feasible without per-map pins (P).** Format-level
   checks with explicit limits already accept the whole installation. Per-file
   hashes add nothing a structural check does not, and they would refuse a mod.
@@ -83,13 +84,14 @@ is itself a mounted source, so files under it also appear under their
 | Editor mobiles `maps/<map>/*.mob` | 12,723 | 2.9 MB | v119 object | all read |
 | Mobile aggregates `maps/<selector>` | 81 | 2.9 MB | aggregate framing | all read, 1:1 with maps |
 | `terrain.tdf` per map | 81 | 1.8 MB | new TDF check | all read (9 row-compressed) |
-| `map.prp`, `map.jmp`, `mapinfo.txt`, `startloc.txt` | 81 each | small | size checks | all framed; 45 jump points of 32 bytes on 17 maps |
+| `map.prp`, `map.jmp` | 81 each | small | size checks | all framed; 45 jump points of 32 bytes on 17 maps |
+| `mapinfo.txt`, `startloc.txt`, one `.sbf`, one `.log` | 81 / 81 / 1 / 1 | small | none | counted only |
 | Terrain templates `terrain/<type>/*.sec` | 413 | 12.0 MB | framing + v119 objects | all read |
 | Prototypes `proto/*.pro` | 1,423 | 0.9 MB | v119 prototype | all read |
-| ART `art/**/*.art` | 13,993 | 720 MB | `ArtDecoder.Inspect` | 13,556 read, 437 refused |
-| MES (`mes/`, `rules/`, `oemes/`, `semes/`, `art/`, `sound/`, module template) | 239 | 3.0 MB | `MesFile.Parse` | 238 read, 1 duplicate number |
-| DLG `dlg/*.dlg` | 709 | 5.9 MB | `DlgReader.Read` | 671 read, 38 refused |
-| SCR `scr/*.scr` | 2,402 | 3.3 MB | SCR framing | all framed, 23,878 lines |
+| All `.art` (mostly under `art/`) | 13,993 | 720 MB | `ArtDecoder.Inspect` | 13,556 read, 437 refused |
+| All `.mes` (mostly `mes/`, `rules/`, `oemes/`, `semes/`, `art/`, `sound/`, module template) | 239 | 3.0 MB | `MesFile.Parse` | 238 read, 1 duplicate number |
+| All `.dlg` | 709 | 5.9 MB | `DlgReader.Read` | 671 read, 38 refused |
+| All `.scr` (2,399 under `scr/`) | 2,402 | 3.3 MB | SCR framing | all framed, 23,878 lines |
 | Townmap tiles `townmap/**.bmp`, `.tmi` | 57,522 / 114 | 180 MB | none | not needed for the world |
 | World map `worldmap/*.bmp` | 65 | 4.2 MB | none | world-map stage only |
 | Sound `.mp3` / `.wav` | 2,704 / 706 | 325 MB | audio lab (ARC-DATA-010) | out of scope here |
@@ -163,7 +165,8 @@ matters only for the game UI.
 ## Unknowns (U)
 
 - **U1 Generated sectors:** template choice, transition tables, relocation of
-  template objects and lights, absent interior sectors. Next: ARC-RES-034.
+  template objects and lights, and whether absent interior sectors inside a
+  larger TDF grid are generated or void. Next: ARC-RES-034.
 - **U2 ART trailing bytes:** exact trailing sizes of the 437 files and which of
   the 92 world ART files are referenced by placed objects. Next: ARC-DATA-015
   measures both before choosing the policy.
