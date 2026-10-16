@@ -36,10 +36,14 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   every installed map and is not used.)
 - **Limits:** count limits follow the map exactly; memory budgets are the
   exterior profile's (20 present sectors, 524 objects) scaled by the map's
-  sectors or objects, whichever grows more, and frame budgets by the visuals the
-  map can hold, each at most 16×, so an oversized map fails with a budget error
-  instead of exhausting memory. A whole map reads archive entries up to 16 MiB
-  (1 MiB for pinned profiles), with a frame-operation budget to match.
+  sectors or objects, whichever grows more, at most 16×, and frame budgets are
+  that 16× cap outright (interiors read larger ART per visual than the
+  exterior), so an oversized map fails with a budget error instead of exhausting
+  memory. A whole map with the original's ART rules reads archive entries
+  (sectors, mappings, ART) up to 16 MiB (1 MiB for pinned profiles), with a
+  32 MiB frame-operation budget. Other caps stay as they are: 1 MiB per object
+  record and per prototype, and the strict ART frame limits (4 Mi pixels,
+  16 MiB RGBA, 256 KiB frame table).
 
 ## Rules of a whole-map plan
 

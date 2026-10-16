@@ -242,9 +242,11 @@ public sealed partial class AreaDataOwner : IDisposable
             foreach (var input in _inputs.Inputs) if (!input.LeaveOpen) input.Stream.Dispose();
         }
     }
-    /// <summary>Largest archive entry the owner reads: 1 MiB for pinned and townmap plans, 16 MiB
-    /// for whole-map plans, whose maps hold larger ART (ARC-DATA-019).</summary>
-    internal static long EntryCap(AreaSourcePlan plan) => !plan.Original && plan.Selection == AreaSectorSelection.AllSectors ? 16L * 1048576 : 1048576;
+    /// <summary>Largest archive entry (sector, mapping or ART) the owner reads: 16 MiB for whole-map
+    /// plans with the original's ART rules, whose maps hold larger ART (ARC-DATA-019); 1 MiB
+    /// otherwise, so pinned profiles are unchanged.</summary>
+    internal static long EntryCap(AreaSourcePlan plan) =>
+        !plan.Original && plan.Selection == AreaSectorSelection.AllSectors && plan.AllowArtTrailingBytes ? 16L * 1048576 : 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
     private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);

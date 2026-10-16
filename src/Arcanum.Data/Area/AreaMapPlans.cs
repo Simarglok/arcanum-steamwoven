@@ -155,20 +155,19 @@ public static class AreaMapPlans
         return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count), startTile));
     }
 
-    /// <summary>Limits scaled from the pinned exterior profile (20 present sectors, 524
-    /// objects, 2,444 visuals): memory budgets by the map's sectors or objects, whichever grows
-    /// more, frame budgets by the visuals the map can hold, each capped at
-    /// <see cref="MaxLimitScale"/>. Count limits follow the map exactly.</summary>
+    /// <summary>Limits from the pinned exterior profile (20 present sectors, 524 objects): memory
+    /// budgets scaled by the map's sectors or objects, whichever grows more, capped at
+    /// <see cref="MaxLimitScale"/>; frame budgets at that cap outright. Count limits follow the
+    /// map exactly.</summary>
     internal static AreaLoaderOptions Limits(int sectors, long objects, int mobiles, long aggregateBytes, int prototypes)
     {
         var baseline = new AreaLoaderOptions();
         var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
         long Scale(long value) => (long)Math.Ceiling(value * factor);
         var visuals = Math.Min(int.MaxValue, checked(sectors * 4096L + objects * 4 + 64));
-        // Frame budgets count every visual's ART read while the snapshot is built, so they grow with
-        // the visuals the map can hold (terrain cells and objects), under the same cap.
-        var frameFactor = Math.Clamp((double)visuals / baseline.MaxVisuals, 1.0, MaxLimitScale);
-        long Frames(long value) => (long)Math.Ceiling(value * frameFactor);
+        // Frame budgets count every visual's ART read while the snapshot is built; interiors read
+        // larger ART per visual than the exterior, so whole maps get the capped budget outright.
+        long Frames(long value) => (long)Math.Ceiling(value * MaxLimitScale);
         return new()
         {
             MaxManagedBytes = Scale(baseline.MaxManagedBytes), MaxRetainedBytes = Scale(baseline.MaxRetainedBytes), MaxBuildPhaseBytes = Scale(baseline.MaxBuildPhaseBytes),
