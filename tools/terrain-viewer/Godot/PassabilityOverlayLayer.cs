@@ -6,7 +6,7 @@ namespace Arcanum.TerrainViewer;
 
 /// <summary>
 /// ARC-RENDER-008 read-only passability overlay, drawn in the canvas' own chart space (a cell's projected
-/// diamond: top (40*(Y-X), 20*(Y+X)), 80x40). Red fill + outline: every admitted incoming step Blocked.
+/// diamond: top (originX + 40*(Y-X), 20*(Y+X)), 80x40; originX 40 on the AREA chart, ARC-RENDER-011). Red fill + outline: every admitted incoming step Blocked.
 /// Red boundary/arrow: a Blocked incoming step into a cell that is not wholly blocked. Gray hatch: Unknown
 /// (outlined) or outside the authority's coverage. Open: no fill. Visible cells only, a fixed per-frame
 /// assessment budget and a visible-cell cap; nothing is assessed or drawn while the overlay is off.
@@ -67,13 +67,13 @@ public partial class PassabilityOverlayLayer : Node2D
         return changed;
     }
 
-    public static Vector2 Top(CellCoord cell) => new(40 * (cell.Y - cell.X), 20 * (cell.Y + cell.X));
-    public static Vector2[] Diamond(CellCoord cell)
+    public static Vector2 Top(CellCoord cell, int originX = 0) => new(originX + 40 * (cell.Y - cell.X), 20 * (cell.Y + cell.X));
+    public static Vector2[] Diamond(CellCoord cell, int originX = 0)
     {
-        var t = Top(cell);
+        var t = Top(cell, originX);
         return [t, t + new Vector2(40, 20), t + new Vector2(0, 40), t + new Vector2(-40, 20)];
     }
-    public static Vector2 Center(CellCoord cell) => Top(cell) + new Vector2(0, 20);
+    public static Vector2 Center(CellCoord cell, int originX = 0) => Top(cell, originX) + new Vector2(0, 20);
 
     public override void _Draw()
     {
@@ -83,7 +83,7 @@ public partial class PassabilityOverlayLayer : Node2D
         {
             if (!_overlay.TryGet(cell, out var result)) continue;
             DrawnCells++;
-            var d = Diamond(cell);
+            var d = Diamond(cell, _overlay.OriginX);
             switch (result.Kind)
             {
                 case OverlayCellKind.Blocked:
@@ -113,12 +113,13 @@ public partial class PassabilityOverlayLayer : Node2D
     /// for map-diagonal steps; an inward arrow marks the direction (from -> to), never both directions.</summary>
     private void Edge(CellCoord cell, OverlayIncoming incoming, Color color, float width)
     {
-        var to = Center(cell); var from = Center(incoming.From);
+        var origin = _overlay!.OriginX;
+        var to = Center(cell, origin); var from = Center(incoming.From, origin);
         var boundary = (to + from) / 2; var inward = (to - from).Normalized();
         if (((int)incoming.Direction & 1) == 1)
         {
             // Map-cardinal: the cell's own diamond edge whose midpoint is the shared boundary.
-            var d = Diamond(cell);
+            var d = Diamond(cell, origin);
             var edge = Enumerable.Range(0, 4).MinBy(i => ((d[i] + d[(i + 1) % 4]) / 2).DistanceSquaredTo(boundary));
             DrawLine(d[edge] + inward * 2, d[(edge + 1) % 4] + inward * 2, color, width);
         }

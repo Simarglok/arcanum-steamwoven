@@ -431,8 +431,11 @@ therefore drawn 40 px left of its cell, on the diamond's left vertex. In
 (`AreaGridSession.LocationOriginX`), so the actor anchor and the followed foot point
 are the diamond centre `(40(y-x)+40, 20(y+x)+20)`, the point `AreaCellPicking` picks
 and AREA scenery uses. Depth order is unchanged: the same-cell ranks come from the
-offsets, not from the drawn point. `world-diagnostic` keeps its retained origin and
-its human/grid references. The synthetic moving-overlap oracle moved with it (actor
+offsets, not from the drawn point. The ARC-RENDER-008 passability overlay draws its
+AREA diamonds from the same origin. `world-diagnostic` keeps its retained origin and
+its human/grid references; its terrain uses the same projection, so its actor and
+overlay probably sit 40 px left of the tiles as well (inferred, not changed or checked
+here). The synthetic moving-overlap oracle moved with it (actor
 rectangles +40; the fixture canopy's hotspot is now `(-20,80)` so its opaque half still
 covers the witnesses; ranks unchanged).
 

@@ -116,12 +116,16 @@ public sealed class PassabilityOverlay
     private static readonly (int Dx, int Dy)[] Deltas = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)];
     private static readonly IReadOnlyList<OverlayIncoming> NoRequest = Array.AsReadOnly(Array.Empty<OverlayIncoming>());
     private readonly Dictionary<CellCoord, OverlayCell> _cells = new();
-    public PassabilityOverlay(IPassabilityAuthority authority, int maxCells = 120_000)
+    public PassabilityOverlay(IPassabilityAuthority authority, int maxCells = 120_000, int originX = 0)
     {
         ArgumentNullException.ThrowIfNull(authority);
         if (maxCells <= 0) throw new ArgumentOutOfRangeException(nameof(maxCells));
-        Authority = authority; MaxCells = maxCells; Identity = authority.Identity;
+        Authority = authority; MaxCells = maxCells; Identity = authority.Identity; OriginX = originX;
     }
+    /// <summary>Horizontal origin of the drawn diamonds: 0 keeps the retained WORLD projection; the AREA chart passes
+    /// <see cref="AreaGridSession.LocationOriginX"/> (40) so each diamond is the terrain tile the actor stands on
+    /// (ARC-RENDER-011).</summary>
+    public int OriginX { get; }
     public IPassabilityAuthority Authority { get; }
     public string Identity { get; }
     public int MaxCells { get; }
@@ -208,11 +212,12 @@ public sealed class PassabilityOverlay
     }
 
     /// <summary>Chart cells whose projected diamond can intersect the canvas rectangle, row-major, at most <paramref name="cap"/>.
-    /// Projection is the chart's own: a cell's top vertex is (40*(Y-X), 20*(Y+X)), its diamond 80x40.</summary>
+    /// Projection is the chart's own: a cell's top vertex is (OriginX + 40*(Y-X), 20*(Y+X)), its diamond 80x40.</summary>
     public IReadOnlyList<CellCoord> Visible(double left, double top, double right, double bottom, int cap)
     {
         var (minX, minY, maxX, maxY) = Authority.Envelope;
-        static (double X, double Y) Cell(double px, double py) => ((py / 20 - px / 40) / 2, (py / 20 + px / 40) / 2);
+        var originX = OriginX;
+        (double X, double Y) Cell(double px, double py) => ((py / 20 - (px - originX) / 40) / 2, (py / 20 + (px - originX) / 40) / 2);
         var corners = new[] { Cell(left, top), Cell(right, top), Cell(left, bottom), Cell(right, bottom) };
         var x0 = Math.Max(minX, (int)Math.Floor(corners.Min(c => c.X)) - 1); var x1 = Math.Min(maxX, (int)Math.Ceiling(corners.Max(c => c.X)) + 1);
         var y0 = Math.Max(minY, (int)Math.Floor(corners.Min(c => c.Y)) - 1); var y1 = Math.Min(maxY, (int)Math.Ceiling(corners.Max(c => c.Y)) + 1);
@@ -220,7 +225,7 @@ public sealed class PassabilityOverlay
         for (var y = y0; y <= y1; y++)
         for (var x = x0; x <= x1; x++)
         {
-            var cx = 40.0 * (y - x); var cy = 20.0 * (y + x) + 20;
+            var cx = OriginX + 40.0 * (y - x); var cy = 20.0 * (y + x) + 20;
             if (cx + 40 < left || cx - 40 > right || cy + 20 < top || cy - 20 > bottom) continue;
             if (result.Count >= cap) return result;
             result.Add(new(x, y));

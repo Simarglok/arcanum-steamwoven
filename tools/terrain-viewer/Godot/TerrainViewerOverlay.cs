@@ -58,7 +58,8 @@ public partial class TerrainViewerApp
         }
         // A new session object (reset, reload, republish) or identity always binds a fresh overlay.
         if (_overlayLayer.Overlay is not { } current || !ReferenceEquals(current.Authority, _overlayAuthority))
-            _overlayLayer.Bind(new PassabilityOverlay(_overlayAuthority));
+            _overlayLayer.Bind(new PassabilityOverlay(_overlayAuthority,
+                originX: _overlayAuthority is AreaPassabilityAuthority ? (int)AreaGridSession.LocationOriginX : 0));
         if (_overlayLayer.Tick(GetViewport().GetVisibleRect())) _overlayCounts = _overlayLayer.Overlay!.Count(_overlayLayer.VisibleCells);
     }
 

@@ -225,6 +225,11 @@ public sealed class PassabilityOverlayTests
         Assert.IsTrue(visible.Contains(new CellCoord(5, 5)));
         Assert.IsFalse(visible.Contains(new CellCoord(9, 9)));
         Assert.AreEqual(3, overlay.Visible(-1000, -1000, 1000, 1000, 3).Count, "the cap bounds the visible set");
+        // ARC-RENDER-011: the AREA chart draws diamonds from the terrain tile origin, 40 px to the right.
+        var area = new PassabilityOverlay(table, originX: 40);
+        Assert.AreEqual(40, area.OriginX);
+        Assert.IsTrue(area.Visible(39, 201, 41, 239, 100).Contains(new CellCoord(5, 5)));
+        Assert.IsFalse(area.Visible(-81, 201, -79, 239, 100).Contains(new CellCoord(5, 5)), "the unshifted diamond's left vertex is outside");
     }
 
     // The production AREA assessor (public strict owner fixture: blocking scenery at (5,1), OF_NO_BLOCK canopy at (6,1),
