@@ -27,6 +27,9 @@ OBJECT_VERSION = 119
 TYPE_PC = 15
 MAX_PROTO_BYTES = 64 * 1024
 MAX_MES_STRING = 2000  # CE MAX_STRING; longer entries are refused by the set parsers
+MAX_SET_NAME = 70  # CE MAX_INVEN_SOURCE_SET_NAME: a name of this length or more fails
+MAX_SET_ITEMS = 300  # CE INVEN_SOURCE_SET_SIZE
+MAX_EFFECT_CHANGES = 7  # CE MAX_CHANGE_COUNT per effect and attribute collection
 
 # v119 wire kinds of the common block and the critter/PC groups, slot order.
 # Same layout as src/Arcanum.Data/StaticObjects/StaticObjectLoader.cs.
@@ -48,6 +51,8 @@ CRITTER = kinds("i*2,ai32*3,au32,i*4,au32*2,poid,i,poid*5,i,aoid,i*2,aoid,p64,i*
 PC = kinds("i*2,au32,au64,i*2,aquest,au32,au64,au32,au64,i,au64,au32*3,i,s,i,au32*2,i*2,au32,au64")
 PC_KINDS = COMMON + CRITTER + PC
 PC_MASK_WORDS = 5
+# Bits per mask word for a PC: common 32+4, critter 32+1, PC 25 (StaticObjectLoader.MaskLength).
+PC_MASK_LENGTHS = (32, len(COMMON) - 32, 32, len(CRITTER) - 32, len(PC))
 assert (len(COMMON), len(CRITTER), len(PC)) == (36, 33, 25)
 
 # Slots (obj.h order: common 0..35, critter 36..68, PC 69..93).
@@ -116,6 +121,7 @@ STARTING_KIT = {"nice_suit": 8049, "small_nice_suit": 8065, "large_nice_suit": 8
 ARMOR_SIZE = {"human": "medium", "dwarf": "small", "elf": "medium", "half_elf": "medium", "gnome": "small",
               "halfling": "small", "half_orc": "medium", "half_ogre": "large"}
 
+# CE armour size by race (item.c item_race_to_armor_size_tbl); a source fact, not an observation.
 # Critter ART file name parts (CE name.c), indexed by the art id fields.
 ART_BODY = ["HM", "DF", "GH", "HG", "EF"]
 ART_GENDER = "FMX"
@@ -125,6 +131,11 @@ ART_WEAPON = "ABCDEFGHIJKXYNZ"
 ART_TYPE_CRITTER, ART_ARMOR_PLATE, ART_ARMOR_PLATE_CLASSIC, ART_ANIM_EXPLODE = 2, 4, 6, 20
 ART_WEAPON_SWORD, ART_WEAPON_TWO_HANDED = 3, 7
 ART_BODY_HUMAN, ART_BODY_DWARF, ART_BODY_HALFLING, ART_BODY_ELF = 0, 1, 2, 4
+MISSING_STAND_NO_WEAPON = 0x8  # missing.dat bit of the stand/no-weapon check (CE name.c)
+CRITTER_ART_KINDS = 10  # missing.dat critter entries: gender + 2 * body type
+ART_LIST_ROOTS = ("art/critter/", "art/monster/", "art/unique_npc/")
+# Background conditions are race/gender codes, NPC or ANY; anything else is printed as a digest.
+CONDITION_TOKENS = {r + g for r in ("HU", "DW", "EL", "HE", "GN", "HA", "HO", "HG") for g in "MF"} | {"NPC", "ANY"}
 
 # Mount order, first wins (docs/research/content-precedence.md).
 MOUNTS = [("module_folder", "modules/Arcanum", "folder"), ("module_patch0", "modules/Arcanum.PATCH0", "dat"),
@@ -132,7 +143,7 @@ MOUNTS = [("module_folder", "modules/Arcanum", "folder"), ("module_patch0", "mod
           ("arcanum4", "Arcanum4.dat", "dat"), ("arcanum3", "arcanum3.dat", "dat"),
           ("arcanum2", "arcanum2.dat", "dat"), ("arcanum1", "arcanum1.dat", "dat")]
 RESOURCES = ["rules/backgrnd.mes", "rules/effect.mes", "rules/gameeffect.mes", "rules/invensource.mes",
-             "rules/gamelevel.mes", "mes/gamelevelname.mes", "rules/userlevel.mes"]
+             "rules/invensourcebuy.mes", "rules/gamelevel.mes", "mes/gamelevelname.mes", "rules/userlevel.mes"]
 
 
 class ProbeFailure(ValueError):
@@ -234,9 +245,11 @@ class Cursor:
         return flag == 1
 
 
-def read_id(cursor: Cursor) -> tuple[int, int]:
+def read_id(cursor: Cursor, blocked: bool = False) -> tuple[int, int]:
     raw = cursor.take(24)
-    return struct.unpack_from("<h", raw)[0], struct.unpack_from("<i", raw, 8)[0]
+    kind = struct.unpack_from("<h", raw)[0]
+    require(0 <= kind <= 3 or (blocked and kind == -1), "ProtoIdKind")
+    return kind, struct.unpack_from("<i", raw, 8)[0]
 
 
 def decode_prototype(data: bytes) -> tuple[int, int, dict[int, object]]:
@@ -244,13 +257,14 @@ def decode_prototype(data: bytes) -> tuple[int, int, dict[int, object]]:
     require(len(data) <= MAX_PROTO_BYTES, "ProtoTooLarge")
     cursor = Cursor(data)
     require(cursor.i32() == OBJECT_VERSION, "ProtoVersion")
-    require(read_id(cursor)[0] == -1, "ProtoParentMarker")
+    require(read_id(cursor, blocked=True)[0] == -1, "ProtoParentMarker")
     kind, number = read_id(cursor)
     require(kind == 1, "ProtoOwnId")
     obj_type = cursor.i32()
     require(obj_type == TYPE_PC, "ProtoNotPc")
-    for _ in range(PC_MASK_WORDS):
-        cursor.u32()
+    for length in PC_MASK_LENGTHS:
+        mask = cursor.u32()
+        require(length == 32 or mask >> length == 0, "ProtoMaskReservedBits")
     fields: dict[int, object] = {}
     for slot, wire in enumerate(PC_KINDS):
         if wire == I32:
@@ -289,29 +303,35 @@ def decode_prototype(data: bytes) -> tuple[int, int, dict[int, object]]:
 def prototype_header_type(data: bytes) -> int:
     cursor = Cursor(data)
     require(cursor.i32() == OBJECT_VERSION, "ProtoVersion")
-    require(read_id(cursor)[0] == -1, "ProtoParentMarker")
+    require(read_id(cursor, blocked=True)[0] == -1, "ProtoParentMarker")
     require(read_id(cursor)[0] == 1, "ProtoOwnId")
     return cursor.i32()
 
 
-def critter_art_path(aid: int) -> str | None:
+def critter_art_path(aid: int, missing: list[int] | None = None) -> str | None:
     """Critter ART file name for an art id, or None for another art type.
 
-    Applies the body/gender part of the engine's id normalisation first (female
-    elves draw the human body; plate armour is male, elf → human, halfling →
-    dwarf). The missing-art fallback table and the per-animation weapon/shield
-    resets are not modelled; callers use anim 0 ids only."""
+    Applies the engine's id normalisation first: female elves draw the human
+    body; plate armour is male, elf → human, halfling → dwarf; and, for the
+    stand animation without a weapon, the missing-art table switches to the
+    unarmed file when its stand/no-weapon bit is set for that body/gender.
+    The other missing-art rows and per-animation resets are not modelled, so
+    only animation 0 ids are accepted."""
     if aid >> 28 != ART_TYPE_CRITTER:
         return None
     armor, body, gender = aid >> 20 & 0xF, aid >> 24 & 7, aid >> 27 & 1
     shield, weapon, anim = aid >> 19 & 1, aid & 0xF, aid >> 6 & 0x1F
     if armor >= len(ART_ARMOR) or body >= len(ART_BODY):
         return None
+    require(anim == 0, "ArtAnimNotModelled")
     if body == ART_BODY_ELF and gender == 0:
         body = ART_BODY_HUMAN
     if armor in (ART_ARMOR_PLATE, ART_ARMOR_PLATE_CLASSIC):
         gender = 1
         body = {ART_BODY_ELF: ART_BODY_HUMAN, ART_BODY_HALFLING: ART_BODY_DWARF}.get(body, body)
+    kind = gender + 2 * body
+    if missing is not None and kind < len(missing) and weapon == 0 and missing[kind] & MISSING_STAND_NO_WEAPON:
+        weapon = 1
     gender_code = ART_GENDER[2] if armor in (ART_ARMOR_PLATE, ART_ARMOR_PLATE_CLASSIC) else ART_GENDER[gender]
     armor_code = ART_ARMOR[armor]
     if anim == ART_ANIM_EXPLODE:
@@ -328,6 +348,14 @@ def art_fields(aid: int) -> dict[str, int]:
 
 
 # ------------------------------------------------------------- rule parsers
+def effect_over_limit(changes: list[dict]) -> bool:
+    """CE stores at most 7 changes per attribute collection; more would overrun its arrays."""
+    counts: dict[str, int] = {}
+    for change in changes:
+        counts[change["category"]] = counts.get(change["category"], 0) + 1
+    return any(n > MAX_EFFECT_CHANGES for n in counts.values())
+
+
 def parse_effect(text: str) -> tuple[list[dict], bool]:
     """effect.mes grammar: attribute token, then operator token (+n, -n, n%, *n, /n, min n, max n)."""
     changes: list[dict] = []
@@ -392,11 +420,31 @@ class InvenSet:
     reachable: bool
 
 
-def parse_invensource(mes: Mes, proto_ok) -> tuple[list[InvenSet], dict]:
+def buy_entry_ok(text: str, proto_ok) -> bool:
+    """InvenSourceBuy.mes line: empty, ALL, or space-separated valid prototypes (at most 300)."""
+    state = [0]
+    tok = strtok(text, state, " ")
+    if tok is None or tok.upper() == "ALL":
+        return len(text) < MAX_MES_STRING
+    count = 0
+    while tok is not None:
+        if count >= MAX_SET_ITEMS or not proto_ok(c_atoi(tok)):
+            return False
+        count += 1
+        tok = strtok(text, state, " ")
+    return len(text) < MAX_MES_STRING
+
+
+def parse_invensource(mes: Mes, proto_ok, buy: Mes | None = None) -> tuple[list[InvenSet], dict]:
     """InvenSource.mes: sets numbered 1..N in order; 'name: min,max rate,proto rate,proto ...'.
-    A gap stops parsing; a bad line or unknown prototype empties that set; set N is out
-    of range for the lookup (`id < count`)."""
-    numbers = sorted(mes.entries)
+
+    Iteration starts after number 0 (an entry 0 is skipped, as `mes_find_next` from 0
+    does) and stops at the first gap. A line over the string limit, an empty line or
+    a name of 70+ characters fails before the coins are read; an incomplete pair, an
+    unknown prototype or more than 300 items fails after them and empties only the
+    items (coins already read stay). A failing buy line empties the items too. Set N
+    is out of range for the lookup (`id < count`)."""
+    numbers = sorted(n for n in mes.entries if n > 0)
     count = mes.count
     sets: list[InvenSet] = []
     gap = None
@@ -406,12 +454,16 @@ def parse_invensource(mes: Mes, proto_ok) -> tuple[list[InvenSet], dict]:
             break
         text = mes.entries[number]
         state = [0]
-        ok = len(text) < MAX_MES_STRING and strtok(text, state, ":") is not None
+        name = strtok(text, state, ":") if len(text) < MAX_MES_STRING else None
+        ok = name is not None and len(name) < MAX_SET_NAME
         min_coins = max_coins = 0
         items: list[tuple[int, int]] = []
         tok = strtok(text, state, ",") if ok else None
         first = True
         while ok and tok is not None:
+            if not first and len(items) >= MAX_SET_ITEMS:
+                ok = False
+                break
             rate = c_atoi(tok)
             proto_tok = strtok(text, state, " ")
             if proto_tok is None:
@@ -426,9 +478,11 @@ def parse_invensource(mes: Mes, proto_ok) -> tuple[list[InvenSet], dict]:
             else:
                 items.append((rate, proto))
             tok = strtok(text, state, ",")
-        sets.append(InvenSet(number, ok, min_coins if ok else 0, max_coins if ok else 0,
-                             tuple(items) if ok else (), 0 < number < count))
-    return sets, {"entries": count, "contiguous_sets": len(sets), "first_gap": gap, "duplicates": mes.duplicates}
+        if ok and buy is not None and number in buy.entries and not buy_entry_ok(buy.entries[number], proto_ok):
+            ok = False
+        sets.append(InvenSet(number, ok, min_coins, max_coins, tuple(items) if ok else (), 0 < number < count))
+    return sets, {"entries": count, "contiguous_sets": len(sets), "first_gap": gap, "duplicates": mes.duplicates,
+                  "entry_zero_skipped": 0 in mes.entries}
 
 
 def parse_backgrounds(mes: Mes) -> list[dict]:
@@ -436,9 +490,17 @@ def parse_backgrounds(mes: Mes) -> list[dict]:
     b = 0
     while all(10 * b + k in mes.entries for k in range(5)):
         e = mes.entries
-        items = [c_atoi(t) for t in e[10 * b + 4].split()]
+        state, items = [0], []
+        tok = strtok(e[10 * b + 4], state, " \t\n")
+        while tok is not None:
+            items.append(c_atoi(tok))
+            tok = strtok(e[10 * b + 4], state, " \t\n")
+        condition = e[10 * b + 2].split()
+        known = all(t.upper() in CONDITION_TOKENS for t in condition)
         blocks.append({"block": b, "description": c_atoi(e[10 * b]), "effect": c_atoi(e[10 * b + 1]),
-                       "effect_text_empty": e[10 * b + 1].strip() == "", "condition": e[10 * b + 2].strip(),
+                       "effect_text_empty": e[10 * b + 1].strip() == "",
+                       "condition": [t.upper() for t in condition] if known else {"sha256": sha(e[10 * b + 2].encode("latin-1"))},
+                       "npc_only": known and "NPC" in [t.upper() for t in condition],
                        "money": c_atoi(e[10 * b + 3]), "items": items})
         b += 1
     return blocks
@@ -517,7 +579,28 @@ def find_prototype(sources: list[Source], description: int) -> tuple[str | None,
 
 
 # ------------------------------------------------------------------ report
-def pc_row(description: int, sources: list[Source]) -> dict:
+def missing_art_table(sources: list[Source]) -> dict:
+    """Critter rows of art/missing.dat, used only when its file count matches the ART lists;
+    otherwise the stand/no-weapon bit is derived from file existence, as CE rebuilds it."""
+    listed = {n for src in sources for n in src.names
+              if n.startswith(ART_LIST_ROOTS) and n.count("/") == 3 and n.endswith(".art")}
+    copies, data, role, _ = resolve(sources, "art/missing.dat")
+    header = struct.unpack_from("<i", data)[0] if data and len(data) >= 4 + 4 * CRITTER_ART_KINDS else None
+    file_masks = list(struct.unpack_from(f"<{CRITTER_ART_KINDS}I", data, 4)) if header is not None else None
+    derived = []
+    for kind in range(CRITTER_ART_KINDS):
+        # The rebuild probes the normalised stand/no-weapon underwear id of each body/gender.
+        path = critter_art_path((ART_TYPE_CRITTER << 28) | ((kind & 1) << 27) | ((kind // 2) << 24))
+        derived.append(0 if path in listed else MISSING_STAND_NO_WEAPON)
+    used = file_masks if header == len(listed) else derived
+    return {"source": role, "copies": copies, "header_count": header, "listed_art_files": len(listed), "file_used": header == len(listed),
+            "stand_no_weapon_missing": [bool(m & MISSING_STAND_NO_WEAPON) for m in used],
+            "file_and_derived_agree": file_masks is not None and
+            all(bool(a & MISSING_STAND_NO_WEAPON) == bool(b) for a, b in zip(file_masks, derived)),
+            "masks": used}
+
+
+def pc_row(description: int, sources: list[Source], missing: list[int]) -> dict:
     role, data, hits = find_prototype(sources, description)
     require(data is not None, "PcPrototypeMissing")
     obj_type, number, f = decode_prototype(data)
@@ -527,7 +610,7 @@ def pc_row(description: int, sources: list[Source]) -> dict:
     race, gender = stats.get(27), stats.get(26)
     expected = CE_PCS[description]
     aid = f[S_AID] & 0xFFFFFFFF
-    art = critter_art_path(aid)
+    art = critter_art_path(aid, missing)
     art_hits = [s.role for s in sources if art is not None and art in s.names]
     name = f[S_PLAYER_NAME]
     row = {
@@ -540,7 +623,7 @@ def pc_row(description: int, sources: list[Source]) -> dict:
         "stat_base_keys": len(stats),
         "basic_skill_nonzero": sum(1 for v in (f[S_BASIC_SKILL] or {}).values() if v),
         "tech_skill_nonzero": sum(1 for v in (f[S_TECH_SKILL] or {}).values() if v),
-        "spell_tech_nonzero": sum(1 for v in (f[S_SPELL_TECH] or {}).values() if v),
+        "spell_tech_nonzero": {k: v for k, v in sorted((f[S_SPELL_TECH] or {}).items()) if v},
         "effects": [{"effect": effects[k], "cause": EFFECT_CAUSES[causes[k]] if 0 <= causes.get(k, -1) < len(EFFECT_CAUSES) else causes.get(k)}
                     for k in sorted(effects)],
         "portrait": f[S_PORTRAIT], "inventory_source": f[S_INVENTORY_SOURCE], "inventory_num": f[S_INVENTORY_NUM],
@@ -548,7 +631,7 @@ def pc_row(description: int, sources: list[Source]) -> dict:
         "auto_level_scheme": f[S_AUTO_LEVEL], "background": f[S_BACKGROUND], "background_text": f[S_BACKGROUND_TEXT],
         "bank_money": f[S_BANK_MONEY], "pc_flags": f"0x{f[S_PC_FLAGS] & 0xFFFFFFFF:X}",
         "critter_flags": f"0x{f[S_CRITTER_FLAGS] & 0xFFFFFFFF:X}", "critter_flags2": f"0x{f[S_CRITTER_FLAGS2] & 0xFFFFFFFF:X}",
-        "player_name": None if name is None else {"bytes": name[1], "sha256": name[2]},
+        "player_name_bytes": None if name is None else name[1],
         "current_aid": f"0x{aid:08X}", "art": art_fields(aid), "art_path": art, "art_sources": art_hits,
     }
     row["matches_ce_table"] = {
@@ -597,7 +680,10 @@ def original(root: Path) -> dict:
             proto_cache[description] = (role, prototype_header_type(data) if data else None, hits)
         return proto_cache[description]
 
-    pcs = [pc_row(d, sources) for d in sorted(CE_PCS)]
+    missing = missing_art_table(sources)
+    pcs = [pc_row(d, sources, missing["masks"]) for d in sorted(CE_PCS)]
+    critter_folders = sorted({(n.split("/")[2], s.role) for s in sources for n in s.names
+                              if n.startswith("art/critter/") and n.count("/") == 3})
 
     # Effects: module 0..49 from gameeffect.mes, 50..399 from effect.mes.
     tables: dict[int, str] = {}
@@ -613,7 +699,8 @@ def original(root: Path) -> dict:
         block["item_prototypes"] = [{"description": d, "source": proto_info(d)[0], "type": proto_info(d)[1]} for d in block["items"]]
         del block["items"]
 
-    sets, set_summary = parse_invensource(winners["rules/invensource.mes"], lambda d: proto_info(d)[1] is not None) \
+    sets, set_summary = parse_invensource(winners["rules/invensource.mes"], lambda d: proto_info(d)[1] is not None,
+                                          winners["rules/invensourcebuy.mes"]) \
         if winners["rules/invensource.mes"] else ([], {})
     by_number = {s.number: s for s in sets}
     wanted_sets = sorted({p["inventory_source"] for p in pcs if p["inventory_source"]})
@@ -625,6 +712,8 @@ def original(root: Path) -> dict:
             "min_coins": s.min_coins, "max_coins": s.max_coins, "items": len(s.items),
             "all_rates_100": all(rate >= 100 for rate, _ in s.items),
             "entries": [{"rate": rate, "prototype": proto, "type": proto_info(proto)[1]} for rate, proto in s.items],
+            "buy_entry": None if not winners["rules/invensourcebuy.mes"] or number not in winners["rules/invensourcebuy.mes"].entries
+            else {"empty": winners["rules/invensourcebuy.mes"].entries[number].strip() == ""},
             "same_in_every_copy": all(c.entries.get(number) == winners["rules/invensource.mes"].entries.get(number)
                                       for c in all_copies["rules/invensource.mes"])})
 
@@ -642,24 +731,44 @@ def original(root: Path) -> dict:
                         "name_present": bool(name_mes and scheme in name_mes.entries)})
     standard = level_mes.entries.get(70) if level_mes else None
 
+    def block_summary(rows: list[dict]) -> dict:
+        categories: dict[str, int] = {}
+        operators: dict[str, int] = {}
+        for row in rows:
+            changes = row["effect_resolved"].get("changes", [])
+            for category in {c["category"] for c in changes}:
+                categories[category] = categories.get(category, 0) + 1
+            for change in changes:
+                operators[change["operator"]] = operators.get(change["operator"], 0) + 1
+        return {"blocks": len(rows), "blocks_changing": categories, "operators": operators,
+                "zero_change_blocks": [r["block"] for r in rows if not r["effect_resolved"].get("changes")],
+                "item_blocks": [r["block"] for r in rows if r["item_prototypes"]]}
+
     gate = next(p for p in pcs if p["description"] == GENDER_GATE_PROTOTYPE)
     return {
         "probe": "starting_hero_probe", "ce_pin": PIN, "mode": "original",
         "sources": fingerprints, "resources": resources,
         "pc_prototypes": pcs,
+        "missing_art": {k: v for k, v in missing.items() if k != "masks"},
+        "critter_art_folders": [{"folder": f, "source": r} for f, r in critter_folders],
         "gender_gate": {"prototype": GENDER_GATE_PROTOTYPE, "art_path": gate["art_path"], "art_sources": gate["art_sources"],
                         "open": bool(gate["art_sources"]), "pregen_count_if_open": 13, "new_char_buttons_if_open": 10},
         "inventory_sources": {"summary": set_summary, "sets": set_rows},
         "auto_level_schemes": schemes, "standard_npc_scheme_70_present": standard is not None,
-        "backgrounds": {"blocks": len(blocks), "rows": blocks},
+        "backgrounds": {"blocks": len(blocks), "rows": blocks,
+                        "pc_offered": block_summary([b for b in blocks if not b["npc_only"]]),
+                        "npc_only": block_summary([b for b in blocks if b["npc_only"]])},
         "effects": {
             "table_entries": len(tables), "unparsed": sorted(n for n, (_, ok) in parsed_all.items() if not ok),
+            "over_change_limit": sorted(n for n, (changes, _) in parsed_all.items() if effect_over_limit(changes)),
+            "at_change_limit": sorted(n for n, (changes, _) in parsed_all.items()
+                                      if any(sum(c["category"] == k for c in changes) == MAX_EFFECT_CHANGES for k in EFFECT_TOKENS)),
             "race": [dict(effect_row(tables, RACE_EFFECT_BASE + r), race=RACES[r]) for r in range(len(RACES))],
             "female": effect_row(tables, FEMALE_EFFECT),
         },
         "starting_kit": {key: {"description": d, "source": proto_info(d)[0], "type": proto_info(d)[1], "copies": proto_info(d)[2]}
                          for key, d in STARTING_KIT.items()},
-        "armor_size_by_race": ARMOR_SIZE,
+        "ce_armor_size_by_race": ARMOR_SIZE,
     }
 
 
@@ -669,7 +778,7 @@ def make_proto(fields: dict[int, object], obj_type: int = TYPE_PC, number: int =
     out += struct.pack("<h6xi12x", -1, 0)
     out += struct.pack("<h6xi12x", 1, number)
     out += struct.pack("<i", obj_type)
-    out += b"\xff" * (4 * PC_MASK_WORDS)
+    out += b"".join(struct.pack("<I", (1 << n) - 1) for n in PC_MASK_LENGTHS)
     for slot, wire in enumerate(PC_KINDS):
         value = fields.get(slot)
         if wire == I32:
@@ -716,6 +825,7 @@ def self_test() -> dict:
            ("special", 0, "min", 5), ("resistance", 1, "multiply", 0)])
     check(changes[-1]["literal"], 2)
     check(parse_effect("st +1, bogus +2")[1], False)
+    check((effect_over_limit(parse_effect("st +1, " * 7)[0]), effect_over_limit(parse_effect("st +1, " * 8)[0])), (False, True))
 
     # Scheme grammar: '<token> <score>,' pairs in order; unknown token fails.
     steps, ok = parse_scheme("st 10, melee 3, fire 2, maxhps 40")
@@ -724,14 +834,22 @@ def self_test() -> dict:
           [("stat", 0, 10), ("basic_skill", 2, 3), ("college", 4, 2), ("misc", 0, 40)])
     check(parse_scheme("st 10, nonsense 1")[1], False)
 
-    # InvenSource: coins pair first, rate,proto pairs, unknown proto empties the set,
-    # a gap stops parsing, set N of N entries is unreachable.
+    # InvenSource: coins pair first, rate,proto pairs, an unknown proto empties only the
+    # items, entry 0 is skipped, a gap stops parsing, set N of N entries is unreachable.
     known = {5001, 6002}
-    inv = parse_mes(b"{1}{A: 10,20 100,5001 50,6002}{2}{B: 0,0 100,9999}{3}{C:}{5}{D: 1,1}")
+    inv = parse_mes(b"{0}{Z: 9,9}{1}{A: 10,20 100,5001 50,6002}{2}{B: 5,6 100,9999}{3}{C:}{5}{D: 1,1}")
     sets, summary = parse_invensource(inv, lambda d: d in known)
     check([(s.number, s.parsed, s.min_coins, s.max_coins, s.items, s.reachable) for s in sets],
-          [(1, True, 10, 20, ((100, 5001), (50, 6002)), True), (2, False, 0, 0, (), True), (3, True, 0, 0, (), True)])
-    check((summary["entries"], summary["contiguous_sets"], summary["first_gap"]), (4, 3, 5))
+          [(1, True, 10, 20, ((100, 5001), (50, 6002)), True), (2, False, 5, 6, (), True), (3, True, 0, 0, (), True)])
+    check((summary["entries"], summary["contiguous_sets"], summary["first_gap"], summary["entry_zero_skipped"]), (5, 3, 5, True))
+    long_name = parse_mes(b"{1}{" + b"N" * 70 + b": 7,8}{2}{" + b"N" * 69 + b": 7,8}{3}{x}")
+    check([(s.parsed, s.min_coins) for s in parse_invensource(long_name, lambda d: True)[0]][:2], [(False, 0), (True, 7)])
+    many = parse_mes(b"{1}{M: 1,1 " + b" ".join(b"1,5" for _ in range(301)) + b"}{2}{x}")
+    check([(s.parsed, s.min_coins, s.items) for s in parse_invensource(many, lambda d: True)[0]][:1], [(False, 1, ())])
+    buy = parse_mes(b"{1}{ALL}{2}{5001 9999}{3}{}")
+    two = parse_mes(b"{1}{A: 1,1 100,5001}{2}{B: 2,2 100,5001}{3}{C: 3,3 100,5001}{4}{x}")
+    check([(s.parsed, len(s.items)) for s in parse_invensource(two, lambda d: d in known, buy)[0]][:3],
+          [(True, 1), (False, 0), (True, 1)])
     last, _ = parse_invensource(parse_mes(b"{1}{A: 1,2}{2}{B: 3,4}"), lambda d: True)
     check([(s.number, s.min_coins, s.max_coins, s.reachable) for s in last], [(1, 1, 2, True), (2, 3, 4, False)])
 
@@ -739,8 +857,10 @@ def self_test() -> dict:
     bg = parse_mes(b"{0}{1000}{1}{51}{2}{}{3}{400}{4}{}{10}{1001}{11}{}{12}{HUM}{13}{100}{14}{5001 6002}{20}{1002}")
     blocks = parse_backgrounds(bg)
     check([(b["block"], b["description"], b["effect"], b["condition"], b["money"], b["items"]) for b in blocks],
-          [(0, 1000, 51, "", 400, []), (1, 1001, 0, "HUM", 100, [5001, 6002])])
-    check(blocks[1]["effect_text_empty"], True)
+          [(0, 1000, 51, [], 400, []), (1, 1001, 0, ["HUM"], 100, [5001, 6002])])
+    check((blocks[1]["effect_text_empty"], blocks[1]["npc_only"]), (True, False))
+    odd = parse_backgrounds(parse_mes(b"{0}{1}{1}{2}{2}{secret words}{3}{4}{4}{}"))[0]["condition"]
+    check(sorted(odd), ["sha256"])
 
     # Critter ART names: underwear human male; plate forces X; explode overrides armor; 2H+shield → sword.
     aid = (2 << 28) | (1 << 27) | (0 << 24) | (0 << 20)
@@ -749,8 +869,16 @@ def self_test() -> dict:
     check(critter_art_path((2 << 28) | (0 << 27) | (4 << 24)), "art/critter/hmf/hmfuwxaa.art")
     check(critter_art_path((2 << 28) | (1 << 27) | (2 << 24) | (6 << 20)), "art/critter/dfx/dfxpcxaa.art")
     check(critter_art_path((2 << 28) | (1 << 27) | (4 << 24)), "art/critter/efm/efmuwxaa.art")
-    check(critter_art_path((2 << 28) | (1 << 27) | (20 << 6)), "art/critter/hmx/hmxxxxau.art")
     check(critter_art_path(6 << 28), None)
+    # Missing stand/no-weapon art (kind = gender + 2 * body) switches to the unarmed file.
+    check(critter_art_path(aid, [0, MISSING_STAND_NO_WEAPON] + [0] * 8), "art/critter/hmm/hmmuwxba.art")
+    check(critter_art_path(aid, [MISSING_STAND_NO_WEAPON] + [0] * 9), "art/critter/hmm/hmmuwxaa.art")
+    try:
+        critter_art_path((2 << 28) | (1 << 27) | (20 << 6))
+    except ProbeFailure:
+        checks += 1
+    else:
+        raise ProbeFailure("SyntheticRejectMissing")
 
     # Prototype decoder: header, every slot, sparse arrays, strings, trailing bytes.
     fields = {S_AID: aid, S_PORTRAIT: 1025, S_INVENTORY_SOURCE: 23, S_AUTO_LEVEL: 84, S_BACKGROUND: 47,
@@ -761,7 +889,10 @@ def self_test() -> dict:
     check((obj_type, number, decoded[S_PORTRAIT], decoded[S_INVENTORY_SOURCE], decoded[S_STAT_BASE]),
           (TYPE_PC, 16095, 1025, 23, {0: 8, 26: 0, 27: 0}))
     check((decoded[S_EFFECTS], decoded[S_PLAYER_NAME][:2], decoded[S_GOLD]), ({0: 64}, ("str", 3), None))
-    for bad in [data + b"\0", data[:-1], make_proto(fields, obj_type=16), b"\x76" + data[1:]]:
+    mask_at = 4 + 24 + 24 + 4 + 4  # second mask word: 4 valid bits
+    reserved = data[:mask_at] + struct.pack("<I", 0x1F) + data[mask_at + 4:]
+    bad_kind = data[:28] + struct.pack("<h", 9) + data[30:]
+    for bad in [data + b"\0", data[:-1], make_proto(fields, obj_type=16), b"\x76" + data[1:], reserved, bad_kind]:
         try:
             decode_prototype(bad)
         except ProbeFailure:

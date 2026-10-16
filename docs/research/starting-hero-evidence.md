@@ -36,15 +36,21 @@ python3 -B tools/research/starting_hero_probe.py --self-test
 python3 -B tools/research/starting_hero_probe.py --game-root /path/to/Arcanum
 ```
 
-The self-test uses invented inputs only (33 checks: C `atoi`/`strtok`
-semantics, MES brace pairs, effect and scheme grammars, inventory-source rules,
-background blocks, critter ART names, the v119 prototype decoder and its
+The self-test uses invented inputs only (42 checks: C `atoi`/`strtok`
+semantics, MES brace pairs, effect and scheme grammars and the per-collection
+change limit, inventory-source and buy-line rules, background blocks, critter
+ART names with the missing-art fallback, the v119 prototype decoder and its
 refusals, mount precedence). Original mode opens the mounts in the
 [ARC-DATA-011](content-precedence.md) search order (module folder, module
 `PATCH0`, module `Arcanum.dat`, `data/`, `Arcanum4`, `arcanum3`, `arcanum2`,
-`arcanum1`; first wins; the game folder and `tig.dat` are not consulted),
-reads each resource in memory, records every copy's size and SHA-256 and parses
-the winning copy. It prints one JSON report and writes nothing. The rule
+`arcanum1`; first wins), reads each resource in memory, records every copy's
+size and SHA-256 and parses the winning copy. It prints one JSON report and
+writes nothing. Limits: it mounts only these eight names, so the game folder,
+`tig.dat`, module `.patch1..9` and any other `arcanum*.dat` that
+[content precedence](content-precedence.md) allows are not consulted (none of
+them is needed on this installation); background conditions are printed only
+when every token is a race/gender code, `NPC` or `ANY`, otherwise as a digest;
+player names only as lengths. The rule
 parsers are independently written from the CE locators cited below; no CE code
 or structure is reused.
 
@@ -60,7 +66,7 @@ or structure is reused.
    four women, the **female effect 330** (cause gender). No background effect is
    stored (SH-03).
 2. **The gender gate is open.** Prototype 16075's art id resolves to an
-   existing critter ART file, so in CE's model this installation shows **twelve
+   existing critter ART file (`art\critter\hmf\hmfuwxaa.art`), so in CE's model this installation shows **twelve
    pre-made heroes** and the **two gender buttons** (SH-04, answers
    ARC-RES-025 CC-10).
 3. **Pre-made heroes' gold and items are deterministic.** They come only from
@@ -82,8 +88,8 @@ or structure is reused.
    ARC-RES-025.
 6. **Schemes spend 5 points at level 1.** Each pre-made hero's scheme is an
    ordered list of `<attribute> <target>` steps; CE charges one point per stat
-   point, skill point, spell or tech degree, and the first affordable steps are
-   bought in order until a step cannot be paid (SH-06). The exact level-1 sheet
+   point, skill point, spell or tech degree (and per misc unit), and the steps
+   are bought in order until one cannot be paid (SH-06). The exact level-1 sheet
    is **not computed** here (it needs the key-stat caps, spell and tech
    prerequisites and the hit-point/fatigue formulas).
 
@@ -103,11 +109,16 @@ and the pre-made screen calls `item_wield_best_all`
 Because every used set has `min = max` and rate 100, the random calls cannot
 change the result.
 
-`Rules\InvenSource.mes` is parsed as sets numbered `1..N` in order; the first
-gap stops parsing (later sets stay unparsed); a line is
-`name: min,max rate,proto rate,proto ...` (first pair = coins); a line over the
-string limit, an incomplete pair or an unknown prototype empties that set;
-the lookup accepts only `0 < id < N`, so the last set is unreachable
+`Rules\InvenSource.mes` is parsed as sets numbered `1..N` in order, starting
+after number 0 (an entry 0 is skipped by `mes_find_next`); the first gap stops
+parsing (later sets stay unparsed). A line is
+`name: min,max rate,proto rate,proto ...` (first pair = coins). A line over the
+string limit, an empty line or a name of 70 or more characters fails before the
+coins and leaves the set empty; an incomplete pair, an unknown prototype or more
+than 300 items fails afterwards and empties **only the items** (the coins
+already read stay); a failing `Rules\InvenSourceBuy.mes` line for the same set
+(not empty, not `ALL`, an unknown prototype or more than 300) also empties the
+items. The lookup accepts only `0 < id < N`, so the last set is unreachable
 ([parser](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L189-L390),
 [lookup](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L167-L182)).
 
@@ -135,13 +146,18 @@ ends the whole rule
 [skill and others](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L989-L1212)).
 Costs are one point per unit: stat cost table all 1
 ([stat_cost](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L151-L172)),
-`basic_skill_cost_inc`/`tech_skill_cost_inc` 1
-([skill.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L909-L915)),
+`basic_skill_cost_inc` and `tech_skill_cost_inc` 1
+([basic](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L909-L915),
+[tech](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L1351-L1357)), tech degrees 1 each
+([tech_degree_cost_tbl](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tech.c#L23-L32)), misc steps one
+point per hit or fatigue point
+([auto_level_misc](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1178-L1212)),
 `spell_cost` 1
 ([spell.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L347-L352)).
 A skill level is 4 × points
 ([basic_skill_base](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L486-L499)),
-so a skill target 4 is one point. Two CE details matter for an exact replay: a
+so a skill target 4 is one point when no effect already adjusts that skill (a
+race effect such as halfling prowling +2 changes the count). Two CE details matter for an exact replay: a
 stat step starts from the **base** value but continues from the **effective**
 value, and a skill/spell/tech step that cannot be raised first raises its key
 stat instead.
@@ -174,13 +190,14 @@ background, so an empty slot adds effect 0
 
 ### Context backgrounds (FR-CHAR-006)
 
-Besides their data effect, fourteen background ids have engine behaviour that
-depends on place, time or items:
+Besides their data effect, fourteen background ids have hard-coded engine
+behaviour: some depend on place, time, light or items (62..69, 72), others
+apply always (51, 55, 74, 75, 78):
 
 | Block | Engine behaviour | Data effect (SH-07) |
 | --- | --- | --- |
 | 51 | followers' skill training raised towards the PC's ([educate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.c#L389-L440)) | max followers −1 |
-| 55, 74, 75 | counts as "dumb" in dialog ([critter_is_dumb](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2392-L2419)) | stat changes |
+| 55, 74, 75 | counts as "dumb" in dialog ([critter_is_dumb](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2392-L2419)) | 55: intelligence +6, four stats −1/−2, gambling +3; 74/75: stat changes and three resistances |
 | 62, 63 | magick points +4 by day / by night, −4 otherwise | none |
 | 64, 65 | magick points +4 outdoors / on natural tiles, −4 otherwise ([stat_level_get](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L382-L511)) | none |
 | 66 | indoors intelligence +2; outdoors strength +2, dexterity/intelligence/willpower −2 | none |
@@ -193,31 +210,50 @@ depends on place, time or items:
 (Block numbers are the `BACKGROUND_*` constants of
 [background.h](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.h#L7-L20).)
 
+### Starting clothes (FR-CHAR-007)
+
+On the new-character path, when no item sits in the armor slot, the shop step
+creates clothes by gender and the race's armour size: men a nice suit (small
+8065, medium 8049, large 8069), women 8134, 8133 or 8135; if wearing fails, it
+destroys them and creates a jacket (8118, 8110, 8126) instead
+([item_generate_inventory](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L207-L316)). Armour size
+by race: small for dwarf, gnome and halfling; large for half-ogre and ogre;
+medium for human, elf, half-elf, half-orc, dark elf and orc
+([size table](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L80-L92)). These are source facts;
+the probe only checks that the prototypes exist (SH-10) and prints the size
+table as a CE constant.
+
 ### Critter ART names (gender gate)
 
 The gate tests `tig_art_exists` on 16075's current art id
 ([gate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L6039-L6055)).
 The path resolver first normalises the id (female elves use the human body;
-plate armour is male, elf → human, halfling → dwarf; a missing-art table may
-swap animation and weapon) and then builds
+plate armour is male, elf → human, halfling → dwarf; the missing-art table
+`art\missing.dat`, or a rebuild from file existence when its file count does
+not match, swaps animation and weapon for art that is missing; for the stand
+animation without a weapon its bit `0x8` switches to the unarmed file) and then
+builds
 `art\critter\<body><gender>\<body><gender><armor><shield><weapon><anim>.art`
 ([normalise](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L648-L708),
+[fallback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L824-L853),
+[table load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L410-L450),
 [path](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L856-L930),
 [id fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/art.c#L36-L39)).
-The probe models the body/gender normalisation and the name; it does not model
-the missing-art table, which is irrelevant for the animation-0 ids here.
+The probe models the body/gender normalisation, the stand/no-weapon fallback
+(from `missing.dat` when its count matches, else derived) and the name; it
+refuses any other animation, so the other fallback rows are not modelled.
 
 ## Local observations
 
 | ID | Observation |
 | --- | --- |
-| SH-01 | Mounts read: module folder (167 files), module `PATCH0` (18,804 bytes, `d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce`), module `Arcanum.dat` (355,938,305 bytes, `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`), `data/` (1,426 files), `Arcanum4.dat` (447,614 bytes, `975d43854fca8b7dd74e2b12ef2ff3fe6d3c0f99dc541151d33001469f89710c`), `arcanum3.dat` (9,605,011 bytes, `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`), `arcanum2.dat` (147,991,122 bytes, `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d`), `arcanum1.dat` (447,470,816 bytes, `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576`). Resources (winner first): `rules\backgrnd.mes` `Arcanum4` over `arcanum3` (the ARC-RES-025 CC-02 pair); `rules\effect.mes` only `arcanum3` (17,497 bytes, `8ac43304c1e3ff2b351124acb7403c5de79165963f6ea0a83fa4c4d3bdb0b6b2`, 309 entries); `rules\gameeffect.mes` only module `Arcanum.dat` (417 bytes, `f8c921b72da9b004aedf9a34c8a1d4f6bbaa86abd1168d234cd811b66ead0a85`, 1 entry); `rules\InvenSource.mes` `Arcanum4` (35,149 bytes, `b66b9cd9640c5dff2b4018dfb5a5d8fc6e5c8f71b62f0a9dcfaeb4430ecfda17`) over `arcanum3` (35,008 bytes, `fc7936ffd47a77ed676ceed33315a3bebc57246338bbcaf53585d669fc2d4ef4`), 123 contiguous sets; `rules\gamelevel.mes` `Arcanum4` (18,492 bytes, `5121e2fabd00ac628be4488b69fafee6639eada475b9a3eee00fe0b145919f55`) over `arcanum3` (18,506 bytes, `f76d56dfbbd00095c2e8a6ca25fb983be805fcb40f9cbe4ac3ff8b770f47ef2e`); `mes\gamelevelname.mes` only `arcanum3` (`21df5868c7fc1b79604a58bba01aeafde35436c7070e3616978e2f8e306de53a`, 58 entries). No resource has duplicate message numbers. |
+| SH-01 | Mounts read: module folder (167 files), module `PATCH0` (18,804 bytes, `d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce`), module `Arcanum.dat` (355,938,305 bytes, `8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f`), `data/` (1,426 files), `Arcanum4.dat` (447,614 bytes, `975d43854fca8b7dd74e2b12ef2ff3fe6d3c0f99dc541151d33001469f89710c`), `arcanum3.dat` (9,605,011 bytes, `cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499`), `arcanum2.dat` (147,991,122 bytes, `4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d`), `arcanum1.dat` (447,470,816 bytes, `6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576`). Resources (winner first): `rules\backgrnd.mes` `Arcanum4` over `arcanum3` (the ARC-RES-025 CC-02 pair); `rules\effect.mes` only `arcanum3` (17,497 bytes, `8ac43304c1e3ff2b351124acb7403c5de79165963f6ea0a83fa4c4d3bdb0b6b2`, 309 entries); `rules\gameeffect.mes` only module `Arcanum.dat` (417 bytes, `f8c921b72da9b004aedf9a34c8a1d4f6bbaa86abd1168d234cd811b66ead0a85`, 1 entry); `rules\InvenSource.mes` `Arcanum4` (35,149 bytes, `b66b9cd9640c5dff2b4018dfb5a5d8fc6e5c8f71b62f0a9dcfaeb4430ecfda17`) over `arcanum3` (35,008 bytes, `fc7936ffd47a77ed676ceed33315a3bebc57246338bbcaf53585d669fc2d4ef4`), 123 contiguous sets; `rules\InvenSourceBuy.mes` `Arcanum4` (23,869 bytes, `6def951c87c876cb6675ecfb2f552b7078f71840c488d34dad320ab27b8cfb7d`) over `arcanum3` (22,811 bytes, `68ff763322e448d78b57c1c3fbd9bafa72a14ed55d058a63debb18a4ea406718`); `rules\gamelevel.mes` `Arcanum4` (18,492 bytes, `5121e2fabd00ac628be4488b69fafee6639eada475b9a3eee00fe0b145919f55`) over `arcanum3` (18,506 bytes, `f76d56dfbbd00095c2e8a6ca25fb983be805fcb40f9cbe4ac3ff8b770f47ef2e`); `mes\gamelevelname.mes` only `arcanum3` (`21df5868c7fc1b79604a58bba01aeafde35436c7070e3616978e2f8e306de53a`, 58 entries); `art\missing.dat` only `arcanum1` (332 bytes, `49502ba4e4236f7c7835e697c3ff569f894f2814f82cd3543ce861c28526b7e0`). No resource has duplicate message numbers. |
 | SH-02 | The 13 PC prototypes are the only copies (no `proto/` match in any archive). Each decodes completely (no trailing bytes) and all nine compared fields equal the CE table of [ARC-RES-025](character-creation-evidence.md#pre-made-heroes) for every prototype. SHA-256 per file: see [the table below](#pc-prototype-files). This settles ARC-RES-025 CC-09. |
-| SH-03 | Every prototype: base stats st/dx/cn/be/in/pe/wp/ch 8, level 1, XP 0, alignment 0, unspent 5, age 20, gender and race as in the table; no basic or tech skill points; the spell/tech array holds one non-zero element (index 16, value −1), which `level_set` resets anyway; inventory count 0 and empty list, no gold handle, bank money 0, PC flags 0, critter flags 0. Effects: race effect `64 + race` (cause race) on all 13, plus effect 330 (cause gender) on 16075..16078. The stored player name is a non-empty string on all 13 (lengths only were read). |
-| SH-04 | Art ids are critter underwear, no shield, no weapon, animation 0 (`0x2_002000` family). Resolved names exist in `arcanum1.dat` only: `hmm` (generic, 16069, 16072, 16073), `ghm` (16067, 16068), `hgm` (16070), `efm` (16071), `dfm` (16074), `hmf` (16075..16078; 16076 is an elf woman, normalised to the human body). There is no `eff` folder in any archive. So 16075's art exists and the gate opens. |
-| SH-05 | Pre-made inventory sets (`Arcanum4`; identical in `arcanum3`), all parsed, reachable, every rate 100. Coins and prototypes (type in brackets: 5 weapon, 7 armor, 14 generic): set **20** 385 — 6029 [5], 8168 [7], 8049 [7]; set **22** 370 — 8094 [7], 6111 [5], 8170 [7]; set **23** 300 — 8200 [7], 6051 [5], 8171 [7]; set **24** 385 — 6029, 8168, 8065 [7]; set **25** 385 — 6029, 8168, 8069 [7]; set **26** 385 — 6029, 8168, 8142 [7]; set **108** 385 — 6029, 8168, 8065, 15178 [14]. 8049, 8065 and 8069 are the medium, small and large suits of the new-character clothes rule; 15178 is the crude lockpicks of the skill rule. Every listed prototype exists in `data/proto`. |
+| SH-03 | Every prototype: base stats st/dx/cn/be/in/pe/wp/ch 8, level 1, XP 0, alignment 0, unspent 5, age 20, gender and race as in the table; no basic or tech skill points; the spell/tech array holds one non-zero element (index 16, value −1), which `level_set` resets anyway; inventory count 0 and empty list, no gold handle, bank money 0, PC flags 0, critter flags 0. Effects: race effect `64 + race` (cause race) on all 13, plus effect 330 (cause gender) on 16075..16078. The stored player name is a non-empty string on all 13 (only lengths are printed). |
+| SH-04 | Art ids are critter underwear, no shield, no weapon, animation 0: `0x28002000` (human male), `0x29002000` (dwarf), `0x2A002000` (halfling body), `0x2B002000` (half-ogre), `0x2C002000` (elf male), `0x20002000` (human female), `0x24002000` (elf female). `art\missing.dat` header 4,601 equals the 4,601 listed critter/monster/unique-NPC ART files, so the engine uses it; its stand/no-weapon bit is set only for the dwarf, halfling and half-ogre female bodies (the same as a rebuild from file existence), so no pre-made id is redirected. Resolved names exist in `arcanum1.dat` only: `hmm` (generic, 16069, 16072, 16073), `ghm` (16067, 16068), `hgm` (16070), `efm` (16071), `dfm` (16074), `hmf` (16075..16078; 16076 is an elf woman, normalised to the human body). The only critter folders are `dfm`, `dfx`, `efm`, `ghm`, `hgm`, `hgx`, `hmf`, `hmm` and `hmx` (no `eff`). So 16075's art exists and the gate opens. |
+| SH-05 | Pre-made inventory sets (`Arcanum4`; identical in `arcanum3`), all parsed, reachable, every rate 100; the buy lines of sets 20..26 are empty and set 108 has none, so none empties a set; entry 0 is absent. Coins and prototypes (type in brackets: 5 weapon, 7 armor, 14 generic): set **20** 385 — 6029 [5], 8168 [7], 8049 [7]; set **22** 370 — 8094 [7], 6111 [5], 8170 [7]; set **23** 300 — 8200 [7], 6051 [5], 8171 [7]; set **24** 385 — 6029, 8168, 8065 [7]; set **25** 385 — 6029, 8168, 8069 [7]; set **26** 385 — 6029, 8168, 8142 [7]; set **108** 385 — 6029, 8168, 8065, 15178 [14]. 8049, 8065 and 8069 are the medium, small and large suits of the new-character clothes rule; 15178 is the crude lockpicks of the skill rule. Every listed prototype exists in `data/proto`. |
 | SH-06 | Schemes 76..87 (`Arcanum4`; identical in `arcanum3`) all exist and parse, 31..49 steps each, and all twelve names exist. Standard NPC scheme 70 exists. First steps (attribute, target): see [the scheme table](#level-1-schemes). |
-| SH-07 | Background blocks (`Arcanum4`): 79. Effect ids used: 0 (blocks 39..50), 86..113, 179..189, 328, 329, 335..352 and 355. Every referenced effect exists and parses. Seven blocks have an effect with zero changes: 0 (effect 86), 62..66 and 78 (all effect 342). Of the 67 blocks offered to PCs, 63 change stats, 30 basic skills, 8 special values, 7 resistances, 5 tech skills and 1 a tech discipline; operators are 266 add, 2 multiply (blocks 5 and 11, `*2` on the bad and good reaction adjustment, stored as 0 by CE), 1 percent, 1 max. Blocks 53/54 and 57/58 share a description id (1053, 1056) and an effect: they are race/gender variants with different item lists. Ten blocks carry items (3, 5, 8, 31, 39, 53, 54, 57, 58, 71); all item prototypes exist. |
+| SH-07 | Background blocks (`Arcanum4`): 79. Effect ids used: 0 (blocks 39..50), 86..113, 179..189, 328, 329, 335..352 and 355. Every referenced effect exists and parses. Seven blocks have an effect with zero changes: 0 (effect 86), 62..66 and 78 (all effect 342). Of the 67 blocks offered to PCs (all but the `NPC` blocks 39..50), 51 change stats, 18 basic skills, 8 special values, 7 resistances, 5 tech skills and 1 a tech discipline; their operators are 206 add, 2 multiply (blocks 5 and 11, `*2` on the bad and good reaction adjustment, stored as 0 by CE), 1 percent, 1 max. No effect exceeds 7 changes in one attribute collection; effect 66 (elf) reaches exactly 7. Blocks 53/54 and 57/58 share a description id (1053, 1056) and an effect: they are race/gender variants with different item lists. Ten blocks carry items (3, 5, 8, 31, 39, 53, 54, 57, 58, 71); all item prototypes exist. |
 | SH-08 | The module's `gameeffect.mes` defines exactly one effect, number 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20; the same changes as the ogre race effect 73). It is the effect an empty background effect slot would add. |
 | SH-09 | Race effects 64..74 (effect.mes): human none; dwarf st +1, cn +1, ch −1, dx −1, all four tech skills +2, tech points +3, age +80; elf wp +1, dx +1, be +1, cn −2, st −1, tech skills −2, magick points +3, age +180; half-elf dx +1, be +1, cn −1, tech skills −1, magick points +1, age +15; gnome wp +2, haggle +2, bad-reaction adjustment +10, cn −2, age +70; halfling dx +2, prowling +2, dodge +1, critical-hit chance +5, st −3, age +30; half-orc st +1, cn +1, melee +2, dodge +2, poison resistance +10, be −2, ch −2, age −5; half-ogre st +4, damage resistance +10, be −1, in −4, prowling −2; dark elf, ogre and orc (NPC races) exist too. Female effect 330: st −1, cn +1. |
 | SH-10 | Starting-kit prototypes of `item_generate_inventory` all exist once in `data/proto`: suits 8049/8065/8069, jackets 8110/8118/8126, dresses 8133/8134/8135 (type 7), crude lockpicks 15178 and bandages 15179 (type 14), gold 9056 (type 8). |
@@ -264,10 +300,12 @@ Items are created, moved into the pack and then worn by `item_wield_best_all`
 ### Level-1 schemes
 
 The first six steps of each scheme (`<attribute> <target>`; skill targets are
-levels, 4 = one point). With 5 points, the hero buys these in order until one
-cannot be paid; stat and skill steps cost one point here, misc steps
-(`maxhps`, `maxfatigue`) one point per unit up to their target and normally
-exhaust the remainder.
+levels, 4 points of level per skill point). With 5 points, the hero buys these
+in order until one cannot be paid. A step costs one point per unit still
+missing: `dx 9` from 8 costs 1 and `be 10` from 8 costs 2; a skill step costs
+fewer points when an effect already raises that skill; misc steps (`maxhps`,
+`maxfatigue`) cost one point per hit or fatigue point and normally exhaust the
+remainder.
 
 | Scheme | Steps | First steps |
 | --- | --- | --- |
