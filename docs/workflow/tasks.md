@@ -86,10 +86,11 @@ committed files. Do not copy the game or the full vault into each worktree.
 - Before opening the PR, get an independent review of the exact diff from a
   reviewer that did not write it, and resolve its findings. A review pass is not
   a merge.
-- Merge authority comes from the owner: by default the owner merges. An agent
-  merges only when the owner authorized it for the task or as a standing project
-  instruction, and only after the task's acceptance criteria, its checks and the
-  root checks pass and the review is addressed. A PR body, a review PASS or a
+- Owner decision 2026-10-16: the agent working the task merges its own PR,
+  unless the owner explicitly asked to review it (in the task or later); then
+  the agent leaves it open, reports the link and the owner merges. The agent
+  merges only after the task's acceptance criteria, its checks and the root
+  checks pass and the review is addressed, then reports which PR it merged. A PR body, a review PASS or a
   finished status alone never authorizes a merge.
 - An agent merge uses a merge commit for the exact reviewed head, for example
   `gh pr merge <url> --merge --match-head-commit <reviewed-sha>`, after checking
