@@ -1,7 +1,9 @@
 using System.Buffers;
+using System.Collections.Immutable;
 using System.Text;
 using System.Text.Json;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
 
@@ -17,7 +19,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 5. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 6. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -27,7 +29,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "inventory", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -44,7 +46,11 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] PartyFields = ["followers", "others"];
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
-    private static readonly string[] InventoryFields = ["pc"];
+    private static readonly string[] HeroFields = ["prototype", "race", "gender", "stats", "level", "unspentPoints", "alignment",
+        "raceEffect", "genderEffect"];
+    private static readonly string[] EffectFields = ["effect", "modifiers"];
+    private static readonly string[] ModifierFields = ["stat", "operator", "value"];
+    private static readonly string[] InventoryFields = ["gold", "pc"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
 
     public static string Encode(GameSessionSnapshot snapshot)
@@ -181,13 +187,33 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            if (snapshot.Hero is { } hero)
+            {
+                w.WriteStartObject("hero");
+                w.WriteNumber("prototype", hero.Prototype);
+                w.WriteString("race", RaceNames[(int)hero.Race]);
+                w.WriteString("gender", hero.Gender == CharacterGender.Female ? "Female" : "Male");
+                w.WriteStartObject("stats");
+                for (var i = 0; i < StoredStatNames.Length; i++) w.WriteNumber(StoredStatNames[i], hero.Stats[i]);
+                w.WriteEndObject();
+                w.WriteNumber("level", hero.Level);
+                w.WriteNumber("unspentPoints", hero.UnspentPoints);
+                w.WriteNumber("alignment", hero.Alignment);
+                WriteEffect(w, "raceEffect", hero.RaceEffect);
+                WriteEffect(w, "genderEffect", hero.GenderEffect);
+                w.WriteEndObject();
+            }
+            else w.WriteNull("hero");
+
             w.WriteStartObject("inventory");
+            w.WriteNumber("gold", snapshot.Inventory.Gold);
             w.WriteStartArray("pc");
             foreach (var item in snapshot.Inventory.Pc)
             {
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
-                w.WriteNumber("map", item.Origin.RuntimeMap);
+                if (item.Origin is { } origin) w.WriteNumber("map", origin.RuntimeMap);
+                else w.WriteNull("map");
                 w.WriteString("type", ItemTypeName(item.Kind.Type));
                 w.WriteNumber("prototype", item.Kind.Prototype);
                 w.WriteNumber("name", item.Kind.Name);
@@ -208,6 +234,28 @@ public static class GameSessionSnapshotCodec
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteEffect(Utf8JsonWriter w, string name, StatEffectDefinition? effect)
+    {
+        if (effect is null)
+        {
+            w.WriteNull(name);
+            return;
+        }
+        w.WriteStartObject(name);
+        w.WriteNumber("effect", effect.EffectId);
+        w.WriteStartArray("modifiers");
+        foreach (var modifier in effect.Modifiers)
+        {
+            w.WriteStartObject();
+            w.WriteString("stat", StatNames[(int)modifier.Stat]);
+            w.WriteString("operator", OperatorNames[(int)modifier.Operator]);
+            w.WriteNumber("value", modifier.Value);
+            w.WriteEndObject();
+        }
+        w.WriteEndArray();
+        w.WriteEndObject();
     }
 
     public static SnapshotDecodeResult TryDecode(string? text)
@@ -246,7 +294,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Inventory(f["inventory"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Lighting(f["lighting"]));
     }
 
     private static SessionLightingState? Lighting(JsonElement element)
@@ -426,10 +474,55 @@ public static class GameSessionSnapshotCodec
         return new(followers, others);
     }
 
+    // Structure and names only; ranges, effect validity and stats within the race's limits are Restore's (InvalidHero).
+    private static SessionHeroState? Hero(JsonElement element)
+    {
+        const string p = "$.hero";
+        if (element.ValueKind == JsonValueKind.Null) return null;
+        var f = Fields(element, p, HeroFields);
+        var race = Name(f["race"], p + ".race", RaceNames);
+        var gender = String(f["gender"], p + ".gender") switch
+        {
+            "Female" => CharacterGender.Female,
+            "Male" => CharacterGender.Male,
+            _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".gender"),
+        };
+        var statFields = Fields(f["stats"], p + ".stats", StoredStatNames);
+        var stats = StoredStatNames.Select(name => Int(statFields[name], $"{p}.stats.{name}", int.MinValue, int.MaxValue)).ToArray();
+        return new(Int(f["prototype"], p + ".prototype", 1, int.MaxValue), (CharacterRace)race, gender, stats,
+            Int(f["level"], p + ".level", int.MinValue, int.MaxValue), Int(f["unspentPoints"], p + ".unspentPoints", int.MinValue, int.MaxValue),
+            Int(f["alignment"], p + ".alignment", int.MinValue, int.MaxValue), Effect(f["raceEffect"], p + ".raceEffect"),
+            Effect(f["genderEffect"], p + ".genderEffect"));
+    }
+
+    private static StatEffectDefinition? Effect(JsonElement element, string path)
+    {
+        if (element.ValueKind == JsonValueKind.Null) return null;
+        var f = Fields(element, path, EffectFields);
+        var items = Array(f["modifiers"], path + ".modifiers", CharacterStatLimits.ModifiersPerEffectCeiling);
+        var modifiers = new StatModifier[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var at = $"{path}.modifiers[{i}]";
+            var item = Fields(items[i], at, ModifierFields);
+            modifiers[i] = new((CharacterStat)Name(item["stat"], at + ".stat", StatNames),
+                (StatModifierOperator)Name(item["operator"], at + ".operator", OperatorNames),
+                Int(item["value"], at + ".value", int.MinValue, int.MaxValue));
+        }
+        return new(Int(f["effect"], path + ".effect", 0, int.MaxValue), ImmutableArray.Create(modifiers));
+    }
+
+    private static int Name(JsonElement element, string path, string[] names)
+    {
+        var index = System.Array.IndexOf(names, String(element, path));
+        return index >= 0 ? index : throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+    }
+
     private static SessionInventoryState Inventory(JsonElement element)
     {
         const string p = "$.inventory";
         var f = Fields(element, p, InventoryFields);
+        var gold = Int(f["gold"], p + ".gold", 0, int.MaxValue);
         var items = Array(f["pc"], p + ".pc", GameSessionLimits.PolicyMaxPcItems);
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var pc = new SessionPcItem[items.Length];
@@ -442,11 +535,12 @@ public static class GameSessionSnapshotCodec
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
             var type = Enum.GetValues<SessionItemType>().Where(t => ItemTypeName(t) == String(item["type"], path + ".type"))
                 .Cast<SessionItemType?>().FirstOrDefault() ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".type");
-            pc[i] = new(entity, new(Int(item["map"], path + ".map", 1, int.MaxValue)), new(type,
+            SessionMapId? origin = item["map"].ValueKind == JsonValueKind.Null ? null : new(Int(item["map"], path + ".map", 1, int.MaxValue));
+            pc[i] = new(entity, origin, new(type,
                 Int(item["prototype"], path + ".prototype", int.MinValue, int.MaxValue), Int(item["name"], path + ".name", int.MinValue, int.MaxValue),
                 Int(item["description"], path + ".description", int.MinValue, int.MaxValue)));
         }
-        return new(pc);
+        return new(gold, pc);
     }
 
     private static string Entity(JsonElement element, string path)
@@ -554,6 +648,20 @@ public static class GameSessionSnapshotCodec
             throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
         return value;
     }
+
+    // Wire names by enum value (the arrays are indexed by the Steamwoven enum, never by a source code).
+    private static readonly string[] RaceNames =
+        ["Human", "Dwarf", "Elf", "HalfElf", "Gnome", "Halfling", "HalfOrc", "HalfOgre", "DarkElf", "Ogre", "Orc"];
+    private static readonly string[] StatNames =
+    [
+        "Strength", "Dexterity", "Constitution", "Beauty", "Intelligence", "Perception", "Willpower", "Charisma",
+        "MagickPoints", "TechPoints", "CarryWeight", "DamageBonus", "AcAdjustment", "Speed", "HealRate", "PoisonRecovery",
+        "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
+    ];
+    private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
+    /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>
+    private static readonly string[] StoredStatNames =
+        ["strength", "dexterity", "constitution", "beauty", "intelligence", "perception", "willpower", "charisma", "magickPoints", "techPoints"];
 
     private static string PauseName(PauseReason reason) => reason switch
     {

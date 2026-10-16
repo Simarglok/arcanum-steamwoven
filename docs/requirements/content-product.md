@@ -108,7 +108,7 @@ Normal/depth/occlusion/emissive maps, soft shadows, fog, weather, particles, imp
 | --- | --- | --- | --- | --- | --- |
 | FR-CONTENT-001 | Частично | Частично | Частично | Частично | Authenticated Area owner/frame leases и explicit NPC SCR/DLG sources; read-only discovery установки и resolver `Arcanum.Data.Content` (ARC-DATA-011), но потребители к нему ещё не подключены. |
 | FR-CONTENT-002 | Частично | Частично | Нет | Частично | Порядок источников по CE и snapshot resolver (первый источник в порядке поиска выигрывает), отчёт о 109 перекрытиях установки (ARC-DATA-011); потребители не переподключены, runtime-записи и `.ignore` не моделируются. |
-| FR-CONTENT-003 | Нет | Нет | Нет | Нет | Campaign bootstrap отсутствует. |
+| FR-CONTENT-003 | Частично | Нет | Частично | Частично | Стартовый персонаж — явный вход новой сессии (ARC-WORLD-015, [герой сессии](../world/starting-hero-runtime.md)) рядом с идентичностью и часами; выбор модуля и campaign bootstrap отсутствуют. |
 | FR-CONTENT-004 | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
 | FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
 | FR-CONTENT-006 | Частично | Частично | Нет | Частично | Raw DLG/MES projections; [ARC-DATA-013](../formats/mes-reader.md): byte-preserving MES reader с typed отказами и явными профилями ASCII/Windows-1252/Windows-1251 (synthetic латиница/кириллица, отсутствующий номер); файл Windows-1251 с `я` (0xFF) отклоняется — NOT READY; не UI/локализация. |

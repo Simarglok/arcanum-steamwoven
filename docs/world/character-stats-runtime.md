@@ -4,8 +4,9 @@ Status: **Implemented bounded component**, ARC-WORLD-012. An independently writt
 Godot-free C# owner in `Arcanum.Simulation` (namespace `Arcanum.Simulation.Character`)
 for [FR-CHAR-008..011](../requirements/characters-skills.md#fr-char-008): stored base
 versus effective values, set-time limits, race/gender innate effects and read-only
-derived stats. It is **not wired** into dialog, session snapshots, the viewer or any
-save format; the conversation runtime keeps its PROJECT diagnostic PC profile
+derived stats. Since ARC-WORLD-015 the [game session's hero](starting-hero-runtime.md) is one
+of these owners (saved in snapshot schema 6, effective intelligence for dialog gates); the viewer is not wired and
+its conversation keeps the PROJECT diagnostic PC profile
 (see [dialog conversation](../scripting/dialog-conversation-runtime.md)). Character
 creation, skills, levels, backgrounds and effect lifetimes are separate requirements.
 
@@ -81,8 +82,8 @@ Skill/spell/tech prerequisite checks when lowering a stat; background, poison,
 Tempus Fugit, crippled-leg, day/night mage and persuasion-expert adjustments; level,
 experience, alignment, fate, unspent points, age and poison stats; HP/fatigue and
 encumbrance recalculation on effect changes; effect lifetimes and durations (FR-CHAR-022);
-skills and resistances; loading `effect.mes`; character creation; save/session
-integration; the character sheet UI.
+skills and resistances; character creation beyond the pre-made start of
+[ARC-WORLD-015](starting-hero-runtime.md) (which reads the innate effects from `effect.mes`); the character sheet UI.
 
 [ce]: https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd
 [stat-tables]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L38-L204

@@ -64,14 +64,23 @@ public sealed record SessionMapInventorySeed(IReadOnlyList<SessionSeedHolder> Ho
     public const int MaxListLength = 512;
 }
 
-/// <summary>An item the PC took from the world, with the map it came from and its saved kind.</summary>
-public readonly record struct SessionPcItem(string Entity, SessionMapId Origin, SessionItemKind Kind);
+/// <summary>An item in the PC's list with its saved kind: taken from the world (<see cref="Origin"/> is the map it came
+/// from) or created with the hero's starting kit (<see cref="Origin"/> is null, the entity is <c>kit:n</c>).</summary>
+public readonly record struct SessionPcItem(string Entity, SessionMapId? Origin, SessionItemKind Kind);
 
-/// <summary>Saved inventory state: the items the PC took from the world, in the order they entered its list.</summary>
+/// <summary>
+/// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero) and the PC's list
+/// in the order items entered it, the starting kit first.
+/// </summary>
 public sealed class SessionInventoryState
 {
-    internal SessionInventoryState(SessionPcItem[] pc) => Pc = Array.AsReadOnly(pc);
+    internal SessionInventoryState(int gold, SessionPcItem[] pc)
+    {
+        Gold = gold;
+        Pc = Array.AsReadOnly(pc);
+    }
 
+    public int Gold { get; }
     public IReadOnlyList<SessionPcItem> Pc { get; }
 }
 
@@ -114,7 +123,7 @@ public delegate SessionInsertVerdict SessionInsertCheck(SessionInventoryItem ite
 public readonly record struct InventoryMutationResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
     string? Item, SessionInsertVerdict? Verdict, GameSessionVersion Version);
 
-/// <summary>Mutable inventory domain of one owner: attached map seeds and the PC's taken items.</summary>
+/// <summary>Mutable inventory domain of one owner: attached map seeds, the PC's gold and the PC's list.</summary>
 internal sealed class InventoryDomain
 {
     internal sealed class Seed(SessionMapInventorySeed source, Dictionary<string, SessionSeedItem> items,
@@ -128,6 +137,7 @@ internal sealed class InventoryDomain
     }
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
+    internal int Gold { get; set; }
     internal List<SessionPcItem> Pc { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
 
@@ -137,7 +147,7 @@ internal sealed class InventoryDomain
         Taken.Add(item.Entity);
     }
 
-    internal SessionInventoryState Capture() => new(Pc.ToArray());
+    internal SessionInventoryState Capture() => new(Gold, Pc.ToArray());
 
     internal SessionMapInventory View(SessionMapId map, Seed seed) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
