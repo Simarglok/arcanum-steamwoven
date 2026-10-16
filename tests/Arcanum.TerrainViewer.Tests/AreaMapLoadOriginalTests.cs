@@ -17,6 +17,9 @@ public sealed class AreaMapLoadOriginalTests
     {
         var result = AreaLoadOperation.Execute(5, Arguments(Root(), map), default);
         var area = result.Area!;
+        // The AREA publication gate: the human actor with its run ART (ARC-WORLD-020).
+        Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, result.ActorPlan?.Profile.Id);
+        Assert.IsNotNull(result.ActorPlan!.Profile.Run);
         Assert.IsTrue(area.Snapshot.Profile.StartsWith("arc-data-019-", StringComparison.Ordinal));
         Assert.IsTrue(area.Plan.DrawableBodies > 0 && area.Frames.Count > 0, $"{area.Plan.DrawableBodies} bodies, {area.Frames.Count} frames");
         var steps = result.AreaStepSnapshot!;

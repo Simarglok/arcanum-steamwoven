@@ -89,7 +89,10 @@ PASS`, `ARC-RENDER-007 resources reload PASS`). Observed on `elven ruins`
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). A small map may fit every GPU cache, so map mode does not
 require evictions in the sweep; every per-view budget and the ownership balance
-still hold. Eviction itself is therefore shown only by the exterior sweep.
+still hold. Eviction itself is therefore shown only by the exterior sweep. The
+reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
+mode, because a small map's repository (the cave's is 1.5 MB) is below the
+heap's ordinary noise; the retired generation must still be collected.
 
 ## Not yet
 
@@ -98,6 +101,9 @@ still hold. Eviction itself is therefore shown only by the exterior sweep.
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).
+- The door and window step rule of ARC-WORLD-018 is being recounted against the
+  original executable (its inside-to-outside exit check swaps the cells), so
+  door passability in map mode is not final.
 - Map transitions (ARC-RES-035), the main world map (ARC-RES-034), door
   runtime, dialogs and companions on these maps.
 - Original-executable parity is NOT_VERIFIED.

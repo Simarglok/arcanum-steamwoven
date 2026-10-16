@@ -57,7 +57,9 @@ internal static class AreaMapLoadOperation
 
         using var module = DatArchive.Open(arguments.ModulePath, ViewerArchiveOptions);
         using var actorResource = DatArchive.Open(arguments.ActorResourcePath!, ViewerArchiveOptions);
-        var actor = ActorDiagnosticSource.Create(module, actorResource, arguments.ActorInput!, 0, 0, token, mode: TerrainViewerMode.WorldDiagnostic);
+        // ARC-WORLD-020: the AREA game view also draws the human's run ART, on maps as on the exterior.
+        var actor = ActorDiagnosticSource.CreateWithBudget(module, actorResource, arguments.ActorInput!, 0, 0, token, TerrainLoadBudget.Default,
+            null, TerrainViewerMode.WorldDiagnostic, ActorDiagnosticProfile.HumanFixedRun);
         if (checked(area.CpuRgbaBytes + actor.CheckedRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
         // Day/night and stationary lights when the map's sources admit them; otherwise the map is drawn unlit and

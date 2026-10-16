@@ -127,7 +127,9 @@ public partial class TerrainViewerApp
         // freed runtime/driver pages need not return to the system.
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
-        Require(after.Managed - baseline.Managed < old.CpuBytes / 2, "MANAGED_RETENTION");
+        // A small whole map's repository (the cave's is 1.5 MB) is below the heap's ordinary noise, so map mode bounds the
+        // growth by at least 8 MiB; the retired generation itself is proven collected above.
+        Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2 : Math.Max(old.CpuBytes / 2, 8L << 20)), "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
             MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions,
             ChunksComposed = chunkComposed, ChunkEvictions = chunkEvictions, MaxResidentChunks = maxChunks, MaxResidentChunkBytes = maxChunkBytes, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,
