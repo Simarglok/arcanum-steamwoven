@@ -80,7 +80,9 @@ stats list that is not ten values, a stored value outside the race's range (stri
 an effect the character owner refuses (no modifiers, more than seven, a magnitude above 1000, divisor 0, negative id),
 negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key, key ring) and a kit larger than
 `MaxPcItems`. The definition is copied (its lists are checked on the copy). Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
-`kit:2`, … with no origin map, at the head of the PC's list.
+`kit:2`, … (`SessionKitItem`, no origin map), kept apart from the items the PC takes from the world (`QueryPcInventory`
+keeps its ARC-WORLD-014 meaning, which the viewer's inventory window reads) and counted with them toward `MaxPcItems`.
+A seed that lists a kit entity is `InventoryMismatch`.
 
 | Entry | Contract |
 | --- | --- |
@@ -88,6 +90,7 @@ negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key
 | `QueryHeroStats(context)` | The character owner's `CharacterStatsQueryResult` under the context (base/effective/derived values, applied innate effects), or `null`. |
 | `QueryHeroDialogFacts()` | `DialogPcFacts` for DLG gates, or `null`: gender, **effective** intelligence (race and gender effects applied), the source race index 0..10 (CE `RACE_*`). `IsDumb` is false: the source sets it for backgrounds 55, 74 and 75 only ([critter_is_dumb](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2392-L2419)) and no background is modelled. |
 | `QueryGold()` | The PC's gold (0 without a hero). |
+| `QueryHeroKit()` | The starting kit in kit order (empty without a hero); in the PC's inventory it precedes `QueryPcInventory`. |
 
 The hero is read-only in this task: no stat purchase, level-up, alignment change, effect added at run time, background
 or name. A host that hands `QueryHeroDialogFacts()` to its conversation (for the AREA host, as the `Pc` of its
@@ -104,14 +107,14 @@ or name. A host that hands `QueryHeroDialogFacts()` to its conversation (for the
         "level":1,"unspentPoints":5,"alignment":0,
         "raceEffect":{"effect":67,"modifiers":[{"stat":"Dexterity","operator":"Add","value":1}, …]},
         "genderEffect":{"effect":330,"modifiers":[{"stat":"Strength","operator":"Add","value":-1}, …]}},
-"inventory":{"gold":385,"pc":[{"entity":"kit:1","map":null,"type":"Weapon","prototype":6049,"name":4021,"description":6029}, …]}
+"inventory":{"gold":385,"kit":[{"entity":"kit:1","type":"Weapon","prototype":6049,"name":4021,"description":6029}, …],"pc":[]}
 ```
 
 (The synthetic test's values; line breaks added.) The effects are saved with their modifiers, so a restore needs no
 effect table. Decoding refuses unknown race, gender, stat and operator names (`OutOfRange`), missing or unknown fields,
 more than 64 modifiers (`BudgetExceeded`), a negative effect id or gold, a prototype below 1. `Restore` rebuilds the
 hero under the same checks as `Create` (`InvalidHero`) and refuses gold or a kit item without a hero, and a kit item that
-is not the next `kit:n` at the head of the list (`InvalidSnapshot`).
+is not the next `kit:n` (`InvalidSnapshot`).
 
 **Migration decision: none.** Schemas 1..5 are `UnsupportedSchema`; a schema-5 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer's sessions have no hero,
@@ -120,7 +123,7 @@ so nothing is lost.
 ## Evidence
 
 - Synthetic: [HeroStateTests](../../tests/Arcanum.Session.Tests/HeroStateTests.cs) (start, effective stats, facts,
-  every `InvalidHero` input and the range edges, copy, kit order and seed clash, canonical text, restore and decode
+  every `InvalidHero` input and the range edges, copy, the kit budget and seed clash, canonical text, restore and decode
   refusals, gender/IQ/RA gates of a synthetic DLG) and [PremadeHeroTests](../../tests/Arcanum.Data.Tests/Characters/PremadeHeroTests.cs)
   (effect and inventory-source grammars and refusals, synthetic v119 PC/item prototypes, every reader refusal, the
   directory lookup).

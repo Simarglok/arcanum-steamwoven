@@ -64,7 +64,7 @@ public sealed class GameSessionOwner : IDisposable
             {
                 if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type))
                     return Rejected(GameSessionFailure.InvalidHero);
-                inventory.Add(new(HeroDomain.KitEntity(index), null, item.Kind));
+                inventory.Add(new SessionKitItem(HeroDomain.KitEntity(index), item.Kind));
             }
             inventory.Gold = definition.Gold;
         }
@@ -344,6 +344,10 @@ public sealed class GameSessionOwner : IDisposable
     /// <summary>The PC's gold: the hero's starting coins, 0 without a hero. Gold pickup and spending are not modelled.</summary>
     public int QueryGold() { ThrowIfDisposed(); return _inventory.Gold; }
 
+    /// <summary>Detached copy of the hero's starting kit (<c>kit:1</c>, <c>kit:2</c>, … in kit order); empty without a hero.
+    /// In the PC's inventory these items precede <see cref="QueryPcInventory"/>.</summary>
+    public IReadOnlyList<SessionKitItem> QueryHeroKit() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Kit.ToArray()); }
+
     /// <summary>The NPC's party record; an NPC never recorded is free with no flags. An invalid entity id throws.</summary>
     public SessionCompanion QueryCompanion(string entity)
     {
@@ -482,6 +486,8 @@ public sealed class GameSessionOwner : IDisposable
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
+        // Kit items came from no map, so no seed may list them.
+        if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity))) return Reject(GameSessionFailure.InventoryMismatch);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
@@ -498,8 +504,8 @@ public sealed class GameSessionOwner : IDisposable
         return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed) : null;
     }
 
-    /// <summary>Detached copy of the PC's list in the order items entered it: the hero's starting kit (no origin map),
-    /// then the items the PC took from the world.</summary>
+    /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
+    /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
 
     /// <summary>
@@ -714,7 +720,7 @@ public sealed class GameSessionOwner : IDisposable
         if (parented && facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
         if (facts.HasScript(SessionScriptPoint.InsertItem) ||
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        if (_inventory.Pc.Count >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map) = (_revision, _actor.Map);
         var verdict = insertCheck(item);
@@ -723,7 +729,7 @@ public sealed class GameSessionOwner : IDisposable
             _inventory.Taken.Contains(item.Entity)) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         // Any answer but Accepted refuses, an undefined one included.
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        _inventory.Add(new(item.Entity, _actor.Map, facts.Kind));
+        _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision));
     }
@@ -741,25 +747,25 @@ public sealed class GameSessionOwner : IDisposable
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 
-    // The PC's items keep their saved order; each must be one the session can produce: an admitted type taken from a valid
-    // map, or a kit item, which only a hero has and which leads the list as kit:1, kit:2, … (no transfer removes items yet).
-    // Gold, too, only comes with a hero.
+    // The PC's items keep their saved order; each must be one the session can produce: a kit item, which only a hero has,
+    // named kit:1, kit:2, … in order (no transfer removes items yet), and an admitted type taken from a valid map. Gold,
+    // too, only comes with a hero.
     private static GameSessionFailure ImportInventory(SessionInventoryState saved, bool hero, GameSessionLimits limits, out InventoryDomain inventory)
     {
         inventory = new();
-        if (saved.Gold < 0 || (saved.Gold > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
+        if (saved.Gold < 0 || (saved.Gold > 0 && !hero) || (saved.Kit.Count > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
         inventory.Gold = saved.Gold;
-        if (saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
-        var kit = 0;
+        if (saved.Kit.Count + saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        foreach (var item in saved.Kit)
+        {
+            if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            if (item.Entity != HeroDomain.KitEntity(inventory.Kit.Count)) return GameSessionFailure.InvalidSnapshot;
+            inventory.Add(item);
+        }
         foreach (var item in saved.Pc)
         {
-            if (!SessionValidation.Entity(item.Entity) || item.Origin is { } origin && !SessionValidation.Map(origin) ||
-                !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
-            if (item.Origin is null)
-            {
-                if (!hero || inventory.Pc.Count != kit || item.Entity != HeroDomain.KitEntity(kit)) return GameSessionFailure.InvalidSnapshot;
-                kit++;
-            }
+            if (!SessionValidation.Entity(item.Entity) || !SessionValidation.Map(item.Origin) || !Enum.IsDefined(item.Kind.Type) ||
+                !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
             if (inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
         }

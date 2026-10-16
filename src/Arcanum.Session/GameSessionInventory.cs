@@ -64,23 +64,28 @@ public sealed record SessionMapInventorySeed(IReadOnlyList<SessionSeedHolder> Ho
     public const int MaxListLength = 512;
 }
 
-/// <summary>An item in the PC's list with its saved kind: taken from the world (<see cref="Origin"/> is the map it came
-/// from) or created with the hero's starting kit (<see cref="Origin"/> is null, the entity is <c>kit:n</c>).</summary>
-public readonly record struct SessionPcItem(string Entity, SessionMapId? Origin, SessionItemKind Kind);
+/// <summary>An item the PC took from the world, with the map it came from and its saved kind.</summary>
+public readonly record struct SessionPcItem(string Entity, SessionMapId Origin, SessionItemKind Kind);
+
+/// <summary>An item of the hero's starting kit (ARC-WORLD-015): entity <c>kit:n</c> and its saved kind. Kit items came from
+/// no map; in the PC's inventory they precede every item it took from the world.</summary>
+public readonly record struct SessionKitItem(string Entity, SessionItemKind Kind);
 
 /// <summary>
-/// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero) and the PC's list
-/// in the order items entered it, the starting kit first.
+/// Saved inventory state: the PC's gold (ARC-WORLD-015: the hero's starting coins; 0 without a hero), the hero's starting
+/// kit in kit order, and the items the PC took from the world in the order they entered its list.
 /// </summary>
 public sealed class SessionInventoryState
 {
-    internal SessionInventoryState(int gold, SessionPcItem[] pc)
+    internal SessionInventoryState(int gold, SessionKitItem[] kit, SessionPcItem[] pc)
     {
         Gold = gold;
+        Kit = Array.AsReadOnly(kit);
         Pc = Array.AsReadOnly(pc);
     }
 
     public int Gold { get; }
+    public IReadOnlyList<SessionKitItem> Kit { get; }
     public IReadOnlyList<SessionPcItem> Pc { get; }
 }
 
@@ -138,8 +143,12 @@ internal sealed class InventoryDomain
 
     internal Dictionary<SessionMapId, Seed> Seeds { get; } = [];
     internal int Gold { get; set; }
+    internal List<SessionKitItem> Kit { get; } = [];
     internal List<SessionPcItem> Pc { get; } = [];
     internal HashSet<string> Taken { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>Items the PC holds: the kit and the taken items (the bound of <see cref="GameSessionLimits.MaxPcItems"/>).</summary>
+    internal int Held => Kit.Count + Pc.Count;
 
     internal void Add(SessionPcItem item)
     {
@@ -147,7 +156,14 @@ internal sealed class InventoryDomain
         Taken.Add(item.Entity);
     }
 
-    internal SessionInventoryState Capture() => new(Gold, Pc.ToArray());
+    /// <summary>A kit entity is also recorded as taken, so no seed can list it.</summary>
+    internal void Add(SessionKitItem item)
+    {
+        Kit.Add(item);
+        Taken.Add(item.Entity);
+    }
+
+    internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray());
 
     internal SessionMapInventory View(SessionMapId map, Seed seed) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))

@@ -27,10 +27,11 @@ there, distinct script points 0..35 (`SAP_EXAMINE`..`SAP_CRITICAL_MISS`); at mos
 copied; at most `MaxMaps` seeds are attached (`BudgetExceeded`). Attaching moves no revision, is never saved, and is
 repeated after every restore.
 
-**State.** The PC's ordered list (`SessionPcItem`: entity, origin map, kind) and its gold. Since ARC-WORLD-015 the
-list starts with the hero's starting kit (`kit:1`, `kit:2`, …, no origin map; [starting hero](starting-hero-runtime.md))
-and the hero's coins are the gold (`QueryGold`); the items the PC took from the world follow. A taken item is hidden from
-its seed's ground and holder lists (`QueryMapInventory`); `QueryPcInventory` returns the list. The PC object, its
+**State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind);
+`QueryPcInventory` returns it. Since ARC-WORLD-015 the session also holds the hero's gold (`QueryGold`) and starting kit
+(`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)),
+which precedes the taken items in the PC's inventory and counts toward `MaxPcItems`. A taken item is hidden from its
+seed's ground and holder lists (`QueryMapInventory`). The PC object, its
 attachments, worn slots and gold pickup are not session state yet.
 
 All entity ids follow the session rule (ASCII letters, digits and `. _ : -`, 1..128 characters); the AREA host uses
@@ -88,21 +89,21 @@ the host replaces the owner, like the party port.
 
 (Schema 6 since ARC-WORLD-015; the inventory part is described here.)
 
-`GameSessionSnapshot.Inventory` is encoded between `hero` and `lighting`. Schema 6 (ARC-WORLD-015) added `gold` and a
-`null` map for kit items:
+`GameSessionSnapshot.Inventory` is encoded between `hero` and `lighting`. Schema 6 (ARC-WORLD-015) added `gold` and the
+`kit` list:
 
 ```json
-"inventory":{"gold":0,"pc":[{"entity":"ring","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804},
+"inventory":{"gold":0,"kit":[],"pc":[{"entity":"ring","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804},
                             {"entity":"apple","map":79,"type":"Food","prototype":4600,"name":3600,"description":33600}]}
 ```
 
 (The synthetic test's values; line breaks added.)
 
-Decoding keeps the list order and refuses an entity listed twice (`NotCanonical`), an unknown type name or a map below
+Decoding keeps the list order and refuses an entity listed twice, in either list (`NotCanonical`), an unknown type name or a map below
 1 (`OutOfRange`), missing or unknown fields and more than 512 items (`BudgetExceeded`). `Restore` refuses a type a
 transfer cannot produce (gold, ammunition, key, key ring: `InvalidItem`), a repeated entity (`InvalidSnapshot`) and the
-caller's lower limit (`BudgetExceeded`); gold or a kit item without a hero, and a kit item that is not
-the next `kit:n` at the head of the list, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
+caller's lower limit, kit and taken items together (`BudgetExceeded`); gold or a kit item without a hero, and a kit
+item that is not the next `kit:n`, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
 (`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
 PC took from another map, so a save of other data cannot silently duplicate or lose an item. For the same reason a seed
 may not list an item another attached seed lists (one object lies on one map).

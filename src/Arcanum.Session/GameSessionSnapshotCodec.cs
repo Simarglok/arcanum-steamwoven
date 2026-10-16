@@ -50,7 +50,8 @@ public static class GameSessionSnapshotCodec
         "raceEffect", "genderEffect"];
     private static readonly string[] EffectFields = ["effect", "modifiers"];
     private static readonly string[] ModifierFields = ["stat", "operator", "value"];
-    private static readonly string[] InventoryFields = ["gold", "pc"];
+    private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
+    private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
 
     public static string Encode(GameSessionSnapshot snapshot)
@@ -207,13 +208,24 @@ public static class GameSessionSnapshotCodec
 
             w.WriteStartObject("inventory");
             w.WriteNumber("gold", snapshot.Inventory.Gold);
+            w.WriteStartArray("kit");
+            foreach (var item in snapshot.Inventory.Kit)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteString("type", ItemTypeName(item.Kind.Type));
+                w.WriteNumber("prototype", item.Kind.Prototype);
+                w.WriteNumber("name", item.Kind.Name);
+                w.WriteNumber("description", item.Kind.Description);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
             w.WriteStartArray("pc");
             foreach (var item in snapshot.Inventory.Pc)
             {
                 w.WriteStartObject();
                 w.WriteString("entity", item.Entity);
-                if (item.Origin is { } origin) w.WriteNumber("map", origin.RuntimeMap);
-                else w.WriteNull("map");
+                w.WriteNumber("map", item.Origin.RuntimeMap);
                 w.WriteString("type", ItemTypeName(item.Kind.Type));
                 w.WriteNumber("prototype", item.Kind.Prototype);
                 w.WriteNumber("name", item.Kind.Name);
@@ -523,8 +535,19 @@ public static class GameSessionSnapshotCodec
         const string p = "$.inventory";
         var f = Fields(element, p, InventoryFields);
         var gold = Int(f["gold"], p + ".gold", 0, int.MaxValue);
-        var items = Array(f["pc"], p + ".pc", GameSessionLimits.PolicyMaxPcItems);
         var seen = new HashSet<string>(StringComparer.Ordinal);
+        var kitItems = Array(f["kit"], p + ".kit", GameSessionLimits.PolicyMaxPcItems);
+        var kit = new SessionKitItem[kitItems.Length];
+        for (var i = 0; i < kitItems.Length; i++)
+        {
+            var path = $"{p}.kit[{i}]";
+            var item = Fields(kitItems[i], path, KitItemFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            kit[i] = new(entity, Kind(item, path));
+        }
+        var items = Array(f["pc"], p + ".pc", GameSessionLimits.PolicyMaxPcItems);
+        if (kit.Length + items.Length > GameSessionLimits.PolicyMaxPcItems) throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".pc");
         var pc = new SessionPcItem[items.Length];
         for (var i = 0; i < items.Length; i++)
         {
@@ -533,14 +556,17 @@ public static class GameSessionSnapshotCodec
             var entity = Entity(item["entity"], path + ".entity");
             // The list order is meaningful, so it is kept; an item may appear once.
             if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
-            var type = Enum.GetValues<SessionItemType>().Where(t => ItemTypeName(t) == String(item["type"], path + ".type"))
-                .Cast<SessionItemType?>().FirstOrDefault() ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".type");
-            SessionMapId? origin = item["map"].ValueKind == JsonValueKind.Null ? null : new(Int(item["map"], path + ".map", 1, int.MaxValue));
-            pc[i] = new(entity, origin, new(type,
-                Int(item["prototype"], path + ".prototype", int.MinValue, int.MaxValue), Int(item["name"], path + ".name", int.MinValue, int.MaxValue),
-                Int(item["description"], path + ".description", int.MinValue, int.MaxValue)));
+            pc[i] = new(entity, new(Int(item["map"], path + ".map", 1, int.MaxValue)), Kind(item, path));
         }
-        return new(gold, pc);
+        return new(gold, kit, pc);
+    }
+
+    private static SessionItemKind Kind(Dictionary<string, JsonElement> item, string path)
+    {
+        var type = Enum.GetValues<SessionItemType>().Where(t => ItemTypeName(t) == String(item["type"], path + ".type"))
+            .Cast<SessionItemType?>().FirstOrDefault() ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".type");
+        return new(type, Int(item["prototype"], path + ".prototype", int.MinValue, int.MaxValue),
+            Int(item["name"], path + ".name", int.MinValue, int.MaxValue), Int(item["description"], path + ".description", int.MinValue, int.MaxValue));
     }
 
     private static string Entity(JsonElement element, string path)

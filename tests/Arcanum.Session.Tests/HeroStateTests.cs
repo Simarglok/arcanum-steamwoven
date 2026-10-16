@@ -66,8 +66,9 @@ public sealed class HeroStateTests
         Assert.AreEqual(385, owner.QueryGold());
         CollectionAssert.AreEqual(new[]
         {
-            new SessionPcItem("kit:1", null, Kit[0].Kind), new SessionPcItem("kit:2", null, Kit[1].Kind), new SessionPcItem("kit:3", null, Kit[2].Kind),
-        }, owner.QueryPcInventory().ToArray());
+            new SessionKitItem("kit:1", Kit[0].Kind), new SessionKitItem("kit:2", Kit[1].Kind), new SessionKitItem("kit:3", Kit[2].Kind),
+        }, owner.QueryHeroKit().ToArray());
+        Assert.AreEqual(0, owner.QueryPcInventory().Count, "nothing taken from the world yet");
         Assert.AreEqual(new DialogPcFacts(DialogPcGender.Male, 8, false, 3), owner.QueryHeroDialogFacts());
     }
 
@@ -89,6 +90,7 @@ public sealed class HeroStateTests
         Assert.IsNull(none.QueryHeroStats(new(0)));
         Assert.IsNull(none.QueryHeroDialogFacts());
         Assert.AreEqual(0, none.QueryGold());
+        Assert.AreEqual(0, none.QueryHeroKit().Count);
         Assert.IsNull(none.Capture().Hero);
     }
 
@@ -158,7 +160,7 @@ public sealed class HeroStateTests
             Level = 51, UnspentPoints = 56, Alignment = -1000, Gold = int.MaxValue, Kit = [],
         }, new GameSessionLimits(maxPcItems: 1));
         Assert.AreEqual(21, Stats(edge).GetEffective(CharacterStat.Dexterity), "the half-elf maximum, effect clamped");
-        Assert.AreEqual(0, edge.QueryPcInventory().Count);
+        Assert.AreEqual(0, edge.QueryHeroKit().Count);
     }
 
     [TestMethod]
@@ -171,16 +173,18 @@ public sealed class HeroStateTests
         kit.Clear();
         Assert.AreEqual(8, owner.QueryHero()!.Stats[0]);
         Assert.AreEqual(8, Stats(owner).GetBase(CharacterStat.Strength));
-        Assert.AreEqual(3, owner.QueryPcInventory().Count);
+        Assert.AreEqual(3, owner.QueryHeroKit().Count);
     }
 
     [TestMethod]
-    public void KitItemsLeadThePcListAndASeedCannotListThem()
+    public void KitItemsCountTowardTheBudgetAndASeedCannotListThem()
     {
-        using var owner = CreateWith(HalfElf());
+        using var owner = CreateWith(HalfElf(), new GameSessionLimits(maxPcItems: 4));
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PickUpItem(owner.Version, "apple", Accept).Disposition);
-        CollectionAssert.AreEqual(new[] { "kit:1", "kit:2", "kit:3", "apple" }, owner.QueryPcInventory().Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "apple" }, owner.QueryPcInventory().Select(item => item.Entity).ToArray());
+        Assert.AreEqual(3, owner.QueryHeroKit().Count);
+        Assert.AreEqual(GameSessionFailure.BudgetExceeded, owner.PickUpItem(owner.Version, "cog", Accept).Failure, "three kit items and the apple");
 
         var seed = InventoryStateTests.Seed();
         var clash = seed with { Items = [.. seed.Items, new("kit:2", InventoryStateTests.Facts(SessionItemType.Generic, 5700), new CellCoord(1, 1))] };
@@ -198,9 +202,9 @@ public sealed class HeroStateTests
         "\"genderEffect\":{\"effect\":330,\"modifiers\":[{\"stat\":\"Strength\",\"operator\":\"Add\",\"value\":-1}," +
         "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]}}";
     internal const string KitInventory =
-        ",\"inventory\":{\"gold\":385,\"pc\":[{\"entity\":\"kit:1\",\"map\":null,\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
-        "{\"entity\":\"kit:2\",\"map\":null,\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
-        "{\"entity\":\"kit:3\",\"map\":null,\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}]}";
+        ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
+        "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
+        "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[]}";
     internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory);
 
     private static GameSessionOwner HeroGoldenSession()
@@ -228,13 +232,14 @@ public sealed class HeroStateTests
         Assert.AreEqual(Stats(owner).GetEffective(CharacterStat.Constitution), Stats(restored).GetEffective(CharacterStat.Constitution));
         Assert.AreEqual(owner.QueryHeroDialogFacts(), restored.QueryHeroDialogFacts());
         Assert.AreEqual(385, restored.QueryGold());
-        CollectionAssert.AreEqual(owner.QueryPcInventory().ToArray(), restored.QueryPcInventory().ToArray());
+        CollectionAssert.AreEqual(owner.QueryHeroKit().ToArray(), restored.QueryHeroKit().ToArray());
 
-        // A world item after the kit keeps its place across a save.
+        // A world item taken after the start is saved beside the kit.
         Assert.AreEqual(GameSessionDisposition.Changed, restored.AttachMapInventory(Exterior, InventoryStateTests.Seed()).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, restored.PickUpItem(restored.Version, "apple", Accept).Disposition);
         using var again = Restore(Decode(GameSessionSnapshotCodec.Encode(restored.Capture())));
-        CollectionAssert.AreEqual(new[] { "kit:1", "kit:2", "kit:3", "apple" }, again.QueryPcInventory().Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(new[] { "apple" }, again.QueryPcInventory().Select(item => item.Entity).ToArray());
+        CollectionAssert.AreEqual(owner.QueryHeroKit().ToArray(), again.QueryHeroKit().ToArray());
     }
 
     [TestMethod]
@@ -263,7 +268,11 @@ public sealed class HeroStateTests
         Fails(HeroJson, ",\"hero\":[]", SnapshotDecodeFailure.WrongType, "$.hero");
         Fails("\"gold\":385", "\"gold\":-1", SnapshotDecodeFailure.OutOfRange, "$.inventory.gold");
         Fails("\"gold\":385,", "", SnapshotDecodeFailure.MissingField, "$.inventory.gold");
-        Fails("\"kit:1\",\"map\":null", "\"kit:1\",\"map\":\"none\"", SnapshotDecodeFailure.WrongType, "$.inventory.pc[0].map");
+        Fails("\"entity\":\"kit:1\",", "\"entity\":\"kit:1\",\"map\":79,", SnapshotDecodeFailure.UnknownField, "$.inventory.kit[0].map");
+        Fails("\"type\":\"Weapon\"", "\"type\":\"Sword\"", SnapshotDecodeFailure.OutOfRange, "$.inventory.kit[0].type");
+        Fails("\"pc\":[]", "\"pc\":[{\"entity\":\"kit:2\",\"map\":79,\"type\":\"Armor\",\"prototype\":1,\"name\":2,\"description\":3}]",
+            SnapshotDecodeFailure.NotCanonical, "$.inventory.pc[0].entity");
+        Fails(",\"kit\":[", ",\"kits\":[", SnapshotDecodeFailure.UnknownField, "$.inventory.kits");
     }
 
     [TestMethod]
@@ -282,13 +291,15 @@ public sealed class HeroStateTests
             "{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":1}]}", "\"genderEffect\":{\"effect\":330,\"modifiers\":[]}"), GameSessionFailure.InvalidHero);
         Refused(HeroGolden.Replace("\"value\":-1}", "\"value\":1001}"), GameSessionFailure.InvalidHero);
 
-        // Gold and kit items come only with a hero; kit items lead the list as kit:1, kit:2, … .
+        // Gold and kit items come only with a hero; the kit is kit:1, kit:2, … in order.
         var noHero = HeroGolden.Replace(HeroJson, NoHero);
         Refused(noHero, GameSessionFailure.InvalidSnapshot);
         Refused(noHero.Replace("\"gold\":385", "\"gold\":0"), GameSessionFailure.InvalidSnapshot);
-        Restore(Decode(noHero.Replace("\"gold\":385", "\"gold\":0").Replace("\"map\":null", "\"map\":79"))).Dispose();
+        Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[]}"), GameSessionFailure.InvalidSnapshot);
+        Restore(Decode(noHero.Replace(KitInventory, EmptyInventory))).Dispose();
+        Restore(Decode(HeroGolden.Replace(KitInventory, ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[]}"))).Dispose();
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:9\""), GameSessionFailure.InvalidSnapshot);
-        Refused(HeroGolden.Replace("{\"entity\":\"kit:1\",\"map\":null", "{\"entity\":\"kit:1\",\"map\":79"), GameSessionFailure.InvalidSnapshot);
+        Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:0\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"type\":\"Weapon\"", "\"type\":\"Gold\""), GameSessionFailure.InvalidItem);
         var small = GameSessionOwner.Restore(Decode(HeroGolden), RestoreOptions(new GameSessionLimits(maxPcItems: 2)));
         Assert.AreEqual((null, GameSessionFailure.BudgetExceeded), (small.Owner, small.Failure), "a kit above the caller's limit");

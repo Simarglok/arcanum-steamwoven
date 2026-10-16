@@ -46,8 +46,9 @@ public sealed class StartingHeroTests
             halfElf.QueryHero()!.Alignment));
         Assert.AreEqual(385, halfElf.QueryGold());
         CollectionAssert.AreEqual(new[] { ("kit:1", SessionItemType.Weapon, 6049), ("kit:2", SessionItemType.Armor, 8188), ("kit:3", SessionItemType.Armor, 8069) },
-            halfElf.QueryPcInventory().Select(item => (item.Entity, item.Kind.Type, item.Kind.Prototype)).ToArray());
-        Assert.IsTrue(halfElf.QueryPcInventory().All(item => item.Origin is null && item.Kind.Name > 0));
+            halfElf.QueryHeroKit().Select(item => (item.Entity, item.Kind.Type, item.Kind.Prototype)).ToArray());
+        Assert.IsTrue(halfElf.QueryHeroKit().All(item => item.Kind.Name > 0));
+        Assert.AreEqual(0, halfElf.QueryPcInventory().Count, "nothing taken from the world");
         Assert.AreEqual(new DialogPcFacts(DialogPcGender.Male, 8, false, 3), halfElf.QueryHeroDialogFacts());
 
         // 16070, the half-ogre man: intelligence 8 − 4 = 4 is at the low-intelligence threshold.
@@ -61,7 +62,7 @@ public sealed class StartingHeroTests
         Assert.AreEqual(330, woman.QueryHero()!.GenderEffect!.EffectId);
         Assert.AreEqual((7, 9), (woman.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Strength),
             woman.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Constitution)));
-        Assert.AreEqual((300, 3), (woman.QueryGold(), woman.QueryPcInventory().Count));
+        Assert.AreEqual((300, 3), (woman.QueryGold(), woman.QueryHeroKit().Count));
 
         // Virgil's first talk (SCR line 4 → DLG node 1) walked with each hero's facts, choosing as the viewer test does.
         CollectionAssert.AreEqual(new[] { "1:4,7", "9:10,11", "15:16,17", "19:20,21,22,23", "24:25", "30:31", "32:33", "35:36,40,48,53",
@@ -77,7 +78,7 @@ public sealed class StartingHeroTests
         Assert.AreEqual(halfElf.QueryHeroDialogFacts(), loaded.QueryHeroDialogFacts());
         Assert.AreEqual(9, loaded.QueryHeroStats(new(0))!.Value.Snapshot!.GetEffective(CharacterStat.Dexterity));
         Assert.AreEqual(385, loaded.QueryGold());
-        CollectionAssert.AreEqual(halfElf.QueryPcInventory().ToArray(), loaded.QueryPcInventory().ToArray());
+        CollectionAssert.AreEqual(halfElf.QueryHeroKit().ToArray(), loaded.QueryHeroKit().ToArray());
     }
 
     /// <summary>A new session at the area spawn with the pre-made hero <paramref name="basic"/> (fresh identities, the

@@ -130,7 +130,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 (PC quests, shared quests that left `Accepted`, known rumors; each ascending), `Party`
 (the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4)),
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
-`Inventory` (the PC's gold and its list, the starting kit first; [inventory runtime](inventory-runtime.md#snapshot-schema-5))
+`Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
@@ -151,7 +151,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
           "rumors":[{"rumor":1200,"timestampMs":54000000}]},
  "party":{"followers":[{"entity":"oid:…","forced":false,"spreadOut":false}],"others":[]},
  "hero":null,
- "inventory":{"gold":0,"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
+ "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
 
@@ -182,7 +182,7 @@ snapshot captured while a dialog or the palette held a `Menu` pause restores pau
 and the host releases or re-applies its modal pause from what is actually open.
 
 **Migration decision: none.** Schema 6 is the only accepted version. ARC-WORLD-015 added the
-required, nullable `hero` field and the inventory's `gold`, and let a PC item have no origin map (a kit item); schema 5
+required, nullable `hero` field and the inventory's `gold` and `kit`; schema 5
 is refused like the earlier ones (see [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)). ARC-WORLD-014 had added the
 required `inventory` domain and refused schema 4 (see
 [inventory runtime](inventory-runtime.md#snapshot-schema-5)). ARC-WORLD-013 had added the
@@ -251,7 +251,7 @@ and a literal, independently written canonical JSON text:
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original
   sector-diff and mobile-object formats.
-- Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's taken items
-  (starting kit, stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), PC alignment and stats,
-  the quest logbook, experience and quest data, RNG and other domains.
+- Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's kit and taken
+  items (stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), changes to the hero after the start
+  (alignment, purchases, levels), the quest logbook, experience and quest data, RNG and other domains.
 - Schema migration and compatibility with original saves.
