@@ -25,7 +25,7 @@ core calls them.
   reading of their intent is marked as such.
 - **CE anomaly**: a branch that looks like a reconstruction slip. It is
   recorded under [CE anomalies](#ce-anomalies-recorded-not-adopted) as
-  MG1..MG18, never adopted silently; under owner decision D2 the slice that
+  MG1..MG20, never adopted silently; under owner decision D2 the slice that
   uses it decides the fix and logs it in the plan's
   [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions).
 - **Project policy**: a choice this project makes where the source leaves a
@@ -58,8 +58,8 @@ a tile. "Magic" means a spell record without the technology flag.
    needs the previous rank of its college, character level {1, 1, 5, 10, 15}
    for ranks 1..5, willpower at least the record's `IQ:` value (default
    {6, 9, 12, 15, 18}, ARC-RES-040 LM6) and intelligence at least 5 (a
-   constant, LM5). Each learned rank adds one magick point, so +5 magick/tech
-   aptitude. Only the highest known rank of a college can be unlearned, which
+   constant, LM5). Each learned rank adds one magick point, so about +5 magick/tech
+   aptitude (integer division can make a step 4). Only the highest known rank of a college can be unlearned, which
    refunds the point ([add/remove][spell-add], [UI][ui-learn]).
 3. **Mastery is one college for life, given only by a script.** It needs all
    five ranks and no earlier mastery; then that college's spells cost half
@@ -94,7 +94,9 @@ a tile. "Magic" means a spell record without the technology flag.
    plus `DurationStatInfo:` schedules the END (or `DurationTriggerCount:`
    repeated MAINTAIN ticks first); `Maintain:(cost@seconds)` charges each
    period for as long as the caster pays, with at most `INT / 4` maintained
-   spells per caster. Unconsciousness, rest, world-map travel, a follower's
+   spells per caster. An unresistable run (`No_Resist:` or a script's
+   "unresistable" cast) gets no duration or maintenance: its END follows the
+   BEGIN at once (MG19). Unconsciousness, rest, world-map travel, a follower's
    fight ending, death or destruction of caster, target or summon, a dispel
    and an explicit stop all end runs ([schedule][mt-schedule], [cap][mt-cap],
    [interrupt][mt-interrupt], [death][mt-death]).
@@ -104,11 +106,13 @@ a tile. "Magic" means a spell record without the technology flag.
    remove numbered entries of the character effect list; object flags carry
    the visible states (invisible, stoned, charmed, mind-controlled, …) with
    reference counting ([process][mt-process], [components](#effect-components-fr-magic-007)).
-9. **This reading adds 18 CE anomalies (MG1..MG18)**, among them a cost check
+9. **This reading adds 20 CE anomalies (MG1..MG20)**, among them a cost check
    that indexes the spell table by run number (MG1), three disagreeing cost
    formulas (MG2), a double maintenance charge (MG3), two dead aptitude
    branches (MG5, MG6), a dead interrupt component (MG7) and a summon faction
-   switch read from the wrong field (MG8).
+   switch read from the wrong field (MG8) and an unresistable flag that also
+   means "END pending", so unresistable runs never last (MG19), and a refused cast that still
+   drains worn mana stores (MG20).
 
 ## State model (source facts)
 
@@ -143,11 +147,11 @@ line][mt-parse-ai], [components][mt-parse-comp]):
 | `ChargesFromCells:` | no | cost is paid in charge-cell ammunition instead of fatigue |
 | `ChargeBeginCost: 0` | (charged) | skip the BEGIN payment |
 | `Info:` | neutral | friendly, aggressive or both; aggressive spells notify the AI of an attack on each target |
-| `Disabled:` | enabled | flag only; this reading found no caster that tests it |
+| `Disabled:` | enabled | refuses only a PC's activation from the spell UI ([UI][ui-enabled]); AI, script, item and dialog casts do not test it |
 | `No_Stack:`, `Cancels_SF:`, `Cancels_EnvSF:` | none | stacking and mutual cancellation |
 | `Disallowed_SF:`, `Disallowed_TSF:`, `Disallowed_TCF:` | none | spell flags forbidden on the caster or target, critter flags forbidden on the target |
 | `ItemTriggers:` | none | which item events the record (and each component) answers |
-| `No_Resist:`, `No_Reflect:` | absent | by presence: never resisted, never reflected |
+| `No_Resist:`, `No_Reflect:` | absent | by presence: never resisted, never reflected; `No_Resist:` also marks the run unresistable, which ends it right after BEGIN (MG19, [flags][mt-run-flags]) |
 | `AI_*` | −1 | priorities for the ten AI lists (ARC-RES-039) |
 | Components | none | per action: area (`AoE:` over 65 target names, spell-flag filters, `Radius:`, `Count:`), then one component per line |
 
@@ -162,9 +166,13 @@ drives the resistance rules below.
   The UI first requires one unspent character point (`spell_cost` is always
   1) and names the failing check ([UI][ui-learn]).
 - **Effect of learning.** College level becomes r and `MAGICK_POINTS` rises
-  by 1, so aptitude rises by 5 ([add][spell-add], [aptitude][stat-aptitude]).
-  The forced variant used by prototypes, auto-level and the debug start adds
-  the rank directly and charges `r − current` points without the checks.
+  by 1, so aptitude rises by about 5 (the truncating division in
+  `(50·MP − 55·TP) / 10` can make a step 4) ([add][spell-add],
+  [aptitude][stat-aptitude]). The forced variant, used by prototypes
+  ([proto][proto-spell]) and the F11 cheat key ([cheat][main-cheat]), skips
+  the checks, sets the rank directly and adds `r − current` magick points
+  without spending character points; auto-level uses the checked variant and
+  spends unspent points itself ([level][level-auto]).
 - **Unlearning.** Only the highest known rank, refunding one point and one
   magick point ([remove][spell-add], [UI][ui-learn]); a stat decrease is
   re-validated against every known rank ([checks][spell-check]).
@@ -242,12 +250,16 @@ if caster is a dwarf PC or NPC: cost × 2
 2. A critter flagged fatigue-limiting pays half (at least 1).
 3. A critter's worn items with a mana store pay first, slot by slot; each
    drained amount schedules a recharge (below), and an emptied item notifies
-   the AI.
+   the AI. The stores are written **before** the fatigue test of step 4, so a
+   refused cast still drains them, with no refund (MG20).
 4. The rest is fatigue damage. Refused if `current fatigue − rest ≤ −15`;
    otherwise applied. When the record is maintained or has no duration and
    fatigue is now below 0, the cast fails **after** paying; a timed,
-   non-maintained spell still lands. Falling below 0 knocks the caster out,
-   which ends all its maintained spells ([unconscious][unconscious]).
+   non-maintained spell still lands. Fatigue at 0 or below knocks out a
+   caster that is not undead, so at exactly 0 the cast lands and the caster
+   faints; that ends every non-tech run the caster is the source of, timed
+   ones included, except item-triggered runs that are not maintained
+   ([unconscious][unconscious], [demaintain][mt-demaintain]).
 5. An item source (scroll, wand, device) spends one charge of its spell mana
    store; 0 refuses; a negative store never runs out.
 
@@ -290,7 +302,8 @@ apply with margin
 ```
 
 What the margin does: Damage components remove `margin %` of the rolled
-damage (at least 1) and skip death damage; Movement and Destroy do nothing on
+damage (at least 1), except that with a margin a Damage component carrying
+the death flag does nothing at all on that target; Movement and Destroy do nothing on
 a resisted target (Destroy still removes summoned objects); a maintained
 spell's MAINTAIN ticks charge `cost + max(1, margin % of cost)` on top of the
 normal charge (MG3). The margin is rolled per target but stored once per run,
@@ -340,17 +353,24 @@ below do not test the technology flag (open question O8).
 - **No stacking**: with `No_Stack:`, BEGIN is refused when the same spell
   already runs on the same target (or, for a self spell, from the same
   source); the refusal comes after payment (MG16) ([no stack][mt-nostack]).
-- **Cancels**: a new run interrupts the caster's other runs that share any
-  `Cancels_SF:` bit (the body spells) or `Cancels_EnvSF:` bit
-  ([cancel][mt-nostack]).
+- **Cancels**: a new run interrupts the other runs from the same **source**
+  that share any `Cancels_SF:` bit (the body spells); for `Cancels_EnvSF:`
+  the same happens only when the local PC already carries all of those spell
+  flags (or, for detect-invisible alone, has extraordinary perception)
+  ([cancel][mt-nostack], [env][mt-env-sf]).
 
 ### Duration, maintenance and ending (FR-MAGIC-006)
 
 After each action the scheduler decides what comes next
 ([schedule][mt-schedule], [timers][mt-timers], [time][mt-time-scale]):
 
-- **Nothing was applied** (no target and no component ran): END at once,
-  unless a callback is pending.
+- **Unresistable run** (`No_Resist:` or a script "unresistable" cast): END
+  at once, unless a BEGIN callback is pending, before any maintenance or
+  duration branch (MG19). The same flag later marks a timed run whose final
+  END is scheduled.
+- **Nothing was applied** (targets existed but every one was filtered out,
+  shielded or resisted): END at once, unless a callback is pending. An empty
+  target list or an action without components counts as applied.
 - **Maintained** (`Maintain:` period > 0) with a source: check the cap, then
   schedule MAINTAIN after `period` seconds (×2 with mastery) and put the run
   in the PC's maintain bar. Each MAINTAIN re-checks intelligence and
@@ -363,7 +383,8 @@ After each action the scheduler decides what comes next
 - **Timed** (`Duration:` set): schedule the next step after
   `period + max(0, level − parent stat) × modifier` seconds (×2 with
   mastery); with `DurationTriggerCount:` n, n MAINTAIN ticks precede the END,
-  otherwise the next step is END. The END of a timed run is unresistable.
+  otherwise the next step is END. The END of a timed run is unresistable
+  (the flag of MG19).
 - **Neither**: END at once.
 - **Callbacks**: an eye-candy component with a callback flag defers the
   decision to the animation; its completion runs the CALLBACK or
@@ -447,11 +468,12 @@ them.
 ## CE anomalies (recorded, not adopted)
 
 "Inference" marks a reading of intent. MG numbers continue ARC-RES-040's
-LM1..LM20 (LM5 and LM6 also concern magic).
+LM1..LM20 (LM5 and LM6 also concern magic). CE's own deliberate changes are
+listed after the table.
 
 | ID | Where | Source behaviour | Likely intent (inference) |
 | --- | --- | --- | --- |
-| MG1 | casting goal ([anim][anim-cast], [check][mt-anim-charge]) | the affordability check before the animation reads `Cost:` (or the maintenance cost) of the spell whose **number equals the run slot**, not of the spell being cast, and applies no mastery | the cast spell's own cost |
+| MG1 | casting goal ([anim][anim-cast], [check][mt-anim-charge]) | the affordability check before the animation reads `Cost:` (or the maintenance cost) of the spell whose **number equals the run slot**, not of the spell being cast, and applies no mastery; the table has only 223 entries, so run slots 223..511 read past its end (undefined behaviour) | the cast spell's own cost |
 | MG2 | cost ([cost][mt-cost], [UI/AI][spell-cost], [UI check][mt-can-charge]) | three formulas: run time halves for mastery and adds 1 when the half is odd, then doubles for dwarves; `spell_cast_cost` (UI, AI) doubles then halves with truncation; the UI affordability check ignores mastery | one formula; likely `ceil(cost / 2)` for mastery |
 | MG3 | maintenance tick ([stage][mt-stage], [pay][mt-maint-pay]) | with a resistance margin a tick charges the plain cost **and** the cost plus the margin share | charge only the surcharged cost |
 | MG4 | saving throw ([resist][mt-resist], [fail][mt-fail]) | the resistance-derived term is **subtracted** from the save, while CE's own comment quotes the manual: "+1 bonus on the save for each 10 % of resistance" | add it |
@@ -469,6 +491,17 @@ LM1..LM20 (LM5 and LM6 also concern magic).
 | MG16 | no-stack refusal ([stage][mt-stage]) | the BEGIN cost is paid before the no-stack test, so a refused recast is paid | test before paying; low confidence that it is a slip |
 | MG17 | fate maximisation ([process][mt-process]) | evaluated on every action with components, so an END can be maximised when its BEGIN was not and then removes more scaled effect entries than were added | capture once at BEGIN |
 | MG18 | target names ([names][mt-tgt]) | `Tgt_Obj_No_ST_Critter_Dead` lacks the critter type bit that its siblings carry (CE's FIXME) | add the bit |
+| MG19 | unresistable runs ([flags][mt-run-flags], [schedule][mt-schedule]) | one run flag means both "unresistable" (`No_Resist:`, script unresistable casts) and "final END scheduled"; the scheduler tests it before maintenance and duration, so an unresistable spell ends right after BEGIN whatever its `Duration:` or `Maintain:` | separate flags; an unresistable spell keeps its duration (the census sizes which records combine them) |
+| MG20 | mana stores ([pay][mt-pay]) | worn mana stores are drained and their recharge scheduled before the fatigue refusal (≤ −15), so a refused cast still costs the stored mana | test fatigue before draining; low confidence that it is a slip |
+
+**CE's deliberate changes in these paths** (CE marks them `FIX:` or `CE:`;
+the original may differ here, see O10): the shell and reflection check moves
+the self-target test below the anti-magic shell handling (so an
+interrupted spell that never began runs no END) and lets runs dispelled by the
+shell, or cast before a reflection shield appeared, finish their END ([reflect][mt-reflect]); the
+charm reaction bonus (+30, removed on END) bypasses the effect list so it can
+be reversed ([charm][mt-charm]); a summoned monster's own palette becomes its
+base art so transformations can be undone ([summon][mt-summon]).
 
 Not a slip but a risk for the effects owner: the Effect component removes
 the **first** entry with that effect number, whatever its cause, so an END can
@@ -497,6 +530,8 @@ remove an identical effect that an item or background added
 - **O9** CE's comment says the original omits equipment magic resistance
   adjustments in these calls, yet the called resistance function adds worn
   armour adjustments; which one the original does is unverified.
+- **O10** What the original does where CE deliberately changed behaviour
+  (the `FIX:`/`CE:` list after the anomaly table).
 
 ## What AI slice I8 needs from this domain
 
@@ -514,11 +549,11 @@ Slice I8 of the [NPC combat AI plan](npc-combat-ai-plan.md#phase-1-faithful-reco
 | Summon list | Summon component and tables |
 | Defensive buffs | Effect and ObjFlag components, maintenance and the cap |
 | After the fight | demaintain on a follower's "demaintain spells" flag |
-| Items | worn mana stores, spell charges, item power (`sub_456A10`), the item-exhausted notification |
+| Items | worn mana stores, spell charges, the holder-can-use-item gate (`sub_456A10`) and item power (`item_effective_power`), the item-exhausted notification |
 
 So I8 needs MAGIC slices 1 to 5 below, and slice 6 for summoning and
 resurrection if the first fights use them. Under D2 each anomaly I8 meets
-(MG1, MG2, MG11, MG14 at least) needs its decision row before I8 merges, and
+(MG1, MG2, MG11, MG14, MG20 at least) needs its decision row before I8 merges, and
 the predictor's d20 must come from the injected, labelled random source.
 
 ## Steamwoven inputs that already exist
@@ -527,7 +562,9 @@ the predictor's d20 must come from the injected, labelled random source.
 already holds magick and tech points (0..210) and derives aptitude with the
 sector adjustment ([contract](../world/character-stats-runtime.md));
 [`EffectRules`](../../src/Arcanum.Data/Characters/EffectRules.cs) parses
-effect rows with their causes (spell among them);
+the `effect.mes` rules, and the
+[`EffectCause`](../../src/Arcanum.Simulation/Character/CharacterStatTypes.cs)
+enum of applied effects already has a Spell cause;
 [`MesFile`](../../src/Arcanum.Data/Messages/MesFile.cs) reads message files;
 the session clock already turns host time into game time at 8×
 ([clock](../world/game-clock-runtime.md)). Spells, colleges, mana stores,
@@ -554,14 +591,15 @@ behind a named switch.
    magick points feeding the existing aptitude formula, snapshot schema
    version bump.
 3. **Cast rules** (Simulation, pure; FR-MAGIC-003/004/005/010): one cost
-   calculator (MG2 decided), a payment plan over worn mana stores, fatigue,
+   calculator (MG2 decided), a payment plan over worn mana stores (MG20), fatigue,
    item charges and charge cells, the invocation check with a line-of-fire
    hook, the resistance and save resolver returning the margin (MG4, MG5,
    MG13 decided) and a predictor that matches it (MG14).
 4. **Active spells** (Session; FR-MAGIC-006): runs with BEGIN, MAINTAIN, END
    and callback actions on the session clock, maintenance payment and the
    `INT / 4` cap, duration and tick counts, interrupt and every ending
-   trigger, persistence in the snapshot, the timer recharge of mana items.
+   trigger, persistence in the snapshot, the timer recharge of mana items;
+   MG3, MG11 and MG19 decided.
 5. **Core components** (FR-MAGIC-007): Damage and Heal over combat slice 1,
    Effect over the durable-effects owner (top-20 item 17), ObjFlag for spell
    flags with reference counting, Dispel, the branch components; EyeCandy as
@@ -585,7 +623,8 @@ For the Mac census that follows ARC-RES-040 (stage A9), in addition to the
 `Duration:`, `DurationStatInfo:`, `DurationTriggerCount:`, `Resist:` stat and
 value, `Range:`, `Info:`, `No_Stack:`, the cancel and disallow sets,
 component types per action, `Dmg_Flags:` in use (scaled, full, resurrect),
-summon `Proto:`, `List:` and `Clear_Faction:` (to size MG8), and what records
+summon `Proto:`, `List:` and `Clear_Faction:` (to size MG8), records that
+combine `No_Resist:` with `Maintain:` or `Duration:` (to size MG19), and what records
 80..139 contain; per Crash Site and cave critter its college ranks and
 mastery; per item its mana store, spell charges and spells.
 
@@ -607,6 +646,14 @@ copied; names in this document are descriptive.
 [mt-tgt]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L150-L216
 [mt-summon-tables]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L477-L536
 [mt-load]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1301-L1435
+[ui-enabled]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/spell_ui.c#L155-L163
+[proto-spell]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16235
+[main-cheat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/main.c#L485-L500
+[level-auto]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1095-L1105
+[mt-run-flags]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L4770-L4786
+[mt-demaintain]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L5469-L5488
+[mt-env-sf]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L6139-L6158
+[mt-charm]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L4085-L4180
 [mt-pay]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1536-L1690
 [mt-cost]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1698-L1727
 [mt-can-charge]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1729-L1752

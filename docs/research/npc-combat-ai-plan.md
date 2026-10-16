@@ -312,7 +312,7 @@ P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-ce-anom
 are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
 the same rule when combat slice 2 settles them, as do the magic-core anomalies
-MG1..MG18 of [ARC-RES-043](magic-core-evidence.md#ce-anomalies-recorded-not-adopted)
+MG1..MG20 of [ARC-RES-043](magic-core-evidence.md#ce-anomalies-recorded-not-adopted)
 when the magic slices settle them.
 
 | Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
