@@ -69,6 +69,7 @@ carries exactly one of the program and the refusal.
 | `ComputedGoto` | P6 | a goto whose target is not a number literal |
 | `NegativeGoto` | P6 | a literal goto below 0 (CE reads −1..−4 as control codes, anomaly X6) |
 | `GotoBeyondEnd` | P6 | a literal goto past the line count |
+| `ScriptNumberOutOfRange` | P4 | a literal change-this-script number outside 0..99999 (ARC-SCRIPT-008) |
 
 Not refused, by design:
 
@@ -93,6 +94,10 @@ slice widens admission by publishing a larger set, not by changing the rules.
 | Actions | 0 do nothing, 1 return and skip default, 2 return and run default, 3 goto, 8/9 set/clear local flag, 10 assign, 11 add, 12 subtract, 13 multiply, 14 divide, 42 get story state, 43 set story state, 100/101 set/clear global flag |
 | Value kinds | counter, local variable, number, global flag |
 | Focus kinds | none |
+
+`ScrAdmissionSet.S2` (ARC-SCRIPT-008) is S1 plus 5 remove this script and 6
+change this script; it is the set the [dispatcher core](scr-dispatcher-runtime.md)
+runs and admits 148 installed scripts. `IsSubsetOf` compares two sets.
 
 On the installed module S1 admits 144 of the 2,399 scripts whole (the census
 count; the opt-in `RealData` test checks it). It is a correctness core, not a
@@ -120,10 +125,9 @@ flags, its query-only walk and frontier codes). Its results are unchanged.
   unknown type, index or write refusal).
 
 Divide (14), counter writes and arithmetic writes into a global flag are
-admitted with CE anomalies X7 (divide stores the sum), X8 (unmasked counter
-write) and X10 (unmasked global-flag write) open: admission checks shape only,
-and the interpreter slice S2 decides their meaning
-([census anomalies](../research/scr-census.md#anomalies-for-s1-s)).
+admitted on shape only; their meaning (X7 quotient and X8 masked counters as in
+the original, X10 as a rule-mode switch) is fixed by the
+[dispatcher core](scr-dispatcher-runtime.md#rule-mode-differences-and-fixes).
 
 ## Not ready
 

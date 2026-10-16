@@ -29,6 +29,8 @@ public enum ScrRefusalCode
     WriteToNumber,
     /// <summary>A goto whose target is not a number literal.</summary>
     ComputedGoto,
+    /// <summary>A literal script number for change this script outside 0..99999 (the original stores it as is).</summary>
+    ScriptNumberOutOfRange,
     /// <summary>A literal goto below line 0 (CE reads −1..−4 as control codes, anomaly X6).</summary>
     NegativeGoto,
     /// <summary>A literal goto past the line after the last one.</summary>
@@ -80,6 +82,18 @@ public sealed class ScrAdmissionSet
          ScrCatalogue.Action.Subtract, ScrCatalogue.Action.Multiply, ScrCatalogue.Action.Divide, ScrCatalogue.Action.GetStoryState,
          ScrCatalogue.Action.SetStoryState, ScrCatalogue.Action.SetGlobalFlag, ScrCatalogue.Action.ClearGlobalFlag],
         [ScrValueKind.Counter, ScrValueKind.LocalVariable, ScrValueKind.Number, ScrValueKind.GlobalFlag], []);
+
+    /// <summary>The set the dispatcher core runs (ARC-SCRIPT-008): <see cref="S1"/> plus remove this script and change
+    /// this script, whose new number takes effect after the run.</summary>
+    public static ScrAdmissionSet S2 { get; } = new("S2", S1.Conditions,
+        S1.Actions.Append(ScrCatalogue.Action.RemoveThisScript).Append(ScrCatalogue.Action.ChangeThisScript), S1.ValueKinds, S1.FocusKinds);
+
+    /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
+    public bool IsSubsetOf(ScrAdmissionSet other)
+    {
+        ArgumentNullException.ThrowIfNull(other);
+        return Conditions.All(other.Conditions.Contains) && Actions.All(other.Actions.Contains) && ValueKinds.All(other.ValueKinds.Contains) && FocusKinds.All(other.FocusKinds.Contains);
+    }
 }
 
 /// <summary>A script admitted as a whole for one set: every clause it could run is inside it.
@@ -155,6 +169,7 @@ public static class ScrAdmission
             var literal = (ScrValueKind)kind == ScrValueKind.Number;
             if (FlagIndexLimit(condition, type) is { } limit && literal && (value < 0 || value >= limit)) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
             if (!condition && Writes(type) && literal) return Refuse(ScrRefusalCode.WriteToNumber);
+            if (!condition && type == ScrCatalogue.Action.ChangeThisScript && literal && value is < 0 or > ScrCatalogue.MaxScriptNumber) return Refuse(ScrRefusalCode.ScriptNumberOutOfRange, true);
             if (!condition && type == ScrCatalogue.Action.Goto)
             {
                 if (!literal) return Refuse(ScrRefusalCode.ComputedGoto);
