@@ -38,7 +38,7 @@ class AreaRunnerTests(unittest.TestCase):
     def exercise(self, *, exported=False, code=0, output=None, coverage='valid',
                  comparator_error=None, mutate_candidate=False, timeout=60, unsafe_private=False):
         marker = 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS '
-        output = output if output is not None else marker + 'PUBLIC-SYNTHETIC\n'
+        output = output if output is not None else marker + 'PUBLIC-SYNTHETIC\nARC-RENDER-008 original overlay PASS {}\n'
         with tempfile.TemporaryDirectory() as owned:
             root = Path(owned).resolve()
             private = root / ('not-local' if unsafe_private else 'local') / 'evidence'
@@ -126,7 +126,9 @@ class AreaRunnerTests(unittest.TestCase):
 
     def test_failed_timeout_missing_marker_and_engine_errors_refuse_before_comparison(self):
         cases: tuple[dict[str, Any], ...] = ({'code': 1}, {'code': 124}, {'output': 'no marker\n'},
-            {'output': 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS \nERROR: private sentinel\n'})
+            {'output': 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS \nERROR: private sentinel\n'},
+            # ARC-RENDER-008: the coverage marker alone is not enough without the original overlay check.
+            {'output': 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS \n'})
         for kwargs in cases:
             with self.subTest(kwargs=kwargs):
                 actual = self.exercise(**kwargs)

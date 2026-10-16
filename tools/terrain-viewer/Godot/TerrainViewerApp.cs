@@ -230,6 +230,7 @@ public partial class TerrainViewerApp : Node
     {
         RetireWorldLifecycle();
         _worldActor.DisposeSession(); _worldGridInput = new();
+        RetirePassabilityOverlay();
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();
@@ -839,6 +840,7 @@ public partial class TerrainViewerApp : Node
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
                 PublishFailure(_arguments?.Mode ?? _readyMode,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
             }
+            SyncPassabilityOverlay();
             return;
         }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);

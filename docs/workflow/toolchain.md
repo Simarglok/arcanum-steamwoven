@@ -42,10 +42,11 @@ It additionally requires source/exported WORLD persistence and dual-hostfxr
 gates, with isolated input and zoom paths; the task/root/head v2 binding,
 capacity/lease/frozen-observation and finalized-rerun rejection are unchanged.
 
-ARC-INPUT-001 (diagnostic palette) uses that same endpoint/root with literal
-`ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001` and exactly the ARC-RENDER-007 gate set;
-the synthetic source/exported gates additionally require its palette markers
-([contract](../input/diagnostic-palette.md)).
+ARC-INPUT-001 (diagnostic palette) and ARC-RENDER-008 (passability overlay) use that
+same endpoint/root with literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001` or
+`ARC-RENDER-008` and exactly the ARC-RENDER-007 gate set; the synthetic gates require the
+palette and overlay markers and the native WORLD/AREA observations the original overlay
+check ([palette](../input/diagnostic-palette.md), [overlay](../rendering/passability-overlay.md)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original

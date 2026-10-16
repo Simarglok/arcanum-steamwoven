@@ -216,7 +216,7 @@ public partial class TerrainViewerApp
                 Require(WorldModal && rect.Position.X >= 0 && rect.Position.Y >= 0 && rect.End.X <= size.X && rect.End.Y <= size.Y, $"palette contained rect={rect}");
                 Require(viewport.GuiGetFocusOwner() is LineEdit, "palette field focus");
                 var overlay = (CheckButton)_worldPanel.FindChild("PassabilityOverlay", true, false)!;
-                Require(overlay.Disabled && !overlay.ButtonPressed && overlay.IsVisibleInTree(), "overlay row visibly unavailable");
+                Require(!overlay.Disabled && overlay.ButtonPressed == _passabilityOverlayOn && overlay.IsVisibleInTree(), "overlay checkbox bound to the session state");
                 var summary = (Label)_worldPanel.FindChild("PaletteSummary", true, false)!;
                 Require(summary.Text.StartsWith("Diagnostic summary:", StringComparison.Ordinal), "palette summary");
                 var buttons = _worldPanel.FindChildren("*", "Button", true, false).OfType<Button>().ToArray();
@@ -258,10 +258,10 @@ public partial class TerrainViewerApp
                     await Click(overlay.GetGlobalRect().GetCenter());
                     Require(overlayEvents.Count == 1 && overlay.Disabled && !overlay.ButtonPressed && overlay.FocusMode == Control.FocusModeEnum.None, "unavailable overlay seam inert");
                 }
-                finally { _worldPanel.OverlayToggled -= Overlay; }
+                finally { _worldPanel.OverlayToggled -= Overlay; _passabilityOverlayOn = false; _overlayPanelState = null; SyncPassabilityOverlay(); }
                 await Press(buttons.Single(b => b.Text.StartsWith("Close", StringComparison.Ordinal)));
                 Require(!WorldModal && _worldActor.State == actor, "native Close");
-                GD.Print($"ARC-INPUT-001 palette UI PASS viewport={size.X}x{size.Y} chord-open/contained/field focus/overlay unavailable/1.00/2.00/Fit/surface click/Close/world LMB inert; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
+                GD.Print($"ARC-INPUT-001 palette UI PASS viewport={size.X}x{size.Y} chord-open/contained/field focus/overlay checkbox/1.00/2.00/Fit/surface click/Close/world LMB inert; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
             }
         }
         finally

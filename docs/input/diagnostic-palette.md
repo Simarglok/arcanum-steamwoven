@@ -38,10 +38,11 @@ its Close button. Contents:
 - **Reload current source**: the generation-aware reload of the loaded source after the
   accepted step settles; a failed reload is shown as a failure and the old scene is not
   republished. Without a loaded source the palette says "Reload unavailable".
-- **Show passability (unavailable)**: a disabled, non-navigable row reserved for
-  ARC-RENDER-008. It draws nothing and claims no Open/Blocked state. The seam for
-  RENDER-008 is `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and the
-  `OverlayToggled` event (one report per user toggle; none while unavailable).
+- **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
+  checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
+  without one it reads "unavailable" and is not navigable. The host binds it through
+  `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and receives one
+  `OverlayToggled` event per user toggle.
 - The status line reports how a palette action ended: "Reset scene done", "Reload
   done: generation N published", or "Scene FAILED: stage=… code=…" (the old scene is not
   republished).

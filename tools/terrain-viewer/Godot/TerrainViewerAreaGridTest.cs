@@ -42,6 +42,8 @@ public static partial class TerrainViewerSelfTest
             var usage = source.Owner.Usage;
             app.WorldGridObservationMatrixForSelfTest();
             app.WorldPaletteChordMatrixForSelfTest();
+            // ARC-RENDER-008 on the whole-core authority: blocker (5,1), Open (7,1), (-1,1) outside the admitted sectors.
+            await app.WorldPassabilityOverlayMatrixForSelfTestAsync(new(5, 1), new(7, 1), new(-1, 1), "crash-site-area");
             var gridReport = await app.AreaGridMatrixForSelfTestAsync(arguments, result, unknown);
             var camera = await app.AreaCameraMatrixForSelfTestAsync(arguments, result);
             var report = new { Grid = gridReport, Camera = camera };

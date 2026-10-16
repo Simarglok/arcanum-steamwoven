@@ -75,7 +75,7 @@ class LauncherSyncTests(unittest.TestCase):
         modes = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")["MODES"]
         # Same pairing arcanum-local enforces at launch: crash-site-area only from
         # ARC-RENDER-007 or ARC-INPUT-001 (same AREA build plus the diagnostic palette).
-        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001"},
+        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-RENDER-008"},
                    "world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
         for mode, tasks in modes.values():
             self.assertIn(mode, launch.MODE_ROLES)

@@ -71,7 +71,9 @@ def main() -> int:
         code, output = run_child(argv, env, args.timeout)
         summary['exitCode'] = code
         (evidence / 'native.log').write_text(output, encoding='utf-8')
-        if code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output or 'ERROR:' in output:
+        # ARC-RENDER-008: the whole-core original overlay check runs in the same native observation.
+        if (code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output
+                or 'ARC-RENDER-008 original overlay PASS ' not in output or 'ERROR:' in output):
             raise ValueError('native outcome')
         stage = 'original-reconciliation'
         raw = config.optional_authority_bytes(evidence / 'coverage.json')

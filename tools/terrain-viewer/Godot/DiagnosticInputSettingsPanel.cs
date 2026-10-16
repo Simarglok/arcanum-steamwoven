@@ -29,6 +29,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     private Label _summary = null!;
     private Label _actionStatus = null!;
     private CheckButton _overlay = null!;
+    private int _overlayIndex;
     public InputSettings Settings { get; private set; } = DiagnosticWorldPolicy.DefaultInputSettings;
     public bool IsOpen => Visible;
     public override void _Ready()
@@ -79,7 +80,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         // row is visibly unavailable and is neither navigable nor toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
         _overlay.Toggled += value => { if (!_binding && !_overlay.Disabled) OverlayToggled?.Invoke(value); };
-        _rows.AddChild(_overlay);
+        _rows.AddChild(_overlay); _overlayIndex = _controls.Count;
         _actionStatus = new Label { Name = "PaletteActionStatus", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_actionStatus);
         _summary = new Label { Name = "PaletteSummary", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_summary);
         _rows.AddChild(new Label { Text = "Passability overlay: not implemented yet (ARC-RENDER-008).\nReset preferences: input settings and zoom 2.00; scene unchanged.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
@@ -146,6 +147,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _binding = true;
         _overlay.Disabled = !available; _overlay.ButtonPressed = available && on; _overlay.Text = text;
         _overlay.FocusMode = available ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        // Navigable (keyboard/controller) exactly while available, at its row position.
+        if (available && !_controls.Contains(_overlay)) _controls.Insert(_overlayIndex, _overlay);
+        else if (!available && _controls.Remove(_overlay) && GetViewport()?.GuiGetFocusOwner() == _overlay) _overlay.ReleaseFocus();
         _binding = false;
     }
     public void SetSaveStatus(bool saved) => _status.Text = saved ? "Preferences saved locally." : "Preferences save failed.";
