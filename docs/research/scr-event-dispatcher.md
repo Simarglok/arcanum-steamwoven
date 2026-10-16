@@ -247,7 +247,7 @@ sit.
   was set, with the new danger target (possibly none) as triggerer; it is cleared first, and spells are de-maintained unless the NPC
   flees ([ai.c 1708–1727][ai-danger]).
 - `SAP_START_COMBAT` / `SAP_END_COMBAT`: per AI pass and per subturn as in the
-  answer (an AI pass also runs when an NPC is hit or alerted, so START can fire
+  answer (an AI pass also runs when an NPC is attacked or given a party order, so START can fire
   outside its own turn); the names describe a turn, not the fight (reading of intent).
 - `SAP_WILL_KOS`: before the KOS rules; *skip default* means "not KOS"
   ([ai.c 3423–3440][ai-kos]).
@@ -292,7 +292,7 @@ returns *skip default* before running (E4).
 | `SAP_DIALOG` of an NPC: effective whole-array attachment, typed invocation, versioned query ports, TRUE / LF / FOLLOWING / JILTED, advance / GOTO / DIALOG; unknown is a frontier | query-only entry walk, no effects | same |
 | DLG conversation with end `ReturnToScript` (0 → caller + 1, −N → N) | delivered; the line is returned, nothing resumes it | [conversation runtime](../scripting/dialog-conversation-runtime.md) |
 | Global flags, quests and rumors in the session; per-NPC LF as the viewer's `dialog.lf` map-change key | delivered (ARC-SCRIPT-006) | [game session](../world/game-session-runtime.md) |
-| Attachment point numbers | `SessionScriptPoint` constants for six points; pickup refuses a holder with a Use script and an item with an InsertItem, Get or RemoveItem script | `src/Arcanum.Session/GameSessionInventory.cs` |
+| Attachment point numbers | `SessionScriptPoint` constants for six points; loot refuses a holder with a Use script; pickup and loot refuse an item with an InsertItem, Get (pickup) or RemoveItem (loot) script | `src/Arcanum.Session/GameSessionInventory.cs` |
 | Tile and sector script words of a sector | read as raw words by the map catalogue | `src/Arcanum.Data/Maps/WorldModels.cs` |
 | Cave entrance and exit use | endpoints are profile literals with SAP and script recorded; no script runs | `src/Arcanum.Data/Area/{OriginalProfile,CaveProfile}.cs`, `tools/terrain-viewer/Core/AreaTransition.cs` |
 | Session clock | delivered; no time-event queue | `src/Arcanum.Simulation/Clock` |
