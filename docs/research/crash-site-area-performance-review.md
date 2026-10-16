@@ -283,14 +283,40 @@ already authenticated in the same load (L-C, not done).
   (141 MiB) at once. A 128 MiB cap would make such views fall back to per-command
   terrain, so the 192 MiB cap stays.
 
+## L-C result: verification passes outside the owner
+
+Counting the whole-input SHA-256 passes in a Release load on `a1e0cf1` found about 8 GB
+hashed per load (4.05 GB for the exterior owner, 4.05 GB for the cave owner, plus the
+viewer's own `VerifyFile` passes), about 3.2 s of the 6–7 s. Each owner hashes every input
+when it opens, again before (I0) and after (I7) its strict build, and the used resources
+before their first frame and at `Complete`; that is the [loader
+contract](../world/crash-site-area-loader.md) and its tests (authentication order, per-input
+budget boundaries, cancellation in each phase) and is unchanged here.
+
+Changed outside the owner: with a cave, the first `VerifyFile` of the three archives is
+replaced by the cave owner's own opening authentication of the same three paths, which
+runs after the actor and lighting reads against the pinned profile identities (the cave
+profile pins the same module and resource identities, and the loader checks that they
+match); the remaining verifications hash their files in parallel. A swapped file now fails
+the load with the owner's input error instead of the viewer's. Same test-host method, two runs each, same commit:
+
+| Configuration | Before | After |
+| --- | ---: | ---: |
+| Release load | 6.0–7.0 s | 5.4–6.6 s |
+| Debug load | 6.9–7.6 s | 6.2–6.9 s |
+
+Removing more of the owner's passes (parallel hashing inside the owner, or skipping I0
+right after opening) would change the tested authentication contract and is left to the
+owner's decision.
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only (done).
 2. L-A Release assemblies for daily runs: halves the load (done, release export).
 3. F-C chunk composition (done as parallel composition), then F-B spatial index (done):
    most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
-4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (share
-   authentication, about 1.5–2 s more; not done).
+4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (partly done
+   outside the owner, about 0.5 s; the owner's own passes are an owner decision).
 5. D-A (done), I-A and M-A (dropped, see above).
 6. Later, only if needed: L-D parallel decode, F-D body batching, L-F persistent
    cache.
