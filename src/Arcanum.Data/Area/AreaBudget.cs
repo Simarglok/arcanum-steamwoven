@@ -10,7 +10,8 @@ internal sealed class AreaBudget : IDatEntryAdmission
     private bool _frameActive;
     private long _frameAllocation;
     private long _frameHeld;
-    private AreaBudgetPhase _phaseId = AreaBudgetPhase.O;
+    private volatile AreaBudgetPhase _phaseId = AreaBudgetPhase.O;
+    internal AreaBudgetPhase PhaseId => _phaseId;
     private readonly long[] _visits = new long[11];
     private readonly long[] _cumulative = new long[11];
     private readonly long[] _highWater = new long[11];
@@ -83,11 +84,13 @@ internal sealed class AreaBudget : IDatEntryAdmission
         if (bytes < 0 || bytes > _retained) throw new InvalidOperationException("Invalid retained ownership release.");
         _retained -= bytes;
     }
-    internal void ReadReserve(int requested) => _readReserved = Admit(AreaBudgetDomain.Read, _readReserved, requested, _limits.MaxReadBytes);
+    // Read counters are the only budget state parallel authentication reads change.
+    private readonly object _readGate = new();
+    internal void ReadReserve(int requested) { lock (_readGate) _readReserved = Admit(AreaBudgetDomain.Read, _readReserved, requested, _limits.MaxReadBytes); }
     internal void ReadActual(int actual, int requested)
     {
         if (actual < 0 || actual > requested) throw new IOException("The input stream returned an invalid byte count.");
-        _readActual = Admit(AreaBudgetDomain.Read, _readActual, actual, _readReserved);
+        lock (_readGate) _readActual = Admit(AreaBudgetDomain.Read, _readActual, actual, _readReserved);
     }
     internal void StartFrame(long stored, long decoded, long rgba = 0, long encoded = 0)
     {
