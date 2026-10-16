@@ -10,7 +10,7 @@ The initial research sequence below is preserved as the R1 scope record. Bounded
 
 First establish the DAT container structure and validate selected local files. DAT parsing and runtime resource precedence are separate questions. A later bounded implementation can provide a C# reader and inspection CLI; ART decoding and a Godot viewer follow.
 
-The initial DAT research card should specify allowed read-only probes, selected baseline files, offset/size/compression checks, independent comparison opportunities and deliverables. It should not silently authorize a production parser, writer, game patch or renderer.
+The initial DAT research task should specify allowed read-only probes, selected baseline files, offset/size/compression checks, independent comparison opportunities and deliverables. It should not silently authorize a production parser, writer, game patch or renderer.
 
 Public fixtures must be synthetic. Local real-data evidence may include approved hashes and aggregate metadata; extracted game text, graphics and bytes remain local. Never upload original data to an external service as part of debugging.
 

@@ -8,4 +8,4 @@ For research changes, include source URL, version/commit, observed facts, uncert
 
 Run checks appropriate to the changed component. Documentation-only changes need source/configuration consistency and relative-link checks; do not describe them as runtime validation. Root solution checks do not cover every standalone viewer or lab.
 
-Keep PRs scoped and independently reviewed where required. Preserve local archives and game data outside version control. Check staged filenames and diff before publishing. The human maintainer performs merges unless they authorized an agent to merge ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)).
+Keep PRs scoped and independently reviewed before opening. Preserve local archives and game data outside version control. Check staged filenames and diff before publishing. The human maintainer performs merges unless they authorized an agent to merge ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)).
