@@ -58,9 +58,9 @@ public partial class TerrainViewerApp : Node
         if (SelfTestBootstrap) return;
 
         var args = OS.GetCmdlineUserArgs().ToList();
-        // The process hosting a self-test or a settings test is automated too: its own frame loop
-        // drives the tests, so it must not cap the engine frame rate (ARC-RENDER-009 pacing).
-        _automatedHost = args.Contains("--self-test", StringComparer.Ordinal) || args.Contains("--world-settings-test", StringComparer.Ordinal);
+        // The process hosting --self-test is automated too: its frame loop drives the frame-bound
+        // tests, so it must not cap the engine frame rate (ARC-RENDER-009 pacing).
+        _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
