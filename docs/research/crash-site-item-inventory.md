@@ -218,8 +218,9 @@ For this one operand the probe closes the RES-021 Unknowns that depend on data:
 
 Still Unknown (U): the recipient PC's own `SAP_TRANSFER` attachment and its
 insert check (weight and free room) depend on the created character, which is not
-in the map data; the PC prototype and creation flow belong to the
-character-creation research.
+in the map data. The [character creation research](character-creation-evidence.md)
+covers the PC prototypes and starting inventory, not this callback or the
+carry/room check against the ring.
 
 ## 5. Stacks, keys and key rings (D + S)
 
@@ -250,5 +251,5 @@ character-creation research.
 3. **Conversation binding.** ARC-SCRIPT-005 already records `IN` as a typed
    command; the owner consumes that command instead of the dialog changing items.
 4. Keep chest generation, barter, theft, NPC respawn and positive `IN` out until
-   their own research. The PC's insert check needs the character-creation
-research.
+   their own research. The PC's insert check needs the stats and starting
+inventory from [character creation](character-creation-evidence.md).
