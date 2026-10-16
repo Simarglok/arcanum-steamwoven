@@ -111,6 +111,8 @@ for several PCs (R3).
 
 ## Source anomalies and decisions
 
+**Original check (ARC-RES-048):** P1 is a CE slip (the original keeps a signed effect's written origin and faction), A2 is the original's own sign, and A4's asymmetry is confirmed. D1 stays as recorded until the owner answers. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
+
 - **P1 Signed reputation effects.** R14 as read, applied to the owner's data:
   62 of 93 effects get origin = faction = adjustment, so each matches only an
   NPC whose origin **and** faction both equal its adjustment.

@@ -277,11 +277,11 @@ returns *skip default* before running (E4).
    shows "not supported" in the diagnostic viewer, a heartbeat logs and skips
    the AI pass), and tests can assert it.
 3. **"Like original" as a named mode.** Like the content readers' strict and
-   "like original" modes, a later "Source" interpreter switch may execute
+   "like original" modes, a later switch of the Original setting (D8) may execute
    unknown types as the CE no-op, with every skip counted in the trace; strict
    stays the default until a census shows what the data needs.
 4. **Bounds are typed too.** 1,000 executed lines, a bad jump and a missing
-   file stay source behaviour in the Source switch, and are typed
+   file stay source behaviour under the Original setting, and are typed
    `Budget`/`BadJump`/`MissingScript` results in the default.
 
 ## 8. What the code already covers (C)
@@ -341,8 +341,11 @@ S8 with inventory.
 
 ## 11. Anomalies recorded, not adopted (S)
 
-Under owner decision D2 (fix confirmed slips, keep the source behind a switch)
-these are settled by the slice that implements them.
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the CE readings below where they differ.
+
+Under owner decisions D2 and D8 (fix confirmed slips; only a bug of the original
+game keeps its behaviour behind a switch of the Original setting) these are
+settled by the slice that implements them.
 
 | ID | Source behaviour | Note |
 | --- | --- | --- |

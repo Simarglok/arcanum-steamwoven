@@ -473,6 +473,8 @@ and monstrous thresholds ([tables][skill-tables]).
 
 ## 8. CE anomalies found by this reading
 
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027) supersede the CE readings below where they differ.
+
 Recorded, not adopted. "Inference" marks a reading of intent.
 
 | ID | Where | Source behaviour | Likely intent (inference) |

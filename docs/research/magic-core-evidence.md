@@ -467,6 +467,8 @@ them.
 
 ## CE anomalies (recorded, not adopted)
 
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040) supersede the CE readings below where they differ.
+
 "Inference" marks a reading of intent. MG numbers continue ARC-RES-040's
 LM1..LM20 (LM5 and LM6 also concern magic). CE's own deliberate changes are
 listed after the table.
@@ -577,8 +579,9 @@ Type `MAGIC` per the [naming policy](../workflow/task-naming.md); codes are
 allocated when each task is created (D6). Each slice is a separate PR; all
 keep Data/Simulation/Session free of Godot, take randomness from an injected,
 seedable source with a purpose label per roll, and settle each anomaly they
-meet by an owner decision logged in the plan (D2), keeping the source variant
-behind a named switch.
+meet by an owner decision logged in the plan (D2). Under D8 only a bug of the
+original game gets a switch of the Original setting; for a CE slip both
+settings follow the original ([verification ledger](original-verification-ledger.md) says which is which).
 
 1. **Spell definitions** (Data, FR-MAGIC-001): read `spelllist.mes` passes A
    and B, `magictech.mes` component names and `spell.mes` names into

@@ -183,6 +183,8 @@ in `src/game/ai.c` unless named.
 
 ## First-pass CE anomalies (to confirm, not adopted)
 
+**Original check (ARC-RES-048):** P1, P2 and P3 are CE slips (P3 tests the redirect target's intelligence, not the candidate's), P4–P7 are the original's behaviour. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
+
 - **P1** The item search keeps the candidate with the **largest** distance
   although it tracks a "nearest" variable ([items][items]).
 - **P2** The party-level sum adds the leader's level once per follower instead
