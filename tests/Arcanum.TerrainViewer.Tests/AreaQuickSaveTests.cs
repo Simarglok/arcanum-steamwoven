@@ -76,6 +76,7 @@ public sealed class AreaQuickSaveTests
         Assert.AreEqual(cave, owner.QueryActor());
         Assert.AreEqual(1, owner.Version.Revision);
         Assert.AreEqual(first.Flags.Binding.Identity, owner.Flags.Binding.Identity, "The load continues the saved playthrough.");
+        Assert.AreSame(Arcanum.Session.GameRules.Steamwoven, owner.Rules);
         Assert.AreNotSame(second.Identity, owner.Identity);
         Assert.AreEqual(Outside.Map, second.QueryActor().Map, "The running session is untouched; the caller adopts the new owner.");
         Assert.AreEqual("quick loaded: map 79 cell (2090,2020), session rev 1", loaded.Status);
@@ -88,6 +89,17 @@ public sealed class AreaQuickSaveTests
         var saved = AreaQuickSave.Save(session, Outside with { Map = new(0) }, Slot());
         Assert.AreEqual((false, GameSessionFailure.InvalidActor), (saved.Saved, saved.PlaceFailure));
         Assert.IsFalse(Slot().Exists);
+    }
+
+    [TestMethod]
+    public void QuickLoadKeepsTheRunningSessionsRuleMode()
+    {
+        using var first = Session();
+        Assert.IsTrue(AreaQuickSave.Save(first, Outside, Slot()).Saved);
+        using var second = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, second.SelectRules(Arcanum.Session.RuleMode.Original));
+        using var owner = AreaQuickSave.Load(Slot(), second, _ => null).Owner ?? throw new AssertFailedException("load");
+        Assert.AreSame(Arcanum.Session.GameRules.Original, owner.Rules, "The rule mode is a setting, not part of the save.");
     }
 
     [TestMethod]

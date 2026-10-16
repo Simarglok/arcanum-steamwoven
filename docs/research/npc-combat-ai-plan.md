@@ -369,7 +369,11 @@ game really has.
   earlier "Source" and "Default" names. A CE reconstruction slip that the
   original game does not have (checked in the original executable) gets no
   switch: both settings follow the original there. First used by
-  ARC-COMBAT-001 (`CombatAnomalyProfile.Original` / `.Steamwoven`).
+  ARC-COMBAT-001 (`CombatAnomalyProfile.Original` / `.Steamwoven`). On 2026-10-17
+  the owner extended the two settings to every domain as one game-wide rule mode,
+  switchable in the settings menu without a restart: the
+  [rule modes contract](../world/rule-modes.md) (ARC-WORLD-023) holds the
+  mechanism and the registry of switches.
 
 ## Method
 
