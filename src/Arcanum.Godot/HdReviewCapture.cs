@@ -57,6 +57,27 @@ internal static class HdReviewCapture
         return ProjectSettings.GlobalizePath("user://hd-review");
     }
 
+    /// <summary>Null when captures may go to <paramref name="directory"/> (absolute);
+    /// otherwise why not. Run from source, a folder inside the checkout must be under its
+    /// ignored <c>local/</c>, so original-derived pixels cannot land in a tracked folder.</summary>
+    internal static string? CheckDirectory(string directory)
+    {
+        if (!Path.IsPathRooted(directory)) return "The capture folder must be an absolute path.";
+        if (OS.HasFeature("template")) return null;
+        var checkout = Path.GetFullPath(Path.Combine(ProjectSettings.GlobalizePath("res://"), "..", ".."));
+        return CheckDirectory(directory, File.Exists(Path.Combine(checkout, "Arcanum.Steamwoven.sln")) ? checkout : null);
+    }
+
+    internal static string? CheckDirectory(string directory, string? checkout)
+    {
+        if (!Path.IsPathRooted(directory)) return "The capture folder must be an absolute path.";
+        if (checkout is null) return null;
+        static string Slash(string path) => Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)) + Path.DirectorySeparatorChar;
+        var full = Slash(directory);
+        return full.StartsWith(Slash(checkout), StringComparison.Ordinal) && !full.StartsWith(Slash(Path.Combine(checkout, "local")), StringComparison.Ordinal)
+            ? "Captures inside the checkout must go under its ignored local/ folder." : null;
+    }
+
     /// <summary>A file name that names no local path: pack id, entry and UTC time.</summary>
     internal static string FileName(string subject, string kind, DateTime utc) =>
         $"{subject}-{utc.ToString("yyyyMMdd-HHmmss-fff", CultureInfo.InvariantCulture)}-{kind}.png";

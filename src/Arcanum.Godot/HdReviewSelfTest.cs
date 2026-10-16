@@ -53,6 +53,30 @@ internal static class HdReviewSelfTest
             state.Request(new SelectedArtSnapshot(new EntryIdentity(1, 2, entries[1].Entry.Ordinal), other, ArtDecoder.Inspect(other, ViewerState.DecoderOptions)), 0, 0, 2);
             Require(state.WaitForResult(TimeSpan.FromSeconds(10)) is { Entry: null }, "another ART has no pack frame");
 
+            // Locating a pack frame: only the target frame on screen concludes it.
+            var target = pack.Entries[0];
+            var shownTarget = first!; // frame 0, palette 2 on screen
+            var sibling = first with { Request = first.Request with { Frame = 1 }, Entry = pack.Entries[1] };
+            Require(HdReviewState.NavigationOutcome(target, shownTarget, 0, 0, 2) == HdNavigationOutcome.Shown, "navigation ends when its frame is shown");
+            Require(HdReviewState.NavigationOutcome(target, sibling, 0, 1, 2) == HdNavigationOutcome.Pending, "another frame on screen keeps navigation pending");
+            // Review finding: the old frame (same group/frame, other slot) is not a palette fallback.
+            Require(HdReviewState.NavigationOutcome(target, shownTarget with { Entry = pack.Entries[1] }, 0, 0, 0) == HdNavigationOutcome.Pending,
+                "a frame requested under another slot is not a fallback");
+            var fallback = shownTarget with { Entry = null, Request = shownTarget.Request with { Palette = 0 } };
+            Require(HdReviewState.NavigationOutcome(target, fallback, 0, 0, 2) == HdNavigationOutcome.PaletteFallback, "requested slot shown under another slot is a fallback");
+            Require(HdReviewState.NavigationOutcome(target, shownTarget with { Entry = pack.Entries[1] }, 0, 0, 2) == HdNavigationOutcome.OtherView, "same key, other entry");
+            Require(HdReviewState.NavigationOutcome(target, shownTarget with { Entry = null, Error = "X" }, 0, 0, 2) == HdNavigationOutcome.Failed, "failed lookup");
+            Require(HdReviewState.NavigationOutcome(target, shownTarget with { ArtSha256 = new string('0', 64) }, 0, 0, 2) == HdNavigationOutcome.OtherArt, "other ART bytes");
+
+            // Captures inside a checkout only under its ignored local/ folder.
+            var checkout = Path.Combine(root, "checkout");
+            Require(HdReviewCapture.CheckDirectory(Path.Combine(checkout, "local", "hd-review"), checkout) is null
+                    && HdReviewCapture.CheckDirectory(Path.Combine(checkout, "src", "Arcanum.Godot", "local"), checkout) is not null
+                    && HdReviewCapture.CheckDirectory(Path.Combine(checkout, "localx"), checkout) is not null
+                    && HdReviewCapture.CheckDirectory(Path.Combine(root, "elsewhere"), checkout) is null
+                    && HdReviewCapture.CheckDirectory("local/hd-review", checkout) is not null,
+                "capture folder rule");
+
             // Flip clock: original first, then HD.
             state.SetMode(HdViewMode.Flip);
             state.SetFlipSeconds(1.0);
@@ -84,6 +108,12 @@ internal static class HdReviewSelfTest
             canvas.CommitFramePublication(nextTexture, FrameHotspot.Zero, layout, false, false);
             Require(canvas.HdTexture is null && ReferenceEquals(canvas.DisplayedTexture, nextTexture), "a new Legacy frame never shows the previous HD frame");
             canvas.SetHd(hdTexture);
+            canvas.UpdateFrame(legacyTexture, FrameHotspot.Zero);
+            Require(canvas.HdTexture is null, "a frame update clears HD");
+            canvas.SetHd(hdTexture);
+            canvas.ResetAsset(legacyTexture, FrameHotspot.Zero, layout);
+            Require(canvas.HdTexture is null, "an asset reset clears HD");
+            canvas.SetHd(hdTexture);
             canvas.ClearAsset();
             Require(canvas.HdTexture is null && canvas.DisplayedTexture is null, "clearing the asset clears HD");
             RequireThrows<ArgumentOutOfRangeException>(() => canvas.SetView((FrameView)9), "undefined canvas view");
@@ -101,6 +131,11 @@ internal static class HdReviewSelfTest
                 Require(pairBytes.AsSpan((y * 20 + 14) * 4, 6 * 4).SequenceEqual(hd[0].AsSpan(y * 6 * 4, 6 * 4)), "pair right is the HD frame");
                 Require(pairBytes.AsSpan((y * 20 + 6) * 4, 8 * 4).ToArray().All(b => b == 0), "pair gap is transparent");
             }
+            using var hd4 = Image.CreateFromData(12, 8, false, Image.Format.Rgba8, Enumerable.Range(0, 12 * 8 * 4).Select(i => (byte)i).ToArray());
+            using var pair4 = HdReviewCapture.ComposePair(legacyImage, hd4, 4);
+            Require(pair4.GetSize() == new Vector2I(12 * 2 + 16, 8) && pair4.GetPixel(13, 0).A == 0
+                    && pair4.GetData().AsSpan((7 * 40 + 28) * 4, 12 * 4).SequenceEqual(hd4.GetData().AsSpan(7 * 12 * 4, 12 * 4)), "pair at 4×");
+            RequireThrows<ArgumentException>(() => HdReviewCapture.ComposePair(legacyImage, hd4, 2), "pair refuses a wrong scale");
             var name = HdReviewCapture.FileName(HdReviewCapture.Subject(first.Entry, pack, null, 0, 0, 2), "pair", new DateTime(2026, 10, 16, 12, 0, 0, DateTimeKind.Utc));
             Require(name == "selftest-pack-e000000-20261016-120000-000-pair.png", "capture file name names the pack frame, not a path");
             Require(HdReviewCapture.Subject(null, null, 7, 1, 2, 3) == "art7-g1f2p3", "capture name without a pack");
@@ -123,7 +158,7 @@ internal static class HdReviewSelfTest
             Require(Opened(Path.Combine(root, "pack")).Entries[0].Review == HdReviewStatus.Rejected, "mark is in the manifest on disk");
             state.Request(snapshot, 0, 0, 2);
             Require(state.WaitForResult(TimeSpan.FromSeconds(10)) is { Frame.Status: HdReviewFrameStatus.Compared }, "a rejected frame stays reviewable");
-            return "HD review: pack lookup, stale suppression, cache, flip/split, HD canvas layer, pair capture and manifest marks.";
+            return "HD review: pack lookup, stale suppression, cache, navigation outcomes, flip/split, HD canvas layer, pair capture at 2× and 4×, capture folder rule and manifest marks.";
         }
         finally
         {

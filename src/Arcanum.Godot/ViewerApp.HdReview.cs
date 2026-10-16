@@ -40,7 +40,9 @@ public partial class ViewerApp
     private CheckBox _nextAfterMark = null!;
     private FileDialog _packDialog = null!;
 
-    private sealed record ShownFrame(SelectedArtSnapshot Snapshot, int Group, int Frame, int Palette);
+    /// <param name="Palette">The effective palette slot shown.</param>
+    /// <param name="RequestedPalette">The slot the target asked for.</param>
+    private sealed record ShownFrame(SelectedArtSnapshot Snapshot, int Group, int Frame, int Palette, int RequestedPalette);
 
     private sealed class HdNavigation(HdPackEntry entry, IEnumerable<int> candidates)
     {
@@ -58,6 +60,7 @@ public partial class ViewerApp
         internal double Elapsed { get; set; }
         internal bool Shown { get; set; }
         internal bool Captured { get; set; }
+        internal int ShownCount { get; set; }
     }
 
     private void BuildHdReviewUi(VBoxContainer root, HSplitContainer lists)
@@ -74,7 +77,7 @@ public partial class ViewerApp
         _viewMode.AddItem("HD", (int)HdViewMode.Hd);
         _viewMode.AddItem("Flip", (int)HdViewMode.Flip);
         _viewMode.AddItem("Split", (int)HdViewMode.Split);
-        _flipSeconds = new SpinBox { MinValue = 0.1, MaxValue = 60, Step = 0.1, Value = _hd.FlipSeconds, Suffix = "s", CustomMinimumSize = new Vector2(84, 0) };
+        _flipSeconds = new SpinBox { MinValue = 0.1, MaxValue = 60, Step = 0.01, Value = _hd.FlipSeconds, Suffix = "s", CustomMinimumSize = new Vector2(84, 0) };
         var approve = new Button { Text = "Approve (A)" };
         var reject = new Button { Text = "Reject (R)" };
         var unmark = new Button { Text = "Unmark (U)" };
@@ -115,44 +118,94 @@ public partial class ViewerApp
     }
 
     // Startup options (after `--`): --dat FILE, --hd-pack DIR, --hd-entry INDEX,
-    // --hd-view legacy|hd|flip|split, --hd-flip-seconds S, --hd-capture-dir DIR,
-    // --hd-demo SECONDS_PER_FRAME (walks the approved frames, or every frame not rejected,
-    // in presentation mode and quits), --hd-demo-capture (the demo captures each frame once
-    // while HD is shown), --presentation. Paths should be absolute: Godot runs
-    // from the project directory.
+    // --hd-view legacy|hd|flip|split, --hd-flip-seconds S (0.1..60), --hd-capture-dir DIR,
+    // --hd-demo SECONDS_PER_FRAME (0.5..600 and at least twice the flip period; walks the
+    // approved frames, or every frame not rejected, in presentation mode and quits),
+    // --hd-demo-capture (the demo captures each frame once while HD is shown),
+    // --presentation. Paths must be absolute (Godot runs in the project directory). Any
+    // invalid value is an error and quits with code 1, so an unattended recording never
+    // silently becomes a manual session.
     private void ApplyStartupArguments(IReadOnlyList<string> arguments)
     {
         string? Value(string name)
         {
-            for (var i = 0; i < arguments.Count - 1; i++) if (arguments[i] == name) return arguments[i + 1];
+            for (var i = 0; i < arguments.Count; i++)
+                if (arguments[i] == name) return i + 1 < arguments.Count ? arguments[i + 1] : "";
             return null;
         }
+        void Fail(string message)
+        {
+            GD.PushError(message);
+            GetTree().Quit(1);
+        }
+        static bool Number(string text, double min, double max, out double value) =>
+            double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out value) && value >= min && value <= max;
 
-        if (Value("--hd-capture-dir") is { } directory) _captureDirectory = Path.GetFullPath(directory);
-        if (Value("--hd-flip-seconds") is { } flip && double.TryParse(flip, NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds) && seconds is >= 0.1 and <= 60)
-            _flipSeconds.Value = seconds;
-        if (Value("--hd-pack") is { } pack) OpenPack(Path.GetFullPath(pack));
-        if (Value("--hd-view") is { } view && Enum.TryParse<HdViewMode>(view, ignoreCase: true, out var mode) && Enum.IsDefined(mode)) SetHdMode(mode);
-        if (Value("--hd-entry") is { } entry && int.TryParse(entry, NumberStyles.None, CultureInfo.InvariantCulture, out var index)) _startupPackEntry = index;
-        if (Value("--hd-demo") is { } demo && double.TryParse(demo, NumberStyles.Float, CultureInfo.InvariantCulture, out var perFrame) && perFrame is >= 0.5 and <= 600)
-            _demoSeconds = perFrame;
+        var capture = Value("--hd-capture-dir");
+        var flip = Value("--hd-flip-seconds");
+        var pack = Value("--hd-pack");
+        var view = Value("--hd-view");
+        var entry = Value("--hd-entry");
+        var demo = Value("--hd-demo");
+        var dat = Value("--dat");
+        var seconds = _hd.FlipSeconds;
+        var perFrame = 0d;
+        var index = 0;
+        var mode = HdViewMode.Legacy;
+        foreach (var (name, path) in new[] { ("--hd-capture-dir", capture), ("--hd-pack", pack), ("--dat", dat) })
+            if (path is not null && !Path.IsPathRooted(path)) { Fail($"{name} needs an absolute path."); return; }
+        if (flip is not null && !Number(flip, 0.1, 60, out seconds)) { Fail("--hd-flip-seconds must be 0.1..60."); return; }
+        if (view is not null && (!Enum.TryParse(view, ignoreCase: true, out mode) || !Enum.IsDefined(mode) || int.TryParse(view, out _)))
+        { Fail("--hd-view must be legacy, hd, flip or split."); return; }
+        if (entry is not null && !int.TryParse(entry, NumberStyles.None, CultureInfo.InvariantCulture, out index)) { Fail("--hd-entry must be a manifest entry index."); return; }
+        if (demo is not null && (!Number(demo, 0.5, 600, out perFrame) || perFrame < 2 * seconds))
+        { Fail("--hd-demo must be 0.5..600 seconds and at least twice the flip period."); return; }
+        if (demo is not null && (dat is null || pack is null)) { Fail("--hd-demo needs --dat and --hd-pack."); return; }
+        if (capture is not null && HdReviewCapture.CheckDirectory(Path.GetFullPath(capture)) is { } refused) { Fail(refused); return; }
+
+        if (capture is not null) _captureDirectory = Path.GetFullPath(capture);
+        _flipSeconds.Value = seconds;
+        _hd.SetFlipSeconds(seconds);
+        if (demo is not null) _demoSeconds = perFrame;
         _demoCapture = arguments.Contains("--hd-demo-capture");
+        if (pack is not null)
+        {
+            OpenPack(Path.GetFullPath(pack));
+            if (_hd.Pack is null && _demoSeconds is not null) return;
+        }
+        if (view is not null) SetHdMode(mode);
+        if (entry is not null) _startupPackEntry = index;
         if (arguments.Contains("--presentation") && !_presentation) TogglePresentation();
-        if (Value("--dat") is { } dat) OpenArchive(Path.GetFullPath(dat));
-        else if (_demoSeconds is not null) { GD.PushError("--hd-demo needs --dat and --hd-pack."); GetTree().Quit(1); }
+        if (dat is not null) OpenArchive(Path.GetFullPath(dat));
+    }
+
+    /// <summary>A DAT, entry or frame failure: an unattended demo whose DAT did not open
+    /// stops with an error; a pack frame being located tries its next candidate.</summary>
+    private void OnHdFailure()
+    {
+        if (_demoSeconds is not null && _demo is null && _entries.Count == 0)
+        {
+            GD.PushError("--hd-demo: the DAT could not be opened.");
+            GetTree().Quit(1);
+            return;
+        }
+        if (_navigation is not null) NavigateNextCandidate();
     }
 
     public override void _Input(InputEvent @event)
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false } key || _canvas is null || _packDialog is null) return;
         if (key.CtrlPressed || key.MetaPressed || key.AltPressed || _packDialog.Visible || _dialog.Visible) return;
+        switch (key.Keycode)
+        {
+            case Key.F12: Capture(); GetViewport().SetInputAsHandled(); return;
+            case Key.F10: TogglePresentation(); GetViewport().SetInputAsHandled(); return;
+        }
         // Typing into the filter or a number field keeps its letters.
         if (GetViewport().GuiGetFocusOwner() is LineEdit) return;
         var review = _hd.Pack is not null;
         switch (key.Keycode)
         {
-            case Key.F12: Capture(); break;
-            case Key.F10: TogglePresentation(); break;
             case Key.A when review: Mark(HdReviewStatus.Approved); break;
             case Key.R when review: Mark(HdReviewStatus.Rejected); break;
             case Key.U when review: Mark(HdReviewStatus.Unreviewed); break;
@@ -216,7 +269,7 @@ public partial class ViewerApp
 
     private void OnHdFramePublished(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
     {
-        _shownFrame = new(snapshot, target.Group, target.Frame, decoded.EffectivePaletteSlot);
+        _shownFrame = new(snapshot, target.Group, target.Frame, decoded.EffectivePaletteSlot, target.Palette);
         RequestHdForShownFrame();
     }
 
@@ -259,24 +312,31 @@ public partial class ViewerApp
 
     private void ApplyHdResult(HdReviewResult result)
     {
-        if (_navigation is { Source: { } source } navigation && _entries[source].Entry.Ordinal == result.Request.Snapshot.Identity.EntryOrdinal)
+        if (_navigation is { Source: { } source } navigation && _entries[source].Entry.Ordinal == result.Request.Snapshot.Identity.EntryOrdinal
+            && _shownFrame is { } shown && ReferenceEquals(shown.Snapshot, result.Request.Snapshot))
         {
-            if (result.ArtSha256 != navigation.Entry.Key!.Value.ArtSha256)
-            {
-                NavigateNextCandidate();
-                return;
-            }
             var key = navigation.Entry.Key!.Value;
-            if (result.Entry?.Index == navigation.Entry.Index)
+            switch (HdReviewState.NavigationOutcome(navigation.Entry, result, shown.Group, shown.Frame, shown.RequestedPalette))
             {
-                _navigation = null;
-                _canvas.SetFit();
-            }
-            else if (result.Request.Group == key.Group && result.Request.Frame == key.Frame)
-            {
-                // The frame is on screen but under another effective palette slot.
-                _navigation = null;
-                SetStatus($"Pack frame #{navigation.Entry.Index}: palette slot {key.Palette} falls back to slot {result.Request.Palette} in this ART.");
+                case HdNavigationOutcome.OtherArt:
+                    NavigateNextCandidate();
+                    return;
+                case HdNavigationOutcome.Shown:
+                    _navigation = null;
+                    _canvas.SetFit();
+                    break;
+                case HdNavigationOutcome.PaletteFallback:
+                    _navigation = null;
+                    SetStatus($"Pack frame #{navigation.Entry.Index}: palette slot {key.Palette} falls back to slot {result.Request.Palette} in this ART.");
+                    break;
+                case HdNavigationOutcome.OtherView:
+                    _navigation = null;
+                    SetStatus($"Pack frame #{navigation.Entry.Index} has the same group, frame and palette as #{result.Entry?.Index} under another view; the viewer shows #{result.Entry?.Index}.");
+                    break;
+                case HdNavigationOutcome.Failed:
+                    _navigation = null;
+                    SetStatus($"Pack frame #{navigation.Entry.Index}: the HD lookup failed ({result.Error}).");
+                    break;
             }
         }
 
@@ -363,8 +423,11 @@ public partial class ViewerApp
         Timeline.Pause();
         RequestCurrentFrame();
         SyncTimelineUi();
-        // Already shown (same ART, same frame): the lookup result completes the navigation.
-        RequestHdForShownFrame();
+        // Already shown (same ART, frame and requested slot): no new frame is published, so
+        // the lookup of the shown frame completes the navigation. Any other shown frame is
+        // left alone; the target's own publication completes it.
+        if (_shownFrame is { } shown && ReferenceEquals(shown.Snapshot, snapshot) && shown.Group == key.Group && shown.Frame == key.Frame && shown.RequestedPalette == key.Palette)
+            RequestHdForShownFrame();
     }
 
     private void StepPackFrame(int step)
@@ -385,11 +448,13 @@ public partial class ViewerApp
         {
             case HdReviewSaveStatus.Saved or HdReviewSaveStatus.Unchanged:
                 _hd.ReplacePack(saved.Pack!);
-                UpdatePackItem(saved.Pack!.Entries[entry.Index]);
+                if (_unreviewedOnly.ButtonPressed) RebuildPackList();
+                else UpdatePackItem(saved.Pack!.Entries[entry.Index]);
                 UpdatePackSummary();
-                if (_hd.Current is null) RequestHdForShownFrame();
                 UpdateHdView();
-                SetStatus($"Pack frame #{entry.Index} marked {ReviewName(status)}; written to the pack manifest.");
+                SetStatus(saved.Status == HdReviewSaveStatus.Saved
+                    ? $"Pack frame #{entry.Index} marked {ReviewName(status)}; written to the pack manifest."
+                    : $"Pack frame #{entry.Index} is already {ReviewName(status)}; nothing written.");
                 if (_nextAfterMark.ButtonPressed) StepPackFrame(1);
                 break;
             case HdReviewSaveStatus.Changed:
@@ -415,6 +480,11 @@ public partial class ViewerApp
         var shown = _shownFrame;
         var subject = HdReviewCapture.Subject(_hd.Current?.Entry, _hd.Pack, shown?.Snapshot.Identity.EntryOrdinal, shown?.Group ?? 0, shown?.Frame ?? 0, shown?.Palette ?? 0);
         var saved = new List<string>();
+        if (HdReviewCapture.CheckDirectory(_captureDirectory) is { } refused)
+        {
+            SetStatus(refused);
+            return;
+        }
         try
         {
             using (var window = GetViewport().GetTexture().GetImage())
@@ -472,8 +542,9 @@ public partial class ViewerApp
             SetHdMode(HdViewMode.Flip);
             if (NavigateTo(demo.Entries[demo.Position])) return;
         }
-        GD.Print($"HD demo finished: {demo.Entries.Count} frames.");
-        GetTree().Quit(0);
+        GD.Print($"HD demo finished: {demo.ShownCount} of {demo.Entries.Count} frames shown.");
+        if (demo.ShownCount == 0) GD.PushError("--hd-demo: no pack frame could be shown from this DAT.");
+        GetTree().Quit(demo.ShownCount > 0 ? 0 : 1);
     }
 
     private void AdvanceDemo(double delta)
@@ -485,6 +556,7 @@ public partial class ViewerApp
             if (_navigation is null && _hd.Current?.Entry?.Index == demo.Entries[demo.Position].Index)
             {
                 demo.Shown = true;
+                demo.ShownCount++;
                 demo.Elapsed = 0;
                 SetHdMode(HdViewMode.Flip);
             }

@@ -267,6 +267,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     {
         SyncTimelineUi();
         SetStatus(MapError(exception));
+        OnHdFailure();
     }
 
     internal static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)

@@ -186,7 +186,7 @@ against the installation, not for reproducing someone else's pixels.
 ## Review marks (ARC-RENDER-015)
 
 `HdPackReview.Save(pack, marks, packReview)` writes approve/reject marks into
-`manifest.json`; the [ART viewer](../Arcanum.Godot.md#hd-before-after-review-arc-render-015)
+`manifest.json`; the [ART viewer](../Arcanum.Godot.md#hd-beforeafter-review-arc-render-015)
 calls it for each mark. Only the `review` values change: every other property, value
 and order is copied (compact JSON, non-ASCII and HTML-like characters unescaped). The
 rewritten manifest is parsed as a pack and compared with the opened one (everything but
@@ -194,8 +194,9 @@ the marks equal) before it is written to a hidden `.manifest-review-<guid>.tmp` 
 pack directory and renamed over `manifest.json`. Nothing is written when the marks equal
 the current ones (`Unchanged`), when `manifest.json` is no longer the bytes the pack was
 opened from, checked before writing and again just before the rename (`Changed`), when it
-is missing, unreadable or a link (`ManifestUnreadable`), or when the file system refuses
-(`WriteFailed`, the old manifest stays). A marked pack is a new identity; frame files are
+is missing, unreadable or a link (`ManifestUnreadable`), when the rewritten manifest would
+not open as the same pack (`Invalid`), or when the file system refuses (`WriteFailed`, the
+old manifest stays). The new manifest takes the directory's default file permissions. A marked pack is a new identity; frame files are
 never touched.
 
 For review, `HdReviewComparison.Compare` decodes the Legacy frame from the entry's own

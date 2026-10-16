@@ -65,6 +65,8 @@ public sealed class HdReviewTests
         before["entries"]![0]!["review"] = "approved";
         before["entries"]![2]!["review"] = "rejected";
         Assert.IsTrue(JsonNode.DeepEquals(before, JsonNode.Parse(File.ReadAllText(manifestPath))));
+        // Property order and values are copied: the bytes are the compact serialization of the edited original.
+        CollectionAssert.AreEqual(Encoding.UTF8.GetBytes(before.ToJsonString()), File.ReadAllBytes(manifestPath));
         CollectionAssert.AreEqual(pngBefore.SelectMany(b => b).ToArray(),
             Directory.GetFiles(Path.Combine(synthetic.Directory, "frames")).Order().Select(File.ReadAllBytes).SelectMany(b => b).ToArray());
         Assert.AreEqual(0, Directory.GetFiles(synthetic.Directory, ".manifest-review-*").Length);
@@ -104,6 +106,77 @@ public sealed class HdReviewTests
 
         File.Delete(Path.Combine(synthetic.Directory, "manifest.json"));
         Assert.AreEqual(HdReviewSaveStatus.ManifestUnreadable, HdPackReview.Save(pack, new Dictionary<int, HdReviewStatus> { [1] = HdReviewStatus.Approved }).Status);
+    }
+
+    [TestMethod]
+    [System.Runtime.Versioning.UnsupportedOSPlatform("windows")]
+    public void A_refused_write_leaves_the_old_manifest_and_no_temporary_file()
+    {
+        if (OperatingSystem.IsWindows()) Assert.Inconclusive("Unix permissions.");
+        var (synthetic, _) = ThreeFrames();
+        var pack = Opened(synthetic.Directory);
+        var manifest = Path.Combine(synthetic.Directory, "manifest.json");
+        var bytes = File.ReadAllBytes(manifest);
+        var mode = File.GetUnixFileMode(synthetic.Directory);
+        File.SetUnixFileMode(synthetic.Directory, UnixFileMode.UserRead | UnixFileMode.UserExecute);
+        try
+        {
+            var result = HdPackReview.Save(pack, new Dictionary<int, HdReviewStatus> { [0] = HdReviewStatus.Approved });
+            Assert.AreEqual((HdReviewSaveStatus.WriteFailed, (HdPack?)null), (result.Status, result.Pack));
+        }
+        finally { File.SetUnixFileMode(synthetic.Directory, mode); }
+        CollectionAssert.AreEqual(bytes, File.ReadAllBytes(manifest));
+        Assert.AreEqual(0, Directory.GetFiles(synthetic.Directory, ".manifest-review-*").Length);
+    }
+
+    [TestMethod]
+    public void Terrain_chunk_entries_survive_a_rewrite_unchanged()
+    {
+        var recipe = SyntheticHdPack.Recipe.Replace("\"kinds\":[\"critter\",\"scenery\"]}", "\"kinds\":[\"critter\",\"scenery\"]},{\"name\":\"ground\",\"map\":\"synthetic-map\",\"kinds\":[\"terrainChunk\"]}")
+            .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\"},\"terrain\":{\"chunkSize\":512,\"padding\":32}")
+            .Replace("\"tileSize\":512", "\"tileSize\":600");
+        var synthetic = new SyntheticHdPack(Path.Combine(_root, "terrain"), recipe: recipe);
+        synthetic.Add(SyntheticHdPack.Legacy("s", 3, 3, seed: 1));
+        var png = HdPng.EncodeRgba(1024, 1024, new byte[1024 * 1024 * 4]);
+        synthetic.WriteFile("chunks/4_1.png", png);
+        synthetic.Entries.Add(new JsonObject
+        {
+            ["kind"] = "terrainChunk", ["file"] = "chunks/4_1.png", ["sha256"] = SyntheticHdPack.Sha(png), ["bytes"] = png.Length, ["slice"] = "ground",
+            ["chunk"] = new JsonObject { ["x"] = 4, ["y"] = 1, ["size"] = 512, ["padding"] = 32 },
+            ["tiles"] = new JsonArray(SyntheticHdPack.Sha("tile:a"), SyntheticHdPack.Sha("tile:b")),
+            ["legacy"] = new JsonObject { ["width"] = 512, ["height"] = 512, ["rgbaSha256"] = SyntheticHdPack.Sha("chunk") },
+            ["review"] = "unreviewed",
+        });
+        var pack = Opened(synthetic.Write());
+
+        var saved = HdPackReview.Save(pack, new Dictionary<int, HdReviewStatus> { [0] = HdReviewStatus.Approved, [1] = HdReviewStatus.Rejected });
+        Assert.AreEqual(HdReviewSaveStatus.Saved, saved.Status, saved.Detail);
+        var chunk = Opened(synthetic.Directory).Entries[1];
+        Assert.AreEqual((HdEntryKind.TerrainChunk, HdReviewStatus.Rejected, 4, 1, 32), (chunk.Kind, chunk.Review, chunk.ChunkX, chunk.ChunkY, chunk.ChunkPadding));
+        CollectionAssert.AreEqual(pack.Entries[1].TileRgbaSha256!.ToArray(), chunk.TileRgbaSha256!.ToArray());
+        Assert.AreEqual(1, new HdReviewIndex(saved.Pack!).Sprites.Count);
+    }
+
+    [TestMethod]
+    public void A_generative_4x_soft_alpha_pack_is_reviewed_too()
+    {
+        const string generative = """
+            {"schema":1,"kind":"arcanum-steamwoven-hd-recipe","id":"synthetic-generative","scale":4,
+             "slices":[{"name":"bodies","map":"synthetic-map","kinds":["critter"]}],
+             "method":{"kind":"generative","tool":"synthetic-diffusion","toolVersion":"1","model":"synthetic-base","licence":"test",
+               "modelFiles":[{"name":"base.bin","sha256":"0000000000000000000000000000000000000000000000000000000000000003"}],
+               "nativeScale":4,"downscale":"none","seed":42,"prompt":"a synthetic sprite"},
+             "alpha":{"mode":"soft","minIoUPermille":900}}
+            """;
+        var art = Art();
+        var synthetic = new SyntheticHdPack(Path.Combine(_root, "generative"), scale: 4, recipe: generative);
+        var legacy = Add(synthetic, art, art.Length, frame: 0, palette: 1);
+        var pack = Opened(synthetic.Write());
+        Assert.AreEqual((HdMethodKind.Generative, HdAlphaMode.Soft, 4), (pack.Recipe.Method.Kind, pack.Recipe.Alpha.Mode, pack.Scale));
+
+        var compared = HdReviewComparison.Compare(pack, pack.Entries[0], art);
+        Assert.AreEqual((HdReviewFrameStatus.Compared, true, 12, 8), (compared.Status, compared.AlphaMatches, compared.Hd!.Width, compared.Hd.Height));
+        CollectionAssert.AreEqual(SyntheticHdPack.Hd(legacy, 4, tint: 40), compared.Hd.Rgba);
     }
 
     [TestMethod]

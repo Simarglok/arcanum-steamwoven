@@ -80,7 +80,8 @@ records approve/reject marks; nothing here draws the game (that is ARC-RENDER-01
   frame's size override: it takes exactly the Legacy frame's place and shows its detail
   from zoom N upward.
 - Views: **Legacy**, **HD**, **Flip** (alternates original then HD every *Flip every*
-  seconds, 0.1–60) and **Split** (original left, HD right). The caption on the canvas
+  seconds, 0.1–60) and **Split** (original left, HD right; Fit fits one frame, so zoom out
+  once for both). The caption on the canvas
   names the side shown, the pack frame and its mark, and why a frame has no HD:
   not in the pack, other ART bytes, a palette slot that falls back, an undecodable view,
   or the pack's refusal (for example `SourceMismatch` or an invalid file). A frame whose
@@ -97,7 +98,9 @@ records approve/reject marks; nothing here draws the game (that is ARC-RENDER-01
   manifest.
 - Other keys: **N/P** (Page Down/Up) next/previous pack frame, **H** Legacy/HD, **F** flip,
   **S** split, **F12** capture, **F10** presentation (only the canvas and a short caption,
-  for the demo). Letter keys do nothing while a text or number field has focus.
+  for the demo). Letter and page keys do nothing while a text or number field has focus;
+  F10 and F12 always work. A pack frame whose DAT entry or frame fails to load tries the
+  next DAT entry of that name.
 
 ### Local captures and the demo clip
 
@@ -105,15 +108,18 @@ records approve/reject marks; nothing here draws the game (that is ARC-RENDER-01
 has HD, `…-pair.png` (Legacy replicated N× nearest, a gap of 4·N pixels, the HD frame;
 transparent background, HD resolution). File names carry no path. The folder is
 `--hd-capture-dir`, otherwise `local/hd-review/` of the checkout when run from source,
-otherwise `user://hd-review` in an exported viewer. Captures, clips and packs are
+otherwise `user://hd-review` in an exported viewer. Run from source, a capture folder inside
+the checkout must be under its ignored `local/` (a capture is refused otherwise). Captures, clips and packs are
 original-derived pixels: they stay local and never go into git, a PR or an attachment.
 
-Startup options (after `--`; use absolute paths, Godot runs in the project directory):
+Startup options (after `--`; paths must be absolute, Godot runs in the project directory):
 `--dat FILE`, `--hd-pack DIR`, `--hd-entry INDEX`, `--hd-view legacy|hd|flip|split`,
-`--hd-flip-seconds S`, `--hd-capture-dir DIR`, `--presentation`, and
-`--hd-demo SECONDS` (walks the approved frames, or every frame not rejected when none is
-approved, in presentation and flip view, then quits; `--hd-demo-capture` also captures
-each frame once while HD is shown). A clip with on-the-fly switching is recorded with
+`--hd-flip-seconds S` (0.1–60), `--hd-capture-dir DIR`, `--presentation`, and
+`--hd-demo SECONDS` (0.5–600 per frame and at least twice the flip period; walks the
+approved frames, or every frame not rejected when none is approved, in presentation and
+flip view, then quits; `--hd-demo-capture` also captures each frame once while HD is
+shown). An invalid or missing value, a pack or DAT that does not open in a demo, or a demo
+that could show no frame exits with code 1 instead of leaving a recording running. A clip with on-the-fly switching is recorded with
 Godot's Movie Maker, which works from source and in the exported viewer:
 
 ```sh
@@ -130,8 +136,9 @@ locally for players that do not read MJPEG.
 The self-test builds a synthetic 2× pack in a temporary directory from the synthetic
 DAT's static ART and checks the lookup by ART hash, stale-result suppression, the cached
 main-thread answer, the flip clock, the HD canvas layer (a new Legacy frame never shows the
-previous HD frame, a failed publication restores it), the pair image and its file name,
-and a manifest mark. The manifest writer, review binding and index have synthetic MSTest
+previous HD frame, a failed publication restores it), how a lookup result ends locating a
+pack frame (only the target frame on screen concludes it), the pair image at 2× and 4×
+and its file name, the capture folder rule, and a manifest mark. The manifest writer, review binding and index have synthetic MSTest
 coverage in `tests/Arcanum.Data.Tests/Hd/HdReviewTests.cs`.
 
 ## Local export

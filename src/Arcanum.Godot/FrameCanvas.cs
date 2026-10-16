@@ -66,6 +66,7 @@ public partial class FrameCanvas : Control
         ArgumentNullException.ThrowIfNull(texture);
         ArgumentNullException.ThrowIfNull(groupLayout);
         _texture = texture;
+        _hd = null;
         _hotspot = hotspot;
         _groupLayout = groupLayout;
         _pan = Vector2.Zero;
@@ -83,6 +84,7 @@ public partial class FrameCanvas : Control
         }
 
         _texture = texture;
+        _hd = null;
         _hotspot = hotspot;
         QueueRedraw();
     }

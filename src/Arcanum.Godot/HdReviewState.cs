@@ -18,6 +18,14 @@ internal sealed record HdReviewRequest(long Generation, HdReviewIndex Index, Sel
 /// was not compared again (<see cref="Frame"/> is null).</param>
 internal sealed record HdReviewResult(HdReviewRequest Request, string ArtSha256, HdPackEntry? Entry, HdReviewFrame? Frame, string? Error = null, bool Cached = false);
 
+/// <summary>What one lookup result means for locating a pack frame: <see cref="OtherArt"/>,
+/// the selected ART is not the frame's bytes (try the next DAT entry of that name);
+/// <see cref="Pending"/>, the target frame is not on screen yet; otherwise the target is
+/// on screen and it <see cref="Shown"/> the frame, or its slot falls back
+/// (<see cref="PaletteFallback"/>), another view of the same bytes answered
+/// (<see cref="OtherView"/>) or the lookup <see cref="Failed"/>.</summary>
+internal enum HdNavigationOutcome { Pending, OtherArt, Shown, PaletteFallback, OtherView, Failed }
+
 /// <summary>Godot-free state of the ARC-RENDER-015 review: the opened pack and its index,
 /// the view mode and flip clock, and at most one background comparison (plus one latest
 /// pending request), whose result is accepted only while its generation is current. The
@@ -40,6 +48,22 @@ internal sealed class HdReviewState
     /// <summary>The result for the frame on screen (null while none has arrived).</summary>
     internal HdReviewResult? Current { get; private set; }
     internal long Generation => Interlocked.Read(ref _generation);
+
+    /// <summary>Decides <see cref="HdNavigationOutcome"/> for the current result of the
+    /// frame on screen (shown group, frame and the palette slot the target requested).</summary>
+    internal static HdNavigationOutcome NavigationOutcome(HdPackEntry target, HdReviewResult result, int shownGroup, int shownFrame, int shownRequestedPalette)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        ArgumentNullException.ThrowIfNull(result);
+        var key = target.Key ?? throw new ArgumentException("Only sprite entries are located.", nameof(target));
+        if (result.ArtSha256 != key.ArtSha256) return HdNavigationOutcome.OtherArt;
+        if (shownGroup != key.Group || shownFrame != key.Frame || shownRequestedPalette != key.Palette
+            || result.Request.Group != key.Group || result.Request.Frame != key.Frame)
+            return HdNavigationOutcome.Pending;
+        if (result.Error is not null) return HdNavigationOutcome.Failed;
+        if (result.Entry?.Index == target.Index) return HdNavigationOutcome.Shown;
+        return result.Request.Palette != key.Palette ? HdNavigationOutcome.PaletteFallback : HdNavigationOutcome.OtherView;
+    }
 
     internal static string NameSha256(DatEntry entry) => Convert.ToHexString(SHA256.HashData(entry.RawNameBytes.ToArray())).ToLowerInvariant();
 
