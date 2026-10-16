@@ -72,8 +72,15 @@ public partial class AreaConversationPanel : CanvasLayer
     {
         if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) { CloseRequested?.Invoke(); return; }
         var option = conversation.Options.FirstOrDefault(candidate => candidate.Number == number);
-        if (option is null) return;
-        var result = conversation.Select(option.Token);
+        if (option is not null) ChooseToken(option.Token);
+    }
+
+    /// <summary>Selects exactly the reply the button showed: a token from older offers is NotOffered.</summary>
+    private void ChooseToken(DialogOptionToken token)
+    {
+        if (_conversation is not { Phase: DialogConversationPhase.AwaitingSelection } conversation) return;
+        var result = conversation.Select(token);
+        if (result.Status == DialogConversationSelectStatus.NotOffered) return;
         Render(result.Status is DialogConversationSelectStatus.UnsupportedTransition or DialogConversationSelectStatus.StaleSelection
             ? $"[{result.Status}: the reply was not executed]" : null);
     }
@@ -111,14 +118,14 @@ public partial class AreaConversationPanel : CanvasLayer
         {
             foreach (var option in conversation.Options)
             {
-                var number = option.Number;
+                var token = option.Token;
                 var button = new Button
                 {
-                    Name = $"Reply{number}", Text = AreaConversationText.Option(option), Alignment = HorizontalAlignment.Left,
+                    Name = $"Reply{option.Number}", Text = AreaConversationText.Option(option), Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null, FocusMode = Control.FocusModeEnum.All,
                 };
                 // Rebuild after the emitting button's signal returns: Render frees the buttons.
-                button.Pressed += () => Callable.From(() => Choose(number)).CallDeferred();
+                button.Pressed += () => Callable.From(() => ChooseToken(token)).CallDeferred();
                 _options.AddChild(button); _buttons.Add(button);
             }
         }

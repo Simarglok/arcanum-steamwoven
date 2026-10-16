@@ -525,8 +525,11 @@ public sealed class DialogConversation
                 failure = new DialogConversationFailure(DialogConversationFailureKind.InvalidText, node, TextFailure: textFailure);
                 return null;
             }
-            // The source tests NPC markers on the record text whatever the PC gender.
-            DialogText.Decode(npc.Text.Bytes, _request.Encoding, _options.MaxTextBytes, out var markerText);
+            // The source tests NPC markers on the record text whatever the PC gender. A marker is ASCII,
+            // so the raw prefix decides it even when a later byte of that text would not decode.
+            var raw = npc.Text.Bytes;
+            var markerText = raw.Count >= 2 && raw[0] < 0x80 && raw[1] == (byte)':'
+                ? $"{(char)raw[0]}:{(raw.Count > 2 ? "+" : string.Empty)}" : string.Empty;
             var marker = DialogText.Marker(markerText, out var exact);
             if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
             {

@@ -185,6 +185,10 @@ public sealed class DialogConversationTests
     {
         var document = Read(Record("10", "g: generated", "Plain for her.") + Record("11", "x", iq: "1", response: "0"));
         Assert.AreEqual(DialogFrontierKind.UnsupportedGeneratedText, Start(document, new Ports(), Owner(), gender: DialogPcGender.Female).Frontier!.Kind);
+        var undecodable = Read(Record("10", "G:x\x81", "Plain for her.") + Record("11", "x", iq: "1", response: "0"));
+        Assert.AreEqual(DialogFrontierKind.UnsupportedGeneratedText, Start(undecodable, new Ports(), Owner(), gender: DialogPcGender.Female).Frontier!.Kind);
+        var plain = Read(Record("10", "Plain for him.", "Plain for her.") + Record("11", "x", iq: "1", response: "0"));
+        Assert.AreEqual("Plain for her.", Start(plain, new Ports(), Owner(), gender: DialogPcGender.Female).NpcLine!.Text);
     }
 
     [TestMethod]
