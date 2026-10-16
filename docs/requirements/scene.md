@@ -98,7 +98,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** В `wall.c` геометрия соединений меняет p-piece по соседним объектам, но помечает вычисление вращений `TODO: Check rotations`; несколько веток `wall_delete`/редактора имеют `TODO: Incomplete`. Кроме того, `wall_draw` вызывается только для top-down view, тогда как обычная игровая сцена вызывает `object_draw` ([wall piece/rotation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wall.c#L290-L385), [явные TODO](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wall.c#L86-L109), [игровой draw](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1702-L1715)). Понадобятся wall object fields, current wall ART selector, rotation и соседние wall instances.
 
-**Steamwoven сейчас.** Нет wall-instance loader, building wall scene plan или проверок связности. Статический объект loader ограничен обычной scenery-подсистемой и не заменяет wall/portal records. [Static loader boundary](../world/static-object-loader.md#scope).
+**Steamwoven сейчас.** Data загружает wall objects пещеры Crash Site и выбирает их wall ART ([cave profile](../world/crash-site-area-loader.md#crash-site-cave-profile)); building wall scene plan, отрисовки стен и проверок связности нет. Статический объект loader ограничен обычной scenery-подсистемой и не заменяет wall/portal records. [Static loader boundary](../world/static-object-loader.md#scope).
 
 <a id="fr-scene-008"></a>
 
@@ -211,7 +211,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 | FR-SCENE-004 | Частично — signed offsets/hotspots/scale/mirror для Area visuals | Частично — diagnostic projection; общий placement/visibility не ратифицирован | Частично — пять static placements и fixed Human в viewer | Частично — metadata/original frame checks и historical bounded raster |
 | FR-SCENE-005 | Частично — tile/facade данные всех выбранных Area sectors | Частично — bounded terrain/facade layer policy | Частично — diagnostic sector; full-area renderer не смержен | Частично — original Data и historical source/export viewer checks |
 | FR-SCENE-006 | Частично — Area occurrence/visual metadata, без общего depth model | Частично — finite diagnostic ordering; не original z-order/occlusion | Частично — terrain/facade/statics/actor policy, без wall/roof | Частично — bounded ordering/readback; полная сцена не сравнивалась |
-| FR-SCENE-007 | Нет: wall/building data model | Нет: wall-piece connection rules | Нет: wall scene path | Нет |
+| FR-SCENE-007 | Частично: wall objects и выбор wall ART (пещера) | Нет: wall-piece connection rules | Нет: wall scene path | Частично: синтетические и real-data тесты выбора wall ART |
 | FR-SCENE-008 | Нет: portal state/resources | Нет: physical door traversal | Нет: state-aware portal rendering | Нет |
 | FR-SCENE-009 | Нет: window/wall records | Нет: window traversal | Нет: wall/window integration | Нет |
 | FR-SCENE-010 | Частично: roof-section framing/discriminator only | Нет: piece topology rules | Нет: roof renderer | Нет: no roof scenario |
