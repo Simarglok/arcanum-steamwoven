@@ -114,12 +114,12 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.IsTrue(traversal.InputIdentity.Sources.Any(s => s.Length == result.ResourceFingerprint.Size && s.Sha256 == result.ResourceFingerprint.Sha256));
         Assert.IsNotNull(result.ActorPlan);
         Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, result.ActorPlan.Profile.Id);
-        Assert.AreEqual(105, result.ActorTextures.Count, "HumanFixedRun: idle, walk and run (ARC-WORLD-020)");
-        Assert.AreEqual(889656L, result.ActorTextures.Values.Sum(t => (long)t.Rgba.Length));
-        Assert.AreEqual(26804592L, result.CheckedRgbaBytes);
+        Assert.AreEqual(150, result.ActorTextures.Count, "HumanFixedArea: idle, walk, run and vault (ARC-WORLD-020/021)");
+        Assert.AreEqual(1259440L, result.ActorTextures.Values.Sum(t => (long)t.Rgba.Length));
+        Assert.AreEqual(27174376L, result.CheckedRgbaBytes);
         Assert.AreEqual((-200L, 160L), (result.ActorPlan.Current.AnchorX, result.ActorPlan.Current.AnchorY));
         Assert.AreEqual((ActorDiagnosticAction.Idle, 5, 0), (result.ActorPlan.Current.Action, result.ActorPlan.Current.RequestedFacing, result.ActorPlan.Current.Frame));
-        Assert.AreEqual(105, result.ActorPlan.Catalog.Count);
-        Console.WriteLine($"AREA original full-load generation={generation} terrain=36864 bodies=499 frames=1975 bytes=25914936 actor=105/889656 traversalEpoch={traversal.EvidenceEpoch} maximumConcurrency={result.MaximumObservedConcurrency}");
+        Assert.AreEqual(150, result.ActorPlan.Catalog.Count);
+        Console.WriteLine($"AREA original full-load generation={generation} terrain=36864 bodies=499 frames=1975 bytes=25914936 actor=150/1259440 traversalEpoch={traversal.EvidenceEpoch} maximumConcurrency={result.MaximumObservedConcurrency}");
     }
 }

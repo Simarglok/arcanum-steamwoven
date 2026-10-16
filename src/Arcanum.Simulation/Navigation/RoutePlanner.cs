@@ -11,6 +11,8 @@ public static class RoutePlanner
 {
     // Search costs: an ordinary step, an extra point for a change of direction; estimate is the Chebyshev distance.
     private const int StepCost = 10, TurnCost = 1;
+    // A source's extra step cost is at most this (a window jump costs 50); 4096 expansions keep every sum in range.
+    private const int MaximumExtraCost = 1000;
     private static readonly NeighborDirection[] Directions = Enum.GetValues<NeighborDirection>();
 
     public static RoutePlan Plan(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits? limits = null)
@@ -53,6 +55,7 @@ public static class RoutePlanner
     private sealed class Search(IRouteStepSource source, CellCoord from, CellCoord target, RouteLimits limits)
     {
         private readonly Dictionary<(CellCoord, NeighborDirection), RouteStepVerdict> _verdicts = [];
+        private readonly Dictionary<(CellCoord, NeighborDirection), int> _extras = [];
         private int _blocked, _unknown, _unsupported, _expansions;
 
         internal RoutePlan Run()
@@ -79,6 +82,16 @@ public static class RoutePlanner
             return verdict;
         }
 
+        // Extra cost of an Open step, asked once per step and bounded so a sum of window steps cannot overflow.
+        private int Extra(CellCoord cell, NeighborDirection direction)
+        {
+            if (_extras.TryGetValue((cell, direction), out var known)) return known;
+            var extra = source.ExtraCost(cell, direction);
+            if (extra is < 0 or > MaximumExtraCost) throw new InvalidOperationException("ROUTE_EXTRA_COST_INVALID");
+            _extras.Add((cell, direction), extra);
+            return extra;
+        }
+
         // A goal no adjacent step can enter is answered from its eight entries, without a search.
         private string? Unenterable()
         {
@@ -103,7 +116,8 @@ public static class RoutePlanner
             for (var cell = from; cell != target;)
             {
                 var direction = Toward(cell, target);
-                if (Verdict(cell, direction) != RouteStepVerdict.Open) return null;
+                // A step with extra cost (a window jump) ends the straight attempt, as in the source's straight path.
+                if (Verdict(cell, direction) != RouteStepVerdict.Open || Extra(cell, direction) != 0) return null;
                 steps.Add(direction); cell = MovementGeometry.Neighbor(cell, direction);
             }
             return steps.ToArray();
@@ -149,7 +163,7 @@ public static class RoutePlanner
                     var verdict = Verdict(cell, direction);
                     if (verdict == RouteStepVerdict.Unknown) unknownFrontier = true;
                     if (verdict != RouteStepVerdict.Open) continue;
-                    var total = cost[current] + StepCost + (entered[current] >= 0 && entered[current] != (sbyte)direction ? TurnCost : 0);
+                    var total = cost[current] + StepCost + Extra(cell, direction) + (entered[current] >= 0 && entered[current] != (sbyte)direction ? TurnCost : 0);
                     if (total >= cost[next]) continue;
                     cost[next] = total; parent[next] = current; entered[next] = (sbyte)direction;
                     open.Enqueue(next, (total + Estimate(next), next));

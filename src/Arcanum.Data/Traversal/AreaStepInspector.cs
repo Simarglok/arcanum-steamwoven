@@ -296,8 +296,8 @@ public static class AreaStepInspector
 
     /// <summary>Whole-map wall rule (docs/research/first-building-evidence.md, pinned CE object.c
     /// traversal): a doorway piece never blocks, the portal on its edge decides; a window piece
-    /// blocks a diagonal step and makes a cardinal one a window jump for a critter walker, which is
-    /// not modelled (Unknown); every other piece blocks.</summary>
+    /// blocks a diagonal step and makes a cardinal one a window jump for a critter walker
+    /// (ARC-WORLD-021); every other piece blocks.</summary>
     internal static (AreaStepEdgeRule Rule, string Reason) WallPieceRule(int piece) =>
         DoorwayWallPieces.Contains(piece) ? (AreaStepEdgeRule.Pass, "DOORWAY_PIECE_PORTAL_DECIDES")
         : WindowWallPieces.Contains(piece) ? (AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP")

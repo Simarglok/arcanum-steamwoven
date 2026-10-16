@@ -17,10 +17,24 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
 
     public bool Contains(CellCoord cell) => Snapshot.IsAdmitted(Chart.ToWorld(cell));
 
-    public RouteStepVerdict Assess(CellCoord from, NeighborDirection direction)
+    public RouteStepVerdict Assess(CellCoord from, NeighborDirection direction) =>
+        AreaOccupancyRules.Route(AreaOccupancyRules.Apply(Assessment(from, direction), from, direction, occupancy?.Invoke()));
+
+    /// <summary>ARC-WORLD-021: a window jump costs 50 on top of the plain step, as the source's path search does
+    /// (research ARC-RES-047 W7). The planner asks right after <see cref="Assess"/> for the same Open step, which reuses
+    /// that assessment.</summary>
+    public int ExtraCost(CellCoord from, NeighborDirection direction) => Assessment(from, direction).WindowJump is null ? 0 : WindowJumpCost;
+
+    // The last assessed step: T0 evidence is immutable, so reusing it for the same step is exact.
+    private (CellCoord From, NeighborDirection Direction, AreaStepAssessment Value)? _last;
+    private AreaStepAssessment Assessment(CellCoord from, NeighborDirection direction)
     {
+        if (_last is { } last && last.From == from && last.Direction == direction) return last.Value;
         var to = RoutePlanner.Neighbor(from, direction);
         var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
-        return AreaOccupancyRules.Route(AreaOccupancyRules.Apply(assessment, from, direction, occupancy?.Invoke()));
+        _last = (from, direction, assessment);
+        return assessment;
     }
+
+    public const int WindowJumpCost = 50;
 }

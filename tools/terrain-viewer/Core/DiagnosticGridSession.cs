@@ -171,9 +171,11 @@ public sealed class AreaGridSession : IGridSession
             var assessment = Assess(key.From, key.To, key.Direction);
             var live = AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
             var gait = Gait?.Invoke() ?? MovementGait.Walk;
-            var duration = Timing?.For(gait, key.Direction) ?? Duration;
+            // ARC-WORLD-021: an Open window jump is the vault (its own time and ART), whatever the gait.
+            var vault = Timing?.Vault is { } vaultTime && assessment.WindowJump is not null ? vaultTime : (StepDuration?)null;
+            var duration = vault ?? Timing?.For(gait, key.Direction) ?? Duration;
             return (GridReplay.Permit(key, live.Coverage, live.Disposition, live.ReasonCode, assessment.EvidenceSha256, duration,
-                    Timing is null ? null : GaitTiming.Provenance(gait)),
+                    Timing is null ? null : vault is not null ? GaitTiming.VaultProvenance : GaitTiming.Provenance(gait)),
                 new AreaGridStepEvidence(key, assessment) { Live = live.Overlaid ? live : null });
         }, validatePresentation);
         if (result.Movement.Status != MovementStatus.Completed) return result;

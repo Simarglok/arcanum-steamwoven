@@ -870,7 +870,9 @@ with Always Run on); Num Lock flips the always-run lock; the palette's **Always 
 Virgil runs while he is farther than range + 2. HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
 current gait …` (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
 Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
-stage; `ARC_AREA_RUN_CAPTURE=PATH.png`).
+stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a window step takes 1.125 s and draws the
+vault ART); the Crash Site maps have no jumpable window, so the map-mode smoke observes it (`ARC-WORLD-021 native-smoke vault PASS`,
+[gait runtime](../world/gait-runtime.md#window-jump-arc-world-021)).
 
 ## Verification and evidence status
 

@@ -149,8 +149,9 @@ ART animation letter.
   stride that is not a whole number of tiles (walk 1.06): the project keeps an
   average time per tile, not per-frame parity.
 - **U2** Turn-based cost of a window jump beyond W6.
-- **U3** Windows inside interior maps (52 complete interiors) are not counted here;
-  ARC-WORLD-018 evidence lists them as `WINDOW_JUMP_UNMODELLED` steps.
+- **U3** Windows inside interior maps are not counted here. ARC-WORLD-021 found 22
+  directed window-jump steps out of the cells reachable from the starts of two of the
+  54 complete interiors.
 - **U4** Shift-click goal flag (L4) and the multiplayer always-run flag are not
   described.
 - **U5** The keyboard requirements' `NumLock` rows are answered by L2; the

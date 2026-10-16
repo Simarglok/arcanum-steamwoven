@@ -24,9 +24,9 @@ public readonly record struct ActorDiagnosticFacing(int ProjectOctant, int Sourc
 public sealed class ActorDiagnosticProfile
 {
     private ActorDiagnosticProfile(ActorDiagnosticProfileId id, ActorDiagnosticClock clock,
-        ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, int coverage, long? rgbaBytes)
+        ActorDiagnosticResource idle, ActorDiagnosticResource walk, ActorDiagnosticResource? run, ActorDiagnosticResource? vault, int coverage, long? rgbaBytes)
     {
-        Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run;
+        Id = id; Clock = clock; Idle = idle; Walk = walk; Run = run; Vault = vault;
         DistinctKeys = coverage; OriginalRgbaBytes = rgbaBytes;
     }
 
@@ -35,15 +35,18 @@ public sealed class ActorDiagnosticProfile
     // diagonal step); the offsets they restate are part of the metadata commitment below.
     private static readonly ActorDiagnosticResource HumanWalk = new(ActorDiagnosticAction.Walk, 0x20000040, 2668, 0, 8, 10, 17, 17) { Stride = new(10, 17, 42, 22, 60) };
     private static readonly ActorDiagnosticResource HumanRun = new(ActorDiagnosticAction.Run, 0x20000180, 2671, 0, 8, 10, 20, 20) { Stride = new(10, 20, 119, 60, 170) };
+    // ARC-WORLD-021: the window vault (animation 13), 9 frames at 8 fps, action frame 2 (research ARC-RES-047 W4/W5).
+    private static readonly ActorDiagnosticResource HumanVault = new(ActorDiagnosticAction.Vault, 0x20000340, 2677, 0, 8, 9, 8, 8);
     public static ActorDiagnosticProfile HumanFixed { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
-        HumanIdle, HumanWalk, null, 55, 457676);
-    /// <summary>ARC-WORLD-020: the same human with its run ART (animation 6, resource1 ordinal 2671), loaded by the AREA
-    /// game view only. The WORLD diagnostic and its sealed human validation keep the 55-key <see cref="HumanFixed"/>.</summary>
-    public static ActorDiagnosticProfile HumanFixedRun { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
-        HumanIdle, HumanWalk, HumanRun, 105, 889656);
+        HumanIdle, HumanWalk, null, null, 55, 457676);
+    /// <summary>ARC-WORLD-020/021: the same human with its run ART (animation 6, resource1 ordinal 2671) and window vault
+    /// (animation 13, ordinal 2677), loaded by the AREA game view only. The WORLD diagnostic and its sealed human
+    /// validation keep the 55-key <see cref="HumanFixed"/>.</summary>
+    public static ActorDiagnosticProfile HumanFixedArea { get; } = new(ActorDiagnosticProfileId.HumanFixed, ActorDiagnosticClock.ArtMetadata,
+        HumanIdle, HumanWalk, HumanRun, HumanVault, 150, 1259440);
     public static ActorDiagnosticProfile MonsterRegression { get; } = new(ActorDiagnosticProfileId.MonsterRegression, ActorDiagnosticClock.LegacyOverride,
         new(ActorDiagnosticAction.Idle, 0xc9001810, 4753, 1, 8, 15, 8, 6),
-        new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, 184, null);
+        new(ActorDiagnosticAction.Walk, 0xc9001850, 4754, 1, 8, 8, 15, 10), null, null, 184, null);
 
     public ActorDiagnosticProfileId Id { get; }
     public ActorDiagnosticClock Clock { get; }
@@ -51,10 +54,13 @@ public sealed class ActorDiagnosticProfile
     public ActorDiagnosticResource Walk { get; }
     /// <summary>The run resource, or null when the profile has none (the monster regression).</summary>
     public ActorDiagnosticResource? Run { get; }
+    /// <summary>The window vault resource, or null when the profile has none.</summary>
+    public ActorDiagnosticResource? Vault { get; }
     /// <summary>The actions this profile decodes, in load order.</summary>
-    public IReadOnlyList<ActorDiagnosticAction> Actions => Run is null ? IdleWalk : IdleWalkRun;
+    public IReadOnlyList<ActorDiagnosticAction> Actions => Run is null ? IdleWalk : Vault is null ? IdleWalkRun : IdleWalkRunVault;
     private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalk = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk]);
     private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRun = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run]);
+    private static readonly IReadOnlyList<ActorDiagnosticAction> IdleWalkRunVault = Array.AsReadOnly([ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault]);
     public int DistinctKeys { get; }
     public long? OriginalRgbaBytes { get; }
     public int? ModuleOrdinal => Id == ActorDiagnosticProfileId.MonsterRegression ? 643 : null;
@@ -64,17 +70,19 @@ public sealed class ActorDiagnosticProfile
     public ActorDiagnosticResource Resource(ActorDiagnosticAction action) => action switch
     {
         ActorDiagnosticAction.Idle => Idle, ActorDiagnosticAction.Walk => Walk, ActorDiagnosticAction.Run => Run ?? throw MetadataFailure(),
+        ActorDiagnosticAction.Vault => Vault ?? throw MetadataFailure(),
         _ => throw MetadataFailure()
     };
     public ActorDiagnosticAction ActionFor(uint selector) => selector == Idle.Selector ? ActorDiagnosticAction.Idle
-        : selector == Walk.Selector ? ActorDiagnosticAction.Walk : Run is not null && selector == Run.Selector ? ActorDiagnosticAction.Run : throw MetadataFailure();
+        : selector == Walk.Selector ? ActorDiagnosticAction.Walk : Run is not null && selector == Run.Selector ? ActorDiagnosticAction.Run
+        : Vault is not null && selector == Vault.Selector ? ActorDiagnosticAction.Vault : throw MetadataFailure();
 
     public ActorDiagnosticFacing Facing(ActorDiagnosticAction action, int projectOctant)
     {
         _ = Resource(action);
         // Both action tables were independently ratified for HumanFixed. The
         // legacy profile happens to agree numerically; this is not compass parity.
-        // ARC-WORLD-020: Run reuses the same table; its rows are not independently verified.
+        // ARC-WORLD-020/021: Run and Vault reuse the same table; their rows are not independently verified.
         return projectOctant switch
         {
             0 => new(0, 0, 0, false), 1 => new(1, 1, 7, true), 2 => new(2, 2, 6, true), 3 => new(3, 3, 5, true),
@@ -116,6 +124,7 @@ public sealed class ActorDiagnosticProfile
             ActorDiagnosticAction.Idle => "45c4311499073a0a1ed47fa70ca02d21fce062cc4b556e65fc6e0156a91b999d",
             ActorDiagnosticAction.Walk => "be57d502d80fd7e178c646b5b639b212b6f018e2ef284355bd2f98d94a827c78",
             ActorDiagnosticAction.Run => "39f2a93d0a7d667d6811b18ba4dbe4806991d596607f1c822f5785c0f70a5578",
+            ActorDiagnosticAction.Vault => "e4f5ddecd90ae61b132229fe0da35494b989f23ebb92d89ec84388ba918817b0",
             _ => throw MetadataFailure(),
         };
         if (!string.Equals(Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant(), expected, StringComparison.Ordinal)) throw MetadataFailure();
