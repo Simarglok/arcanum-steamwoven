@@ -30,33 +30,37 @@ remains **NOT_VERIFIED**.
   while he follows a PC from level 1 to 50, scheme 91 never completes: by level
   50 he has white necromancy 4, dodge, melee and heal 20, lock picking 12,
   dexterity 18, intelligence 18, willpower 15 and 187 hit points, and is still
-  buying hit points towards 200. Scheme 70 never runs. About half of his
-  level-ups buy a unit of a key stat rather than a skill, because each skill
-  rank needs a higher key stat first. The replay matches an independent player report
+  buying hit points towards 200. Scheme 70 never runs. In 18 of his 49
+  level-ups he buys only dexterity or intelligence, the key stats a skill
+  rank needs first, and in 5 more only willpower for the next spell. The replay matches an independent player report
   (X1): at level 10 his two points go into hit points, which rise from 55 to
   65, and nothing else changes on his sheet.
 - **U3 (S applied to D).** Script 1997 runs whenever he enters combat. It reads
-  the player's alignment and his own, and adds the difference to his own, so
-  his alignment becomes the player's. It then picks his dialog script (1712,
+  the player's alignment and his own, and adds the difference to his own base
+  value; as he has no alignment effect, his alignment becomes the player's. It then picks his dialog script (1712,
   1842 or 1324) from global flags 2449 and 2444. The alignment gap of the
   follow check is therefore 0 after any combat.
 - **U2 (S applied to D).** Script 2023 is a story event for Virgil himself: his
-  name field is 6409, and the script acts only on a triggerer named 6409 when
-  global flag 2593 is set and the story state is above 14. It sets flag 2449,
+  name field is 6409, and when global flag 2593 is set and the story state is
+  above 14, a triggerer named 6409 gets the event (a triggerer named 6614 is
+  instead destroyed after flag 2477 is set). For Virgil it sets flag 2449,
   sets his scheme to **101**, switches his dialog and first-heartbeat scripts,
   gives him new day and night standpoints and teleports him to map 5023.
   Scripts 2498 and 2648 set flag 2593. No Crash Site object attaches 2023 and
-  no script calls it, so it is attached on another map (not traced). Scheme
+  no literal call or change-script edge targets it; presumably an object on
+  another map runs it (U6). Scheme
   101 changes what he buys from then on (white necromancy 5, black necromancy
   2 and 5, constitution 20, dexterity 20), never his level.
-- **U5 (D).** His six scripts reach 20 scripts through literal call edges, with
+- **U5 (D).** His six scripts reach 20 scripts through literal call and
+  change-script edges, with
   15 call-ex edges unresolved and one target (1800) not installed. Only 1997
   has an adjust-stat action; none has a transform or set-scheme action.
-- **Level 50 (X).** The 1.0.7.4 changelog says that a PC at level 50 keeps
-  gaining XP and that followers then level up (X2). So in the installed
-  version the ARC-RES-031 A1 path does end, and lagging followers catch up by
-  one level per would-be PC level, still capped at 50. The gate conclusion of
-  ARC-RES-031 is unchanged.
+- **Level 50 (X).** The 1.0.7.4 update notes say that a PC at level 50 keeps
+  gaining XP and that followers then level up (X2). If the installed 1.0.7.4
+  executable does that (not traced, NOT_VERIFIED), the ARC-RES-031 A1 path
+  ends there and lagging followers catch up by one level per would-be PC
+  level, still capped at 50. The gate conclusion of ARC-RES-031 is unchanged
+  either way.
 
 ## Inputs and reproduction
 
@@ -81,7 +85,7 @@ is research evidence, not a runtime.
 | ID | Rule the replay applies | Source |
 | --- | --- | --- |
 | R1 | Effective stat = base, then effects (percent, multiply, divide, add, largest minimum, smallest maximum), clamped (primary stats 1..20 for a human). An NPC has no background term. | [stat.c 336–527][stat-level], [effect.c 741–850][fold] |
-| R2 | A stat unit costs 1 (0 only to reach 1). After a purchase the loop compares the **effective** value with the target, so an effect that lowers the stat makes the helper set the same base again and pay for it. | [stat.c 151–172][stat-cost], [level.c 949–982][buy-stat] |
+| R2 | A stat unit costs 1 (0 only to reach 1). After a purchase the loop compares the **effective** value with the target, so an effect that lowers the stat makes the helper set the same base again and pay for it. | [stat.c 151–172][stat-cost], [stat.c 835–844][stat-cost-fn], [level.c 949–982][buy-stat] |
 | R3 | A skill rank (4 levels) costs 1. The skill level is 4 × points, then effects, clamped 0..20, then capped by the key stat (3 up to 5, 7 at 6–8, 11 at 9–11, 15 at 12–14, 19 at 15–17, 20 from 18). A rank the cap refuses buys one base unit of the key stat instead. Key stats: dodge, melee and lock picking dexterity, heal intelligence. | [skill.c 37–62][key-stats], [skill.c 145–166][cap], [skill.c 506–545][basic-level], [skill.c 592–625][basic-set], [skill.c 1037–1140][tech], [level.c 989–1072][buy-skill] |
 | R4 | A college rank costs 1. Rank *k* needs character level 1, 1, 5, 10, 15, intelligence 5, and the willpower named by the spell's `IQ:` value or by default 6, 9, 12, 15, 18. Too low a level skips the step; otherwise the helper buys intelligence (if short) or willpower. | [spell.c 31–37][min-level], [spell.c 465–526][spell-add], [magictech.c 1472–1490][min-stats], [magictech.c 468–474][default-wp], [magictech.c 1375–1415][spell-entries], [level.c 1079–1126][buy-spell] |
 | R5 | A hit (fatigue) point costs 1 and adds 4: maximum hit points = willpower + 2 × (strength + level) + 4 + adjustment + 4 × points; fatigue = 4 × points + adjustment + 2 × (level + constitution) + willpower + 4; both then through effects. | [object.c 1632–1677][hp], [critter.c 502–524][fatigue], [level.c 1178–1212][buy-misc] |
@@ -89,7 +93,10 @@ is research evidence, not a runtime.
 
 The replay assumes he follows from T0 and the PC gains one level at a time. A
 multi-level jump grants its points at once and could buy in a different
-order (not replayed).
+order (not replayed). The level-up also runs the Educator background on
+followers ([level.c 559][educate]), which sets training bits only and does
+not change purchases; poison and the monstrous-melee case do not apply to
+him. The model refuses a non-human sheet.
 
 ## 2. Inputs from his sheet (D)
 
@@ -110,27 +117,51 @@ order (not replayed).
 | 3 | dexterity 9 | melee 8 | 42 |
 | 4 | melee 8 | necro_good 2 | 44 |
 | 5 | willpower 9, white necromancy 2 | heal 8 | 47 |
-| 6–7 | intelligence base 9, 10 (effective 8, 9) | heal 8 | 49–51 |
+| 6 | intelligence base 9 (effective 8) | heal 8 | 49 |
+| 7 | intelligence base 10 (effective 9) | heal 8 | 51 |
 | 8 | heal 8 | dodge 8 | 53 |
 | 9 | dodge 8 | maxhps 62 | 55 |
-| 10 | two hit points | melee 12 | 65 |
-| 11–13 | dexterity 10, 11, 12 | melee 12 | 67–71 |
+| 10 | 2 hit points | melee 12 | 65 |
+| 11 | dexterity 10 | melee 12 | 67 |
+| 12 | dexterity 11 | melee 12 | 69 |
+| 13 | dexterity 12 | melee 12 | 71 |
 | 14 | melee 12 | necro_good 3 | 73 |
-| 15–16 | willpower 11, 12 | necro_good 3 | 77–80 |
+| 15 | willpower 10, 11 | necro_good 3 | 77 |
+| 16 | willpower 12 | necro_good 3 | 80 |
 | 17 | white necromancy 3 | heal 12 | 82 |
-| 18–20 | intelligence base 11, 12, 13 (one point wasted at 20, R2) | heal 12 | 84–88 |
-| 21–23 | heal 12, lock picking 8, dodge 12 | melee 16 | 90–94 |
-| 24–25 | dexterity 13, 15 | melee 16 | 96–98 |
+| 18 | intelligence base 11 (effective 10) | heal 12 | 84 |
+| 19 | intelligence base 12 (effective 11) | heal 12 | 86 |
+| 20 | intelligence base 13 (effective 12), 1 point paid twice (R2) | heal 12 | 88 |
+| 21 | heal 12 | picklock 8 | 90 |
+| 22 | lock picking 8 | dodge 12 | 92 |
+| 23 | dodge 12 | melee 16 | 94 |
+| 24 | dexterity 13 | melee 16 | 96 |
+| 25 | dexterity 14, 15 | melee 16 | 98 |
 | 26 | melee 16 | necro_good 4 | 100 |
-| 27–29 | willpower 13, 14, 15 | necro_good 4 | 103–109 |
-| 30 | white necromancy 4, intelligence base 14 | heal 16 | 111 |
-| 31–32 | intelligence base 15, 16 | heal 16 | 113–115 |
-| 33–34 | heal 16, dodge 16 | melee 20 | 117–119 |
-| 35–36 | dexterity 17, 18 | melee 20 | 121–123 |
+| 27 | willpower 13 | necro_good 4 | 103 |
+| 28 | willpower 14 | necro_good 4 | 106 |
+| 29 | willpower 15 | necro_good 4 | 109 |
+| 30 | intelligence base 14 (effective 13), white necromancy 4 | heal 16 | 111 |
+| 31 | intelligence base 15 (effective 14) | heal 16 | 113 |
+| 32 | intelligence base 16 (effective 15) | heal 16 | 115 |
+| 33 | heal 16 | dodge 16 | 117 |
+| 34 | dodge 16 | melee 20 | 119 |
+| 35 | dexterity 16, 17 | melee 20 | 121 |
+| 36 | dexterity 18 | melee 20 | 123 |
 | 37 | melee 20 | heal 20 | 125 |
-| 38–40 | intelligence base 17, 18, 19 (one point wasted at 40) | heal 20 | 127–131 |
-| 41–43 | heal 20, lock picking 12, dodge 20 | maxhps 200 | 133–137 |
-| 44–50 | hit points only | maxhps 200 | 143–187 |
+| 38 | intelligence base 17 (effective 16) | heal 20 | 127 |
+| 39 | intelligence base 18 (effective 17) | heal 20 | 129 |
+| 40 | intelligence base 19 (effective 18), 1 point paid twice (R2) | heal 20 | 131 |
+| 41 | heal 20 | picklock 12 | 133 |
+| 42 | lock picking 12 | dodge 20 | 135 |
+| 43 | dodge 20 | maxhps 200 | 137 |
+| 44 | 1 hit point | maxhps 200 | 143 |
+| 45 | 2 hit points | maxhps 200 | 153 |
+| 46 | 1 hit point | maxhps 200 | 159 |
+| 47 | 1 hit point | maxhps 200 | 165 |
+| 48 | 1 hit point | maxhps 200 | 171 |
+| 49 | 1 hit point | maxhps 200 | 177 |
+| 50 | 2 hit points | maxhps 200 | 187 |
 
 Each level also adds 2 hit points and 2 fatigue through the level term (R5).
 Two points are wasted in all by the intelligence effect (R2). Fatigue ends at
@@ -143,10 +174,12 @@ points. So the step that `Arcanum4.dat` drops costs three of his level-ups.
 
 ## 4. Scripts that act on him (D, read with S)
 
-Script lines below are read with the source's condition, action, focus and
-value enums ([script.h 46–81][enums], [script.c 1511–1575][arith],
-[script.c 1746–1757][get-stat], [script.c 2380–2394][change-script],
-[script.c 904–925][named], [script.c 631–648][compare]). Unused operand slots
+Script lines below are read with the source's focus, value, condition and
+action enums ([script.h 46–81][enums], [script.h 95–294][enums2]) and handlers
+([script.c 1511–1575][arith], [script.c 1746–1757][get-stat],
+[script.c 1875–1889][teleport], [script.c 2380–2394][change-script],
+[script.c 2767–2821][adjust-set], [script.c 904–925][named],
+[script.c 631–648][compare]). Unused operand slots
 hold editor leftovers and are not read.
 
 **1997, enter combat.** Lines 0–3: get the player's alignment, get his own,
@@ -204,8 +237,12 @@ the model where they agree.
 
 Source reading at the pinned commit, the read-only probe `--virgil-auto-level`
 (self-test `--virgil-auto-level-self-test` now also covers the effect grammar
-and fold, the formulas, each purchase helper including the R2 loop, the spell
-gates, rule runs, the replay and the reach), and the outside sources above.
+and fold, the formulas, every purchase helper including the R2 loop, the
+tech-points side effect and a refused hit point, the spell gates, rule runs,
+the replay and the reach; the line decoder and the flag-writer scan are
+exercised only by the real data), and the outside sources above. The replay follows the CE helpers'
+control flow closely because it is a research model of them; a runtime should
+be written from R1–R6, not ported from this file.
 
 [stat-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L336-L527
 [fold]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L741-L850
@@ -227,6 +264,11 @@ gates, rule runs, the replay and the reach), and the outside sources above.
 [fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L502-L524
 [buy-misc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L1178-L1212
 [enums]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L46-L81
+[enums2]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h#L95-L294
+[teleport]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1875-L1889
+[adjust-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2767-L2821
+[stat-cost-fn]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L835-L844
+[educate]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L559
 [arith]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1511-L1575
 [get-stat]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1746-L1757
 [change-script]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2380-L2394

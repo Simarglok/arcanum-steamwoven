@@ -368,6 +368,12 @@ internal static partial class Program
         s = Sheet(new AlChange("stat", 4, AlOp.Add, -1)); s.Stats[21] = 5; s.BasicPoints[10] = 1;
         Check(AlBuySkill(s, false, 10, 8) == AlResult.Insufficient && s.Stats[4] == 9 && s.Stats[21] == 0 && s.Wasted == 4 && s.BasicPoints[10] == 1, "lowered-stat drain");
 
+        // Tech skill: a point also raises tech points; a hit-point purchase capped by an effect fails.
+        s = Sheet(); s.Stats[21] = 2;
+        Check(AlBuySkill(s, true, 2, 4) == AlResult.Ok && s.TechPoints[2] == 1 && s.Stats[23] == 1 && s.Stats[21] == 1, "tech skill purchase");
+        s = Sheet(new AlChange("special", 0, AlOp.Max, 30)); s.Stats[21] = 2;
+        Check(AlBuyMisc(s, 0, 40) == AlResult.UpdateFailed && s.HpPts == 1 && s.Stats[21] == 2, "capped hit points fail without paying");
+
         // Spells: level gate is a skip, willpower is bought.
         s = Sheet(); s.Stats[21] = 3; s.Colleges[12] = 1;
         Check(AlBuySpell(s, 12, 2) == AlResult.Ok && s.Stats[6] == 9 && s.Colleges[12] == 2 && s.Stats[21] == 1, "willpower purchase");
@@ -385,6 +391,6 @@ internal static partial class Program
         var graph = new Dictionary<int, (IReadOnlyList<CaveScriptEdge>, int)> { [1] = ([new(7, 2), new(99, 3)], 1), [2] = ([new(7, 1)], 0) };
         var reach = AlReach([1], n => graph.TryGetValue(n, out var g) ? g : null);
         Check(reach.Reached.SequenceEqual([1, 2]) && reach.Unresolved == 1 && reach.Missing.SequenceEqual([3]), "reach");
-        Console.WriteLine("virgil-level-replay self-test: PASS (effect grammar and fold, formulas, purchases, drain, spell gates, rule run, replay, reach)");
+        Console.WriteLine("virgil-level-replay self-test: PASS (effect grammar and fold, formulas, purchases incl. tech and capped hit points, drain, spell gates, rule run, replay, reach)");
     }
 }

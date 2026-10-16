@@ -199,8 +199,9 @@ matters only once both schemes are complete, since a running rule spends them.
   original executable or a fix), every later XP award at level 50 would call
   L7 with PC levels 50 → 51 and raise a lagging follower by one level, capped
   at 50. [level.c 366–377][to-next], [level.c 492–500][recalc], [stat.c 732–737][xp-recalc]
-  The 1.0.7.4 update notes say exactly that happens in the installed version
-  ([ARC-RES-032](virgil-level-replay.md#5-outside-sources-x), X2).
+  The 1.0.7.4 update notes describe that behaviour (followers level up at PC
+  level 50; [ARC-RES-032](virgil-level-replay.md#5-outside-sources-x), X2);
+  the installed executable was not traced.
 - **A2** The PC's level-up message is built with `sizeof` of a pointer as the
   remaining buffer length; only the PC path builds the message.
   [level.c 831–834][apply]
@@ -247,7 +248,8 @@ matters only once both schemes are complete, since a running rule spends them.
   counted only in the whole-archive totals above (no adjust-stat names the
   level anywhere). Next check: the call-edge census of the
   [cave research](cave-transition-evidence.md) applied to his scripts.
-  Answered by [ARC-RES-032](virgil-level-replay.md): 20 scripts reached, only
+  Answered by [ARC-RES-032](virgil-level-replay.md): through call and
+  change-script edges 20 scripts are reached, only
   1997 has an adjust-stat action, 15 call-ex edges stay unresolved.
 
 ## Method

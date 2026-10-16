@@ -367,6 +367,7 @@ internal static partial class Program
             return AlSpellDefaultWillpower[id % 5];
         }).ToArray();
         var overrides = Enumerable.Range(0, 80).Count(id => willpower[id] != AlSpellDefaultWillpower[id % 5]);
+        if (Stat(27) != 0) throw new InvalidDataException("AUTOLEVEL_REPLAY_NOT_HUMAN");
         var sheet = new AlSheet
         {
             Stats = Enumerable.Range(0, 28).Select(i => Stat(i) ?? 0).ToArray(),
