@@ -846,7 +846,7 @@ public partial class TerrainViewerApp : Node
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
                 PublishFailure(_arguments?.Mode ?? _readyMode,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
             }
-            SyncPassabilityOverlay();
+            SyncPassabilityOverlay(); UpdateAreaHover();
             return;
         }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);
@@ -920,7 +920,7 @@ public partial class TerrainViewerApp : Node
     private void ClearReadyMetrics()
     {
         // The conversation host borrows the area session, so it is unbound before the session is disposed.
-        UnbindAreaConversations();
+        UnbindAreaConversations(); UnbindAreaHover();
         StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls();
         _readyArea = null;
         _readySourceId = null;

@@ -277,6 +277,9 @@ public partial class TerrainViewerApp
     }
     public override void _Notification(int what)
     {
+        // ARC-UI-005: the pointer leaving the window hides the hover tooltip and action cursor.
+        if (what == NotificationWMMouseExit) _pointerInWindow = false;
+        else if (what == NotificationWMMouseEnter) _pointerInWindow = true;
         if (!IsWorld || !_worldInitialized) return;
         if (what == NotificationApplicationFocusOut || what == NotificationApplicationFocusIn)
             ObserveWorldFocus(what == NotificationApplicationFocusIn && GetWindow().HasFocus());
@@ -549,10 +552,13 @@ public partial class TerrainViewerApp
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
             WorldObservation(() => WorldRouteClick(click.Position));
     }
+    /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
+    private bool WorldClickInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && _readyActorPlan is not null
+        && _worldGate.IsOpen && _worldLifecycleSession is null;
     private void WorldRouteClick(Vector2 screen)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
-        if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null || !_worldGate.IsOpen || _worldLifecycleSession is not null)
+        if (!WorldClickInputOpen)
         {
             _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
             RefreshReadyStatus(); return;

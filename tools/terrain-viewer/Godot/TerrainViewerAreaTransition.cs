@@ -96,19 +96,11 @@ public partial class TerrainViewerApp
         return true;
     }
 
-    /// <summary>The trigger object whose drawn sprite has an opaque pixel under the screen point, if any.</summary>
+    /// <summary>The trigger object that is the frontmost pickable object under the screen point, if any (ARC-UI-005 pick).</summary>
     private AreaObjectKey? AreaTriggerAt(Vector2 screen)
     {
-        if (_areaTransitions is null || _readyArea is not { } area) return null;
-        var transform = AreaDrawItem.RasterTransform(GetViewport());
-        var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
-        foreach (var (_, trigger) in _areaTransitions.Triggers())
-        {
-            var command = area.Plan.Commands.FirstOrDefault(c => c.Identity == trigger.Key);
-            if (command is null) continue;
-            if (AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0) return trigger.Key;
-        }
-        return null;
+        if (_areaTransitions is null || AreaObjectAtScreen(screen) is not { } hit) return null;
+        return _areaTransitions.Triggers().Any(t => t.Trigger.Key == hit) ? hit : null;
     }
 
     /// <summary>A standable cell within use range of the trigger, nearest the actor: admitted, and entered Open from

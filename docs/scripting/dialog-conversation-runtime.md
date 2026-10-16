@@ -124,8 +124,10 @@ party port is a `JoinRefused` frontier (the source then speaks a generated refus
 
 ## AREA viewer integration (PROJECT diagnostic)
 
-In `crash-site-area` mode the original **left click** on an opaque pixel of an NPC whose
-effective SAP_DIALOG attachment names a script talks to it. The click takes the guarded
+In `crash-site-area` mode the original **left click** on an NPC whose
+effective SAP_DIALOG attachment names a script talks to it. The NPC must be the
+[hover pick](../rendering/terrain-viewer.md#hover-tooltip-and-action-cursor-arc-ui-005) under the
+pointer: the frontmost opaque body that is not click-through (ARC-UI-005). The click takes the guarded
 ground-click path of the [click-to-move route](../world/click-route-runtime.md) (focus, modal, gate,
 lifecycle, pending map transfer). Within 3 tiles (Chebyshev; project rule, not source range)
 the dialog opens at once; farther away the route walks to the nearest standable cell within
