@@ -26,6 +26,10 @@ public partial class TerrainCanvas
     private const int AreaPoolFloor = 256;
     private const int AreaPoolTrimPerUpdate = 1024;
     private AreaUprightOrder? _areaUpright;
+    // Non-upright commands (phase < 4) in plan order and a coarse grid over them, so a
+    // moving view does not scan every command; the exact intersection test is unchanged.
+    private AreaDrawCommand[] _areaFlat = Array.Empty<AreaDrawCommand>();
+    private AreaVisibilityIndex? _areaIndex;
     private readonly AreaMappingCache _areaMappings = new();
     // Terrain drawn as pre-composed chunks when the plan admits it (exact under the
     // nearest rule; see docs/research/crash-site-area-draw-calls.md); null keeps
@@ -70,6 +74,11 @@ public partial class TerrainCanvas
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
         }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
+        if (!ReferenceEquals(_area, plan) || _areaIndex is null)
+        {
+            _areaFlat = plan.Commands.Where(command => command.Phase < 4).ToArray();
+            _areaIndex = new AreaVisibilityIndex(_areaFlat.Select(command => command.Destination).ToArray());
+        }
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         UpdateAreaVisible(); QueueRedraw();
@@ -170,7 +179,8 @@ public partial class TerrainCanvas
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
             command.Destination.Width, command.Destination.Height).Intersects(world);
         var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel);
-        var ordered = _area.Commands.Where(command => command.Phase < 4).Concat(upright);
+        var flat = _areaIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y);
+        var ordered = flat.Select(index => _areaFlat[index]).Concat(upright);
         var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || _showStatics)).ToArray();
         if (visible.Length > _area.Commands.Count + 1) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
         // Index rows used by this submission stay resident; rows from earlier views are
@@ -187,6 +197,8 @@ public partial class TerrainCanvas
             if (AreaChunkTextureCache.Fits(chunks.Length, level) && chunks.All(chunk => AreaChunkChannel(chunk) is not null))
             {
                 _areaChunkTextures.BeginSubmission();
+                // Missing chunks of this view are composed in parallel before the items acquire them.
+                _areaChunkTextures.Prepare(_areaChunks, chunks, level);
                 var chunkDraws = chunks.Select(chunk => AreaTerrainChunks.Command(chunk, level)).ToArray();
                 for (var index = 0; index < chunks.Length; index++) _areaChunkCommands.Add(chunkDraws[index], chunks[index]);
                 draw = chunkDraws.Concat(visible.Where(command => command.Identity is not null)).ToArray();
@@ -256,7 +268,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null; _areaWallFades = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

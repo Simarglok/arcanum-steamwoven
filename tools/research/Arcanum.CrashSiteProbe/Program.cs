@@ -58,6 +58,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--building-research") return ProbeBuildingResearch(args[1..]);
             if (args.SequenceEqual(["--building-self-test"])) { BuildingSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--companion-consent") return ProbeCompanionConsent(args[1..]);
+            if (args.SequenceEqual(["--companion-consent-self-test"])) { CompanionConsentSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--item-inventory") return ProbeItemInventory(args[1..]);
             if (args.SequenceEqual(["--item-inventory-self-test"])) { ItemInventorySelfTest(); return 0; }
             if (args.FirstOrDefault() == "--cave-transition") return ProbeCaveTransition(args[1..]);
@@ -91,6 +93,8 @@ internal static partial class Program
                     exception is InvalidOperationException && exception.Message.StartsWith("closure self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AREA_CLOSURE_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--cave-transition", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception is InvalidDataException or ArgumentException or InvalidOperationException && exception.Message.All(c => c is '_' or ' ' or '=' || char.IsAsciiLetter(c) || char.IsAsciiDigit(c)) && (exception.Message.StartsWith("CAVE_", StringComparison.Ordinal) || exception.Message.StartsWith("AGGREGATE_", StringComparison.Ordinal) || exception.Message.StartsWith("AREA_", StringComparison.Ordinal)) || exception.Message.StartsWith("cave self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CAVE_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--companion-consent", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("CONSENT_", StringComparison.Ordinal) || exception.Message.StartsWith("consent self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CONSENT_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--item-inventory", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("ITEM_", StringComparison.Ordinal) || exception.Message.StartsWith("item self-test failed: ", StringComparison.Ordinal) ? exception.Message : "ITEM_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
