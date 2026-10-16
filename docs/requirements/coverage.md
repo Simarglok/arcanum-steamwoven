@@ -249,8 +249,8 @@
 
 | ID и функция | Данные | Правила | Интеграция | Проверка | Ограниченный объём |
 | --- | --- | --- | --- | --- | --- |
-| [FR-CONTENT-001](content-product.md#fr-content-001) — Оригинальные ресурсы читаются из выбранных источников | Частично | Частично | Частично | Частично | Authenticated Area owner/frame leases и explicit NPC SCR/DLG sources; не game discovery/general resolver. |
-| [FR-CONTENT-002](content-product.md#fr-content-002) — Приоритеты ресурсов и патчей задаются проверенным профилем | Нет | Нет | Нет | Нет | Универсальный precedence profile не принят и не реализован. |
+| [FR-CONTENT-001](content-product.md#fr-content-001) — Оригинальные ресурсы читаются из выбранных источников | Частично | Частично | Частично | Частично | Authenticated Area owner/frame leases и explicit NPC SCR/DLG sources; read-only discovery установки и resolver `Arcanum.Data.Content` (ARC-DATA-011), но потребители к нему ещё не подключены. |
+| [FR-CONTENT-002](content-product.md#fr-content-002) — Приоритеты ресурсов и патчей задаются проверенным профилем | Частично | Частично | Нет | Частично | Порядок источников по CE и snapshot resolver (первый источник в порядке поиска выигрывает), отчёт о 109 перекрытиях установки (ARC-DATA-011); потребители не переподключены, runtime-записи и `.ignore` не моделируются. |
 | [FR-CONTENT-003](content-product.md#fr-content-003) — Кампания/модуль имеют собственные начальные параметры | Нет | Нет | Нет | Нет | Campaign bootstrap отсутствует. |
 | [FR-CONTENT-004](content-product.md#fr-content-004) — Объекты сохраняют identity, тип и наследуемые свойства | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
 | [FR-CONTENT-005](content-product.md#fr-content-005) — Системы продолжают читать оригинальные структуры | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
