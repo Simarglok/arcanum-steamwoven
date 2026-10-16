@@ -31,6 +31,10 @@ public partial class TerrainViewerApp
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
 
+    // The sector the lighting follows: the actor's in the exterior; in the cave the exterior sector last
+    // selected stays (the lighting source is the exterior's).
+    private long AmbientSector() => InCave && _areaAmbient is { } driver ? driver.Selection.Sector : ActiveAreaSector();
+
     private long ActiveAreaSector()
     {
         // The lighting source is the exterior's; in the cave the exterior sector last selected stays.
@@ -49,8 +53,7 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) return;
         var paused = driver.ModalPaused;
-        // In the cave the exterior sector last selected stays (its lighting source is the exterior's).
-        var hourChanged = driver.Tick(hostMilliseconds, WorldModal, InCave ? driver.Selection.Sector : ActiveAreaSector());
+        var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
         if (hourChanged) PushAreaAmbient();
         if (hourChanged || paused != driver.ModalPaused)
         {
@@ -75,7 +78,7 @@ public partial class TerrainViewerApp
     private void PaletteGameHour()
     {
         if (_areaAmbient is null) { _worldPanel?.SetActionStatus("Game time unavailable: no area lighting loaded"); return; }
-        _areaAmbient.AdvanceHours(1, ActiveAreaSector());
+        _areaAmbient.AdvanceHours(1, AmbientSector());
         AreaAmbientChanged($"Waited 1 hour: {_areaAmbient.Clock.Hour:00}:00");
     }
     private void PaletteLightingToggle()

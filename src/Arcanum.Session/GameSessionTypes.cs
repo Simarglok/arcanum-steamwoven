@@ -36,9 +36,9 @@ public readonly record struct MapChange(MapChangeKey Key, long Value);
 
 /// <summary>
 /// Applied ambient lighting (FR-LIGHT-012): the resolved scheme id (positive; the map-default sentinel 0 is
-/// never applied) and the game hour it was applied for. The host records it after it applies a selection;
-/// it is presentation state derived from the clock, map and sector, saved so that a load can check it shows
-/// the same scheme at once.
+/// never applied) and the game hour it was selected for. The host records it after it applies a selection;
+/// it is presentation state derived from the clock, map and sector, saved with the time (FR-LIGHT-012) so a
+/// load restores the selected scheme of the saved hour together with the clock.
 /// </summary>
 public readonly record struct SessionLightingState(int SchemeId, int Hour);
 

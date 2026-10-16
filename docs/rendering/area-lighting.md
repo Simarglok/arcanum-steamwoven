@@ -32,12 +32,16 @@ key 5, payload digest bound into the profile; `AreaAmbientDriver.ClockProfile`).
 frame `AreaAmbientDriver.Tick` admits host time through
 [`GameTimeFlow`](../world/game-clock-runtime.md#host-time-flow-arc-world-010) (8× the
 admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pause
-while the diagnostic palette or a dialog is open, releasing only a pause it set; resume
-has no catch-up. **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
+while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
+(a Menu pause already on the session when the driver binds, as after a restore, counts
+as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
+flowing while the window is unfocused or minimised: only a modal window pauses it. **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
 works during that pause. After every clock change that crosses an hour, and after a
 sector change, the selection is re-applied and recorded in the session
-(`RecordLighting`), so a session capture carries the time and the scheme shown for it
-(FR-LIGHT-012). Automated runs (self-test, native smoke) get no live flow; they drive
+(`RecordLighting`), so a session capture carries the time and the scheme selected for
+it (FR-LIGHT-012). The record is the selection, also in the cave (drawn unlit) and with
+the diagnostic lighting toggle off; in the cave the exterior sector last selected stays
+for the flow and the wait alike. Automated runs (self-test, native smoke) get no live flow; they drive
 the same tick with literal host times. Sleep/rest UI, turn-based combat, a scheduler
 and a save file are not implemented; the 8× rate is a CE source observation, NOT_VERIFIED.
 

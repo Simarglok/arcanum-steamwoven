@@ -55,7 +55,8 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 /// Viewer wiring of day/night over the session clock (ARC-WORLD-010): the lighting reads and advances the
 /// <see cref="GameSessionOwner"/>'s clock, never one of its own, so lighting, HUD and snapshot see one time.
 /// <see cref="Tick"/> lets time flow from host milliseconds through <see cref="GameTimeFlow"/> and holds a
-/// Menu pause while a modal window is open; <see cref="AdvanceHours"/> is an explicit wait that also works
+/// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
+/// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
 /// while paused. After every clock change the Data hourly selection for the active sector is re-applied
 /// and recorded in the session, so a capture carries the time and the scheme shown for it. The session is
 /// owned by the caller and outlives this driver. Caller-serialized like the session.
@@ -69,9 +70,13 @@ public sealed class AreaAmbientDriver
     private readonly AmbientLightingState _state;
     private readonly AreaLightingSource _source;
     private readonly GameTimeFlow _flow = new();
+    private bool _holdsPause;
 
     private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state)
-    { _source = source; _session = session; _state = state; }
+    {
+        _source = source; _session = session; _state = state;
+        _holdsPause = session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
+    }
 
     public ClockSnapshot Clock => _session.QueryClockSnapshot();
     public AmbientSelection Selection => _state.Current ?? throw new InvalidOperationException("AREA_AMBIENT_NOT_APPLIED");
@@ -80,7 +85,7 @@ public sealed class AreaAmbientDriver
     public bool Enabled { get; set; } = true;
     public AmbientPair Effective => Enabled ? Selection.Pair : AmbientPair.Neutral;
     /// <summary>True while this driver holds the session clock in a Menu pause for a modal window.</summary>
-    public bool ModalPaused => Clock.PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
+    public bool ModalPaused => _holdsPause && Clock.PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
 
     /// <summary>The clock profile of the area lighting source's module and startup declaration.</summary>
     public static ProfileBinding ClockProfile(AreaLightingSource source)
@@ -111,8 +116,9 @@ public sealed class AreaAmbientDriver
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
         var clock = Clock;
-        if (modal && !clock.PauseDisposition.Paused) clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu)));
-        else if (!modal && ModalPaused) clock = Mutate(_session.SetPaused(clock.Token, default));
+        if (modal && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
+        else if (!modal && ModalPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
+        else if (!ModalPaused) _holdsPause = false;
         var admitted = _flow.Observe(hostMilliseconds);
         var hour = clock.Hour;
         if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));

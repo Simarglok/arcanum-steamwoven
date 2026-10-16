@@ -25,13 +25,25 @@ public sealed class SessionLightingTests
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.RecordLighting(new(3, 15)).Disposition);
         Assert.AreEqual(new SessionLightingState(3, 15), owner.QueryLighting());
 
-        // After the clock crosses an hour, the previous hour is refused and the new one is recorded.
-        var clock = owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 3_600_000, ClockAdvanceReason.OrdinaryAdvance).Snapshot;
+        // An advance within the hour keeps the record.
+        var clock = owner.AdvanceGameTime(owner.QueryClockSnapshot().Token, 3_599_999, ClockAdvanceReason.OrdinaryAdvance).Snapshot;
+        Assert.AreEqual(15, clock.Hour);
+        Assert.AreEqual(new SessionLightingState(3, 15), owner.QueryLighting());
+        // Crossing the hour clears it, so a capture taken before the host records again still restores.
+        clock = owner.AdvanceGameTime(clock.Token, 1, ClockAdvanceReason.ExplicitWait).Snapshot;
         Assert.AreEqual(16, clock.Hour);
+        Assert.IsNull(owner.QueryLighting());
+        var unrecorded = owner.Capture();
+        Assert.IsNull(unrecorded.Lighting);
+        using (var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(unrecorded)))) Assert.IsNull(restored.QueryLighting());
         Rejected(owner.RecordLighting(new(3, 15)), owner, GameSessionFailure.InvalidLighting, 0);
-        Assert.AreEqual(new SessionLightingState(3, 15), owner.QueryLighting(), "a refusal keeps the recorded value");
+        Assert.IsNull(owner.QueryLighting(), "a refusal records nothing");
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordLighting(new(3, 16)).Disposition);
         Assert.AreEqual(new SessionLightingState(3, 16), owner.Capture().Lighting);
+        // A refused or no-op advance keeps the record.
+        Assert.AreEqual(ClockMutationDisposition.Rejected, owner.AdvanceGameTime(clock.Token, -1, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.AreEqual(ClockMutationDisposition.NoChange, owner.AdvanceGameTime(clock.Token, 0, ClockAdvanceReason.OrdinaryAdvance).Disposition);
+        Assert.AreEqual(new SessionLightingState(3, 16), owner.QueryLighting());
     }
 
     [TestMethod]

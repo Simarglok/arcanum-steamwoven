@@ -104,10 +104,15 @@ public sealed class GameSessionOwner : IDisposable
 
     public ClockSnapshot QueryClockSnapshot() { ThrowIfDisposed(); return _clock.QueryClockSnapshot(); }
 
+    /// <summary>Forwarded to the clock. An advance that leaves the hour of the recorded lighting clears it, so a
+    /// capture never pairs a time with another hour's scheme; the host records the new hour's lighting.</summary>
     public ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
         ThrowIfDisposed();
-        return _clock.AdvanceGameTime(token, durationGameMs, reason);
+        var result = _clock.AdvanceGameTime(token, durationGameMs, reason);
+        if (result.Disposition == ClockMutationDisposition.Changed && _lighting is { } lighting && lighting.Hour != result.Snapshot.Hour)
+            _lighting = null;
+        return result;
     }
 
     public ClockMutationResult SetPaused(ClockToken token, PauseDisposition disposition)
@@ -122,9 +127,9 @@ public sealed class GameSessionOwner : IDisposable
     public SessionLightingState? QueryLighting() { ThrowIfDisposed(); return _lighting; }
 
     /// <summary>
-    /// Records the lighting the host has just applied. The hour must be the clock's current hour, so a
-    /// capture never pairs a time with another hour's scheme; the host records again after every clock change
-    /// that crosses an hour. Like clock and flag changes, this does not move the session revision.
+    /// Records the lighting the host has just applied. The hour must be the clock's current hour; an advance
+    /// out of that hour clears the record until the host records again. Like clock and flag changes, this does
+    /// not move the session revision.
     /// </summary>
     public GameSessionMutationResult RecordLighting(SessionLightingState lighting)
     {

@@ -164,6 +164,13 @@ public sealed class AreaAmbientTests
         driver.Tick(3_600_400, false, West);
         Assert.AreEqual(new PauseDisposition(true, PauseReason.User), driver.Clock.PauseDisposition);
         Assert.AreEqual(57_601_600L, driver.Clock.GameTimestampMs);
+
+        // Nor a Menu pause someone else set while this driver held none.
+        var menu = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.Menu));
+        Assert.AreEqual(ClockMutationDisposition.Changed, menu.Disposition);
+        Assert.IsFalse(driver.ModalPaused);
+        driver.Tick(3_600_800, false, West);
+        Assert.AreEqual(new PauseDisposition(true, PauseReason.Menu), driver.Clock.PauseDisposition);
     }
 
     [TestMethod]
