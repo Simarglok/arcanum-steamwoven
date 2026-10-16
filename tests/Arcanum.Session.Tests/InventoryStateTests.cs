@@ -266,8 +266,8 @@ public sealed class InventoryStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, NoHero + ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" +
             "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":3804,\"name\":2804,\"description\":32804}," +
-            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}]}," +
-            "\"lighting\":null}");
+            "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}]}" +
+            FreshRandom + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryPcInventory().ToArray(), restored.QueryPcInventory().ToArray());
