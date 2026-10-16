@@ -289,7 +289,7 @@ public partial class TerrainViewerApp
         {
             HoverReleaseForSelfTest();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
     }
 }

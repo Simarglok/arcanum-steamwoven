@@ -200,7 +200,7 @@ public partial class TerrainViewerApp
         {
             if (ConversationOpen) EndConversation();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
             source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }

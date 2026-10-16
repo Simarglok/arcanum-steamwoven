@@ -99,7 +99,7 @@ public partial class TerrainViewerApp
             _worldAdvanceObserverForSelfTest = null;
             _areaSmokeTime = (_areaSmokeTime + 9) / 10;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
             if (_worldActor.Session is AreaGridSession walked)
                 ConfigureAreaActor(map, walked.State.CommittedCell, walked.State.Facing);
         }

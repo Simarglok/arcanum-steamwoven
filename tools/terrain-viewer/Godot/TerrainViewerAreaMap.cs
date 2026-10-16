@@ -64,8 +64,9 @@ public partial class TerrainViewerApp
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
-            // Back on the viewer clock: a fresh session where the actor stands, so no later observation is late.
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
+            // On the restored clock (the viewer's, or the walk's test time when it ran ahead): a fresh session where the actor
+            // stands, so no later observation is late.
             if (_worldActor.Session is AreaGridSession walked)
                 ConfigureAreaActor(new AreaMapRuntime(area.Snapshot, result.AreaStepSnapshot!, chart), walked.State.CommittedCell, walked.State.Facing);
         }

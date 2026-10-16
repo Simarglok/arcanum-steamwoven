@@ -182,7 +182,7 @@ public partial class TerrainViewerApp
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
     }
 
@@ -289,7 +289,7 @@ public partial class TerrainViewerApp
         finally
         {
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
     }
 

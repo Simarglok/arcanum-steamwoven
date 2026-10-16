@@ -35,6 +35,18 @@ public partial class TerrainViewerApp
     private SimulationTime? _worldTestTime;
     private SimulationTime? _worldObservationTime;
     private SimulationTime WorldTime => _worldObservationTime ?? _worldTestTime ?? SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
+    // ARC-WORLD-025: a smoke stage drives the actor on test time, which can run ahead of the wall clock. The time it
+    // restores must not be older than the actor's session or the stage's last observation, or the next observation (a
+    // quarantine on a pad change, the next frame) is refused as late or non-monotonic (GRID_OBSERVATION_LATE_OR_INVALID,
+    // GRID_OBSERVATION_NONMONOTONIC): the clock then stays at the later of the two, possibly for the rest of the smoke.
+    // Call it after the stage's last observation (its pad release), never before.
+    private void RestoreWorldTestTime(SimulationTime? saved)
+    {
+        var floor = _worldTestTime;
+        if (_worldActor.Session?.State.Time is { } session && (floor is null || floor.Value.Value < session.Value)) floor = session;
+        var restored = saved ?? SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
+        _worldTestTime = floor is { } latest && restored.Value < latest.Value ? latest : saved;
+    }
     private void WorldObservation(Action action)
     {
         if (_worldObservationTime.HasValue) { action(); return; }

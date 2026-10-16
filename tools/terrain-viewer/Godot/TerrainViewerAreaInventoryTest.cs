@@ -264,7 +264,7 @@ public partial class TerrainViewerApp
             HoverReleaseForSelfTest();
             if (InventoryOpen) EndInventory();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
     }
 }
