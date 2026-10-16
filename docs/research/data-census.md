@@ -173,8 +173,11 @@ matters only for the game UI.
   on request ([ART format](../formats/art.md#trailing-bytes-after-the-last-frame-arc-data-016));
   the counts in this census are for the strict default.
   Which world ART files placed objects reference stays open.
-- **U3 DLG refusals:** whether the 38 files are valid for the original reader.
-  Next: when a world conversation needs one of them.
+- **U3 DLG refusals (closed by ARC-DATA-017):** the original reader skips
+  anything between fields and reads numbers like `atoi`, so all 38 files load
+  in the game; 4 of them hold one record missing its last field and load empty.
+  An opt-in original read mode now matches this
+  ([DLG reader](../formats/dlg-reader.md#original-read-mode-arc-data-017)).
 - **U4 Map transitions:** jump points and scripted teleports. Next: ARC-RES-035.
 - **U5 Modifications:** no mod was examined. A mod can add object or sector
   variants this installation does not contain; the record-level refusal above is
