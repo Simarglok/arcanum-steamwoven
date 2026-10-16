@@ -1,11 +1,16 @@
 using Godot;
 using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
 using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer;
 
+/// <summary>ARC-RENDER-010: the applied hourly pair and the channel of every drawn visual.</summary>
+public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels);
+
 public partial class TerrainCanvas
 {
+    private AreaAmbientView? _areaAmbient;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -56,12 +61,47 @@ public partial class TerrainCanvas
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
-            _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks;
+            _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
         }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands);
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         UpdateAreaVisible(); QueueRedraw();
+    }
+    /// <summary>Applies a new ambient pair to every item from the next submission (null draws source
+    /// pixels unlit). Only the per-item multiplier changes; plan, frames and index rows are reused.</summary>
+    public void SetAreaAmbient(AreaAmbientView? ambient)
+    {
+        if (Equals(_areaAmbient, ambient)) return;
+        if (!ReferenceEquals(_areaAmbient?.Channels, ambient?.Channels)) _areaChunkChannels.Clear();
+        _areaAmbient = ambient; _areaView = null; QueueRedraw();
+    }
+    // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
+    // when all its terrain shares one channel (null = mixed, drawn per command instead).
+    private readonly Dictionary<(int X, int Y), AreaAmbientChannel?> _areaChunkChannels = new();
+    private AreaAmbientChannel? AreaChunkChannel((int X, int Y) chunk)
+    {
+        if (_areaAmbient is not { } ambient) return AreaAmbientChannel.Unlit;
+        if (_areaChunkChannels.TryGetValue(chunk, out var known)) return known;
+        var channels = _areaChunks!.CommandsIn(chunk).Select(command => ambient.Channels.TryGetValue(command.Visual, out var found)
+            ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED")).Distinct().ToArray();
+        var channel = channels.Length == 1 ? channels[0] : (AreaAmbientChannel?)null;
+        _areaChunkChannels[chunk] = channel; return channel;
+    }
+    // The actor is a critter: outdoor channel (CE palette callback), like other bodies.
+    private Color AreaAmbientColor(AreaDrawCommand command, bool isActor)
+    {
+        if (_areaAmbient is not { } ambient) return Colors.White;
+        var channel = isActor ? AreaAmbientChannel.Outdoor
+            : _areaChunkCommands.TryGetValue(command, out var chunk) ? AreaChunkChannel(chunk) ?? throw new InvalidOperationException("AREA_AMBIENT_MIXED_CHUNK")
+            : ambient.Channels.TryGetValue(command.Visual, out var found) ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED");
+        var color = channel switch
+        {
+            AreaAmbientChannel.Outdoor => ambient.Pair.Outdoor,
+            AreaAmbientChannel.Indoor => ambient.Pair.Indoor,
+            _ => AmbientColor.Neutral,
+        };
+        return new Color(color.R / 255f, color.G / 255f, color.B / 255f);
     }
     public override void _Process(double delta)
     {
@@ -94,7 +134,7 @@ public partial class TerrainCanvas
         {
             var level = ChunkLevel(AreaDrawItem.RasterTransform(GetViewport()));
             var chunks = _areaChunks.Intersecting(world.Position.X, world.Position.Y, world.Size.X, world.Size.Y).ToArray();
-            if (AreaChunkTextureCache.Fits(chunks.Length, level))
+            if (AreaChunkTextureCache.Fits(chunks.Length, level) && chunks.All(chunk => AreaChunkChannel(chunk) is not null))
             {
                 _areaChunkTextures.BeginSubmission();
                 var chunkDraws = chunks.Select(chunk => AreaTerrainChunks.Command(chunk, level)).ToArray();
@@ -130,6 +170,7 @@ public partial class TerrainCanvas
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
+            item.Ambient = AreaAmbientColor(command, isActor);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }
@@ -163,12 +204,12 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null;
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null;
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
         _areaMappings.Clear(); // after the items stopped sampling the rows
-        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0;
+        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
     }
     public override void _ExitTree()
     {

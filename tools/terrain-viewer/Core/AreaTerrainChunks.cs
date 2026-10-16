@@ -68,6 +68,11 @@ public sealed class AreaTerrainChunks
         return new(terrain, frames, chunks.ToDictionary(pair => pair.Key, pair => pair.Value.ToArray()));
     }
 
+    /// <summary>The terrain commands composed into one chunk, in plan order (ARC-RENDER-010
+    /// uses it to give a chunk its single ambient channel).</summary>
+    public IEnumerable<AreaDrawCommand> CommandsIn((int X, int Y) chunk) =>
+        _chunks.TryGetValue(chunk, out var indices) ? indices.Select(index => _terrain[index]) : throw new ArgumentOutOfRangeException(nameof(chunk));
+
     /// <summary>Terrain chunks whose world square intersects the half-open world rectangle.</summary>
     public IEnumerable<(int X, int Y)> Intersecting(double x, double y, double width, double height)
     {
