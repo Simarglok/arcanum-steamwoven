@@ -50,15 +50,19 @@ public sealed class AreaConversationHost
     private readonly NpcDialogWorldId _world = new(Guid.NewGuid());
     private readonly NpcDialogMapId _map;
     private readonly NpcDialogPcId _pc;
+    private readonly AreaInventoryHost? _inventory;
 
+    /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
+    /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
     public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, GameSessionOwner session,
-        AreaConversationProfile? profile = null)
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _scriptArchive = scriptArchive ?? throw new ArgumentNullException(nameof(scriptArchive));
         _dialogArchive = dialogArchive ?? throw new ArgumentNullException(nameof(dialogArchive));
         Profile = profile ?? AreaConversationProfile.Diagnostic;
+        _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
         _map = new NpcDialogMapId(snapshot.RuntimeMap, snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256);
         _pc = new NpcDialogPcId(_world, _map, Guid.NewGuid());
         Speakers = FindSpeakers(snapshot);
@@ -70,7 +74,10 @@ public sealed class AreaConversationHost
     /// A host over another session (a quick load replaced the area session): same area, archives and profile.
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile, _inventory);
+
+    /// <summary>True when negative IN goes to the session inventory.</summary>
+    public bool InventoryWired => _inventory is not null;
 
     public AreaConversationProfile Profile { get; }
     public IReadOnlyList<AreaSpeaker> Speakers { get; }
@@ -176,9 +183,12 @@ public sealed class AreaConversationHost
         var participants = new DialogParticipants(new DialogId(speaker.ScriptId), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var conversation = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(entry.DlgNode.Value), participants, new DialogScriptLine(entry.ScrLine.Value), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State));
+            new DialogConversationPorts(State, State, _session.Flags, State, Inventory: _inventory?.DialogPort(_session, SpeakerEntity)));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {speaker.ScriptId} SCR line {entry.ScrLine.Value} -> DLG node {entry.DlgNode.Value}");
     }
+
+    private string? SpeakerEntity(DialogParticipantId npc) =>
+        npc.Value - 1000 is var index && index >= 0 && index < Speakers.Count ? AreaConversationState.EntityId(Speakers[(int)index].Row) : null;
 
     private static (long, string) Fingerprint(string path)
     {
@@ -204,7 +214,8 @@ public sealed class AreaConversationHost
 /// rumors (the session story domain), and, per speaker, the attachment local flags, the NPC→PC reaction and the
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
 /// from the area, the profile's initial reaction, not following). Still PROJECT diagnostic, in memory only and
-/// lost with this object: PC alignment, items given (IN) and areas marked (MM); they wait for their own owners.
+/// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
+/// and areas marked (MM); they wait for their own owners.
 /// </summary>
 public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort
 {

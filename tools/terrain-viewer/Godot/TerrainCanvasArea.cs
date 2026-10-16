@@ -16,6 +16,7 @@ public partial class TerrainCanvas
 {
     private AreaAmbientView? _areaAmbient;
     private IReadOnlyDictionary<AreaObjectKey, AreaWallFade>? _areaWallFades;
+    private IReadOnlySet<AreaObjectKey>? _areaHidden;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -98,6 +99,14 @@ public partial class TerrainCanvas
         if (ReferenceEquals(_areaWallFades, fades)) return;
         _areaWallFades = fades; _areaView = null; QueueRedraw();
     }
+    /// <summary>ARC-UI-004: bodies no longer in the world (items the PC took) from the next submission; null = none.</summary>
+    public void SetAreaHidden(IReadOnlySet<AreaObjectKey>? hidden)
+    {
+        if (ReferenceEquals(_areaHidden, hidden)) return;
+        _areaHidden = hidden; _areaView = null; QueueRedraw();
+    }
+    internal IReadOnlySet<AreaObjectKey>? AreaHidden => _areaHidden;
+    internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && _areaHidden?.Contains(key) == true;
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
@@ -181,7 +190,7 @@ public partial class TerrainCanvas
         var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel);
         var flat = _areaIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y);
         var ordered = flat.Select(index => _areaFlat[index]).Concat(upright);
-        var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || _showStatics)).ToArray();
+        var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command)))).ToArray();
         if (visible.Length > _area.Commands.Count + 1) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
         // Index rows used by this submission stay resident; rows from earlier views are
         // reused across pans or evicted under the shared 16 MiB cap. The original ART
@@ -268,7 +277,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

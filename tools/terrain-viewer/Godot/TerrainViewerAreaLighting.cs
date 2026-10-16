@@ -130,7 +130,7 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) return " | lighting: not loaded (unlit)";
         var clock = driver.Clock; var selection = driver.Selection;
-        var flow = driver.ModalPaused ? "PAUSED (dialog/palette open)" : clock.PauseDisposition.Paused ? $"PAUSED ({clock.PauseDisposition.Reason})"
+        var flow = driver.ModalPaused ? "PAUSED (dialog/palette/inventory open)" : clock.PauseDisposition.Paused ? $"PAUSED ({clock.PauseDisposition.Reason})"
             : $"time flows {GameTimeFlow.GameMillisecondsPerHostMillisecond}x";
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"

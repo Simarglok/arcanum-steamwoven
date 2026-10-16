@@ -47,6 +47,7 @@ public partial class TerrainViewerApp
         var header = Convert.FromHexString(moduleSha)[..16];
         var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), AreaGridSession.Cell(AreaGridSession.Spawn), area.Snapshot.RuntimeMap);
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+        BindAreaInventory(result);
         if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
         _caveLoad = cave;
         _areaTransitions = new([new(result.Area.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(cave.Area.Snapshot, cave.Steps, cave.Chart)],
@@ -58,6 +59,7 @@ public partial class TerrainViewerApp
 
     private void StopAreaTransitions()
     {
+        UnbindAreaInventory();
         _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded";
     }
@@ -70,7 +72,7 @@ public partial class TerrainViewerApp
         var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
-        CancelTalkApproach("a use click replaced it");
+        CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
         var result = _areaTransitions.RequestUse(hit.Value, actor);
         _areaUseAfterRoute = null;
         // An accepted use replaces any click route: the started step ends at its cell centre, then the transfer applies.
@@ -158,7 +160,7 @@ public partial class TerrainViewerApp
         if (_areaTransitions is null) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
-            CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload");
+            CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
             if (_areaTransitions.Cancel() is { } dropped)
             {
                 _areaUseStatus = $"transfer to map {dropped.ToMap} cancelled by reset/reload";
