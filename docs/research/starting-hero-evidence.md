@@ -114,7 +114,8 @@ after number 0 (an entry 0 is skipped by `mes_find_next`); the first gap stops
 parsing (later sets stay unparsed). A line is
 `name: min,max rate,proto rate,proto ...` (first pair = coins). A line over the
 string limit, an empty line or a name of 70 or more characters fails before the
-coins and leaves the set empty; an incomplete pair, an unknown prototype or more
+coins and leaves the set without items (CE never writes its coins, which stay
+whatever the uninitialised allocation held; the probe reports 0); an incomplete pair, an unknown prototype or more
 than 300 items fails afterwards and empties **only the items** (the coins
 already read stay); a failing `Rules\InvenSourceBuy.mes` line for the same set
 (not empty, not `ALL`, an unknown prototype or more than 300) also empties the
@@ -219,7 +220,7 @@ destroys them and creates a jacket (8118, 8110, 8126) instead
 ([item_generate_inventory](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L207-L316)). Armour size
 by race: small for dwarf, gnome and halfling; large for half-ogre and ogre;
 medium for human, elf, half-elf, half-orc, dark elf and orc
-([size table](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L80-L92)). These are source facts;
+([size table](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L79-L91)). These are source facts;
 the probe only checks that the prototypes exist (SH-10) and prints the size
 table as a CE constant.
 
@@ -236,7 +237,9 @@ builds
 `art\critter\<body><gender>\<body><gender><armor><shield><weapon><anim>.art`
 ([normalise](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L648-L708),
 [fallback](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L824-L853),
-[table load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L410-L450),
+[table rebuild](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L410-L450),
+[table load and count check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L516-L556),
+[file count](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L597-L645),
 [path](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c#L856-L930),
 [id fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/art.c#L36-L39)).
 The probe models the body/gender normalisation, the stand/no-weapon fallback
@@ -251,7 +254,7 @@ refuses any other animation, so the other fallback rows are not modelled.
 | SH-02 | The 13 PC prototypes are the only copies (no `proto/` match in any archive). Each decodes completely (no trailing bytes) and all nine compared fields equal the CE table of [ARC-RES-025](character-creation-evidence.md#pre-made-heroes) for every prototype. SHA-256 per file: see [the table below](#pc-prototype-files). This settles ARC-RES-025 CC-09. |
 | SH-03 | Every prototype: base stats st/dx/cn/be/in/pe/wp/ch 8, level 1, XP 0, alignment 0, unspent 5, age 20, gender and race as in the table; no basic or tech skill points; the spell/tech array holds one non-zero element (index 16, value −1), which `level_set` resets anyway; inventory count 0 and empty list, no gold handle, bank money 0, PC flags 0, critter flags 0. Effects: race effect `64 + race` (cause race) on all 13, plus effect 330 (cause gender) on 16075..16078. The stored player name is a non-empty string on all 13 (only lengths are printed). |
 | SH-04 | Art ids are critter underwear, no shield, no weapon, animation 0: `0x28002000` (human male), `0x29002000` (dwarf), `0x2A002000` (halfling body), `0x2B002000` (half-ogre), `0x2C002000` (elf male), `0x20002000` (human female), `0x24002000` (elf female). `art\missing.dat` header 4,601 equals the 4,601 listed critter/monster/unique-NPC ART files, so the engine uses it; its stand/no-weapon bit is set only for the dwarf, halfling and half-ogre female bodies (the same as a rebuild from file existence), so no pre-made id is redirected. Resolved names exist in `arcanum1.dat` only: `hmm` (generic, 16069, 16072, 16073), `ghm` (16067, 16068), `hgm` (16070), `efm` (16071), `dfm` (16074), `hmf` (16075..16078; 16076 is an elf woman, normalised to the human body). The only critter folders are `dfm`, `dfx`, `efm`, `ghm`, `hgm`, `hgx`, `hmf`, `hmm` and `hmx` (no `eff`). So 16075's art exists and the gate opens. |
-| SH-05 | Pre-made inventory sets (`Arcanum4`; identical in `arcanum3`), all parsed, reachable, every rate 100; the buy lines of sets 20..26 are empty and set 108 has none, so none empties a set; entry 0 is absent. Coins and prototypes (type in brackets: 5 weapon, 7 armor, 14 generic): set **20** 385 — 6029 [5], 8168 [7], 8049 [7]; set **22** 370 — 8094 [7], 6111 [5], 8170 [7]; set **23** 300 — 8200 [7], 6051 [5], 8171 [7]; set **24** 385 — 6029, 8168, 8065 [7]; set **25** 385 — 6029, 8168, 8069 [7]; set **26** 385 — 6029, 8168, 8142 [7]; set **108** 385 — 6029, 8168, 8065, 15178 [14]. 8049, 8065 and 8069 are the medium, small and large suits of the new-character clothes rule; 15178 is the crude lockpicks of the skill rule. Every listed prototype exists in `data/proto`. |
+| SH-05 | Pre-made inventory sets (`Arcanum4`; identical in `arcanum3`), all parsed, reachable, every rate 100; the buy lines of sets 20 and 22..26 are empty and set 108 has none, so none empties a set; entry 0 is absent. Coins and prototypes (type in brackets: 5 weapon, 7 armor, 14 generic): set **20** 385 — 6029 [5], 8168 [7], 8049 [7]; set **22** 370 — 8094 [7], 6111 [5], 8170 [7]; set **23** 300 — 8200 [7], 6051 [5], 8171 [7]; set **24** 385 — 6029, 8168, 8065 [7]; set **25** 385 — 6029, 8168, 8069 [7]; set **26** 385 — 6029, 8168, 8142 [7]; set **108** 385 — 6029, 8168, 8065, 15178 [14]. 8049, 8065 and 8069 are the medium, small and large suits of the new-character clothes rule; 15178 is the crude lockpicks of the skill rule. Every listed prototype exists in `data/proto`. |
 | SH-06 | Schemes 76..87 (`Arcanum4`; identical in `arcanum3`) all exist and parse, 31..49 steps each, and all twelve names exist. Standard NPC scheme 70 exists. First steps (attribute, target): see [the scheme table](#level-1-schemes). |
 | SH-07 | Background blocks (`Arcanum4`): 79. Effect ids used: 0 (blocks 39..50), 86..113, 179..189, 328, 329, 335..352 and 355. Every referenced effect exists and parses. Seven blocks have an effect with zero changes: 0 (effect 86), 62..66 and 78 (all effect 342). Of the 67 blocks offered to PCs (all but the `NPC` blocks 39..50), 51 change stats, 18 basic skills, 8 special values, 7 resistances, 5 tech skills and 1 a tech discipline; their operators are 206 add, 2 multiply (blocks 5 and 11, `*2` on the bad and good reaction adjustment, stored as 0 by CE), 1 percent, 1 max. No effect exceeds 7 changes in one attribute collection; effect 66 (elf) reaches exactly 7. Blocks 53/54 and 57/58 share a description id (1053, 1056) and an effect: they are race/gender variants with different item lists. Ten blocks carry items (3, 5, 8, 31, 39, 53, 54, 57, 58, 71); all item prototypes exist. |
 | SH-08 | The module's `gameeffect.mes` defines exactly one effect, number 0 (strength +6, beauty −6, intelligence −6, prowling −3, age +20; the same changes as the ogre race effect 73). It is the effect an empty background effect slot would add. |

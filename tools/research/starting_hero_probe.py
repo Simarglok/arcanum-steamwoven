@@ -118,10 +118,11 @@ RACE_EFFECT_BASE, FEMALE_EFFECT = 64, 330
 STARTING_KIT = {"nice_suit": 8049, "small_nice_suit": 8065, "large_nice_suit": 8069, "jacket": 8110,
                 "small_jacket": 8118, "large_jacket": 8126, "plain_dress": 8133, "small_ladies_clothes": 8134,
                 "large_ladies_clothes": 8135, "crude_lockpicks": 15178, "bandages": 15179, "gold": 9056}
-ARMOR_SIZE = {"human": "medium", "dwarf": "small", "elf": "medium", "half_elf": "medium", "gnome": "small",
-              "halfling": "small", "half_orc": "medium", "half_ogre": "large"}
-
 # CE armour size by race (item.c item_race_to_armor_size_tbl); a source fact, not an observation.
+ARMOR_SIZE = {"human": "medium", "dwarf": "small", "elf": "medium", "half_elf": "medium", "gnome": "small",
+              "halfling": "small", "half_orc": "medium", "half_ogre": "large", "dark_elf": "medium",
+              "ogre": "large", "orc": "medium"}
+
 # Critter ART file name parts (CE name.c), indexed by the art id fields.
 ART_BODY = ["HM", "DF", "GH", "HG", "EF"]
 ART_GENDER = "FMX"
@@ -500,7 +501,7 @@ def parse_backgrounds(mes: Mes) -> list[dict]:
         blocks.append({"block": b, "description": c_atoi(e[10 * b]), "effect": c_atoi(e[10 * b + 1]),
                        "effect_text_empty": e[10 * b + 1].strip() == "",
                        "condition": [t.upper() for t in condition] if known else {"sha256": sha(e[10 * b + 2].encode("latin-1"))},
-                       "npc_only": known and "NPC" in [t.upper() for t in condition],
+                       "npc_only": known and [t.upper() for t in condition] == ["NPC"],
                        "money": c_atoi(e[10 * b + 3]), "items": items})
         b += 1
     return blocks
