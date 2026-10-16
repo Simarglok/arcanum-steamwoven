@@ -126,7 +126,7 @@ public sealed class AreaInputSet
     }
     internal IReadOnlyList<AreaInput> Inputs { get; }
 }
-public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy }
+public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName }
 public sealed record AreaMappingBinding(AreaMappingRole Role, AreaEntryIdentity Entry, string PayloadSha256);
 public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 
@@ -156,10 +156,19 @@ public sealed class AreaSourcePlan
     public IReadOnlyList<AreaInputIdentity> Identities { get; }
     public IReadOnlyList<AreaMappingBinding> Mappings { get; }
     public IReadOnlyList<AreaArtBinding> ArtBindings { get; }
-    public string Profile => Original ? "arc-data-009-complete-file-effective-source-v1" : "structural-file-effective-v1";
-    internal bool Original { get; init; }
+    public string Profile => OriginalMap switch
+    {
+        OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
+        OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
+        _ => "structural-file-effective-v1",
+    };
+    /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans.</summary>
+    internal OriginalAreaMap OriginalMap { get; init; }
+    internal bool Original => OriginalMap != OriginalAreaMap.None;
     internal static bool Digest(string value) => value is not null && value.Length == 64 && value.All(c => c is >= '0' and <= '9' or >= 'a' and <= 'f');
 }
+
+internal enum OriginalAreaMap { None, CrashSiteExterior, CrashSiteCave }
 
 public sealed class AreaLoaderOptions
 {

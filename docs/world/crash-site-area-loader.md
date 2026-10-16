@@ -43,12 +43,62 @@ counts remain separate sector metadata. Active required composite references tha
 this profile cannot resolve fail completeness; absence in these originals does not
 claim general overlay/underlay, wall or roof-rendering support.
 
-Cave loading, executing the recorded connector, PATCH/dif/loose-file precedence,
+The cave is a second pinned profile (see [Crash Site cave profile](#crash-site-cave-profile)).
+Executing the recorded connector, PATCH/dif/loose-file precedence,
 lighting, time, navigation, interaction, AI and original runtime/pixel parity remain
 unimplemented. The snapshot reports `RendererExecutionVerified == false` and
 `GameplayVerified == false`. The independent frozen 4,096-terrain/317-record sector
 regression is separate and unchanged; this API does not widen the five-only static
 resource API or the bounded traversal profile.
+
+## Crash Site cave profile
+
+ARC-WORLD-009 adds `AreaOriginalValidator.OpenCave(inputs, options)` and
+`OpenCaveFiles(module, resource1, resource2, caveMobile, prototypes, options)`
+for the cave, catalogue map 5078 / runtime map 79, under the pinned profile
+`arc-world-009-cave-file-effective-source-v1` (`CaveProfile`). It uses the same
+owner, budget, identity and frame contract as the exterior. Facts and sources are
+in the [cave transition research](../research/cave-transition-evidence.md).
+
+| Domain | Required reconciliation |
+| --- | ---: |
+| Surveyed cave sectors | 1 |
+| Core sector (32,31), townmap 141, 4 serialized lights | 1 |
+| Context sectors present / absent | 0 / 8 |
+| Core terrain cells | 4,096 |
+| Core static objects (125 walls, 13 scenery) | 138 |
+| Normal-game aggregate records, all core | 39 |
+| Aggregate/editor correspondences | 39 |
+| Required prototype definitions | 30 |
+| Distinct terrain frame chains plus core object bodies | 194 |
+
+The NormalGameMobile role is the cave's game-generated object file (6,698 bytes,
+SHA-256 `aa29827d…8318`), never the exterior one. The profile binds all ten mapping
+roles, including the two wall tables.
+
+**Walls.** Object type 0 is admitted only when a plan binds both `WallStructure`
+and `WallName`; otherwise it stays `UnsupportedVersionOrSchema`, as before. A wall
+selector (art class 1) chooses one file: the structure row for its wall number gives
+an interior name (rotations 0, 1, 6, 7) or an exterior name (2–5), matched by its
+first three characters to exactly one wall-name row; then the piece code, damage
+letter `u` and the variation digit. Damaged walls (selector bits 0x480), unknown
+pieces, missing rows and ambiguous names fail. The visual is physical group 0,
+frame 0, requested palette from bits 4–5; `NominalFacing` keeps the rotation and
+`Mirrored` keeps the flip bit (bit 0). The loader does not move hotspots: drawing
+a wall (hotspot adjustment for rotations 0, 1, 6, 7 and the flip) and wall edge
+blocking are the next ARC-WORLD-009 steps.
+
+**Exact exceptions.** Five aggregate bodies use pinned policies, each bound to the
+object, record, raw selector, ART entry identity and payload digest: four contained
+items whose ground ART has trailing bytes after its last frame
+(`arc-world-009-exact-art-view-v1`; one NUL for entry 919, the bytes `02 00` for
+entries 955 and 956) and one container whose single-rotation ART is selected with
+rotation 1 (`arc-world-009-exact-single-group-alias-v1`). Any other mismatch fails.
+
+**Endpoint.** The snapshot publishes one endpoint: cave sector 2080374816 index 99,
+prototype 4047, use slot 1, script 1532 → catalogue 5000 / runtime 1, arrival
+(92913,82598). The exterior snapshot keeps its endpoint into the cave. Neither is
+executed by Data.
 
 ## API and explicit sources
 

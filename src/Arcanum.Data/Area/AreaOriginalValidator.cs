@@ -10,11 +10,26 @@ public static class AreaOriginalValidator
     public static AreaDataOwner Open(AreaInputSet inputs, AreaLoaderOptions? options = null)
         => AreaDataOwner.Open(inputs, OriginalProfile.Plan(), options ?? new());
 
+    /// <summary>The Crash Site cave (catalogue map 5078) under its own pinned profile. The
+    /// normal-game mobile role is the cave's game-generated object file.</summary>
+    public static AreaDataOwner OpenCave(AreaInputSet inputs, AreaLoaderOptions? options = null)
+        => AreaDataOwner.Open(inputs, CaveProfile.Plan(), options ?? new());
+
     /// <summary>Opens the explicit original roles and uniquely selected prototype
     /// files. Selection belongs to the authenticated Data profile, not a renderer
     /// resource list. All handles close if assembly or owner creation fails.</summary>
     public static AreaDataOwner OpenFiles(string module, string resource1, string resource2,
         string mobile, string prototypeDirectory, AreaLoaderOptions? options = null)
+        => OpenFiles(module, resource1, resource2, mobile, prototypeDirectory, OriginalProfile.Prototypes.Keys, inputs => Open(inputs, options));
+
+    /// <summary>As <see cref="OpenFiles(string,string,string,string,string,AreaLoaderOptions?)"/> for the cave;
+    /// <paramref name="caveMobile"/> is the cave's game-generated object file.</summary>
+    public static AreaDataOwner OpenCaveFiles(string module, string resource1, string resource2,
+        string caveMobile, string prototypeDirectory, AreaLoaderOptions? options = null)
+        => OpenFiles(module, resource1, resource2, caveMobile, prototypeDirectory, CaveProfile.Prototypes.Keys, inputs => OpenCave(inputs, options));
+
+    private static AreaDataOwner OpenFiles(string module, string resource1, string resource2, string mobile, string prototypeDirectory,
+        IEnumerable<int> prototypes, Func<AreaInputSet, AreaDataOwner> open)
     {
         var inputs = new List<AreaInput>();
         try
@@ -23,14 +38,14 @@ public static class AreaOriginalValidator
             inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Resource1), resource1));
             inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Resource2), resource2));
             inputs.Add(AreaInput.FromFile(new(AreaSourceRole.NormalGameMobile), mobile));
-            foreach (var number in OriginalProfile.Prototypes.Keys.Order())
+            foreach (var number in prototypes.Order())
             {
                 var candidates = Directory.EnumerateFiles(prototypeDirectory, $"{number:D6} - *.pro", SearchOption.TopDirectoryOnly).Take(2).ToArray();
                 if (candidates.Length != 1)
                     throw new AreaException(new(candidates.Length == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Prototype));
                 inputs.Add(AreaInput.FromFile(new(AreaSourceRole.Prototype, number), candidates[0]));
             }
-            return Open(new(inputs), options);
+            return open(new(inputs));
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
