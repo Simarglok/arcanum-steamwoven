@@ -31,7 +31,7 @@ internal static partial class Program
     internal sealed record InvItem(int Index, string RawId, string Entity, int Type, int Prototype, uint Flags, uint ItemFlags, string? ParentRaw,
         int Name, int Description, int UnknownDescription, int Complexity, int? KeyId);
     internal sealed record InvOwner(int Index, string RawId, int Type, int DeclaredCount, IReadOnlyList<(string Raw, string Entity)> List);
-    internal enum InvLookup { Found, Absent, UnresolvedElement }
+    internal enum InvLookup { NotQueried, Found, Absent, UnresolvedElement }
     internal readonly record struct InvMatch(InvLookup Kind, int ListIndex, InvItem? Item);
     internal readonly record struct InvCode(string Code, int Value, bool Overflow);
 
@@ -251,9 +251,11 @@ internal static partial class Program
                 var document = DlgReader.Read(bytes);
                 var substituteRaw = o.EffectiveFields.FirstOrDefault(f => f.Slot == NpcSubstituteSlot) is { Presence: AreaPresence.Value } s ? s.Fingerprint : null;
                 var substitute = substituteRaw is null ? (InvOwner?)null : owners.Select(x => x.Owner).FirstOrDefault(x => x.RawId == substituteRaw);
-                var operands = new List<object>(); var gold = 0;
+                var operands = new List<object>(); var gold = 0; var barter = 0;
                 foreach (var record in document.Records)
                 {
+                    // A player reply whose whole text is the "b:" directive opens barter.
+                    if (record.Role == DlgRecordRole.Player && Encoding.ASCII.GetString(record.Text.Bytes.ToArray()).Trim().Equals("b:", StringComparison.OrdinalIgnoreCase)) barter++;
                     var fields = record.Role == DlgRecordRole.Player ? new[] { ("condition", record.Condition), ("action", record.Action) } : [("action", record.Action)];
                     foreach (var (role, field) in fields)
                         foreach (var code in InvScanCodes(field.Bytes.ToArray()))
@@ -280,7 +282,7 @@ internal static partial class Program
                 dialogs.Add(new
                 {
                     owner_source_index = inv.Index, description = InvNumber(o, InvDescriptionSlot), script, dlg_archive = CaveArchives[hits[0].Archive].Role, dlg_bytes = bytes.Length,
-                    dlg_sha256 = AreaHash(bytes), records = document.Records.Count, gold_operations = gold, in_operations = operands,
+                    dlg_sha256 = AreaHash(bytes), records = document.Records.Count, gold_operations = gold, barter_replies = barter, in_operations = operands,
                 });
             }
 
@@ -356,6 +358,7 @@ internal static partial class Program
     private static void ItemInventorySelfTest()
     {
         static void Check(bool condition, string label) { if (!condition) throw new InvalidOperationException("item self-test failed: " + label); }
+        static bool Throws(Action action) { try { action(); return false; } catch (InvalidDataException) { return true; } }
         static InvItem Item(int index, string raw, int name, uint flags = InventoryFlag, string? parent = "npc", int type = 14, uint itemFlags = 0, int complexity = 0, int? key = null) =>
             new(index, raw, "e" + raw, type, 1, flags, itemFlags, parent, name, 100 + index, 200 + index, complexity, key);
 
@@ -376,6 +379,13 @@ internal static partial class Program
         var broken = npc with { List = [("a", "ea"), ("z", "ez"), ("b", "eb")] };
         Check(InvFirstByName(broken, byRaw, 9) is { Kind: InvLookup.UnresolvedElement, ListIndex: 1 }, "unresolved stops");
         Check(InvFirstByName(npc with { List = [("a", "wrong")] }, byRaw, 7).Kind == InvLookup.UnresolvedElement, "entity mismatch");
+        Check(default(InvMatch).Kind == InvLookup.NotQueried, "unqueried lookup is not a match");
+
+        // List element words rebuild the same raw ID and entity as the record's own 24 bytes.
+        var raw = new byte[24]; raw[0] = 2; raw[3] = 0x7F; for (var k = 8; k < 24; k++) raw[k] = (byte)k;
+        var words = Enumerable.Range(0, 6).Select(k => (long)BinaryPrimitives.ReadUInt32LittleEndian(raw.AsSpan(k * 4))).ToArray();
+        Check(InvElement(words) == (AreaHash(raw), InvEntity(raw)) && InvEntity(raw) == "2:" + Convert.ToHexString(raw, 8, 16).ToLowerInvariant(), "element identity");
+        raw[0] = 9; Check(Throws(() => InvEntity(raw)), "unknown ID form refused");
 
         // Name chain: key id, unidentified unknown description, identified description, file split.
         Check(InvNameSource(Item(1, "k", 0, type: KeyType, key: 5)) == ("gamekey", 5), "key");
@@ -392,6 +402,6 @@ internal static partial class Program
         Check(twice.MultiplyListed == 1 && twice.ParentAgrees == 2 && twice.CountMismatches == 1, "double listing");
         var unflagged = InvReconcile([npc], [a with { Flags = 0 }, b, c]);
         Check(unflagged.FlagAgrees == 2, "flag");
-        Console.WriteLine("item-inventory self-test: PASS (scanner, first match, name chain, reconciliation)");
+        Console.WriteLine("item-inventory self-test: PASS (scanner, first match, element identity, name chain, reconciliation)");
     }
 }

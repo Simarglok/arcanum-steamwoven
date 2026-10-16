@@ -55,9 +55,11 @@ so absent instance fields inherit the authenticated prototype value.
 | `mes/gamekey.mes` | module only | 3,258 | `21fce72d…0efb35` |
 | `rules/invensource.mes` | resource3 **and** resource4 | 35,008 / 35,149 | `fc7936ff…d4ef4` / `b66b9cd9…cfda17` |
 
-The two inventory-source files differ, which is a resource-precedence question
-left to its own task. The three entries the Crash Site uses (56, 69, 84) are present in
-both with equal text hashes, so the answer below does not depend on it.
+The two inventory-source files differ. Under the merged
+[content precedence](content-precedence.md) (ARC-DATA-011) the later-named
+`arcanum4.dat` copy wins. The three entries the Crash Site uses (56, 69, 84) have
+equal text hashes in both copies, so nothing below depends on the choice. No loose
+`data/` or module-folder file overrides any of these four resources or the DLG.
 
 ## 1. The T0 inventory graph (D)
 
@@ -66,12 +68,14 @@ of 8 NPCs**. Both containers are empty. Field mapping (S): the container and
 critter lists are `OBJ_F_CONTAINER_INVENTORY_LIST_IDX` / `OBJ_F_CRITTER_INVENTORY_LIST_IDX`
 (object-ID arrays, dense keys 0..n-1) with their `*_INVENTORY_NUM` counts; each
 item carries `OBJ_F_ITEM_PARENT`, `OBJ_F_ITEM_INV_LOCATION` and the common
-`OF_INVENTORY` flag ([field enum](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L97-L121),
+`OF_INVENTORY` flag ([container](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L66-L78),
+[item](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L97-L121), [critter](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L228-L262) fields,
+[flag](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.h#L23),
 [list fields by owner type](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1068-L1101)).
 
 Reconciliation over the whole loaded area (core plus context ring, 53 items and
 45 owners) has no exception: every one of the 16 listed elements resolves to
-exactly one item record, by raw 24-byte ID and by type-tagged entity ID; each
+exactly one item record by its raw 24-byte object ID; each
 listed item's parent field names its listing owner; each carries `OF_INVENTORY`;
 no inventory-flagged item is unlisted; no item is listed twice; every declared
 count equals its list length. The sixteenth element is the one context item,
@@ -80,7 +84,7 @@ Area already marks `ExteriorSectorInsertionRefusedByInventory`; ground items are
 the 37 `BodyEligibleConditionally` bodies the viewer draws.
 
 Life follows the passability closure's F6 rule (current HP ≤ 0): the four owners
-carrying 32,000 damage are dead, all others carry 0.
+carrying 32,000 damage are dead; the other four inventory owners carry no damage.
 
 | Owner (source index, description, prototype) | At T0 | Items: list index → (source index, type, slot, `OBJ_F_NAME`, description) |
 | --- | --- | --- |
@@ -120,37 +124,49 @@ background, gender and name characters, then the source and spawn flag are clear
 ([generation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2073-L2164)).
 So chest contents are a function of the created character, not stored data.
 
-**NPC inventory sources (S).** For critters, the read callers of the generator are
-object creation/duplication and the NPC respawn timer, not loading a saved map
-object ([creation call](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4237-L4298),
+**NPC inventory sources (S).** The generator's callers that can reach a Crash Site
+NPC are object creation/duplication and the NPC respawn timer, which closing an
+inventory UI on that NPC arms for 12 to 24 game hours
+([UI close](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L1080-L1084)); loading a saved map object does
+not call it. PC creation and the new-game shop are separate callers
+([creation call](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4237-L4298),
 [gate](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2004-L2070),
 [respawn timer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2167-L2201)).
-Only NPC 6460 has a source (84); at T0 its serialized one-item list is authoritative.
+Only NPC 6460 has a source (84); at T0 its serialized one-item list is
+authoritative, and a later respawn could regenerate it.
 
 ## 2. How the player gets each item (S)
 
-- **Ground items.** A left click on any item type, in or out of combat, queues
-  `AG_PICKUP_ITEM` ([click dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L3317-L3497)).
+- **Ground items.** A left click on any item type queues
+  `AG_PICKUP_ITEM`, in or out of combat; out of combat Alt+click takes a
+  different action instead ([click dispatch](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L3317-L3497)).
   The goal accepts only an unparented or junk-pile item, needs the item decay
   process enabled (its counter starts at 1), consumes one action point (a combat
   cost) and calls `item_transfer(item, pc)`
   ([goal](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L7850-L7891)).
   For an unparented item that runs `SAP_GET` (triggerer PC, attachee item),
-  `item_check_insert` (weight against carry limit, free grid room), `object_pickup`,
+  `item_check_insert` (weight against carry limit; a technology item, complexity
+  below 0, is refused to a PC with the Technophobia background; free grid room),
+  `object_pickup`,
   `item_insert` into the chosen slot, then cancels decay
   ([transfer](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L603-L688),
   [insert check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3639-L3677),
   [insert](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3680-L3777)).
   All 37 Crash Site ground items have no attachment, and an absent attachment
-  counts as script success, so only the insert check can refuse (D + S).
+  counts as script success, so only the insert check can refuse (D + S). 34 of the
+  37 ground items have negative complexity, so a technophobe cannot pick them up.
 - **Dead NPCs (6 items).** Out of combat a left click on a dead critter opens it
   as a container (`AG_USE_CONTAINER` → loot inventory UI); in combat it needs Alt.
-  Loot admission checks the PC and target visibility before the UI opens
+  Loot admission checks the PC, target visibility and the target's `SAP_USE`
+  script (none of the four dead NPCs has one) before the UI opens
   ([UI admission](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c#L475-L599)).
   Moving 2527 into the PC fires its own `SAP_INSERT_ITEM` script: a U frontier.
-- **Living NPCs.** Virgil's ring arrives through dialog (section 4). The other
-  items of living NPCs (gold, food, two weapons, robes) have no dialog or loot path
-  at T0; barter, theft or death are outside this research.
+- **Living NPCs.** Virgil's ring arrives through dialog (section 4). No other
+  item of a living NPC (gold, food, two weapons, worn armor) is named by a dialog
+  `IN` operand. Virgil's DLG has one barter reply (`b:`), so barter reaches his
+  inventory; SCR-level item actions in his other scripts (dialog override 1848,
+  heartbeat 1100 and others) and in the other NPCs' scripts were not scanned and
+  stay Unknown, as do theft and death.
 - **Containers.** Generated on first loot open as above; there is nothing to take
   before that.
 
@@ -168,7 +184,8 @@ ID; an item that is not identified (`OBJ_F_ITEM_MAGIC_TECH_COMPLEXITY > 0` and n
 `OBJ_F_NAME` is **not** display text. It is a numeric name class the prototype
 initializer sets from a per-type base (generic 5600, food 3600, gold 3200 and so
 on) or a specific number, and it is the key that `IN` and other name lookups
-compare ([type bases](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L419-L465)).
+compare ([type bases](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L419-L465),
+[assignment](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L494), with per-prototype overrides further down).
 All 16 Crash Site generic ground items share 5600, so a name lookup cannot
 distinguish them.
 
@@ -185,21 +202,24 @@ Only Virgil has an `SAP_DIALOG` attachment in the core (script 1324). Its DLG
 (resource3, 56,782 bytes, `34a49a2c…5e53a`, 409 records) was scanned with the
 source rule for conditions and actions: skip to a letter or `$`, take two
 characters as the code, read a C integer after it
-([scanner](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1360-L1406)).
+([condition scanner](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1360-L1406),
+[action scanner](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1861-L1895)). Player replies whose text
+is the barter directive `b:` were counted separately ([options](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2405-L2415)).
 Player conditions and all actions were scanned; NPC condition fields were not,
 because they are speech metadata.
 
 Result: there is **exactly one** item operand in the whole dialog: the entry
 action of NPC node 1 is `IN` with name **−2804**. There is no positive `IN`, no
-`IN` condition and no `$$` gold operation. This is the inventory step of the
+`IN` condition and no `$$` gold operation; there is one barter reply. This is the inventory step of the
 first-conversation effect sequence GF, GF, GF, IN, GF, QU, RU already recorded
 in the [NPC dialog evidence](crash-site-npc-dialog-evidence.md).
 
 Negative `IN` looks up the name in the NPC's own list first, then in his
 substitute inventory, transfers to the PC and, if the item's parent is then not
 the PC, removes it and places it at the PC's location; positive `IN` takes the
-item from the PC or a follower and gives it to the NPC, destroying it when the
-NPC has no PC leader
+item from the PC or a follower and gives it to the NPC; if the NPC did not receive
+it, it is dropped at the NPC's location when the NPC has a PC leader and destroyed
+otherwise
 ([action](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2004-L2056),
 [condition](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1519-L1546)).
 
@@ -213,11 +233,12 @@ For this one operand the probe closes the RES-021 Unknowns that depend on data:
 | Parent consistency | The item's parent field names Virgil and it carries `OF_INVENTORY`. |
 | Type / stack / key | Armor type, not gold or ammo, so no stack merge and no quantity; not a key or key ring. |
 | Worn slot | Pack location 0, not a wear slot, so no unequip effects on removal. |
-| Item callbacks | Only `SAP_EXAMINE`; no `SAP_GET`, `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM` or wield scripts on the item. Virgil has no `SAP_REMOVE_ITEM` either. |
+| Item callbacks | Only `SAP_EXAMINE`; no `SAP_GET`, `SAP_INSERT_ITEM`, `SAP_REMOVE_ITEM` or wield scripts on the item. |
 | Decay on fallback | No `OIF_NO_DECAY`, so if the PC cannot take it and it is placed on the ground, it is decay-eligible. |
 
 Still Unknown (U): the recipient PC's own `SAP_TRANSFER` attachment and its
-insert check (weight and free room) depend on the created character, which is not
+insert check (weight, Technophobia and free room; the ring has complexity 0, so
+the Technophobia branch does not apply) depend on the created character, which is not
 in the map data. The [character creation research](character-creation-evidence.md)
 covers the PC prototypes and starting inventory, not this callback or the
 carry/room check against the ring.
@@ -231,7 +252,7 @@ carry/room check against the ring.
   prototype, as RES-021 E06 records.
 - **Keys and key rings (FR-ITEM-004).** The core has no key and no key ring, both
   containers have key ID 0 and are never locked. The ring Virgil hands over is an
-  armor-type ring for a ring slot, not a key ring. FR-ITEM-004 has nothing to
+  armor-type item, not a key ring. FR-ITEM-004 has nothing to
   exercise at the Crash Site.
 
 ## Proposal for implementation (P)
@@ -251,5 +272,5 @@ carry/room check against the ring.
 3. **Conversation binding.** ARC-SCRIPT-005 already records `IN` as a typed
    command; the owner consumes that command instead of the dialog changing items.
 4. Keep chest generation, barter, theft, NPC respawn and positive `IN` out until
-   their own research. The PC's insert check needs the stats and starting
-inventory from [character creation](character-creation-evidence.md).
+   their own research. The PC's insert check needs the stats, background and
+   starting inventory from [character creation](character-creation-evidence.md).
