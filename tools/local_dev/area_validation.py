@@ -487,7 +487,8 @@ def resource_summary(raw: object) -> dict:
 
 
 # Export tasks whose area-original native smoke also loads the cave and must bind its transition smoke.
-CAVE_TASKS = ('ARC-WORLD-009',)
+# ARC-RENDER-008 builds include the cave (they are merged on top of ARC-WORLD-009).
+CAVE_TASKS = ('ARC-WORLD-009', 'ARC-RENDER-008')
 
 
 def validate_report(report: object, head: str, host: str, task: str = 'ARC-RENDER-007') -> None:

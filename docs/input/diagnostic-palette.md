@@ -42,10 +42,11 @@ its Close button. Contents:
   `crash-site-area` only): advance the area game clock by one whole hour or switch the
   ambient multiplier off/on; a status line shows time, DAY/NIGHT and scheme. Elsewhere
   they report "unavailable". See [area lighting](../rendering/area-lighting.md).
-- **Show passability (unavailable)**: a disabled, non-navigable row reserved for
-  ARC-RENDER-008. It draws nothing and claims no Open/Blocked state. The seam for
-  RENDER-008 is `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and the
-  `OverlayToggled` event (one report per user toggle; none while unavailable).
+- **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
+  checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
+  without one it reads "unavailable" and is not navigable. The host binds it through
+  `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and receives one
+  `OverlayToggled` event per user toggle.
 - The status line reports how a palette action ended: "Reset scene done", "Reload
   done: generation N published", or "Scene FAILED: stage=… code=…" (the old scene is not
   republished).
@@ -83,8 +84,10 @@ WORLD host (`TerrainViewerWorld.cs`).
    implemented**: Escape, F1–F5, F7, F8, F12, NumLock, Enter, Space, Home, 1–0, A, C, F,
    I, L, O, R, S, T, V, W, and the CE-source-only F6, F10, E, K, M, plus held `,` `.` `/`.
    A reserved key has no debug action and is not redirected; the HUD names the last
-   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Every other key is
-   unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Exception: while
+   `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
+   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)).
+   Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.

@@ -32,6 +32,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     private Label _summary = null!;
     private Label _actionStatus = null!;
     private CheckButton _overlay = null!;
+    private int _overlayIndex;
     public InputSettings Settings { get; private set; } = DiagnosticWorldPolicy.DefaultInputSettings;
     public bool IsOpen => Visible;
     public override void _Ready()
@@ -83,14 +84,14 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
         AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
         _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);
-        // The overlay state seam for ARC-RENDER-008. Until a real overlay exists the
-        // row is visibly unavailable and is neither navigable nor toggleable.
+        // ARC-RENDER-008 overlay checkbox: the host binds availability/state (BindOverlay);
+        // without a movement authority it is visibly unavailable, not navigable, not toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
         _overlay.Toggled += value => { if (!_binding && !_overlay.Disabled) OverlayToggled?.Invoke(value); };
-        _rows.AddChild(_overlay);
+        _rows.AddChild(_overlay); _overlayIndex = _controls.Count;
         _actionStatus = new Label { Name = "PaletteActionStatus", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_actionStatus);
         _summary = new Label { Name = "PaletteSummary", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_summary);
-        _rows.AddChild(new Label { Text = "Passability overlay: not implemented yet (ARC-RENDER-008).\nReset preferences: input settings and zoom 2.00; scene unchanged.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        _rows.AddChild(new Label { Text = "Passability: read-only movement assessor view; legend in the HUD.\nReset preferences: input settings and zoom 2.00; scene unchanged.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         AddAction("Reset preferences", () => ResetRequested?.Invoke());
         AddAction("Close (Ctrl+Shift+F9/Start)", () => CloseRequested?.Invoke());
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_status);
@@ -155,6 +156,25 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _binding = true;
         _overlay.Disabled = !available; _overlay.ButtonPressed = available && on; _overlay.Text = text;
         _overlay.FocusMode = available ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        // Navigable (keyboard/controller) exactly while available, at its row position.
+        if (available && !_controls.Contains(_overlay))
+        {
+            _controls.Insert(_overlayIndex, _overlay);
+            if (_selected >= _overlayIndex && GetViewport()?.GuiGetFocusOwner() != _overlay) _selected++;
+        }
+        else if (!available && _controls.IndexOf(_overlay) is var removed and >= 0)
+        {
+            // Keep the selection on the same control (or the row before the checkbox), so a
+            // later Confirm can never fall through to an unrelated action such as Reset preferences.
+            var focused = GetViewport()?.GuiGetFocusOwner() == _overlay;
+            _controls.RemoveAt(removed);
+            if (_selected > removed || (_selected == removed && _selected > 0)) _selected--;
+            if (focused)
+            {
+                var control = _controls[_selected];
+                if (control is SpinBox spin) spin.GetLineEdit().GrabFocus(); else control.GrabFocus();
+            }
+        }
         _binding = false;
     }
     public void SetSaveStatus(bool saved) => _status.Text = saved ? "Preferences saved locally." : "Preferences save failed.";
@@ -169,6 +189,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     {
         SynchronizeSelection();
         InputTraceForSelfTest?.Invoke($"Confirm selected={_selected} control={_controls[_selected].Name}");
+        if (_controls[_selected] is BaseButton { Disabled: true }) return;
         if (_controls[_selected] is CheckButton check) check.ButtonPressed = !check.ButtonPressed;
         else if (_actions.TryGetValue(_controls[_selected], out var action)) action();
     }

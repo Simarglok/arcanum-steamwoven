@@ -95,24 +95,51 @@ class Render007DevTests(unittest.TestCase):
         self.assertIn("ARC-RENDER-007", cli["parser"]().parse_args(
             ["configure", "select-launch", "--tool", "terrain", "--candidate", "root:ARC-RENDER-007:" + "a" * 40]).candidate)
 
-    def test_input001_binds_literally_to_the_area_gate_set(self):
-        # ARC-INPUT-001 (diagnostic palette) ships on the whole-core AREA build with
-        # every ARC-RENDER-007 gate; nothing broader than the literal task is admitted.
-        self.assertIn("ARC-INPUT-001", manifests.SUPPORTED_TOOLS["terrain"])
-        self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for("ARC-INPUT-001"))
-        self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES["ARC-INPUT-001"])
-        for other in ("ARC-INPUT-002", "ARC-RENDER-008", "ARC-INPUT"):
+    def test_cli_crash_site_area_launches_every_exact_area_task(self):
+        # Each AREA-family v2 artifact passes the closed (schema, task) pairing, not only ARC-RENDER-007.
+        for task in retention.AREA_TASKS:
+            with self.subTest(task=task):
+                self.tearDown(); self.setUp()
+                self.authority_fixture(task=task, tool="terrain")
+                conf = config.load_config(); conf["inputs"] = self.roles()
+                conf["launchSelection"] = {"terrain": f"test:{task}:" + "a" * 40}; config.save_config(conf)
+                cli = runpy.run_path(str(Path(__file__).resolve().parents[1] / "arcanum-local"))
+                args = cli["parser"]().parse_args(["launch", "terrain", "--mode", "crash-site-area", "--dry-run"])
+                with patch.object(launch, "start", return_value={"started": False}) as start:
+                    try:
+                        cli["command_launch"](args)
+                        start.assert_called_once()
+                    except ValueError as error:
+                        # Past the pairing, a cave build may still name its own missing role.
+                        self.assertNotIn("crash-site-area requires", str(error))
+                        self.assertIn(task, launch.TASK_ROLES)
+
+    def test_area_family_tasks_bind_literally_to_the_area_gate_set(self):
+        # ARC-INPUT-001 (diagnostic palette) and ARC-RENDER-008 (passability overlay) ship on the whole-core
+        # AREA build with every ARC-RENDER-007 gate; nothing broader than the literal tasks is admitted.
+        tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
+        writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
+        script = (tools / "validate-macos.sh").read_text()
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009|ARC-RENDER-008) area_task=1; regression_task=ARC-WORLD-003", script)
+        # ARC-RENDER-008 builds sit on top of the cave build: the cave role and transition smoke apply too.
+        from tools.local_dev import area_validation
+        self.assertIn("ARC-RENDER-008", area_validation.CAVE_TASKS)
+        self.assertEqual(launch.TASK_ROLES["ARC-WORLD-009"], launch.TASK_ROLES["ARC-RENDER-008"])
+        self.assertEqual("crash-site-area", launch.TASK_MODES["ARC-RENDER-008"])
+        for task in ("ARC-INPUT-001", "ARC-RENDER-008"):
+            self.assertIn(task, manifests.SUPPORTED_TOOLS["terrain"])
+            self.assertIn(task, retention.AREA_TASKS)
+            self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for(task))
+            self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES[task])
+            self.assertEqual("world-builds", writer["TASKS"][task])
+            self.assertIn(task, writer["AREA_TASKS"])
+            with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
+                with self.assertRaises(ValueError):
+                    grid_export_gates.validate_reports(Path(evidence), "a" * 40, task)
+        for other in ("ARC-INPUT-002", "ARC-RENDER-009", "ARC-INPUT", "ARC-RENDER"):
             self.assertNotIn(other, manifests.SUPPORTED_TOOLS["terrain"])
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
-        tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
-        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
-        writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
-        self.assertEqual("world-builds", writer["TASKS"]["ARC-INPUT-001"])
-        self.assertIn("ARC-INPUT-001", writer["AREA_TASKS"])
-        with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
-            with self.assertRaises(ValueError):
-                grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-INPUT-001")
 
     def test_world007_binds_literally_to_the_area_gate_set(self):
         # ARC-WORLD-007 (LMB click-to-move) ships on the same whole-core AREA build; its route
@@ -126,7 +153,7 @@ class Render007DevTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
         tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
-        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009|ARC-RENDER-008) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
         writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
         self.assertEqual("world-builds", writer["TASKS"]["ARC-WORLD-007"])
         self.assertIn("ARC-WORLD-007", writer["AREA_TASKS"])
