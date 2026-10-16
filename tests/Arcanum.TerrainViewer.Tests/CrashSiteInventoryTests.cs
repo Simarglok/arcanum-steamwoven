@@ -47,6 +47,7 @@ public sealed class CrashSiteInventoryTests
         // docs/research/crash-site-item-inventory.md section 1: the four NPCs carrying 32,000 damage.
         CollectionAssert.AreEquivalent(new[] { 5699, 4457, 4200, 1201 }, dead.Where(index => inventory.ListOf(index).Count > 0).ToArray());
         Assert.AreEqual(dead.Count, inventoryMap.DeadNpcs);
+        Assert.AreEqual(0, inventoryMap.NpcsWithoutEvidence, "every NPC on an admitted cell has step evidence for its life");
 
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
         var map = new SessionMapId(snapshot.RuntimeMap);

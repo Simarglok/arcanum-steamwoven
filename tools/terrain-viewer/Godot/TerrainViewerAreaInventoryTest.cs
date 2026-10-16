@@ -76,14 +76,38 @@ public partial class TerrainViewerApp
                      new("syn:listed", Facts(SessionItemType.Weapon, 2), null)]),
                 new Dictionary<string, AreaObjectRecord> { ["syn:body"] = body, ["syn:item"] = item, ["syn:listed"] = listed })]));
 
-            // From afar the cursor promises a walk; a press sets the walk and remembers the pickup.
+            // From afar (a reachable cell 2..6 cells from the item) the cursor promises a walk; a press sets the walk and
+            // remembers the pickup; a ground press then cancels it.
             var session = (AreaGridSession)_worldActor.Session!;
-            var actor = session.Chart.ToWorld(session.State.CommittedCell);
+            var routes = new AreaRouteSource(session.Snapshot, session.Chart);
+            var itemChart = session.Chart.ToChart(new(item.WorldX!.Value, item.WorldY!.Value));
+            var seen = new HashSet<CellCoord> { session.State.CommittedCell }; var queue = new Queue<CellCoord>([session.State.CommittedCell]);
+            CellCoord? farCell = null;
+            while (farCell is null && queue.TryDequeue(out var cell))
+            {
+                if (Math.Max(Math.Abs(cell.X - itemChart.X), Math.Abs(cell.Y - itemChart.Y)) is >= 2 and <= 6) { farCell = cell; break; }
+                foreach (var direction in Enum.GetValues<NeighborDirection>())
+                {
+                    var next = Arcanum.Simulation.Navigation.RoutePlanner.Neighbor(cell, direction);
+                    if (seen.Contains(next) || !routes.Contains(next) || routes.Assess(cell, direction) != Arcanum.Simulation.Navigation.RouteStepVerdict.Open) continue;
+                    seen.Add(next); queue.Enqueue(next);
+                }
+            }
+            ConfigureAreaActor(AreaRuntimes()[map], farCell ?? throw new InvalidOperationException("AREA inventory: no reachable cell 2..6 from the item"), NeighborDirection.XPlus);
+            OpenHoverGate(steps); session = (AreaGridSession)_worldActor.Session!;
             var point = await HoverPointAsync(host, itemCommand) ?? throw new InvalidOperationException("AREA inventory: item not visible");
             HoverAtForSelfTest(point);
-            var far = Chebyshev(item, (actor.X, actor.Y)) > AreaInventoryHost.Reach;
-            Require(HoverActionForSelfTest == (far ? AreaHoverAction.WalkToPickUp : AreaHoverAction.PickUp) && HoverCursorForSelfTest == Godot.Input.CursorShape.PointingHand,
-                $"item hover {HoverActionForSelfTest}");
+            Require(HoverActionForSelfTest == AreaHoverAction.WalkToPickUp && HoverCursorForSelfTest == Godot.Input.CursorShape.PointingHand,
+                $"far item hover {HoverActionForSelfTest}");
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
+            Require(_inventoryAfterRoute is { Kind: AreaInventoryTargetKind.GroundItem } && _worldRoute?.Target is not null, "the far press walks to pick up: " + _inventoryStatus);
+            PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+            await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+            var ground = GroundPoint(session.State.CommittedCell) ?? throw new InvalidOperationException("AREA inventory: no bare ground at the actor");
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = ground, GlobalPosition = ground });
+            Require(_inventoryAfterRoute is null && _inventoryStatus.Contains("cancelled: a ground click", StringComparison.Ordinal) && _areaSession.QueryPcInventory().Count == 0,
+                "a ground press cancels the walk to pick up: " + _inventoryStatus);
+            StopWorldRoute("ARC-UI-004 self-test");
 
             // Stand next to the item: the press takes it at once and it leaves the world.
             var near = ApproachCell(session, item.WorldX!.Value, item.WorldY!.Value, AreaInventoryHost.Reach) ?? throw new InvalidOperationException("AREA inventory: no cell next to the item");
@@ -124,7 +148,7 @@ public partial class TerrainViewerApp
             Require(_inventoryPanel.MessageForSelfTest.StartsWith("took ", StringComparison.Ordinal), "window message " + _inventoryPanel.MessageForSelfTest);
             InventoryKey(Key.Escape);
             Require(!InventoryOpen, "Escape closed the loot window");
-            return $"pickup at reach {AreaInventoryHost.Reach}, hover {(far ? "walk to pick up" : "pick up")} from the spawn, I/Escape toggle, loot by take button";
+            return $"walk to pick up and its ground-click cancel, pickup at reach {AreaInventoryHost.Reach}, I/Escape toggle, loot by take button";
         }
         finally
         {

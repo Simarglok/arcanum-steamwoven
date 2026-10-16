@@ -21,12 +21,13 @@ public sealed class AreaInventoryMap
     private readonly Dictionary<AreaObjectKey, string> _entities;
 
     /// <param name="rows">The object row of every seed entity (exactly those); one row per entity.</param>
-    public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0)
+    public AreaInventoryMap(int runtimeMap, SessionMapInventorySeed seed, IReadOnlyDictionary<string, AreaObjectRecord> rows, int deadNpcs = 0,
+        int npcsWithoutEvidence = 0)
     {
         ArgumentNullException.ThrowIfNull(seed);
         ArgumentNullException.ThrowIfNull(rows);
         if (runtimeMap < 1) throw new ArgumentOutOfRangeException(nameof(runtimeMap));
-        RuntimeMap = runtimeMap; Seed = seed; DeadNpcs = deadNpcs;
+        RuntimeMap = runtimeMap; Seed = seed; DeadNpcs = deadNpcs; NpcsWithoutEvidence = npcsWithoutEvidence;
         var wanted = seed.Items.Select(item => item.Entity).Concat(seed.Holders.Select(holder => holder.Entity)).ToHashSet(StringComparer.Ordinal);
         if (rows.Count != wanted.Count || !wanted.All(rows.ContainsKey)) throw new ArgumentException("AREA_INVENTORY_ROWS_DIFFER", nameof(rows));
         _rows = new(rows, StringComparer.Ordinal); _entities = [];
@@ -38,6 +39,8 @@ public sealed class AreaInventoryMap
     public SessionMapInventorySeed Seed { get; }
     /// <summary>NPC holders the step rules show dead (<c>CRITTER_DEAD</c>), with or without items.</summary>
     public int DeadNpcs { get; }
+    /// <summary>NPC holders on an admitted cell whose step evidence names no life fact (counted as alive).</summary>
+    public int NpcsWithoutEvidence { get; }
     public AreaObjectRecord Row(string entity) => _rows[entity];
     public bool TryGetRow(string entity, out AreaObjectRecord row) => _rows.TryGetValue(entity, out row!);
     public bool TryGetEntity(AreaObjectKey key, out string entity) => _entities.TryGetValue(key, out entity!);
@@ -45,19 +48,30 @@ public sealed class AreaInventoryMap
     /// <summary>
     /// Builds the seed from the strict Area snapshot: every holder and item of the ARC-DATA-012 view, life from the step
     /// rules (an NPC is dead only when a step into its cell meets its <c>CRITTER_DEAD</c> evidence; no evidence counts as
-    /// alive, so it is never looted). A refused view or a PC record (none exists at T0) gives no map.
+    /// alive, so it is never looted). A refused view, a PC record (none exists at T0), or data the mapping cannot represent
+    /// (duplicate object ids or step evidence, a coordinate beyond the session's cell range) gives no map, never an exception.
     /// </summary>
     public static AreaInventoryMapBuild Build(AreaSnapshot snapshot, AreaStepSnapshot steps, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         ArgumentNullException.ThrowIfNull(steps);
+        try { return BuildChecked(snapshot, steps, token); }
+        catch (Exception exception) when (exception is InvalidOperationException or OverflowException or ArgumentException or KeyNotFoundException)
+        {
+            return new(AreaInventoryMapStatus.InventoryRefused, null, "mapping refused: " + exception.GetType().Name);
+        }
+    }
+
+    private static AreaInventoryMapBuild BuildChecked(AreaSnapshot snapshot, AreaStepSnapshot steps, CancellationToken token)
+    {
         var read = AreaInventoryReader.Read(snapshot, token);
         if (read.Failure != AreaInventoryFailure.None || read.Inventory is not { } inventory)
             return new(AreaInventoryMapStatus.InventoryRefused, null, $"{read.Failure} at {read.SourceIndex?.ToString() ?? "-"}");
         if (inventory.Holders.Any(holder => holder.Type == AreaInventoryHolderType.Pc))
             return new(AreaInventoryMapStatus.PcRecordPresent, null, "a PC record lies in the map");
-        var dead = inventory.Holders.Where(holder => holder.Type == AreaInventoryHolderType.Npc && Dead(steps, holder))
-            .Select(holder => holder.SourceIndex).ToHashSet();
+        var life = inventory.Holders.Where(holder => holder.Type == AreaInventoryHolderType.Npc).ToDictionary(holder => holder.SourceIndex, holder => Life(steps, holder));
+        var dead = life.Where(pair => pair.Value == true).Select(pair => pair.Key).ToHashSet();
+        var unknown = life.Count(pair => pair.Value is null);
         static string Id(AreaObjectKey key) => "oid:" + key.ObjectIdSha256;
         var seed = new SessionMapInventorySeed(
             inventory.Holders.Select(holder => new SessionSeedHolder(Id(holder.Key), (SessionHolderKind)holder.Type, dead.Contains(holder.SourceIndex),
@@ -69,12 +83,14 @@ public sealed class AreaInventoryMap
                 item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
         var objects = snapshot.Objects.ToDictionary(row => row.Key);
         var rows = inventory.Holders.Select(holder => holder.Key).Concat(inventory.Items.Select(item => item.Key)).ToDictionary(Id, key => objects[key], StringComparer.Ordinal);
-        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count),
-            $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs");
+        return new(AreaInventoryMapStatus.Ready, new(snapshot.RuntimeMap, seed, rows, dead.Count, unknown),
+            $"{inventory.Items.Count} items, {inventory.Holders.Count} holders, {dead.Count} dead NPCs, {unknown} without life evidence");
     }
 
-    /// <summary>Life from the step rules: the NPC's own evidence as the destination of a step into its cell.</summary>
-    public static bool Dead(AreaStepSnapshot steps, AreaInventoryHolder holder)
+    /// <summary>Life from the step rules: the NPC's own evidence as the destination of a step into its cell. True for
+    /// <c>CRITTER_DEAD</c>, false for other evidence or an NPC off the admitted cells (outside the core, never reached),
+    /// null when an admitted cell has no step that names it.</summary>
+    public static bool? Life(AreaStepSnapshot steps, AreaInventoryHolder holder)
     {
         ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(holder);
@@ -95,7 +111,7 @@ public sealed class AreaInventoryMap
                 .SingleOrDefault(o => o.Role == AreaStepObjectRole.Destination && o.Key == holder.Key);
             if (evidence is not null) return evidence.ReasonCode == "CRITTER_DEAD";
         }
-        return false;
+        return null;
     }
 }
 
@@ -157,7 +173,8 @@ public sealed class AreaInventoryHost
     }
 
     /// <summary>The ground item or dead NPC a press on <paramref name="key"/> acts on; null for anything else (a taken
-    /// item, a living NPC, a container, an object of a map without a seed).</summary>
+    /// item, a living NPC, a container, an object of a map without a seed). A ground item the session will refuse (gold,
+    /// ammunition, a key, a pickup or insert script) is still a target: the click reports the refusal.</summary>
     public AreaInventoryTarget? Target(GameSessionOwner session, int runtimeMap, AreaObjectKey key)
     {
         ArgumentNullException.ThrowIfNull(session);

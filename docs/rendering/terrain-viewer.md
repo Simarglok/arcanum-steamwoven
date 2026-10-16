@@ -631,7 +631,8 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   the cave) seed is built from the [T0 inventory view](../world/area-inventory-view.md) and
   life from the [step rules](../world/area-step-assessment.md): an NPC is dead only when a
   step into its cell meets its `CRITTER_DEAD` evidence; no evidence counts as alive, so it is
-  never looted. Installed original: exterior 53 items, 45 holders, 4 dead NPCs; cave 28
+  never looted (the build counts NPCs on admitted cells without such evidence; 0 on the
+  installed exterior). Installed original: exterior 53 items, 45 holders, 4 dead NPCs; cave 28
   items, 11 holders, 1 dead NPC (empty). A refused build or attach leaves the inventory
   unavailable (the status line says why) and the rest of the area unchanged. Every F8 quick
   load attaches the seeds to the restored session before anything changes; a save whose
@@ -647,7 +648,9 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
   ([CE `sub_428930`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L6500-L6531));
   the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
   choice). Living NPCs, chests (contents generated on first open, not modelled) and items
-  inside holders are not targets. Not modelled: the pickup animation and action-point cost.
+  inside holders are not targets. A ground item the session refuses (gold, ammunition, keys,
+  a pickup or insert script; none on the exterior core) is still shown as *pick up* and the
+  click reports the refusal. Not modelled: the pickup animation and action-point cost.
 - **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
   skips its body; the hover pick passes over it), also after a quick load. The resource
   sweep of the native smoke counts those bodies as taken.
@@ -670,11 +673,11 @@ the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
 
 Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
 after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`
-(`ARC_AREA_CONVERSATION_GAME_ROOT`: seeds built by `AreaInventoryMap.Build`, every core ground
-item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot,
+(`ARC_AREA_CONVERSATION_GAME_ROOT`: seeds built by `AreaInventoryMap.Build`, every NPC on an
+admitted cell with life evidence, every core ground item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot,
 37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
-production click path: walk-to-pickup hover, pickup next to the item, I/Escape, loot by the take
-button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
+production click path: walk-to-pickup hover and press from 2..6 cells, its cancel by a ground
+click, pickup next to the item, I/Escape, loot by the take button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
 (one pickup next to an item, one walk to pick up, the four dead NPCs looted with *Take all*:
 5 taken, 1 left, every taken item named in the window; `ARC_AREA_INVENTORY_CAPTURE=PATH.png` saves a
 readback of the open window) and the quick-save phase, which now

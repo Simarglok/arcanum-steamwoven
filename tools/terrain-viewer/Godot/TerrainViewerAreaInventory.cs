@@ -39,9 +39,7 @@ public partial class TerrainViewerApp
         var maps = new List<AreaInventoryMap>();
         foreach (var (name, snapshot, mapSteps) in sources)
         {
-            AreaInventoryMapBuild build;
-            try { build = AreaInventoryMap.Build(snapshot, mapSteps); }
-            catch (ArgumentException exception) { build = new(AreaInventoryMapStatus.InventoryRefused, null, exception.Message); }
+            var build = AreaInventoryMap.Build(snapshot, mapSteps);
             GD.Print($"ARC-UI-004 inventory-seed map={snapshot.RuntimeMap} status={build.Status} detail={build.Detail}");
             if (build.Map is null) { _inventoryStatus = $"inventory: unavailable ({name} {build.Status})"; return; }
             maps.Add(build.Map);
@@ -49,6 +47,8 @@ public partial class TerrainViewerApp
         AdoptAreaInventory(new AreaInventoryHost(maps));
     }
 
+    // The session has no detach: when a later map's seed is refused, an earlier one stays attached but unused (seeds are
+    // never saved, and the dialog port and clicks need _inventoryHost).
     private void AdoptAreaInventory(AreaInventoryHost host)
     {
         var failure = host.Attach(_areaSession!);
@@ -164,7 +164,8 @@ public partial class TerrainViewerApp
             _inventoryPanel.TakeRequested += TakeFromBody;
             _inventoryPanel.TakeAllRequested += TakeAllFromBody;
         }
-        QuarantineWorld();
+        // A quick key held across the window must not act on its release afterwards (its press predates the window).
+        QuarantineWorld(); _quickKeys.Reset();
         _inventoryPanel.Open(InventoryView(holder));
         GD.Print($"ARC-UI-004 inventory open holder={(holder is null ? "none" : "dead-npc")} pc={_areaSession!.QueryPcInventory().Count} loot={_inventoryPanel.ViewForSelfTest!.Loot.Count}");
         RefreshReadyStatus();
