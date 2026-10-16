@@ -13,11 +13,11 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>
-/// ARC-WORLD-014: the Crash Site T0 inventory (ARC-DATA-012 view, life from the step rules) as a session seed, Virgil's
-/// ring through his original DLG and the session inventory port, loot of the four dead NPCs and every ground pickup,
-/// then save and load. The viewer is not wired to the session inventory yet; this checks the Session/Scripting seam on
-/// real data. Opt-in: ARC_AREA_CONVERSATION_GAME_ROOT names the user-owned installation (read-only). Structural
-/// identifiers only; no original text is asserted or printed.
+/// ARC-WORLD-014 and ARC-UI-004: the Crash Site T0 inventory (ARC-DATA-012 view, life from the step rules) as the AREA
+/// viewer's session seed (<see cref="AreaInventoryMap.Build"/>), Virgil's ring through his original DLG and the viewer's
+/// conversation host with its inventory port, loot of the four dead NPCs and every ground pickup through the viewer's
+/// inventory host, then save and load. Opt-in: ARC_AREA_CONVERSATION_GAME_ROOT names the user-owned installation
+/// (read-only). Structural identifiers only; no original text is asserted or printed.
 /// </summary>
 [TestClass]
 public sealed class CrashSiteInventoryTests
@@ -38,35 +38,45 @@ public sealed class CrashSiteInventoryTests
         var inventory = read.Inventory!;
         var steps = AreaStepInspector.ValidateOriginalData(snapshot, P("modules/Arcanum.dat"), P("arcanum2.dat"), P("arcanum3.dat"),
             P("modules/Arcanum.PATCH0"), P(Mobile), 1);
-        var dead = inventory.Holders.Where(holder => holder.Type == AreaInventoryHolderType.Npc && Dead(steps, holder))
+        var build = AreaInventoryMap.Build(snapshot, steps);
+        Assert.AreEqual(AreaInventoryMapStatus.Ready, build.Status, build.Detail);
+        var inventoryMap = build.Map!;
+        string Entity(int sourceIndex) => "oid:" + (inventory.TryGetItem(sourceIndex, out var item) ? item.Key : Holder(inventory, sourceIndex).Key).ObjectIdSha256;
+        var dead = inventory.Holders.Where(holder => inventoryMap.Seed.Holders.Single(h => h.Entity == Entity(holder.SourceIndex)).Dead)
             .Select(holder => holder.SourceIndex).ToHashSet();
         // docs/research/crash-site-item-inventory.md section 1: the four NPCs carrying 32,000 damage.
         CollectionAssert.AreEquivalent(new[] { 5699, 4457, 4200, 1201 }, dead.Where(index => inventory.ListOf(index).Count > 0).ToArray());
+        Assert.AreEqual(dead.Count, inventoryMap.DeadNpcs);
+        Assert.AreEqual(0, inventoryMap.NpcsWithoutEvidence, "every NPC on an admitted cell has step evidence for its life");
 
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
         var map = new SessionMapId(snapshot.RuntimeMap);
-        var seed = Seed(inventory, dead);
-        Assert.AreEqual(GameSessionDisposition.Changed, session.AttachMapInventory(map, seed).Disposition);
-        string Entity(int sourceIndex) => "oid:" + (inventory.TryGetItem(sourceIndex, out var item) ? item.Key : Holder(inventory, sourceIndex).Key).ObjectIdSha256;
+        var viewer = new AreaInventoryHost([inventoryMap]);
+        Assert.AreEqual(GameSessionFailure.None, viewer.Attach(session));
+        AreaObjectKey Key(int sourceIndex) => inventory.TryGetItem(sourceIndex, out var item) ? item.Key : Holder(inventory, sourceIndex).Key;
+        // ARC-UI-004 click targets: every core ground item, every dead NPC; never Virgil (alive) or a chest.
+        var ground = inventory.Items.Where(item => item.Scope == AreaScope.Core && !item.InInventory).ToArray();
+        Assert.AreEqual(37, ground.Length);
+        Assert.IsTrue(ground.All(item => viewer.Target(session, map.RuntimeMap, item.Key)?.Kind == AreaInventoryTargetKind.GroundItem));
+        Assert.IsTrue(dead.All(index => viewer.Target(session, map.RuntimeMap, Key(index))?.Kind == AreaInventoryTargetKind.DeadNpc));
+        Assert.IsNull(viewer.Target(session, map.RuntimeMap, Key(2907)));
+        Assert.IsNull(viewer.Target(session, map.RuntimeMap, Key(4453)));
 
-        // Virgil's first talk: the DLG node 1 entry action IN -2804 hands over the ring through the session port.
-        var document = VirgilDialog(P("arcanum3.dat"));
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session);
+        // Virgil's first talk through the viewer's conversation host (ARC-UI-004 wiring): the DLG node 1 entry action
+        // IN -2804 hands over the ring through the session inventory port.
+        VirgilDialog(P("arcanum3.dat"));
+        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session, inventory: viewer);
+        Assert.IsTrue(host.InventoryWired);
         var speaker = host.Speakers.Single();
         var virgil = AreaConversationState.EntityId(speaker.Row);
         Assert.AreEqual(Entity(2907), virgil);
-        Assert.IsTrue(host.Begin(host.Nearest(speaker.WorldX, speaker.WorldY)).Conversation!.Close());
-        var port = new SessionDialogInventoryPort(session, AreaConversationState.PcParticipant,
-            npc => npc == AreaConversationState.Npc(0) ? virgil : null, Accept);
-        var talk = DialogConversation.Start(document,
-            new DialogConversationRequest(new DialogNodeId(1),
-                new DialogParticipants(new DialogId(1324), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
-                new DialogScriptLine(4), host.Profile.Pc, host.Profile.Names),
-            new DialogConversationPorts(host.State, host.State, session.Flags, host.State, Inventory: port));
-        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, talk.Phase);
+        var start = host.Begin(host.Nearest(speaker.WorldX, speaker.WorldY));
+        Assert.AreEqual(AreaConversationStartStatus.Started, start.Status, start.Detail);
+        var talk = start.Conversation!;
+        Assert.AreEqual((1, DialogConversationPhase.AwaitingSelection), (talk.CurrentNode.Value, talk.Phase));
         var give = talk.Effects.Single(effect => effect.Command is GiveItemCommand);
         Assert.AreEqual((2804, DialogCommandAttemptOutcome.Applied), (((GiveItemCommand)give.Command).ItemName, give.Outcome));
-        Assert.AreEqual(Entity(1714), port.LastResult!.Value.Item);
+        Assert.AreEqual(0, host.State.Items.Count, "IN went to the session, not to the in-memory record");
         Assert.AreEqual(new SessionPcItem(Entity(1714), map, new(SessionItemType.Armor, Item(inventory, 1714).Prototype, 2804, 30082)),
             session.QueryPcInventory().Single());
         CollectionAssert.AreEqual(new[] { Entity(2421), Entity(2908) }, Current(session, map, virgil));
@@ -74,16 +84,16 @@ public sealed class CrashSiteInventoryTests
 
         // Loot: five of the six dead-NPC items; 2527 has its own insert-item script (ARC-RES-023 U frontier).
         foreach (var (holder, item) in new[] { (5699, 3312), (5699, 7282), (4457, 4698), (4457, 6177), (4200, 4201) })
-            Assert.AreEqual(GameSessionDisposition.Changed, session.LootItem(session.Version, Entity(holder), Entity(item), Accept).Disposition, item.ToString());
-        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, session.LootItem(session.Version, Entity(1201), Entity(2527), Accept).Failure);
+            Assert.AreEqual(GameSessionDisposition.Changed, viewer.Loot(session, Entity(holder), Entity(item)).Disposition, item.ToString());
+        Assert.AreEqual(GameSessionFailure.ItemScriptUnsupported, viewer.Loot(session, Entity(1201), Entity(2527)).Failure);
+        Assert.AreEqual(1, viewer.View(session, null, map.RuntimeMap, Entity(1201)).Loot.Count, "the refused item stays on the body");
         Assert.AreEqual(GameSessionFailure.HolderNotLootable, session.LootItem(session.Version, virgil, Entity(2421), Accept).Failure);
         Assert.AreEqual(GameSessionFailure.HolderNotLootable, session.LootItem(session.Version, Entity(4453), Entity(2421), Accept).Failure, "chests are generated, not looted");
 
-        // Pickup: every one of the 37 unscripted core ground items.
-        var ground = inventory.Items.Where(item => item.Scope == AreaScope.Core && !item.InInventory).ToArray();
-        Assert.AreEqual(37, ground.Length);
+        // Pickup: every one of the 37 unscripted core ground items; each is then no longer drawn.
         foreach (var item in ground)
-            Assert.AreEqual(GameSessionDisposition.Changed, session.PickUpItem(session.Version, Entity(item.SourceIndex), Accept).Disposition, item.SourceIndex.ToString());
+            Assert.AreEqual(GameSessionDisposition.Changed, viewer.PickUp(session, Entity(item.SourceIndex)).Disposition, item.SourceIndex.ToString());
+        Assert.IsTrue(ground.All(item => viewer.Taken(session, map.RuntimeMap).Contains(item.Key) && viewer.Target(session, map.RuntimeMap, item.Key) is null));
         var pc = session.QueryPcInventory();
         Assert.AreEqual(1 + 5 + 37, pc.Count);
         Assert.IsFalse(session.QueryMapInventory(map)!.Ground.Any(g => ground.Any(item => Entity(item.SourceIndex) == g.Item.Entity)));
@@ -91,48 +101,9 @@ public sealed class CrashSiteInventoryTests
         // Save and load keep the list; the seed is attached again and agrees with it.
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
         CollectionAssert.AreEqual(pc.ToArray(), loaded.QueryPcInventory().ToArray());
-        Assert.AreEqual(GameSessionDisposition.Changed, loaded.AttachMapInventory(map, Seed(inventory, dead)).Disposition);
+        Assert.AreEqual(GameSessionFailure.None, viewer.Attach(loaded));
         CollectionAssert.AreEqual(new[] { Entity(2527) }, Current(loaded, map, Entity(1201)));
         Assert.AreEqual(GameSessionDisposition.NoChange, loaded.GiveItemToPc(loaded.Version, virgil, 2804, Accept).Disposition, "the ring is gone");
-    }
-
-    // The host's mapping (to be shared with the viewer wiring): every Area holder and item, entity ids as the conversation host's.
-    private static SessionMapInventorySeed Seed(AreaInventory inventory, IReadOnlySet<int> dead)
-    {
-        Assert.IsFalse(inventory.Holders.Any(holder => holder.Type == AreaInventoryHolderType.Pc), "no PC record at T0");
-        string Id(AreaObjectKey key) => "oid:" + key.ObjectIdSha256;
-        return new(
-            inventory.Holders.Select(holder => new SessionSeedHolder(Id(holder.Key), (SessionHolderKind)holder.Type, dead.Contains(holder.SourceIndex),
-                holder.SubstituteInventory is not null, holder.Scripts.Select(s => s.Sap).ToArray(),
-                inventory.ListOf(holder.SourceIndex).Select(item => Id(item.Key)).ToArray())).ToArray(),
-            inventory.Items.Select(item => new SessionSeedItem(Id(item.Key),
-                new(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description), item.Weight, item.Complexity,
-                    item.InventoryLocation, item.Quantity, item.Scripts.Select(s => s.Sap).ToArray()),
-                item.InInventory ? null : new CellCoord(checked((int)item.WorldX!.Value), checked((int)item.WorldY!.Value)))).ToArray());
-    }
-
-    // Life from the step rules: the NPC's own evidence as the destination of a step into its cell.
-    private static bool Dead(AreaStepSnapshot steps, AreaInventoryHolder holder)
-    {
-        if (holder.WorldX is not { } x || holder.WorldY is not { } y) return false;
-        var cell = new AreaStepCell(x, y);
-        if (!steps.IsAdmitted(cell)) return false;
-        foreach (var direction in Enum.GetValues<CardinalTraversalDirection>())
-        {
-            var from = direction switch
-            {
-                CardinalTraversalDirection.XMinusYMinus => new AreaStepCell(x + 1, y + 1), CardinalTraversalDirection.XMinus => new(x + 1, y),
-                CardinalTraversalDirection.XMinusYPlus => new(x + 1, y - 1), CardinalTraversalDirection.YPlus => new(x, y - 1),
-                CardinalTraversalDirection.XPlusYPlus => new(x - 1, y - 1), CardinalTraversalDirection.XPlus => new(x - 1, y),
-                CardinalTraversalDirection.XPlusYMinus => new(x - 1, y + 1), _ => new(x, y + 1),
-            };
-            if (!steps.IsAdmitted(from)) continue;
-            var evidence = steps.Assess(steps.Request(from, cell, direction)).Objects
-                .SingleOrDefault(o => o.Role == AreaStepObjectRole.Destination && o.Key == holder.Key);
-            if (evidence is not null) return evidence.ReasonCode == "CRITTER_DEAD";
-        }
-        Assert.Fail($"no step evidence for {holder.SourceIndex}");
-        return false;
     }
 
     private static string[] Current(GameSessionOwner session, SessionMapId map, string holder) =>

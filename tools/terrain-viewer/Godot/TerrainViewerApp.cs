@@ -846,7 +846,7 @@ public partial class TerrainViewerApp : Node
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
                 PublishFailure(_arguments?.Mode ?? _readyMode,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
             }
-            SyncPassabilityOverlay(); UpdateAreaHover();
+            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover();
             return;
         }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);

@@ -97,6 +97,14 @@ public partial class TerrainViewerApp
             Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
         if (result.Owner is null) { SetQuickStatus("F8 " + result.Status); return; }
+        // ARC-UI-004: the loaded maps' inventory seeds are attached to the restored session before anything changes; a
+        // save whose taken items disagree with them is refused (the item would be lost or duplicated).
+        if (_inventoryHost?.Attach(result.Owner) is { } attached && attached != GameSessionFailure.None)
+        {
+            result.Owner.Dispose();
+            SetQuickStatus($"F8 quick load REFUSED: the save's inventory does not match the loaded maps ({attached})");
+            return;
+        }
         // ARC-SCRIPT-006: the dialog host reads its state from the session, so it moves to the loaded one; a session
         // whose dialog values it cannot read is refused here, before anything changes.
         AreaConversationHost? talk = null;
@@ -130,7 +138,7 @@ public partial class TerrainViewerApp
     private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk)
     {
         StopWorldRoute("QUICK_LOAD");
-        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load");
+        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
         var actor = loaded.QueryActor();
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
@@ -200,6 +208,8 @@ public partial class TerrainViewerApp
             var savedWorld = exterior.Chart.ToWorld(savedCell);
             Require(_areaSession!.QueryActor() is { } placed && placed.Map.RuntimeMap == 1 && placed.Cell == new CellCoord((int)savedWorld.X, (int)savedWorld.Y), "the session holds the saved cell");
             var savedBytes = System.IO.File.ReadAllBytes(slot.Path);
+            // ARC-UI-004: the items the PC took before the save come back with it (the seeds are attached again).
+            var savedItems = _areaSession.QueryPcInventory().ToArray();
 
             // Under the palette F7 is ignored and the slot is unchanged.
             ToggleWorldSettings();
@@ -219,6 +229,8 @@ public partial class TerrainViewerApp
                 "F8 restored the exterior under a new session");
             var grid = (AreaGridSession)_worldActor.Session!;
             Require(grid.State.CommittedCell == savedCell && grid.State.Phase == MovementPhase.Settled, "the actor stands settled on the saved cell");
+            Require(_areaSession!.QueryPcInventory().SequenceEqual(savedItems) && (_inventoryHost is null || _areaSession.QueryMapInventory(new(1)) is not null),
+                "F8 restored the PC's items and re-attached the inventory seeds");
             for (var frame = 0; frame < 3; frame++)
             {
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
@@ -234,7 +246,7 @@ public partial class TerrainViewerApp
             Require(ReferenceEquals(running, _areaSession) && _areaSession.Version.Revision == revision && _areaTransitions.CurrentMap == 1
                 && ((AreaGridSession)_worldActor.Session!).State.CommittedCell == savedCell, "a failed load changed nothing");
             GD.Print("ARC-WORLD-011 native-smoke quicksave PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Saved = new { Map = 1, Cell = savedWorld }, SavedBytes = savedBytes.Length, PaletteIgnored = true, LoadedFromCave = true,
+                Saved = new { Map = 1, Cell = savedWorld }, SavedBytes = savedBytes.Length, PcItems = savedItems.Length, PaletteIgnored = true, LoadedFromCave = true,
                 DamagedRefused = true, Session = _areaSession.Version.Revision }));
         }
         finally
