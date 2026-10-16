@@ -156,7 +156,8 @@ public static class AreaMapPlans
     }
 
     /// <summary>Limits scaled from the pinned exterior profile (20 present sectors, 524
-    /// objects) by the map's sectors or objects, whichever grows more, capped at
+    /// objects, 2,444 visuals): memory budgets by the map's sectors or objects, whichever grows
+    /// more, frame budgets by the visuals the map can hold, each capped at
     /// <see cref="MaxLimitScale"/>. Count limits follow the map exactly.</summary>
     internal static AreaLoaderOptions Limits(int sectors, long objects, int mobiles, long aggregateBytes, int prototypes)
     {
@@ -164,11 +165,17 @@ public static class AreaMapPlans
         var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
         long Scale(long value) => (long)Math.Ceiling(value * factor);
         var visuals = Math.Min(int.MaxValue, checked(sectors * 4096L + objects * 4 + 64));
+        // Frame budgets count every visual's ART read while the snapshot is built, so they grow with
+        // the visuals the map can hold (terrain cells and objects), under the same cap.
+        var frameFactor = Math.Clamp((double)visuals / baseline.MaxVisuals, 1.0, MaxLimitScale);
+        long Frames(long value) => (long)Math.Ceiling(value * frameFactor);
         return new()
         {
             MaxManagedBytes = Scale(baseline.MaxManagedBytes), MaxRetainedBytes = Scale(baseline.MaxRetainedBytes), MaxBuildPhaseBytes = Scale(baseline.MaxBuildPhaseBytes),
-            MaxFrameRequests = Scale(baseline.MaxFrameRequests), MaxFrameStoredBytes = Scale(baseline.MaxFrameStoredBytes), MaxFrameDecodedBytes = Scale(baseline.MaxFrameDecodedBytes),
-            MaxFrameRgbaBytes = Scale(baseline.MaxFrameRgbaBytes), MaxFrameEncodedBytes = Scale(baseline.MaxFrameEncodedBytes),
+            // One frame operation may read an entry up to the whole-map entry cap (16 MiB).
+            MaxFrameOperationBytes = checked(baseline.MaxFrameOperationBytes * (long)MaxLimitScale),
+            MaxFrameRequests = Frames(baseline.MaxFrameRequests), MaxFrameStoredBytes = Frames(baseline.MaxFrameStoredBytes), MaxFrameDecodedBytes = Frames(baseline.MaxFrameDecodedBytes),
+            MaxFrameRgbaBytes = Frames(baseline.MaxFrameRgbaBytes), MaxFrameEncodedBytes = Frames(baseline.MaxFrameEncodedBytes),
             MaxSurvey = sectors, MaxPresentSectors = sectors, MaxAggregateRecords = Math.Max(1, mobiles),
             MaxAggregateBytes = (int)Math.Clamp(aggregateBytes, 16, int.MaxValue),
             MaxPrototypes = Math.Max(1, prototypes), MaxObjects = (int)Math.Clamp(objects + 1, 1, int.MaxValue), MaxVisuals = (int)visuals,

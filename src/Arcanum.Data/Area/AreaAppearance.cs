@@ -258,7 +258,7 @@ public sealed partial class AreaDataOwner
             var strict = WireLimits.ArtOptions;
             return _lenientArt ??= new()
             {
-                MaxInputBytes = strict.MaxInputBytes, MaxEncodedFrameBytes = strict.MaxEncodedFrameBytes, MaxFrameCount = strict.MaxFrameCount,
+                MaxInputBytes = (int)EntryCap(_plan), MaxEncodedFrameBytes = (int)EntryCap(_plan), MaxFrameCount = strict.MaxFrameCount,
                 MaxDimension = strict.MaxDimension, MaxFrameTableBytes = strict.MaxFrameTableBytes, MaxFramePixels = strict.MaxFramePixels,
                 MaxRgbaBytes = strict.MaxRgbaBytes, AllowTrailingBytes = true,
             };

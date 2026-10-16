@@ -105,7 +105,7 @@ public sealed class AreaWholeMapStepTests
             if (reach > 1) walkable++;
             if (map.Name == "crash site cave") Assert.AreEqual(506, reach, "the generic cave walks like the pinned cave profile");
         }
-        Assert.AreEqual(52, complete);
+        Assert.AreEqual(54, complete);
         Assert.IsTrue(walkable >= 48, $"{walkable} of {complete} complete interiors walkable from their start");
     }
 
