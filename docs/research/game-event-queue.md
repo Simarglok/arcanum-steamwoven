@@ -306,6 +306,9 @@ explicit limits, typed results, Godot-free assemblies):
 | E4 First kinds | E2 and the owning slice | Each consumer slice adds its kinds with handlers: the AI tick (I6, with the RNG jitter label), script call-in / call-at / remove-call (SCRIPT S5, TE1/TE2 decided there), the life-state timers (fatigue 80 s, resting 1 h, poison 15 s/120 s, body decay), effect expiry and magic ticks (item 17 and MAGIC), the companion wait timeout after O3. The queue slice itself ships only a synthetic kind. |
 | E5 Animation domain | E2, animation scheduler (item 9) | A second clock that runs at the game rate while game time is frozen in a round, with its own list and pass, for animation goals and real-time combat cadence. |
 
+E1 is implemented as ARC-WORLD-022 ([runtime](../world/game-event-queue-runtime.md)), which records the
+decisions it took per row of section 7.
+
 Order: E1 now (no schema), E2 after item 2 in the schema lane (and
 before item 6 if that is next in the lane), then E3; the E4 kinds arrive with
 their owners (I6 and S5 first); E5 with real-time combat.
