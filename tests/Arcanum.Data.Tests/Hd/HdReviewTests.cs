@@ -113,6 +113,7 @@ public sealed class HdReviewTests
     public void A_refused_write_leaves_the_old_manifest_and_no_temporary_file()
     {
         if (OperatingSystem.IsWindows()) Assert.Inconclusive("Unix permissions.");
+        if (Environment.UserName == "root") Assert.Inconclusive("Permissions do not stop root.");
         var (synthetic, _) = ThreeFrames();
         var pack = Opened(synthetic.Directory);
         var manifest = Path.Combine(synthetic.Directory, "manifest.json");
