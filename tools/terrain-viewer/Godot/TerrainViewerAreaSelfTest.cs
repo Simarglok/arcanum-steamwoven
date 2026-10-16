@@ -100,6 +100,11 @@ public static partial class TerrainViewerSelfTest
             var shownActor = Shown() - canvas.AreaVisibleCount;
             if (canvas.AreaVisibleCount != 600 || canvas.AreaPoolCount != 600 + shownActor || shownActor is < 0 or > 1)
                 throw new InvalidOperationException("AREA crowd submission");
+            // Identical bodies share one exact index row, and an integer pan reuses it.
+            var rows = canvas.AreaMappingCreatedCount;
+            viewport.CanvasTransform=new Transform2D(0,new Vector2(1,1),0,new Vector2(107,93)); await Settle();
+            if (canvas.AreaVisibleCount != 600 || canvas.AreaMappingCreatedCount != rows)
+                throw new InvalidOperationException("AREA shared index rows across an integer pan");
             viewport.CanvasTransform=new Transform2D(0,new Vector2(2000,2000)); await Settle();
             if (canvas.AreaVisibleCount != 0 || canvas.AreaPoolCount != 256 || Shown() != 0)
                 throw new InvalidOperationException("AREA draw item pool bound");

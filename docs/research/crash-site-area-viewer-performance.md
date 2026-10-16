@@ -9,8 +9,9 @@ a budget or a regression gate. Numbers are single observations on one machine.
 **Updates.** Cause L1 is addressed by the owner frame batch (see
 [L1 result](#l1-result-frame-batch)); F1 and F5 by the bounded draw item pool,
 actor-framed first publication and cached upright order, and F4 partly by the
-cached N/A count (see [F1/F4/F5 result](#f1f4f5-result-pool-startup-hud-order)).
-The other causes are unchanged.
+cached N/A count (see [F1/F4/F5 result](#f1f4f5-result-pool-startup-hud-order));
+F2 by the shared translation-invariant index-row cache (see
+[F2 result](#f2-result-shared-index-rows)). The other causes are unchanged.
 
 ## Scope and method
 
@@ -219,6 +220,28 @@ draw calls (cause F3, ≈4.7 µs each) and did not improve; the pan ended on a b
 view (≈8,070 draw calls after, 7,125 before). Per-sprite mapping rebuilds (F2) are now
 the largest panning cost.
 
+## F2 result: shared index rows
+
+Each draw item's nearest index rows are now keyed by the exact, translation-invariant
+`AreaNearestAxis.RowKey` and shared through one canvas cache
+([sampling contract](../rendering/area-nearest-sampling.md)); the sampling rule is
+unchanged. Same method, isolated preferences, at `origin/main` `a6408ae` plus the
+change (before = the F1/F4/F5 result above):
+
+| Phase | Before | After | Row textures created |
+| --- | ---: | ---: | ---: |
+| Idle, WORLD follow, zoom 2 | 2.2–3.4 ms | 2.0 ms | 0 |
+| Pan, zoom 2 | 9.0–10.1 ms | 5.4 ms | 16 in 6 s |
+| Pan, zoom 1 | 21.7–27.1 ms | 11.0 ms | 34 in 8 s |
+| Pan, zoom 0.5 | 65.5–70.7 ms | 19.6 ms | 27 in 8 s |
+
+Before, every visible sprite created or updated its own row texture on every camera
+move (752 at zoom 1). Keys are recomputed only for items whose command changed in
+their pool slot (132 of 757 per moving frame at zoom 1, 8 of 203 at zoom 2). At zoom
+0.25 the `UpdateAreaVisible` cost per camera move fell from about 133 ms to about
+52 ms, but frames there remain bound by about 9,500 draw calls (cause F3), and the
+measured path covered a busier view, so that row is not comparable.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
@@ -235,7 +258,7 @@ contracts that the code currently enforces.
    example, authenticate once per owner generation and rely on those checks per
    frame. Estimated load without the per-frame passes: ≈25–30 s Debug,
    ≈7–10 s Release, assuming the untimed per-frame remainder stays small.
-2. **F1 + F2, most of the 26–81 ms `UpdateAreaVisible` per camera-moving frame. F1 done for startup and pool size (an explicit Fit still submits the whole envelope); F2 remains.** Create items for visible
+2. **F1 + F2, most of the 26–81 ms `UpdateAreaVisible` per camera-moving frame. F1 done for startup and pool size (an explicit Fit still submits the whole envelope); F2 done (shared index rows).** Create items for visible
    commands only (no Fit-sized pool, or shrink it) and touch only items whose
    state changed; make the nearest-sampling mapping independent of pan (for
    example derive it per zoom level, or compute indices in the shader from

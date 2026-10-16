@@ -33,7 +33,10 @@ from GPU output or the production sampler.
 
 ## Production mechanism and limits
 
-Build two bounded CPU index rows per visible draw item from the rule above.
+Build two bounded CPU index rows per visible draw item's whole screen envelope
+(padded by one pixel and not clamped to the viewport) from the rule above. Only an
+axis longer than 8,192 pixels (a very large sprite at high zoom) is clamped to the
+viewport as before; its rows stay exact but are not reused across pans.
 Upload them as RGBA8 lookup metadata: zero encodes an excluded pixel; otherwise
 R/G encode the 16-bit source index plus one. The shader reads the integer screen
 pixel with `texelFetch` from the lookup and then the original retained ART frame.
@@ -42,11 +45,27 @@ A padded screen-covering primitive with explicit lookup exclusion prevents
 backend triangle-edge conventions from changing the half-open ownership rule.
 It is not additional source geometry or movement permission.
 
-The mapping is regenerated only for changed geometry/viewport state and reused
-for unchanged frames. Shared ART textures retain the existing identity/dedup
-cache. Mapping metadata is separately owned and released on hide/retirement;
-maximum viewport axis is 8192, maximum source axis is 65534, and aggregate live
-mapping data is capped at 16 MiB. Unsupported rotated/sheared/nonpositive
+For row position `i` from the envelope start `e`, the rule above is an exact
+affine function of `i`: `AreaNearestAxis.RowKey(e)` normalizes its integer
+coefficients with the source crop and reflection into a key. Equal keys select
+equal indices for every `i`, so one row texture serves every item and camera
+position with that key. An integer camera translation (always the case with the
+existing pixel snapping) moves the envelope by the same integer and leaves the key
+unchanged, so panning reuses rows instead of rebuilding them; a sub-pixel or zoom
+change yields new keys. The key is reused across such a translation without being
+recomputed only when both origins are integral and the envelope moved by exactly the
+same integer. Keys are
+compared exactly, never by tolerance.
+
+Rows live in one canvas-owned cache. Rows used by the current submission are never
+evicted; rows of earlier views are reused or evicted least recently used first, down
+to three quarters of the limits, when the row payload would exceed 16 MiB or the
+cache would exceed 8,192 rows. These limits count index-row payload bytes and row
+textures, not driver memory. A submission that alone needs more fails explicitly. A
+standalone draw item keeps a private cache with only its current row. Shared ART
+textures retain the existing identity/dedup cache. Rows stop being sampled on
+hide/retirement and are disposed with the cache; maximum viewport axis is 8192,
+maximum row length is 8192, maximum source axis is 65534. Unsupported rotated/sheared/nonpositive
 transforms, oversized domains or exceeded budget fail explicitly rather than
 fall back to interpolated sampling. These are bounded renderer limits, not
 measured performance claims. Measure full-area update costs before readiness.
