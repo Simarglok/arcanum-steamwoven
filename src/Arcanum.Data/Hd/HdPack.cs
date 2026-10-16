@@ -40,6 +40,7 @@ public sealed class HdPack
     public HdRecipe Recipe { get; }
     public HdBuildRecord Build { get; }
     public IReadOnlyList<HdPackEntry> Entries { get; }
+    internal HdPackOptions Options => _options;
     public int SpriteCount => _sprites.Count;
     /// <summary>Terrain chunk entries are a reserved kind: parsed and integrity-checked, never
     /// bound until ARC-RENDER-016 amends the contract.</summary>
@@ -115,8 +116,19 @@ public sealed class HdPack
     /// <see cref="HdLegacyFrame.RgbaSha256"/>); its alpha is the reference of the mask check.
     /// Never throws for pack content; throws only for a query that contradicts its own
     /// pixels (a caller error).</summary>
-    public HdFrameResult ResolveSprite(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba)
+    public HdFrameResult ResolveSprite(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba) => Resolve(query, legacyRgba, review: false, out _);
+
+    /// <summary>The before/after review's binding (ARC-RENDER-015): as
+    /// <see cref="ResolveSprite"/>, but review marks do not refuse a frame (a rejected frame
+    /// can be looked at again) and a failed alpha check still returns the pixels, with
+    /// <paramref name="alphaMatches"/> false, so the reviewer sees why the game would refuse
+    /// it. Never used to draw the game.</summary>
+    internal HdFrameResult ResolveForReview(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba, out bool alphaMatches)
+        => Resolve(query, legacyRgba, review: true, out alphaMatches);
+
+    private HdFrameResult Resolve(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba, bool review, out bool alphaMatches)
     {
+        alphaMatches = false;
         ArgumentNullException.ThrowIfNull(query);
         ArgumentNullException.ThrowIfNull(query.Legacy);
         if (query.Legacy.Width <= 0 || query.Legacy.Height <= 0 || legacyRgba.Length != (long)query.Legacy.Width * query.Legacy.Height * 4)
@@ -124,7 +136,7 @@ public sealed class HdPack
         if (HdPackPath.Sha256(legacyRgba) != query.Legacy.RgbaSha256)
             throw new ArgumentException("Legacy RGBA does not hash to the query's RgbaSha256.", nameof(legacyRgba));
 
-        if (Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
+        if (!review && Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
         if (!_sprites.TryGetValue(query.Key, out var entry))
         {
             // The pack knows this ART name but was built from other bytes (a mod or another
@@ -133,7 +145,7 @@ public sealed class HdPack
             return HdFrameResult.Refused(changed ? HdFrameStatus.SourceMismatch : HdFrameStatus.FrameMissing, Scale);
         }
         if (entry.Legacy != query.Legacy) return HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale);
-        if (entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
+        if (!review && entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
 
         var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
         if (hdWidth * hdHeight > _options.MaxHdFramePixels) return Invalid(HdInvalidReason.TooLarge);
@@ -144,7 +156,8 @@ public sealed class HdPack
         if (header.Header!.Width != hdWidth || header.Header.Height != hdHeight) return Invalid(HdInvalidReason.SizeMismatch);
         var image = HdPng.Decode(bytes, _options.MaxHdFramePixels);
         if (image.Status != HdPngStatus.Decoded) return Invalid(PngReason(image.Status));
-        if (!AlphaMatches(image.Image!.Rgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height)) return Invalid(HdInvalidReason.AlphaMismatch);
+        alphaMatches = AlphaMatches(image.Image!.Rgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height);
+        if (!alphaMatches && !review) return Invalid(HdInvalidReason.AlphaMismatch);
         return new(HdFrameStatus.Hd, HdInvalidReason.None, Scale, (int)hdWidth, (int)hdHeight, image.Image.Rgba);
     }
 
@@ -281,7 +294,7 @@ public sealed class HdPack
     private static readonly Dictionary<string, HdEntryKind> EntryKinds = new(StringComparer.Ordinal)
     { ["sprite"] = HdEntryKind.Sprite, ["terrainChunk"] = HdEntryKind.TerrainChunk };
 
-    private static HdPackOpenResult Parse(string directory, byte[] manifestBytes, JsonElement element, HdPackOptions options)
+    internal static HdPackOpenResult Parse(string directory, byte[] manifestBytes, JsonElement element, HdPackOptions options)
     {
         var root = HdJson.Object(element, "pack", ["schema", "kind", "id", "scale", "review", "recipe", "build", "entries"]);
         HdJson.Schema(root, Kind);
