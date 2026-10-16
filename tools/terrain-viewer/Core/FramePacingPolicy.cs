@@ -15,6 +15,13 @@ public static class FramePacingPolicy
     /// <summary>The status line is rebuilt at most this often per second in an
     /// interactive frame loop; event-driven refreshes stay immediate.</summary>
     public const double StatusRefreshSeconds = 0.1;
+    /// <summary>The same limit while idle. An idle WORLD status still changes every frame
+    /// (the grid's simulation time), and re-wrapping the long status text ten times per
+    /// second cost about as much CPU as drawing the idle view.</summary>
+    public const double IdleStatusRefreshSeconds = 1.0;
+    /// <summary>Whether this long without activity counts as idle (see <see cref="Target"/>).</summary>
+    public static bool Idle(double secondsSinceActivity)
+        => !(double.IsFinite(secondsSinceActivity) && secondsSinceActivity >= 0 && secondsSinceActivity < IdleAfterSeconds);
     /// <summary>The engine cap never exceeds this multiple of the target.</summary>
     public const int MaxCapFactor = 4;
     /// <summary>Measured rates within this many FPS of the target keep the cap.</summary>
@@ -28,8 +35,7 @@ public static class FramePacingPolicy
     public static int Target(double secondsSinceActivity, double refreshRate)
     {
         var display = DisplayFps(refreshRate);
-        return double.IsFinite(secondsSinceActivity) && secondsSinceActivity >= 0 && secondsSinceActivity < IdleAfterSeconds
-            ? display : Math.Min(IdleFps, display);
+        return Idle(secondsSinceActivity) ? Math.Min(IdleFps, display) : display;
     }
 
     /// <summary>Whether a measured rate meets the target; only such caps are kept for

@@ -277,8 +277,23 @@ already authenticated in the same load (L-C, not done).
 - **I-A dropped.** With Godot's low-processor mode switched on while idle, the idle view
   still drew about 60 frames per second at the same CPU: something visible changes every
   frame, so there is nothing to skip until that source is found. Idle CPU measured
-  11–24% in both runs on `f60dd31`, above the 5–9% measured on `cf691aa`; the cause was
-  not investigated (other sessions were loading the machine at the same time).
+  11–24% in both runs on `f60dd31`, above the 5–9% measured on `cf691aa`, while other
+  sessions were loading the machine.
+- **Idle CPU follow-up (`10b661e`).** A temporary per-stage timer in the WORLD frame loop of
+  an ordinary launch, no input: the viewer's own per-frame work is 0.26–0.58 ms (clock tick
+  and WORLD processing; overlay, inventory, hover and pacing together under 0.04 ms), that
+  is 2–3% of a core at 60 FPS; the rest is Godot's own frame (35 draw calls, 107 nodes, no
+  canvas update). Single `ps` samples varied from 4% to 19% with the machine's other load,
+  so the 11–24% above is not evidence of a regression. Switching parts off one at a time
+  showed the status line as the largest optional cost: while idle, the part of the
+  2,310-character WORLD status that changes on every refresh is mainly the grid's
+  simulation time, and the wrapped HUD label was re-laid out ten times per second for it.
+  The status line now refreshes once per second while idle (ten times per second while
+  active, where a moving camera or a walking actor counts as activity; event-driven
+  refreshes stay immediate). Alternating runs of the same build, CPU time over 20 s idle:
+  7.6–8.1% with the 10 Hz refresh, 5.5–6.1% with the idle 1 Hz refresh. Frames are still
+  drawn every frame (engine counters, also with low-processor mode on), so the rest needs an
+  idle cap below the agreed 60 FPS.
 - **M-A dropped.** The first visit of zoom 0.3 needs up to 141 full-resolution chunks
   (141 MiB) at once. A 128 MiB cap would make such views fall back to per-command
   terrain, so the 192 MiB cap stays.

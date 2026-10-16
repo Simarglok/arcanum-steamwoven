@@ -173,7 +173,8 @@ cap is corrected once per second from the measured rate, within 1–4 times the
 target, because Godot's limiter alone undershoots on macOS; only a cap that met
 its target is remembered for the next time that target applies, so a frame-bound
 pan does not leave later light views uncapped. The per-frame WORLD
-status line is rebuilt at most ten times per second; event-driven refreshes stay
+status line is rebuilt at most ten times per second while active and once per
+second while idle; event-driven refreshes stay
 immediate. Self-tests and the native smoke run uncapped with per-frame status.
 These are interactive comfort policies, not frame-time guarantees.
 
