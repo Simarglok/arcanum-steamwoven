@@ -428,7 +428,8 @@ public partial class TerrainViewerApp
         ProcessTalkAfterRoute();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
-        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
+        // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
+        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null || WorldModal ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); }
@@ -559,11 +560,10 @@ public partial class TerrainViewerApp
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen)) return;
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
-        CancelTalkApproach("another click replaced it");
         if (TryAreaUse(screen)) return;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
-        CancelAreaUseApproach("a ground click replaced it");
+        CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it");
         var accepted = route.SetTarget(cell, WorldTime);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";

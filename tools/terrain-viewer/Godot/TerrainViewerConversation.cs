@@ -56,8 +56,9 @@ public partial class TerrainViewerApp
         {
             var command = area.Plan.Commands[index];
             if (command.Identity is not { } identity || command.Additive) continue;
-            var speaker = _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity);
-            if (speaker is not null && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0) return speaker;
+            if (AreaAlphaAt(command, area.Frames, transform, sx, sy) == 0) continue;
+            // The frontmost opaque body decides: an NPC hidden behind another sprite is not clicked through it.
+            return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity);
         }
         return null;
     }
@@ -101,7 +102,8 @@ public partial class TerrainViewerApp
             || !ReferenceEquals(_worldRouteSession, walking) || _worldRoute is not { } route || route.Status == Arcanum.Simulation.Navigation.RouteFollowStatus.Following) return;
         _talkAfterRoute = null;
         var cell = ActorCell()!.Value;
-        if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Arrived) _conversationNotice = "walk to talk stopped: " + (route.StopReason ?? route.Status.ToString());
+        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
+        else if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Arrived) _conversationNotice = "walk to talk stopped: " + (route.StopReason ?? route.Status.ToString());
         else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive) _conversationNotice = "walk to talk dropped: input quarantined/modal";
         else if (AreaConversationHost.Distance(speaker, cell.X, cell.Y) > _conversationHost!.Profile.Reach) _conversationNotice = "walk to talk ended out of reach";
         else { BeginConversation(speaker); return; }

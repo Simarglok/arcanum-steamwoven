@@ -150,7 +150,8 @@ public partial class TerrainViewerApp
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true; _worldFocused = true;
         void Press(Key key) { InputWorld(new InputEventKey { Keycode = key, Pressed = true }); InputWorld(new InputEventKey { Keycode = key, Pressed = false }); }
-        void Click(Vector2 at) { InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at }); InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = at }); }
+        // The ground-click path (WorldRouteClick → TryAreaTalk) is the native unhandled LMB press.
+        void Click(Vector2 at) { InputWorld(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at }); _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = at, GlobalPosition = at }); }
         try
         {
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal && _conversationHost.Speakers.Count == 0, "closed at publication; the synthetic core has no dialog NPC");

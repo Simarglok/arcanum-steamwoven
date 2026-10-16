@@ -64,6 +64,7 @@ public partial class TerrainViewerApp
         var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
+        CancelTalkApproach("a use click replaced it");
         var result = _areaTransitions.RequestUse(hit.Value, actor);
         _areaUseAfterRoute = null;
         // An accepted use replaces any click route: the started step ends at its cell centre, then the transfer applies.
