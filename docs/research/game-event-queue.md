@@ -27,7 +27,7 @@ the same state at any frame rate). The clock it builds on is the
   copied. CE is a reconstruction lineage with decompiler names (`sub_…`); a
   reading of a name's intent is marked **inference**. Original-executable
   parity is **NOT_VERIFIED** throughout.
-- **Code (C)**: this repository at `origin/main` fc6fbb0.
+- **Code (C)**: this repository at `origin/main` f500b76.
 - **Project policy (P)**: a proposal for this project where the source leaves
   a choice or where this note recommends a departure; open until the slice
   that owns it, or until the owner decides the questions of
@@ -114,7 +114,8 @@ session, no installed game).
 - **Steamwoven today (C).** The session owns the normalized game clock with
   pause reasons (`Arcanum.Simulation/Clock`, `GameSessionOwner.AdvanceGameTime`),
   the viewer's ambient host admits host time 5..250 ms × 8
-  (`GameTimeFlow`, `AreaAmbient`) and the snapshot (schema 6) stores the clock.
+  (`GameTimeFlow`, `AreaAmbient`) and the snapshot (schema 7) stores the clock
+  and the RNG state.
   There is no event record, queue, pump or event section in the snapshot.
 - **Proposal.** One session-owned, Godot-free queue of typed events on the
   game clock, ordered by (deadline, sequence), with a closed kind registry
@@ -123,8 +124,8 @@ session, no installed game).
   typed outcomes, and an event section in the snapshot. Five slices E1..E5
   ([section 8](#8-proposed-implementation-slices-world)): the pure core E1
   touches no schema and can start now; the session integration E2 raises the
-  snapshot schema and therefore waits for top-20 items 1 (RNG) and 2 (life
-  state) in the one-at-a-time schema lane.
+  snapshot schema and therefore waits for top-20 item 2 (life state) in the
+  one-at-a-time schema lane; item 1 (session RNG, ARC-WORLD-019) is merged.
 
 ## 1. Clocks, admission and freezing (S)
 
@@ -226,7 +227,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 
 | Consumer | Source behaviour it needs | Queue requirement |
 | --- | --- | --- |
-| AI tick, [ARC-RES-039 I6](npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) | One tick per NPC (replace), distance-scaled delay, first-tick jitter, ticks run on game time, so in a round they wait until the +1 s round advance makes them due and then only reschedule (the tick re-checks turn-based mode; the round itself runs the heartbeat at subturn start, ARC-RES-042 H5), immediate tick when a sector loads, no save. | Replace-by-key, immediate (1 ms) scheduling, map scope "active map only", rebuild on activation, deterministic order; the random jitter comes from the session RNG (top-20 item 1) under a labelled roll. |
+| AI tick, [ARC-RES-039 I6](npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) | One tick per NPC (replace), distance-scaled delay, first-tick jitter, ticks run on game time, so in a round they wait until the +1 s round advance makes them due and then only reschedule (the tick re-checks turn-based mode; the round itself runs the heartbeat at subturn start, ARC-RES-042 H5), immediate tick when a sector loads, no save. | Replace-by-key, immediate (1 ms) scheduling, map scope "active map only", rebuild on activation, deterministic order; the random jitter comes from the session RNG (ARC-WORLD-019, merged) under a labelled roll. |
 | SCR deferred calls, [ARC-RES-042 S5](scr-event-dispatcher.md#10-proposed-implementation-slices) | Call-in delay `seconds × 1000 × 8` (real seconds by inference), call-at delay to a time of day (TE1, TE2), remove-call removes the first call matching script and attachee, the call runs `SAP_USE` from the stored line with stored roles, saved. | Allow-many kind with a typed payload (script, line, triggerer, attachee), remove-first by key, persistence with entity references, scope by referenced entities. |
 | Durable effects, top-20 item 17, and MAGIC slices | Timed spells: MAINTAIN / END ticks per run, one pending tick per run, delayed interrupt; recharge of worn mana items; effect expiry. [ARC-RES-043](magic-core-evidence.md) fixes the durations (real seconds × 8). | Keep-existing, merge (recharge) and replace-by-key, cancel by key when a run ends, persistence, elapsed-aware handlers. |
 | Life state, top-20 item 2 | Fatigue recovery every 80 s, resting heal hourly for free NPCs, poison damage/recovery, body decay, combat-focus wipe. | Keep-existing by (critter, sub-kind); scheduling time in the payload and elapsed computation at fire time for fatigue and resting, one step per firing for poison and decay. Item 2 can ship the formulas as pure functions over elapsed time; the timer kinds land on E2. |
@@ -240,7 +241,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | --- | --- | --- |
 | Game clock | delivered: normalized signed64 game milliseconds since day 0 midnight, pause disposition with reasons None/User/Menu/TurnBased, ordinary advance stops while paused, explicit wait advances while paused, revision/generation tokens | `src/Arcanum.Simulation/Clock` ([runtime](../world/game-clock-runtime.md)) |
 | Host admission | delivered: 5 ms minimum, 250 ms clamp, × 8 | `GameTimeFlow` |
-| Session | owns the clock; `AdvanceGameTime` clears the recorded lighting when the hour changes; snapshot schema 6 carries the clock state | `src/Arcanum.Session/GameSessionOwner.cs`, `GameSessionTypes.cs` |
+| Session | owns the clock; `AdvanceGameTime` clears the recorded lighting when the hour changes; snapshot schema 7 carries the clock state and the session RNG (ARC-WORLD-019) | `src/Arcanum.Session/GameSessionOwner.cs`, `GameSessionTypes.cs` |
 | Host pump | the area viewer's ambient host observes host time, advances the session clock and offers an explicit wait by hours | `tools/terrain-viewer/Core/AreaAmbient.cs` |
 | Event queue | **absent**: no event record, kind registry, pass, map scope or snapshot section | — |
 | Animation domain | absent (no second clock that runs in a round) | — |
@@ -250,7 +251,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | ID | Source behaviour | Note / proposed default (P) |
 | --- | --- | --- |
 | TE1 | Call-in and the magic maintenance and END periods build `seconds × 1000` ms and then multiply only the millisecond word by 8 ([call-in][scr-call], [maintain][mt-maintain]). `seconds × 1000` overflows a signed int above 2,147,483 s; the × 8 wraps the 32-bit word above 536,870 s (about 6.2 real days, 49.7 game days); the unsigned millisecond sum of the add wraps a little earlier, from about 526,070 s depending on the time of day ([datetime helpers][te-dt]); a negative operand becomes a huge unsigned delay. The recharge delay uses the same pattern with a constant 60 s and cannot overflow. | Likely unintended edges, harmless for normal operands. Default: one checked signed64 delay `seconds × 8000`, typed refusal for negative or overflowing operands. |
-| TE2 | Call-at subtracts the module start time (the start-hour key of the module's startup resource, 15:00 for the selected startup per the [clock policy](../world/game-clock-policy.md#source-clock-startup-and-calendar); 15 when the resource is absent, static default 10) from the current time before taking the time of day, so the operand counts seconds from the start hour, not from midnight, while the displayed clock counts from midnight ([call-at][scr-call], [start hour][te-start], [startup][gameinit-start]). A target equal to now gives delay 0 → 1 ms (fires now, not tomorrow). | Unknown whether slip or convention: decide in SCRIPT S5 with the S0 census of call-at operands and, if possible, one original run. Until then the source arithmetic is the documented behaviour. |
+| TE2 | Call-at subtracts the module start time (the start-hour key of the module's startup resource, 15:00 for the selected startup per the [clock policy](../world/game-clock-policy.md#source-clock-startup-and-calendar); 15 when the resource is absent, static default 10) from the current time before taking the time of day, so the operand counts seconds from the start hour, not from midnight, while the displayed clock counts from midnight ([call-at][scr-call], [start hour][te-start], [startup][gameinit-start]). A target equal to now gives delay 0 → 1 ms (fires now, not tomorrow). | Unknown whether slip or convention, but nearly moot: the [ARC-RES-045 census](scr-census.md#action-types-d) finds call-at in 1 line of the data and in no live line, against 304 call-in lines (209 live, 125 scripts). SCRIPT S5 may keep the source arithmetic behind its switch or refuse call-at; call-in carries TE1. |
 | TE3 | Ties fire newest first for events scheduled outside a ping; events merged after a ping go in front of older equals, and among themselves keep creation order (Q3, Q4). | An implementation artefact, not a rule. Default: FIFO by a persisted sequence number (owner question OQ1). |
 | TE4 | "Remove first" can remove two events, one from the main list and one from the side list (Q9). Remove-call during a ping can therefore cancel two calls. | Default: remove exactly the first match in queue order. |
 | TE5 | The loop guard is shared across the three lists and resets when it trips, so the per-list budget depends on earlier lists (Q8). | Default: a fixed per-pass budget, reported in the pass result. |
@@ -299,12 +300,12 @@ explicit limits, typed results, Godot-free assemblies):
 | Slice | Needs | Result |
 | --- | --- | --- |
 | E1 Queue core | clock runtime (delivered) | `Arcanum.Simulation` pure type: record, order, kind registry, schedule by delay and by absolute deadline, remove first / remove all / any by kind and key, uniqueness policies, scope eligibility, `ProcessDue` with budget and typed outcomes, explicit limits (proposed: 16,384 pending events, 500 per pass, payload bounds per kind). Synthetic tests: ties, same-pass exclusion, budget carry-over, uniqueness, refusal of unknown kinds, overflow, detached snapshots. **No session or schema change, so it can start now.** |
-| E2 Session owner and snapshot | E1, top-20 items 1 and 2 merged (schema lane) | `GameSessionOwner` owns one queue; clock advances and explicit waits drain passes; map activation and the PC's map change apply the scope rules (events that only reference travelling entities follow the PC, others stay with their map and become eligible when it is active again, AI-style kinds are removed and rebuilt, so no unsaved kind is carried by accident as in P3); snapshot event section with strict validation (unknown kind, duplicate or non-increasing sequence, negative deadline, duplicate unique key, unresolvable entity refused) and the next schema version. |
+| E2 Session owner and snapshot | E1, top-20 item 2 merged (schema lane; item 1 is merged) | `GameSessionOwner` owns one queue; clock advances and explicit waits drain passes; map activation and the PC's map change apply the scope rules (events that only reference travelling entities follow the PC, others stay with their map and become eligible when it is active again, AI-style kinds are removed and rebuilt, so no unsaved kind is carried by accident as in P3); snapshot event section with strict validation (unknown kind, duplicate or non-increasing sequence, negative deadline, duplicate unique key, unresolvable entity refused) and the next schema version. |
 | E3 Host pump | E2 | The area viewer's ambient host calls the pass after each admitted advance and after each wait step; a diagnostic overlay line (pending count, next deadline, last pass outcomes). FR-RUNTIME-001 acceptance: one recorded sequence of admitted durations replayed at different frame rates gives equal snapshots. |
 | E4 First kinds | E2 and the owning slice | Each consumer slice adds its kinds with handlers: the AI tick (I6, with the RNG jitter label), script call-in / call-at / remove-call (SCRIPT S5, TE1/TE2 decided there), the life-state timers (fatigue 80 s, resting 1 h, poison 15 s/120 s, body decay), effect expiry and magic ticks (item 17 and MAGIC), the companion wait timeout after O3. The queue slice itself ships only a synthetic kind. |
 | E5 Animation domain | E2, animation scheduler (item 9) | A second clock that runs at the game rate while game time is frozen in a round, with its own list and pass, for animation goals and real-time combat cadence. |
 
-Order: E1 now (no schema), E2 after items 1 and 2 in the schema lane (and
+Order: E1 now (no schema), E2 after item 2 in the schema lane (and
 before item 6 if that is next in the lane), then E3; the E4 kinds arrive with
 their owners (I6 and S5 first); E5 with real-time combat.
 
@@ -320,8 +321,8 @@ their owners (I6 and S5 first); E5 with real-time combat.
 
 - **U1** Whether the original executable orders tied events and caps a ping
   like CE (Q3, Q8) is NOT_VERIFIED.
-- **U2** The intent of the call-at reference (TE2) and the operand range
-  scripts use (S0 census on the Mac).
+- **U2** The intent of the call-at reference (TE2); the census finds no live
+  call-at line, so it matters only for mods.
 - **U3** How the magic module re-creates its tick events for runs parked with
   a map (P6) is not read.
 - **U4** The exact first-tick marker of a folded sector (P7) is not read
@@ -337,7 +338,7 @@ handler sites of every kind in `ai.c`, `script.c`, `critter.c`, `stat.c`,
 `newspaper.c`, `teleport.c`, `map.c`, `sector_object_list.c`, `gamelib.c`,
 `obj_pool.c`, `anim.c`, `anim_private.c`, `ui/sleep_ui.c`, `ui/wmap_ui.c`,
 `ui/wmap_rnd.c`, `ui/intgame.c`, `ui/anim_ui.c` and `ui/mainmenu_ui.c`. Code
-state from `origin/main` fc6fbb0. Earlier research reused, not re-read:
+state from `origin/main` f500b76. Earlier research reused, not re-read:
 ARC-RES-020 (clock), ARC-RES-024 (companion), ARC-RES-039 (AI plan),
 ARC-RES-040 (load map), ARC-RES-042 (dispatcher), ARC-RES-043 (magic). No CE
 code or structure was copied; names in this note are descriptive.
