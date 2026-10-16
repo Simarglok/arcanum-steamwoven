@@ -12,7 +12,8 @@ namespace Arcanum.Session;
 /// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
 /// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs), the player
 /// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
-/// loot, negative dialog IN) over host-attached T0 map inventories, and the seeded gameplay randomness (labelled rolls).
+/// loot, negative dialog IN) over host-attached T0 map inventories, the seeded gameplay randomness (labelled rolls) and the
+/// life of the hero and the NPCs (hit points, fatigue, poison, injuries, knockout, death).
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -27,7 +28,9 @@ public sealed class GameSessionOwner : IDisposable
     private readonly PartyDomain _party;
     private readonly InventoryDomain _inventory;
     private readonly HeroDomain? _hero;
-    private readonly SeededRandom _random;
+    private readonly LifeDomain _life;
+    // Replaced, not mutated, when a life step that drew on a trial copy commits.
+    private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
@@ -38,10 +41,10 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, SessionLightingState? lighting)
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, LifeDomain life, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _lighting = lighting;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _life = life; _lighting = lighting;
         _combatRolls = new(this);
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
@@ -49,8 +52,8 @@ public sealed class GameSessionOwner : IDisposable
     /// <summary>
     /// Starts a new session from explicit inputs. Rejection leaves no component alive. A hero (ARC-WORLD-015) is checked
     /// before any component is built (<see cref="GameSessionFailure.InvalidHero"/>); its gold and kit items enter the PC's
-    /// inventory at revision 0, the kit as <c>kit:1</c>, <c>kit:2</c>, … in order. The generator starts at draw 0 of the
-    /// descriptor's seed (ARC-WORLD-019).
+    /// inventory at revision 0, the kit as <c>kit:1</c>, <c>kit:2</c>, … in order, and it starts unharmed (ARC-COMBAT-002).
+    /// The generator starts at draw 0 of the descriptor's seed (ARC-WORLD-019).
     /// </summary>
     public static GameSessionCreationResult Create(GameSessionDescriptor? descriptor)
     {
@@ -82,8 +85,9 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
+        var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-                new(descriptor.RandomSeed), null),
+                new(descriptor.RandomSeed), life, null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -114,6 +118,8 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportInventory(snapshot.Inventory, hero is not null, limits, out var inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
@@ -135,7 +141,7 @@ public sealed class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, hero, inventory,
-                new(snapshot.Random.Seed, snapshot.Random.Draws), snapshot.Lighting),
+                new(snapshot.Random.Seed, snapshot.Random.Draws), life, snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -663,6 +669,111 @@ public sealed class GameSessionOwner : IDisposable
     /// purpose name (for example <c>combat.DodgeCheck</c>). Its lifetime belongs to the session.</summary>
     public ICombatRollSource CombatRolls { get { ThrowIfDisposed(); return _combatRolls; } }
 
+    /// <summary>The hero's life (record and current values), or null for a session without a hero.</summary>
+    public SessionLifeView? QueryHeroLife()
+    {
+        ThrowIfDisposed();
+        if (_hero is null) return null;
+        var record = _life.Hero!.Value;
+        return new(record, LifeRules.Evaluate(record.State, LifeDomain.HeroFacts(_hero, record.State)), true);
+    }
+
+    /// <summary>
+    /// The life of a target: the hero, or an NPC under the host's facts (its record, or its loaded state while it has none).
+    /// A hero target without a hero is <see cref="GameSessionFailure.InvalidLifeTarget"/>; facts or a loaded state out of
+    /// range are <see cref="GameSessionFailure.InvalidLifeFacts"/> and <see cref="GameSessionFailure.InvalidLifeState"/>.
+    /// </summary>
+    public SessionLifeQueryResult QueryLife(SessionLifeTarget target)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(target);
+        var failure = Resolve(target, out var record, out var facts, out var recorded);
+        if (failure != GameSessionFailure.None) return new(failure, null);
+        return new(GameSessionFailure.None, new(record, LifeRules.Evaluate(record.State, facts!), recorded));
+    }
+
+    /// <summary>The saved life record of an NPC, or null while the session never changed it. An invalid entity id throws.</summary>
+    public SessionLifeRecord? QueryLifeRecord(string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity id.", nameof(entity));
+        return _life.Critters.TryGetValue(entity, out var record) ? record : null;
+    }
+
+    /// <summary>
+    /// Applies one damage packet (<see cref="LifeRules.ApplyDamage"/>; build it from an attack with
+    /// <see cref="LifeDamage.FromAttack"/>). The knockout and second-arm rolls come from the session generator
+    /// (<c>combat.KnockoutFatigue</c>, <c>combat.CrippleBothArms</c>). A death stamps the record with the current game time.
+    /// </summary>
+    public SessionLifeResult ApplyDamage(GameSessionVersion expected, SessionLifeTarget target, LifeDamage damage)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(damage);
+        var valid = Math.Abs((long)damage.HitPoints) <= LifeLimits.MaxAmount && Math.Abs((long)damage.Fatigue) <= LifeLimits.MaxAmount &&
+            Math.Abs((long)damage.Poison) <= LifeLimits.MaxAmount && Enum.IsDefined(damage.Location);
+        return Life(expected, target, valid, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls));
+    }
+
+    /// <summary>A kill (<see cref="LifeRules.Kill"/>), such as a script's; a death stamps the current game time.</summary>
+    public SessionLifeResult Kill(GameSessionVersion expected, SessionLifeTarget target)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.Kill(state, facts));
+    }
+
+    /// <summary>One healing (<see cref="LifeRules.Heal"/>), resurrection included; amounts are 0..1,000,000.</summary>
+    public SessionLifeResult Heal(GameSessionVersion expected, SessionLifeTarget target, LifeHeal heal)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(heal);
+        var valid = heal.HitPoints is >= 0 and <= LifeLimits.MaxAmount && heal.Fatigue is >= 0 and <= LifeLimits.MaxAmount &&
+            heal.Poison is >= 0 and <= LifeLimits.MaxAmount;
+        return Life(expected, target, valid, (state, facts, _) => LifeRules.Heal(state, facts, heal));
+    }
+
+    /// <summary>
+    /// A fatigue recovery event scheduled at <paramref name="scheduledAtGameMs"/> fires now (<see cref="LifeRules.RecoverFatigue"/>
+    /// with <see cref="LifeRules.FatigueRecoverySteps"/> up to the session clock). A time after the clock is
+    /// <see cref="GameSessionFailure.InvalidLifeAmount"/>. Scheduling the event belongs to the game event queue.
+    /// </summary>
+    public SessionLifeResult RecoverFatigue(GameSessionVersion expected, SessionLifeTarget target, long scheduledAtGameMs)
+    {
+        ThrowIfDisposed();
+        var now = _clock.QueryClockSnapshot().GameTimestampMs;
+        var valid = scheduledAtGameMs >= 0 && scheduledAtGameMs <= now;
+        return Life(expected, target, valid,
+            (state, facts, _) => LifeRules.RecoverFatigue(state, facts, LifeRules.FatigueRecoverySteps(scheduledAtGameMs, now)));
+    }
+
+    /// <summary>A resting heal of <paramref name="hours"/> (0..87,600; <see cref="LifeRules.RestHeal"/>), for sleep or an NPC's hourly event.</summary>
+    public SessionLifeResult RestHeal(GameSessionVersion expected, SessionLifeTarget target, int hours)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, hours is >= 0 and <= LifeLimits.MaxRestHours,
+            (state, facts, _) => LifeRules.RestHeal(state, facts, hours));
+    }
+
+    /// <summary>The 15-second poison damage tick (<see cref="LifeRules.PoisonDamage"/>); a death stamps the current game time.</summary>
+    public SessionLifeResult PoisonDamageTick(GameSessionVersion expected, SessionLifeTarget target)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.PoisonDamage(state, facts));
+    }
+
+    /// <summary>The 120-second poison recovery tick (<see cref="LifeRules.PoisonRecoveryTick"/>).</summary>
+    public SessionLifeResult PoisonRecoveryTick(GameSessionVersion expected, SessionLifeTarget target)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.PoisonRecoveryTick(state, facts));
+    }
+
+    /// <summary>The stun animation ended or could not start (<see cref="LifeRules.ClearStun"/>).</summary>
+    public SessionLifeResult ClearStun(GameSessionVersion expected, SessionLifeTarget target)
+    {
+        ThrowIfDisposed();
+        return Life(expected, target, true, (state, facts, _) => LifeRules.ClearStun(state, facts));
+    }
+
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
     public GameSessionSnapshot Capture()
     {
@@ -674,7 +785,7 @@ public sealed class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), new(_random.Seed, _random.Draws), _lighting);
+            _inventory.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -860,6 +971,84 @@ public sealed class GameSessionOwner : IDisposable
                 !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
             if (inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
             inventory.Add(item);
+        }
+        return GameSessionFailure.None;
+    }
+
+    // Every life call: target and input checks, then the version, budget and revision capacity, all before the step draws
+    // anything. The step rolls on a trial copy of the generator, adopted only on commit, so a refusal draws nothing.
+    private SessionLifeResult Life(GameSessionVersion expected, SessionLifeTarget target, bool validInput,
+        Func<LifeState, LifeFacts, ICombatRollSource, LifeOutcome> step)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var failure = Resolve(target, out var record, out var facts, out var recorded);
+        if (failure != GameSessionFailure.None) return RejectLife(failure);
+        if (!validInput) return RejectLife(GameSessionFailure.InvalidLifeAmount);
+        if (!IsCurrent(expected)) return RejectLife(GameSessionFailure.StaleVersion);
+        if (!target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectLife(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectLife(GameSessionFailure.RevisionExhausted);
+
+        var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
+        LifeOutcome outcome;
+        try { outcome = step(record.State, facts!, rolls); }
+        catch (TrialCombatRolls.ExhaustedException) { return RejectLife(GameSessionFailure.RandomExhausted); }
+        _random = rolls.Trial;
+        var next = new SessionLifeRecord(outcome.After,
+            outcome.Events.HasFlag(LifeEvents.Died) ? _clock.QueryClockSnapshot().GameTimestampMs : record.DeathTimeMs);
+        if (next == record)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision));
+        if (target.IsHero) _life.Hero = next;
+        else _life.Critters[target.Entity!] = next;
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
+    }
+
+    // The record and facts of a target: the hero's own, or an NPC's record (else its loaded state) under the host's facts.
+    private GameSessionFailure Resolve(SessionLifeTarget target, out SessionLifeRecord record, out LifeFacts? facts, out bool recorded)
+    {
+        record = default;
+        facts = null;
+        recorded = false;
+        if (target.IsHero)
+        {
+            if (_hero is null) return GameSessionFailure.InvalidLifeTarget;
+            record = _life.Hero!.Value;
+            facts = LifeDomain.HeroFacts(_hero, record.State);
+            recorded = true;
+            return GameSessionFailure.None;
+        }
+        if (!SessionValidation.Entity(target.Entity)) return GameSessionFailure.InvalidLifeTarget;
+        if (!LifeRules.IsValid(target.Facts)) return GameSessionFailure.InvalidLifeFacts;
+        if (!LifeRules.IsValid(target.Loaded)) return GameSessionFailure.InvalidLifeState;
+        recorded = _life.Critters.TryGetValue(target.Entity!, out record);
+        if (!recorded) record = new(target.Loaded, null);
+        facts = target.Facts;
+        return GameSessionFailure.None;
+    }
+
+    private SessionLifeResult RejectLife(GameSessionFailure failure) =>
+        new(GameSessionDisposition.Rejected, failure, null, new(_identity, _revision));
+
+    // The hero's record exists exactly when the hero does; NPC records are valid states with a death time no later than the
+    // saved clock, unique, in ordinal order and within the caller's budget.
+    private static GameSessionFailure ImportLife(SessionLifeState saved, bool hero, long clockMs, GameSessionLimits limits, out LifeDomain life)
+    {
+        life = new();
+        if (saved.Hero.HasValue != hero) return GameSessionFailure.InvalidSnapshot;
+        if (saved.Hero is { } heroRecord)
+        {
+            if (!LifeDomain.ValidRecord(heroRecord, clockMs)) return GameSessionFailure.InvalidLifeState;
+            life.Hero = heroRecord;
+        }
+        if (saved.Critters.Count > limits.MaxLifeRecords) return GameSessionFailure.BudgetExceeded;
+        string? previous = null;
+        foreach (var critter in saved.Critters)
+        {
+            if (!SessionValidation.Entity(critter.Entity)) return GameSessionFailure.InvalidLifeTarget;
+            if (!LifeDomain.ValidRecord(critter.Record, clockMs)) return GameSessionFailure.InvalidLifeState;
+            if (previous is not null && string.CompareOrdinal(previous, critter.Entity) >= 0) return GameSessionFailure.InvalidSnapshot;
+            previous = critter.Entity;
+            life.Critters.Add(critter.Entity, critter.Record);
         }
         return GameSessionFailure.None;
     }

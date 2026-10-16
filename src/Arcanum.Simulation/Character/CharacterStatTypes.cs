@@ -65,8 +65,12 @@ public sealed record InnateEffectTable(IReadOnlyDictionary<CharacterRace, StatEf
 public sealed record CharacterStatsDefinition(CharacterRace Race, CharacterGender Gender, InnateEffectTable Innate,
     CharacterStatLimits Limits);
 
-/// <summary>World inputs to derived formulas. Sector aptitude adjustment is bounded to [-100, 100].</summary>
-public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment);
+/// <summary>
+/// World and condition inputs of a query. Sector aptitude adjustment is bounded to [-100, 100]. <paramref name="PoisonLevel"/>
+/// (0..1000) lowers strength and dexterity by <c>min(3, poison / 100)</c> and <paramref name="CrippledLegs"/> lowers speed
+/// by 5, both before effects, as the source's effective-stat read does (ARC-COMBAT-002); the life state owns both values.
+/// </summary>
+public readonly record struct CharacterStatContext(int SectorAptitudeAdjustment, int PoisonLevel = 0, bool CrippledLegs = false);
 
 public readonly record struct AppliedEffectId(long Value);
 public readonly record struct AppliedEffect(AppliedEffectId Id, EffectCause Cause, StatEffectDefinition Definition);

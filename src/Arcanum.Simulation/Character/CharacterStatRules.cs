@@ -10,6 +10,8 @@ internal static class CharacterStatRules
     public const string SourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     public const int ExtraordinaryThreshold = 20;
     public const int MaxSectorAptitudeAdjustment = 100;
+    /// <summary>The poison level stat's range in the source (0..1000).</summary>
+    public const int MaxPoisonLevel = 1000;
     private const long Saturation = 1_000_000_000;
 
     private static readonly int StatCount = Enum.GetValues<CharacterStat>().Length;
@@ -100,6 +102,17 @@ internal static class CharacterStatRules
                 throw new ArgumentOutOfRangeException(nameof(stat));
         }
     }
+
+    /// <summary>
+    /// The source's situational adjustment of a base value before effects: poison lowers strength and dexterity by
+    /// <c>min(3, poison / 100)</c>, crippled legs lower speed by 5 (CE <c>stat_level_get</c>).
+    /// </summary>
+    public static int Situational(CharacterStat stat, CharacterStatContext context) => stat switch
+    {
+        CharacterStat.Strength or CharacterStat.Dexterity => -Math.Min(3, context.PoisonLevel / 100),
+        CharacterStat.Speed => context.CrippledLegs ? -5 : 0,
+        _ => 0,
+    };
 
     /// <summary>
     /// Applies every modifier for <paramref name="stat"/>. Integer division truncates toward zero; intermediates

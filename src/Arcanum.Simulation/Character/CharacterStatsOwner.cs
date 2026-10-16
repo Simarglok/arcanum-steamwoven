@@ -56,7 +56,8 @@ public sealed class CharacterStatsOwner
 
     public CharacterStatsQueryResult Query(CharacterStatContext context)
     {
-        if (Math.Abs((long)context.SectorAptitudeAdjustment) > CharacterStatRules.MaxSectorAptitudeAdjustment)
+        if (Math.Abs((long)context.SectorAptitudeAdjustment) > CharacterStatRules.MaxSectorAptitudeAdjustment ||
+            context.PoisonLevel is < 0 or > CharacterStatRules.MaxPoisonLevel)
             return new(CharacterStatsFailure.InvalidContext, null);
         return new(CharacterStatsFailure.None, BuildSnapshot(context));
     }
@@ -153,14 +154,14 @@ public sealed class CharacterStatsOwner
             var stat = (CharacterStat)index;
             if (CharacterStatRules.IsDerived(stat)) continue;
             baseValues[index] = stored[index];
-            effective[index] = Effective(stat, stored[index], applied);
+            effective[index] = Effective(stat, stored[index] + CharacterStatRules.Situational(stat, context), applied);
         }
         for (var index = 0; index < stored.Length; index++)
         {
             var stat = (CharacterStat)index;
             if (!CharacterStatRules.IsDerived(stat)) continue;
             baseValues[index] = CharacterStatRules.DerivedBase(stat, input => effective[(int)input], context);
-            effective[index] = Effective(stat, baseValues[index], applied);
+            effective[index] = Effective(stat, baseValues[index] + CharacterStatRules.Situational(stat, context), applied);
         }
         return new(revision, race, gender, context, applied, baseValues.ToImmutableArray(), effective.ToImmutableArray());
     }
