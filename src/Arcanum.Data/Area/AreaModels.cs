@@ -104,7 +104,10 @@ public sealed class AreaInspection
 }
 
 /// <summary>Explicit owner transfer. All streams must be readable/seekable and distinct.
-/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.</summary>
+/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.
+/// The owner may read a large input's stream from a worker thread during a parallel authentication pass
+/// while it holds its own lock, so a custom stream must be safe to read from another thread and must not
+/// call back into the owner while it is read.</summary>
 public sealed class AreaInput
 {
     public AreaInput(AreaInputKey key, Stream stream, bool leaveOpen = false)

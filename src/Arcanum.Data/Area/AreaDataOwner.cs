@@ -277,6 +277,8 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (stream.Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
                 jobs[index] = (identity, input, stream);
             }
+            // Workers share one context: a read rejection during the parallel reads names the pass, not an input.
+            _budget.Context = new(AreaBudgetCallsite.Authentication);
             var hashes = new string?[jobs.Length]; var failures = new Exception?[jobs.Length];
             Parallel.For(0, jobs.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(jobs.Length, Environment.ProcessorCount) }, index =>
             {
@@ -300,6 +302,8 @@ public sealed partial class AreaDataOwner : IDisposable
         foreach (var identity in _plan.Identities)
         {
             _budget.Context = new(AreaBudgetCallsite.Authentication, identity.Key);
+            // Admitted like Authenticate's scratch, which also precedes its path checks.
+            using var scratch = new AreaOwnership(_budget); scratch.Allocate(4096);
             if (_inputs.Inputs.Single(i => i.Key == identity.Key).Stream is AreaPathStream pathStream) pathStream.Check();
             if (_streams[identity.Key].Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
         }

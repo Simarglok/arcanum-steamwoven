@@ -134,14 +134,18 @@ executed by Data.
   path binding and length, and I7 hashes every input after the build as before, so
   that build is bracketed by the `Open` and I7 hashes. Later builds hash at I0 and I7.
   A whole-set pass (I0, I7, a frame batch's `Complete`) hashes the inputs of at least
-  `AreaLoaderOptions.ParallelAuthenticationMinBytes` (default 1 MiB; 0 parallelizes every
-  pass) in parallel when two or more take part; smaller inputs keep the sequential pass.
-  Scratch admission and path/length checks precede the reads in plan order, and the
-  verdicts, position resets and closing path checks follow in plan order, so the first
-  failing input in plan order is reported; the reads themselves are no longer ordered.
-  Only the read counters change during parallel reads (they are synchronized); a stream
-  passed to the owner may be read from worker threads and must not call back into the
-  owner while it is read (`CurrentPhase` is an unsynchronized internal phase for tests).
+  `AreaLoaderOptions.ParallelAuthenticationMinBytes` (default 1 MiB; 0 makes every input
+  eligible) in parallel when two or more take part; smaller inputs keep the sequential pass.
+  The smaller inputs are checked first, one by one; then the large inputs' scratch
+  admission and path/length checks run in plan order, their reads run in parallel, and
+  their verdicts, position resets and closing path checks follow in plan order, so the
+  first failing large input in plan order is reported. During the parallel reads only the
+  read counters and the first budget rejection change (synchronized); a read rejection
+  there names the pass, not the input. After a failed pass the read counters depend on
+  how far the other inputs got, and a pass holds one 69,632-byte scratch per large input
+  at once. A stream passed to the owner may be read from a worker thread and must not call
+  back into the owner while it is read: the owner's public getters take its lock, which
+  the pass holds (`CurrentPhase` is an unsynchronized internal phase for tests).
 - `AreaOriginalValidator.Validate(inputs, token)` is metadata-only convenience:
   its owner is disposed before returning. Use `Open` when frame access is needed.
 
