@@ -188,6 +188,69 @@ public sealed class SessionScriptCallTests
         }
     }
 
+    [TestMethod]
+    public void Player_and_follower_roles_travel_with_the_actor_and_other_roles_stay()
+    {
+        using var owner = Session();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "virgil").Disposition);
+        var exterior = owner.QueryActor().Map;
+        SessionScriptRole Pcr = new(exterior, SessionEventKinds.PlayerEntity), Virgil = new(exterior, "virgil"), Wolf = new(exterior, "oid:wolf");
+        Schedule(owner, new(1, 0, Pcr, Virgil), 10);
+        Schedule(owner, new(2, 0, Virgil, Wolf), 10);
+        Schedule(owner, new(3, 0, null, Wolf), 10);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
+        CollectionAssert.AreEqual(new[]
+        {
+            new SessionScriptCall(1, 0, Pcr with { Map = Cave }, Virgil with { Map = Cave }),
+            new SessionScriptCall(2, 0, Virgil with { Map = Cave }, Wolf),
+            new SessionScriptCall(3, 0, null, Wolf),
+        }, owner.QueryScriptCalls().Select(c => c.Call).ToArray());
+        // Remove matches the attachee by entity id, whatever map either stores.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveScriptCall(owner.Version, 1, new(exterior, "virgil")).Disposition);
+        CollectionAssert.AreEqual(new[] { 2, 3 }, owner.QueryScriptCalls().Select(c => c.Call.Script).ToArray());
+    }
+
+    [TestMethod]
+    public void The_call_share_is_counted_on_its_own_and_removal_moves_one_revision()
+    {
+        using var owner = Session();
+        for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++) Schedule(owner, new(i + 1, 0, Pc, Npc), 1000);
+        // The queue still has room (no life timers), so only the call share refuses the next one.
+        Assert.IsTrue(owner.QueryEvents().Count < SessionEventKinds.MaxPending);
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.ScheduleScriptCall(owner.Version, new(1, 0, Pc, Npc), 1000).Failure);
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveScriptCall(owner.Version, 1, Npc).Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.RemoveScriptCall(owner.Version, 1, Npc).Disposition);
+        Assert.AreEqual(revision + 1, owner.Version.Revision);
+        // A save holding more calls than the share is refused.
+        Schedule(owner, new(1, 0, Pc, Npc), 1000);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var last = owner.QueryEvents().Max(e => e.Sequence);
+        var one = $"{{\"sequence\":{last},";
+        var start = text.IndexOf(one, StringComparison.Ordinal);
+        var end = text.IndexOf('}', text.IndexOf("\"values\"", start, StringComparison.Ordinal)) + 1;
+        var copy = text[start..end].Replace($"\"sequence\":{last},", $"\"sequence\":{last + 1},");
+        var extra = text.Insert(end, "," + copy).Replace($"\"nextSequence\":{last + 1}", $"\"nextSequence\":{last + 2}");
+        Assert.AreNotEqual(text, extra);
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, GameSessionOwner.Restore(Decode(extra), RestoreOptions()).Failure);
+    }
+
+    [TestMethod]
+    public void Restore_refuses_a_call_role_no_session_could_have_saved()
+    {
+        using var owner = Session();
+        Schedule(owner, new(2023, 4, Pc, Npc), 80_000);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        foreach (var bad in new[] { text.Replace("{\"map\":1,\"entity\":\"oid:npc\"}", "{\"map\":0,\"entity\":\"oid:npc\"}"),
+                                    text.Replace("\"entity\":\"oid:npc\"", "\"entity\":\"a b\"") })
+        {
+            Assert.AreNotEqual(text, bad, "the edit applies");
+            var decoded = GameSessionSnapshotCodec.TryDecode(bad);
+            Assert.IsTrue(decoded.Snapshot is null || GameSessionOwner.Restore(decoded.Snapshot, RestoreOptions()).Failure == GameSessionFailure.InvalidEvents);
+        }
+    }
+
     // End to end: a run's call script in goes into the session, fires after its delay and runs the called script, whose
     // global flag lands in the session (flag 9 is in the fixture's flag domain).
     [TestMethod]

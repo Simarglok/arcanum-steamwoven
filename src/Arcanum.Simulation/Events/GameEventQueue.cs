@@ -138,6 +138,31 @@ public sealed class GameEventQueue
         return new(GameEventFailure.None, moved.ToImmutableArray());
     }
 
+    /// <summary>
+    /// Moves single entities of a global, any-number kind (ARC-SCRIPT-010): every entity of a pending <paramref name="kind"/>
+    /// event that is on <paramref name="fromMap"/> and <paramref name="travels"/> moves to <paramref name="toMap"/>, the
+    /// event's other entities stay. Deadline and sequence are kept. Refused during a pass, for a kind that is not global
+    /// and <see cref="GameEventUniqueness.Many"/>, or for a map below 1; returns the rewritten events.
+    /// </summary>
+    public GameEventRelocateResult RelocateEntities(string kind, int fromMap, int toMap, Func<GameEventEntity, bool> travels)
+    {
+        ArgumentNullException.ThrowIfNull(travels);
+        if (_passing) return new(GameEventFailure.PassInProgress, ImmutableArray<GameEvent>.Empty);
+        if (!Registry.TryGet(kind, out var definition) || definition is not { Uniqueness: GameEventUniqueness.Many, Scope: GameEventScopeRule.Global })
+            return new(GameEventFailure.UnknownKind, ImmutableArray<GameEvent>.Empty);
+        if (fromMap < 1 || toMap < 1) return new(GameEventFailure.InvalidScope, ImmutableArray<GameEvent>.Empty);
+        if (fromMap == toMap) return new(GameEventFailure.None, ImmutableArray<GameEvent>.Empty);
+        bool Moves(GameEventEntity entity) => entity.Map == fromMap && travels(entity);
+        var moving = QueryPending().Where(e => e.Kind == kind && e.Payload.Entities.Any(Moves)).ToArray();
+        var moved = moving.Select(e => e with
+        {
+            Payload = e.Payload with { Entities = e.Payload.Entities.Select(entity => Moves(entity) ? entity with { Map = toMap } : entity).ToImmutableArray() },
+        }).ToArray();
+        foreach (var e in moving) Remove(e);
+        foreach (var e in moved) Insert(e);
+        return new(GameEventFailure.None, moved.ToImmutableArray());
+    }
+
     /// <summary>All pending events, saved or not, in queue order (domain, deadline, sequence). Detached.</summary>
     public ImmutableArray<GameEvent> QueryPending() =>
         PassOrder.SelectMany(d => DomainSet(d)).Select(o => _events[o.Sequence]).ToImmutableArray();

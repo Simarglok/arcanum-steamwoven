@@ -150,7 +150,9 @@ public sealed record ScrWriteback(ScrSource Source, ScrObjectRef? Attachee, int 
 
 /// <summary>A conversation for the caller to start after it applied the writeback (the original's dialog action stores
 /// the slot before its start callback, 0x4472F1): the DLG of <paramref name="Script"/> at <paramref name="Node"/>, between the PC
-/// triggerer and the attachee; a DLG end of 0 resumes the same dialog script at <paramref name="Line"/> + 1.</summary>
+/// triggerer and the attachee. A DLG end of 0 resumes the attachee's dialog slot at <paramref name="Line"/> + 1, and −N at
+/// line N (the original runs the NPC's SAP_DIALOG slot, dialog_ui.c 400–407): for a talk that is this script, for a
+/// conversation a deferred call started it is whatever the NPC's dialog slot holds.</summary>
 public sealed record ScrDialogStart(ScrObjectRef Pc, ScrObjectRef? Npc, int Script, int Line, int Node);
 
 public enum ScrCallKind { Schedule, Remove }
@@ -164,7 +166,8 @@ public enum ScrCallKind { Schedule, Remove }
 public sealed record ScrCallRequest(ScrCallKind Kind, int Script, int Line, ScrObjectRef? Triggerer, ScrObjectRef? Attachee, long DelayMs);
 
 /// <summary>A deferred call firing: the named script from its file header, at the stored line, as a use event with
-/// the stored roles and no extra object; nothing is written back (E1, ARC-RES-042 section 3).</summary>
+/// the stored roles and no extra object; nothing is written back except the attachee's use slot when the run starts a
+/// conversation (E1, ARC-RES-042 section 3; see <see cref="ScrDispatcher.RunCall"/>).</summary>
 public sealed record ScrCallEvent(int Script, int Line, ScrObjectRef? Triggerer, ScrObjectRef? Attachee);
 
 /// <summary>The final value of a global flag the run changed.</summary>

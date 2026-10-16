@@ -824,8 +824,9 @@ public sealed class GameSessionOwner : IDisposable
     public IReadOnlyList<GameEvent> QueryEvents() { ThrowIfDisposed(); return _events.QueryPending(); }
 
     /// <summary>
-    /// One event pass at the session's game time (ARC-WORLD-024, slice E2): the due timers of the active map (the actor's)
-    /// and the hero's run in (deadline, sequence) order, at most <paramref name="budget"/> (1..500) of them, each through
+    /// One event pass at the session's game time (ARC-WORLD-024, slice E2): the due timers of the active map (the actor's),
+    /// the hero's and the deferred SCR calls (ARC-SCRIPT-010, through an <see cref="ISessionScriptWorld"/> host) run in
+    /// (deadline, sequence) order, at most <paramref name="budget"/> (1..500) of them, each through
     /// its life step. An NPC timer whose NPC the host no longer reports (<see cref="ISessionEventWorld.CritterFacts"/> null)
     /// or the session holds no life record for is dropped without running. Timers set during the pass wait for the next
     /// one. The pass takes no expected version, like a clock advance; each life step that changes a record adds one
@@ -887,15 +888,16 @@ public sealed class GameSessionOwner : IDisposable
 
     /// <summary>
     /// ARC-SCRIPT-010: removes the first pending deferred call (in queue order) of <paramref name="script"/> whose
-    /// attachee is <paramref name="attachee"/> (an absent attachee matches a call stored without one), as remove script
-    /// call does; <see cref="GameSessionDisposition.NoChange"/> when there is none.
+    /// attachee is the object <paramref name="attachee"/> names, by entity id whatever map either stores (the original
+    /// compares the object handle; an absent attachee matches a call stored without one), as remove script call does;
+    /// <see cref="GameSessionDisposition.NoChange"/> when there is none.
     /// </summary>
     public GameSessionMutationResult RemoveScriptCall(GameSessionVersion expected, int script, SessionScriptRole? attachee)
     {
         ThrowIfDisposed();
         if (!ValidRole(attachee)) return Reject(GameSessionFailure.InvalidEvents);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
-        bool Match(GameEvent e) => SessionEventKinds.Call(e.Payload) is var call && call.Script == script && call.Attachee == attachee;
+        bool Match(GameEvent e) => SessionEventKinds.Call(e.Payload) is var call && call.Script == script && call.Attachee?.Entity == attachee?.Entity;
         if (!_events.QueryPending().Any(e => e.Kind == SessionEventKinds.ScriptCall && Match(e))) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         _events.RemoveFirst(SessionEventKinds.ScriptCall, Match);
@@ -1020,7 +1022,14 @@ public sealed class GameSessionOwner : IDisposable
     {
         if (to == _actor.Map) return GameSessionFailure.None;
         var followers = _party.Order.ToHashSet(StringComparer.Ordinal);
-        return _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure switch
+        var failure = _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure;
+        // ARC-SCRIPT-010: a deferred call's player and follower roles travel one by one (the original keeps their handles
+        // across maps), its other roles stay where they were. Both steps refuse only during a pass, which the first one
+        // already reports, so the rewrite cannot fail after the relocation moved anything.
+        if (failure == GameEventFailure.None)
+            failure = _events.RelocateEntities(SessionEventKinds.ScriptCall, _actor.Map.RuntimeMap, to.RuntimeMap,
+                entity => entity.Code == SessionEventKinds.PlayerEntity || followers.Contains(entity.Code)).Failure;
+        return failure switch
         {
             GameEventFailure.None => GameSessionFailure.None,
             GameEventFailure.PassInProgress => GameSessionFailure.InvalidEventPass,

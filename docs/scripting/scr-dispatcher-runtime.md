@@ -185,11 +185,14 @@ the script; a reset, reload or map change closes the panel without resuming.
 - **Call script in** asks for a call (`ScrEffects.Calls`, in action order):
   script, line, triggerer and attachee (an absent role is stored as absent, as
   the original stores a null handle) and a game delay of the seconds × 8000 ms
-  (real seconds at the 8× game rate). TE1, an original bug at the edges: the
-  original multiplies in 32 bits (wraps above 536,870 s; a negative count gives
-  weeks). Steamwoven computes without wrapping and treats a negative count as 0;
-  the Original setting wraps (`ScrRuleProfile.CallDelayWraps`). A delay of 0 is
-  1 ms (the next pass).
+  (real seconds at the 8× game rate). The original makes a 32-bit millisecond
+  count of `seconds × 1000`, raises 0 to 1 and multiplies by 8 (call-in case
+  0x44867B, `sub_45A950`), so 0 seconds is 8 ms. TE1, an original bug at the
+  edges: that count wraps above 536,870 s and a negative count gives weeks.
+  Steamwoven computes without wrapping and reads a negative count as 0 (8 ms);
+  the Original setting wraps (`ScrRuleProfile.CallDelayWraps`). Not modelled:
+  the later wrap of the unsigned millisecond sum when the queue adds the delay
+  to the current time of day (from about 526,070 s, depending on the hour).
 - **Remove script call** asks to remove the first pending call of a script whose
   attachee is the named object.
 - **`ScrDispatcher.RunCall(ScrCallEvent)`** runs a call that came due: the named
@@ -197,8 +200,15 @@ the script; a reset, reload or map change closes the panel without resuming.
   line, as a use event with the stored roles and no extra object; a missing or
   trap script and a monster generator attachee end it as for an object event; a
   role an operand reads but the call does not have stops it with
-  `MissingObject`; nothing is written back (a deferred call has no attachment),
-  every other effect is returned.
+  `MissingObject`. A deferred call has no attachment, so nothing is written
+  back, with the original's one exception: a dialog action (PC triggerer)
+  stores the run's local flags and counters into the attachee's **use** slot
+  (the run's point) before the conversation starts, when they differ, keeping
+  the slot's number (0x447282). In the installed data most call-in targets an
+  S5 run reaches are such delayed conversations. The conversation's "return to
+  script" end resumes the NPC's **dialog** slot (the original's DLG end runs
+  `SAP_DIALOG` of the NPC), which may be another script than the call's;
+  `ScrDialogStart` says so.
 
 The session keeps the calls on its event queue as the kind `scr.call`
 ([event queue](../world/game-event-queue-runtime.md#session-wiring-arc-world-024)):

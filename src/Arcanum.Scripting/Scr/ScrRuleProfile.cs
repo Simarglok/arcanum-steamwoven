@@ -29,8 +29,9 @@ public sealed record ScrRuleProfile
 
     /// <summary>
     /// TE1 (original bug at the edges, ARC-RES-048): call script in turns its seconds into game milliseconds as a 32-bit
-    /// <c>seconds × 1000</c> times 8, which wraps above 536,870 seconds and turns a negative count into a delay of
-    /// weeks. Steamwoven computes <c>seconds × 8000</c> without wrapping and treats a negative count as 0.
+    /// <c>seconds × 1000</c> (0 raised to 1) times 8, which wraps above 536,870 seconds and turns a negative count into a
+    /// delay of weeks. Steamwoven computes <c>seconds × 8000</c> without wrapping and reads a negative count as 0 (8 ms,
+    /// as the original's 0 seconds).
     /// </summary>
     public bool CallDelayWraps { get; init; }
 

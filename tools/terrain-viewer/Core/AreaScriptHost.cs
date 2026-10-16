@@ -17,7 +17,7 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed class AreaScriptHost : IScrHost
 {
     /// <summary>The PC as the scripts see it; the viewer has one.</summary>
-    public const string PcCode = "pc";
+    public const string PcCode = SessionEventKinds.PlayerEntity;
     /// <summary>Map-change keys of a speaker's dialog slot, besides <see cref="AreaConversationState.LocalFlagsProperty"/>.</summary>
     public const string CountersProperty = "dialog.counters", ScriptProperty = "dialog.script";
 

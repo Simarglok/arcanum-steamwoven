@@ -25,7 +25,12 @@ public sealed record SessionScriptCall(int Script, int Line, SessionScriptRole? 
 /// </summary>
 public interface ISessionScriptWorld : ISessionEventWorld
 {
-    /// <summary>Whether an object a call names still exists on its map; a call naming a missing object is dropped.</summary>
+    /// <summary>
+    /// Whether an object a call names still exists (an NPC with a life record is asked through
+    /// <see cref="ISessionEventWorld.CritterFacts"/> instead); a call naming a missing object is dropped. The map is the
+    /// object's map: when the actor changes map, a call's <see cref="SessionEventKinds.PlayerEntity"/> and follower
+    /// roles move with it (the original keeps their handles across maps) and other roles keep the map they had.
+    /// </summary>
     bool ObjectExists(SessionMapId map, string entity);
     /// <summary>Runs the call through the host's SCR dispatcher and applies its effects; false when it could not.</summary>
     bool RunScriptCall(SessionScriptCall call);
@@ -87,13 +92,16 @@ public static class SessionEventKinds
     public const int RegistryVersion = 1;
 
     /// <summary>
-    /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee, an
-    /// absent role written as <see cref="AbsentRole"/>; values: the game time it was scheduled at, its delay, the script,
-    /// the line.
+    /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee (the
+    /// player as <see cref="PlayerEntity"/>; player and follower roles follow the actor across maps), an absent role
+    /// written as <see cref="AbsentRole"/> on the map that was active when it was scheduled; values: the game time it was
+    /// scheduled at, its delay, the script, the line.
     /// </summary>
     public const string ScriptCall = "scr.call";
     /// <summary>The entity id standing for an absent role of a <see cref="ScriptCall"/>.</summary>
     public const string AbsentRole = "-";
+    /// <summary>The entity id of the player character in a <see cref="ScriptCall"/>; it travels with the actor.</summary>
+    public const string PlayerEntity = "pc";
     /// <summary>Pending deferred calls a session holds.</summary>
     public const int MaxScriptCalls = 1024;
     /// <summary>The longest delay: a call-in of int.MaxValue seconds at the game rate (8 game ms per real ms).</summary>

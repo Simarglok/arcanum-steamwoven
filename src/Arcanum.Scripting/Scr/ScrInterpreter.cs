@@ -6,7 +6,7 @@ namespace Arcanum.Scripting.Scr;
 /// One run of an admitted program (ARC-RES-042 E7–E11): fresh local variables, the attachment's local flags and
 /// counters in a private copy, a line loop with the original's budget, and every global change kept in an overlay that
 /// the run itself reads back and the result hands to the caller. It supports exactly the commands of
-/// <see cref="ScrAdmissionSet.S2"/>.
+/// <see cref="ScrAdmissionSet.S5"/>.
 /// </summary>
 internal sealed class ScrInterpreter
 {
@@ -208,11 +208,18 @@ internal sealed class ScrInterpreter
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     } ?? throw new MissingObjectStop(line);
 
-    // TE1: the original's 32-bit seconds × 1000 × 8 (Original) or seconds × 8000 without wrapping (Steamwoven); a delay of
-    // 0 fires on the next pass (1 ms), as the original's 0 does.
-    private long CallDelay(int seconds) => Math.Max(1, _options.Rules.CallDelayWraps
-        ? unchecked((uint)(seconds * 1000) * 8u)
-        : Math.Max(0L, seconds) * 8000L);
+    // The original turns the seconds into a 32-bit millisecond count, raises 0 to 1 (sub_45A950) and multiplies by 8, so
+    // 0 seconds is 8 game ms. TE1: Original keeps the 32-bit wrap; Steamwoven computes without wrapping and reads a
+    // negative count as 0. A product that wraps to 0 still waits 1 ms.
+    private long CallDelay(int seconds)
+    {
+        if (_options.Rules.CallDelayWraps)
+        {
+            var ms = unchecked((uint)(seconds * 1000));
+            return Math.Max(1L, unchecked(Math.Max(1u, ms) * 8u));
+        }
+        return seconds <= 0 ? 8L : seconds * 8000L;
+    }
 
     private ScrObjectRef? OptionalObject(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
     {

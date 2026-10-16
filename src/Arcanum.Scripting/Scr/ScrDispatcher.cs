@@ -118,7 +118,18 @@ public static class ScrDispatcher
         if (e.Attachee is { } attachee && host.IsMonsterGenerator(attachee)) return Ended(ScrOutcome.RunDefault, ScrStop.MonsterGenerator);
         var run = Execute(program, e.Script, new(e.Script, program.InitialLocalFlags, program.InitialCounters), e.Line, program.FileFlags,
             new(e.Triggerer, e.Attachee, null), host, options);
-        return run.Refusal is not null ? run.Result : run.With(null, null);
+        if (run.Refusal is not null) return run.Result;
+        // A call has no attachment, so nothing is written back, with one exception the original has: its dialog action
+        // stores the run's flags and counters into the attachee's slot of the run's point (use) before the conversation
+        // starts, when they differ (0x447282; flags to flags, X1). The slot keeps its own number.
+        ScrWriteback? writeback = null;
+        if (run.Dialog is not null && e.Attachee is { } npc)
+        {
+            var slot = host.Slot(npc, ScrPoint.Use) ?? new ScrSlot(0, 0, 0);
+            if (slot.LocalFlags != run.Slot.LocalFlags || slot.Counters != run.Slot.Counters)
+                writeback = new(ScrSource.Object, npc, ScrPoint.Use, slot with { LocalFlags = run.Slot.LocalFlags, Counters = run.Slot.Counters });
+        }
+        return run.With(writeback, null);
     }
 
     private static ScrRunResult RunPlaced(ScrSource source, ScrSlot slot, ScrRoles roles, IScrHost host, ScrRunOptions options, bool discard)

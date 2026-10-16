@@ -42,11 +42,14 @@ public sealed class ScrDeferredCallTests
         foreach (var (seconds, steamwoven, original) in new[]
         {
             (10, 80_000L, 80_000L),
-            (0, 1L, 1L),
+            // The original raises a 0 ms count to 1 before the × 8 (sub_45A950): 0 seconds is 8 ms.
+            (0, 8L, 8L),
             (536_870, 4_294_960_000L, 4_294_960_000L),
             (536_871, 4_294_968_000L, 704L),
-            (-1, 1L, 4_294_959_296L),
-            (int.MaxValue, int.MaxValue * 8000L, unchecked((uint)(int.MaxValue * 1000) * 8u)),
+            (-1, 8L, 4_294_959_296L),
+            (int.MaxValue, 17_179_869_176_000L, 4_294_959_296L),
+            // 536,870,912 × 1000 is a multiple of 2^32: the 32-bit count is 0, raised to 1, so 8 ms in the original.
+            (536_870_912, 4_294_967_296_000L, 8L),
         })
         {
             var program = Program(Do(C(54, N(5), N(0), (Triggerer, 0), (Attachee, 0), N(seconds))), Do(C(1)));
@@ -91,6 +94,27 @@ public sealed class ScrDeferredCallTests
         // An absent role in the call stops the run only where an operand reads it.
         host.Generator = false;
         Assert.AreEqual(ScrStop.MissingObject, ScrDispatcher.RunCall(new(2023, 3, null, Npc), host).Stop);
+    }
+
+    [TestMethod]
+    public void A_conversation_started_by_a_call_stores_the_runs_flags_in_the_attachees_use_slot()
+    {
+        var host = new FakeHost();
+        // Header flags 0; the call sets local flag 3 and starts DLG node 5.
+        host.Scripts[1699] = ScrScriptLookup.Of(Program(Do(C(8, N(3))), Do(C(4, N(5)))));
+        host.Slots[(Npc, ScrPoint.Use)] = new(4242, 0, 0x11);
+        var r = ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host);
+        Assert.AreEqual(ScrStop.Dialog, r.Stop);
+        Assert.AreEqual(new ScrDialogStart(Pc, Npc, 1699, 1, 5), r.Effects.Dialog);
+        // The use slot keeps its number and takes the run's flags and counters (the header's counter 0 replaces 0x11).
+        Assert.AreEqual(new ScrWriteback(ScrSource.Object, Npc, ScrPoint.Use, new(4242, 8, 0)), r.Effects.Writeback);
+        // No slot yet: one is created with number 0; no PC: no conversation, no write; no change: no write.
+        host.Slots.Clear();
+        Assert.AreEqual(new ScrSlot(0, 8, 0), ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host).Effects.Writeback!.Slot);
+        Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Npc, Npc), host).Effects.Writeback);
+        host.Slots[(Npc, ScrPoint.Use)] = new(4242, 8, 0);
+        Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host).Effects.Writeback);
+        Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Pc, null), host).Effects.Writeback, "no attachee, no slot");
     }
 
     [TestMethod]
