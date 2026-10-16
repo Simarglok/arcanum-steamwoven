@@ -5,5 +5,7 @@
   </PropertyGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Arcanum.Simulation.Tests" />
+    <!-- Session restore rebuilds a saved clock through the validated descriptor path. -->
+    <InternalsVisibleTo Include="Arcanum.Session" />
   </ItemGroup>
 </Project>
