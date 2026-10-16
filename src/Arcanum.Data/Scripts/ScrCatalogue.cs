@@ -93,7 +93,7 @@ public static class ScrCatalogue
     /// <summary>Action types the project reads by name.</summary>
     public static class Action
     {
-        public const int DoNothing = 0, ReturnSkipDefault = 1, ReturnRunDefault = 2, Goto = 3, Dialog = 4, CallScript = 7,
+        public const int DoNothing = 0, ReturnSkipDefault = 1, ReturnRunDefault = 2, Goto = 3, Dialog = 4, RemoveThisScript = 5, ChangeThisScript = 6, CallScript = 7,
             SetLocalFlag = 8, ClearLocalFlag = 9, Assign = 10, Add = 11, Subtract = 12, Multiply = 13, Divide = 14,
             LoopFor = 18, LoopEnd = 19, LoopBreak = 20, GetStoryState = 42, SetStoryState = 43, Teleport = 44,
             CallScriptIn = 54, CallScriptAt = 55, CallScriptEx = 81, SetGlobalFlag = 100, ClearGlobalFlag = 101, FadeAndTeleport = 102;
@@ -107,6 +107,9 @@ public static class ScrCatalogue
     }
 
     public const int LocalFlags = 32, Counters = 4, LocalSlots = 10, GlobalFlags = 3200, GlobalVariables = 2000;
+
+    /// <summary>Script numbers are 1..99999 (five-digit file names); 0 is "no script".</summary>
+    public const int MaxScriptNumber = 99999;
 }
 
 /// <summary>Which clause of a line.</summary>

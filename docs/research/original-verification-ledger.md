@@ -220,11 +220,13 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    portal tile need recomputing. The direction-5 side effect is an Original-setting switch candidate.
 5. **SCR S2 choices** ([census](scr-census.md#anomalies-for-s1-s)): X7 (quotient, not sum) and X8
    (masked counters) are settled by the original, so neither is an Original-setting option; X10 stays a
-   switch candidate. X6: the S1 admission refusal of negative gotos (`NegativeGoto`) is stricter than
+   switch candidate. Implemented by ARC-SCRIPT-008 ([dispatcher core](../scripting/scr-dispatcher-runtime.md)):
+   X7 and X8 as the original in both modes, X10 and X3 tile as Original switches. X6: the S1 admission refusal of negative gotos (`NegativeGoto`) is stricter than
    the original, which reads −1..−4 as control codes; whether the Original setting admits them is
    open (the census decides whether any data uses them).
 6. **Tile script 2498 self-removal** ([Virgil script attachments](virgil-script-attachments.md),
-   ARC-RES-037): holds only in CE; in the original the removal does not persist.
+   ARC-RES-037): holds only in CE; in the original the removal does not persist. ARC-SCRIPT-008: it persists in
+   Steamwoven (D2 fix) and not in the Original setting (`TileScriptChangesDiscarded`).
 7. **Starting hero `*n` / `/n`** ([starting hero](starting-hero-evidence.md), SH-07 and the runtime's
    refusal): the original parses the factor, so backgrounds 5 and 11 double their reaction adjustment.
 8. **Magic slices** ([magic core](magic-core-evidence.md)): MG1, MG2 (mastery `ceil(cost / 2)` at run

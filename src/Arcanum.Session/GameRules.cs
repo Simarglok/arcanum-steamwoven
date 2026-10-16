@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 
@@ -25,11 +26,12 @@ public enum RuleMode
 /// </summary>
 public sealed class GameRules
 {
-    private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events)
+    private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts)
     {
         Mode = mode;
         Combat = combat;
         Events = events;
+        Scripts = scripts;
     }
 
     public RuleMode Mode { get; }
@@ -43,11 +45,14 @@ public sealed class GameRules
     /// <summary>Game event queue (ARC-WORLD-022): OQ2, AI ticks rebuilt on load.</summary>
     public GameEventQueueProfile Events { get; }
 
+    /// <summary>SCR dispatcher (ARC-SCRIPT-008): X10 global-flag write spill, X3 tile writeback discarded.</summary>
+    public ScrRuleProfile Scripts { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
-    public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven);
+    public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
-    public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original);
+    public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
