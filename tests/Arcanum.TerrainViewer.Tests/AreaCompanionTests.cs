@@ -163,6 +163,36 @@ public sealed class AreaCompanionTests
     }
 
     [TestMethod]
+    public void AFarCompanionRunsAndANearOneWalksWithGaitTiming()
+    {
+        // ARC-WORLD-020: beyond range + 2 the follow decision is a run; with gait timing its steps take the run duration.
+        var f = Load();
+        using var session = ConversationSessionFixture.Create();
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0), GaitTiming.HumanFixed);
+        var companion = group.Companions.Single();
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step) { Occupancy = group.OccupancyForPc };
+        pc.Advance(SimulationTime.At(9), [new(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        pc.Advance(SimulationTime.At(11), [new(SimulationTime.At(19, 2), [MovementInput.Set(1, ActorIntent.Neutral)])]);
+        Assert.AreEqual(MovementPhase.Settled, pc.State.Phase);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.JoinParty(session.Version, companion.Entity,
+            AreaCompanionRoster.Facts(AreaCompanionRoster.Virgil, 0, 50), false).Disposition);
+        var permits = new List<StepAssessmentTiming>();
+        // Frames of 1/10 s: the follow decision is re-made while the route runs.
+        for (var i = 1; i <= 100; i++)
+            foreach (var (_, advance) in group.Drive(session, pc.State, SimulationTime.At(110 + i, 10)))
+                permits.AddRange(advance.Movement.Events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!));
+        Assert.AreEqual(FollowAction.Run, FollowDistanceRules.Decide(new(5, 1), pc.State.CommittedCell, false, false));
+        var first = permits.First();
+        CollectionAssert.Contains(first.Provenance.ToArray(), GaitTiming.RunProvenance);
+        Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Run, first.Key.Direction), first.Duration);
+        // The last steps, within range + 2 of the PC, walk; it stops within 2.
+        var last = permits.Last();
+        CollectionAssert.Contains(last.Provenance.ToArray(), GaitTiming.WalkProvenance);
+        Assert.AreEqual(GaitTiming.HumanFixed.For(MovementGait.Walk, last.Key.Direction), last.Duration);
+        Assert.AreEqual(2, FollowDistanceRules.Distance(companion.Grid.State.CommittedCell, pc.State.CommittedCell));
+    }
+
+    [TestMethod]
     public void ThePlacementIsSessionStateThatSurvivesASaveAndRestoresTheCompanion()
     {
         var f = Load();

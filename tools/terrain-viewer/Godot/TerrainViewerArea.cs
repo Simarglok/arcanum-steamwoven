@@ -15,7 +15,7 @@ public partial class TerrainViewerApp
         // Whole-core step evidence bound to this generation is the only admitted movement source;
         // the bounded single-sector snapshot is WORLD-only.
         if (area.Generation != result.Generation || arguments.Mode != TerrainViewerMode.CrashSiteArea ||
-            result.ActorPlan?.Profile.Id != ActorDiagnosticProfileId.HumanFixed ||
+            result.ActorPlan?.Profile.Id != ActorDiagnosticProfileId.HumanFixed || result.ActorPlan.Profile.Run is null ||
             result.TraversalSnapshot is not null || result.AreaStepSnapshot?.EvidenceEpoch != result.Generation)
             throw new InvalidOperationException("AREA_GENERATION_MISMATCH");
         var core = area.Snapshot.Terrain.Where(record => record.Scope == AreaScope.Core).Select(record => record.Key).ToHashSet();
@@ -167,7 +167,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
-        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
+        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaGaitSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
         RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }

@@ -3,7 +3,7 @@ using Arcanum.Data.Terrain;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>Closed, source-derived state accepted by the fixed actor diagnostic.</summary>
-public enum ActorDiagnosticAction { Idle, Walk }
+public enum ActorDiagnosticAction { Idle, Walk, Run }
 public enum ActorDiagnosticRenderBranch { NormalUncached, CachedUnsupported, Unknown }
 
 /// <summary>Path-free identity for one selected actor ART frame.</summary>

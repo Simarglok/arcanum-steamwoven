@@ -6,6 +6,6 @@ Implementation requires a bounded accepted task or explicit user instruction def
 
 For research changes, include source URL, version/commit, observed facts, uncertainty and a reproducible verification method. For code, include meaningful tests of format/behavior boundaries. Use synthetic fixtures in Git; real-data tests are optional and receive explicit local inputs. A synthetic pass does not establish original-game compatibility or physical controller behavior.
 
-Run checks appropriate to the changed component. Documentation-only changes need source/configuration consistency and relative-link checks; do not describe them as runtime validation. Root solution checks do not cover every standalone viewer or lab.
+Run checks appropriate to the changed component. Documentation-only changes run no checks ([docs-only rule](docs/workflow/tasks.md#review-publication-and-merge)); their independent review confirms source/configuration consistency and relative links, and they are never described as runtime validation. Root solution checks do not cover every standalone viewer or lab.
 
 Keep PRs scoped and independently reviewed before opening. Preserve local archives and game data outside version control. Check staged filenames and diff before publishing. The agent working the task merges its own PR unless the maintainer explicitly asked to review it ([review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge)).

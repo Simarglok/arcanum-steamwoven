@@ -27,7 +27,7 @@ public static partial class TerrainViewerSelfTest
             || result.Frames.Count!=2 || result.Plan.Commands.Count(c=>c.Identity is null&&c.FlipX)!=4)
             throw new InvalidOperationException("AREA_SEAM_STRICT_COVERAGE");
         fixture.Owner.Dispose(); var settledUsage=fixture.Owner.Usage;
-        using var cache=new TerrainTextureCache(); var actor=SyntheticActorFixture.Create(human:true);
+        using var cache=new TerrainTextureCache(); var actor=SyntheticActorFixture.Create(human: true, run: true);
         cache.UploadActor(actor.Result.ActorTextures);
         var viewport=new SubViewport { Size=new(480,400),TransparentBg=true,RenderTargetUpdateMode=SubViewport.UpdateMode.Always };
         var canvas=new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);

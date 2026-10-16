@@ -189,7 +189,8 @@ Walk has ten frames at raw 17 FPS. These positive ART rates drive the diagnostic
 clock, not an original animation scheduler or movement-speed claim. The legacy
 standalone `actor-diagnostic` keeps `MonsterRegression`, 15/8 frames and the
 6/10 FPS override (raw 8/15). Both ratified action facing tables use physical
-groups `[0,7,6,5,4,5,6,7]` and mirror only slots 1..3. Action changes reset frame/interval;
+groups `[0,7,6,5,4,5,6,7]` and mirror only slots 1..3 (the AREA run ART of ARC-WORLD-020 reuses them, not
+independently verified). Action changes reset frame/interval;
 same-action facing changes preserve the interval. Runtime motion events and
 phase determine facing, including reversed facing on early cancellation;
 denial does not rotate the actor. Cell floor and ToEven fractional projected pixel offsets
@@ -773,7 +774,7 @@ smoke on the installed original, which writes a nearest 4× pack of every charac
 frame to a temporary directory outside the repository, deletes it afterwards, and requires
 the whole window to equal Legacy with no fallback:
 `ARC-RENDER-014 native-smoke AREA HD identity PASS` (Crash Site exterior: 114 frames, 59
-body frames and 55 actor frames, 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
+body frames and 55 actor frames (105 since ARC-WORLD-020 adds the run ART: 164 frames), 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
 0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
 22 MB resident at 4×, first bind 90 ms) and `ARC-RENDER-014 native-smoke WORLD HD identity
 PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: a real upscaled pack (ARC-RES-038/ARC-DEV-003), walls and terrain in HD,
@@ -858,6 +859,18 @@ and steps off it; in the cave he is drawn (his exterior T0 frame, lit by the cav
 and followed like outside, while the exterior shows no T0 Virgil. A waiting Virgil stays on the map where he waits.
 Contract: [map change](../world/companion-follow-runtime.md#map-change-arc-world-017); native smoke
 `ARC-WORLD-017 native-smoke cave PASS` (after the follow stage; `ARC_AREA_CAVE_FOLLOW_CAPTURE=PATH.png`).
+
+### Walking and running (ARC-WORLD-020)
+
+In `crash-site-area` the PC walks or runs ([walking and running](../world/gait-runtime.md)): each step takes the
+human ART's average time for its gait (walk 547/773 ms, run 168/235 ms per axis/diagonal step), and a run step
+draws the run ART (animation 6, loaded only in this mode). A ground click walks; Ctrl+click runs once (walks once
+with Always Run on); Num Lock flips the always-run lock; the palette's **Always Run on/off** is the original option
+(`user://always_run_v1.json`, `ALWAYS_RUN_TEST_PATH`); clicking an object always runs the approach. A following
+Virgil runs while he is farther than range + 2. HUD: `Gait: Always Run …, Num Lock run …; next ground click …;
+current gait …` (in `world-diagnostic` the palette row says it is unavailable and Num Lock stays a reserved key). On macOS a physical
+Ctrl+click arrives as a right press with Ctrl held and counts as Ctrl+LMB. Native smoke `ARC-WORLD-020 native-smoke run PASS` (after the quick-save phase, before the follow
+stage; `ARC_AREA_RUN_CAPTURE=PATH.png`).
 
 ## Verification and evidence status
 

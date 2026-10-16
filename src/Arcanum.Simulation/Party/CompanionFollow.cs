@@ -4,7 +4,8 @@ using Arcanum.Simulation.Navigation;
 namespace Arcanum.Simulation.Party;
 
 /// <summary>What a follower does at one decision. <see cref="Walk"/> and <see cref="Run"/> both approach the leader;
-/// <see cref="Run"/> is the source's run-near goal, which this project moves at walking speed (no running yet).</summary>
+/// <see cref="Run"/> is the source's run-near goal; the host chooses the step duration for it (the AREA viewer's run gait,
+/// ARC-WORLD-020).</summary>
 public enum FollowAction { Hold, Walk, Run, Jump, Separate }
 
 /// <summary>
@@ -46,7 +47,7 @@ public readonly record struct CompanionFollowUpdate(FollowAction Action, CellCoo
 /// committed cell, then <see cref="Drive"/> to the same frame boundary. Decisions use the leader cell of that call (a
 /// frame, not the source's 100 ms re-check). A goal the planner cannot reach is not asked again until the follower or
 /// the leader stands on another cell. The jump itself is the host's: it stands the follower settled on
-/// <see cref="CompanionFollowUpdate.JumpTo"/>. No running speed, combat, turn-based cost or loyalty check.
+/// <see cref="CompanionFollowUpdate.JumpTo"/>. Running speed is the host's step duration. No combat, turn-based cost or loyalty check.
 /// </summary>
 public sealed class CompanionFollower
 {

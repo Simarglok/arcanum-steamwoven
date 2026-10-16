@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
     {
         _areaCompanions = null;
         if (_areaSession is not { } session || _conversationHost is not { PartyWired: true } || _worldActor.Session is not AreaGridSession grid) return;
-        _areaCompanions = AreaCompanionGroup.Create(_companionTemplates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time);
+        _areaCompanions = AreaCompanionGroup.Create(_companionTemplates, grid.Snapshot, grid.Chart, session, new(CurrentAreaMap), grid.State.Time, grid.Timing);
         foreach (var skipped in _areaCompanions.Skipped) GD.Print("ARC-WORLD-016 companion skipped " + skipped);
         GD.Print("ARC-WORLD-016 companions bound " + System.Text.Json.JsonSerializer.Serialize(_areaCompanions.Companions.Select(c => new {
             c.Speaker.ScriptId, Standing = c.Standing.ToString(), Cell = grid.Chart.ToWorld(c.Grid.State.CommittedCell), Visiting = c.Template.Home.RuntimeMap != CurrentAreaMap }).ToArray())

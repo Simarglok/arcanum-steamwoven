@@ -224,8 +224,10 @@ public sealed class AreaCompanionGroup
     /// The companions of <paramref name="templates"/> the session places on map <paramref name="map"/>, each on its
     /// recorded placement there, or on its T0 cell on its home map when none is recorded.
     /// </summary>
+    /// <param name="timing">ARC-WORLD-020: per-gait step durations; a companion runs while its follow decision is a run
+    /// (research ARC-RES-047 L11). Null keeps the fixed step duration.</param>
     public static AreaCompanionGroup Create(IEnumerable<AreaCompanionTemplate> templates, AreaStepSnapshot steps, AreaChart chart,
-        GameSessionOwner session, SessionMapId map, SimulationTime time)
+        GameSessionOwner session, SessionMapId map, SimulationTime time, GaitTiming? timing = null)
     {
         ArgumentNullException.ThrowIfNull(templates); ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(chart); ArgumentNullException.ThrowIfNull(session);
@@ -256,8 +258,10 @@ public sealed class AreaCompanionGroup
             AreaOccupancy Admission() => group!.OccupancyFor(index, leader: true);
             AreaOccupancy Planning() => group!.OccupancyFor(index, leader: false);
             var grid = new AreaGridSession(steps, time, chart: chart, start: start, facing: facing,
-                actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission };
-            list.Add(new(template, grid, new CompanionFollower(new AreaRouteSource(steps, chart, Planning))));
+                actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission, Timing = timing };
+            var companion = new AreaCompanion(template, grid, new CompanionFollower(new AreaRouteSource(steps, chart, Planning)));
+            grid.Gait = () => companion.LastUpdate.Action == FollowAction.Run ? MovementGait.Run : MovementGait.Walk;
+            list.Add(companion);
         }
         group = new(steps, chart, map, list.ToArray(), absent, away.AsReadOnly()) { Skipped = skipped.AsReadOnly() };
         group.Refresh(session);
@@ -330,7 +334,7 @@ public sealed class AreaCompanionGroup
             {
                 if (!Admitted(_steps, _chart, jump)) continue;
                 companion.Grid = new AreaGridSession(_steps, frontier, chart: _chart, start: jump, facing: grid.State.Facing,
-                    actorId: grid.State.Binding.ActorId, capabilities: Capabilities) { Occupancy = grid.Occupancy };
+                    actorId: grid.State.Binding.ActorId, capabilities: Capabilities) { Occupancy = grid.Occupancy, Timing = grid.Timing, Gait = grid.Gait };
                 companion.Jumps++;
                 continue;
             }

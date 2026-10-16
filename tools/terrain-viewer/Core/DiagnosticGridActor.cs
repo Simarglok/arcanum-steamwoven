@@ -12,7 +12,8 @@ public sealed class DiagnosticGridActor
     public IGridSession? Session { get; private set; }
     /// <summary>The bounded single-sector WORLD session, when that profile is configured.</summary>
     public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
-    public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixed;
+    // ARC-WORLD-020: the human with its run resource (the WORLD diagnostic never selects Run; facing tables are shared).
+    public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixedRun;
     public int CurrentFrame => _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
     public DiagnosticActorState State => Session is { } session ? RenderState(session.State)
@@ -24,10 +25,14 @@ public sealed class DiagnosticGridActor
     }
     /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
     public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
+    /// <summary>ARC-WORLD-020: the gait timing and the current gait every AREA session this actor configures uses
+    /// when no explicit step duration is given; null timing, or an explicit duration, keeps the fixed duration.</summary>
+    public GaitTiming? AreaGaitTiming { get; set; }
+    public Func<MovementGait>? AreaGait { get; set; }
     public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null,
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
-        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy };
+        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait };
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
@@ -41,18 +46,20 @@ public sealed class DiagnosticGridActor
         var result = session.Advance(time, batches, (state, movement) =>
         {
             var cursor = previous.Time;
-            var action = Action(previous.Action);
+            var moving = previous.Action;
+            var run = IsRun(previous.Segment);
+            var action = Action(moving, run);
             foreach (var item in movement.Events)
             {
                 trial.Advance(Seconds(item.Time.Value - cursor.Value));
                 cursor = item.Time;
-                if (item.Kind == MovementEventKind.ActionChanged)
-                {
-                    var next = Action(item.NewAction!.Value);
-                    if (next != action) { action = next; trial = Timeline(action); }
-                }
+                if (item.Kind == MovementEventKind.ActionChanged) moving = item.NewAction!.Value;
+                // ARC-WORLD-020: each step's permit names its gait; a run step draws the run ART.
+                if (item.Kind == MovementEventKind.StepStarted) run = item.Assessment?.Provenance.Contains(GaitTiming.RunProvenance) == true;
+                var next = Action(moving, run);
+                if (next != action) { action = next; trial = Timeline(action); }
                 // Facing changes select another physical row at the same frame.
-                // The action clock stays continuous for Walk->Walk and turns.
+                // The action clock stays continuous for Walk->Walk, Run->Run and turns.
             }
             trial.Advance(Seconds(state.Time.Value - cursor.Value));
             validateSelection?.Invoke(Placement(session, state, trial.CurrentFrame));
@@ -73,11 +80,12 @@ public sealed class DiagnosticGridActor
         : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
     public static DiagnosticActorState RenderState(MovementState state) => new(
-        new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action));
-    private static ActorDiagnosticAction Action(MovementAction action) => action switch
+        new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action, IsRun(state.Segment)));
+    private static bool IsRun(ActiveSegment? segment) => segment?.Assessment.Provenance.Contains(GaitTiming.RunProvenance) == true;
+    private static ActorDiagnosticAction Action(MovementAction action, bool run) => action switch
     {
         MovementAction.Idle => ActorDiagnosticAction.Idle,
-        MovementAction.Walk => ActorDiagnosticAction.Walk,
+        MovementAction.Walk => run ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk,
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
     public static int Octant(NeighborDirection facing) => facing switch
@@ -92,10 +100,10 @@ public sealed class DiagnosticGridActor
         DiagnosticActorMotion.ToPlacement(RenderState(state), frame); // pure geometry ONLY
     private static AnimationTimeline Timeline(ActorDiagnosticAction action)
     {
-        var resource = ActorDiagnosticProfile.HumanFixed.Resource(action);
+        var resource = ActorDiagnosticProfile.HumanFixedRun.Resource(action);
         var timeline = new AnimationTimeline(resource.FramesPerGroup, resource.RawFramesPerSecond);
         timeline.SetMode(PlaybackMode.Loop);
-        if (action == ActorDiagnosticAction.Walk) timeline.Play();
+        if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run) timeline.Play();
         return timeline;
     }
 

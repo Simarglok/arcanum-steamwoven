@@ -129,6 +129,10 @@ public sealed class AreaGridSession : IGridSession
     public AreaChart Chart { get; }
     /// <summary>ARC-WORLD-016: the live actors this session's steps are admitted against (read at every assessment); null is T0 alone.</summary>
     public Func<AreaOccupancy?>? Occupancy { get; set; }
+    /// <summary>ARC-WORLD-020: per-gait step durations. Null keeps the fixed <see cref="Duration"/> for every step.</summary>
+    public GaitTiming? Timing { get; init; }
+    /// <summary>ARC-WORLD-020: the gait a step starts with, read when it is admitted; null walks.</summary>
+    public Func<MovementGait>? Gait { get; set; }
     public const string PcActorId = "HUMAN_FIXED_DIAGNOSTIC", PcCapabilities = "ISOLATED_PC_HUMAN_FIXED_V1";
 
     public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null,
@@ -166,7 +170,10 @@ public sealed class AreaGridSession : IGridSession
         {
             var assessment = Assess(key.From, key.To, key.Direction);
             var live = AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
-            return (GridReplay.Permit(key, live.Coverage, live.Disposition, live.ReasonCode, assessment.EvidenceSha256, Duration),
+            var gait = Gait?.Invoke() ?? MovementGait.Walk;
+            var duration = Timing?.For(gait, key.Direction) ?? Duration;
+            return (GridReplay.Permit(key, live.Coverage, live.Disposition, live.ReasonCode, assessment.EvidenceSha256, duration,
+                    Timing is null ? null : GaitTiming.Provenance(gait)),
                 new AreaGridStepEvidence(key, assessment) { Live = live.Overlaid ? live : null });
         }, validatePresentation);
         if (result.Movement.Status != MovementStatus.Completed) return result;
@@ -219,7 +226,7 @@ internal static class GridReplay
     // Full components, ALL records and gaps remain in evidence. Bounded Simulation
     // codes reference that exact-key record, never truncate it.
     internal static StepAssessmentTiming Permit(AdmissionKey key, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition,
-        string reason, string evidenceSha256, StepDuration duration)
+        string reason, string evidenceSha256, StepDuration duration, string? gait = null)
     {
         var mappedCoverage = coverage switch
         {
@@ -236,7 +243,7 @@ internal static class GridReplay
             _ => throw new InvalidOperationException("GRID_DISPOSITION_INVALID")
         };
         return new(key, mappedCoverage, mappedDisposition, mappedDisposition == AssessmentDisposition.Open ? duration : null,
-            [reason], ["GRID_FULL_DATA_RECORD", evidenceSha256]);
+            [reason], gait is null ? ["GRID_FULL_DATA_RECORD", evidenceSha256] : ["GRID_FULL_DATA_RECORD", evidenceSha256, gait]);
     }
 
     // Deliberate semantic mapping, not an enum cast or compass/ART alias.

@@ -10,8 +10,8 @@ covers the follow part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-
 through the cave entrance and exit with the PC ([map change](#map-change-arc-world-017)), the bounded
 [FR-WORLD-010](../requirements/world.md#fr-world-010) A→B→A case for one follower.
 
-**NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), no running speed (the source's
-run-near goal moves at the diagnostic walking speed), only the two cave endpoints carry him (no other map, no
+**NOT READY:** no walk cycle or turning for Virgil (his T0 body frame moves with him), running uses the human gait timing
+(ARC-WORLD-020, [gait runtime](gait-runtime.md); his own ART stride is not read), only the two cave endpoints carry him (no other map, no
 follower of a follower, no unconscious-follower rule, no carried inventory payload), no orders, loyalty, wait timer, combat or turn-based cost, no
 refusal line text, and the PC side of the follow check is still the AREA diagnostic profile (charisma 8, level 1), not
 the session hero. Distances and order are source claims read in CE at `a7ff41b300ef712f0e7d088183a3d08957110cdd`;
