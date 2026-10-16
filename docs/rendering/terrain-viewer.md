@@ -137,7 +137,8 @@ conversation panel closes the actor gate; replies are clicked (controller menu n
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
 closes the dialog. The HUD says whether a dialog NPC is in reach. Rules, state profile and
 limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
-self-test covers a synthetic panel and the click/keyboard routing in AREA mode.
+self-test covers a synthetic panel, an off-NPC click, keyboard events and polled levels, and the
+palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test).
 
 ## Integrated world diagnostic policy
 

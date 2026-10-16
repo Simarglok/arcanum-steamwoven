@@ -93,7 +93,8 @@ public partial class TerrainViewerApp
     private bool _worldUiFocused;
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
-    private bool WorldModal => _worldPanel?.IsOpen == true || ConversationOpen;
+    private bool PaletteOpen => _worldPanel?.IsOpen == true;
+    private bool WorldModal => PaletteOpen || ConversationOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => DiagnosticActorMotion.Project(_worldActor.State.Position) + new Vec2(0, 20);
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -161,7 +162,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); }
@@ -322,7 +323,7 @@ public partial class TerrainViewerApp
     }
     private void ProcessWorldObserved(double delta)
     {
-        _worldAdapter.PaletteOpen = WorldModal;
+        _worldAdapter.PaletteOpen = PaletteOpen;
         if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); AdvanceWorldGrid(default); return; }
         if (WorldUiFocus != _worldUiFocused) { _worldUiFocused = WorldUiFocus; QuarantineWorld(); }
         var complete = _worldFocused;
@@ -578,7 +579,7 @@ public partial class TerrainViewerApp
             return;
         }
         var wasModal = WorldModal;
-        _worldAdapter.PaletteOpen = WorldModal;
+        _worldAdapter.PaletteOpen = PaletteOpen;
         if (input is InputEventKey chordKey)
         {
             // Diagnostics first: a consumed chord key never reaches the shared
@@ -666,7 +667,8 @@ public partial class TerrainViewerApp
         // adapter: no keyboard actor vector, no lab Inspect/Context/Q/E/F1 pulses,
         // and semantic Confirm/Cancel/menu pulses only inside the open palette.
         raw = raw with { KeyboardActor = default, Inspect = false, Context = false, Previous = false, Next = false, Settings = false, KeyboardActorHeld = false };
-        if (!WorldModal) raw = raw with { Confirm = false, Cancel = false, MenuUp = false, MenuDown = false };
+        // The conversation panel is modal too, but keyboard keys are not dialog controls (ARC-SCRIPT-005).
+        if (!PaletteOpen) raw = raw with { Confirm = false, Cancel = false, MenuUp = false, MenuDown = false };
         // The native numeric editor owns text, Enter, Backspace and Tab. Only
         // explicit Escape cancels here; do not reinterpret Backspace as Cancel.
         if (WorldModal && GetViewport().GuiGetFocusOwner() is LineEdit)

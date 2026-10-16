@@ -43,8 +43,9 @@ while (conversation.Phase == DialogConversationPhase.AwaitingSelection)
 
 Ports: `IDialogStateQueryPort` + `IDialogCommandPort` (existing LF/QU/RU seams), the
 production [`GlobalFlagOwner`](global-flag-state-runtime.md) and `IDialogWorldPort`
-(reaction query and commands, alignment, negative IN, MM, JO). A missing capability turns
-every operation needing it into a static `CapabilityUnavailable` frontier.
+(reaction query and commands, alignment, negative IN, MM, JO). A missing capability makes an
+NPC action or reply condition that needs it a static `CapabilityUnavailable` frontier, and
+blocks (`UnsupportedOperation`) a reply whose own action needs it.
 
 ## Flow and source semantics
 
@@ -79,7 +80,8 @@ frontier and an unterminated `@` is a failure. Code page is explicit
 0x85 ellipsis, é, ï); CRLF becomes LF, tab/LF are kept, other C0 controls, DEL, the five
 undefined 1252 bytes and texts over 4096 bytes fail closed.
 
-Generated markers (one ASCII letter and `:`): Player `a e f k n s w y` (exact) are offered as
+Generated markers (one ASCII letter and `:`; NPC markers are read from the record text
+whatever the PC gender, as in the source): Player `a e f k n s w y` (exact) are offered as
 `Generated` with their normal transition (phrase text lives in generic resources not loaded
 here); `b h i l p` (exact) and `c r t z` (prefix) are offered blocked as
 `UnsupportedInteraction`; `d q u x` have state-dependent visibility and make the step a
@@ -89,17 +91,20 @@ frontier. NPC `g:`/`m:`/`r:` (prefix) and exact `i:` are frontiers. Other text i
 
 ```text
 separator = SP | HTAB | ',' | ';' | ':' | '(' | ')'      field = separator* (op (separator+ op)*)? separator*
-op        = LETTER LETTER separator* int (separator+ int)?   int = ('-' | '+')? DIGIT+
+space     = SP | HTAB
+op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? DIGIT+
 ```
 
 | Field | Admitted operations (domains) |
 | --- | --- |
 | Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1). |
-| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (s 0..6), `RU r` (r ≥ 1000), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
+| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
 | Player action tail | one `JO 0 node` or `FL node` as the last operation (NPC node checked statically). |
 
 Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO` with a non-zero
-first operand, `JO`/`FL` in NPC actions or not last → `UnsupportedOperation`. Wrong arity,
+first operand, `JO`/`FL` in NPC actions or not last, and a non-space separator inside one
+operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
+→ `UnsupportedOperation`; such forms are never reinterpreted. Wrong arity,
 missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
 overflow → `InvalidOperation`. A field of separators only is empty. GF reads/writes use the
 owner's current version; `Unknown`/`Unavailable` is a frontier, `Failed`/`Stale` a failure,
@@ -149,12 +154,14 @@ runs, not original gameplay verification.
 "$DOTNET" test tests/Arcanum.Scripting.Tests/Arcanum.Scripting.Tests.csproj --no-build --filter "FullyQualifiedName~DialogConversation"
 "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation"
 ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.TerrainViewer.Tests/Arcanum.TerrainViewer.Tests.csproj --no-build --filter "FullyQualifiedName~AreaConversation&TestCategory=RealData"
-godot_canonical --path tools/terrain-viewer/Godot -- --self-test      # includes the synthetic panel and click/keyboard routing
+godot_canonical --path tools/terrain-viewer/Godot -- --self-test      # synthetic panel; AREA routing: off-NPC click, keys and polled levels, palette guard
 ARC_AREA_CONVERSATION_PROBE=1 [ARC_AREA_CONVERSATION_GAME_ROOT=…] [ARC_AREA_CONVERSATION_SCREENSHOTS=<ignored dir>] \
   godot_canonical --path tools/terrain-viewer/Godot -- --self-test
 ```
 
-Synthetic fixtures are invented. The opt-in original test checks the dialog archive hash
+The Godot self-test has no dialog NPC in its synthetic core: the positive NPC hit test and
+reach are covered by the opt-in original host test (`SpeakerAt` on the real scene plan), and a
+real mouse click on a reply is not automated. Synthetic fixtures are invented. The opt-in original test checks the dialog archive hash
 before and after and asserts identifiers and command kinds only; screenshots of original
 text stay in an ignored local directory. Ordinary `./arcanum area` launches the registered
 ARC-RENDER-007 export, which predates this change until a new export is registered.

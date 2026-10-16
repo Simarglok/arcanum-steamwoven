@@ -5,6 +5,7 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
+using GamepadLab.Core;
 using Godot;
 using System.Reflection;
 
@@ -89,7 +90,7 @@ public static partial class TerrainViewerSelfTest
             app.ClearSyntheticForSelfTest();
             viewport.Free();
         }
-        GD.Print("ARC-SCRIPT-005 self-test PASS crash-site-area talk routing (LMB/T off-NPC no-op, modal panel, gate closed, keys not redirected, Close)");
+        GD.Print("ARC-SCRIPT-005 self-test PASS crash-site-area talk routing (LMB/T off-NPC no-op, modal panel, gate closed, key events and polled levels not redirected, no palette over dialog, Close); positive NPC click covered by the opt-in original host test");
     }
 
     /// <summary>
@@ -162,7 +163,18 @@ public partial class TerrainViewerApp
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))), "the modal panel opens with the typed start status");
             foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
-            TerrainViewerSelfTest.Require(ConversationOpen, "keyboard keys are not redirected to dialog actions");
+            TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
+            // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.
+            var none = new RawInputFrame(-1, default);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+            foreach (var held in new[] { none with { Cancel = true }, none with { Confirm = true }, none with { MenuDown = true }, none with { MenuUp = true } })
+            {
+                WorldFrameForSelfTest(held, Array.Empty<RawInputFrame>(), .1);
+                WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
+            }
+            TerrainViewerSelfTest.Require(ConversationOpen && _conversationPanel!.Conversation is null, "polled keyboard Confirm/Cancel/menu levels do not drive the dialog");
+            ToggleWorldSettings();
+            TerrainViewerSelfTest.Require(!PaletteOpen && ConversationOpen, "the palette cannot open over the conversation");
             _conversationPanel!.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "Close ends the modal surface");
         }

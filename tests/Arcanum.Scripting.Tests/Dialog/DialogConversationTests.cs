@@ -181,6 +181,13 @@ public sealed class DialogConversationTests
     }
 
     [TestMethod]
+    public void Npc_generated_markers_are_read_from_the_record_text_for_either_gender()
+    {
+        var document = Read(Record("10", "g: generated", "Plain for her.") + Record("11", "x", iq: "1", response: "0"));
+        Assert.AreEqual(DialogFrontierKind.UnsupportedGeneratedText, Start(document, new Ports(), Owner(), gender: DialogPcGender.Female).Frontier!.Kind);
+    }
+
+    [TestMethod]
     public void Unsupported_operations_stop_before_effects_or_block_only_their_reply()
     {
         var entry = Read(Record("10", "?", action: "QU 1 1, ZZ 801") + Record("11", "x", iq: "1", response: "0"));
@@ -218,7 +225,7 @@ public sealed class DialogConversationTests
         var blank = Read(Record("10", "?", action: " , ") + Record("11", "x", iq: "1", condition: " ", response: "0", action: "\t"));
         Assert.AreEqual(DialogConversationPhase.AwaitingSelection, Start(blank, new Ports(), Owner()).Phase);
 
-        foreach (var action in new[] { "GF 3 2", "GF -1 1", "LF 32 1", "QU 1 7", "RU 999", "GF 3", "GF 3 +1", "GF3 1QU 1 1" })
+        foreach (var action in new[] { "GF 3 2", "GF -1 1", "LF 32 1", "QU 1 7", "QU -3 1", "QU 0 1", "RU 999", "GF 3", "GF 3 +1", "GF3 1QU 1 1" })
         {
             var ports = new Ports();
             var failed = Start(Read(Record("10", "?", action: action) + Record("11", "x", iq: "1", response: "0")), ports, Owner());
@@ -226,8 +233,18 @@ public sealed class DialogConversationTests
             Assert.AreEqual(DialogConversationFailureKind.InvalidOperation, failed.Failure!.Kind, action);
             Assert.AreEqual(0, ports.Commands.Count, action);
         }
-        var attached = Start(Read(Record("10", "?", action: "gf3 1;qu(5,6)") + Record("11", "x", iq: "1", response: "0")), new Ports(), Owner());
+        var attached = Start(Read(Record("10", "?", action: "gf3 1;qu 5\t6,") + Record("11", "x", iq: "1", response: "0")), new Ports(), Owner());
         Assert.AreEqual(2, attached.Effects.Count);
+
+        // The source reads operands with whitespace-skipping atoi: a non-space separator inside one
+        // operation would read a different value there, so these forms are unsupported, never reinterpreted.
+        foreach (var action in new[] { "GF 3,1", "LF 3;1", "qu(5,6)", "RU:1000", "RE,+5" })
+        {
+            var ports = new Ports();
+            var stopped = Start(Read(Record("10", "?", action: action) + Record("11", "x", iq: "1", response: "0")), ports, Owner(), world: new World());
+            Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, stopped.Frontier?.Kind, action);
+            Assert.AreEqual(0, ports.Commands.Count, action);
+        }
     }
 
     [TestMethod]
@@ -446,6 +463,7 @@ public sealed class DialogConversationTests
             ("FL 99", DialogOptionBlockKind.TargetInvalid),
             ("MM -1", DialogOptionBlockKind.InvalidOperation),
             ("FL 0", DialogOptionBlockKind.InvalidOperation),
+            ("JO 0,30", DialogOptionBlockKind.UnsupportedOperation),
         })
         {
             var document = Read(Record("10", "?") + Record("11", "x", iq: "1", response: "0", action: action) + Record("30", "!") + Record("40", "!"));

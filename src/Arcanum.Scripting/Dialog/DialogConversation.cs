@@ -525,7 +525,9 @@ public sealed class DialogConversation
                 failure = new DialogConversationFailure(DialogConversationFailureKind.InvalidText, node, TextFailure: textFailure);
                 return null;
             }
-            var marker = DialogText.Marker(text, out var exact);
+            // The source tests NPC markers on the record text whatever the PC gender.
+            DialogText.Decode(npc.Text.Bytes, _request.Encoding, _options.MaxTextBytes, out var markerText);
+            var marker = DialogText.Marker(markerText, out var exact);
             if (marker is { Letter: 'g' or 'm' or 'r' } || marker is { Letter: 'i' } && exact)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.UnsupportedGeneratedText, node);

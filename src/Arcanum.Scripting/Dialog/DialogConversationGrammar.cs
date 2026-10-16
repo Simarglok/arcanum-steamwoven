@@ -30,7 +30,9 @@ internal enum ConversationField
 /// <item>Actions: LF, GF, QU, RU, RE and AL (unsigned target or lexically signed delta), negative IN (NPC gives
 /// an item), MM; a Player action may end with one JO 0 node or FL node.</item>
 /// </list>
-/// A field holding only separators is empty. This is project admission policy, not CE's permissive scanner.
+/// Operations are separated by SP, HTAB, ',', ';', ':', '(' or ')'; inside one operation only SP/HTAB may
+/// precede an operand. A field holding only separators is empty. This is project admission policy, not CE's
+/// permissive scanner.
 /// </summary>
 internal static class DialogConversationGrammar
 {
@@ -66,10 +68,11 @@ internal static class DialogConversationGrammar
             }
             if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationFinalLine)
             {
-                // JO/FL transfer control at once in the source; anything after them is outside this subset.
+                // The source keeps reading operations after JO/FL, but JO enters its node mid-field;
+                // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            SkipSeparators(bytes, ref index);
+            SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: false);
             if (opcode is "RE" or "AL" && index < bytes.Count && bytes[index] is (byte)'>' or (byte)'<')
             {
                 // Source tests these markers after atoi already consumed the value; their intent is not established.
@@ -79,7 +82,7 @@ internal static class DialogConversationGrammar
             var second = 0;
             if (opcode is "LF" or "GF" or "QU" or "JO")
             {
-                RequireSeparators(bytes, ref index, record, field, start, operations.Count);
+                SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
                 if (secondSign == '+')
                 {
@@ -100,7 +103,7 @@ internal static class DialogConversationGrammar
             {
                 "LF" when first is >= 0 and <= 31 && second is 0 or 1 => new ConversationLocalFlag(source, first, second),
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
-                "QU" when second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
+                "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
                 "RU" when first >= 1000 => new ConversationRumor(source, first),
                 "RE" when !reactionAction && first != int.MinValue => new ConversationReactionGate(source, first),
                 "RE" when reactionAction && sign == '\0' => new ConversationReaction(source, DialogReactionMode.Target, first),
@@ -154,11 +157,22 @@ internal static class DialogConversationGrammar
         return (value, sign);
     }
 
-    private static void RequireSeparators(IReadOnlyList<byte> bytes, ref int index, DlgRecord record, DlgField field, int start, int ordinal)
+    /// <summary>
+    /// Inside one operation only SP/HTAB may precede an operand: the source scanner reads each operand with
+    /// whitespace-skipping atoi, so `GF 5,1` would read 0 there. Such forms are unsupported, never reinterpreted.
+    /// </summary>
+    private static void SkipOperandSpace(IReadOnlyList<byte> bytes, ref int index, DlgRecord record, DlgField field, int start, int ordinal, bool required)
     {
         var before = index;
-        SkipSeparators(bytes, ref index);
-        if (before == index)
+        while (index < bytes.Count && bytes[index] is (byte)' ' or (byte)'\t')
+        {
+            index++;
+        }
+        if (index < bytes.Count && IsSeparator(bytes[index]))
+        {
+            throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, index - start + 1, ordinal);
+        }
+        if (required && before == index)
         {
             throw Failure(DialogFailureKind.InvalidOperation, record, field, start, Math.Max(1, index - start), ordinal);
         }

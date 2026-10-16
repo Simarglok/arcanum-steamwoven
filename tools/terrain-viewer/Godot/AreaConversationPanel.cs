@@ -5,7 +5,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>
-/// ARC-SCRIPT-005 diagnostic conversation surface: the NPC line, up to five replies (number keys or mouse), the
+/// ARC-SCRIPT-005 diagnostic conversation surface: the NPC line, up to five replies (mouse or controller menu), the
 /// outcome and the recent typed effects. It renders a <see cref="DialogConversation"/>; it owns no dialog rules.
 /// </summary>
 public partial class AreaConversationPanel : CanvasLayer
@@ -117,7 +117,8 @@ public partial class AreaConversationPanel : CanvasLayer
                     Name = $"Reply{number}", Text = AreaConversationText.Option(option), Alignment = HorizontalAlignment.Left,
                     AutowrapMode = TextServer.AutowrapMode.WordSmart, Disabled = option.Block is not null, FocusMode = Control.FocusModeEnum.All,
                 };
-                button.Pressed += () => Choose(number);
+                // Rebuild after the emitting button's signal returns: Render frees the buttons.
+                button.Pressed += () => Callable.From(() => Choose(number)).CallDeferred();
                 _options.AddChild(button); _buttons.Add(button);
             }
         }
