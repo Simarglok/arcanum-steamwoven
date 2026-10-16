@@ -33,7 +33,7 @@ public static class AttackResolver
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(rollSource);
         criticalEffects ??= NoCriticalEffects.Instance;
-        profile ??= CombatAnomalyProfile.Default;
+        profile ??= CombatAnomalyProfile.Steamwoven;
         Validate(request);
 
         var rolls = new CombatRollLog(rollSource);

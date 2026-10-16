@@ -287,15 +287,16 @@ A9 is part of A0.
 ## Phase 2: patches and mods
 
 Goal: optional changes on top of the phase 1 rules, chosen per profile,
-never altering the "Default" profile (the source plus the recorded D2 fixes).
-The "Source" variant set (CE behaviour for every D2 fix) exists from phase 1
+never altering the "Steamwoven" profile (the original plus the recorded D2
+fixes; called "Default" before D8). The "Original" variant set (the retail
+behaviour for every D2 fix; called "Source" before D8) exists from phase 1
 (design rule 2); phase 2 only exposes it as a profile. Nothing here starts
 before the matching phase 1 slice exists.
 
 | Step | When | Content |
 | --- | --- | --- |
-| M0 Profiles and policy seams | with the first slice that needs a second policy | "Default", "Source" and named alternative profiles; per-policy override points; the active profile is a setting that may change mid-game, saves hold only profile-independent state (D4); the decision trace is the debugging tool. |
-| M1 Source profile | with M0 | The "Source" variants of every D2 fix as a player-selectable profile (for example P1 farthest item, P2 leader level per follower, the combat-core anomaly A9 double subturn), for players who want the original quirks; I11 parity runs use the same variants. |
+| M0 Profiles and policy seams | with the first slice that needs a second policy | "Steamwoven", "Original" (D8) and named alternative profiles; per-policy override points; the active profile is a setting that may change mid-game, saves hold only profile-independent state (D4); the decision trace is the debugging tool. |
+| M1 Original profile | with M0 | The "Original" variants of every D2 fix as a player-selectable profile (for example P1 farthest item, P2 leader level per follower, the combat-core anomaly A9 double subturn), for players who want the original quirks; I11 parity runs use the same variants. |
 | M2 Data overrides | after I1 | External pack (outside the repo, like the HD pack) overriding parameter rows, per-NPC row choice and spell AI priorities; validated, versioned. |
 | M3 Tactical improvements | after I7/I8 | Candidates to test one at a time: threat-based target score (damage, HP, range) instead of the 50/50 rule, focus fire, leftover-AP use in turn-based mode, keeping range and cover for ranged NPCs, friendly-fire checks for area spells (the source checks only grenades), healers prioritising the weakest ally, fleeing toward allies, group cohesion. |
 | M4 Companion control | after I9 | Stances (passive, defensive, aggressive), "don't use consumables", "no area spells", extended orders. |
@@ -317,22 +318,23 @@ when the magic slices settle them.
 
 The combat-core rows below were also checked against the original 1.0.7.4
 executable ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)).
-"CE only" marks a reconstruction slip the original does not have, so the
-default already is the original behaviour; "original behaviour" marks a
-switch that keeps a bug the retail game really has.
+"CE only" marks a reconstruction slip the original does not have, so both
+settings of D8 follow the original and there is no switch; "Original setting"
+marks a switch that the Original setting turns on to keep a bug the retail
+game really has.
 
 | Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
 | --- | --- | --- | --- | --- |
-| A1 (ARC-RES-030) | CE only: `sort_combat_list` moves only PCs to the round's tail; PC followers keep their scan position. The original 1.0.7.4 tests the PC leader's type ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | PCs and the PCs' followers move to the tail; scan order kept within each group, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for the original behaviour. Lands with the turn-based round slice. | `PcFollowersKeepScanOrder` (reserved, CE only) |
-| A2 (ARC-RES-030) | CE and original 1.0.7.4: the bed's −30 invocation modifier is counted twice (−60). | Counted once (−30). | The run adds the modifier to a difficulty that already starts from it. ARC-COMBAT-001. | `InvocationModifierCountedTwice` (original behaviour) |
-| A3 (ARC-RES-030) | CE only: getting up in a round is refused on the critter's own subturn and free on any other. The original allows it only on the own turn for 5 AP ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Only on the critter's own subturn, for 5 AP, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for confirmation. Lands with the turn-based round slice. | `GetUpFreeOffTurn` (reserved, CE only) |
-| A4 (ARC-RES-030) | CE only: the every-fifth-run-step fatigue charge in combat mode writes back the unchanged fatigue damage, so running costs no fatigue and a critter without fatigue damage fails the step. The original writes fatigue damage + 1 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Each charge adds 1 fatigue damage (every 5th run step, ×4 when fatigue-limiting, then ÷4 (at least 1) when fatigue-draining), as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked to confirm or refute. Lands with the movement/real-time slice. | `RunFatigueNotCharged` (reserved, CE only) |
-| A5 (ARC-RES-030) | CE only: a crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. The original drops the shield and clears crippled legs ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Drop the shield; clear crippled legs, as in the original. | CE reconstruction slips; owner confirmed 2026-10-16. Land with the critical-effect (FR-COMBAT-009) and healing slices. | `CrippledArmDropsWeaponForShield`, `LegHealClearsBlindness` (reserved, CE only) |
-| A6 (ARC-RES-030) | CE and original 1.0.7.4: `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` (original behaviour) |
-| A7 (ARC-RES-030) | CE and original 1.0.7.4: a critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` (original behaviour) |
+| A1 (ARC-RES-030) | CE only: `sort_combat_list` moves only PCs to the round's tail; PC followers keep their scan position. The original 1.0.7.4 tests the PC leader's type ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | PCs and the PCs' followers move to the tail; scan order kept within each group, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for the original behaviour. Lands with the turn-based round slice. | none: both settings follow the original |
+| A2 (ARC-RES-030) | CE and original 1.0.7.4: the bed's −30 invocation modifier is counted twice (−60). | Counted once (−30). | The run adds the modifier to a difficulty that already starts from it. ARC-COMBAT-001. | `InvocationModifierCountedTwice` (Original setting) |
+| A3 (ARC-RES-030) | CE only: getting up in a round is refused on the critter's own subturn and free on any other. The original allows it only on the own turn for 5 AP ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Only on the critter's own subturn, for 5 AP, as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked for confirmation. Lands with the turn-based round slice. | none: both settings follow the original |
+| A4 (ARC-RES-030) | CE only: the every-fifth-run-step fatigue charge in combat mode writes back the unchanged fatigue damage, so running costs no fatigue and a critter without fatigue damage fails the step. The original writes fatigue damage + 1 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Each charge adds 1 fatigue damage (every 5th run step, ×4 when fatigue-limiting, then ÷4 (at least 1) when fatigue-draining), as in the original. | CE reconstruction slip; settled 2026-10-16 after the owner asked to confirm or refute. Lands with the movement/real-time slice. | none: both settings follow the original |
+| A5 (ARC-RES-030) | CE only: a crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. The original drops the shield and clears crippled legs ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Drop the shield; clear crippled legs, as in the original. | CE reconstruction slips; owner confirmed 2026-10-16. Land with the critical-effect (FR-COMBAT-009) and healing slices. | none: both settings follow the original |
+| A6 (ARC-RES-030) | CE and original 1.0.7.4: `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` (Original setting) |
+| A7 (ARC-RES-030) | CE and original 1.0.7.4: a critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` (Original setting) |
 | A8 (ARC-RES-030) | CE only: the critical effect chance is never assigned when the weapon's magic was cancelled. The original sets it to 0 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | 0, as in the original. | CE reconstruction slip. ARC-COMBAT-001. | none: the original and the default agree, and CE's value is undefined |
-| A9 (ARC-RES-030) | CE and original 1.0.7.4: when the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | Started once. | `combat_turn_based_begin_turn` already starts it; owner confirmed 2026-10-16. Lands with the turn-based round slice. | `FirstSubturnStartedTwice` (reserved, original behaviour) |
-| A10 (ARC-COMBAT-001) | CE and original 1.0.7.4: `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001; fixed under D2. | `BackstabDamageOnSelfHit` (original behaviour) |
+| A9 (ARC-RES-030) | CE and original 1.0.7.4: when the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | Started once. | `combat_turn_based_begin_turn` already starts it; owner confirmed 2026-10-16. Lands with the turn-based round slice. | `FirstSubturnStartedTwice` (reserved, Original setting) |
+| A10 (ARC-COMBAT-001) | CE and original 1.0.7.4: `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001; fixed under D2. | `BackstabDamageOnSelfHit` (Original setting) |
 | LM14 (ARC-RES-040) | The melee damage scaling helper always returns 100, so it changes nothing. | Kept: no scaling. | The intended factor is unknown, so there is no confirmed slip to fix. ARC-COMBAT-001. | none |
 
 ## Owner decisions (2026-10-16)
@@ -356,6 +358,13 @@ switch that keeps a bug the retail game really has.
 - **D6 Codes: allocated on task creation**, not reserved in advance.
 - **D7 Next step:** first a detailed study of what the original and CE load
   and run (stage A0), before stage A1.
+- **D8 Two rule settings (2026-10-17): "Original" and "Steamwoven".**
+  "Original" is the retail 1.0.7.4 behaviour, bugs included; "Steamwoven" is
+  the original with the recorded D2 fixes and is the default. They replace the
+  earlier "Source" and "Default" names. A CE reconstruction slip that the
+  original game does not have (checked in the original executable) gets no
+  switch: both settings follow the original there. First used by
+  ARC-COMBAT-001 (`CombatAnomalyProfile.Original` / `.Steamwoven`).
 
 ## Method
 

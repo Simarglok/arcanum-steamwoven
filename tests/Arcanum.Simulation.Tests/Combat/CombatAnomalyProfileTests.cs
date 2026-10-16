@@ -4,19 +4,34 @@ using static Arcanum.Simulation.Tests.Combat.CombatFixtures;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-/// <summary>Each D2 fix against its "Source" (CE) variant.</summary>
+/// <summary>Each D2 fix (Steamwoven setting) against the original game's behaviour (Original setting).</summary>
 [TestClass]
 public sealed class CombatAnomalyProfileTests
 {
     [TestMethod]
-    public void ProfilesSetEverySwitch()
+    public void TwoSettingsSteamwovenFirst()
     {
-        var d = CombatAnomalyProfile.Default;
-        Assert.IsFalse(d.InvocationModifierCountedTwice || d.ArmorClassEffectsCountedTwice || d.CriticalSelfHitRolledTwice
-            || d.BackstabDamageOnSelfHit);
-        var s = CombatAnomalyProfile.Source;
-        Assert.IsTrue(s.InvocationModifierCountedTwice && s.ArmorClassEffectsCountedTwice && s.CriticalSelfHitRolledTwice
-            && s.BackstabDamageOnSelfHit);
+        var steamwoven = CombatAnomalyProfile.Steamwoven;
+        Assert.AreEqual("steamwoven", steamwoven.Name);
+        Assert.IsFalse(steamwoven.InvocationModifierCountedTwice || steamwoven.ArmorClassEffectsCountedTwice
+            || steamwoven.CriticalSelfHitRolledTwice || steamwoven.BackstabDamageOnSelfHit);
+        var original = CombatAnomalyProfile.Original;
+        Assert.AreEqual("original", original.Name);
+        Assert.IsTrue(original.InvocationModifierCountedTwice && original.ArmorClassEffectsCountedTwice
+            && original.CriticalSelfHitRolledTwice && original.BackstabDamageOnSelfHit);
+        CollectionAssert.AreEqual(new[] { steamwoven, original }, CombatAnomalyProfile.All.ToArray());
+        Assert.AreSame(original, CombatAnomalyProfile.FromName("original"));
+        Assert.AreSame(steamwoven, CombatAnomalyProfile.FromName("steamwoven"));
+        Assert.IsNull(CombatAnomalyProfile.FromName("Original"));
+        Assert.IsNull(CombatAnomalyProfile.FromName(null));
+    }
+
+    [TestMethod]
+    public void ResolverDefaultsToSteamwoven()
+    {
+        var request = Melee() with { SkillLevel = 0, Target = Npc() with { ArmorClass = 95 }, TargetWasInBed = true };
+        var rolls = Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 100) });
+        Assert.AreEqual(-30, Run(request, rolls, profile: null).Difficulty!.Invocation);
     }
 
     [TestMethod]
@@ -26,8 +41,8 @@ public sealed class CombatAnomalyProfileTests
         var request = Melee() with { SkillLevel = 0, Target = Npc() with { ArmorClass = 95 }, TargetWasInBed = true };
         var rolls = Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 100) });
         Assert.AreEqual(-30, Run(request, rolls).Difficulty!.Invocation);
-        Assert.AreEqual(-60, Run(request, rolls, profile: CombatAnomalyProfile.Source).Difficulty!.Invocation);
-        Assert.AreEqual(0, Run(request with { TargetWasInBed = false }, rolls, profile: CombatAnomalyProfile.Source).Difficulty!.Invocation);
+        Assert.AreEqual(-60, Run(request, rolls, profile: CombatAnomalyProfile.Original).Difficulty!.Invocation);
+        Assert.AreEqual(0, Run(request with { TargetWasInBed = false }, rolls, profile: CombatAnomalyProfile.Original).Difficulty!.Invocation);
     }
 
     [TestMethod]
@@ -47,10 +62,10 @@ public sealed class CombatAnomalyProfileTests
         Assert.AreEqual(1, effects.MissContexts.Count);
         Assert.AreEqual(CriticalMissChart.Bludgeon, effects.MissContexts[0].Chart);
 
-        // Source: the critical-miss branch rolls first (falls back to ×1.5), then the damage step rolls ×3; flags add up.
+        // Original: the critical-miss branch rolls first (falls back to ×1.5), then the damage step rolls ×3; flags add up.
         var sourceEffects = new FixedCriticalEffects();
         var source = Run(Melee(), Concat(criticalMiss, NoMultiplier(), new[] { (Normal, 5), (Triple, 1) }), sourceEffects,
-            CombatAnomalyProfile.Source);
+            CombatAnomalyProfile.Original);
         Assert.AreEqual(DamageMultiplier.Triple, source.Damage!.Multiplier);
         Assert.IsFalse(source.Damage.MultiplierFromFallback);
         Assert.AreEqual(15, source.Damage.HitPointDamage);
@@ -77,7 +92,7 @@ public sealed class CombatAnomalyProfileTests
             new[] { (AttackCheck, 1), (AttackCritical, 1), (DodgeCheck, 100), (DodgeCritical, 100), (Normal, 5) },
             NoMultiplier());
 
-        foreach (var profile in new[] { CombatAnomalyProfile.Default, CombatAnomalyProfile.Source })
+        foreach (var profile in new[] { CombatAnomalyProfile.Steamwoven, CombatAnomalyProfile.Original })
         {
             var cancelled = new FixedCriticalEffects();
             Assert.IsTrue(Run(request, Rolls(60), cancelled, profile).WeaponMagicCancelled);
@@ -101,6 +116,6 @@ public sealed class CombatAnomalyProfileTests
         var fixedResult = Run(request, rolls);
         Assert.AreEqual(DamageRecipient.Attacker, fixedResult.Damage!.Recipient);
         Assert.AreEqual(5, fixedResult.Damage.HitPointDamage);
-        Assert.AreEqual(25, Run(request, rolls, profile: CombatAnomalyProfile.Source).Damage!.HitPointDamage);
+        Assert.AreEqual(25, Run(request, rolls, profile: CombatAnomalyProfile.Original).Damage!.HitPointDamage);
     }
 }

@@ -140,10 +140,10 @@ public sealed class AttackRulesTests
     {
         // Base 10, worn 20, AcAdjustment DX 14 − 10 = 4 plus a +5 effect = 9.
         Func<int, int> plusFive = ac => ac + 5;
-        Assert.AreEqual(39, AttackRules.ArmorClass(10, 20, 9, plusFive, CombatAnomalyProfile.Default));
-        Assert.AreEqual(44, AttackRules.ArmorClass(10, 20, 9, plusFive, CombatAnomalyProfile.Source));
-        Assert.AreEqual(95, AttackRules.ArmorClass(90, 20, 9, plusFive, CombatAnomalyProfile.Default));
-        Assert.AreEqual(0, AttackRules.ArmorClass(0, 0, -9, plusFive, CombatAnomalyProfile.Default));
+        Assert.AreEqual(39, AttackRules.ArmorClass(10, 20, 9, plusFive, CombatAnomalyProfile.Steamwoven));
+        Assert.AreEqual(44, AttackRules.ArmorClass(10, 20, 9, plusFive, CombatAnomalyProfile.Original));
+        Assert.AreEqual(95, AttackRules.ArmorClass(90, 20, 9, plusFive, CombatAnomalyProfile.Steamwoven));
+        Assert.AreEqual(0, AttackRules.ArmorClass(0, 0, -9, plusFive, CombatAnomalyProfile.Steamwoven));
     }
 
     [TestMethod]
