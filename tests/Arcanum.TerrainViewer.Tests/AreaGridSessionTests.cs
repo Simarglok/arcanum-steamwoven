@@ -19,11 +19,7 @@ public sealed class AreaGridSessionTests
     private static AreaStepSnapshot Steps(long epoch = 7)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
-        var area = source.Owner.LoadStrict();
-        using var module = DatArchive.Open(new MemoryStream(source.Streams[new(AreaSourceRole.Module)].Bytes));
-        using var names = DatArchive.Open(new MemoryStream(AreaOwnerFixture.Dat(("art/tile/tilename.mes", Encoding.ASCII.GetBytes("{0}{grs}{100}{rck}{200}{flr}{300}{stn/s/n 4}"))))); 
-        using var effects = DatArchive.Open(new MemoryStream(AreaOwnerFixture.Dat(("rules/effect.mes", Encoding.ASCII.GetBytes("{50}{st +1}")))));
-        return AreaStepInspector.Inspect(area, module, names, effects, null, ReadOnlyMemory<byte>.Empty, epoch);
+        return AreaOwnerFixture.Steps(source.Owner.LoadStrict(), source.Streams[new(AreaSourceRole.Module)].Bytes, epoch);
     }
 
     [TestMethod]

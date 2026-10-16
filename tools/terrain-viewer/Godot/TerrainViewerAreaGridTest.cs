@@ -18,14 +18,16 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertAreaGridAsync(Node host)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
-        using var grid = new GridWireFixture(policy: CardinalTraversalAdmissionPolicy.BoundedAdjacent);
-        using var unknown = new GridWireFixture(names: false, policy: CardinalTraversalAdmissionPolicy.BoundedAdjacent);
         var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
         var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None])!;
+        // Whole-core step evidence over the same strict publication; a second snapshot leaves tile names Unknown.
+        var module = source.Streams[new(AreaSourceRole.Module)].Bytes;
+        var steps = AreaOwnerFixture.Steps(area.Snapshot, module, 7);
+        var unknown = AreaOwnerFixture.Steps(area.Snapshot, module, 7, tileNamesResolved: false);
         source.Owner.Dispose();
         var human = SyntheticActorFixture.Create(human: true);
-        var result = human.Result with { Generation = 7, Area = area, TraversalSnapshot = grid.Snapshot };
+        var result = human.Result with { Generation = 7, Area = area, AreaStepSnapshot = steps };
         var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "synthetic-module",
             "--resource", "synthetic-terrain", "--actor-resource", "synthetic-actor", "--prototypes", "synthetic-prototypes",
             "--area-mobile", "synthetic-mobile", "--area-effects", "synthetic-effects", "--area-patch", "synthetic-patch", "--source-id", "synthetic"]);
@@ -39,7 +41,7 @@ public static partial class TerrainViewerSelfTest
             app.PublishSyntheticForSelfTest(arguments, result);
             var usage = source.Owner.Usage;
             app.WorldGridObservationMatrixForSelfTest();
-            var gridReport = await app.AreaGridMatrixForSelfTestAsync(arguments, result, unknown.Snapshot);
+            var gridReport = await app.AreaGridMatrixForSelfTestAsync(arguments, result, unknown);
             var camera = await app.AreaCameraMatrixForSelfTestAsync(arguments, result);
             var report = new { Grid = gridReport, Camera = camera };
             if (source.Owner.Usage != usage || source.Streams.Values.Any(stream => stream.DisposeCount != 1))
@@ -62,7 +64,7 @@ public static partial class TerrainViewerSelfTest
 public partial class TerrainViewerApp
 {
     internal async Task<object> AreaGridMatrixForSelfTestAsync(TerrainViewerArguments arguments,
-        TerrainLoadResult result, CardinalTraversalSnapshot unknown)
+        TerrainLoadResult result, AreaStepSnapshot unknown)
     {
         if (!SelfTestBootstrap || _readyArea is null || _readyMode != TerrainViewerMode.CrashSiteArea)
             throw new InvalidOperationException("AREA_GRID_TEST_READY_REQUIRED");
@@ -75,13 +77,13 @@ public partial class TerrainViewerApp
         finally { _worldFocusSimulationForSelfTest = simulatedFocus; }
     }
     private async Task<object> AreaGridMatrixScriptAsync(TerrainViewerArguments arguments,
-        TerrainLoadResult result, CardinalTraversalSnapshot unknown)
+        TerrainLoadResult result, AreaStepSnapshot unknown)
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("AREA grid: " + why); }
         var none = new RawInputFrame(-1, default);
         var level = none;
         var events = new List<MovementEvent>();
-        var evidence = new List<GridStepEvidence>();
+        var evidence = new List<AreaGridStepEvidence>();
         var cases = new List<object>();
         var views = new List<object>();
         void Frame(int time)
@@ -89,7 +91,7 @@ public partial class TerrainViewerApp
             WorldFrameForSelfTest(level, Array.Empty<RawInputFrame>(), .1, true, SimulationTime.At(time));
             if (_worldActor.Session?.LastAdvance is not { } advance) return;
             events.AddRange(advance.Movement.Events.Where(e => !events.Any(old => old.Ordinal == e.Ordinal)));
-            evidence.AddRange(advance.Evidence.Where(e => !evidence.Any(old => old.Key == e.Key)));
+            evidence.AddRange(advance.AreaEvidence.Where(e => !evidence.Any(old => old.Key == e.Key)));
         }
         void Keys(int time, bool down, params Key[] keys)
         {
@@ -97,13 +99,13 @@ public partial class TerrainViewerApp
             foreach (var key in keys) _Input(new InputEventKey { Keycode = key, Pressed = down });
             level = _worldAdapter.SampleKeyboard(true);
         }
-        void Prepare(CardinalTraversalSnapshot? snapshot = null, MovementLimits? limits = null)
+        void Prepare(AreaStepSnapshot? snapshot = null, MovementLimits? limits = null)
         {
             if (_readyArea is null) PublishSyntheticForSelfTest(arguments, result);
             if (WorldModal) ToggleWorldSettings();
             GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); RetireWorldLifecycle();
             _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
-            _worldActor.Configure(snapshot ?? result.TraversalSnapshot!, SimulationTime.At(0), StepDuration.Of(8), limits);
+            _worldActor.Configure(snapshot ?? result.AreaStepSnapshot!, SimulationTime.At(0), StepDuration.Of(8), limits);
             _worldGridInput = new(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
             _worldReducer.SetStartupDevices(Array.Empty<int>()); level = none;
             QuarantineWorld(); Frame(1); Frame(2); Frame(3);
@@ -147,9 +149,11 @@ public partial class TerrainViewerApp
             Prepare(denial == "Unknown" ? unknown : null);
             if (denial == "Unsupported")
             {
-                Keys(10,true,Key.S,Key.A); Frame(27); Frame(28);
-                Require(events.Count(e => e.Kind == MovementEventKind.StepStarted) == 2
-                    && _worldActor.Session!.State.CommittedCell == new CellCoord(8,1), "bounded domain, no area enlargement");
+                // W+A is map YMinus: (6,1)->(6,0) is admitted; (6,-1) lies in an absent core sector and is
+                // refused like a map edge, not rerouted.
+                Keys(10,true,Key.W,Key.A); Frame(19); Frame(20);
+                Require(events.Count(e => e.Kind == MovementEventKind.StepStarted) == 1
+                    && _worldActor.Session!.State.CommittedCell == new CellCoord(6,0), "admitted edge, no enlargement past the core");
             }
             else { Keys(10,true,denial == "Blocked" ? [Key.W,Key.D] : [Key.S,Key.A]); Frame(11); Frame(12); }
             var rejected = events.Last(e => e.Kind == MovementEventKind.StepRejected);
@@ -288,7 +292,7 @@ public partial class TerrainViewerApp
         Case("native-moving-overlap");
         _hud.Visible = true;
         return new { Schema = "arcanum-area-grid-synthetic-v1", Task = "ARC-RENDER-007", Outcome = "PASS", result.Generation,
-            Source = "public strict FILE/DAT/ART area and traversal wire fixtures", Commands = result.Area!.Plan.Commands.Count,
+            Source = "public strict FILE/DAT/ART area fixture and its whole-core T0 step evidence", Commands = result.Area!.Plan.Commands.Count,
             ControlledProfile = "HumanFixed", MainViewport = GetWindow().GetVisibleRect().Size.ToString(), Cases = cases, Views = views,
             CallbackSafety = "literal D8 matrix PASS: between-frame/same-tick/focus/modal/disconnect/incomplete early/equality/late",
             OriginalAreaIntegration = "NOT_VERIFIED", Physical = "NOT_VERIFIED", FullDelivery = "NOT_READY" };

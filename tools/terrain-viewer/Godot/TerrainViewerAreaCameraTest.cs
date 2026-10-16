@@ -29,7 +29,7 @@ public partial class TerrainViewerApp
         if (WorldModal) ToggleWorldSettings();
         GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); RetireWorldLifecycle();
         _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
-        _worldActor.Configure(result.TraversalSnapshot!, SimulationTime.At(0));
+        _worldActor.Configure(result.AreaStepSnapshot!, SimulationTime.At(0));
         _worldGridInput = new(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
         _worldReducer.SetStartupDevices(Array.Empty<int>());
         Rearm(); PublishWorldSelection();
