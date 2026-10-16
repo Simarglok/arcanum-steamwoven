@@ -150,7 +150,12 @@ pixels.
 Integer sampling metadata has a separate 16 MiB cap. Terrain chunk textures have
 their own 192 MiB / 1,024-texture cap, with chunks of the current view never evicted
 and older chunks evicted least recently used; terrain frames are uploaded only when
-terrain is drawn per command. These are admission policies, not measured
+terrain is drawn per command. Missing chunks of a view are composed in parallel (batches
+of 32, byte-identical to composing them one by one) before upload. The visible set is
+selected through a coarse 512 px grid over the non-upright commands
+(`AreaVisibilityIndex`), which only narrows the candidates: the exact intersection
+test and the plan order are unchanged, and a view spanning more grid cells (empty ones
+included) than half the occupied cells scans every command. These are admission policies, not measured
 process/GPU memory or load-speed guarantees.
 
 The HUD separates core/context, terrain/statics/core mobiles, body submissions,
