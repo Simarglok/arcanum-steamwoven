@@ -363,22 +363,30 @@ cave under its pinned profile (`OpenCaveFiles`), its scene plan on its own chart
 and its step evidence with wall edges.
 
 - **Use.** A left press whose screen pixel is an opaque pixel of the entrance or
-  exit sprite is the original use action. `AreaTransitionCoordinator` accepts it
+  exit sprite is the original use action. It arrives through the ground-click path
+  (`_UnhandledInput`, so a HUD or palette click never reaches it) under the same
+  focus, modal, safety-gate and reset/reload guards as a click-to-move goal. `AreaTransitionCoordinator` accepts it
   within Chebyshev distance 2 of the object when the object's tile is not
   terrain-blocking and one step towards it is not blocked by anything but the
   object; otherwise the HUD says why. A click from farther away sets the
   click-to-move route (ARC-WORLD-007) to the nearest standable cell within range,
   as the source's use goal walks near first, and requests the same use once the
-  route has arrived and the actor is settled. Other clicks keep their routing.
-- **Transfer.** An accepted use is queued and applied once, when the actor is
-  settled; a second use while one is pending is refused. The whole area scene,
+  route has arrived and the actor is settled. A ground click, a stick step or a
+  quarantine cancels that walk-to-use. Other clicks keep their routing.
+- **Transfer.** An accepted use stops any click route and is queued; it is applied
+  once, when the actor is settled (a started step ends at its cell centre). While
+  it is pending the stick starts no step, ground clicks are ignored and a second
+  use is refused. A reset or reload drops it. The destination must be loaded and
+  the arrival admitted, or the use is refused as unavailable. The whole area scene,
   step evidence and chart are swapped, the actor starts on the authored arrival
-  cell with a fresh authoritative session and input queue, and the camera follows
-  it. The exit leads back to (92913,82598), three cells east of the entrance.
+  cell with a fresh authoritative session and input queue, and the camera centres
+  on it before the scene is published. Reset in the cave returns the actor to the
+  cave arrival cell; the session map stays the cave. The exit leads back to (92913,82598), three cells east of the entrance.
 - **Session.** A `GameSessionOwner` (ARC-WORLD-008) is created per load with the
   area lighting clock profile, a project module id (the first 16 bytes of the
-  module SHA-256, because the object file's GUID is empty) and a GF domain of the
-  two cave story flags, all Unknown. Each transfer records the actor's map and
+  module SHA-256, because the object file's GUID is empty) and a neutral GF domain
+  (one placeholder flag, Unknown, that nothing reads or writes: the owner needs a
+  non-empty domain and no script runs here). Each transfer records the actor's map and
   arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
@@ -388,10 +396,12 @@ and its step evidence with wall edges.
   near the arrival.
 
 The native smoke (`--native-smoke` with the cave input) adds a transition phase: it
-stands the actor next to each trigger, clicks an opaque trigger pixel through the
-production picking path, applies the transfer and checks the arrival cell and the
-session, then clicks the entrance from the return cell three cells away and lets
-the route walk there before the use; it prints `ARC-WORLD-009 native-smoke transition PASS`.
+stands the actor next to each trigger, clicks an opaque trigger pixel outside the
+HUD through `_UnhandledInput` (simulated focus and test time, as the route matrix),
+lets a frame apply the transfer and checks the arrival cell and the
+session, then clicks the entrance from the return cell three cells away, checks that a
+ground click cancels that walk-to-use, clicks again and lets the route walk there
+before the use; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher does not pass the cave input yet:

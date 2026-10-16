@@ -9,8 +9,10 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-WORLD-009: the Crash Site cave and the way back in crash-site-area. A left click on the visible
-// entrance or exit object is the original use action (research T3): accepted within Chebyshev distance 2,
-// queued, and applied once when the actor is settled. The area scene, its step evidence and chart are
+// entrance or exit object is the original use action (research T3): it reaches here through the ground-click
+// path (_UnhandledInput, so never through the HUD or palette) under the same focus, modal, gate and lifecycle
+// guards; it is accepted within Chebyshev distance 2, queued, and applied once when the actor is settled.
+// A reset or reload takes precedence over a queued transfer. The area scene, its step evidence and chart are
 // swapped as a whole; the session records the actor on the destination map at the authored arrival.
 // Every other click is left to its existing handling.
 public partial class TerrainViewerApp
@@ -54,16 +56,18 @@ public partial class TerrainViewerApp
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded";
     }
 
-    /// <summary>Left press on a trigger sprite: one use request. Returns true when the click was a use.</summary>
-    private bool TryAreaUse(InputEvent input)
+    /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: one use request.
+    /// Returns true when the click was a use.</summary>
+    private bool TryAreaUse(Vector2 screen)
     {
-        if (input is not InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } button || WorldModal ||
-            _areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession session) return false;
-        var hit = AreaTriggerAt(button.Position);
+        if (_areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession session) return false;
+        var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         var result = _areaTransitions.RequestUse(hit.Value, actor);
         _areaUseAfterRoute = null;
+        // An accepted use replaces any click route: the started step ends at its cell centre, then the transfer applies.
+        if (result.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_USE");
         if (result.Outcome == AreaUseOutcome.TooFar && WorldRoute(session) is { } route && UseApproach(session, hit.Value) is { } goal)
         {
             StopWorldRoute("ROUTE_REPLACED_BY_USE");
@@ -135,24 +139,42 @@ public partial class TerrainViewerApp
         return null;
     }
 
+    private void CancelAreaUseApproach(string why)
+    {
+        if (_areaUseAfterRoute is null) return;
+        _areaUseAfterRoute = null; _areaUseStatus = "walk to use cancelled: " + why;
+    }
+
     /// <summary>Applies a pending transfer once the actor is settled; a walk-to-use asks for its use on arrival.
-    /// Returns true when the map changed.</summary>
+    /// A reset or reload in progress drops both first. Returns true when the map changed.</summary>
     private bool ProcessAreaTransition()
     {
+        if (_areaTransitions is null) return false;
+        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
+        {
+            CancelAreaUseApproach("reset/reload");
+            if (_areaTransitions.Cancel() is { } dropped)
+            {
+                _areaUseStatus = $"transfer to map {dropped.ToMap} cancelled by reset/reload";
+                GD.Print("ARC-WORLD-009 transition cancelled by lifecycle to=" + dropped.ToMap);
+                RefreshAreaStatus();
+            }
+            return false;
+        }
         if (_areaUseAfterRoute is { } key && _worldActor.Session is AreaGridSession walking && walking.State.Phase == MovementPhase.Settled
             && ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
         {
             _areaUseAfterRoute = null;
             if (route.Status == RouteFollowStatus.Arrived)
             {
-                var result = _areaTransitions!.RequestUse(key, walking.Chart.ToWorld(walking.State.CommittedCell));
+                var result = _areaTransitions.RequestUse(key, walking.Chart.ToWorld(walking.State.CommittedCell));
                 _areaUseStatus = result.Outcome == AreaUseOutcome.Accepted ? "use accepted after walking" : $"use refused after walking: {result.Outcome} {result.Reason}";
                 GD.Print("ARC-WORLD-009 use-after-route " + System.Text.Json.JsonSerializer.Serialize(new { Outcome = result.Outcome.ToString(), result.Distance, result.Reason }));
             }
             else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
             RefreshAreaStatus();
         }
-        if (_areaTransitions?.Pending is null || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
+        if (_areaTransitions.Pending is null || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
         var transition = _areaTransitions.Process(session.State.Facing)!;
         var target = _areaTransitions.Current;
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
@@ -160,8 +182,9 @@ public partial class TerrainViewerApp
         ConfigureAreaActor(target, transition.ArrivalChartCell, session.State.Facing);
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
         PushAreaAmbient(); FollowAreaAmbient();
-        PublishWorldSelection();
+        // The camera centres on the arrival first, then the scene is published at that view.
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+        PublishWorldSelection();
         _areaUseStatus = InCave ? "in the cave: click the exit within 2 cells to return" : "back outside at the authored return cell";
         var placed = _areaSession!.QueryActor();
         GD.Print("ARC-WORLD-009 transition " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -187,99 +210,128 @@ public partial class TerrainViewerApp
     }
 
     // Native observation (ARC-WORLD-009): stand within use range of each trigger, click an opaque pixel of its
-    // sprite through the production picking path, let the transfer apply, and observe the other map drawn.
+    // sprite through the production ground-click seam (_UnhandledInput and its guards), let the frames apply the
+    // transfer, and observe the other map drawn. Frames run on simulated focus and test time, as the route matrix does.
+    private int _areaSmokeTime;
     private async Task RunAreaTransitionSmokeAsync()
-    {
-        var report = new List<object>();
-        report.Add(await UseNextToTriggerAsync(79));
-        report.Add(await UseNextToTriggerAsync(1));
-        report.Add(await RunAreaWalkToUseSmokeAsync());
-        // Leave the exterior published for the later resource stages.
-        report.Add(await UseNextToTriggerAsync(1));
-        GD.Print("ARC-WORLD-009 native-smoke transition PASS " + System.Text.Json.JsonSerializer.Serialize(report));
-    }
-
-    private async Task<object> UseNextToTriggerAsync(int expected)
-    {
-        {
-            var (endpoint, trigger) = _areaTransitions!.Triggers().Single();
-            var map = _areaTransitions.Current;
-            var near = UseCell(map, new(trigger.WorldX!.Value, trigger.WorldY!.Value));
-            ConfigureAreaActor(map, near, NeighborDirection.XPlus);
-            PublishWorldSelection();
-            var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
-            _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
-                command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            var point = OpaqueScreenPoint(command) ?? throw new InvalidOperationException("AREA_TRIGGER_NOT_VISIBLE");
-            if (!TryAreaUse(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point }) || _areaTransitions.Pending is null)
-                throw new InvalidOperationException("AREA_USE_NOT_ACCEPTED " + _areaUseStatus);
-            if (!ProcessAreaTransition() || _areaTransitions.CurrentMap != expected) throw new InvalidOperationException("AREA_TRANSITION_NOT_APPLIED");
-            var arrival = _areaTransitions.Current.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
-            if (arrival.X != endpoint.ArrivalX || arrival.Y != endpoint.ArrivalY || _areaSession!.QueryActor().Map.RuntimeMap != expected)
-                throw new InvalidOperationException("AREA_ARRIVAL_MISMATCH");
-            for (var frame = 0; frame < 5; frame++)
-            {
-                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            }
-            using var image = GetViewport().GetTexture().GetImage();
-            var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_TRANSITION_CAPTURE");
-            if (!string.IsNullOrWhiteSpace(capture))
-            {
-                if (image.SavePng($"{capture}-map{expected}.png") != Error.Ok) throw new InvalidOperationException("AREA_TRANSITION_CAPTURE_FAILED");
-                // A wider view of the arrival surroundings, then the actor-framed view again.
-                _camera.ResetWorld(WorldAnchor, WorldViewport, .5);
-                for (var frame = 0; frame < 3; frame++)
-                {
-                    await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-                    await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-                }
-                using var wide = GetViewport().GetTexture().GetImage();
-                if (wide.SavePng($"{capture}-map{expected}-wide.png") != Error.Ok) throw new InvalidOperationException("AREA_TRANSITION_CAPTURE_FAILED");
-                _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
-            }
-            return new { From = map.RuntimeMap, To = expected, UsedFrom = map.Chart.ToWorld(near), Arrival = arrival, Session = _areaSession.Version.Revision,
-                Drawn = _readyArea.Plan.Commands.Count, Walls = _readyArea.Snapshot.Objects.Count(o => o.Type == 0) };
-        }
-    }
-
-    // From the exterior return cell (three cells from the entrance), one left click on the entrance sets the
-    // click-to-move goal within use range; the simulated frames drive the authoritative session there, and the
-    // same use is requested on arrival and applied once settled.
-    private async Task<object> RunAreaWalkToUseSmokeAsync()
     {
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true;
         try
         {
-            var (_, trigger) = _areaTransitions!.Triggers().Single();
-            var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
-            var start = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
             _worldFocused = true; SelectSimulatedPadForSelfTest();
-            var time = 0; var level = StickLevel(default);
-            _worldTestTime = SimulationTime.At(0);
-            ConfigureAreaActor(_areaTransitions.Current, start, NeighborDirection.XPlus);
-            void Frame() { time++; WorldFrameForSelfTest(new(-1, default), new[] { level }, .1, true, SimulationTime.At(time)); }
-            for (var i = 0; i < 3; i++) Frame();
-            if (!_worldGate.IsOpen) throw new InvalidOperationException("AREA_WALK_GATE_CLOSED");
-            PublishWorldSelection();
-            _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
-                command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
-            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
-            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-            var point = OpaqueScreenPoint(command) ?? throw new InvalidOperationException("AREA_TRIGGER_NOT_VISIBLE");
-            _worldTestTime = SimulationTime.At(time);
-            if (!TryAreaUse(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point }) || _areaUseAfterRoute is null)
-                throw new InvalidOperationException("AREA_WALK_NOT_STARTED " + _areaUseStatus);
-            var goal = _worldRoute!.Target;
-            for (var i = 0; i < 400 && _areaTransitions.CurrentMap == 1; i++) Frame();
-            if (_areaTransitions.CurrentMap != 79 || _areaSession!.QueryActor().Map.RuntimeMap != 79)
-                throw new InvalidOperationException("AREA_WALK_TO_USE_NOT_APPLIED " + _areaUseStatus);
-            return new { WalkToUse = true, From = start, Goal = goal, Frames = time, Session = _areaSession.Version.Revision };
+            var report = new List<object>();
+            report.Add(await UseNextToTriggerAsync(79));
+            report.Add(await UseNextToTriggerAsync(1));
+            report.Add(await RunAreaWalkToUseSmokeAsync());
+            // Leave the exterior published for the later resource stages.
+            report.Add(await UseNextToTriggerAsync(1));
+            GD.Print("ARC-WORLD-009 native-smoke transition PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }
         finally { ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; }
+    }
+
+    private void AreaSmokeFrame()
+    {
+        _areaSmokeTime++;
+        WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime));
+    }
+
+    // A fresh session at the cell, then neutral frames until the safety gate opens.
+    private void AreaSmokePlace(AreaMapRuntime map, CellCoord cell)
+    {
+        _areaSmokeTime = 0; _worldTestTime = SimulationTime.At(0);
+        ConfigureAreaActor(map, cell, NeighborDirection.XPlus);
+        for (var i = 0; i < 3; i++) AreaSmokeFrame();
+        if (!_worldGate.IsOpen) throw new InvalidOperationException("AREA_SMOKE_GATE_CLOSED");
+    }
+
+    // Frames the trigger, then returns an opaque pixel of its sprite outside the HUD.
+    private async Task<Vector2> AreaSmokeTriggerPointAsync(AreaDrawCommand command)
+    {
+        PublishWorldSelection();
+        _camera!.ResetWorld(new GamepadLab.Core.Vec2(command.Destination.X + command.Destination.Width / 2d,
+            command.Destination.Y + command.Destination.Height / 2d), WorldViewport, 1);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+        await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        return OpaqueScreenPoint(command) ?? throw new InvalidOperationException("AREA_TRIGGER_NOT_VISIBLE");
+    }
+
+    private void AreaSmokeClick(Vector2 point)
+    {
+        _worldTestTime = SimulationTime.At(_areaSmokeTime);
+        _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = point, GlobalPosition = point });
+    }
+
+    private async Task<object> UseNextToTriggerAsync(int expected)
+    {
+        var (endpoint, trigger) = _areaTransitions!.Triggers().Single();
+        var map = _areaTransitions.Current;
+        var near = UseCell(map, new(trigger.WorldX!.Value, trigger.WorldY!.Value));
+        AreaSmokePlace(map, near);
+        var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
+        AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        if (_areaTransitions.Pending is null) throw new InvalidOperationException("AREA_USE_NOT_ACCEPTED " + _areaUseStatus);
+        AreaSmokeFrame();
+        if (_areaTransitions.CurrentMap != expected || _areaTransitions.Pending is not null) throw new InvalidOperationException("AREA_TRANSITION_NOT_APPLIED");
+        var arrival = _areaTransitions.Current.Chart.ToWorld(((AreaGridSession)_worldActor.Session!).State.CommittedCell);
+        if (arrival.X != endpoint.ArrivalX || arrival.Y != endpoint.ArrivalY || _areaSession!.QueryActor().Map.RuntimeMap != expected)
+            throw new InvalidOperationException("AREA_ARRIVAL_MISMATCH");
+        for (var frame = 0; frame < 5; frame++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+        }
+        var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_TRANSITION_CAPTURE");
+        if (!string.IsNullOrWhiteSpace(capture))
+        {
+            using var image = GetViewport().GetTexture().GetImage();
+            if (image.SavePng($"{capture}-map{expected}.png") != Error.Ok) throw new InvalidOperationException("AREA_TRANSITION_CAPTURE_FAILED");
+            // A wider view of the arrival surroundings, then the actor-framed view again.
+            _camera!.ResetWorld(WorldAnchor, WorldViewport, .5);
+            for (var frame = 0; frame < 3; frame++)
+            {
+                await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+            }
+            using var wide = GetViewport().GetTexture().GetImage();
+            if (wide.SavePng($"{capture}-map{expected}-wide.png") != Error.Ok) throw new InvalidOperationException("AREA_TRANSITION_CAPTURE_FAILED");
+            _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+        }
+        return new { From = map.RuntimeMap, To = expected, UsedFrom = map.Chart.ToWorld(near), Arrival = arrival, Session = _areaSession.Version.Revision,
+            Drawn = _readyArea.Plan.Commands.Count, Walls = _readyArea.Snapshot.Objects.Count(o => o.Type == 0) };
+    }
+
+    // From the exterior return cell (three cells from the entrance), one left click on the entrance sets the
+    // click-to-move goal within use range; the frames drive the authoritative session there, and the same use
+    // is requested on arrival and applied once settled. A ground click first cancels a pending walk-to-use.
+    private async Task<object> RunAreaWalkToUseSmokeAsync()
+    {
+        var (_, trigger) = _areaTransitions!.Triggers().Single();
+        var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
+        var start = ((AreaGridSession)_worldActor.Session!).State.CommittedCell;
+        AreaSmokePlace(_areaTransitions.Current, start);
+        var point = await AreaSmokeTriggerPointAsync(command);
+        AreaSmokeClick(point);
+        if (_areaUseAfterRoute is null) throw new InvalidOperationException("AREA_WALK_NOT_STARTED " + _areaUseStatus);
+        // A ground click on the actor's own cell (or the nearest cell whose centre is plain ground) replaces the
+        // walk-to-use; no use follows.
+        var ground = Enumerable.Range(0, 7).SelectMany(r => Enumerable.Range(-r, 2 * r + 1).Select(d => new CellCoord(start.X + d, start.Y - r)))
+            .Select(cell => { var c = AreaCellPicking.Center(cell); return _canvas!.GetGlobalTransformWithCanvas() * new Vector2((float)c.X, (float)c.Y); })
+            .First(p => !_hud!.Rect.HasPoint(p) && GetViewport().GetVisibleRect().HasPoint(p) && AreaTriggerAt(p) is null);
+        AreaSmokeClick(ground);
+        if (_areaUseAfterRoute is not null) throw new InvalidOperationException("AREA_WALK_NOT_CANCELLED_BY_GROUND_CLICK");
+        for (var i = 0; i < 40; i++) AreaSmokeFrame();
+        if (_areaTransitions.CurrentMap != 1 || _areaTransitions.Pending is not null) throw new InvalidOperationException("AREA_CANCELLED_WALK_USED");
+        // The camera followed those frames: frame the trigger again before the second click.
+        AreaSmokePlace(_areaTransitions.Current, start);
+        AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        if (_areaUseAfterRoute is null) throw new InvalidOperationException("AREA_WALK_NOT_RESTARTED " + _areaUseStatus);
+        var goal = _worldRoute!.Target;
+        for (var i = 0; i < 400 && _areaTransitions.CurrentMap == 1; i++) AreaSmokeFrame();
+        if (_areaTransitions.CurrentMap != 79 || _areaSession!.QueryActor().Map.RuntimeMap != 79)
+            throw new InvalidOperationException("AREA_WALK_TO_USE_NOT_APPLIED " + _areaUseStatus);
+        return new { WalkToUse = true, GroundClickCancels = true, From = start, Goal = goal, Frames = _areaSmokeTime, Session = _areaSession.Version.Revision };
     }
 
     // A cell next to the trigger reachable over the map's step evidence from the chart's start.
@@ -304,9 +356,10 @@ public partial class TerrainViewerApp
     private Vector2? OpaqueScreenPoint(AreaDrawCommand command)
     {
         var transform = AreaDrawItem.RasterTransform(GetViewport()); var size = GetViewport().GetVisibleRect().Size;
+        var hud = _hud!.Rect;
         for (var y = 0; y < (int)size.Y; y += 2)
         for (var x = 0; x < (int)size.X; x += 2)
-            if (AreaAlphaAt(command, _readyArea!.Frames, transform, x, y) != 0 && AreaTriggerAt(new(x + .5f, y + .5f)) == command.Identity)
+            if (!hud.HasPoint(new(x + .5f, y + .5f)) && AreaAlphaAt(command, _readyArea!.Frames, transform, x, y) != 0 && AreaTriggerAt(new(x + .5f, y + .5f)) == command.Identity)
                 return new Vector2(x + .5f, y + .5f);
         return null;
     }

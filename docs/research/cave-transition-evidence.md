@@ -208,6 +208,16 @@ and 2: PR #87 and #88; steps 3 and 4: the viewer transfer, see the
 Out of scope: cave NPC behaviour and combat, the story tile scripts (T9),
 cave lighting and sound, and the jump-point path.
 
+As delivered in the viewer (steps 3 and 4), two choices differ from the order
+above. Both maps are loaded and authenticated together before the area view is
+published and stay loaded; a transfer switches the active map, its step evidence
+and chart instead of unloading the source and opening the destination, so the
+flush/open order of T4 is not reproduced. An endpoint whose destination map is
+not loaded, or whose arrival cell is outside that map's admitted area or chart,
+is refused as unavailable at the use (`DESTINATION_MAP_NOT_LOADED`,
+`ARRIVAL_NOT_ADMITTED`, `ARRIVAL_OUTSIDE_CHART`); nothing is queued and the
+actor stays where it is. A viewer reset or reload drops a queued transfer.
+
 ## Reproduction
 
 Use the pinned SDK from the [toolchain](../workflow/toolchain.md). Output is

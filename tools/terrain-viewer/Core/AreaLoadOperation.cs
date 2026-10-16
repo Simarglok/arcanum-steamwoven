@@ -81,14 +81,18 @@ internal static class AreaLoadOperation
             using var caveOwner = AreaOriginalValidator.OpenCaveFiles(arguments.ModulePath, arguments.ActorResourcePath!, arguments.ResourcePath,
                 caveMobile, arguments.PrototypePath!);
             var entrance = snapshot.Endpoints.Single();
-            var caveSnapshot = caveOwner.LoadStrict(token);
-            var caveChart = AreaChart.For(caveSnapshot);
-            caveChart = caveChart with { Spawn = caveChart.ToChart(new(entrance.ArrivalX, entrance.ArrivalY)) };
-            var caveArea = ReadArea(generation, caveOwner, token, caveChart);
+            // One strict load: the chart is derived from the snapshot ReadArea publishes.
+            var caveArea = ReadArea(generation, caveOwner, token, loaded =>
+            {
+                var chart = AreaChart.For(loaded);
+                return chart with { Spawn = chart.ToChart(new(entrance.ArrivalX, entrance.ArrivalY)) };
+            });
+            var caveChart = caveArea.Plan.Chart;
             var caveSteps = AreaStepInspector.ValidateOriginalData(caveArea.Snapshot, arguments.ModulePath, arguments.ResourcePath,
                 arguments.AreaEffectsPath!, arguments.AreaPatchPath!, caveMobile, generation);
             if (caveSteps.EvidenceEpoch != generation || caveSteps.InputIdentity.AreaProfile != caveArea.Snapshot.Profile ||
                 caveSteps.InputIdentity.Kind != AreaStepInputKind.AuthenticatedOriginal || !caveSteps.IsAdmitted(caveChart.ToWorld(caveChart.Spawn)) ||
+                !caveArea.Snapshot.Inputs.All(i => caveSteps.InputIdentity.Sources.Any(s => s.Length == i.Length && s.Sha256 == i.Sha256)) ||
                 entrance.RuntimeDestination != caveArea.Snapshot.RuntimeMap || entrance.CatalogueDestination != caveArea.Snapshot.CatalogueMap)
                 throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Publication));
             if (checked(retained + actor.CheckedRgbaBytes + caveArea.CpuRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
@@ -143,13 +147,14 @@ internal static class AreaLoadOperation
     // Complete strict AREA repository phase, shared by ordinary Execute and
     // structural coordinator tests. The caller owns and disposes the Data owner;
     // actor/traversal authentication stays in Execute, never in this test seam.
-    internal static AreaLoadResult ReadArea(long generation, AreaDataOwner owner, CancellationToken token, AreaChart? chart = null)
+    // chartFor (ARC-WORLD-009) charts a map other than the exterior from its own strict snapshot.
+    internal static AreaLoadResult ReadArea(long generation, AreaDataOwner owner, CancellationToken token, Func<AreaSnapshot, AreaChart>? chartFor = null)
     {
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
         var snapshot = owner.LoadStrict(token);
         Console.WriteLine("ARC-RENDER-007 load stage=strict-snapshot");
-        var plan = AreaScenePlan.Create(snapshot, chart);
+        var plan = AreaScenePlan.Create(snapshot, chartFor?.Invoke(snapshot));
         Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
         var initial = owner.Usage;
         var frames = CopyFrames(owner, snapshot, plan, token);

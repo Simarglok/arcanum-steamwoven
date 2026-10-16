@@ -424,7 +424,9 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         if (ProcessAreaTransition()) return;
         var time = WorldTime;
-        var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
+        // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
+        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
+            : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is not null) StopWorldRoute("ROUTE_STOPPED_BY_STICK");
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
@@ -546,8 +548,16 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
             RefreshReadyStatus(); return;
         }
+        if (_areaTransitions?.Pending is not null)
+        {
+            _worldRouteClick = "ignored (map transfer pending)";
+            RefreshReadyStatus(); return;
+        }
+        // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
+        if (TryAreaUse(screen)) return;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
+        CancelAreaUseApproach("a ground click replaced it");
         var accepted = route.SetTarget(cell, WorldTime);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
@@ -563,8 +573,6 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         var wasModal = WorldModal;
         _worldAdapter.PaletteOpen = WorldModal;
-        // ARC-WORLD-009: a left press on a cave trigger sprite is a use action; other clicks keep their routing.
-        if (TryAreaUse(input)) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventKey chordKey)
         {
             // Diagnostics first: a consumed chord key never reaches the shared
