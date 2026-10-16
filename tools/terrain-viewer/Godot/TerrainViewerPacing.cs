@@ -31,7 +31,8 @@ public partial class TerrainViewerApp
     {
         if (PacingAutomated) { if (Engine.MaxFps != 0) Engine.MaxFps = 0; return; }
         var now = PacingNow(); var camera = _camera?.State;
-        // A walking actor (a click route with a still camera) is activity as well.
+        // A walking or turning actor (a click route with a still camera) is activity as well:
+        // it raises the frame cap to the display rate and the status refresh to 10 Hz.
         (GamepadLab.Core.Vec2 Anchor, int Facing)? actor = IsWorld ? (_worldActor.FootAnchor, _worldActor.State.Facing) : null;
         if (camera != _pacingCamera || actor != _pacingActor || Godot.Input.IsAnythingPressed())
         { _pacingCamera = camera; _pacingActor = actor; _pacingLastActivity = now; }

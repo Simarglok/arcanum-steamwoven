@@ -289,8 +289,8 @@ already authenticated in the same load (L-C, not done).
   2,310-character WORLD status that changes on every refresh is mainly the grid's
   simulation time, and the wrapped HUD label was re-laid out ten times per second for it.
   The status line now refreshes once per second while idle (ten times per second while
-  active, where a moving camera or a walking actor counts as activity; event-driven
-  refreshes stay immediate). Alternating runs of the same build, CPU time over 20 s idle:
+  active, where a moving camera or a walking or turning actor counts as activity, which
+  also raises the frame cap to the display rate; event-driven refreshes stay immediate). Alternating runs of the same build, CPU time over 20 s idle:
   7.6–8.1% with the 10 Hz refresh, 5.5–6.1% with the idle 1 Hz refresh. Frames are still
   drawn every frame (engine counters, also with low-processor mode on), so the rest needs an
   idle cap below the agreed 60 FPS.

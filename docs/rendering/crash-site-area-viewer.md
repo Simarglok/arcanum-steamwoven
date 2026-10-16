@@ -167,8 +167,8 @@ frame proofs, screenshots, paths and detailed reports stay ignored/local and
 must not enter Git or an app payload.
 
 In an interactive run the viewer caps its frame rate (`FramePacingPolicy`): at
-the current display's refresh rate while input is held or recent (0.5 s) or the
-camera moves, and at 60 FPS (or the display rate, if lower) otherwise. The engine
+the current display's refresh rate while input is held or recent (0.5 s), the
+camera moves or the WORLD actor walks or turns, and at 60 FPS (or the display rate, if lower) otherwise. The engine
 cap is corrected once per second from the measured rate, within 1–4 times the
 target, because Godot's limiter alone undershoots on macOS; only a cap that met
 its target is remembered for the next time that target applies, so a frame-bound
