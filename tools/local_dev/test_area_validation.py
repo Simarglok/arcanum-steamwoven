@@ -166,6 +166,11 @@ class AreaValidationTests(unittest.TestCase):
         for change in ({'task':'ARC-WORLD-003'},{'candidateCommit':'b'*40},{'host':'exported'}, {'graphical':False},
                        {'exitCode':1},{'drawCoverage':'NOT_VERIFIED'},{'submitted':37362},{'resources':None}):
             with self.subTest(change=change),self.assertRaises(ValueError):area.validate_report(good|change,head,'source')
+        # ARC-WORLD-009 receipts must carry the cave transition, and no other task's may.
+        cave=good|{'caveTransition':'PASS'}
+        area.validate_report(cave,head,'source','ARC-WORLD-009')
+        for report,task in ((good,'ARC-WORLD-009'),(cave,'ARC-RENDER-007'),(good|{'caveTransition':'FAIL'},'ARC-WORLD-009')):
+            with self.subTest(task=task,cave=report.get('caveTransition')),self.assertRaises(ValueError):area.validate_report(report,head,'source',task)
 
     def test_resource_observation_is_bounded_and_reduced_to_safe_scalars(self):
         summary=area.resource_summary(RESOURCES)

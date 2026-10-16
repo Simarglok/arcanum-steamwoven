@@ -75,8 +75,10 @@ def main() -> int:
         (evidence / 'native.log').write_text(output, encoding='utf-8')
         if code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output or 'ERROR:' in output:
             raise ValueError('native outcome')
-        if args.task == 'ARC-WORLD-009' and 'ARC-WORLD-009 native-smoke transition PASS ' not in output:
-            raise ValueError('cave transition outcome')
+        if args.task in area_validation.CAVE_TASKS:
+            if 'ARC-WORLD-009 native-smoke transition PASS ' not in output:
+                raise ValueError('cave transition outcome')
+            summary['caveTransition'] = 'PASS'
         stage = 'original-reconciliation'
         raw = config.optional_authority_bytes(evidence / 'coverage.json')
         if raw is None:
@@ -91,7 +93,7 @@ def main() -> int:
             raise ValueError('candidate changed')
         summary.update(result, outcome='PASS', coverageSha256=hashlib.sha256(raw).hexdigest(),
                        originalRuntimeParity='NOT_VERIFIED')
-        area_validation.validate_report(summary, head, summary['host'])
+        area_validation.validate_report(summary, head, summary['host'], args.task)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, ChildFailure) as error:
         if evidence is not None:
             # Exception details belong to ignored private diagnostics, not the

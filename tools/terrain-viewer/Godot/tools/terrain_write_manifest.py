@@ -97,7 +97,7 @@ def main() -> None:
         validate_grid_reports(evidence, head, task)
     if task in AREA_TASKS:
         from tools.local_dev.area_validation import validate_reports as validate_area_reports
-        validate_area_reports(evidence, head)
+        validate_area_reports(evidence, head, task)
     if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
             or preflight.get("tool") != "terrain" or preflight.get("candidateId") != expected_candidate_id
             or preflight.get("candidateCommit") != head):

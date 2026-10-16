@@ -91,11 +91,22 @@ def run(args: argparse.Namespace) -> int:
 def status(_: argparse.Namespace) -> int:
     conf = config.load_config()
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
+    roots = conf.get("artifactRoots", {})
     for name, (mode, tasks) in MODES.items():
-        # A task's own roles (the ARC-WORLD-009 cave input) count once one of its builds can be chosen.
-        extra = tuple(role for task in tasks for role in launch.TASK_ROLES.get(task, ()))
+        # A task's own roles (the ARC-WORLD-009 cave input) count when `run` would choose its build.
+        chosen = None
+        if isinstance(roots, dict) and isinstance(roots.get(ROOT_ID), str):
+            for task in tasks:
+                try:
+                    manifests.resolve_current(Path(roots[ROOT_ID]), "terrain", root_id=ROOT_ID, selected_task=task)
+                except ValueError:
+                    continue
+                chosen = task
+                break
+        extra = launch.TASK_ROLES.get(chosen, ()) if chosen else ()
         missing = [role for role in launch.MODE_ROLES[mode] + extra + ("sourceId",) if role not in inputs]
-        print(f"{name}: {'ready' if not missing else 'missing ' + ', '.join(missing)}")
+        build = f" ({chosen} build)" if chosen else ""
+        print(f"{name}{build}: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'}")
     print("selection:", conf.get("launchSelection", {}).get("terrain", "none"))
     return 0
 

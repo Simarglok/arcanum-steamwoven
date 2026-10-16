@@ -36,11 +36,11 @@ The only persistent files are owner-only (0600), atomically replaced JSON docume
 
 They have schemas `arcanum-local-config-v1` and `build-registry-v1`. They hold registered artifact-root identifiers, explicit original-input roles, a safe non-path source label, preferences, selection, and acceptance lifecycle records. They never belong in Git. Test runs may set `ARCANUM_LOCAL_HOME` to an owned temporary directory.
 
-Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
+Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file, the cave object file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
 
     tools/arcanum-local list [--json]
     tools/arcanum-local configure discover --game-root PATH [--write-inputs]
-    tools/arcanum-local configure inputs --module PATH --terrain-resource PATH --actor-resource PATH --prototypes PATH [--source-id LABEL]
+    tools/arcanum-local configure inputs --module PATH --terrain-resource PATH --actor-resource PATH --prototypes PATH [--source-id LABEL] [--area-mobile PATH --area-effects PATH --area-patch PATH] [--cave-mobile PATH]
     tools/arcanum-local configure add-artifact-root --id ID PATH
     tools/arcanum-local configure select-launch --tool terrain --candidate ROOT_ID:ARC-DEV-001:CANDIDATE
 
@@ -158,9 +158,13 @@ which `./arcanum setup` discovers. The launcher passes `--area-cave-mobile` only
 the launched manifest's task is ARC-WORLD-009 (`launch.TASK_ROLES`); older AREA
 builds reject that flag and never receive it. In the export, `area_validate.py --task
 ARC-WORLD-009` adds the cave input to both area-original native smokes and requires
-`ARC-WORLD-009 native-smoke transition PASS`. A home configured before this role
-existed must run `./arcanum setup` (or `configure discover --write-inputs`) again;
-`./arcanum status` lists the missing role.
+`ARC-WORLD-009 native-smoke transition PASS`; its area-original receipts carry
+`caveTransition: PASS`, which registration requires for this task and refuses for any
+other. A home configured before this role existed must run `./arcanum setup` (or
+`configure discover --write-inputs`, or `configure inputs ... --cave-mobile PATH`)
+again: launching the ARC-WORLD-009 build otherwise stops with the missing role named,
+and `./arcanum status` lists it for the build `area` would choose. Setup writes nothing
+unless every pinned role, the cave file included, is found with its exact identity.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 

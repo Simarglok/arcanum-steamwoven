@@ -106,8 +106,12 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
         raise ValueError("world diagnostic rejects actor preview overrides")
     task_roles = TASK_ROLES.get(task, ()) if isinstance(task, str) and TASK_MODES.get(task) == mode else ()
     required = MODE_ROLES[mode] + task_roles + ("sourceId",)
-    if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
+    if not isinstance(inputs, dict):
         raise ValueError("configure explicit terrain input roles before launch")
+    missing = [key for key in required if not isinstance(inputs.get(key), str)]
+    if missing:
+        raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
+                         + "; run ./arcanum setup again)")
 
     def local_file(role: str, *, directory: bool = False) -> str:
         path = Path(inputs[role]).expanduser().absolute()

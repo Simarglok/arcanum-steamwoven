@@ -133,8 +133,13 @@ class AreaRunnerTests(unittest.TestCase):
         self.assertIn('cave transition outcome', missing['failure'])
         self.assertEqual('ARC-WORLD-009', missing['arguments_calls'][0].kwargs['task'])
         passed = self.exercise(task='ARC-WORLD-009', output=marker + 'ARC-WORLD-009 native-smoke transition PASS []\n')
-        self.assertEqual(0, passed['exit'])
-        area_validation.validate_report(passed['receipt'], 'a' * 40, 'source')
+        self.assertEqual((0, 'PASS'), (passed['exit'], passed['receipt']['caveTransition']))
+        # The receipt binds the cave smoke to its export task, and only to it.
+        area_validation.validate_report(passed['receipt'], 'a' * 40, 'source', 'ARC-WORLD-009')
+        with self.assertRaises(ValueError):
+            area_validation.validate_report(passed['receipt'], 'a' * 40, 'source')
+        with self.assertRaises(ValueError):
+            area_validation.validate_report(self.exercise()['receipt'], 'a' * 40, 'source', 'ARC-WORLD-009')
         self.assertEqual('ARC-RENDER-007', self.exercise()['arguments_calls'][0].kwargs['task'])
 
     def test_failed_timeout_missing_marker_and_engine_errors_refuse_before_comparison(self):

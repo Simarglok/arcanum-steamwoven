@@ -676,7 +676,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
             raise ValueError("gamepad reports/captures/exit receipts must be bound by the manifest inventory")
     if task in AREA_TASKS:
         from .area_validation import validate_reports as validate_area_reports
-        validate_area_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
+        validate_area_reports(manifest.parent / "evidence", payload["candidate"]["commit"], task)
     app_path = manifest.parent / app["relativePath"]
     executable = manifest.parent / app["executableRelativePath"]
     try:
