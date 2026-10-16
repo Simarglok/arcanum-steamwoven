@@ -133,23 +133,48 @@ cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard 
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
 closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) re-authenticates the
-selected archives on every talk (`arcanum2.dat` as Script, `arcanum3.dat` as Dialog), resolves
+selected archives on every talk (`arcanum2.dat` as Script, `arcanum3.dat` as Dialog; the original
+game opens Virgil's script from `Arcanum4.dat`, which shadows this copy, see
+[content precedence](../research/content-precedence.md#crash-site-impact)), resolves
 the entry through the SCR resolver (Following from the session, Jilted false, LF from the
 session's attachment flags seeded from the loaded attachment), reads the resolved DLG member
 by ordinal and checks its payload SHA-256 before parsing.
 
-`AreaConversationProfile.Diagnostic` and `AreaConversationState` are **project diagnostics,
-not original state**: male human PC, intelligence 8, not dumb, alignment 0, NPC→PC reaction
-50, global flags 0..4095 known false, names `[PC]`/`[NPC]`, follow requests accepted. IN, MM,
-JO, QU, RU, AL and RE are recorded as typed state; no item, party, map or AI simulation runs.
-The panel shows typed identifiers in its effect ledger, never raw operations.
+`AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
+human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
+`[PC]`/`[NPC]`, follow requests accepted. No item, party, map or AI simulation runs. The
+panel shows typed identifiers in its effect ledger, never raw operations.
+
+### Consequences in the game session (ARC-SCRIPT-006)
+
+The host borrows the area's [game session](../world/game-session-runtime.md), created for
+every published area (with or without the cave), and `AreaConversationState` stores the
+dialog consequences there, so they survive further talks, the cave trip and a
+capture/encode/decode/restore of the session, and they change the next conversation:
+
+| Consequence | Where it lives |
+| --- | --- |
+| GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false ([source: 100 words of flags zeroed on init and reset][gf]); flags ≥3200 are not admitted and fail the dialog. |
+| QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's reaction to at least 41, Completed adds 10 (source rule); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
+| RU | Session rumors with their game time; outside 1000..2999 is refused. |
+| LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, reaction outside `int`, follow other than 1) is refused when the state is built. |
+| AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
+
+The SCR entry resolver reads Following and LF from the same session, so Virgil's
+follow consent picks his follower entry after a round trip to the cave or a restore. The
+HUD status shows the session story (quests, rumors, followers). In the synthetic
+self-test without area lighting the session clock is an invented synthetic profile.
+
+[gf]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L150-L212
 
 Observed with the user-owned installation: Virgil (script 1324) enters at SCR line 4 → DLG
 node 1; choosing the first Direct reply each time walks 13 NPC nodes
 (1, 9, 15, 19, 24, 30, 32, 35, 57, 71, 120, 210, 74) with 16 applied effects
 (GF×4, IN, QU, RU×2, RE, MM×5, JO, AL) and exits to SCR line 5. Talking again while he
-follows enters at SCR line 6 → node 385, a frontier (`WA` condition). These are diagnostic
-runs, not original gameplay verification.
+follows enters at SCR line 6 → node 385, a frontier (`WA` condition); since ARC-SCRIPT-006
+this holds after the session went to the cave and back and through a snapshot round trip,
+with the four flags, one quest and two rumors restored. These are diagnostic runs, not
+original gameplay verification.
 
 ## Verification
 

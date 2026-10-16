@@ -840,7 +840,7 @@ public partial class TerrainViewerApp : Node
         PaceFrames();
         if (IsWorld)
         {
-            try { ProcessWorld(delta); }
+            try { TickAreaClock(); ProcessWorld(delta); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
@@ -919,8 +919,9 @@ public partial class TerrainViewerApp : Node
 
     private void ClearReadyMetrics()
     {
-        StopAreaAmbient(); StopAreaTransitions();
+        // The conversation host borrows the area session, so it is unbound before the session is disposed.
         UnbindAreaConversations();
+        StopAreaAmbient(); StopAreaTransitions();
         _readyArea = null;
         _readySourceId = null;
         _readyDecodedCount = 0;

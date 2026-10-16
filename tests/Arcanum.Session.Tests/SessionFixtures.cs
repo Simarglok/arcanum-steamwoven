@@ -72,9 +72,11 @@ internal static class SessionFixtures
         return owner.Flags.Write(new(new(Guid.Parse("66666666-6666-6666-6666-666666666666")), owner.FlagVersion, new FlagId(flag), value));
     }
 
-    // Independently written canonical text of the fixture session after one sector and one entity change.
+    // Independently written canonical text of the fixture session after one sector and one entity change
+    // and recorded lighting (scheme 1 at 15:00).
+    internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":1," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":3," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"a7ff41b300ef712f0e7d088183a3d08957110cdd\"," +
@@ -84,13 +86,16 @@ internal static class SessionFixtures
         "\"flags\":{\"revision\":0,\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]}," +
         "\"actor\":{\"map\":79,\"x\":100,\"y\":200,\"facing\":\"XPlus\"}," +
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
-        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]}";
+        "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + LightingTail;
+
+    internal const string EmptyStory = ",\"story\":{\"quests\":[],\"globalQuests\":[],\"rumors\":[]}";
 
     internal static GameSessionOwner GoldenSession()
     {
         var owner = Create();
         Changed(owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForEntity("npc-1", "hp"), 12), owner, 1);
         Changed(owner.SetMapChange(owner.Version, Exterior, MapChangeKey.ForSector(5, "door.open"), 1), owner, 2);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordLighting(new(1, 15)).Disposition);
         return owner;
     }
 

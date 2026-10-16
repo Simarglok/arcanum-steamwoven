@@ -1,14 +1,19 @@
 using Arcanum.Data.Lighting;
+using Arcanum.Session;
+using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
 using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-// ARC-RENDER-010: day/night in crash-site-area. One WORLD-004 clock per load generation,
-// advanced only by explicit whole hours from the diagnostic palette, which can also switch
-// the ambient multiplier off to show unlit source pixels. The active sector follows the
-// actor's committed cell. ARC-RENDER-012: each map (exterior, cave) brings its own ambient source
-// and stationary lights; a transfer rebinds them on the same clock.
+// ARC-RENDER-010: day/night in crash-site-area; the diagnostic palette can switch the ambient
+// multiplier off to show unlit source pixels. The active sector follows the actor's committed cell.
+// ARC-WORLD-010: the clock is the game session's. It flows by itself each frame (GameTimeFlow, 8x
+// admitted host time), holds a Menu pause while the palette or a dialog is open, and the palette's
+// "+1 hour" is an explicit wait that works during that pause. Automated runs (self-test, native smoke)
+// get no live flow; they drive the same tick with literal host times.
+// ARC-RENDER-012: each map (exterior, cave) brings its own ambient source and stationary lights; a transfer
+// or a quick load across maps rebinds them on the same session clock.
 public partial class TerrainViewerApp
 {
     private AreaAmbientDriver? _areaAmbient;
@@ -16,17 +21,34 @@ public partial class TerrainViewerApp
     private void StartAreaAmbient(AreaLoadResult area)
     {
         StopAreaAmbient();
-        if (area.Lighting is not { } lighting) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, ActiveAreaSector());
+        if (area.Lighting is not { } lighting || _areaSession is null) return;
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, _areaSession, ActiveAreaSector());
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
     }
 
+    // ARC-WORLD-011 quick load replaced the session: the day/night driver binds to the loaded clock (its time,
+    // pause and the lighting it carries) and keeps the viewer's lighting toggle. The sector is the last selected
+    // one until the host re-applies for the loaded actor (FollowAreaAmbient after the actor is placed).
+    private void RebindAreaAmbient(GameSessionOwner session)
+    {
+        if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
+        // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
+        // loaded actor is bound once it is placed (RebindAreaMapAmbient).
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector);
+        _areaAmbient.Enabled = previous.Enabled;
+        PushAreaAmbient(); BindAreaAmbientPalette();
+        GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
+    }
+
     private void StopAreaAmbient()
     {
-        _areaAmbient?.Dispose(); _areaAmbient = null;
+        _areaAmbient = null;
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
+
+    // The sector the lighting follows: the actor's, on the shown map (each map has its own source).
+    private long AmbientSector() => ActiveAreaSector();
 
     // The sector under the actor's committed cell on the shown map's own chart (the exterior spawn
     // before the first session exists).
@@ -36,6 +58,26 @@ public partial class TerrainViewerApp
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
 
+    private void TickAreaClock()
+    {
+        if (_areaAmbient is null || SelfTestBootstrap || _nativeSmoke) return;
+        TickAreaClock((long)Time.GetTicksMsec());
+    }
+
+    // One production tick at the given host time; the frame loop passes the monotonic engine clock.
+    private void TickAreaClock(long hostMilliseconds)
+    {
+        if (_areaAmbient is not { } driver) return;
+        var paused = driver.ModalPaused;
+        var hourChanged = driver.Tick(hostMilliseconds, WorldModal, AmbientSector());
+        if (hourChanged) PushAreaAmbient();
+        if (hourChanged || paused != driver.ModalPaused)
+        {
+            BindAreaAmbientPalette();
+            GD.Print("ARC-WORLD-010 clock " + AreaAmbientReceipt());
+        }
+    }
+
     // FR-LIGHT-007: re-select when the actor commits into another sector, at the same hour.
     private void FollowAreaAmbient()
     {
@@ -43,9 +85,9 @@ public partial class TerrainViewerApp
         if (_areaAmbient.Apply(ActiveAreaSector())) { PushAreaAmbient(); GD.Print("ARC-RENDER-010 lighting-sector " + AreaAmbientReceipt()); }
     }
 
-    // ARC-RENDER-012: a map transfer switches to the destination map's ambient source and lights on the
-    // same clock (the cave has its own map default scheme and stationary lights).
-    private void RebindAreaAmbient()
+    // ARC-RENDER-012: a map transfer (or a quick load onto the other map) switches to the shown map's ambient
+    // source and lights on the same clock (the cave has its own map default scheme and stationary lights).
+    private void RebindAreaMapAmbient()
     {
         if (_areaAmbient is null) return;
         // A map without lighting inputs is drawn unlit; the driver never stays bound to the other map.
@@ -64,8 +106,8 @@ public partial class TerrainViewerApp
     private void PaletteGameHour()
     {
         if (_areaAmbient is null) { _worldPanel?.SetActionStatus("Game time unavailable: no area lighting loaded"); return; }
-        _areaAmbient.AdvanceHours(1, ActiveAreaSector());
-        AreaAmbientChanged($"Game time +1 hour: {_areaAmbient.Clock.Hour:00}:00");
+        _areaAmbient.AdvanceHours(1, AmbientSector());
+        AreaAmbientChanged($"Waited 1 hour: {_areaAmbient.Clock.Hour:00}:00");
     }
     private void PaletteLightingToggle()
     {
@@ -88,11 +130,12 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver) return " | lighting: not loaded (unlit)";
         var clock = driver.Clock; var selection = driver.Selection;
-        var lights = _readyArea?.Lighting?.Local?.LightCount ?? 0;
-        return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} | ambient scheme {selection.SchemeId}"
+        var flow = driver.ModalPaused ? "PAUSED (dialog/palette open)" : clock.PauseDisposition.Paused ? $"PAUSED ({clock.PauseDisposition.Reason})"
+            : $"time flows {GameTimeFlow.GameMillisecondsPerHostMillisecond}x";
+        return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
-            + $" | stationary lights {lights}"
-            + " | palette: Game time +1 hour, Ambient lighting on/off | hourly discrete, original night/visual parity NOT_VERIFIED";
+            + $" | stationary lights {_readyArea?.Lighting?.Local?.LightCount ?? 0}"
+            + " | palette: Game time +1 hour (wait), Ambient lighting on/off | hourly discrete, 8x rate and original night/visual parity NOT_VERIFIED";
     }
 
     // Numbers only: scheme id, hour, sector and digests; never colour values.
@@ -101,6 +144,7 @@ public partial class TerrainViewerApp
         var driver = _areaAmbient!; var selection = driver.Selection;
         return System.Text.Json.JsonSerializer.Serialize(new {
             driver.Clock.GameTimestampMs, driver.Clock.Hour, driver.Clock.IsDay, ClockRevision = driver.Clock.Revision,
+            Paused = driver.Clock.PauseDisposition.Paused, PauseReason = driver.Clock.PauseDisposition.Reason.ToString(),
             selection.SchemeId, selection.FromMapDefault, selection.Sector, AmbientRevision = driver.Revision, driver.Enabled,
             Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0,
             TerrainChunks = _canvas?.AreaChunkCount ?? 0 });
@@ -170,5 +214,69 @@ public partial class TerrainViewerApp
         }
         if (tinted[0] == 0 || tinted[1] == 0) throw new InvalidOperationException("AREA_LIGHTING_TINT_NEVER_OBSERVED");
         GD.Print($"ARC-RENDER-010 native-smoke lighting PASS hours={string.Join(',', hours)} tinted terrain={tinted[0]} body={tinted[1]} neutral=[{string.Join(',', neutral)}] " + AreaAmbientReceipt());
+    }
+
+    // ARC-WORLD-010 native smoke: the production tick at literal host times (no live flow in automation).
+    // Time flows to the next hour boundary at 8x and the scheme follows; the palette and a dialog each hold a
+    // Menu pause with no catch-up on resume; the palette's +1 hour waits during that pause; a capture carries
+    // the time and applied scheme and a restore of it (a separate owner, the live session untouched) agrees.
+    private void RunAreaClockSmoke()
+    {
+        if (_areaAmbient is not { } driver || _areaSession is not { } session || _conversationPanel is null) throw new InvalidOperationException("AREA_CLOCK_REQUIRED");
+        if (WorldModal) ToggleWorldSettings();
+        // After the quick-load phase the session is a restored one: the driver must be bound to it.
+        if (!ReferenceEquals(driver.Clock.OwnerIdentity, session.QueryClockSnapshot().OwnerIdentity)) throw new InvalidOperationException("AREA_CLOCK_DRIVER_NOT_REBOUND");
+        var host = 10_000_000L;
+        TickAreaClock(host);
+        var start = driver.Clock;
+        if (start.PauseDisposition.Paused) throw new InvalidOperationException("AREA_CLOCK_PAUSED_AT_START");
+        var remaining = AreaAmbientDriver.HourMilliseconds - start.MillisecondOfDay % AreaAmbientDriver.HourMilliseconds;
+        var frames = 0;
+        while (driver.Clock.Hour == start.Hour)
+        {
+            if (++frames > 2_000) throw new InvalidOperationException("AREA_CLOCK_DID_NOT_FLOW");
+            TickAreaClock(host += 250);
+        }
+        var flowed = driver.Clock;
+        if (frames != (remaining + 1_999) / 2_000 || flowed.GameTimestampMs != start.GameTimestampMs + frames * 2_000L
+            || driver.Selection.Hour != flowed.Hour || session.QueryLighting() != new SessionLightingState(driver.Selection.SchemeId, flowed.Hour))
+            throw new InvalidOperationException($"AREA_CLOCK_HOUR_FLOW frames={frames} remaining={remaining}");
+
+        ToggleWorldSettings();
+        if (!PaletteOpen) throw new InvalidOperationException("AREA_CLOCK_PALETTE_NOT_OPEN");
+        for (var i = 0; i < 400; i++) TickAreaClock(host += 250);
+        var palette = driver.Clock;
+        if (!driver.ModalPaused || palette.GameTimestampMs != flowed.GameTimestampMs) throw new InvalidOperationException("AREA_CLOCK_PALETTE_NOT_PAUSED");
+        PaletteGameHour();
+        var waited = driver.Clock;
+        if (waited.GameTimestampMs != flowed.GameTimestampMs + AreaAmbientDriver.HourMilliseconds || !driver.ModalPaused
+            || session.QueryLighting() != new SessionLightingState(driver.Selection.SchemeId, waited.Hour)) throw new InvalidOperationException("AREA_CLOCK_WAIT");
+        ToggleWorldSettings();
+        TickAreaClock(host += 100);
+        var resumed = driver.Clock;
+        if (driver.ModalPaused || resumed.GameTimestampMs != waited.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_PALETTE_CATCHUP");
+
+        _conversationPanel.Open("ARC-WORLD-010 smoke", null, "[clock pause check]");
+        for (var i = 0; i < 400; i++) TickAreaClock(host += 250);
+        var dialog = driver.Clock;
+        if (!ConversationOpen || !driver.ModalPaused || dialog.GameTimestampMs != resumed.GameTimestampMs) throw new InvalidOperationException("AREA_CLOCK_DIALOG_NOT_PAUSED");
+        EndConversation();
+        TickAreaClock(host += 100);
+        var after = driver.Clock;
+        if (driver.ModalPaused || after.GameTimestampMs != resumed.GameTimestampMs + 800) throw new InvalidOperationException("AREA_CLOCK_DIALOG_CATCHUP");
+
+        var snapshot = session.Capture();
+        var text = GameSessionSnapshotCodec.Encode(snapshot);
+        var decoded = GameSessionSnapshotCodec.TryDecode(text);
+        if (decoded.Snapshot is not { } saved || saved.Clock.GameTimestampMs != after.GameTimestampMs || saved.Lighting != session.QueryLighting())
+            throw new InvalidOperationException("AREA_CLOCK_SNAPSHOT " + decoded.Failure);
+        var restored = GameSessionOwner.Restore(saved, new(saved.Identity, after.ProfileBinding, new(Guid.NewGuid())));
+        using (var owner = restored.Owner ?? throw new InvalidOperationException("AREA_CLOCK_RESTORE_" + restored.Failure))
+            if (owner.QueryClockSnapshot().GameTimestampMs != after.GameTimestampMs || owner.QueryLighting() != saved.Lighting)
+                throw new InvalidOperationException("AREA_CLOCK_RESTORE_STATE");
+        GD.Print("ARC-WORLD-010 native-smoke clock PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+            Start = start.GameTimestampMs, FlowFrames = frames, Flowed = flowed.GameTimestampMs, FlowedHour = flowed.Hour,
+            PaletteWait = waited.GameTimestampMs, Resumed = resumed.GameTimestampMs, DialogHeld = dialog.GameTimestampMs,
+            After = after.GameTimestampMs, saved.Lighting, SnapshotSchema = saved.SchemaVersion, SnapshotChars = text.Length }));
     }
 }

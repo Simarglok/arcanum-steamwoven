@@ -204,7 +204,7 @@ only in multiplayer
 | ID | Observation |
 | --- | --- |
 | CC-01 | Module `Rules\MapList.mes` (SHA-256 `3df16fd2bd186415da0738c25a6b7ea8a32134f5ea95817e3bcfafdbcf55843f`, 5,454 bytes, same payload as the [NPC dialog evidence](crash-site-npc-dialog-evidence.md)) has exactly two typed records: 5000 `START_MAP` (`Arcanum1-024-fixed`, `(92958, 82592)`, `WorldMap: 0`) and 5013 `SHOPPING_MAP` (`ShopMap`, `(31, 29)`). |
-| CC-02 | `rules\backgrnd.mes` exists twice: `arcanum3.dat` (SHA-256 `31b968a0d0e6a234105b07e8450ffb207c8e02338137a8a9cd7c47a396bfd944`) and `arcanum4.dat` (`a34b8189839e86fe6cc7b2ff372d7140cb81c78ffbe0f467f21c6b984b1129fe`), 7,241 bytes each. Both have 79 complete blocks (0..78, 395 messages). They differ only in block 2: `arcanum3` has the money value in the condition slot (so the block is offered to no one and gives 0), `arcanum4` has an empty condition and money 400. Which copy the game reads depends on DAT precedence, not settled here (ARC-DATA-011). |
+| CC-02 | `rules\backgrnd.mes` exists twice: `arcanum3.dat` (SHA-256 `31b968a0d0e6a234105b07e8450ffb207c8e02338137a8a9cd7c47a396bfd944`) and `arcanum4.dat` (`a34b8189839e86fe6cc7b2ff372d7140cb81c78ffbe0f467f21c6b984b1129fe`), 7,241 bytes each. Both have 79 complete blocks (0..78, 395 messages). They differ only in block 2: `arcanum3` has the money value in the condition slot (so the block is offered to no one and gives 0), `arcanum4` has an empty condition and money 400. Which copy the game reads depends on DAT precedence: `arcanum4.dat` wins ([ARC-DATA-011](content-precedence.md)). |
 | CC-03 | Block 0 (the default for a new character): description id 1000, a non-empty effect id, empty condition, money **400**, no items. |
 | CC-04 | Money over all 79 blocks (`arcanum4`): 400 in 65 blocks; 0 in 6; 100 in 4; 50, 200, 500 and 800 in one each. 10 blocks carry an item list; 12 have an empty effect. No condition uses `ANY`. |
 | CC-05 | Blocks 39..50 (the pre-made heroes' backgrounds) each have condition `NPC`, so the new-character screen never offers them to a PC. Their money (400 each) and the one item list among them are not applied on the pre-made path (CE step above). |
@@ -261,5 +261,4 @@ Proposal only; each line needs its own task and owner decision.
 - Background effects (effect ids in `+1`) and the context effects of
   FR-CHAR-006; the clothes prototypes and armor-size rule of FR-CHAR-007.
 - Whether Crash Site scripts read the pre-made flags 2350..2361.
-- Which `backgrnd.mes`/`MainMenu.mes` copy wins (ARC-DATA-011).
 - What the shop NPC on `ShopMap` sells (barter inventory).

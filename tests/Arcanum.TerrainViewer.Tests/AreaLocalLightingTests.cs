@@ -2,6 +2,7 @@ using System.Text;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -127,13 +128,18 @@ public sealed class AreaLocalLightingTests
             new Dictionary<int, LightSchemeTable> { [1] = Table(1, h => $"{h},0,0,0,0,0") }, startup);
         var cave = new AreaLightingSource(Sha, 5078, 2, Sha, new Dictionary<long, int> { [Cave] = 0 },
             new Dictionary<int, LightSchemeTable> { [2] = Table(2, h => $"0,{h},0,0,0,{h}") }, startup);
-        using var driver = AreaAmbientDriver.Create(exterior, Exterior);
+        var created = AreaTransitionCoordinator.CreateSession(AreaAmbientDriver.ClockProfile(exterior),
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), Guid.Parse("22222222-2222-2222-2222-222222222222"), new(100, 100), 1);
+        using var session = created.Owner!;
+        var driver = AreaAmbientDriver.Create(exterior, session, Exterior);
         driver.AdvanceHours(2, Exterior);
         var clock = driver.Clock; var revision = driver.Revision;
         driver.Rebind(cave, Cave);
         Assert.AreEqual(clock, driver.Clock, "the clock is not touched");
         Assert.AreEqual(new AmbientSelection(2, true, Cave, 17, new(new(0, 17, 0), new(0, 0, 17))), driver.Selection);
         Assert.AreEqual(revision + 1, driver.Revision, "revision stays monotonic across sources");
+        Assert.AreSame(cave, driver.Source);
+        Assert.AreEqual(new SessionLightingState(2, 17), session.QueryLighting(), "the session records the cave's scheme");
         Assert.IsTrue(driver.AdvanceHours(1, Cave));
         Assert.AreEqual(new AmbientPair(new(0, 18, 0), new(0, 0, 18)), driver.Selection.Pair);
         // A sector of the other map is refused under the current source.
