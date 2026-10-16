@@ -156,6 +156,10 @@ public sealed class ObjectDisplayNameTests
         Write(module, "mes/gamedesc.mes", "{30000}{Ring}");
         Write(data, "readme.txt", "x");
         Assert.AreEqual(new DescriptionCatalogLoad(DescriptionCatalogStatus.DescriptionMissing, null, ObjectDescriptionFile.Description), Load(module, data));
+        Write(module, "mes/description.mes", "{100}{Module Coat}");
+        Assert.AreEqual(DescriptionCatalogStatus.DescriptionMissing, Load(module, data).Status, "A module copy is never the base file.");
+        Write(data, "mes/description.mes", "// no messages");
+        Assert.AreEqual(DescriptionCatalogStatus.DescriptionMissing, Load(module, data).Status, "An empty base file is not loaded.");
 
         Write(data, "mes/description.mes", "{100}{Coat}");
         Write(module, "mes/gamekey.mes", "{0}{Key");

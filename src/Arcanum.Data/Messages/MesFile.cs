@@ -115,7 +115,8 @@ public sealed class MesFile
             if (!SeekOpen(payload, ref at, ref line)) break;
             var numberLine = line;
             var status = ReadField(payload, ref at, ref line, options.MaxTextBytes, out var numberBytes);
-            if (status != MesParseStatus.Parsed) return new(status == MesParseStatus.TextTooLong ? MesParseStatus.UnsupportedNumber : status, null, line);
+            if (status == MesParseStatus.TextTooLong) return new(MesParseStatus.UnsupportedNumber, null, numberLine);
+            if (status != MesParseStatus.Parsed) return new(status, null, line);
             if (!TryNumber(numberBytes, out var number)) return new(MesParseStatus.UnsupportedNumber, null, numberLine);
             if (!SeekOpen(payload, ref at, ref line)) return new(MesParseStatus.MissingText, null, line);
             var textLine = line;
