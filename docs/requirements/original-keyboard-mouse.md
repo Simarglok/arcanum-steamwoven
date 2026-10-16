@@ -163,7 +163,9 @@ Cheat-only inventory, чтобы не принять его за игровой 
 
 ## KM-09 — Диагностический слой: варианты после сверки
 
-**Owner-policy:** диагностические команды требуют дополнительного слоя с модификаторами. **Proposal:** конкретный prefix и mapping пока не выбраны. Современные дополнительные действия Viewer являются диагностическими расширениями, а не восстановленными original shortcuts.
+**Owner-policy:** диагностические команды требуют дополнительного слоя с модификаторами. Современные дополнительные действия Viewer являются диагностическими расширениями, а не восстановленными original shortcuts.
+
+**Выбор 2026-10-04:** владелец выбрал вариант B (палитра, вход Ctrl+Shift+F9) для bounded реализации. **Статус binding:** реализован в Terrain Viewer WORLD задачей ARC-INPUT-001, контракт и доказательства в [diagnostic-palette.md](../input/diagnostic-palette.md). Software-проверки (synthetic Godot events) не подтверждают native доставку macOS и физическую клавиатуру: этот вердикт остаётся за ARC-INPUT-002. Таблица вариантов ниже сохранена как исследование.
 
 Модификатор не делает любую занятую клавишу свободной: original/CE handlers F1–F6 часто не проверяют Ctrl/Shift. Поэтому Ctrl+Shift+F3 всё равно способен вызвать original broadcast на key-up, если diagnostic handler перехватывает только down. Alt особенно неудобен как общий prefix: он уже влияет на original force-attack/drag/targeting, а LeftAlt ещё включает CE highlighting. Command/Option не рассматриваются как замена original Ctrl/Alt; платформенные варианты требуют собственной проверки.
 
@@ -189,6 +191,8 @@ Cheat-only inventory, чтобы не принять его за игровой 
 ## KM-10 — Текущие расхождения Viewer и границы работы
 
 На SW-срезе [GodotInputAdapter](https://github.com/Simarglok/arcanum-steamwoven/blob/db8bcd0ff48983b4e90a4ff30a66a9ad48d79e7c/src/Arcanum.Input.Godot/GodotInputAdapter.cs) создаёт WASD actor vector, I=Inspect, C=Context, Enter/Space=Confirm, F1=Settings и W/S=menu navigation. [TerrainViewerWorld](https://github.com/Simarglok/arcanum-steamwoven/blob/db8bcd0ff48983b4e90a4ff30a66a9ad48d79e7c/tools/terrain-viewer/Godot/TerrainViewerWorld.cs) использует LMB drag, R reset, F fit, L reload и wheel/+/- zoom. Это диагностическая схема; она не является original controls и не должна стать production default. Новый кандидат нужно проверить отдельно: данный инвентарь не заявляет live состояние всех веток/сборок.
+
+**После ARC-INPUT-001:** в WORLD-режимах Viewer клавиатура больше не создаёт actor vector, F1/R/F/L, I/C/Space и wheel/+/-/LMB drag не несут диагностических действий; оригинальные клавиши зарезервированы как ещё не реализованные, стрелки панорамируют с фиксированным направлением, а Fit/Reset scene/Reload/exact zoom перенесены в палитру ([diagnostic-palette.md](../input/diagnostic-palette.md)). Лабораторная раскладка GodotInputAdapter осталась только для Gamepad Lab и standalone-режимов. Click-to-move, команды Followers, quick slots и игровые экраны по-прежнему не реализованы.
 
 Нужны отдельные реализации original KBM adapter/context routing, click-to-move goal + bounded route planning, доступных оригинальных UI actions и выбранного diagnostic layer. Они используют общую simulation и существующие gamepad contracts, не требуют создания второй игровой симуляции. Общая лабораторная клавиатура для synthetic controller tests не подтверждает оригинальный keyboard mapping. Tests, жёстко требующие WASD actor movement, нельзя использовать как будущий compatibility gate.
 

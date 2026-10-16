@@ -85,18 +85,20 @@ public partial class TerrainViewerApp
         var manual=_camera.FollowState; var center=_camera.State;
         Frame(pad with {RightTrigger=1},.1);
         Require(_camera.FollowState==manual&&_camera.State.X==center.X&&_camera.State.Y==center.Y,"zoom-only manual anchor/return arm");
-        // Gate applies to ordinary wheel too, but explicit modal commands are permitted.
-        QuarantineWorld(); var gated=_camera.State;
-        _Input(new InputEventMouseButton{ButtonIndex=MouseButton.WheelUp,Pressed=true,Position=WorldViewport-Vector2.One});
-        Require(_camera.State==gated,"wheel bypassed quarantine");
-        Rearm(); SetPreferredWorldZoom(.9);
-        _Input(new InputEventMouseButton{ButtonIndex=MouseButton.WheelUp,Pressed=true,Position=WorldViewport-Vector2.One});
-        Require(_camera.State.Zoom==1,"wheel crossing exact1");
-        _Input(new InputEventMouseButton{ButtonIndex=MouseButton.WheelUp,Pressed=true,Position=WorldViewport-Vector2.One});
-        Require(_camera.State.Zoom==1.25,"wheel leaves1");
-        SetPreferredWorldZoom(1.1);
-        _Input(new InputEventKey{Keycode=Key.Minus,Pressed=true}); Require(_camera.State.Zoom==1,"minus crossing1");
-        _Input(new InputEventKey{Keycode=Key.Minus,Pressed=true}); Require(_camera.State.Zoom==.8,"minus leaves1");
+        // ARC-INPUT-001: the world mouse/keyboard route has no zoom or drag. Wheel,
+        // +/- and LMB drag leave camera, zoom and Follow unchanged even with an
+        // open gate; exact zoom is the palette's job (below).
+        Rearm(); SetPreferredWorldZoom(.9); var free=_camera.State; var freeFollow=_camera.FollowState;
+        foreach (var button in new[]{MouseButton.WheelUp,MouseButton.WheelDown})
+            _Input(new InputEventMouseButton{ButtonIndex=button,Pressed=true,Position=WorldViewport-Vector2.One});
+        _Input(new InputEventKey{Keycode=Key.Plus,Pressed=true}); _Input(new InputEventKey{Keycode=Key.Minus,Pressed=true});
+        _Input(new InputEventKey{Keycode=Key.Equal,Pressed=true,ShiftPressed=true});
+        _Input(new InputEventMouseButton{ButtonIndex=MouseButton.Left,Pressed=true,Position=WorldViewport/2});
+        _Input(new InputEventMouseMotion{Position=WorldViewport/2+new Vector2(40,20),Relative=new(40,20)});
+        Frame(pad);
+        _Input(new InputEventMouseButton{ButtonIndex=MouseButton.Left,Pressed=false,Position=WorldViewport/2+new Vector2(40,20)});
+        Frame(pad);
+        Require(_camera.State==free&&_camera.FollowState==freeFollow&&_worldPreferredZoom==.9,"world wheel/+/-/LMB drag changed camera");
         SetPreferredWorldZoom(3); FitWorldView(); Require(_worldPreferredZoom==3&&_worldZoomStore.Load()==3&&_worldFitView,"Fit preference isolation");
         ResetWorldScene(); WorldSettleForSelfTest(pad); Require(_camera.State.Zoom==3&&_camera.FollowState.Mode==CameraMode.Follow,"R preference precedence");
         if(!WorldModal) ToggleWorldSettings();

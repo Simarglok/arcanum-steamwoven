@@ -240,7 +240,7 @@ public partial class TerrainViewerApp : Node
         if (IsWorldMode(mode))
         {
             _worldGate.Close(); _worldReducer.Quarantine();
-            _dragging = false; _worldDrag = default; _worldMenuAnalogDirection = 0;
+            _dragging = false; _worldMenuAnalogDirection = 0;
             _camera?.SafetyResetWorld();
         }
         _hud?.SetMode(mode);

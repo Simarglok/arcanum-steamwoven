@@ -8,12 +8,14 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-RENDER-007 build
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-INPUT-001 build, else ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
-(never timestamps or directory order) and launch it; a real run leaves the terrain
+(never timestamps or directory order) and launch it; `area` tries its tasks in the
+fixed order ARC-INPUT-001 (the same AREA build plus the [diagnostic palette](../input/diagnostic-palette.md)),
+then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
@@ -126,6 +128,17 @@ No ordinary input automation is added. After selecting the immutable candidate,
 are separate from smoke; require actual Idle/Walk observation and unchanged
 seal/signature outside the sealed app. Registration is still not acceptance,
 review, publication or owner merge.
+
+## Diagnostic palette candidate (ARC-INPUT-001)
+
+ARC-INPUT-001 uses the same closed terrain endpoint and `world-builds` root with the
+literal task `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001`. It keeps every ARC-RENDER-007
+gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003)
+and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
+and both `palette UI` viewport markers. Its manifest's ordinary mode is
+`crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
+an exact ARC-RENDER-007 or ARC-INPUT-001 v2 artifact and nothing broader. The
+owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 

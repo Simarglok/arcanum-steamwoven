@@ -82,7 +82,7 @@ def selected_root(conf: dict, registry: dict, tool: str) -> Path:
         raise ValueError("configure an explicit launch selection before launch")
     matches: list[Path] = []
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001") else None
     for root_id, root_text in roots.items():
         if not isinstance(root_id, str) or not isinstance(root_text, str):
             continue
@@ -109,10 +109,10 @@ def command_launch(args: argparse.Namespace) -> None:
     root = selected_root(conf, registry, tool)
     selection = conf.get("launchSelection", {}).get(tool, "")
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001") else None
     _, manifest, _ = manifests.resolve_current(root, tool, selected_task=selected_task)
-    if tool == "terrain" and args.mode == "crash-site-area" and (manifest.get("schema"), manifest.get("task")) != ("arcanum-build-manifest-v2", "ARC-RENDER-007"):
-        raise ValueError("crash-site-area requires an exact ARC-RENDER-007 v2 artifact")
+    if tool == "terrain" and args.mode == "crash-site-area" and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001")):
+        raise ValueError("crash-site-area requires an exact ARC-RENDER-007 or ARC-INPUT-001 v2 artifact")
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
     executable, argv = launch.argv_from_manifest(manifest)

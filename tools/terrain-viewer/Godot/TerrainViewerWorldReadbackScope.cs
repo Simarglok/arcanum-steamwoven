@@ -20,7 +20,7 @@ public partial class TerrainViewerApp
         var lifecycle = _worldLifecycleSession; var reset = _worldResetPending; var reload = _worldReloadPending;
         var scene = _readyDiagnosticPlan; var plan = _readyActorPlan; var input = _readyActorInput; var selected = _readyActor;
         var diagnostic = _worldGridDiagnostic; var focused = _worldFocused; var uiFocused = _worldUiFocused;
-        var drag = _worldDrag; var dragging = _dragging; var menuDirection = _worldMenuAnalogDirection;
+        var dragging = _dragging; var menuDirection = _worldMenuAnalogDirection;
         var camera = _camera!; var cameraPosition = camera.Camera.Position; var cameraZoom = camera.Camera.Zoom;
         var size = new Vector2I((int)WorldViewport.X, (int)WorldViewport.Y);
         var actorVisible = _canvas!.ActorVisibleForReadback; var staticVisible = _canvas.StaticVisibleForReadback;
@@ -32,10 +32,10 @@ public partial class TerrainViewerApp
         SetProcess(false); SetProcessInput(false); _worldFocusSimulationForSelfTest = true;
         try
         {
-            _worldActor = new(); _worldGridInput = new(); _worldAdapter = new(); _worldReducer = new(); _worldGate = new();
+            _worldActor = new(); _worldGridInput = new(); _worldAdapter = new() { WorldRoute = true }; _worldReducer = new(); _worldGate = new();
             _worldTestTime = Arcanum.Simulation.Movement.SimulationTime.At(0); _worldObservationTime = null;
             RetireWorldLifecycle(); _worldFocused = true; _worldUiFocused = false;
-            _worldDrag = default; _dragging = false; _worldMenuAnalogDirection = 0;
+            _dragging = false; _worldMenuAnalogDirection = 0;
             _worldPanel?.Hide(); GetViewport().GuiReleaseFocus();
             _worldActor.Configure(result.TraversalSnapshot!, _worldTestTime.Value);
             _camera = new TerrainCameraController(camera.Camera);
@@ -55,7 +55,7 @@ public partial class TerrainViewerApp
             _worldLifecycleSession = lifecycle; _worldResetPending = reset; _worldReloadPending = reload;
             _readyDiagnosticPlan = scene; _readyActorPlan = plan; _readyActorInput = input; _readyActor = selected;
             _worldGridDiagnostic = diagnostic; _worldFocused = focused; _worldUiFocused = uiFocused;
-            _worldDrag = drag; _dragging = dragging; _worldMenuAnalogDirection = menuDirection;
+            _dragging = dragging; _worldMenuAnalogDirection = menuDirection;
             _camera = camera; camera.Camera.Position = cameraPosition; camera.Camera.Zoom = cameraZoom;
             _canvas.SetActorVisibilityForReadback(actorVisible); _canvas.SetStaticVisibilityForReadback(staticVisible);
             _canvas.Publish(scene!, _cache);

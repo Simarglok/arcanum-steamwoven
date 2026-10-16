@@ -12,6 +12,8 @@ import sys
 
 TASKS = {"ARC-DEV-001": "builds", "ARC-WORLD-001": "world-builds", "ARC-GPAD-004": "world-builds", "ARC-RENDER-006": "world-builds", "ARC-WORLD-003": "world-builds"}
 TASKS["ARC-RENDER-007"] = "world-builds"
+TASKS["ARC-INPUT-001"] = "world-builds"
+AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001")
 GATES = {
     "locked-build": "locked-build.log", "source-headless": "source-headless.log",
     "source-graphical": "source-graphical.log", "export": "export.log",
@@ -44,15 +46,15 @@ def main() -> None:
     if task not in TASKS:
         raise SystemExit("Unsupported terrain export task")
     gates = dict(GATES)
-    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001"):
         gates.update({"focused-tests": "tests.log", "source-world-original": "source-world-original.log",
                       "exported-world-original": "exported-world-original.log", "source-world-persistence": "source-world-persistence.log",
                       "exported-world-persistence": "exported-world-persistence.log", "dual-hostfxr": "hostfxr.log"})
-    if task in ("ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-RENDER-006", "ARC-WORLD-003", *AREA_TASKS):
         gates.update({"human-metadata": "human-metadata.log", "source-human-original": "source-human-original.log", "exported-human-original": "exported-human-original.log"})
-    if task in ("ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-WORLD-003", *AREA_TASKS):
         gates.update({"source-grid-original": "source-grid-original.log", "exported-grid-original": "exported-grid-original.log"})
-    if task == "ARC-RENDER-007":
+    if task in AREA_TASKS:
         gates.update({f"{host}-{name}": f"{host}-{name}.log" for host in ("source", "exported")
                       for name in ("area-original", "area-grid", "area-seams", "area-nearest")})
     root_id = os.environ.get("ARCANUM_LOCAL_ROOT_ID")
@@ -77,21 +79,21 @@ def main() -> None:
     except (OSError, ValueError) as error:
         raise SystemExit(f"invalid export preflight evidence: {error}") from error
     expected_candidate_id = f"{root_id}:{task}:{head}"
-    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001"):
         for host in ("source", "exported"):
             for kind in ("original", "persistence"):
                 bound = json.loads((evidence / f"{host}-world-{kind}.log").read_text(encoding="utf-8"))
                 if (bound.get("schema"), bound.get("candidateCommit"), bound.get("host"), bound.get("kind"), bound.get("outcome")) != ("arcanum-world-validation-v1", head, host, kind, "PASS"):
                     raise SystemExit("WORLD gate evidence does not bind the candidate")
-    if task in ("ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-RENDER-006", "ARC-WORLD-003", *AREA_TASKS):
         from tools.local_dev.human_validation import validate_reports
-        validate_reports(evidence, head, "ARC-WORLD-003" if task == "ARC-RENDER-007" else task)
-    if task in ("ARC-WORLD-003", "ARC-RENDER-007"):
+        validate_reports(evidence, head, "ARC-WORLD-003" if task in AREA_TASKS else task)
+    if task in ("ARC-WORLD-003", *AREA_TASKS):
         from tools.local_dev.grid_export_gates import validate_reports as validate_gate_reports
         validate_gate_reports(evidence, head, task)
         from tools.local_dev.grid_validation import validate_reports as validate_grid_reports
         validate_grid_reports(evidence, head)
-    if task == "ARC-RENDER-007":
+    if task in AREA_TASKS:
         from tools.local_dev.area_validation import validate_reports as validate_area_reports
         validate_area_reports(evidence, head)
     if (not isinstance(preflight, dict) or preflight.get("schema") != "arcanum-export-preflight-v1"
@@ -107,12 +109,12 @@ def main() -> None:
         "candidate": {"baseCommit": git(candidate_root, "merge-base", "HEAD", "origin/main"), "commit": head,
                       "tree": git(candidate_root, "rev-parse", "HEAD^{tree}"), "branch": git(candidate_root, "branch", "--show-current")},
         "app": {"relativePath": "ArcanumTerrainViewer.app", "executableRelativePath": app.relative_to(build_root).as_posix(),
-                "ordinaryArgs": ["--mode", "crash-site-area"] if task == "ARC-RENDER-007" else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
+                "ordinaryArgs": ["--mode", "crash-site-area"] if task in AREA_TASKS else ["--mode", "world-diagnostic"] if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003") else []},
         "payloadInventory": payload_inventory, "evidence": evidence_inventory,
         "checks": [{"name": name, "outcome": "PASS", "evidenceRelativePath": f"evidence/{path}"} for name, path in gates.items()],
         "exportBudget": bound_budget(build_root, "terrain", expected_candidate_id, payload_bytes),
         "acceptance": "not-accepted",
-        "delivery": {"status": "verified-local-candidate; exact-head review pending", "originalInputModes": "PASS" if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007") else "NOT_VERIFIED unless separately configured", "ordinaryLaunch": "NOT_VERIFIED"},
+        "delivery": {"status": "verified-local-candidate; exact-head review pending", "originalInputModes": "PASS" if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001") else "NOT_VERIFIED unless separately configured", "ordinaryLaunch": "NOT_VERIFIED"},
     }
     (build_root / "manifest.json").write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 

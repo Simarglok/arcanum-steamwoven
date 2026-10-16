@@ -110,6 +110,23 @@ class GridReportTests(unittest.TestCase):
             bad=copy.deepcopy(good);change(bad)
             with self.assertRaises(ValueError):validate_report(bad,'a'*40,'source')
 
+    def test_original_world_keyboard_route_requires_stick_matrix_and_inert_keyboard(self):
+        good=self.sample()
+        good['screenCases']=[row for row in good['screenCases'] if row['device']=='stick']
+        good['keyboardRoute']='original-world'
+        good['keyboardInert']=[dict(viewport=v,sector=s,events=0,cell=[7,2],phase='Settled')
+            for v in ([1280,800],[1440,900],[800,600]) for s in range(8)]
+        validate_report(good,'a'*40,'source')
+        changes=[lambda r:r.pop('keyboardInert'),lambda r:r['keyboardInert'][3].__setitem__('events',2),
+            lambda r:r['keyboardInert'].pop(),lambda r:r.__setitem__('keyboardRoute','lab'),
+            lambda r:r['screenCases'].append(dict(r['screenCases'][0],device='keyboard')),
+            lambda r:r['screenCases'][0].__setitem__('device','keyboard')]
+        for change in changes:
+            bad=copy.deepcopy(good);change(bad)
+            with self.assertRaises(ValueError):validate_report(bad,'a'*40,'source')
+        legacy=self.sample(); legacy['keyboardInert']=good['keyboardInert']
+        with self.assertRaises(ValueError):validate_report(legacy,'a'*40,'source')
+
     def test_literal_report_and_each_binding_rejects_changed_or_missing(self):
         good=self.sample(); validate_report(good,'a'*40,'source')
         changes={'task':'ARC-RENDER-006','candidateCommit':'c'*40,'host':'exported','kind':'human',

@@ -4,7 +4,7 @@ import json
 import re
 from pathlib import Path
 from . import config
-from .screen_grid_validation import validate_screen_cases
+from .screen_grid_validation import validate_keyboard_inert, validate_screen_cases
 
 VIEWPORTS = [[1280, 800], [1440, 900], [800, 600]]
 START = 'StepStarted@1/1:6,1>7,1|ActionChanged@1/1:6,1>7,1'
@@ -86,7 +86,16 @@ def validate_report(report: object, head: str, host: str) -> None:
                     'MaterialIntentKey': dict(Time=time, Sequence=index * 4 + 1), 'EvidenceRevision': 0,
                 }.items()):
                     raise ValueError('grid runtime-generated exact key is incomplete or stale')
-    validate_screen_cases(report.get('screenCases'), digest, epoch)
+    # Reports from ARC-INPUT-001 onwards carry the original WORLD keyboard route:
+    # the stick drives the screen matrix and the keyboard sector chords are inert.
+    # Earlier reports (no route field) keep their keyboard+stick matrix.
+    if report.get('keyboardRoute') == 'original-world':
+        validate_screen_cases(report.get('screenCases'), digest, epoch, devices=('stick',))
+        validate_keyboard_inert(report.get('keyboardInert'))
+    elif 'keyboardRoute' in report or 'keyboardInert' in report:
+        raise ValueError('grid keyboard route binding is invalid')
+    else:
+        validate_screen_cases(report.get('screenCases'), digest, epoch)
 
 
 def validate_reports(evidence: Path, head: str) -> None:

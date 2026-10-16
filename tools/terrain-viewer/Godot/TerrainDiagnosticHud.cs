@@ -61,7 +61,7 @@ public partial class TerrainDiagnosticHud : CanvasLayer
 
         var contents = new VBoxContainer { Name = "DiagnosticContents" };
         _panel.AddChild(contents);
-        _settings = new Button { Text = "Input settings (F1 / Start)", Visible = false };
+        _settings = new Button { Text = "Diagnostic palette (Ctrl+Shift+F9 / Start)", Visible = false };
         _settings.Pressed += () => SettingsRequested?.Invoke();
         contents.AddChild(_settings);
         _sticky = new Label

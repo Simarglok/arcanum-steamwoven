@@ -95,6 +95,25 @@ class Render007DevTests(unittest.TestCase):
         self.assertIn("ARC-RENDER-007", cli["parser"]().parse_args(
             ["configure", "select-launch", "--tool", "terrain", "--candidate", "root:ARC-RENDER-007:" + "a" * 40]).candidate)
 
+    def test_input001_binds_literally_to_the_area_gate_set(self):
+        # ARC-INPUT-001 (diagnostic palette) ships on the whole-core AREA build with
+        # every ARC-RENDER-007 gate; nothing broader than the literal task is admitted.
+        self.assertIn("ARC-INPUT-001", manifests.SUPPORTED_TOOLS["terrain"])
+        self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for("ARC-INPUT-001"))
+        self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES["ARC-INPUT-001"])
+        for other in ("ARC-INPUT-002", "ARC-RENDER-008", "ARC-INPUT"):
+            self.assertNotIn(other, manifests.SUPPORTED_TOOLS["terrain"])
+            with self.assertRaises(ValueError):
+                grid_export_gates.gates_for(other)
+        tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
+        self.assertEqual("world-builds", writer["TASKS"]["ARC-INPUT-001"])
+        self.assertIn("ARC-INPUT-001", writer["AREA_TASKS"])
+        with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
+            with self.assertRaises(ValueError):
+                grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-INPUT-001")
+
 
 if __name__ == "__main__":
     unittest.main()
