@@ -58,7 +58,12 @@ public partial class TerrainViewerApp
         var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap);
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         BindAreaInventory(result);
-        if (mapMode) { _areaUseStatus = $"map {arguments.AreaMapName}: transitions not wired (ARC-RES-035 / M3)"; return; }
+        if (mapMode)
+        {
+            _areaUseStatus = $"map {arguments.AreaMapName}: transitions not wired (ARC-RES-035 / M3)"
+                + (area.UnlitLightsReason is { } lights ? $"; stationary lights not drawn ({lights})" : "");
+            return;
+        }
         if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
         // The cave draws a visiting companion from its own frame repository: the companions' T0 frames are added once.
         _caveLoad = _companionTemplates.Count == 0 ? cave

@@ -19,6 +19,8 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
     public IReadOnlyList<AreaWallPiece> Walls { get; init; } = Array.Empty<AreaWallPiece>();
     /// <summary>ARC-RENDER-017: why a whole map is drawn unlit (its lighting sources were not admitted); null otherwise.</summary>
     public LightingFailure? UnlitReason { get; init; }
+    /// <summary>ARC-RENDER-017: why a lit whole map has no stationary lights; null otherwise.</summary>
+    public LightingFailure? UnlitLightsReason { get; init; }
 }
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>

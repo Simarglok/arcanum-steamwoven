@@ -27,6 +27,11 @@ public sealed class AreaMapChartTests
         Assert.AreEqual((-64, 127), (AreaChart.Exterior.MinimumCell, AreaChart.Exterior.MaximumCell));
         Assert.IsTrue(AreaChart.Exterior.Contains(new(-64, 127)) && !AreaChart.Exterior.Contains(new(-65, 0)));
         Assert.AreEqual(127, (chart with { Spawn = new(3, 4) }).MaximumCell);
+        // A map wider than 32 sectors is refused with a typed code, before any chart arithmetic.
+        Assert.AreEqual(32 * 64 - 1, AreaMapLoadOperation.Chart([new(1452, 1290), new(1452 + 31, 1290)], 1).MaximumCell);
+        Assert.AreEqual("AREA_MAP_CHART_TOO_LARGE", Assert.ThrowsExactly<InvalidOperationException>(
+            () => AreaMapLoadOperation.Chart([new(1452, 1290), new(1452, 1290 + 32)], 1)).Message);
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaMapLoadOperation.Chart([], 1));
         // A session on that chart accepts a start anywhere in it and refuses one outside.
         var steps = AreaOwnerFixture.Steps(snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 3);
         _ = new AreaGridSession(steps, SimulationTime.At(0), chart: chart, start: new(70, 70));

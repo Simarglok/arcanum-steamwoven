@@ -63,7 +63,8 @@ internal static class AreaMapLoadOperation
         if (checked(area.CpuRgbaBytes + actor.CheckedRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
         // Day/night and stationary lights when the map's sources admit them; otherwise the map is drawn unlit and
-        // says why. Every archive read outside the owner is re-verified against the snapshot's identities below.
+        // says why. The three viewer archives read outside the owner are re-verified against the snapshot's identities
+        // below; the step evidence's rule payloads from other stack sources are not (it is labelled structural).
         var lighting = AreaLightingReader.Read(module, snapshot, token);
         AreaLightingPlan? lit = null; var lightsFailure = LightingFailure.None;
         if (lighting.Failure == LightingFailure.None)
@@ -86,7 +87,8 @@ internal static class AreaMapLoadOperation
                 checked((int)(command.MapY - plan.Chart.OriginY)), command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
         var elapsed = Environment.TickCount64 - started;
-        area = area with { Lighting = lit, UnlitReason = lit is null ? lighting.Failure : null, FinalUsage = owner.Usage, ElapsedMilliseconds = elapsed };
+        area = area with { Lighting = lit, UnlitReason = lit is null ? lighting.Failure : null,
+            UnlitLightsReason = lit is not null && lightsFailure != LightingFailure.None ? lightsFailure : null, FinalUsage = owner.Usage, ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);
         token.ThrowIfCancellationRequested();
         return new(generation, terrain, new Dictionary<TerrainTextureKey, DecodedTerrainTexture>(), terrainCommands.Length,
@@ -96,19 +98,22 @@ internal static class AreaMapLoadOperation
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
     }
 
-    /// <summary>The whole map's chart: origin at the first core sector row and column, and a square cell range
-    /// covering every core sector (the largest installed interior spans 14 sectors, 896 cells).</summary>
     /// <summary>The widest chart (in sectors) a whole map may span; the largest installed interior spans 14.</summary>
     internal const int MaxChartSectors = 32;
 
-    internal static AreaChart Chart(AreaSnapshot snapshot)
+    /// <summary>The whole map's chart: origin at the first core sector row and column, and a square cell range
+    /// covering every core sector (the largest installed interior spans 14 sectors, 896 cells).</summary>
+    internal static AreaChart Chart(AreaSnapshot snapshot) =>
+        Chart(snapshot.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).Select(s => s.Coordinate), snapshot.RuntimeMap);
+
+    internal static AreaChart Chart(IEnumerable<AreaSectorCoordinate> coreSectors, int runtimeMap)
     {
-        var core = snapshot.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).Select(s => s.Coordinate).ToArray();
+        var core = coreSectors.ToArray();
         if (core.Length == 0) throw new InvalidOperationException("AREA_CHART_CORE_REQUIRED");
         long minX = core.Min(c => c.X), minY = core.Min(c => c.Y);
         var span = Math.Max(core.Max(c => c.X) - minX, core.Max(c => c.Y) - minY) + 1;
         if (span > MaxChartSectors) throw new InvalidOperationException("AREA_MAP_CHART_TOO_LARGE");
-        return new AreaChart(checked(minX * 64), checked(minY * 64), default, $"MAP_{snapshot.RuntimeMap}_WHOLE_MAP_CHART")
+        return new AreaChart(checked(minX * 64), checked(minY * 64), default, $"MAP_{runtimeMap}_WHOLE_MAP_CHART")
             { MinimumCell = 0, MaximumCell = checked((int)(span * 64 - 1)) };
     }
 
@@ -137,14 +142,14 @@ internal static class AreaMapLoadOperation
         return false;
     }
 
-    // Exactly one stack source, and the viewer argument names it (full paths, ordinal: no case folding or symlink
-    // resolution, so a differently spelled path is refused, never guessed).
     private static bool Open(AreaStepSnapshot steps, AreaStepCell from, AreaStepCell to, int direction)
     {
         var step = steps.Assess(steps.Request(from, to, (CardinalTraversalDirection)direction));
         return step.Coverage == CardinalTraversalCoverage.Supported && step.Disposition == CardinalTraversalDisposition.Open;
     }
 
+    // Exactly one stack source, and the viewer argument names it (full paths, ordinal: no case folding or symlink
+    // resolution, so a differently spelled path is refused, never guessed).
     private static void RequireSame(IEnumerable<string> expected, string actual)
     {
         var sources = expected.Take(2).ToArray();
