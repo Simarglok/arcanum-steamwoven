@@ -216,7 +216,8 @@ Combat core slices 1–4 of [ARC-RES-030](combat-core-evidence.md#proposed-imple
 mode), the [reaction owner](npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
 (slices 1–2), the [companion follow slices](companion-follow-evidence.md) of
 ARC-RES-024 (no code allocated yet) and, for slice I8, the magic/tech domain
-(FR-MAGIC-001..006). The research stages need none of these; slices I1–I7
+(FR-MAGIC-001..006; what I8 needs from the magic core is listed in
+[ARC-RES-043](magic-core-evidence.md#what-ai-slice-i8-needs-from-this-domain)). The research stages need none of these; slices I1–I7
 need only the first two.
 
 ### Research stages (source reading, one document each)
@@ -310,7 +311,9 @@ source behaviour, chosen behaviour, reason and the switch name. Until then
 P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-ce-anomalies-found-by-this-reading)
 are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
-the same rule when combat slice 2 settles them.
+the same rule when combat slice 2 settles them, as do the magic-core anomalies
+MG1..MG18 of [ARC-RES-043](magic-core-evidence.md#ce-anomalies-recorded-not-adopted)
+when the magic slices settle them.
 
 | Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
 | --- | --- | --- | --- | --- |
