@@ -23,6 +23,10 @@ public partial class TerrainViewerApp
     private IGridSession? _worldRouteSession;
     private string _worldRouteDiagnostic = "no click yet";
     private string _worldRouteClick = "none";
+    // ARC-WORLD-016: a route step denied by a live companion is planned again a few times for the same goal.
+    private bool _worldActorDenied;
+    private (CellCoord? Goal, int Count) _worldActorRetries;
+    private const int ActorDenialRetries = 8;
     private bool _worldResetPending;
     private bool _worldReloadPending;
     private IGridSession? _worldLifecycleSession;
@@ -472,6 +476,7 @@ public partial class TerrainViewerApp
             if (!drive.Completed) throw new InvalidOperationException("GRID_" + drive.FailureCode);
         }
         _worldGridInput.PublishedThrough(frontier);
+        RetryActorDenial(route, frontier);
         if (route is not null) _worldRouteDiagnostic = DescribeWorldRoute(route);
         DriveAreaCompanions(session, frontier);
         PublishWorldSelection();
@@ -498,15 +503,28 @@ public partial class TerrainViewerApp
             }
         }
     }
+    /// <summary>ARC-WORLD-016: the planner sees a companion where it stood when the route was planned; when it then steps
+    /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).</summary>
+    private void RetryActorDenial(RouteFollower? route, SimulationTime frontier)
+    {
+        var denied = _worldActorDenied; _worldActorDenied = false;
+        if (!denied || route is not { Status: RouteFollowStatus.Stopped, StopReason: "ROUTE_STEP_DENIED", Target: { } goal }) return;
+        var count = _worldActorRetries.Goal == goal ? _worldActorRetries.Count : 0;
+        if (count >= ActorDenialRetries) return;
+        _worldActorRetries = (goal, count + 1);
+        route.SetTarget(goal, frontier, route.Range);
+        GD.Print($"ARC-WORLD-016 route replanned around a companion target={goal} retry={count + 1}");
+    }
     private Action<GridAdvance>? _worldAdvanceObserverForSelfTest;
     private void PublishWorldAdvance(IGridSession session, GridAdvance advance)
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
+            _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
             var assessment = evidence.Assessment;
             _worldLastStepAttempt = $"({evidence.Key.From.X},{evidence.Key.From.Y})->({evidence.Key.To.X},{evidence.Key.To.Y}) {evidence.Key.Direction} {assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} epoch={session.EvidenceEpoch}";
-            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
+            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode}{(evidence.Live is { } live ? $" live {live.Coverage}/{live.Disposition} {live.ReasonCode}" : "")} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
             // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
             GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
                 evidence.Key, coverage=assessment.Coverage.ToString(), disposition=assessment.Disposition?.ToString(),

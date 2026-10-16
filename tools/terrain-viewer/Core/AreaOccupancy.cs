@@ -6,9 +6,10 @@ using Arcanum.Simulation.Navigation;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
-/// Live actors over the T0 step evidence (ARC-WORLD-016): <see cref="Moved"/> are T0 records that no longer stand on
-/// their serialized cell (a companion that walks), <see cref="Occupied"/> the chart cells other live actors hold for the
-/// mover (committed cell and the cell of a started step). Immutable; the host builds one per assessment.
+/// Live actors over the T0 step evidence (ARC-WORLD-016): <see cref="Moved"/> are T0 records the T0 evidence no longer
+/// speaks for (every companion's, wherever it stands: its live cell is in <see cref="Occupied"/> instead),
+/// <see cref="Occupied"/> the chart cells other live actors hold for the mover (committed cell and the other cell of a
+/// started step). Immutable.
 /// </summary>
 public sealed class AreaOccupancy
 {

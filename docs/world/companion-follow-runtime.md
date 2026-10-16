@@ -41,7 +41,9 @@ per frame and then `Drive` to the same frontier:
 - **Unreachable:** a goal that ends without arriving (`ROUTE_NOT_FOUND`, a denied step) is not planned again until
   the follower or the leader stands on another cell, so a closed-off leader costs one plan, not one per frame.
 - **Jump:** beyond 30 cells the update returns the leader's cell; the host stands the follower settled there. On
-  the shared cell the next decision steps it to the first Open neighbour in direction order (C10).
+  the shared cell the next decision steps it to the first Open neighbour in direction order (C10). That choice is
+  planned without the leader; if the leader is stepping into that neighbour the step is denied and the next frame
+  tries again (transient, no memory).
 
 ## Live actors over T0 evidence (Terrain Viewer Core)
 
@@ -85,7 +87,11 @@ the chart cannot stand is skipped and reported, not guessed.
   (AI row 5 −1000/2001/2001/30, level 1, alignment 1; the diagnostic PC). His `JO 0` joins the session party, `WA`
   and `UW 0 518` run, and node 385 (his follower entry) is no longer a frontier. Other speakers keep the diagnostic
   `follow.pc` key. A refused JO/UW shows `follow refused: <reason>` after the dialog closes.
-- Talk reach, walk-to-talk and the HUD prompt use where the companion stands now.
+- The hover/click pick (`AreaHoverIndex.Pick(…, moving)`), talk reach, walk-to-talk, the hover action and the HUD
+  prompt use where the companion is drawn and stands now; nothing is picked on his empty T0 cell.
+- The PC's click route is planned around the companions as they stand at planning time. When one then steps into it
+  and the step is denied by the live overlay (`DESTINATION_ACTOR_OCCUPIED`, `SHOULDER_ACTOR_OCCUPIED`), the same goal
+  is planned again, at most 8 times per goal.
 - HUD: `companion script 1324 <standing> at (x,y) <phase> follow=<action> route=<status> jumps=<n>`; the log prints
   `ARC-WORLD-016 companion …` step lines.
 

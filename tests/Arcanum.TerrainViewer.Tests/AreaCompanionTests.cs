@@ -140,6 +140,12 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(((int)AreaGridSession.ChartOriginX + cell.X, (int)AreaGridSession.ChartOriginY + 1), (drawn.MapX, drawn.MapY));
         Assert.AreEqual((t0.Frame, t0.Visual, t0.Destination.Width), (drawn.Frame, drawn.Visual, drawn.Destination.Width));
         Assert.AreEqual((f.Speaker.WorldX + cell.X - 5, f.Speaker.WorldY), group.WorldCell(f.Speaker));
+        // The hover/click pick sees it where it is drawn, not on its T0 cell.
+        var hover = new AreaHoverIndex(f.Area.Objects, plan.Commands, null);
+        bool Under(AreaDrawCommand c, AreaDrawCommand at) => c.Destination == at.Destination;
+        Assert.AreEqual(f.Scenery, hover.Pick(c => Under(c, drawn), group.Commands(plan)));
+        Assert.IsNull(hover.Pick(c => Under(c, t0), group.Commands(plan)), "nothing is picked on the empty T0 cell");
+        Assert.AreEqual(f.Scenery, hover.Pick(c => Under(c, t0)), "without the moved bodies the T0 pick is unchanged");
 
         // The PC cannot walk into it; its T0 cell no longer blocks the PC.
         Assert.AreEqual(RouteStepVerdict.Blocked, new AreaRouteSource(f.Steps, occupancy: group.OccupancyForPc).Assess(new(cell.X + 1, 1), NeighborDirection.XMinus));

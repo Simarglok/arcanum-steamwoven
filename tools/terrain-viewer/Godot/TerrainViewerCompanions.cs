@@ -136,6 +136,13 @@ public partial class TerrainViewerApp
                 "his body is drawn on his new cell only: expected " + world + " drawn " + string.Join(",", _canvas.AreaVisibleCommands
                     .Where(c => c.Identity == companion.Key).Select(c => $"({c.MapX},{c.MapY}) dest {c.Destination.X},{c.Destination.Y}"))
                     + $" moving {AreaCompanionCommands()?.Count ?? -1} map {_areaCompanions?.Map.RuntimeMap} ready {_readyArea?.Snapshot.RuntimeMap} visible {_canvas.AreaVisibleCount}");
+            // He is picked where he is drawn: the hover names him and a left click there talks (his follower entry).
+            var drawn = _canvas.AreaVisibleCommands.First(c => c.Identity == companion.Key);
+            var point = PickedScreenPoint(drawn);
+            Require(point is not null, "the pick finds him on an opaque pixel of his drawn body");
+            AreaSmokeClick(point!.Value);
+            Require(ConversationOpen, "a click on his drawn body talks: " + _conversationNotice);
+            EndConversation();
             var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_FOLLOW_CAPTURE");
             if (!string.IsNullOrWhiteSpace(capture))
             {
@@ -168,6 +175,21 @@ public partial class TerrainViewerApp
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; _worldTestTime = testTime;
         }
+    }
+
+    /// <summary>A screen point outside the HUD where <paramref name="command"/> draws an opaque pixel and the production
+    /// pick answers its object, or null.</summary>
+    private Vector2? PickedScreenPoint(AreaDrawCommand command)
+    {
+        var transform = AreaDrawItem.RasterTransform(GetViewport()); var size = GetViewport().GetVisibleRect().Size;
+        var hud = _hud!.Rect;
+        for (var y = 0; y < (int)size.Y; y += 2)
+        for (var x = 0; x < (int)size.X; x += 2)
+        {
+            var point = new Vector2(x + .5f, y + .5f);
+            if (!hud.HasPoint(point) && AreaAlphaAt(command, _readyArea!.Frames, transform, x, y) != 0 && AreaObjectAtScreen(point) == command.Identity) return point;
+        }
+        return null;
     }
 
     /// <summary>A cell within <paramref name="range"/> of <paramref name="center"/> the PC can stand on (see <c>ApproachCell</c>).</summary>
