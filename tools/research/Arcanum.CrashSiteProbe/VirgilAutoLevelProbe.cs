@@ -12,10 +12,11 @@ namespace Arcanum.CrashSiteProbe;
 // can change, and which installed rules, effects and scripts could move his level
 // relative to the PC's. Independently authored from the pinned CE locators cited in
 // docs/research/virgil-auto-level.md; no CE code or structure is reused. No level-up
-// runtime, no purchase replay. Only numbers, booleans, engine rule tokens and SHA-256
+// runtime; ARC-RES-032 adds a research replay (VirgilLevelReplay.cs). Only numbers, booleans, engine rule tokens and SHA-256
 // digests leave the probe; MES text other than parsed rule tokens stays in memory.
 internal static partial class Program
 {
+    private const int AlHpPtsSlot = 26, AlHpAdjSlot = 27, AlFatiguePtsSlot = 42, AlFatigueAdjSlot = 43;
     private const int AlBasicSkillSlot = 39, AlTechSkillSlot = 40, AlSpellTechSlot = 41;
     private const int AlStatExperience = 18, AlStatUnspent = 21, AlStatMagickPoints = 22, AlStatTechPoints = 23;
     private const int AlStandardNpcScheme = 70, AlLevelMax = 51, AlMaxRuleBytes = 2000;
@@ -250,6 +251,8 @@ internal static partial class Program
         var framingFailures = new List<int>(); var shadowedScripts = 0; var scannedNumbers = new HashSet<int>();
         var adjusts = new List<object>(); var schemeSets = new List<object>(); var transforms = new SortedDictionary<int, int>(); var adjustByStat = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var attachedActions = attached.Select(a => a.Script).Distinct().ToDictionary(n => n, _ => 0);
+        var edgesByScript = new Dictionary<int, (IReadOnlyList<CaveScriptEdge> Edges, int Unresolved)>();
+        var actionsByScript = new Dictionary<int, List<AlAction>>(); var winnerBytes = new Dictionary<int, byte[]>();
         foreach (var name in scriptNames)
         {
             var number = ScriptNumberFromFile(name[4..])!.Value;
@@ -260,6 +263,9 @@ internal static partial class Program
             try { actions = AlActions(copies[0].Bytes, wanted); }
             catch (InvalidDataException) { framingFailures.Add(number); continue; }
             scannedNumbers.Add(number);
+            var census = CaveScriptCensus(copies[0].Bytes);
+            edgesByScript[number] = (census.Edges, census.Unresolved);
+            actionsByScript[number] = actions; winnerBytes[number] = copies[0].Bytes;
             if (attachedActions.ContainsKey(number)) attachedActions[number] += actions.Count;
             foreach (var a in actions)
             {
@@ -278,6 +284,128 @@ internal static partial class Program
             }
         }
 
+        // ARC-RES-032: the call-edge reach of Virgil's scripts, who attaches or calls the
+        // set-scheme scripts, and the numeric lines of the set-scheme and adjust-stat scripts.
+        var (reached, reachUnresolved, reachMissing) = AlReach(attached.Select(a => a.Script), n => edgesByScript.TryGetValue(n, out var c) ? c : null);
+        var reach = new
+        {
+            roots = attached.Select(a => a.Script).Distinct().Order().ToArray(), reached = reached.ToArray(), missing = reachMissing.ToArray(), unresolved_edges = reachUnresolved,
+            reached_actions = reached.Select(n => new { script = n, transform = actionsByScript[n].Count(a => a.Type == AlTransformAction),
+                adjust_stat = actionsByScript[n].Count(a => a.Type == AlAdjustStatAction), set_scheme = actionsByScript[n].Count(a => a.Type == AlSetSchemeAction) })
+                .Where(x => x.transform + x.adjust_stat + x.set_scheme > 0).ToArray(),
+        };
+        var schemeScripts = actionsByScript.Where(p => p.Value.Any(a => a.Type == AlSetSchemeAction)).Select(p => p.Key).Order().ToArray();
+        var callers = schemeScripts.Select(target => new
+        {
+            script = target, crash_site_attachments = AttachmentsOf(target),
+            callers = edgesByScript.Where(p => p.Value.Edges.Any(e => e.Target == target)).Select(p => new { script = p.Key,
+                actions = p.Value.Edges.Where(e => e.Target == target).Select(e => e.Action).ToArray(), crash_site_attachments = AttachmentsOf(p.Key) }).ToArray(),
+            lines = AlDecode(winnerBytes[target]),
+        }).ToArray();
+        // Global flags the set-scheme scripts test, and who writes them: script set/clear-flag
+        // actions and flag assignments with a literal flag, and DLG GF actions.
+        var flagsTested = schemeScripts.SelectMany(n => AlActionsAndConditions(winnerBytes[n]).Where(x => x.Condition).SelectMany(x => Enumerable.Range(0, 2).Where(k => x.Kinds[k] == AlFlagOperand).Select(k => x.Values[k]))).Distinct().Order().ToArray();
+        var flagWriters = new List<object>();
+        foreach (var (number, bytes) in winnerBytes.OrderBy(p => p.Key))
+            foreach (var x in AlActionsAndConditions(bytes).Where(x => !x.Condition))
+            {
+                if (x.Type is AlSetFlagAction or AlClearFlagAction && x.Kinds[0] == AlNumberOperand && flagsTested.Contains(x.Values[0]))
+                    flagWriters.Add(new { source = "script", number, line = x.Line, action = x.Type, flag = x.Values[0], value = x.Type == AlSetFlagAction ? 1 : 0 });
+                else if (x.Type == AlAssignAction && x.Kinds[0] == AlFlagOperand && flagsTested.Contains(x.Values[0]))
+                    flagWriters.Add(new { source = "script", number, line = x.Line, action = x.Type, flag = x.Values[0], value = x.Kinds[1] == AlNumberOperand ? x.Values[1] : (int?)null });
+            }
+        var dialogNames = new SortedSet<string>(StringComparer.Ordinal);
+        foreach (var path in archivePaths)
+        {
+            using var archive = DatArchive.Open(path, datOptions);
+            foreach (var entry in archive.Entries) if (InvDialogKey(entry) is not null) dialogNames.Add(ClosureEntryName(entry));
+        }
+        var unreadableDialogs = 0;
+        foreach (var name in dialogNames)
+        {
+            var copies = Candidates(name);
+            if (copies.Length == 0) continue;
+            DlgDocument document;
+            try { document = DlgReader.Read(copies[0].Bytes); } catch (DlgException) { unreadableDialogs++; continue; }
+            foreach (var record in document.Records)
+            {
+                var bytes = record.Action.Bytes.ToArray();
+                foreach (var (code, after) in CcScanCodes(bytes))
+                    if (code == "GF" && CcAtoi(bytes.AsSpan(after)).Value is var flag && flagsTested.Contains(flag))
+                        flagWriters.Add(new { source = "dlg", number = InvDialogKeyFromName(name), line = record.Id, action = 0, flag, value = (int?)CcSecondOperand(bytes.AsSpan(after)).Value });
+            }
+        }
+        var setSchemeRules = schemeSets.Count == 0 ? [] : actionsByScript.SelectMany(p => p.Value).Where(a => a.Type == AlSetSchemeAction && a.Kinds[1] == AlNumberOperand)
+            .Select(a => a.Values[1]).Distinct().Order().Select(n => RuleRow(n, n < 50 ? userLevel : gameLevel)).ToArray();
+        var adjustScriptLines = actionsByScript.Where(p => attachedActions.ContainsKey(p.Key) && p.Value.Any(a => a.Type == AlAdjustStatAction))
+            .Select(p => new { script = p.Key, lines = AlDecode(winnerBytes[p.Key]) }).ToArray();
+
+        // ARC-RES-032: replay of the scheme over Virgil's T0 sheet while he follows a PC from level 1 to 50.
+        var effectTexts = effectTable.ToDictionary(p => p.Key, p => p.Value);
+        var virgilEffects = new List<AlChange>();
+        foreach (var effect in FieldOf(CcEffectsSlot) is { Presence: AreaPresence.Array } ef ? ef.Elements.OrderBy(x => x.Key).Select(x => unchecked((int)x.Words[0])) : [])
+        {
+            if (!effectTexts.TryGetValue(effect, out var text)) throw new InvalidDataException("AUTOLEVEL_REPLAY_EFFECT_MISSING");
+            var parsed = AlParseEffect(text);
+            if (!parsed.Complete) throw new InvalidDataException("AUTOLEVEL_REPLAY_EFFECT_" + parsed.Stop!.ToUpperInvariant());
+            virgilEffects.AddRange(parsed.Changes);
+        }
+        int[] Raw(int slot, int length, int mask)
+        {
+            var values = new int[length];
+            if (FieldOf(slot) is { Presence: AreaPresence.Array } f)
+                foreach (var x in f.Elements) { if (x.Key < 0 || x.Key >= length) continue; values[x.Key] = unchecked((int)x.Words[0]) & mask; }
+            return values;
+        }
+        int NumberOf(int slot) => FieldOf(slot) is { Presence: AreaPresence.Value, Number: { } n } ? checked((int)n) : throw new InvalidDataException("AUTOLEVEL_REPLAY_FIELD");
+        var spellMes = AlMes(spellCopies[0].Bytes);
+        var willpower = Enumerable.Range(0, 80).Select(id =>
+        {
+            // The willpower a spell needs: an "IQ:" value at the start of its second entry, else the default by rank (magictech.c 1301-1330, 5520-5530, 5650-5660).
+            if (spellMes.TryGetValue(1000 + 50 * id + 1, out var t) && t.TrimStart() is var u && u.StartsWith("IQ:", StringComparison.Ordinal))
+                return CcAtoi(Encoding.Latin1.GetBytes(u[3..].Split(',')[0])).Value;
+            return AlSpellDefaultWillpower[id % 5];
+        }).ToArray();
+        var overrides = Enumerable.Range(0, 80).Count(id => willpower[id] != AlSpellDefaultWillpower[id % 5]);
+        if (Stat(27) != 0) throw new InvalidDataException("AUTOLEVEL_REPLAY_NOT_HUMAN");
+        var sheet = new AlSheet
+        {
+            Stats = Enumerable.Range(0, 28).Select(i => Stat(i) ?? 0).ToArray(),
+            BasicPoints = Raw(AlBasicSkillSlot, 12, 63), TechPoints = Raw(AlTechSkillSlot, 4, 63), Colleges = Raw(AlSpellTechSlot, 16, -1),
+            HpPts = NumberOf(AlHpPtsSlot), HpAdj = NumberOf(AlHpAdjSlot), FatiguePts = NumberOf(AlFatiguePtsSlot), FatigueAdj = NumberOf(AlFatigueAdjSlot),
+            Effects = virgilEffects, SpellWillpower = willpower,
+        };
+        var trainingBits = Raw(AlBasicSkillSlot, 12, ~63).Concat(Raw(AlTechSkillSlot, 4, ~63)).Any(v => v != 0);
+        var standardSteps = AlParseRule(AlMes(gameLevel[0].Bytes)[AlStandardNpcScheme]).Steps;
+        var schemeCopies = (scheme < 50 ? userLevel : gameLevel).Select(c => (c.Source, Mes: AlMes(c.Bytes))).Where(c => c.Mes.ContainsKey(scheme)).ToArray();
+        object Snapshot(AlSheet x) => new
+        {
+            stats = new { st = x.StatLevel(0), dx = x.StatLevel(1), cn = x.StatLevel(2), @in = x.StatLevel(4), pe = x.StatLevel(5), wp = x.StatLevel(6),
+                base_in = x.Stats[4], base_st = x.Stats[0] },
+            dodge = x.BasicLevel(1), melee = x.BasicLevel(2), heal = x.BasicLevel(10), picklock = x.TechLevel(2), necro_good = x.Colleges[12],
+            hp_max = x.HpMax, fatigue_max = x.FatigueMax,
+        };
+        var replays = schemeCopies.Select(c =>
+        {
+            var steps = AlParseRule(c.Mes[scheme]).Steps;
+            var rows = AlReplay(sheet, steps, standardSteps, AlLevelMax - 1);
+            return new
+            {
+                source = c.Source,
+                levels = rows.Select(r => new { level = r.Level, granted = r.PointsGranted, unspent_before = r.UnspentBefore,
+                    scheme_completed = r.Scheme.Completed, stopped_at = r.Scheme.StoppedAt, stopped_token = r.Scheme.StoppedAt is { } k ? $"{steps[k].Token} {steps[k].Target}" : null,
+                    standard_completed = r.Standard?.Completed, standard_stopped_at = r.Standard?.StoppedAt, unspent_after = r.UnspentAfter, wasted_total = r.WastedTotal, sheet = Snapshot(r.After) }).ToArray(),
+            };
+        }).ToArray();
+        var replay = new
+        {
+            model = "follower matching the PC one level at a time from T0; CE-as-read purchase helpers",
+            effects = virgilEffects.Select(c => new { category = c.Category, index = c.Index, op = c.Op.ToString(), param = c.Param }).ToArray(),
+            hp_pts = sheet.HpPts, hp_adj = sheet.HpAdj, fatigue_pts = sheet.FatiguePts, fatigue_adj = sheet.FatigueAdj, training_bits_present = trainingBits,
+            spell_willpower_overrides = overrides, necro_good_willpower = Enumerable.Range(60, 5).Select(id => willpower[id]).ToArray(),
+            t0 = Snapshot(sheet), copies = replays,
+        };
+
         var afterRun = archivePaths.Select(InputFingerprint.Create).ToArray();
         if (!before.SequenceEqual(afterRun) || InputFingerprint.Create(mobilePath) != mobileBefore) throw new InvalidDataException("AUTOLEVEL_INPUT_CHANGED");
         var report = new
@@ -288,6 +416,7 @@ internal static partial class Program
             virgil = new
             {
                 source_index = virgil.Key.SourceIndex, prototype = virgil.PrototypeNumber,
+                name = FieldOf(InvNameSlot) is { Presence: AreaPresence.Value, Number: { } nm } ? nm : (long?)null, description = FieldOf(InvDescriptionSlot)?.Number,
                 auto_level_scheme = new { value = scheme, origin = schemeField!.Origin.ToString() },
                 stat_origin = statField.Origin.ToString(),
                 level = Stat(CcStatLevel), experience_points = Stat(AlStatExperience), unspent_points = Stat(AlStatUnspent),
@@ -313,7 +442,10 @@ internal static partial class Program
                 names = scriptNames.Count, scanned = scannedNumbers.Count, shadowed_by_precedence = shadowedScripts, framing_failures = framingFailures,
                 adjust_stat_by_literal_stat = adjustByStat, adjust_stat_actions = adjusts, set_scheme_actions = schemeSets,
                 transform_into_prototype = new { actions = transforms.Values.Sum(), by_script = transforms.Select(t => new { script = t.Key, actions = t.Value }).ToArray() },
+                virgil_reach = reach, set_scheme_scripts = callers, attached_adjust_stat_scripts = adjustScriptLines,
+                flags_tested_by_set_scheme_scripts = flagsTested, flag_writers = flagWriters, dialogs_scanned = dialogNames.Count, dialogs_unreadable = unreadableDialogs, set_scheme_rules = setSchemeRules,
             },
+            replay,
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
@@ -364,6 +496,7 @@ internal static partial class Program
         Check(found[1] is { Line: 1, Branch: "false", Type: AlSetSchemeAction } && found[1].Kinds[1] == AlNumberOperand && found[1].Values[1] == 91, "set-scheme scan");
         var torn = false; try { AlActions(bytes.AsSpan(0, bytes.Length - 1), new HashSet<int>()); } catch (InvalidDataException) { torn = true; }
         Check(torn, "torn script refused");
+        VirgilLevelReplaySelfTest();
         Console.WriteLine("virgil-auto-level self-test: PASS (rule grammar, bonus points, follower level and gap invariant, action scan)");
     }
 }
