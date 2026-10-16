@@ -77,6 +77,9 @@ void Observe(MovementResult result);
 RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime, IReadOnlyList<InputBatch>, MovementResult> advance);
 ```
 
+- `SetTarget(target, at, range)`: the goal is reached when the actor settles within `range` Chebyshev cells of it
+  (0, the default, is the goal cell; a companion follow goal uses its follow range, ARC-WORLD-016,
+  [companion follow](companion-follow-runtime.md)). The same goal with the same range is kept.
 - One click sets a goal; release has no meaning here (KM-03). The actor walks to the
   goal through `Segment`s, planning again from the cell it will stand on after each
   segment, so a goal farther than eight steps is reached in several segments
@@ -192,7 +195,8 @@ runtime receives therefore share one Data verdict.
 
 No hover cursor or route preview, no physical mouse check (synthetic and local
 software checks only). No running,
-NPC/object goals, doors, windows, traps, followers, other actors, state after T0,
+NPC/object goals, doors, windows, traps or state after T0 other than the live PC and companions of
+[ARC-WORLD-016](companion-follow-runtime.md#live-actors-over-t0-evidence-terrain-viewer-core),
 movement speed or original path choice. Unknown or unsupported evidence is
 reported, not explored. A target more than 32 cells away on an axis is refused,
 not approached.
