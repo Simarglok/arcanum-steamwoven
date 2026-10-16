@@ -9,16 +9,17 @@ namespace Arcanum.TerrainViewer.Core;
 /// <see cref="AreaStepSnapshot.Assess"/> the session admits steps with, so a planned Open step is the step the runtime
 /// receives. Only Supported Open is Open; Unknown and Unsupported (core edge) stay distinct from Blocked.
 /// </summary>
-public sealed class AreaRouteSource(AreaStepSnapshot snapshot) : IRouteStepSource
+public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null) : IRouteStepSource
 {
     public AreaStepSnapshot Snapshot { get; } = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+    public AreaChart Chart { get; } = chart ?? AreaChart.Exterior;
 
-    public bool Contains(CellCoord cell) => Snapshot.IsAdmitted(AreaGridSession.Cell(cell));
+    public bool Contains(CellCoord cell) => Snapshot.IsAdmitted(Chart.ToWorld(cell));
 
     public RouteStepVerdict Assess(CellCoord from, NeighborDirection direction)
     {
         var to = RoutePlanner.Neighbor(from, direction);
-        var assessment = Snapshot.Assess(Snapshot.Request(AreaGridSession.Cell(from), AreaGridSession.Cell(to), GridReplay.MapDirection(direction)));
+        var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
         return assessment.Coverage switch
         {
             CardinalTraversalCoverage.Supported => assessment.Disposition == CardinalTraversalDisposition.Open ? RouteStepVerdict.Open : RouteStepVerdict.Blocked,

@@ -14,6 +14,19 @@
       "arcanum.presentation": {
         "type": "Project"
       },
+      "arcanum.scripting": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Data": "[1.0.0, )"
+        }
+      },
+      "arcanum.session": {
+        "type": "Project",
+        "dependencies": {
+          "Arcanum.Scripting": "[1.0.0, )",
+          "Arcanum.Simulation": "[1.0.0, )"
+        }
+      },
       "arcanum.simulation": {
         "type": "Project"
       },

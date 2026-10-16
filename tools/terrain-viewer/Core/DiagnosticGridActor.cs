@@ -22,9 +22,10 @@ public sealed class DiagnosticGridActor
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
-    public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
+    public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null,
+        AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
-        var session = new AreaGridSession(snapshot, time, duration, limits);
+        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }

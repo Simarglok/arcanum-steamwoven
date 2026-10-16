@@ -178,7 +178,9 @@ which found no other literal teleport.
 
 ## Project policy for the implementation
 
-The following steps are separate PRs under ARC-WORLD-009, in this order:
+The following steps are separate PRs under ARC-WORLD-009, in this order (steps 1
+and 2: PR #87 and #88; steps 3 and 4: the viewer transfer, see the
+[terrain viewer](../rendering/terrain-viewer.md#crash-site-cave-and-return-arc-world-009)):
 
 1. **Cave loader** (Data). A second pinned area profile for catalogue 5078:
    one sector, 4,096 class-0 terrain cells, 125 walls, 13 scenery, the 39
@@ -205,6 +207,18 @@ The following steps are separate PRs under ARC-WORLD-009, in this order:
 
 Out of scope: cave NPC behaviour and combat, the story tile scripts (T9),
 cave lighting and sound, and the jump-point path.
+
+As delivered in the viewer (steps 3 and 4), two choices differ from the order
+above. Both maps are loaded and authenticated together before the area view is
+published and stay loaded; a transfer switches the active map, its step evidence
+and chart instead of unloading the source and opening the destination, so the
+flush/open order of T4 is not reproduced. An endpoint whose destination map is
+not loaded, or whose arrival cell is outside that map's admitted area or chart,
+is refused as unavailable at the use (`DESTINATION_MAP_NOT_LOADED`,
+`ARRIVAL_NOT_ADMITTED`, `ARRIVAL_OUTSIDE_CHART`) once the actor is within use
+range (a farther click walks there first); nothing is queued. Without the
+reverse record the exit object is not a trigger at all, and its click is an
+ordinary ground click. A viewer reset or reload drops a queued transfer.
 
 ## Reproduction
 

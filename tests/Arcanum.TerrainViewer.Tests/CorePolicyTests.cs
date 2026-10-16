@@ -9,6 +9,18 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class CorePolicyTests
 {
     [TestMethod]
+    public void Area_arguments_take_an_optional_cave_object_file_only_in_crash_site_area()
+    {
+        string[] area = ["--mode", "crash-site-area", "--module", "m", "--resource", "r", "--actor-resource", "a", "--prototypes", "p",
+            "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture"];
+        Assert.IsNull(TerrainViewerArguments.Parse(area).AreaCaveMobilePath);
+        Assert.AreEqual("c", TerrainViewerArguments.Parse([.. area, "--area-cave-mobile", "c"]).AreaCaveMobilePath);
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. area, "--area-cave-mobile", " "]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. area, "--area-cave-mobile", "c", "--area-cave-mobile", "d"]));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--area-cave-mobile", "c"]));
+    }
+
+    [TestMethod]
     public void Arguments_require_explicit_non_path_source_id_and_normalize_hashes()
     {
         var result = TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--expect-module-sha256", new string('A', 64)]);

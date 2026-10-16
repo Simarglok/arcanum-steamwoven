@@ -74,6 +74,33 @@ internal static class AreaLoadOperation
                 command.Phase == 0 ? TerrainKind.Tile : TerrainKind.Facade, command.MapX - AreaScenePlan.CameraOriginX,
                 command.MapY - AreaScenePlan.CameraOriginY, command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
+        // ARC-WORLD-009: the cave under its own pinned profile, its chart starting at the exterior endpoint's arrival.
+        AreaCaveLoad? cave = null;
+        if (arguments.AreaCaveMobilePath is { } caveMobile)
+        {
+            using var caveOwner = AreaOriginalValidator.OpenCaveFiles(arguments.ModulePath, arguments.ActorResourcePath!, arguments.ResourcePath,
+                caveMobile, arguments.PrototypePath!);
+            var entrance = snapshot.Endpoints.Single();
+            // One strict load: the chart is derived from the snapshot ReadArea publishes.
+            var caveArea = ReadArea(generation, caveOwner, token, loaded =>
+            {
+                var chart = AreaChart.For(loaded);
+                return chart with { Spawn = chart.ToChart(new(entrance.ArrivalX, entrance.ArrivalY)) };
+            });
+            var caveChart = caveArea.Plan.Chart;
+            var caveSteps = AreaStepInspector.ValidateOriginalData(caveArea.Snapshot, arguments.ModulePath, arguments.ResourcePath,
+                arguments.AreaEffectsPath!, arguments.AreaPatchPath!, caveMobile, generation);
+            if (caveSteps.EvidenceEpoch != generation || caveSteps.InputIdentity.AreaProfile != caveArea.Snapshot.Profile ||
+                caveSteps.InputIdentity.Kind != AreaStepInputKind.AuthenticatedOriginal || !caveSteps.IsAdmitted(caveChart.ToWorld(caveChart.Spawn)) ||
+                !caveArea.Snapshot.Inputs.All(i => caveSteps.InputIdentity.Sources.Any(s => s.Length == i.Length && s.Sha256 == i.Sha256)) ||
+                entrance.RuntimeDestination != caveArea.Snapshot.RuntimeMap || entrance.CatalogueDestination != caveArea.Snapshot.CatalogueMap)
+                throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Publication));
+            if (checked(retained + actor.CheckedRgbaBytes + caveArea.CpuRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
+                throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+            retained = checked(retained + caveArea.CpuRgbaBytes);
+            cave = new(caveArea, caveSteps, caveChart);
+            Console.WriteLine($"ARC-WORLD-009 load stage=cave visuals={caveArea.Snapshot.Visuals.Count} cells={caveSteps.AdmittedCells} walls={caveSteps.WallEdges}");
+        }
         var elapsed = Environment.TickCount64 - started;
         area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)), FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
             ManagedBytes = GC.GetTotalMemory(false), ProcessBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
@@ -84,7 +111,7 @@ internal static class AreaLoadOperation
             terrainCommands.Count(command => command.Phase == 0), terrainCommands.Count(command => command.Phase == 1), 0, 0,
             mf, rf, mf, rf, retained + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
-            ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256) };
+            ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256), Cave = cave };
     }
 
     // Bind the whole-core step evidence to this AREA generation. The source check is a
@@ -120,13 +147,14 @@ internal static class AreaLoadOperation
     // Complete strict AREA repository phase, shared by ordinary Execute and
     // structural coordinator tests. The caller owns and disposes the Data owner;
     // actor/traversal authentication stays in Execute, never in this test seam.
-    internal static AreaLoadResult ReadArea(long generation, AreaDataOwner owner, CancellationToken token)
+    // chartFor (ARC-WORLD-009) charts a map other than the exterior from its own strict snapshot.
+    internal static AreaLoadResult ReadArea(long generation, AreaDataOwner owner, CancellationToken token, Func<AreaSnapshot, AreaChart>? chartFor = null)
     {
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
         var snapshot = owner.LoadStrict(token);
         Console.WriteLine("ARC-RENDER-007 load stage=strict-snapshot");
-        var plan = AreaScenePlan.Create(snapshot);
+        var plan = AreaScenePlan.Create(snapshot, chartFor?.Invoke(snapshot));
         Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
         var initial = owner.Usage;
         var frames = CopyFrames(owner, snapshot, plan, token);

@@ -75,8 +75,29 @@ public sealed class DiagnosticGridSession : IGridSession
     }
 }
 
-/// <summary>Whole-core T0 admission adapter. Cells are base-sector-relative to the retained chart origin
-/// (92928,82560), so negative coordinates address the western/northern core sectors.</summary>
+/// <summary>One map's chart: the world cell at chart cell (0,0), the default start cell and the actor binding
+/// name. The exterior keeps the retained base-sector origin (92928,82560); another map uses the origin of its
+/// first core sector, so chart pixels stay small and chart cells stay inside the placement range.</summary>
+public sealed record AreaChart(long OriginX, long OriginY, CellCoord Spawn, string BindingName)
+{
+    public static AreaChart Exterior { get; } = new(AreaScenePlan.CameraOriginX, AreaScenePlan.CameraOriginY, new(6, 1), "CRASH_SITE_CORE_BASE_CHART_CENTERS");
+    public const string ExteriorProfile = "arc-data-009-complete-file-effective-source-v1";
+
+    /// <summary>The exterior chart for the exterior profile; otherwise the first core sector's origin with the given start.</summary>
+    public static AreaChart For(Arcanum.Data.Area.AreaSnapshot snapshot, CellCoord? spawn = null)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+        if (snapshot.Profile == ExteriorProfile) return Exterior;
+        var core = snapshot.Sectors.Where(s => s.Scope == Arcanum.Data.Area.AreaScope.Core && s.Present).OrderBy(s => s.Coordinate.Y).ThenBy(s => s.Coordinate.X).FirstOrDefault()
+            ?? throw new InvalidOperationException("AREA_CHART_CORE_REQUIRED");
+        return new(core.Coordinate.OriginX, core.Coordinate.OriginY, spawn ?? new(0, 0), $"MAP_{snapshot.RuntimeMap}_CORE_CHART_CENTERS");
+    }
+    public AreaStepCell ToWorld(CellCoord cell) => new(checked(OriginX + cell.X), checked(OriginY + cell.Y));
+    public CellCoord ToChart(AreaStepCell cell) => new(checked((int)(cell.X - OriginX)), checked((int)(cell.Y - OriginY)));
+}
+
+/// <summary>Whole-core T0 admission adapter. Cells are relative to the map's chart origin (the exterior keeps
+/// (92928,82560), so negative coordinates address the western/northern core sectors).</summary>
 public sealed class AreaGridSession : IGridSession
 {
     public const long ChartOriginX = AreaScenePlan.CameraOriginX, ChartOriginY = AreaScenePlan.CameraOriginY;
@@ -88,21 +109,28 @@ public sealed class AreaGridSession : IGridSession
     public StepDuration Duration { get; }
     public GridAdvance? LastAdvance { get; private set; }
     public long EvidenceEpoch => Snapshot.EvidenceEpoch;
+    public AreaChart Chart { get; }
 
-    public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null)
+    public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null,
+        AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
-        Snapshot = snapshot;
+        Snapshot = snapshot; Chart = chart ?? AreaChart.Exterior;
         Duration = duration ?? DiagnosticGridSession.LiveDuration;
         if (!Duration.IsValid) throw new ArgumentException("GRID_DURATION_INVALID");
-        if (!snapshot.IsAdmitted(Cell(Spawn))) throw new ArgumentException("GRID_SPAWN_NOT_ADMITTED");
-        var context = Snapshot.Assess(Snapshot.Request(Cell(Spawn), Cell(new(7, 1)), CardinalTraversalDirection.XPlus)).ContextFingerprint;
-        var binding = new ActorBinding("CRASH_SITE_CORE_BASE_CHART_CENTERS", "HUMAN_FIXED_DIAGNOSTIC",
+        var origin = start ?? Chart.Spawn;
+        if (origin.X is < MinimumChartCell or > MaximumChartCell || origin.Y is < MinimumChartCell or > MaximumChartCell || !snapshot.IsAdmitted(Chart.ToWorld(origin)))
+            throw new ArgumentException("GRID_SPAWN_NOT_ADMITTED");
+        // The context fingerprint is the declared context, the same for every request of this snapshot.
+        var probe = new CellCoord(origin.X + 1, origin.Y);
+        var context = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(origin), Chart.ToWorld(probe), CardinalTraversalDirection.XPlus)).ContextFingerprint;
+        var binding = new ActorBinding(Chart.BindingName, "HUMAN_FIXED_DIAGNOSTIC",
             context, "ISOLATED_PC_HUMAN_FIXED_V1", "KIND15_ART2_FLAGS0_GROUND_NONPOLYMORPH_REGISTRY0",
             snapshot.ProfileId, snapshot.EvidenceSha256, snapshot.EvidenceEpoch);
-        State = MovementState.CreateSettled(binding, Spawn, initialTime, NeighborDirection.XPlus, limits);
+        State = MovementState.CreateSettled(binding, origin, initialTime, facing, limits);
     }
 
+    /// <summary>The exterior chart's world cell. Use <see cref="AreaChart.ToWorld"/> for another map.</summary>
     public static AreaStepCell Cell(CellCoord cell) => new(ChartOriginX + cell.X, ChartOriginY + cell.Y);
 
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
@@ -110,7 +138,7 @@ public sealed class AreaGridSession : IGridSession
     {
         var (result, evidence) = GridReplay.Run(State, target, batches, key =>
         {
-            var assessment = Snapshot.Assess(Snapshot.Request(Cell(key.From), Cell(key.To), GridReplay.MapDirection(key.Direction)));
+            var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(key.From), Chart.ToWorld(key.To), GridReplay.MapDirection(key.Direction)));
             return (GridReplay.Permit(key, assessment.Coverage, assessment.Disposition, assessment.ReasonCode, assessment.EvidenceSha256, Duration),
                 new AreaGridStepEvidence(key, assessment));
         }, validatePresentation);

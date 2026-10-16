@@ -45,6 +45,8 @@ public sealed class AreaStepSnapshot
     /// <summary>Walls registered as tile-edge components (each blocks one edge, never its tile).</summary>
     public int WallEdges { get; }
     public bool IsAdmitted(AreaStepCell cell) => _sectors.Contains((cell.X >> 6, cell.Y >> 6));
+    /// <summary>The owned terrain verdict of one admitted cell, or null outside the admitted area.</summary>
+    public AreaStepTerrainEvidence? Terrain(AreaStepCell cell) => IsAdmitted(cell) && _terrain.TryGetValue(cell, out var evidence) ? evidence : null;
 
     public AreaStepRequest Request(AreaStepCell from, AreaStepCell to, CardinalTraversalDirection direction) =>
         new(ProfileId, EvidenceSha256, EvidenceEpoch, from, to, direction, DeclaredContext);
