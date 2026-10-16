@@ -38,18 +38,23 @@ public sealed class RouteFollower
 
     public RouteFollowStatus Status { get; private set; }
     public CellCoord? Target { get; private set; }
+    /// <summary>Chebyshev distance from <see cref="Target"/> at which the goal counts as reached (0: on the goal cell).
+    /// A companion follow goal (ARC-WORLD-016) stops within its range of the leader; a click goal uses 0.</summary>
+    public int Range { get; private set; }
     public string? StopReason { get; private set; }
     /// <summary>The newest plan made for the current goal, including a failed one.</summary>
     public RoutePlan? LastPlan { get; private set; }
     public int PlannedSegments { get; private set; }
     public IReadOnlyList<NeighborDirection> RemainingSegment => Array.AsReadOnly(_segment[_segmentNext..]);
 
-    /// <summary>Sets a goal observed at <paramref name="observedAt"/>. The goal already followed is kept (no replan, no duplicate).</summary>
-    public bool SetTarget(CellCoord target, SimulationTime observedAt)
+    /// <summary>Sets a goal observed at <paramref name="observedAt"/>, reached when the actor settles within
+    /// <paramref name="range"/> cells of it. The goal already followed with the same range is kept (no replan, no duplicate).</summary>
+    public bool SetTarget(CellCoord target, SimulationTime observedAt, int range = 0)
     {
         if (!observedAt.IsValid) throw new ArgumentException("ROUTE_TIME_INVALID", nameof(observedAt));
-        if (Status == RouteFollowStatus.Following && Target == target) return false;
-        Target = target; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
+        if (range is < 0 or > RouteLimits.AxisDistanceMaximum) throw new ArgumentOutOfRangeException(nameof(range));
+        if (Status == RouteFollowStatus.Following && Target == target && Range == range) return false;
+        Target = target; Range = range; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
         _requestedAt = observedAt; ResetSegment();
         return true;
     }
@@ -117,7 +122,7 @@ public sealed class RouteFollower
             else if (e.Kind == MovementEventKind.StepRejected) Finish(RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED");
         }
         var state = result.State;
-        if (Status == RouteFollowStatus.Following && state.Phase == MovementPhase.Settled && state.CommittedCell == Target)
+        if (Status == RouteFollowStatus.Following && state.Phase == MovementPhase.Settled && Reached(state.CommittedCell))
             Finish(RouteFollowStatus.Arrived, "ROUTE_ARRIVED");
         if (Status != RouteFollowStatus.Following && !state.LatestIntent.Active) _requestedAt = null;
     }
@@ -142,7 +147,7 @@ public sealed class RouteFollower
 
     private ActorIntent Desired(CellCoord cell)
     {
-        if (Status != RouteFollowStatus.Following || Target is not { } goal || cell == goal) return ActorIntent.Neutral;
+        if (Status != RouteFollowStatus.Following || Target is not { } goal || Reached(cell)) return ActorIntent.Neutral;
         if (_segmentCell != cell || _segmentNext == _segment.Length)
         {
             var plan = RoutePlanner.Plan(_source, cell, goal, _limits);
@@ -152,6 +157,9 @@ public sealed class RouteFollower
         }
         return ActorIntent.Toward(_segment[_segmentNext]);
     }
+
+    private bool Reached(CellCoord cell) => Target is { } goal &&
+        Math.Max(Math.Abs((long)goal.X - cell.X), Math.Abs((long)goal.Y - cell.Y)) <= Range;
 
     private void Finish(RouteFollowStatus status, string reason) { Status = status; StopReason = reason; ResetSegment(); }
     private void ResetSegment() { _segment = []; _segmentNext = 0; _segmentCell = null; }

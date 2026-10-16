@@ -774,6 +774,18 @@ PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor fra
 the toggle protocol and Session-snapshot invariance (ARC-UI-006), walls and terrain in HD,
 other GPUs and handhelds, human review (ARC-RENDER-015).
 
+### Virgil follows the PC (ARC-WORLD-016)
+
+In `crash-site-area` Virgil talks through the [session party](../world/party-runtime.md): his `JO` joins it, and his
+follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walks after the PC on his own grid session
+over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
+Virgil block each other where they stand, and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
+(no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
+session on F7 and when the PC enters the cave (he does not come along yet). HUD: `companion script 1324 <standing> at
+(x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
+`ARC-WORLD-016 native-smoke follow PASS` (with the cave input, after the quick-save phase;
+`ARC_AREA_FOLLOW_CAPTURE=PATH.png` saves the frame).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

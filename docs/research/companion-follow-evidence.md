@@ -107,8 +107,8 @@ flag.
 | V4 | Both cave scripts teleport the triggerer with flags 0, so by C15 a following (not waiting, conscious) Virgil arrives on the PC's arrival cell: (2087,2018) in the cave, (92913,82598) on return. | [Cave transition T2/T4](cave-transition-evidence.md#findings). |
 
 Since [ARC-WORLD-013](../world/party-runtime.md), `WA` and `UW 0 node` run when the host passes
-a party port, and node 385 then is no frontier; the AREA viewer passes none yet, so C1 and V2
-still describe the viewer.
+a party port, and node 385 then is no frontier; since [ARC-WORLD-016](../world/companion-follow-runtime.md)
+the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below).
 
 ## Open questions
 

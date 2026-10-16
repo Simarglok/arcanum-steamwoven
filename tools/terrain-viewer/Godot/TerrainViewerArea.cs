@@ -34,6 +34,7 @@ public partial class TerrainViewerApp
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
         StartAreaTransitions(arguments, result);
         BindAreaConversations(arguments, area);
+        BindAreaCompanions();
         BindAreaHover(arguments);
         StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
@@ -64,7 +65,7 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")} | cave transfer by use, no gameplay | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{AreaInventoryStatus()}{AreaHoverStatus()}{WorldStatus()}");
+        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")} | cave transfer by use, no gameplay | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{CompanionStatus()}{AreaInventoryStatus()}{AreaHoverStatus()}{WorldStatus()}");
     }
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {
@@ -163,7 +164,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
-        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); }
+        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaFollowSmokeAsync(); }
         RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }

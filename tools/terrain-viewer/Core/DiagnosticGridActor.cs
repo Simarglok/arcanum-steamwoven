@@ -22,10 +22,12 @@ public sealed class DiagnosticGridActor
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
+    /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
+    public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
     public void Configure(AreaStepSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null,
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
-        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing);
+        var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy };
         Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
