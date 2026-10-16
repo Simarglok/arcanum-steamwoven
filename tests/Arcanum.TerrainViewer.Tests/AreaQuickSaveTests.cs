@@ -33,6 +33,29 @@ public sealed class AreaQuickSaveTests
 
     private GameSessionSaveSlot Slot() => GameSessionSaveSlot.QuickSave(_directory);
 
+    // ARC-SCRIPT-006: dialog consequences are session state, so the quick-save file carries them.
+    [TestMethod]
+    public void DialogConsequencesComeBackWithAQuickLoad()
+    {
+        const string npc = "oid:synthetic-npc";
+        using var first = Session();
+        var state = new AreaConversationState(first, new(1), [npc], 50);
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogJoinResult.Accepted,
+            state.Execute(new Arcanum.Scripting.Dialog.JoinCommand(AreaConversationState.Npc(0), AreaConversationState.PcParticipant)));
+        Assert.AreEqual(Arcanum.Scripting.Dialog.DialogCommandResult.Applied,
+            state.Execute(new Arcanum.Scripting.Dialog.QuestStateCommand(AreaConversationState.PcParticipant, 1003, 2, AreaConversationState.Npc(0))));
+        Assert.AreEqual(GameSessionDisposition.Changed, first.LearnRumor(first.Version, 1001).Disposition);
+        Assert.IsTrue(AreaQuickSave.Save(first, Outside, Slot()).Saved);
+
+        using var second = Session();
+        using var owner = AreaQuickSave.Load(Slot(), second, _ => null).Owner ?? throw new AssertFailedException("load");
+        var loaded = new AreaConversationState(owner, new(1), [npc], 50);
+        Assert.IsTrue(loaded.Follows(0));
+        Assert.AreEqual(SessionQuestState.Accepted, owner.QueryQuest(1003)!.Value.State);
+        Assert.IsNotNull(owner.QueryRumor(1001));
+        Assert.IsFalse(new AreaConversationState(second, new(1), [npc], 50).Follows(0), "the running session is untouched");
+    }
+
     [TestMethod]
     public void ASaveRecordsTheActorAndALaterRunLoadsItIntoANewSession()
     {

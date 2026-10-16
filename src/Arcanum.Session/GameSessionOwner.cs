@@ -4,7 +4,8 @@ using Arcanum.Simulation.Clock;
 namespace Arcanum.Session;
 
 /// <summary>
-/// Single owner of one game session: the clock, global flags, actor placement and map-local changes.
+/// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
+/// story domain (PC quests, shared quest states, known rumors).
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -15,6 +16,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly SessionFlags _flagView;
     private readonly GameSessionLimits _limits;
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
+    private readonly Story _story;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private long _revision;
@@ -22,9 +24,10 @@ public sealed class GameSessionOwner : IDisposable
     private bool _disposed;
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
-        ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps)
+        ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
+        _story = story;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
@@ -42,7 +45,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, []),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new()),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -64,6 +67,8 @@ public sealed class GameSessionOwner : IDisposable
         var limits = options.Limits ?? new GameSessionLimits();
         var failure = ImportMaps(snapshot.Maps, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportStory(snapshot.Story, snapshot.Clock.GameTimestampMs, out var story);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
@@ -78,7 +83,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -87,7 +92,7 @@ public sealed class GameSessionOwner : IDisposable
     public GameSessionLimits Limits { get { ThrowIfDisposed(); return _limits; } }
 
     /// <summary>The session's flag owner for reads, writes and adapters. Its lifetime belongs to the session.</summary>
-    public IGlobalFlagOwner Flags { get { ThrowIfDisposed(); return _flagView; } }
+    public IVersionedGlobalFlagOwner Flags { get { ThrowIfDisposed(); return _flagView; } }
 
     /// <summary>Current GF version, the expected value for the next flag read or write.</summary>
     public GlobalFlagVersion FlagVersion { get { ThrowIfDisposed(); return _flags.Version; } }
@@ -172,6 +177,83 @@ public sealed class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>The PC's record of a quest, or null while it was never changed (state Unknown).</summary>
+    public SessionQuest? QueryQuest(int quest)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsQuest(quest)) throw new ArgumentOutOfRangeException(nameof(quest));
+        return _story.Quests.TryGetValue(quest, out var value) ? value : null;
+    }
+
+    /// <summary>A quest's shared state: Accepted (the source default) until a PC completes or botches it.</summary>
+    public SessionQuestState QueryGlobalQuest(int quest)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsQuest(quest)) throw new ArgumentOutOfRangeException(nameof(quest));
+        return _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
+    }
+
+    /// <summary>The game time a rumor was learned, or null while the PC does not know it.</summary>
+    public long? QueryRumor(int rumor)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsRumor(rumor)) throw new ArgumentOutOfRangeException(nameof(rumor));
+        return _story.Rumors.TryGetValue(rumor, out var value) ? value : null;
+    }
+
+    /// <summary>Detached copy of the story domain in ascending order.</summary>
+    public SessionStoryState QueryStory() { ThrowIfDisposed(); return _story.Capture(); }
+
+    /// <summary>
+    /// Requests a PC quest state with the source rules: a Completed, OtherCompleted or Botched quest and a request
+    /// not above the current state change nothing. Otherwise a quest whose shared state is still Accepted takes
+    /// the request (Completed/OtherCompleted complete it for everyone, Botched botches it); once the shared state
+    /// left Accepted, the request becomes OtherCompleted (shared Completed) or Botched. Botched keeps the stored
+    /// state and marks it. The change is stamped with the current session game time. Experience, alignment and
+    /// reaction effects of the source belong to their own owners and are not applied here.
+    /// </summary>
+    public GameSessionMutationResult SetQuestState(GameSessionVersion expected, int quest, SessionQuestState requested)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsQuest(quest)) return Reject(GameSessionFailure.InvalidQuest);
+        if (!Enum.IsDefined(requested)) return Reject(GameSessionFailure.InvalidQuestState);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var current = _story.Quests.TryGetValue(quest, out var record) ? record : new SessionQuest(quest, SessionQuestState.Unknown, false, 0);
+        if (current.Effective is SessionQuestState.Completed or SessionQuestState.OtherCompleted or SessionQuestState.Botched ||
+            current.Effective >= requested) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+
+        var shared = _story.GlobalQuests.GetValueOrDefault(quest, SessionQuestState.Accepted);
+        var state = requested;
+        if (shared == SessionQuestState.Accepted)
+        {
+            if (state is SessionQuestState.Completed or SessionQuestState.OtherCompleted) shared = SessionQuestState.Completed;
+            else if (state == SessionQuestState.Botched) shared = SessionQuestState.Botched;
+        }
+        else state = shared == SessionQuestState.Completed ? SessionQuestState.OtherCompleted : SessionQuestState.Botched;
+        var timestamp = _clock.QueryClockSnapshot().GameTimestampMs;
+        var next = state == SessionQuestState.Botched
+            ? current with { Botched = true, TimestampMs = timestamp }
+            : new SessionQuest(quest, state, false, timestamp);
+
+        // All refusals precede the commit.
+        _story.Quests[quest] = next;
+        if (shared != SessionQuestState.Accepted) _story.GlobalQuests[quest] = shared;
+        return Changed();
+    }
+
+    /// <summary>Marks a rumor known at the current session game time; an already known rumor keeps its time.</summary>
+    public GameSessionMutationResult LearnRumor(GameSessionVersion expected, int rumor)
+    {
+        ThrowIfDisposed();
+        if (!SessionStoryLimits.IsRumor(rumor)) return Reject(GameSessionFailure.InvalidRumor);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        if (_story.Rumors.ContainsKey(rumor)) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _story.Rumors.Add(rumor, _clock.QueryClockSnapshot().GameTimestampMs);
+        return Changed();
+    }
+
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
     public GameSessionSnapshot Capture()
     {
@@ -182,7 +264,7 @@ public sealed class GameSessionOwner : IDisposable
             .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
-            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps);
+            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture());
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -217,6 +299,47 @@ public sealed class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
+    // Beyond each record's own range, the records must agree with the rules: no time after the saved clock, a PC
+    // record Completed/OtherCompleted only under a shared Completed state, a botched one only under shared Botched,
+    // and any other PC record only while the shared state is Accepted. A shared state without a PC record is kept
+    // (the source's shared state is not owned by one PC).
+    private static GameSessionFailure ImportStory(SessionStoryState saved, long clockMs, out Story story)
+    {
+        story = new();
+        foreach (var quest in saved.Quests)
+        {
+            if (!SessionStoryLimits.IsQuest(quest.Quest)) return GameSessionFailure.InvalidQuest;
+            // The stored state is never Botched itself, and an untouched quest is not listed.
+            if (quest.State is < SessionQuestState.Unknown or > SessionQuestState.OtherCompleted || quest.TimestampMs < 0 ||
+                (quest.State == SessionQuestState.Unknown && !quest.Botched)) return GameSessionFailure.InvalidQuestState;
+            if (quest.TimestampMs > clockMs) return GameSessionFailure.InvalidSnapshot;
+            if (!story.Quests.TryAdd(quest.Quest, quest)) return GameSessionFailure.InvalidSnapshot;
+        }
+        foreach (var quest in saved.GlobalQuests)
+        {
+            if (!SessionStoryLimits.IsQuest(quest.Quest)) return GameSessionFailure.InvalidQuest;
+            if (quest.State is not (SessionQuestState.Completed or SessionQuestState.Botched)) return GameSessionFailure.InvalidQuestState;
+            if (!story.GlobalQuests.TryAdd(quest.Quest, quest.State)) return GameSessionFailure.InvalidSnapshot;
+        }
+        foreach (var rumor in saved.Rumors)
+        {
+            if (!SessionStoryLimits.IsRumor(rumor.Rumor)) return GameSessionFailure.InvalidRumor;
+            if (rumor.TimestampMs < 0 || rumor.TimestampMs > clockMs) return GameSessionFailure.InvalidSnapshot;
+            if (!story.Rumors.TryAdd(rumor.Rumor, rumor.TimestampMs)) return GameSessionFailure.InvalidSnapshot;
+        }
+        foreach (var quest in story.Quests.Values)
+        {
+            var shared = quest.Effective switch
+            {
+                SessionQuestState.Botched => SessionQuestState.Botched,
+                SessionQuestState.Completed or SessionQuestState.OtherCompleted => SessionQuestState.Completed,
+                _ => SessionQuestState.Accepted,
+            };
+            if (story.GlobalQuests.GetValueOrDefault(quest.Quest, SessionQuestState.Accepted) != shared) return GameSessionFailure.InvalidQuestState;
+        }
+        return GameSessionFailure.None;
+    }
+
     private static MapChange[] Sorted(Dictionary<MapChangeKey, long> changes) => changes
         .OrderBy(pair => pair.Key, MapChangeKeyComparer.Instance)
         .Select(pair => new MapChange(pair.Key, pair.Value)).ToArray();
@@ -244,9 +367,23 @@ public sealed class GameSessionOwner : IDisposable
 }
 
 /// <summary>Forwarding view, so callers cannot reach the owner's Dispose or MarkFailed.</summary>
-internal sealed class SessionFlags(GlobalFlagOwner owner) : IGlobalFlagOwner
+internal sealed class SessionFlags(GlobalFlagOwner owner) : IVersionedGlobalFlagOwner
 {
     public GlobalFlagBinding Binding => owner.Binding;
+    public GlobalFlagVersion Version => owner.Version;
     public GlobalFlagReadResult Read(GlobalFlagReadRequest request) => owner.Read(request);
     public GlobalFlagWriteReceipt Write(GlobalFlagWriteRequest request) => owner.Write(request);
+}
+
+/// <summary>Mutable story domain of one owner; bounded by the quest and rumor number ranges.</summary>
+internal sealed class Story
+{
+    internal Dictionary<int, SessionQuest> Quests { get; } = [];
+    internal Dictionary<int, SessionQuestState> GlobalQuests { get; } = [];
+    internal Dictionary<int, long> Rumors { get; } = [];
+
+    internal SessionStoryState Capture() => new(
+        Quests.Values.OrderBy(quest => quest.Quest).ToArray(),
+        GlobalQuests.OrderBy(pair => pair.Key).Select(pair => new SessionGlobalQuest(pair.Key, pair.Value)).ToArray(),
+        Rumors.OrderBy(pair => pair.Key).Select(pair => new SessionRumor(pair.Key, pair.Value)).ToArray());
 }

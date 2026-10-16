@@ -139,14 +139,14 @@ public sealed class AreaTransitionCoordinator
         (1, -1) => CardinalTraversalDirection.XPlusYMinus, _ => CardinalTraversalDirection.YMinus,
     };
 
-    /// <summary>A new-game session for the viewer: the clock profile of the area lighting source, a neutral GF
-    /// domain and the actor at the given exterior cell. The flag owner requires a non-empty domain; no script runs
-    /// here, so the domain is one placeholder flag (0, Unknown) that nothing reads or writes. The cave's story
-    /// scripts and their flags are out of scope (docs/research/cave-transition-evidence.md T9).</summary>
+    /// <summary>A new-game session for the viewer: the clock profile of the area lighting source, the original
+    /// new-game global flags (0..3199 known false, ARC-SCRIPT-006) that dialogs read and write, an empty story
+    /// domain and the actor at the given exterior cell. The cave's story scripts are out of scope
+    /// (docs/research/cave-transition-evidence.md T9).</summary>
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap)
     {
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
-        var flags = new GlobalFlagOwnerDescriptor(identity, new OwnerEpoch(Guid.NewGuid()), 0, [new FlagId(0)], []);
+        var flags = OriginalGlobalFlags.NewGame(identity, new OwnerEpoch(Guid.NewGuid()));
         return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus)));
     }
 }

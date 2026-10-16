@@ -28,12 +28,12 @@ public partial class TerrainViewerApp
         // Counted once per publication; the status line is rebuilt every frame.
         _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed);
         _readyArea = area; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
-        BindAreaConversations(arguments, area);
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
         StartAreaTransitions(arguments, result);
+        BindAreaConversations(arguments, area);
         StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
         _camera!.SetAreaPlan(area.Plan, WorldViewport);

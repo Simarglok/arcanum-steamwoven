@@ -135,7 +135,8 @@ attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (
 diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
-closes the dialog. The HUD says whether a dialog NPC is in reach. Rules, state profile and
+closes the dialog. The HUD says whether a dialog NPC is in reach and what the dialogs left in
+the game session (quests, rumors, followers; ARC-SCRIPT-006). Rules, state profile and
 limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
 self-test covers a synthetic panel, an off-NPC click, keyboard events and polled levels, and the
 palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test).
@@ -393,11 +394,12 @@ and its step evidence with wall edges.
   cell with a fresh authoritative session and input queue, and the camera centres
   on it before the scene is published. Reset in the cave returns the actor to the
   cave arrival cell; the session map stays the cave. The exit leads back to (92913,82598), three cells east of the entrance.
-- **Session.** A `GameSessionOwner` (ARC-WORLD-008) is created per load with the
-  area lighting clock profile, a project module id (the first 16 bytes of the
-  module SHA-256, because the object file's GUID is empty) and a neutral GF domain
-  (one placeholder flag, Unknown, that nothing reads or writes: the owner needs a
-  non-empty domain and no script runs here). Each transfer records the actor's map and
+- **Session.** A `GameSessionOwner` (ARC-WORLD-008) is created per load, with or
+  without the cave, with the area lighting clock profile, a project module id (the
+  first 16 bytes of the module SHA-256, because the object file's GUID is empty) and the
+  original new-game GF domain (0..3199 known false, ARC-SCRIPT-006). Dialogs keep their
+  consequences in it ([conversation runtime](../scripting/dialog-conversation-runtime.md#consequences-in-the-game-session-arc-script-006)),
+  so they hold after the cave trip. Each transfer records the actor's map and
   arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
@@ -422,7 +424,7 @@ it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-
 
 ### Quick save and quick load (ARC-WORLD-011)
 
-While `crash-site-area` has a game session (today: when the cave input is loaded),
+While `crash-site-area` has a game session (every published area since ARC-SCRIPT-006),
 the original **F7** saves and **F8** loads one quick-save slot,
 `user://saves/quicksave.json` (Godot user data of the viewer). There is no save
 list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
@@ -453,7 +455,10 @@ list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
   cell (the scene is swapped as a transfer swaps it). The session is replaced in one
   place (`ReplaceAreaSession`), which disposes the previous owner: code that uses the
   session reads it when needed and keeps no owner, clock or flags reference across
-  calls; a component that mirrors session state rebinds there. Snapshot sections other domains
+  calls; a component that mirrors session state rebinds there. The dialog host
+  (ARC-SCRIPT-006) is rebuilt over the loaded session there, so flags, quests, rumors
+  and NPC dialog state (LF, reaction, follow consent) come back with the save; a save
+  whose dialog values it cannot read is refused before anything changes. Snapshot sections other domains
   add later are restored with the session; the viewer's day/night clock does not
   read the session clock yet.
 - **HUD.** The area status line shows the slot and the last F7/F8 result.
