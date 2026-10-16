@@ -163,7 +163,7 @@ public partial class TerrainViewerApp
         if (!TalkMapActive) return " | talk: no dialog NPC on this map";
         return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell, SpeakerPresent) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
-            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
+            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
     }
 
     // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt

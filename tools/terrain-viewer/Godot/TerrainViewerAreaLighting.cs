@@ -103,9 +103,12 @@ public partial class TerrainViewerApp
         ? new AreaAmbientView(driver.Effective, lighting.Channels)
         {
             Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective),
-            // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual.
-            Moving = command => _areaCompanions?.Light(command, driver.Effective, lighting.Local),
+            // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
+            // delegate reads the current pair and map at draw time, so equal views stay equal.
+            Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
+                ? _areaCompanions?.Light(command, current.Effective, shown.Local) : null,
         } : null);
+    private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).
     private void PaletteGameHour()

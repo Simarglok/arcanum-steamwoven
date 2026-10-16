@@ -214,6 +214,10 @@ public sealed class SessionOwnerTests
 
         using var perMap = Create(new GameSessionLimits(maxChangesPerMap: 1));
         Rejected(perMap.ApplyChanges(perMap.Version, null, [new(Exterior, a, 1), new(Exterior, b, 1)]), perMap, GameSessionFailure.BudgetExceeded, 0);
+        // No-op edits beside one that needs room: the room is still checked, and nothing applies.
+        Changed(perMap.ApplyChanges(perMap.Version, null, [new(Exterior, a, 1)]), perMap, 1);
+        Rejected(perMap.ApplyChanges(perMap.Version, Start with { Map = Cave }, [new(Exterior, a, 1), new(Cave, c, null), new(Exterior, b, 2)]), perMap, GameSessionFailure.BudgetExceeded, 1);
+        Assert.AreEqual((Start, (long?)null), (perMap.QueryActor(), perMap.QueryMapChange(Exterior, b)));
     }
 
     [TestMethod]

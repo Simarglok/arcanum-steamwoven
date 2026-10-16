@@ -95,13 +95,17 @@ steps him to an Open neighbour (`Separate`, C10). Parity NOT_VERIFIED.
 its T0 record, the exterior for Virgil) unless the home map's entity change `npc.map` names another runtime map; there
 its cell is that map's `npc.cell` (absent on the home map = its T0 cell, required on any other map).
 `AreaCompanionPlacement.Where` reads it; an unreadable value (an `npc.map` naming the home map, a missing or unpackable
-cell) is reported and the companion is skipped, never guessed. One identity stands on exactly one map.
+cell) is reported and the companion is skipped, never guessed: on its home map its T0 body is then absent too, so one
+identity stands on at most one map. A following companion skipped on the map the PC leaves is not carried.
 
 **The transfer** is one atomic session step: `AreaCompanionGroup.Carry(session, destination, arrival)` lists the
 changes (for each following companion: clear its cell on the map it leaves, write the arrival cell on the destination
 with its own facing, set `npc.map` to the destination or clear it when the destination is home; every other companion
 records where it stands), and `AreaTransitionCoordinator.Process(facing, changes)` applies them with the PC's placement
-in one `GameSessionOwner.ApplyChanges` ([session runtime](game-session-runtime.md#api)): one revision, or nothing.
+in one `GameSessionOwner.ApplyChanges` ([session runtime](game-session-runtime.md#api)): one revision, or nothing. A
+refusal (for example the change budget) drops the pending transfer with `LastRefusal`; the PC stays and the HUD says
+why. Building the templates at load throws on a broken invariant (a body without its visual or frame, a conflicting
+frame key), like the other load checks; it is not a runtime failure.
 
 **On each map** the group is rebuilt from the session (`AreaCompanionGroup.Create(templates, …)`):
 
@@ -128,8 +132,8 @@ in one `GameSessionOwner.ApplyChanges` ([session runtime](game-session-runtime.m
 - The PC's click route is planned around the companions as they stand at planning time. When one then steps into it
   and the step is denied by the live overlay (`DESTINATION_ACTOR_OCCUPIED`, `SHOULDER_ACTOR_OCCUPIED`), the same goal
   is planned again, at most 8 times per goal.
-- HUD: `companion script 1324 <standing> at (x,y) [visiting] <phase> follow=<action> route=<status> jumps=<n>` and
-  `n companion(s) away on another map`; the log prints `ARC-WORLD-016 companion …` step lines and `ARC-WORLD-017
+- HUD: `companion script 1324 <standing> at (x,y) [visiting] <phase> follow=<action> route=<status> jumps=<n>`,
+  `away: script 1324 on map 79` and `skipped: …`; the log prints `ARC-WORLD-016 companion …` step lines and `ARC-WORLD-017
   companions carried {…}` at each transfer.
 - ARC-WORLD-017: the transfer carries the following companions (above). In the cave a visiting companion is the only
   dialog NPC; on the exterior an absent one is not a speaker.

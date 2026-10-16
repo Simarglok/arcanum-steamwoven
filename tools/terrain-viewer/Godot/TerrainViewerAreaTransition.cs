@@ -198,7 +198,14 @@ public partial class TerrainViewerApp
         // one stays where it stands; one atomic session step with the PC's placement.
         var pending = _areaTransitions.Pending!;
         var carry = _areaCompanions?.Carry(_areaSession!, new(pending.ToMap), new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)));
-        var transition = _areaTransitions.Process(session.State.Facing, carry?.Changes)!;
+        if (_areaTransitions.Process(session.State.Facing, carry?.Changes) is not { } transition)
+        {
+            // The session refused the step (nothing applied): the PC stays on this map and may use the endpoint again.
+            _areaUseStatus = $"transfer to map {pending.ToMap} refused by the session ({_areaTransitions.LastRefusal})";
+            GD.Print("ARC-WORLD-017 transfer refused " + _areaTransitions.LastRefusal);
+            RefreshAreaStatus();
+            return false;
+        }
         if (carry is { } carried)
             GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
                 transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Carried.Select(c => c.Speaker.ScriptId).ToArray(),

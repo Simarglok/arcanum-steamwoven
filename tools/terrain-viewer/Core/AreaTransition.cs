@@ -108,7 +108,8 @@ public sealed class AreaTransitionCoordinator
     /// <summary>Applies the pending transfer exactly once: the current map changes and the session (when
     /// present) records the actor on the destination map at the authored arrival, together with
     /// <paramref name="changes"/> (ARC-WORLD-017: the companions it carries or leaves behind) in one atomic step.
-    /// Changes without a session are refused.</summary>
+    /// Changes without a session are refused. A session refusal (for example the change budget) applies nothing:
+    /// the pending transfer is dropped, <see cref="LastRefusal"/> names the failure and null is returned.</summary>
     public AreaTransition? Process(NeighborDirection facing = NeighborDirection.XPlus, IReadOnlyList<MapChangeEdit>? changes = null)
     {
         if (Pending is not { } transition) return null;
@@ -117,11 +118,18 @@ public sealed class AreaTransitionCoordinator
         {
             var placed = _session.ApplyChanges(_session.Version, new ActorPlacement(new(transition.ToMap),
                 new(checked((int)transition.Arrival.X), checked((int)transition.Arrival.Y)), facing), changes ?? []);
-            if (placed.Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_TRANSITION_SESSION_" + placed.Failure);
+            if (placed.Disposition == GameSessionDisposition.Rejected)
+            {
+                Pending = null; LastRefusal = placed.Failure;
+                return null;
+            }
         }
-        CurrentMap = transition.ToMap; Pending = null;
+        CurrentMap = transition.ToMap; Pending = null; LastRefusal = GameSessionFailure.None;
         return transition;
     }
+
+    /// <summary>The session failure of the last refused <see cref="Process"/>, None after an applied one.</summary>
+    public GameSessionFailure LastRefusal { get; private set; }
 
     /// <summary>Drops a pending transfer unapplied (a viewer reset or reload takes precedence over it).
     /// Returns the dropped transfer, or null when none was pending.</summary>

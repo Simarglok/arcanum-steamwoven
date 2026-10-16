@@ -58,7 +58,13 @@ public sealed class VirgilCaveOriginalTests
         var carry = outside.Carry(session, inside, arrival);
         Assert.AreEqual(1, carry.Carried.Count);
         var revision = session.Version.Revision;
+        // A session refusal applies nothing: the transfer is dropped with its typed failure and can be requested again.
+        Assert.IsNull(transitions.Process(NeighborDirection.XPlus, [carry.Changes[0], carry.Changes[0]]));
+        Assert.AreEqual((GameSessionFailure.InvalidChangeKey, 1, revision, (AreaTransition?)null),
+            (transitions.LastRefusal, transitions.CurrentMap, session.Version.Revision, transitions.Pending));
+        Assert.AreEqual(AreaUseOutcome.Accepted, transitions.RequestUse(trigger.Key, exterior.Chart.ToWorld(near)).Outcome);
         var inbound = transitions.Process(NeighborDirection.XPlus, carry.Changes)!;
+        Assert.AreEqual(GameSessionFailure.None, transitions.LastRefusal);
         Assert.AreEqual((79, revision + 1), (transitions.CurrentMap, session.Version.Revision));
         Assert.AreEqual(new AreaCompanionWhere(inside, (new CellCoord(2087, 2018), NeighborDirection.XPlus), null), AreaCompanionPlacement.Where(session, home, virgil.Entity));
 
@@ -74,7 +80,16 @@ public sealed class VirgilCaveOriginalTests
         Assert.AreEqual((1, MovementPhase.Settled), (FollowDistanceRules.Distance(cell, inbound.ArrivalChartCell), companion.Grid.State.Phase));
         var drawn = visit.Commands().Single();
         Assert.AreEqual(((int)caveMap.Chart.ToWorld(cell).X, (int)caveMap.Chart.ToWorld(cell).Y), (drawn.MapX, drawn.MapY));
-        Assert.IsNotNull(visit.Light(drawn, AmbientPair.Neutral, cave.Area.Lighting!.Local), "lit by the cave's lights where he stands");
+        // Drawn where the cave plan would draw a body on that cell, and lit by the cave's tile class and lights there.
+        var homeAt = Arcanum.Data.Terrain.TerrainGeometry.Project(checked((int)(virgil.Speaker.WorldX - AreaChart.Exterior.OriginX)), checked((int)(virgil.Speaker.WorldY - AreaChart.Exterior.OriginY)));
+        var caveAt = Arcanum.Data.Terrain.TerrainGeometry.Project(cell.X, cell.Y);
+        var t0 = virgil.Commands.Single();
+        Assert.AreEqual((t0.Destination.X - homeAt.X + caveAt.X, t0.Destination.Y - homeAt.Y + caveAt.Y), (drawn.Destination.X, drawn.Destination.Y));
+        var visual = virgil.Visuals[drawn.Visual];
+        var pair = new AmbientPair(new(200, 150, 100), new(40, 50, 60));
+        var local = cave.Area.Lighting!.Local!;
+        var expected = local.Point(drawn.MapX, drawn.MapY, visual.ObjectOffsetX, visual.ObjectOffsetY, pair);
+        Assert.AreEqual(new AreaLitColors(expected, expected), visit.Light(drawn, pair, local), "lit by the cave's lights where he stands");
         // Meanwhile on the exterior his T0 record is not in the world.
         var behind = AreaCompanionGroup.Create(templates, exterior.Steps, exterior.Chart, session, home, SimulationTime.At(0));
         Assert.AreEqual((0, true), (behind.Companions.Count, behind.Absent.Contains(virgil.Key)));

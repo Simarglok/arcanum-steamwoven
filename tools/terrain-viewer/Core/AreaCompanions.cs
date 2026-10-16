@@ -203,16 +203,18 @@ public sealed class AreaCompanionGroup
     private readonly SessionMapId _map;
     private readonly AreaCompanion[] _companions;
     private readonly HashSet<AreaObjectKey> _absent;
+    private readonly IReadOnlyList<string> _away;
 
-    private AreaCompanionGroup(AreaStepSnapshot steps, AreaChart chart, SessionMapId map, AreaCompanion[] companions, HashSet<AreaObjectKey> absent)
+    private AreaCompanionGroup(AreaStepSnapshot steps, AreaChart chart, SessionMapId map, AreaCompanion[] companions, HashSet<AreaObjectKey> absent,
+        IReadOnlyList<string> away)
     {
-        _steps = steps; _chart = chart; _map = map; _companions = companions; _absent = absent;
+        _steps = steps; _chart = chart; _map = map; _companions = companions; _absent = absent; _away = away;
     }
 
     public IReadOnlyList<AreaCompanion> Companions => _companions;
     public SessionMapId Map => _map;
-    /// <summary>Companions whose home is this map and who stand on another one: their T0 record is not in the world here
-    /// (not drawn, picked, talked to or blocking).</summary>
+    /// <summary>Companions whose home is this map and who stand on another one, or whose recorded placement here cannot
+    /// be read: their T0 record is not in the world here (not drawn, picked, talked to or blocking).</summary>
     public IReadOnlySet<AreaObjectKey> Absent => _absent;
     /// <summary>Companions the session places here that could not stand on this map's chart (cell not admitted, outside the
     /// chart, unreadable or missing placement).</summary>
@@ -227,7 +229,7 @@ public sealed class AreaCompanionGroup
     {
         ArgumentNullException.ThrowIfNull(templates); ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(chart); ArgumentNullException.ThrowIfNull(session);
-        var list = new List<AreaCompanion>(); var skipped = new List<string>(); var absent = new HashSet<AreaObjectKey>();
+        var list = new List<AreaCompanion>(); var skipped = new List<string>(); var absent = new HashSet<AreaObjectKey>(); var away = new List<string>();
         AreaCompanionGroup? group = null;
         foreach (var template in templates)
         {
@@ -235,11 +237,17 @@ public sealed class AreaCompanionGroup
             var where = AreaCompanionPlacement.Where(session, template.Home, entity);
             if (where.Map != map)
             {
-                // A home companion away (or unreadable away) is not in this map's world.
+                // A home companion away is not in this map's world.
+                if (map == template.Home) { absent.Add(template.Key); away.Add($"script {template.Speaker.ScriptId} on map {where.Map.RuntimeMap}"); }
+                continue;
+            }
+            if (where.Error is { } error)
+            {
+                // Reported, never guessed: on its home map its T0 body does not stand in for an unreadable placement.
+                skipped.Add(entity + " " + error);
                 if (map == template.Home) absent.Add(template.Key);
                 continue;
             }
-            if (where.Error is { } error) { skipped.Add(entity + " " + error); continue; }
             var start = template.HomeOrigin; var facing = NeighborDirection.XPlus;
             if (where.Placement is { } placed) { start = Chart(chart, placed.World.X, placed.World.Y); facing = placed.Facing; }
             if (!Admitted(steps, chart, start)) { skipped.Add(entity + " cell not admitted"); continue; }
@@ -251,7 +259,7 @@ public sealed class AreaCompanionGroup
                 actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission };
             list.Add(new(template, grid, new CompanionFollower(new AreaRouteSource(steps, chart, Planning))));
         }
-        group = new(steps, chart, map, list.ToArray(), absent) { Skipped = skipped.AsReadOnly() };
+        group = new(steps, chart, map, list.ToArray(), absent, away.AsReadOnly()) { Skipped = skipped.AsReadOnly() };
         group.Refresh(session);
         return group;
     }
@@ -434,7 +442,7 @@ public sealed class AreaCompanionGroup
 
     public string Status()
     {
-        var away = _absent.Count == 0 ? "" : $"; {_absent.Count} companion(s) away on another map";
+        var away = (_away.Count == 0 ? "" : "; away: " + string.Join(", ", _away)) + (Skipped.Count == 0 ? "" : "; skipped: " + string.Join(", ", Skipped));
         if (_companions.Length == 0) return "companions: none on this map" + away;
         return string.Join("; ", _companions.Select(c =>
         {
