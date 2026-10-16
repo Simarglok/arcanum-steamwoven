@@ -1,4 +1,6 @@
+using System.Collections.ObjectModel;
 using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
@@ -63,22 +65,115 @@ public static class AreaCompanionPlacement
     }
 
     public static MapChangeKey Key(string entity) => MapChangeKey.ForEntity(entity, Property);
+
+    /// <summary>ARC-WORLD-017: on the NPC's home map, the runtime map it stands on while it is elsewhere (absent = home).</summary>
+    public const string MapProperty = "npc.map";
+
+    public static MapChangeKey MapKey(string entity) => MapChangeKey.ForEntity(entity, MapProperty);
+
+    /// <summary>
+    /// Where a companion stands (ARC-WORLD-017, project policy): on its home map unless the home map's
+    /// <see cref="MapProperty"/> names another runtime map, and there on that map's <see cref="Property"/> (absent on the
+    /// home map = its T0 cell; required elsewhere). An unreadable value is an error, never a guess.
+    /// </summary>
+    public static AreaCompanionWhere Where(GameSessionOwner session, SessionMapId home, string entity)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        var map = home;
+        if (session.QueryMapChange(home, MapKey(entity)) is { } away)
+        {
+            if (away is < 1 or > int.MaxValue || away == home.RuntimeMap) return new(home, null, "map unreadable");
+            map = new((int)away);
+        }
+        if (session.QueryMapChange(map, Key(entity)) is not { } value)
+            return map == home ? new(map, null, null) : new(map, null, "placement missing on map " + map.RuntimeMap);
+        return Decode(value) is { } placed ? new(map, placed, null) : new(map, null, "placement unreadable");
+    }
+
+    /// <summary>The change that records a companion standing on <paramref name="map"/> at <paramref name="world"/>: on its
+    /// home map, its T0 cell facing the default clears the key; anywhere else the cell is always written.</summary>
+    public static MapChangeEdit Edit(AreaCompanionTemplate template, SessionMapId map, CellCoord world, NeighborDirection facing)
+    {
+        ArgumentNullException.ThrowIfNull(template);
+        return map == template.Home && world == template.HomeWorld && facing == NeighborDirection.XPlus
+            ? new(map, Key(template.Entity), null)
+            : new(map, Key(template.Entity), Encode(world, facing));
+    }
+}
+
+/// <summary>A companion's map and recorded placement there (null = its T0 cell on its home map), or why it cannot be read.</summary>
+public readonly record struct AreaCompanionWhere(SessionMapId Map, (CellCoord World, NeighborDirection Facing)? Placement, string? Error);
+
+/// <summary>
+/// ARC-WORLD-017: the home-map T0 data of one roster companion, enough to stand, draw, light and pick it on any loaded
+/// map: its speaker row, its T0 body commands with their visuals, and its T0 chart cell on the home map. The body keeps
+/// the T0 frame, flip and alpha wherever it stands.
+/// </summary>
+public sealed record AreaCompanionTemplate(AreaSpeaker Speaker, AreaCompanionFacts Facts, SessionMapId Home, CellCoord HomeOrigin,
+    CellCoord HomeWorld, IReadOnlyList<AreaDrawCommand> Commands, IReadOnlyDictionary<AreaVisualKey, AreaVisualRecord> Visuals)
+{
+    public string Entity => AreaConversationState.EntityId(Speaker.Row);
+    public AreaObjectKey Key => Speaker.Row.Key;
+
+    /// <summary>The roster speakers of <paramref name="speakers"/> on home map <paramref name="home"/>, with their body
+    /// commands from <paramref name="plan"/> and the visuals those commands draw.</summary>
+    public static IReadOnlyList<AreaCompanionTemplate> From(IEnumerable<AreaSpeaker> speakers, AreaScenePlan plan,
+        IEnumerable<AreaVisualRecord> visuals, AreaChart chart, SessionMapId home)
+    {
+        ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(plan);
+        ArgumentNullException.ThrowIfNull(visuals); ArgumentNullException.ThrowIfNull(chart);
+        var catalog = new Dictionary<AreaVisualKey, AreaVisualRecord>();
+        foreach (var visual in visuals) catalog.TryAdd(visual.Key, visual);
+        var templates = new List<AreaCompanionTemplate>();
+        foreach (var speaker in speakers)
+        {
+            if (AreaCompanionRoster.For(speaker) is not { } facts) continue;
+            var commands = plan.Commands.Where(command => command.Identity == speaker.Row.Key).ToArray();
+            var drawn = new Dictionary<AreaVisualKey, AreaVisualRecord>();
+            foreach (var command in commands)
+                drawn[command.Visual] = catalog.TryGetValue(command.Visual, out var visual) ? visual : throw new InvalidOperationException("AREA_COMPANION_VISUAL_REQUIRED");
+            templates.Add(new(speaker, facts, home, chart.ToChart(new AreaStepCell(speaker.WorldX, speaker.WorldY)),
+                new(checked((int)speaker.WorldX), checked((int)speaker.WorldY)), Array.AsReadOnly(commands), new ReadOnlyDictionary<AreaVisualKey, AreaVisualRecord>(drawn)));
+        }
+        return templates.AsReadOnly();
+    }
+
+    /// <summary>The frame repository of another map with the templates' T0 body frames added from the home map's
+    /// (a key already present must be the same decoded frame).</summary>
+    public static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> map,
+        IEnumerable<AreaCompanionTemplate> templates, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> home)
+    {
+        ArgumentNullException.ThrowIfNull(map); ArgumentNullException.ThrowIfNull(templates); ArgumentNullException.ThrowIfNull(home);
+        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(map);
+        foreach (var command in templates.SelectMany(template => template.Commands))
+        {
+            var frame = home.TryGetValue(command.Frame, out var found) ? found : throw new InvalidOperationException("AREA_COMPANION_FRAME_REQUIRED");
+            if (frames.TryGetValue(command.Frame, out var known))
+            {
+                if (!ReferenceEquals(known, frame) && (known.Width != frame.Width || known.Height != frame.Height || !known.Rgba.AsSpan().SequenceEqual(frame.Rgba)))
+                    throw new InvalidOperationException("AREA_COMPANION_FRAME_CONFLICT");
+            }
+            else frames.Add(command.Frame, frame);
+        }
+        return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
+    }
 }
 
 /// <summary>One companion of the shown map: its own authoritative grid session and follow goal.</summary>
 public sealed class AreaCompanion
 {
-    internal AreaCompanion(AreaSpeaker speaker, string entity, AreaCompanionFacts facts, CellCoord origin, AreaGridSession grid, CompanionFollower follow)
+    internal AreaCompanion(AreaCompanionTemplate template, AreaGridSession grid, CompanionFollower follow)
     {
-        Speaker = speaker; Entity = entity; Facts = facts; Origin = origin; Grid = grid; Follow = follow;
+        Template = template; Grid = grid; Follow = follow;
     }
 
-    public AreaSpeaker Speaker { get; }
-    public string Entity { get; }
-    public AreaCompanionFacts Facts { get; }
-    public AreaObjectKey Key => Speaker.Row.Key;
-    /// <summary>The serialized T0 chart cell of the NPC.</summary>
-    public CellCoord Origin { get; }
+    public AreaCompanionTemplate Template { get; }
+    public AreaSpeaker Speaker => Template.Speaker;
+    public string Entity => Template.Entity;
+    public AreaCompanionFacts Facts => Template.Facts;
+    public AreaObjectKey Key => Template.Key;
+    /// <summary>The serialized T0 chart cell of the NPC on its home map.</summary>
+    public CellCoord Origin => Template.HomeOrigin;
     public AreaGridSession Grid { get; internal set; }
     public CompanionFollower Follow { get; }
     public CompanionStanding Standing { get; internal set; }
@@ -94,7 +189,10 @@ public sealed class AreaCompanion
 /// waiting or free companion stands where it stopped. The PC is admitted against the companions in the same way.
 /// Placement lives in the session (<see cref="AreaCompanionPlacement"/>) only when the host records it (quick save,
 /// leaving the map), like the PC's. The drawn body is the NPC's T0 frame moved with the actor (no walk cycle or
-/// turning). Caller-serialized; no Godot.
+/// turning). ARC-WORLD-017: a companion stands on the map the session names (<see cref="AreaCompanionPlacement.Where"/>),
+/// so a group holds the companions of every home map standing here (visitors too) and lists the home companions standing
+/// elsewhere as <see cref="Absent"/>; <see cref="Carry"/> gives the session changes of a map transfer. Caller-serialized;
+/// no Godot.
 /// </summary>
 public sealed class AreaCompanionGroup
 {
@@ -104,56 +202,70 @@ public sealed class AreaCompanionGroup
     private readonly AreaChart _chart;
     private readonly SessionMapId _map;
     private readonly AreaCompanion[] _companions;
+    private readonly HashSet<AreaObjectKey> _absent;
+    private readonly IReadOnlyList<string> _away;
 
-    private AreaCompanionGroup(AreaStepSnapshot steps, AreaChart chart, SessionMapId map, AreaCompanion[] companions)
+    private AreaCompanionGroup(AreaStepSnapshot steps, AreaChart chart, SessionMapId map, AreaCompanion[] companions, HashSet<AreaObjectKey> absent,
+        IReadOnlyList<string> away)
     {
-        _steps = steps; _chart = chart; _map = map; _companions = companions;
+        _steps = steps; _chart = chart; _map = map; _companions = companions; _absent = absent; _away = away;
     }
 
     public IReadOnlyList<AreaCompanion> Companions => _companions;
     public SessionMapId Map => _map;
-    /// <summary>Speakers listed by the roster that could not stand on this map's chart (cell not admitted, outside the chart, bad placement).</summary>
+    /// <summary>Companions whose home is this map and who stand on another one, or whose recorded placement here cannot
+    /// be read: their T0 record is not in the world here (not drawn, picked, talked to or blocking).</summary>
+    public IReadOnlySet<AreaObjectKey> Absent => _absent;
+    /// <summary>Companions the session places here that could not stand on this map's chart (cell not admitted, outside the
+    /// chart, unreadable or missing placement).</summary>
     public IReadOnlyList<string> Skipped { get; private init; } = [];
 
     /// <summary>
-    /// The roster speakers of <paramref name="speakers"/> on map <paramref name="map"/>, each standing on its session
-    /// placement when one is recorded for this map and on its T0 cell otherwise.
+    /// The companions of <paramref name="templates"/> the session places on map <paramref name="map"/>, each on its
+    /// recorded placement there, or on its T0 cell on its home map when none is recorded.
     /// </summary>
-    public static AreaCompanionGroup Create(IEnumerable<AreaSpeaker> speakers, AreaStepSnapshot steps, AreaChart chart,
+    public static AreaCompanionGroup Create(IEnumerable<AreaCompanionTemplate> templates, AreaStepSnapshot steps, AreaChart chart,
         GameSessionOwner session, SessionMapId map, SimulationTime time)
     {
-        ArgumentNullException.ThrowIfNull(speakers); ArgumentNullException.ThrowIfNull(steps);
+        ArgumentNullException.ThrowIfNull(templates); ArgumentNullException.ThrowIfNull(steps);
         ArgumentNullException.ThrowIfNull(chart); ArgumentNullException.ThrowIfNull(session);
-        var list = new List<AreaCompanion>(); var skipped = new List<string>();
+        var list = new List<AreaCompanion>(); var skipped = new List<string>(); var absent = new HashSet<AreaObjectKey>(); var away = new List<string>();
         AreaCompanionGroup? group = null;
-        foreach (var speaker in speakers)
+        foreach (var template in templates)
         {
-            if (AreaCompanionRoster.For(speaker) is not { } facts) continue;
-            var entity = AreaConversationState.EntityId(speaker.Row);
-            var origin = Chart(chart, speaker.WorldX, speaker.WorldY);
-            var start = origin; var facing = NeighborDirection.XPlus;
-            if (session.QueryMapChange(map, AreaCompanionPlacement.Key(entity)) is { } value)
+            var entity = template.Entity;
+            var where = AreaCompanionPlacement.Where(session, template.Home, entity);
+            if (where.Map != map)
             {
-                if (AreaCompanionPlacement.Decode(value) is not { } placed) { skipped.Add(entity + " placement unreadable"); continue; }
-                start = Chart(chart, placed.World.X, placed.World.Y); facing = placed.Facing;
+                // A home companion away is not in this map's world.
+                if (map == template.Home) { absent.Add(template.Key); away.Add($"script {template.Speaker.ScriptId} on map {where.Map.RuntimeMap}"); }
+                continue;
             }
+            if (where.Error is { } error)
+            {
+                // Reported, never guessed: on its home map its T0 body does not stand in for an unreadable placement.
+                skipped.Add(entity + " " + error);
+                if (map == template.Home) absent.Add(template.Key);
+                continue;
+            }
+            var start = template.HomeOrigin; var facing = NeighborDirection.XPlus;
+            if (where.Placement is { } placed) { start = Chart(chart, placed.World.X, placed.World.Y); facing = placed.Facing; }
             if (!Admitted(steps, chart, start)) { skipped.Add(entity + " cell not admitted"); continue; }
-            list.Add(new(speaker, entity, facts, origin, null!, null!));
-            var index = list.Count - 1;
+            var index = list.Count;
             // Every companion and route source reads the group's live overlay at assessment time.
             AreaOccupancy Admission() => group!.OccupancyFor(index, leader: true);
             AreaOccupancy Planning() => group!.OccupancyFor(index, leader: false);
             var grid = new AreaGridSession(steps, time, chart: chart, start: start, facing: facing,
-                actorId: ActorPrefix + speaker.Index, capabilities: Capabilities) { Occupancy = Admission };
-            list[index] = new(speaker, entity, facts, origin, grid, new CompanionFollower(new AreaRouteSource(steps, chart, Planning)));
+                actorId: ActorPrefix + template.Speaker.Index, capabilities: Capabilities) { Occupancy = Admission };
+            list.Add(new(template, grid, new CompanionFollower(new AreaRouteSource(steps, chart, Planning))));
         }
-        group = new(steps, chart, map, list.ToArray()) { Skipped = skipped.AsReadOnly() };
+        group = new(steps, chart, map, list.ToArray(), absent, away.AsReadOnly()) { Skipped = skipped.AsReadOnly() };
         group.Refresh(session);
         return group;
     }
 
-    /// <summary>The PC's overlay: every companion's T0 record is moved, and the companions hold their live cells.</summary>
-    public AreaOccupancy OccupancyForPc() => _companions.Length == 0 ? AreaOccupancy.None : Cached(-1, true);
+    /// <summary>The PC's overlay: every companion's T0 record is moved (here or away), and the companions hold their live cells.</summary>
+    public AreaOccupancy OccupancyForPc() => _companions.Length == 0 && _absent.Count == 0 ? AreaOccupancy.None : Cached(-1, true);
 
     /// <summary>The PC's live cells, set by the host after each PC advance (committed cell and a started step's cell).</summary>
     public IReadOnlyList<CellCoord> Pc { get; private set; } = [];
@@ -177,7 +289,7 @@ public sealed class AreaCompanionGroup
         if (leader && index >= 0) held.AddRange(Pc);
         for (var i = 0; i < _companions.Length; i++)
             if (i != index && _companions[i].Grid is { } other) held.AddRange(Held(other.State));
-        var value = new AreaOccupancy(_companions.Select(c => c.Key), held);
+        var value = new AreaOccupancy(_companions.Select(c => c.Key).Concat(_absent), held);
         _cache[(index, leader)] = (inputs, value);
         return value;
     }
@@ -236,27 +348,48 @@ public sealed class AreaCompanionGroup
     }
 
     /// <summary>
-    /// Records every companion's committed cell and facing on this map in the session: a companion back on its T0
-    /// cell facing the default clears the change. Stops at the first refusal and returns it (None when all applied).
+    /// Records every companion's committed cell and facing on this map in the session, in one atomic step: a companion
+    /// back on its home T0 cell facing the default clears the change. Returns the refusal (None when applied).
     /// </summary>
     public GameSessionFailure Record(GameSessionOwner session)
     {
         ArgumentNullException.ThrowIfNull(session);
-        foreach (var companion in _companions)
-        {
-            var state = companion.Grid.State;
-            var key = AreaCompanionPlacement.Key(companion.Entity);
-            var world = _chart.ToWorld(state.CommittedCell);
-            var result = state.CommittedCell == companion.Origin && state.Facing == NeighborDirection.XPlus
-                ? session.ClearMapChange(session.Version, _map, key)
-                : session.SetMapChange(session.Version, _map, key,
-                    AreaCompanionPlacement.Encode(new(checked((int)world.X), checked((int)world.Y)), state.Facing));
-            if (result.Disposition == GameSessionDisposition.Rejected) return result.Failure;
-        }
-        return GameSessionFailure.None;
+        var result = session.ApplyChanges(session.Version, null, _companions.Select(Stay).ToArray());
+        return result.Disposition == GameSessionDisposition.Rejected ? result.Failure : GameSessionFailure.None;
     }
 
-    /// <summary>The companion of a speaker, if it is one.</summary>
+    private MapChangeEdit Stay(AreaCompanion companion)
+    {
+        var state = companion.Grid.State; var world = _chart.ToWorld(state.CommittedCell);
+        return AreaCompanionPlacement.Edit(companion.Template, _map, new(checked((int)world.X), checked((int)world.Y)), state.Facing);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-017 (research C15, C16, V4): the session changes of the PC leaving this map for
+    /// <paramref name="destination"/> at the world cell <paramref name="arrival"/>. Every companion the session party says
+    /// follows the PC goes with it, at any distance, onto the same arrival cell with its own facing (the next follow
+    /// decision on the destination steps it off the shared cell); its home map names the destination, or forgets the away
+    /// map when the destination is home. Every other companion (waiting, free) stays where it stands on this map. The host
+    /// applies the changes together with the PC's placement in one <see cref="GameSessionOwner.ApplyChanges"/>.
+    /// </summary>
+    public (IReadOnlyList<MapChangeEdit> Changes, IReadOnlyList<AreaCompanion> Carried) Carry(GameSessionOwner session, SessionMapId destination, CellCoord arrival)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (destination == _map) throw new ArgumentException("AREA_COMPANION_CARRY_SAME_MAP", nameof(destination));
+        var changes = new List<MapChangeEdit>(); var carried = new List<AreaCompanion>();
+        foreach (var companion in _companions)
+        {
+            if (session.QueryCompanion(companion.Entity).Standing != CompanionStanding.Following) { changes.Add(Stay(companion)); continue; }
+            var template = companion.Template;
+            changes.Add(new(_map, AreaCompanionPlacement.Key(companion.Entity), null));
+            changes.Add(AreaCompanionPlacement.Edit(template, destination, arrival, companion.Grid.State.Facing));
+            changes.Add(new(template.Home, AreaCompanionPlacement.MapKey(companion.Entity), destination == template.Home ? null : destination.RuntimeMap));
+            carried.Add(companion);
+        }
+        return (changes.AsReadOnly(), carried.AsReadOnly());
+    }
+
+    /// <summary>The companion of a speaker, if it stands on this map.</summary>
     public AreaCompanion? Of(AreaSpeaker speaker) => _companions.FirstOrDefault(c => c.Speaker.Row.Key == speaker.Row.Key);
 
     /// <summary>The world cell a speaker stands on now: a companion's committed cell, else its T0 cell.</summary>
@@ -269,11 +402,11 @@ public sealed class AreaCompanionGroup
 
     /// <summary>
     /// The companions' T0 body commands moved with their live actors: shifted by the projected offset of the continuous
-    /// anchor from the T0 cell, ordered at the committed cell. Frame, flip, alpha and lighting key stay the T0 body's.
+    /// anchor from the home T0 chart cell, ordered at the committed cell. Charts share one projection, so the same shift
+    /// stands a visitor on another map's chart. Frame, flip, alpha and visual key stay the T0 body's.
     /// </summary>
-    public IReadOnlyList<AreaDrawCommand> Commands(AreaScenePlan plan)
+    public IReadOnlyList<AreaDrawCommand> Commands()
     {
-        ArgumentNullException.ThrowIfNull(plan);
         var moved = new List<AreaDrawCommand>();
         foreach (var companion in _companions)
         {
@@ -281,7 +414,7 @@ public sealed class AreaCompanionGroup
             double du = DiagnosticGridActor.Seconds(state.Anchor.U) - companion.Origin.X, dv = DiagnosticGridActor.Seconds(state.Anchor.V) - companion.Origin.Y;
             int px = (int)Math.Round(40 * (dv - du), MidpointRounding.AwayFromZero), py = (int)Math.Round(20 * (du + dv), MidpointRounding.AwayFromZero);
             var world = _chart.ToWorld(state.CommittedCell);
-            foreach (var command in plan.Commands.Where(c => c.Identity == companion.Key))
+            foreach (var command in companion.Template.Commands)
                 moved.Add(command with
                 {
                     Destination = new TerrainRect(checked(command.Destination.X + px), checked(command.Destination.Y + py), command.Destination.Width, command.Destination.Height),
@@ -291,16 +424,33 @@ public sealed class AreaCompanionGroup
         return moved.AsReadOnly();
     }
 
+    /// <summary>
+    /// ARC-WORLD-017: the light of a moved body command (from <see cref="Commands"/>) where it stands now: its ART
+    /// channel, and with <paramref name="local"/> the CE object colour at its current cell (tile class plus stationary
+    /// lights, as for a T0 body). Null for a command that is not a companion body of this group.
+    /// </summary>
+    public AreaLitColors? Light(AreaDrawCommand command, AmbientPair pair, AreaLocalLighting? local)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (_companions.FirstOrDefault(c => c.Key == command.Identity)?.Template is not { } template
+            || !template.Visuals.TryGetValue(command.Visual, out var visual)) return null;
+        var channel = AreaAmbientPolicy.Channel(visual.RawArt);
+        if (local is not null) return local.Body(command, visual, channel, pair);
+        var color = AreaLocalLighting.Ambient(channel, pair);
+        return new AreaLitColors(color, color);
+    }
+
     public string Status()
     {
-        if (_companions.Length == 0) return "companions: none on this map";
+        var away = (_away.Count == 0 ? "" : "; away: " + string.Join(", ", _away)) + (Skipped.Count == 0 ? "" : "; skipped: " + string.Join(", ", Skipped));
+        if (_companions.Length == 0) return "companions: none on this map" + away;
         return string.Join("; ", _companions.Select(c =>
         {
             var state = c.Grid.State; var world = _chart.ToWorld(state.CommittedCell);
             var route = c.Follow.Route;
-            return $"companion script {c.Speaker.ScriptId} {c.Standing} at ({world.X},{world.Y}) {state.Phase} follow={c.Follow.LastAction}"
+            return $"companion script {c.Speaker.ScriptId} {c.Standing} at ({world.X},{world.Y}){(c.Template.Home != _map ? " visiting" : "")} {state.Phase} follow={c.Follow.LastAction}"
                 + $" route={route.Status}{(route.StopReason is { } reason ? " " + reason : "")} jumps={c.Jumps}";
-        }));
+        })) + away;
     }
 
     private static CellCoord Chart(AreaChart chart, long worldX, long worldY) => chart.ToChart(new AreaStepCell(worldX, worldY));

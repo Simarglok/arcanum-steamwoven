@@ -3,10 +3,11 @@
 ## Task authority
 
 - Work starts only from an explicit owner request: a direct instruction, a Claude project thread or a named `ARC-*` work item. Obsidian and repository roadmaps are knowledge/reference material, not task authority. Full rules: [task workflow](docs/workflow/tasks.md).
-- Every work item has a code under the [task naming policy](docs/workflow/task-naming.md); thread titles, branches, PR titles and commit subjects carry it first (PR titles and commits may put a short area prefix before it).
+- Every work item has a code under the [task naming policy](docs/workflow/task-naming.md); thread titles, branches, PR titles and commit subjects carry it first (PR titles and commits may put a short area prefix before it). The policy holds the type registry (`RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`, `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`). Whoever allocates a number (the owner or an owner-authorized session) first checks that it is unused: git history, open and merged PRs, branches and codes reserved in the project.
 - Confirm task ID, scope, assigned workspace and existing changes before editing. Work in the task's isolated checkout and preserve unrelated work.
 - Read `docs/architecture/decisions.md`, `docs/research/method.md` and the relevant task references. Do not expand a bounded task into a full engine.
-- Project development currently runs natively on macOS. Do not install Windows, run legacy executables, patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
+- Project development currently runs natively on macOS: work that builds, tests or runs code, Godot or original data runs on the owner's Mac. Following the owner's project instructions, a docs-only task (Markdown only) may run in a cloud checkout without .NET or Godot; there run `python3 -B tools/research/dat_probe.py --self-test` and state in the PR that the .NET root checks were not run because no code changed. Do not install Windows, run legacy executables, patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
+- The former Hermes task board and Codex workflow are retired: do not read `~/.hermes` or run `hermes`.
 
 ## Task readiness (Definition of Ready)
 
@@ -34,14 +35,21 @@ AC2. ...
 - Keep parsers and simulation independent of Godot. Use the pinned versions and process-local launch guidance in `docs/workflow/toolchain.md`; do not change shared installations implicitly.
 - Prefer existing evidence; document unknown fields and link technical claims to versioned sources. Distinguish source claims, hypotheses and experiments.
 - No mechanical copying from CE or CE-derived projects. Record provenance and applicable licenses before reuse; MIT labels alone do not prove independent lineage.
-- Do not commit original/extracted game content, third-party toolkit archives, secrets or personal paths. Use synthetic public fixtures and opt-in local real-data checks. Keep the original installation unchanged.
+- Do not commit original/extracted game content, third-party toolkit archives, secrets or personal paths. Nothing derived from original art enters git either: HD packs, upscaled frames, real manifests, model weights or adapters, screenshots and recordings stay local; an HD pack is built or imported on the player's device and never distributed ([HD pack format](docs/formats/hd-pack.md)). Use synthetic public fixtures and opt-in local real-data checks. Keep the original installation unchanged.
 - Validate offsets, sizes, decompression limits and untrusted archive paths. Do not infer gameplay/resource-precedence rules from a parser's convenience behavior.
 - Launcher sync: a change that adds or changes a viewer mode's arguments or original inputs updates `tools/local_dev/launch.py` (`GAME_ROLES`, `MODE_ROLES`, `ROLE_FLAGS`), the root `./arcanum` launcher when it adds a mode, and [the launcher docs](docs/workflow/local-development.md#project-launcher) in the same PR; `tools/local_dev/test_launcher_sync.py` must pass.
-- Run checks appropriate to changed behavior and all checks required by the accepted task. The repository has .NET tests and separate Godot/lab checks; see `docs/workflow/toolchain.md`. Documentation or source inspection alone is not runtime verification.
+- Run checks appropriate to changed behavior and all checks required by the accepted task, plus the root checks:
+
+  ```sh
+  dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"
+  python3 -B tools/research/dat_probe.py --self-test
+  ```
+
+  The root solution leaves out the terrain viewer and its tests, the `Arcanum.Input` project, research probes and labs, which have their own commands in `docs/workflow/toolchain.md`. Documentation or source inspection alone is not runtime verification.
 
 ## GitHub identity
 
-For this project, use the GitHub account `Simarglok`, not a bot or other account. Before GitHub operations, select it with `gh auth switch --hostname github.com --user Simarglok`, then verify `gh api user --jq .login` returns `Simarglok`. If an environment credential overrides the selected account, stop and resolve the mismatch without printing or copying secrets. This switch is shared CLI state, not repository-scoped; recheck identity before remote writes. It does not grant publication or merge authority.
+For this project, use the GitHub account `Simarglok`, not a bot or other account. Before GitHub operations, select it with `gh auth switch --hostname github.com --user Simarglok`, then verify `gh api user --jq .login` returns `Simarglok`. If an environment credential overrides the selected account, stop and resolve the mismatch without printing or copying secrets. A cloud session without `gh` uses the GitHub tools it is given, which must act as `Simarglok`; check the account before the first remote write. This switch is shared CLI state, not repository-scoped; recheck identity before remote writes. It does not grant publication or merge authority.
 
 ## Delivery
 
