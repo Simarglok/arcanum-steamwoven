@@ -212,7 +212,8 @@ character, without a key and with no unlock script attached:
 
 The windows refuse as jammed from both sides. A new game starts at hour 15
 ([clock policy](../world/game-clock-policy.md)), inside the unlocked 7..21 window, so
-the door is open if the player reaches it before 22:00 on the first day; the travel
+the door is unlocked (still closed, opening when walked into) if the player reaches
+it before 22:00 on the first day; the travel
 time to the house is not modelled (U2).
 
 ## Roofs (FR-SCENE-010)
@@ -302,7 +303,7 @@ for every piece.
   A faded but unfilled roof still counts as covering when objects are drawn; a wall
   with a transparent side under a faded roof is skipped unless its rotation check
   passes. The roof list's DIF/save bodies are empty, so fill and fade are not
-  saved; whether anything recomputes them on load, before the player's next tile
+  saved through DIF; whether anything recomputes them on load, before the player's next tile
   change, is not shown by the cited source (U7)
   ([stubs](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_roof_list.c#L87-L123)).
 

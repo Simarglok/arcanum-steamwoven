@@ -224,6 +224,7 @@ internal static partial class Program
             var towns = census.Where(c => c.Townmap is not null and not 0 and not 2 && c.Walls + c.Portals + c.RoofCells > 0).GroupBy(c => c.Townmap!.Value)
                 .Select(g => new { townmap = g.Key, nearest_distance = g.Min(c => c.Distance), sectors = g.Count(), walls = g.Sum(c => c.Walls), portals = g.Sum(c => c.Portals), roof_cells = g.Sum(c => c.RoofCells) })
                 .OrderBy(t => t.nearest_distance).ThenBy(t => t.townmap).ToArray();
+            if (towns.Length == 0) throw new InvalidDataException("BUILDING_NO_TOWN");
 
             // 2. The selected sector in detail.
             var sx = chosen.X; var sy = chosen.Y; var ox = sx * 64; var oy = sy * 64;
