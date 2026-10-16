@@ -32,11 +32,11 @@ It changes no code; every optimization below is a candidate, not a decision.
 
 | Category | Measured now | Main remaining cost | Best candidate | Expected gain | Size / risk |
 | --- | --- | --- | --- | --- | --- |
-| Load | 22.1–22.8 s Debug, 11.6–13.4 s Release, single thread | strict build and frame copy (inflate, decode, SHA-256), ~10 full-input authentication passes | Release assemblies for daily runs; reuse frames decoded in the strict build; share authentication | −45% (Release); −2–4 s each (reuse, sharing) | owner decision; medium / contract |
+| Load | 22.1–22.8 s Debug, 11.6–13.4 s Release, single thread | strict build and frame copy (inflate, decode, SHA-256), about ten whole-archive authentication passes | Release assemblies for daily runs; reuse frames decoded in the strict build; share authentication | −45% (Release); −2–4 s each (reuse, sharing) | owner decision; medium / contract |
 | Frame, overlay on | pan 10–33 ms, up to 2,508 draw calls | the overlay is redrawn every moving frame as thousands of separate polylines | redraw only when visible cells change; draw as one mesh | pan back to the 6–7 ms of the plain view | small–medium / low |
-| Frame, plain view | pan 5–10 ms; spikes 30–137 ms on first visit of a zoom | full scan of 37,363 commands per moving frame (2–5 ms); chunk composition on the main thread | spatial index for visibility; budgeted or background chunk composition | −2–4 ms per pan frame; spikes under ~20 ms | medium / low (exactness kept) |
-| Idle and pacing | 60 FPS, 4–7% CPU | full redraw of an unchanged view | Godot low-processor mode when nothing changes | a few % CPU | small / low |
-| Memory | RSS 277–533 MiB; GPU textures up to 266 MiB | 192 MiB chunk cache cap; 2.2 GB allocated per load | per-level or lower chunk cap; fewer load allocations | −50–100 MiB GPU; lower post-load peak | small / trade-off with spikes |
+| Frame, plain view | pan 5–10 ms; worst frames 17–137 ms, highest on first visit of a zoom | canvas update on every moving frame (2–5 ms: scan of 37,363 commands, uploads, item updates); chunk composition on the main thread | spatial index for visibility; budgeted or background chunk composition | up to −2–4 ms per pan frame; spikes under ~20 ms | medium / low (exactness kept) |
+| Idle and pacing | 58–61 FPS, 5–9% CPU | full redraw of an unchanged view | Godot low-processor mode when nothing changes | a few % CPU | small / low |
+| Memory | RSS 277–620 MiB; GPU textures up to 266 MiB | 192 MiB chunk cache cap; 2.3 GB allocated per load | per-level or lower chunk cap; fewer load allocations | −50–100 MiB GPU; lower post-load peak | small / trade-off with spikes |
 | Developer loop | root tests 12.9 s; smoke 59 s | one differential inflate test takes 10 s | smaller corpus or own category | −9 s per root test run | small / low |
 
 ## Load
@@ -52,11 +52,11 @@ It changes no code; every optimization below is a candidate, not a decision.
 | Cave plan, frames (54), steps | 0.6–0.7 s | 0.6 s |
 | **Total** | **22.1–22.8 s** | **11.6–13.4 s** |
 
-The ordinary source launch reached `SOURCE READY` 22.4 s after `load stage=begin`.
+The ordinary source launch logged `source-ready` 22.4 s after `load stage=begin`.
 CPU time equals wall time: the load runs on one core of fourteen. Each load
-allocates 2.2 GB of managed memory and triggers about 15 gen-2 collections;
-shortly after a load the managed heap held 607 MiB, which fell to about 130 MiB once
-collected.
+allocates 2.3 GB (2,223 MiB) of managed memory and adds 14–16 gen-2 collections
+(measured on the second run in a process); shortly after a load the managed heap
+held 607–610 MiB, which fell to 119–159 MiB once collected.
 
 The native profile of the Release frame copy has about half of the load thread's
 samples in `AccelerateCrypto_SHA256_compress`; in the strict snapshot it is about
@@ -81,7 +81,7 @@ over the 961 MB of DAT inputs (inferred, not timed per call):
 | L-A Release assemblies for daily runs (a release export preset, or optimized Data/Core assemblies in Debug) | 22 → 12–13 s | small code, but export gates and presets | Owner decision: the earlier plan chose hot-loop fixes over the optimize flag, and the export/evidence chain is built around `macOS debug`. |
 | L-B Keep the RGBA decoded in the strict build and hand it to the frame copy | about half the copy: 4 s Debug, 1.5–2 s Release | medium | Changes the loader contract (strict build retains pixels for selected frames, about 26 MB); the copy keeps its batch authentication. |
 | L-C Share authentication within one load (cave owner and `VerifyFile` reuse the main owner's verified identities while the files are held open) | 1.5–2 s in both configurations | medium | Needs an explicit argument for why a held-open, already hashed file cannot change, or a cheaper size/mtime guard; fail-closed contract change. |
-| L-D Decode frames in parallel (14 cores) | copy 8.5 → about 2 s Debug, 3.6 → about 1 s Release (estimate) | medium–large | The owner's budget and admission counters are sequential and deterministic today; parallel work must keep exact, reproducible accounting. |
+| L-D Decode frames in parallel (14 cores) | copy 8.5 → about 3 s Debug, 3.6 → about 2 s Release, unless batch authentication is also split (estimate) | medium–large | The owner's budget and admission counters are sequential and deterministic today; parallel work must keep exact, reproducible accounting. |
 | L-E Fewer allocations in the read path (pooled entry and inflate buffers) | lower GC time and post-load peak; time gain not measured | medium | Profile allocations first. |
 | L-F Persistent local cache of derived frames keyed by source SHA-256 | repeat loads to a few seconds | large | Derived original content on disk (ignored `local/` only), invalidation and provenance rules; owner decision. |
 
@@ -115,27 +115,33 @@ Findings:
   frame, and `_Draw` emits each visible cell as its own polygon, polylines,
   hatch lines and arrows (2,739 cells and up to 2,508 draw calls). Even idle it
   costs up to 1,122 draw calls.
-- **Visibility scan.** `TerrainCanvas.UpdateAreaVisible` filters all 37,363
-  commands (plus the upright order) on every frame in which the camera moved, so
-  even zoom 2 with about 200 visible commands spends 2–4.6 ms per pan frame in it.
-- **First visit of a zoom.** Chunks are composed on the main thread when first
-  needed: 82–93 ms at zoom 1 and 135–137 ms at the non-dyadic zoom 0.3 (full
-  resolution), 40–66 ms elsewhere.
+- **Canvas update.** `TerrainCanvas.UpdateAreaVisible` runs on every frame in
+  which the camera moved: it filters all 37,363 commands (plus the upright
+  order), composes missing chunks, uploads frames and updates the draw items.
+  Even zoom 2 with about 200 visible commands spends 2–4.6 ms per pan frame in
+  it. How much of that is the scan alone was not timed; it is inferred to be the
+  part that does not shrink with the view.
+- **Worst frames.** The maximum frame per pan phase was 17–23 ms at zoom 2,
+  82–93 ms at zoom 1, 40–66 ms at zoom 0.5, 135–137 ms at the non-dyadic zoom 0.3
+  (full-resolution chunks), 29–44 ms at zoom 0.25 and 57–61 ms at zoom 0.125.
+  Chunks are composed on the main thread when first needed (5–259 per phase);
+  attributing these spikes to composition is inferred from those counts.
 - **Zoom 0.25 pan** is the slowest steady state without the overlay (10 ms,
   about 100 FPS, under the 180 Hz display): about half canvas update, the rest
-  about 250 body items drawn one by one plus chunks.
+  about 270 body items drawn one by one plus chunks.
 
 | Option | Expected gain | Size | Notes |
 | --- | --- | --- | --- |
 | F-A Overlay: recompute and redraw only when the set of visible cells changes (with a margin around the view), and build the overlay as one mesh (or a few) instead of per-cell draw commands | pan with overlay close to the plain 6–7 ms; idle draw calls back to the plain view | small–medium | Display only; the existing overlay self-tests keep the cell classification. |
-| F-B Spatial index (a coarse world grid of command indices) for the visibility scan | −2–4 ms per pan frame at every zoom | medium | Must keep the exact draw order: index only selects candidates, the order stays the plan order. |
-| F-C Budgeted chunk composition: compose at most a few chunks per frame and draw the missing ones per command (already exact), or compose on a worker thread | worst frames from 40–137 ms to under about 20 ms | medium | Per-command fallback is the existing exact path; a worker needs immutable inputs, which the plan and frames already are. |
+| F-B Spatial index (a coarse world grid of command indices) for the visibility scan | up to −2–4 ms per pan frame (upper bound: the canvas update also holds composition and uploads) | medium | Must keep the exact draw order: index only selects candidates, the order stays the plan order. |
+| F-C Budgeted chunk composition: compose at most a few chunks per frame and draw the missing ones per command (already exact), or compose on a worker thread | worst frames from up to 137 ms to under about 20 ms (estimate) | medium | Per-command fallback is the existing exact path; a worker needs immutable inputs, which the plan and frames already are. |
 | F-D Batch body items (one material, per-instance data) | zoom 0.25 pan toward 5–6 ms | large | Option C of the [draw-call research](crash-site-area-draw-calls.md); the nearest-sampling proof must be redone. |
 | F-E Event-driven status line instead of 10 Hz rebuilds | about 1 ms every 100 ms | small | Low value now. |
 
 ## Idle and pacing
 
-With frame pacing (PR #90) the idle view runs at 58–61 FPS and 4–7% CPU, and an
+With frame pacing (PR #90) the idle view runs at 58–61 FPS once the cap has settled
+(55–65 FPS in the first seconds) and 5–9% CPU (`ps`, this run), and an
 active view at the display rate. The remaining idle cost is a full redraw of an
 unchanged scene 60 times per second.
 
@@ -147,13 +153,13 @@ unchanged scene 60 times per second.
 
 | Measurement | Value |
 | --- | --- |
-| Process RSS, idle after load | 456–533 MiB, falling to 277–474 MiB during the scripted phases |
-| Managed heap right after load / after collection | 607 MiB / about 130 MiB |
-| Managed allocation per load | 2.2 GB |
+| Process RSS, idle after load | 362–533 MiB (three launches), 277–620 MiB during the scripted phases |
+| Managed heap right after load / after collection | 607–610 MiB / 119–159 MiB |
+| Managed allocation per load | 2.3 GB |
 | CPU frame repository (area + cave) | 25.9 + 1.5 MB |
 | GPU frame textures (visible + LRU) | 0.5–1.9 MiB in the scripted phases; at most 13 MB in the smoke sweep |
-| Terrain chunk textures | up to 662 chunks, 190 MiB (cap 192 MiB) |
-| Godot texture / video memory | 17–266 MiB / 29–279 MiB |
+| Terrain chunk textures | up to 662–666 chunks, 188–190 MiB (cap 192 MiB) |
+| Godot texture / video memory | 17–266 MiB / 29–282 MiB |
 
 Terrain chunks dominate GPU memory once a few zoom levels have been visited.
 
@@ -163,6 +169,8 @@ Terrain chunks dominate GPU memory once a few zoom levels have been visited.
 | M-B Fewer load allocations (L-E) and a compacting collection after publication | lower RSS peak after load | small–medium | Measure RSS before and after. |
 
 ## Developer loop
+
+Single wall-clock runs of each command on a warm build:
 
 | Check | Wall time |
 | --- | ---: |
@@ -197,5 +205,6 @@ takes 10.0 of the Data project's 12.6 s.
 
 The exported `.app`, real input (the probe moves the camera by script), GPU-side
 timing beyond draw-call counts, other machines, and the cost of click routing and
-NPC conversation (not probed; no frame spike was attributed to them). Gains in the
+NPC conversation (not probed; no frame spike was attributed to them). Quick save
+and character stats, merged after the measured commit, were not measured. Gains in the
 option tables are estimates from the measurements above, not measured results.
