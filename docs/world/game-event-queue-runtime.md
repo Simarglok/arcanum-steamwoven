@@ -88,38 +88,58 @@ that ARC-COMBAT-002 left for the queue. All run on game time, are saved, and kee
 | `life.npc.resting` | NPC | hit-point damage is written with a positive value | 1 h | a living NPC without a PC leader (free, not following or waiting) heals `HealRate × max(1, elapsed h)` hit points and three times that fatigue; positive writes set their timers again |
 
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
-found positive (the source writes those back even when the heal rate is 0). The hero gets no resting timer: the source
-schedules one but its handler heals only NPCs. Sources: [fatigue][cr-fatigue], [resting][cr-rest], [poison][st-poison],
+found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
+damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that
+changes neither still sets a missing resting or poison timer; the session sets timers only on a change. It matters
+only for a critter that already has damage or poison but no pending timer: an NPC whose map data loads it wounded or
+poisoned, or a follower whose resting timer ended while it had a PC leader and who then left the party. The next
+change of the value sets the timer. The hero gets no resting timer: the source schedules one but its handler heals
+only NPCs. Sources: [fatigue][cr-fatigue], [resting][cr-rest], [poison][st-poison],
 [poison schedule][st-poison-sched], [hit-point write][hp-set], [poison write][stat-set].
 
 Rules of the wiring:
 
 - **Scheduling with the step.** Every life call (`ApplyDamage`, `Kill`, `Heal`, the ticks) sets its timers in the same
-  step. The step counts the new events first; if they do not fit in the queue (16,384 pending) the whole step is refused
-  (`EventBudgetExceeded`) with nothing drawn or changed.
+  step. The session's queue holds 16,387 events (`SessionEventKinds.MaxPending`: four per NPC life record and three for
+  the hero), so the timers of a step always fit; a step whose timers would not fit, or whose deadline would pass the
+  clock's range, is refused whole (`EventBudgetExceeded`) with nothing drawn or changed.
 - **Map of an NPC timer.** The map the NPC is on: the actor's map when a life call sets it (the host acts on NPCs of the
-  map the PC is on), the timer's own map when a handler sets the next one.
+  map the PC is on), the timer's own map when a handler sets the next one. An NPC keeps all its timers on one map and
+  one per kind whatever the map: a life step on another map than its pending timers' (a move the session did not see,
+  such as a script teleport) takes them along to that map in the same step. Restore refuses an NPC with timers on two
+  maps.
 - **Pass.** `ProcessEvents(world, budget)` runs one pass at the session's game time with the actor's map as the active
   map. Hero timers run on any map; an NPC timer waits while its map is not active and fires late on return, with the
   elapsed time. The host's `ISessionEventWorld.CritterFacts(map, entity)` gives the NPC's life facts; an NPC it does not
   report, or one without a session life record, is dropped (`EntityMissing`). Each fired timer is one life step, so a
-  changed record adds one revision; the pass itself takes no expected version, like a clock advance. A pass while paused
+  changed record adds one revision; the pass itself takes no expected version, like a clock advance. A pass can change
+  the saved queue without moving any revision (a dropped or ended timer, a timer set again after a step that changed
+  nothing), so the revision is not a "nothing to save" signal. A pass while paused
   or in turn-based mode still fires due timers. Real and animation time are 0 in a session pass: no session kind uses them.
 - **Map change.** `PlaceActor` and `ApplyChanges` to another map move the pending timers of the PC's followers to that
   map (`GameEventQueue.Relocate`; an event moves only when every entity it names is on the old map and travels). A key
-  collision on the new map refuses the whole step (`EventConflict`). Waiting and free NPCs keep their timers on their map.
+  collision on the new map refuses the whole step (`EventConflict`; the one-map-per-NPC rule leaves no way to reach it),
+  and a call from the host's world port during a pass is `InvalidEventPass`. Waiting and free NPCs keep their timers
+  on their map. The source makes unconscious followers wait before the PC leaves; the session moves the timers of every
+  follower in the party list, so a host that leaves an unconscious follower behind makes it wait first.
 - **Long waits.** A wait that advances many hours and then runs one pass fires each timer once, late: fatigue and resting
   count the elapsed time, a poison tick applies one step. Stepping a long wait (the source sleeps one hour per step) is
   the host pump's job (E3).
-- **Profile.** A restore uses the event profile of the options' rule mode (`GameRules.For(options.Rules).Events`,
-  ARC-WORLD-023). No session kind is `SavedUnlessRebuilt` yet (the AI tick arrives with I6), so both modes restore the
-  same timers.
+- **Rule mode.** A restore uses the event profile of the options' rule mode (`GameRules.For(options.Rules).Events`,
+  ARC-WORLD-023); no session kind is `SavedUnlessRebuilt` yet (the AI tick arrives with I6), so both modes restore the
+  same timers. The poison recovery timer reads the session's current rules when it fires (`PoisonRecoveryTwice`, TE10).
+- **Poison recovery value.** A recovery timer carries a second value: 1 when a poison write set it, 2 when the recovery
+  tick set the next one (it then stands for the source's two events). In the Steamwoven mode a timer applies one tick;
+  in the Original mode a timer with 2 applies the tick twice, the second only while poison remains. The value does not
+  depend on the mode, so switching modes converts nothing.
 
-Anomaly **TE10** (new, recorded in the [research note](../research/game-event-queue.md#7-ce-anomalies-recorded-not-adopted)):
-the source's poison recovery handler writes the new level, which schedules a recovery event because none is pending
-(the firing one already left the list), and then adds another one itself, so after the first tick two recovery events
-run every 120 s and the level falls twice as fast. The project keeps one (one per critter and kind), under both rule
-settings; whether the original executable does the same is NOT_VERIFIED.
+Anomaly **TE10** (new, recorded in the [research note](../research/game-event-queue.md#7-ce-anomalies-recorded-not-adopted)
+and the [verification ledger](../research/original-verification-ledger.md)): the source's poison recovery handler
+writes the new level, which schedules a recovery event because none is pending (the firing one already left the list),
+and then adds another one itself, so after the first tick two recovery events run every 120 s and the level falls
+twice as fast. The retail 1.0.7.4 executable does the same (read at `stat_poison_timeevent_process` 0x4B1170,
+`stat_base_set` 0x4B0980 and `poison_timeevent_schedule` 0x4B1350): a bug of the original. Decision of this task under
+D2: the Steamwoven mode applies one tick per period, the Original mode keeps two (rule switch `PoisonRecoveryTwice`).
 
 ### Snapshot schema 9
 
@@ -132,9 +152,10 @@ settings; whether the original executable does the same is NOT_VERIFIED.
 ```
 
 Pending events are in queue order. Decoding checks shapes and ranges: registry and next sequence at least 1, at most
-16,384 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
+16,387 events, 4 entities and 8 values each, a kind spelled as a code, maps at least 1 and entity ids
 (`OutOfRange`, `BudgetExceeded`, missing, unknown and wrongly typed fields). Restore refuses (`InvalidEvents`) another
-registry version, an unknown kind, a timer whose deadline is not its kind's delay after its scheduling time or that was
+registry version, an unknown kind, a value count other than the kind's (2 for poison recovery, else 1), a recovery
+value other than 1 or 2, an NPC with timers on two maps, a timer whose deadline is not its kind's delay after its scheduling time or that was
 set after the saved clock, a hero timer without a hero, an NPC timer without the NPC's life record, and everything the
 queue's own restore refuses (sequences, order, payloads, keys); more events than the queue holds is
 `EventBudgetExceeded`.
@@ -154,9 +175,11 @@ real-seconds delay, detached snapshots, restore under both settings and the prof
 last sequence number, and relocation (only events whose entities all travel, scope and key index follow, an atomic
 collision refusal). `tests/Arcanum.Session.Tests/SessionEventTests`: hero fatigue recovery and a long wait, poison
 damage and recovery with one timer of each kind, NPC timers that wait for their map and followers that carry theirs,
-resting skipped for a follower and a dead NPC, a missing NPC dropped, a pass while paused, a full queue refusing a step
-whole, the canonical `events` text, restore under both settings and the same firing afterwards, decode and restore
-refusals.
+resting skipped for a follower and a dead NPC, a missing NPC dropped, a pass while paused, a queue that holds every
+timer the life records can need (and restores full), a dead critter's fatigue timer ending, an NPC's timers following
+it to another map, a map transfer step that carries followers' timers but not a waiting NPC's, a callback from the
+world port that cannot move the PC, the TE10 switch in both modes, the canonical `events` text, restore under both
+modes and the same firing afterwards, decode and restore refusals.
 
 [cr-fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1304-L1371
 [cr-rest]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1421-L1526

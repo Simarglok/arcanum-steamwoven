@@ -45,7 +45,9 @@ public sealed class SessionEventState
 
 /// <summary>
 /// The session's event kinds (registry version 1): the life-state timers of ARC-COMBAT-002, each one per critter and
-/// sub-kind (the source keeps one too) with the game time it was scheduled at as its only value. Hero kinds name no
+/// sub-kind (the source keeps one too) with the game time it was scheduled at as its first value. The poison recovery
+/// kinds carry a second value, the number of source recovery events the timer stands for: 1 when a poison write set it,
+/// 2 when the recovery tick itself did (anomaly TE10; the Original rule mode applies that many ticks). Hero kinds name no
 /// entity and run on any map; NPC kinds name the NPC on its map and run while that map is active.
 /// </summary>
 public static class SessionEventKinds
@@ -69,13 +71,19 @@ public static class SessionEventKinds
     /// <summary>Resting: one game hour after hit-point damage is set.</summary>
     public const long RestingDelayMs = 3_600_000;
 
+    /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
+    /// can always set its timers.</summary>
+    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3;
+
+    internal static GameEventQueueLimits Limits { get; } = new(MaxPending: MaxPending);
+
     internal static GameEventRegistry Build(SessionEventSink owner)
     {
         GameEventKindDefinition Hero(string name, LifeTimer timer) => new(name, GameEventDomain.Game, GameEventPersistence.Saved,
-            GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, 1, 0, 0, new LifeTimerHandler(owner, timer),
+            GameEventUniqueness.KeepExisting, GameEventScopeRule.Global, 0, Values(timer), 0, 0, new LifeTimerHandler(owner, timer),
             Validate: ScheduledAt);
         GameEventKindDefinition Npc(string name, LifeTimer timer) => new(name, GameEventDomain.Game, GameEventPersistence.Saved,
-            GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, 1, 1, 0, new LifeTimerHandler(owner, timer),
+            GameEventUniqueness.KeepExisting, GameEventScopeRule.EntityMap, 1, Values(timer), 1, 0, new LifeTimerHandler(owner, timer),
             Validate: ScheduledAt);
         return new(RegistryVersion,
         [
@@ -107,8 +115,10 @@ public static class SessionEventKinds
         _ => throw new ArgumentOutOfRangeException(nameof(timer)),
     };
 
-    // The scheduling time is a game time no later than the deadline; the queue checks the deadline itself.
-    private static bool ScheduledAt(GameEventPayload payload) => payload.Values[0] >= 0;
+    internal static int Values(LifeTimer timer) => timer == LifeTimer.PoisonRecovery ? 2 : 1;
+
+    // The scheduling time is a game time; a recovery timer stands for one or two source events.
+    private static bool ScheduledAt(GameEventPayload payload) => payload.Values[0] >= 0 && (payload.Values.Length == 1 || payload.Values[1] is 1 or 2);
 }
 
 internal enum LifeTimer { Fatigue, PoisonDamage, PoisonRecovery, Resting }

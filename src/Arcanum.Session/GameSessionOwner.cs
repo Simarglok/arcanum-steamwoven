@@ -100,7 +100,7 @@ public sealed class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(descriptor.RandomSeed), life, null, sink, new GameEventQueue(SessionEventKinds.Build(sink))) { _rules = GameRules.For(descriptor.Rules) };
+            new(descriptor.RandomSeed), life, null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -224,7 +224,7 @@ public sealed class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
         if (placement == _actor) return NoChange();
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
-        if (!MoveFollowerEvents(placement.Map)) return Reject(GameSessionFailure.EventConflict);
+        if (MoveFollowerEvents(placement.Map) is var moved && moved != GameSessionFailure.None) return Reject(moved);
         _actor = placement;
         return Changed();
     }
@@ -320,7 +320,7 @@ public sealed class GameSessionOwner : IDisposable
             return Reject(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
         // The last refusal: an atomic move that changes nothing when it fails.
-        if (actorChanged && !MoveFollowerEvents(actor!.Value.Map)) return Reject(GameSessionFailure.EventConflict);
+        if (actorChanged && MoveFollowerEvents(actor!.Value.Map) is var moved && moved != GameSessionFailure.None) return Reject(moved);
 
         // All refusals precede the commit.
         if (actorChanged) _actor = actor!.Value;
@@ -898,8 +898,15 @@ public sealed class GameSessionOwner : IDisposable
                 break;
             case LifeTimer.PoisonRecovery:
                 if (state.PoisonLevel == 0) return GameEventHandlerOutcome.Completed;
-                result = Life(Version, target, true, (s, f, _) => LifeRules.PoisonRecoveryTick(s, f),
-                    (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map);
+                // TE10: in the Original mode a timer that stands for two source events applies the tick twice, the second
+                // only while poison remains (as the second event finds it). The next timer stands for two either way.
+                var twice = _rules.Events.PoisonRecoveryTwice && e.Payload.Values[1] == 2;
+                result = Life(Version, target, true, (s, f, _) =>
+                    {
+                        var first = LifeRules.PoisonRecoveryTick(s, f);
+                        return twice && first.After.PoisonLevel > 0 ? LifeRules.PoisonRecoveryTick(first.After, f) with { Before = s } : first;
+                    },
+                    (_, after) => after.PoisonLevel > 0 ? [LifeTimer.PoisonRecovery] : [], map, recoveryCopies: 2);
                 break;
             case LifeTimer.Resting:
                 if (hero || dead || _party.Get(target.Entity!).LedByPc) return GameEventHandlerOutcome.Completed;
@@ -940,13 +947,19 @@ public sealed class GameSessionOwner : IDisposable
         return timers;
     }
 
-    // The PC moves to another map: the pending timers of its followers go with it. Atomic; false on a key collision.
-    private bool MoveFollowerEvents(SessionMapId to)
+    // The PC moves to another map: the pending timers of its followers go with it. Atomic: a key collision (which the
+    // one-map-per-NPC rule leaves no way to reach) is EventConflict, a call from the host's world port during a pass
+    // InvalidEventPass, and either moves nothing.
+    private GameSessionFailure MoveFollowerEvents(SessionMapId to)
     {
-        if (to == _actor.Map) return true;
+        if (to == _actor.Map) return GameSessionFailure.None;
         var followers = _party.Order.ToHashSet(StringComparer.Ordinal);
-        return _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure ==
-            GameEventFailure.None;
+        return _events.Relocate(_actor.Map.RuntimeMap, to.RuntimeMap, entity => followers.Contains(entity.Code)).Failure switch
+        {
+            GameEventFailure.None => GameSessionFailure.None,
+            GameEventFailure.PassInProgress => GameSessionFailure.InvalidEventPass,
+            _ => GameSessionFailure.EventConflict,
+        };
     }
 
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
@@ -1155,7 +1168,7 @@ public sealed class GameSessionOwner : IDisposable
     // adopts the trial copy, so it draws nothing.
     private SessionLifeResult Life(GameSessionVersion expected, SessionLifeTarget target, bool validInput,
         Func<LifeState, LifeFacts, ICombatRollSource, LifeOutcome> step,
-        Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handlerTimers = null, int eventMap = 0)
+        Func<LifeState, LifeState, IEnumerable<LifeTimer>>? handlerTimers = null, int eventMap = 0, int recoveryCopies = 1)
     {
         ArgumentNullException.ThrowIfNull(target);
         var failure = Resolve(target, out var record, out var facts, out var recorded);
@@ -1172,15 +1185,24 @@ public sealed class GameSessionOwner : IDisposable
         // An NPC's timers belong to the map it is on: the timer's own map, else the actor's (the map where the step happened).
         var map = target.IsHero ? 0 : eventMap > 0 ? eventMap : _actor.Map.RuntimeMap;
         var timers = Timers(target.IsHero, record.State, next.State, handlerTimers)
-            .Select(timer => TimerEvent(timer, target, map, now)).Where(pending => !IsPending(pending.Kind, pending.Payload)).ToArray();
+            .Select(timer => TimerEvent(timer, target, map, now, recoveryCopies)).Where(pending => !IsPending(pending.Kind, target.Entity)).ToArray();
+        // One map per NPC's timers: a step on another map than its pending timers' (a teleport the session did not see)
+        // takes them along, as the NPC is evidently here now.
+        var stray = target.IsHero ? [] : _events.QueryPending()
+            .Where(e => e.Payload.Entities.Length == 1 && e.Payload.Entities[0].Code == target.Entity && e.Payload.Entities[0].Map != map)
+            .Select(e => e.Payload.Entities[0].Map).Distinct().ToArray();
         if (timers.Length > 0 && (_events.Count > _events.Limits.MaxPending - timers.Length ||
-            _events.NextSequence > long.MaxValue - timers.Length)) return RejectLife(GameSessionFailure.EventBudgetExceeded);
+            _events.NextSequence > long.MaxValue - timers.Length || now > long.MaxValue - SessionEventKinds.RestingDelayMs))
+            return RejectLife(GameSessionFailure.EventBudgetExceeded);
         var changed = next != record;
         if (changed && !target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectLife(GameSessionFailure.BudgetExceeded);
         if (changed && _revision == long.MaxValue) return RejectLife(GameSessionFailure.RevisionExhausted);
 
         // All refusals precede the commit; the timers fit, so scheduling cannot fail.
         _random = rolls.Trial;
+        foreach (var from in stray)
+            if (_events.Relocate(from, map, entity => entity.Code == target.Entity).Failure != GameEventFailure.None)
+                throw new InvalidOperationException("Timer relocation failed after admission.");
         foreach (var (kind, payload) in timers)
         {
             var scheduled = _events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0));
@@ -1193,14 +1215,18 @@ public sealed class GameSessionOwner : IDisposable
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }
 
-    private static (string Kind, GameEventPayload Payload) TimerEvent(LifeTimer timer, SessionLifeTarget target, int map, long now) =>
-        target.IsHero
-            ? (SessionEventKinds.Kind(timer, true), new([], [now]))
-            : (SessionEventKinds.Kind(timer, false), new([new GameEventEntity(map, target.Entity!)], [now]));
+    private static (string Kind, GameEventPayload Payload) TimerEvent(LifeTimer timer, SessionLifeTarget target, int map, long now,
+        int recoveryCopies)
+    {
+        long[] values = timer == LifeTimer.PoisonRecovery ? [now, recoveryCopies] : [now];
+        return target.IsHero
+            ? (SessionEventKinds.Kind(timer, true), new([], [.. values]))
+            : (SessionEventKinds.Kind(timer, false), new([new GameEventEntity(map, target.Entity!)], [.. values]));
+    }
 
-    // One per critter and kind: the key is the kind and, for an NPC, the entity on its map.
-    private bool IsPending(string kind, GameEventPayload payload) =>
-        _events.Any(kind, e => e.Payload.Entities.AsSpan().SequenceEqual(payload.Entities.AsSpan()));
+    // One per critter and kind, whatever map the pending one is on (an NPC keeps all its timers on one map).
+    private bool IsPending(string kind, string? entity) =>
+        _events.Any(kind, e => entity is null || e.Payload.Entities[0].Code == entity);
 
     private static LifeTimer TimerOf(string kind) => kind switch
     {
@@ -1253,19 +1279,25 @@ public sealed class GameSessionOwner : IDisposable
         events = null;
         var registry = SessionEventKinds.Build(sink);
         var converted = ImmutableArray.CreateBuilder<GameEvent>(saved.Pending.Count);
+        var maps = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var pending in saved.Pending)
         {
             if (pending is null || !registry.TryGet(pending.Kind, out var kind) || pending.Entities.IsDefault || pending.Values.IsDefault ||
-                pending.Values.Length != 1) return GameSessionFailure.InvalidEvents;
+                pending.Values.Length != kind.ValueCount) return GameSessionFailure.InvalidEvents;
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
             if (pending.Entities.IsEmpty ? !hero : !pending.Entities.All(entity => entity.Code is not null && life.Critters.ContainsKey(entity.Code)))
                 return GameSessionFailure.InvalidEvents;
+            // One map per NPC's timers.
+            foreach (var entity in pending.Entities)
+                if (!maps.TryAdd(entity.Code, entity.Map) && maps[entity.Code] != entity.Map) return GameSessionFailure.InvalidEvents;
             var scope = kind.Scope == GameEventScopeRule.Global || pending.Entities.IsEmpty ? 0 : pending.Entities[0].Map;
             converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, scope, new(pending.Entities, pending.Values)));
         }
-        var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile);
+        // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
+        var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
+            SessionEventKinds.Limits);
         if (result.Queue is null)
             return result.Failure == GameEventFailure.QueueFull ? GameSessionFailure.EventBudgetExceeded : GameSessionFailure.InvalidEvents;
         events = result.Queue;

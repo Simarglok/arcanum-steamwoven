@@ -67,6 +67,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Combat | `CombatAnomalyProfile` | `CriticalSelfHitRolledTwice` | A7 | a critical self-hit rolls the critical procedure twice |
 | Combat | `CombatAnomalyProfile` | `BackstabDamageOnSelfHit` | A10 | the backstab bonus applies to a self-hit |
 | Event queue | `GameEventQueueProfile` | `RebuildOnLoad` | OQ2 | AI ticks are rebuilt with fresh jitter on load |
+| Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
 until then both modes behave as the original):
@@ -85,8 +86,9 @@ The list covers every "Original bug" and "CE change" row of the ledger.
 
 ## Not ready
 
-- No domain reads `GameSessionOwner.Rules` yet: combat is not wired into the session and the event queue is not owned
-  by it; each wiring slice passes `Rules.Combat` or `Rules.Events` at its call.
+- Combat is not wired into the session yet and does not read `GameSessionOwner.Rules`. The event queue does
+  (ARC-WORLD-024): a restore uses `Rules.Events` for `RebuildOnLoad`, and the poison recovery timer reads
+  `PoisonRecoveryTwice` when it fires.
 - There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
   (F8) keeps the current session's mode.
 - Domains other than combat and the event queue have no profile yet; their first switch adds one.

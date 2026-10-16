@@ -181,19 +181,100 @@ public sealed class SessionEventTests
     }
 
     [TestMethod]
-    public void ALifeStepThatNeedsATimerOverTheQueueLimitIsRefusedWhole()
+    public void TheQueueHoldsEveryTimerTheLifeRecordsCanNeed()
     {
         using var owner = Session();
-        // 4096 NPC records with four timers each fill the 16,384 slots.
+        // 4096 NPC records with four timers each, then the hero's three: exactly the session's queue size.
         for (var i = 0; i < GameSessionLimits.PolicyMaxLifeRecords; i++)
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
-        Assert.AreEqual(GameEventQueueLimits.Default.MaxPending, owner.QueryEvents().Count);
-        var version = owner.Version;
-        var refused = owner.ApplyDamage(version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1 });
-        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.EventBudgetExceeded), (refused.Disposition, refused.Failure));
-        Assert.AreEqual((version, LifeState.Unharmed), (owner.Version, owner.QueryHeroLife()!.Record.State));
-        // A step that needs no new timer still runs.
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
+        Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
+        Assert.AreEqual(SessionEventKinds.MaxPending, owner.QueryEvents().Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
+        // A save of a full queue restores.
+        using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(owner.Capture())));
+        Assert.AreEqual(SessionEventKinds.MaxPending, restored.QueryEvents().Count);
+    }
+
+    [TestMethod]
+    public void AFatigueTimerOfADeadCritterEndsAndATimerFollowsItsNpcToAnotherMap()
+    {
+        using var owner = Session(hero: false);
+        Damage(owner, Npc("oid:wolf"), new LifeDamage { Fatigue = 10 });
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, Npc("oid:wolf")).Disposition);
+        Damage(owner, Npc("oid:fox"), new LifeDamage { Fatigue = 10 });
+        var world = new World { Present = { [(79, "oid:wolf")] = Wolf, [(80, "oid:fox")] = Wolf } };
+
+        // The fox (not a follower) turns up in the cave: a step there takes its pending timer along, one per kind.
+        var revision = owner.Version.Revision;
+        Changed(owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)), owner, revision + 1);
+        Damage(owner, Npc("oid:fox"), new LifeDamage { Fatigue = 5 });
+        CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 80_000}:79/oid:wolf", $"life.npc.fatigue@{T0 + 80_000}:80/oid:fox",
+            $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf" }, Pending(owner));
+
+        Advance(owner, 80_000);
+        Pass(owner, world);
+        revision = owner.Version.Revision;
+        Changed(owner.PlaceActor(owner.Version, Start), owner, revision + 1);
+        var exterior = Pass(owner, world);
+        // The dead wolf's timer fires without a step and sets no next one (the source returns early for the dead).
+        Assert.AreEqual(0, exterior.Life.Count);
+        CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 160_000}:80/oid:fox", $"life.npc.resting@{T0 + 3_600_000}:79/oid:wolf" },
+            Pending(owner));
+    }
+
+    [TestMethod]
+    public void AMapTransferStepCarriesFollowersTimersButNotWaitingOnes()
+    {
+        using var owner = Session(hero: false);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "virgil").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "sogg").Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, "sogg").Disposition);
+        Damage(owner, Npc("virgil"), new LifeDamage { Fatigue = 10 });
+        Damage(owner, Npc("sogg"), new LifeDamage { Fatigue = 10 });
+
+        var revision = owner.Version.Revision;
+        Changed(owner.ApplyChanges(owner.Version, new(Cave, new(5, 5), Start.Facing),
+            [new(Cave, MapChangeKey.ForEntity("virgil", "npc.map"), 80)]), owner, revision + 1);
+        CollectionAssert.AreEqual(new[] { $"life.npc.fatigue@{T0 + 80_000}:80/virgil", $"life.npc.fatigue@{T0 + 80_000}:79/sogg" },
+            Pending(owner));
+
+        // A call back from the host's world port during a pass cannot move the PC.
+        var world = new CallbackWorld(owner);
+        Advance(owner, 80_000);
+        Pass(owner, world);
+        Assert.AreEqual(GameSessionFailure.InvalidEventPass, world.Placement!.Value.Failure);
+        Assert.AreEqual(Cave, owner.QueryActor().Map);
+    }
+
+    private sealed class CallbackWorld(GameSessionOwner owner) : ISessionEventWorld
+    {
+        public GameSessionMutationResult? Placement { get; private set; }
+        public LifeFacts? CritterFacts(SessionMapId map, string entity)
+        {
+            Placement ??= owner.PlaceActor(owner.Version, Start);
+            return Wolf;
+        }
+    }
+
+    [TestMethod]
+    public void TheOriginalModeRecoversPoisonTwicePerPeriodAfterTheFirstTick()
+    {
+        // TE10: from the second tick on the source runs two recovery events per 120 s; the mode is read when the timer fires.
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Session(hero: false);
+            Assert.AreNotEqual(GameSessionDisposition.Rejected, owner.SelectRules(mode));
+            var world = new World { Present = { [(79, "oid:wolf")] = Wolf } };
+            Damage(owner, Npc("oid:wolf"), new LifeDamage { Poison = 300 });
+            Assert.AreEqual(1, owner.QueryEvents().Single(e => e.Kind == SessionEventKinds.NpcPoisonRecovery).Payload.Values[1]);
+            Advance(owner, 120_000);
+            Pass(owner, world);
+            Assert.AreEqual(292, owner.QueryLifeRecord("oid:wolf")!.Value.State.PoisonLevel, mode.ToString());
+            Assert.AreEqual(2, owner.QueryEvents().Single(e => e.Kind == SessionEventKinds.NpcPoisonRecovery).Payload.Values[1]);
+            Advance(owner, 120_000);
+            Pass(owner, world);
+            Assert.AreEqual(mode == RuleMode.Original ? 276 : 284, owner.QueryLifeRecord("oid:wolf")!.Value.State.PoisonLevel, mode.ToString());
+        }
     }
 
     [TestMethod]

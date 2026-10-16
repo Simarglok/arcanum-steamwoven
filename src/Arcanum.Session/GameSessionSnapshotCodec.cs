@@ -25,7 +25,8 @@ public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, Snapsho
 /// JSON for <see cref="GameSessionSnapshot"/> schema 9. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
-/// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
+/// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
+/// needs the kind registry) stays with <see cref="GameSessionOwner.Restore"/>.
 /// </summary>
 public static class GameSessionSnapshotCodec
 {
@@ -436,7 +437,7 @@ public static class GameSessionSnapshotCodec
         var f = Fields(element, p, EventsFields);
         var registry = Int(f["registry"], p + ".registry", 1, int.MaxValue);
         var next = Long(f["nextSequence"], p + ".nextSequence", 1, long.MaxValue);
-        var items = Array(f["pending"], p + ".pending", GameEventQueueLimits.Default.MaxPending);
+        var items = Array(f["pending"], p + ".pending", SessionEventKinds.MaxPending);
         var pending = new SessionPendingEvent[items.Length];
         for (var i = 0; i < items.Length; i++)
         {
