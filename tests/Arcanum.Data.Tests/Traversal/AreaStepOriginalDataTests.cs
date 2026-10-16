@@ -113,7 +113,8 @@ public sealed class AreaStepOriginalDataTests
         Console.WriteLine(JsonSerializer.Serialize(new { Reached = reached.Count, WallBlockedSteps = walls }));
         Assert.IsTrue(reached.Any(c => Math.Max(Math.Abs(c.X - 2093), Math.Abs(c.Y - 2019)) <= 2), "The exit must be within use range of a reached cell.");
         Assert.IsTrue(reached.All(c => c.X is > 2060 and < 2100 && c.Y is > 1994 and < 2030), "Walls must keep the reachable set inside the cave.");
-        Assert.IsTrue(walls > 0);
+        Assert.AreEqual(506, reached.Count);
+        Assert.AreEqual(736, walls);
     }
 
     private static AreaStepCell Step(AreaStepCell cell, CardinalTraversalDirection direction) => direction switch

@@ -11,7 +11,8 @@ x4..8/y0..3 profile are unchanged. Original executable parity remains
 ## Scope and owner decisions
 
 - **Admitted area**: the nine Crash Site core sectors 1451..1453 × 1289..1291
-  (36,864 cells). This boundary is an owner decision of 2026-10-15. A step whose
+  (36,864 cells), or for the cave profile its one sector (32,31) (4,096 cells).
+  The exterior boundary is an owner decision of 2026-10-15. A step whose
   source, destination or diagonal shoulder leaves the admitted sectors is
   `Unsupported`, like a map edge. The context ring and the walkable exit south
   of it are not admitted.
@@ -89,8 +90,11 @@ digest and epoch.
 - **Walls** ([cave research](../research/cave-transition-evidence.md) T7): a
   wall is retained as `NotApplicable` (`WALL_EDGE_COMPONENT`) and registered on
   one tile edge, its art rotation rounded up to odd (1 x−1, 3 y+1, 5 x+1, 7 y−1).
-  It never blocks its own tile. A destroyed/off wall is not listed; a wall whose
-  art is not class 1 is `Unknown` (`WALL_ART_UNRESOLVED`).
+  It never blocks its own tile. A destroyed/off wall is not listed, nor is a wall
+  whose own spell flags (slot 19) carry pass-wall (0x100000), which the source
+  traversal skips; unresolved spell flags are `Unknown` (`WALL_SPELL_FLAGS_UNRESOLVED`)
+  and a wall whose art is not class 1 is `Unknown` (`WALL_ART_UNRESOLVED`). An
+  Unknown wall or portal on the source tile is a gap for every step leaving it.
 - **Step** (F7): destination terrain first; then wall edges; then destination
   objects; for a map diagonal also the objects on both shoulders. A cardinal step
   crosses one edge: it is blocked by a wall on the source tile on that edge or on
@@ -113,8 +117,8 @@ Terrain evidence codes: `SERIALIZED_BLOCK_MASK`, `FACADE_WALKABILITY_BIT`,
 `TILE_ART_CLASS_UNSUPPORTED` (Unknown). Object evidence codes: `OBJECT_BLOCKS`,
 `NO_BLOCK_FLAG`, `CRITTER_ALIVE`, `CRITTER_DEAD` (applicable);
 `INVENTORY_NOT_LISTED`, `DESTROYED_OR_OFF_NOT_LISTED`, `ITEM_TYPE_NOT_QUERIED`,
-`WALL_EDGE_COMPONENT` (not applicable); `MAP_PATCH_TARGETS_OBJECT`, `MAP_PATCH_LINE_UNSUPPORTED`,
-`WALL_OR_PORTAL_UNSUPPORTED` (portals), `WALL_ART_UNRESOLVED`, `FLAGS_UNRESOLVED`, `PC_RECORD_UNSUPPORTED`,
+`WALL_EDGE_COMPONENT`, `WALL_PASSWALLED_NOT_LISTED` (not applicable); `MAP_PATCH_TARGETS_OBJECT`, `MAP_PATCH_LINE_UNSUPPORTED`,
+`WALL_OR_PORTAL_UNSUPPORTED` (portals), `WALL_SPELL_FLAGS_UNRESOLVED`, `WALL_ART_UNRESOLVED`, `FLAGS_UNRESOLVED`, `PC_RECORD_UNSUPPORTED`,
 `OBJECT_TYPE_UNSUPPORTED`, `CRITTER_STATS_UNRESOLVED`,
 `CRITTER_EFFECT_INDEX_UNSUPPORTED`, `CRITTER_EFFECT_UNSUPPORTED`,
 `CRITTER_MAX_HP_EFFECT_UNSUPPORTED`, `CRITTER_LIFE_INTERVAL_UNRESOLVED`

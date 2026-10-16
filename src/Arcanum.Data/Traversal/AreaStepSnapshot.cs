@@ -4,7 +4,8 @@ namespace Arcanum.Data.Traversal;
 
 /// <summary>
 /// Owned whole-core step evidence at the new-game initial state T0, with no source retention or query-time I/O.
-/// Admission is the declared sector set only (owner decision: the nine Crash Site core sectors); a step whose
+/// Admission is the declared sector set only (owner decision: the nine Crash Site core sectors; the cave
+/// profile admits its single sector); a step whose
 /// destination or diagonal shoulder leaves it is Unsupported, like a map edge. State after T0 (AI, scripts,
 /// saves) is outside this profile.
 /// </summary>
@@ -79,6 +80,10 @@ public sealed class AreaStepSnapshot
         // Wall legs: a cardinal step crosses one edge; a diagonal step checks both L-shaped paths
         // around it (counter-clockwise then clockwise, and clockwise then counter-clockwise), four legs.
         AreaObjectKey? wallBlocker = null;
+        // The source tile's walls and portals take part in leaving it: an Unknown one there is a gap.
+        foreach (var evaluation in _objects.GetValueOrDefault(request.From, []))
+            if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported)
+                gaps.Add(new(evaluation.Reason, request.From, evaluation.Key));
         void Leg(AreaStepCell cell, int edge)
         {
             var next = Neighbor(cell, edge);

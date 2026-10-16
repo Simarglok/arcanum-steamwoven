@@ -22,7 +22,8 @@ public static class AreaStepInspector
         [PatchPath] = (5779, "2bed0dfca7dc6620c84a1f5aea286a392e98adf6de9f7b6296fcc2d5a3cadf28"),
     };
     private const int ObjectTypeFlagsSlot = 18, HpPointsSlot = 26, HpAdjustmentSlot = 27, HpDamageSlot = 28, StatBaseSlot = 38, EffectsSlot = 46;
-    private const uint FlagDestroyedOrOff = 0x3, FlagNoBlock = 0x400, FlagInventory = 0x1000;
+    private const uint FlagDestroyedOrOff = 0x3, FlagNoBlock = 0x400, FlagInventory = 0x1000, SpellPassWalled = 0x100000;
+    private const int SpellFlagsSlot = 19;
 
     /// <summary>Structural construction. Every archive is caller-owned and only read. The patch archive is optional
     /// (absent means no patch source in this structural selection); every other rule resource must occur exactly once.</summary>
@@ -212,8 +213,11 @@ public static class AreaStepInspector
         var flags = unchecked((uint)rawFlags);
         if (o.Type == 0)
         {
-            // Walls are edge components, never destination blockers; a pass-walled actor is outside the declared context.
+            // Walls are edge components, never destination blockers. A wall whose own spell flags carry
+            // pass-wall (0x100000, slot 19) is not a blocker in the source traversal, so it is not registered.
             if ((flags & FlagDestroyedOrOff) != 0) return Excluded("DESTROYED_OR_OFF_NOT_LISTED");
+            if (Number(o, SpellFlagsSlot) is not { } spell) return Unknown("WALL_SPELL_FLAGS_UNRESOLVED");
+            if ((unchecked((uint)spell) & SpellPassWalled) != 0) return Excluded("WALL_PASSWALLED_NOT_LISTED");
             return Number(o, 0) is { } aid && unchecked((uint)aid) >> 28 == 1 ? Excluded(WallEdgeReason) : Unknown("WALL_ART_UNRESOLVED");
         }
         if ((flags & FlagInventory) != 0) return Excluded("INVENTORY_NOT_LISTED");
@@ -286,7 +290,7 @@ public static class AreaStepInspector
         {
             w.Write("WALL_EDGES_V1");
             foreach (var e in walls.OrderBy(p => p.Key.Y).ThenBy(p => p.Key.X).SelectMany(p => p.Value))
-            { w.Write(e.Cell.X); w.Write(e.Cell.Y); w.Write(e.Key.SourceIndex); w.Write(e.Key.Offset); w.Write(e.Edge); w.Write(e.Opening); }
+            { w.Write(e.Cell.X); w.Write(e.Cell.Y); w.Write((int)e.Key.Kind); w.Write(e.Key.SourceIndex); w.Write(e.Key.Offset); w.Write(e.Edge); w.Write(e.Opening); }
         }
         w.Flush();
         return Convert.ToHexString(SHA256.HashData(stream.ToArray())).ToLowerInvariant();

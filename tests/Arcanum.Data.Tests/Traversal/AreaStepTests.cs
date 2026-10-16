@@ -242,7 +242,7 @@ public sealed class AreaStepTests
             Assert.AreEqual((CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.NotApplicable, (CardinalTraversalDisposition?)null, reason),
                 (excluded.Coverage, excluded.Applicability, excluded.Disposition, excluded.Reason), reason);
         }
-        foreach (var (type, fields, reason) in new[] { (0, new[] { Value(18, 0) }, "WALL_ART_UNRESOLVED"), (1, [Value(18, 0)], "WALL_OR_PORTAL_UNSUPPORTED"),
+        foreach (var (type, fields, reason) in new[] { (0, new[] { Value(18, 0) }, "WALL_SPELL_FLAGS_UNRESOLVED"), (1, [Value(18, 0)], "WALL_OR_PORTAL_UNSUPPORTED"),
             (15, [Value(18, 0)], "PC_RECORD_UNSUPPORTED"), (3, [Value(19, 0)], "FLAGS_UNRESOLVED"), (16, [Value(18, 0)], "CRITTER_STATS_UNRESOLVED") })
         {
             var unknown = Eval(type, fields);
@@ -360,12 +360,63 @@ public sealed class AreaStepTests
     public void Wall_objects_are_edge_components_not_destination_blockers()
     {
         var table = new Dictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?>();
-        var wall = Object(0, [Value(0, 0x10b02800), Value(18, 0x4000)]);
+        var wall = Object(0, [Value(0, 0x10b02800), Value(18, 0x4000), Value(19, 0)]);
         Assert.AreEqual((CardinalTraversalApplicability.NotApplicable, AreaStepInspector.WallEdgeReason),
             (AreaStepInspector.Evaluate(wall, new(64, 64), default, [], 0, table).Applicability, AreaStepInspector.Evaluate(wall, new(64, 64), default, [], 0, table).Reason));
         Assert.AreEqual("DESTROYED_OR_OFF_NOT_LISTED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x10b02800), Value(18, 0x2)]), new(64, 64), default, [], 0, table).Reason);
-        Assert.AreEqual("WALL_ART_UNRESOLVED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x40000000), Value(18, 0)]), new(64, 64), default, [], 0, table).Reason);
+        Assert.AreEqual("WALL_PASSWALLED_NOT_LISTED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x10b02800), Value(18, 0), Value(19, 0x100000)]), new(64, 64), default, [], 0, table).Reason);
+        Assert.AreEqual("WALL_SPELL_FLAGS_UNRESOLVED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x10b02800), Value(18, 0)]), new(64, 64), default, [], 0, table).Reason);
+        Assert.AreEqual("WALL_ART_UNRESOLVED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x40000000), Value(18, 0), Value(19, 0)]), new(64, 64), default, [], 0, table).Reason);
         Assert.AreEqual("WALL_OR_PORTAL_UNSUPPORTED", AreaStepInspector.Evaluate(Object(1, [Value(18, 0)]), new(64, 64), default, [], 0, table).Reason);
+    }
+
+    [TestMethod]
+    public void Structural_inspection_registers_wall_edges_from_rotation_piece_and_flags()
+    {
+        var moduleBytes = Dat(("maps/test/67108865.sec", Sector()));
+        using var fixture = new Fixture([(67108865, [])], moduleBytes: moduleBytes);
+        var area = fixture.Owner.LoadStrict();
+        using var module = DatArchive.Open(new MemoryStream(moduleBytes));
+        using var names = DatArchive.Open(new MemoryStream(Dat(("art/tile/tilename.mes", Encoding.ASCII.GetBytes("{0}{grs}{100}{rck}{200}{flr}{300}{stn}")))));
+        using var effects = DatArchive.Open(new MemoryStream(Dat(("rules/effect.mes", Encoding.ASCII.GetBytes("{50}{st +1}")))));
+        static uint Wall(int rotation, int piece = 0) => 0x1000_0000u | ((uint)piece << 14) | ((uint)rotation << 11);
+        AreaObjectRecord At(int x, int y, uint art, long flags = 0, long spell = 0, int index = 0) =>
+            Object(0, [Value(0, art), Value(18, flags), Value(19, spell)]) with { WorldX = x, WorldY = y, Key = Object(0, []).Key with { SourceIndex = index } };
+        var objects = new[]
+        {
+            At(80, 80, Wall(6), index: 1),              // rotation 6 rounds up to edge 7 (y-1)
+            At(70, 70, Wall(0), index: 2),              // rotation 0 rounds up to edge 1 (x-1)
+            At(90, 90, Wall(5, piece: 13), index: 3),   // opening piece on edge 5
+            At(100, 100, Wall(7), flags: 0x1, index: 4), // destroyed: not listed
+            At(110, 110, Wall(7), spell: 0x100000, index: 5), // pass-walled: not listed
+            At(120, 120, 0x40000000, index: 6),         // not wall art: Unknown, a source-tile gap
+        };
+        var copy = new AreaSnapshot(new object(), 1, fixture.Plan, area.Sectors, area.Terrain, objects, area.Visuals, area.Reconciliation, area.Endpoints);
+        copy.MarkStrictlyPublished();
+        var snapshot = AreaStepInspector.Inspect(copy, module, names, effects, null, ReadOnlyMemory<byte>.Empty, 3);
+        Assert.AreEqual(3, snapshot.WallEdges);
+        Assess(snapshot, new(80, 80), CardinalTraversalDirection.YMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(70, 70), CardinalTraversalDirection.XMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(69, 70), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(90, 90), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
+        Assess(snapshot, new(100, 100), CardinalTraversalDirection.YMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        Assess(snapshot, new(110, 110), CardinalTraversalDirection.YMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        var leaving = Assess(snapshot, new(120, 120), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
+        Assert.AreEqual("WALL_ART_UNRESOLVED", leaving.Gaps.Single().ReasonCode);
+        // A blocker keeps an unrelated opening gap; wall edges change the digest only when present.
+        var both = Synthetic(walls: [((80, 80), 7, false), ((81, 79), 1, true)]);
+        var blocked = Assess(both, new(80, 80), CardinalTraversalDirection.XPlusYMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assert.AreEqual("WALL_OPENING_PIECE_UNSUPPORTED", blocked.Gaps.Single().ReasonCode);
+        var without = AreaStepInspector.Inspect(Copy(objects.Take(0)), module, names, effects, null, ReadOnlyMemory<byte>.Empty, 3);
+        var withWalls = snapshot.EvidenceSha256;
+        Assert.AreNotEqual(withWalls, without.EvidenceSha256);
+        Assert.AreEqual(without.EvidenceSha256, AreaStepInspector.Inspect(Copy([]), module, names, effects, null, ReadOnlyMemory<byte>.Empty, 3).EvidenceSha256);
+
+        AreaSnapshot Copy(IEnumerable<AreaObjectRecord> list)
+        {
+            var c = new AreaSnapshot(new object(), 1, fixture.Plan, area.Sectors, area.Terrain, list, area.Visuals, area.Reconciliation, area.Endpoints);
+            c.MarkStrictlyPublished(); return c;
+        }
     }
 
     private static (CardinalTraversalDisposition?, string) Disposition(AreaStepObjectEvaluation e) => (e.Disposition, e.Reason);

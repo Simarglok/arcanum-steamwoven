@@ -95,7 +95,8 @@ public sealed class AreaScenePlan
 
     /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009): rotations 0, 1, 6 and 7 move it
     /// 40 left and 20 down, then the flip bit mirrors it as width − x − 2 (research T7 and the pinned
-    /// tig art.c 1235–1253). Every other body uses its frame hotspot unchanged.</summary>
+    /// tig art.c 1235–1253). The source applies the same shift to portal art, which no admitted core
+    /// draws; every other body uses its frame hotspot unchanged.</summary>
     public static (int X, int Y) Hotspot(AreaVisualRecord visual)
     {
         if (visual.RawArt >> 28 != 1) return (visual.HotX, visual.HotY);
