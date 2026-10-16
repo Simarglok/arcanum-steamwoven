@@ -247,7 +247,8 @@ public sealed class AreaIdentityTests
         private readonly List<Stream> _streams = [];
         internal Fixture((long Sector, byte[][] Records)[] sectors, byte[][]? aggregate = null, byte[][]? editors = null, int map = 1, byte[]? extraPrototype = null, AreaLoaderOptions? limits = null,
             Func<AreaInputKey, byte[], Stream>? streamFactory = null, byte[]? prototype = null, byte[]? moduleBytes = null,
-            (string Name, byte[] Payload)[]? resourceEntries = null, byte[]? secondResource = null, AreaMappingRole[]? mappingRoles = null)
+            (string Name, byte[] Payload)[]? resourceEntries = null, byte[]? secondResource = null, AreaMappingRole[]? mappingRoles = null,
+            AreaSectorSelection selection = AreaSectorSelection.TownmapComponent, bool allowArtTrailingBytes = false)
         {
             var moduleEntries = sectors.Select(s => ($"maps/test/{s.Sector}.sec", Sector(s.Records))).ToList();
             foreach (var (record, index) in (editors ?? aggregate ?? []).Select((r, i) => (r, i))) moduleEntries.Add(($"maps/test/{index}.mob", record));
@@ -267,7 +268,8 @@ public sealed class AreaIdentityTests
                 var e = archive.Entries[i]; var payload = entries[i].Payload;
                 return new AreaMappingBinding(role, new(new(AreaSourceRole.Resource1), i, 1, e.StoredSize, e.DeclaredOutputSize, e.Offset, Hash(e.RawNameBytes.ToArray())), Hash(payload));
             });
-            Plan = new(1, map, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings);
+            Plan = new(1, map, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings)
+            { Selection = selection, AllowArtTrailingBytes = allowArtTrailingBytes };
             Owner = AreaDataOwner.Open(new(inputs), Plan, limits ?? new());
         }
         internal AreaSourcePlan Plan { get; }
