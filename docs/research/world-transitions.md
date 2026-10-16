@@ -41,7 +41,7 @@ dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --world-transition
 ```
 
 The report is deterministic JSON. On the owner's installation two runs gave the
-same SHA-256 `7364ef12eb013d9279dc70e4426c4c30a85c41f5b41357194a9e247d83243fb2`
+same SHA-256 `dbb304413e1fbec110bafbcea45c090622b19a38763989cd1e8ae2ddf9c42f87`
 in about 3 s. Inputs: the seven archives of the stack (fingerprinted before and
 after the run) plus the `data/` and module folders. The report sections are
 `maps`, `jump_points`, `teleport_sites`, `edges` (one row per attachment and
