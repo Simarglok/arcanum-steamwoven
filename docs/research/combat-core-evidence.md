@@ -433,7 +433,8 @@ AI plan](npc-combat-ai-plan.md#anomaly-decisions).
 ## Original executable check (ARC-COMBAT-001)
 
 On the owner's request the ten anomalies were checked against the original
-game, not only CE: the retail **1.0.7.4** `Arcanum.exe` of the owner's local
+game, not only CE, with what became the project's
+[original executable check](original-executable-check.md): the retail **1.0.7.4** `Arcanum.exe` of the owner's local
 GOG install (SHA-256 `9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52`;
 GOG adds a `ddraw.dll` import section, and no checked function branches into it) was disassembled read-only with
 `llvm-objdump` at the addresses CE gives for each function, which match the
