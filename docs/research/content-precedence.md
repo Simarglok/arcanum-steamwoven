@@ -172,7 +172,9 @@ Three more Virgil scripts (`01708`, `02023`, `02033`) are also replaced by
 `Arcanum4.dat`; they are not used at the Crash Site start. `oemes/oname.mes`,
 `mes/spell.mes`, `rules/backgrnd.mes`, `rules/gamelevel.mes`, `rules/xp_level.mes`,
 `rules/monster.txt`, `rules/npc.txt` and `sound/snd_critter.mes` are replaced too and
-matter to future item, character and audio work.
+matter to future item, character and audio work. This settles the open question of
+[character creation](character-creation-evidence.md) (ARC-RES-025): the `Arcanum4.dat`
+copies of `rules/backgrnd.mes` and `mes/mainmenu.mes` are the ones the game reads.
 
 **Follow-up (not done here):** move the NPC conversation's script and dialog lookup onto
 `ContentStack` (or at least select `Arcanum4.dat` for the script) and re-check
