@@ -108,14 +108,17 @@ flag.
 
 ## Open questions
 
-- **O1** Virgil's AI-data row, its follow fields (5..8), his level, alignment,
-  wait index and charisma-relevant flags: these need a bounded read-only probe
-  of the instance/prototype and the two `.mes` tables. They decide whether a
-  real PC can be refused at all.
-- **O2** The operands of the 21 `JO` and 4 `UW` in his DLG (forced or not).
+- **O1** *Answered by [ARC-RES-026](virgil-follow-consent.md):* AI row 5
+  (dislike ≤ −1000, alignment gaps 2001, level gate 30), level 1, alignment 1,
+  wait index 6, reaction base 60, no forced/aloof bit. A real PC can be refused
+  only at his follower limit (or by another leader).
+- **O2** *Answered by [ARC-RES-026](virgil-follow-consent.md):* all 21 `JO`
+  and 4 `UW` have first operand 0 (not forced, charisma limit applies); nodes
+  74, 535, 547 and 518.
 - **O3** The wait-timeout anomaly of C12 (condition and missing NPC parameter).
   It needs an original-executable observation or a second independent source
-  before it becomes behaviour.
+  before it becomes behaviour. Virgil's wait index 6 schedules no timer, so it
+  does not affect him.
 - **O4** How often the C13 loyalty check runs while a follow goal is alive.
 - **O5** The move-near / run-near goals (so the exact stopping distance),
   speed recalculation and the follower in combat or turn-based mode were not
