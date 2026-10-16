@@ -127,7 +127,7 @@ public sealed class ArtFrameMetadata
 
 public sealed class ArtMetadata
 {
-    internal ArtMetadata(ArtHeader header, ArtFrameMetadata[] frames, int trailingBytes = 0)
+    internal ArtMetadata(ArtHeader header, ArtFrameMetadata[] frames, int trailingBytes)
     {
         Header = header;
         Frames = Array.AsReadOnly(frames);

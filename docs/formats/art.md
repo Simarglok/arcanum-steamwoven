@@ -122,9 +122,11 @@ end of the file, so the tail is invisible to it.
 `ArtDecoderOptions.AllowTrailingBytes` (off by default) accepts such a tail and
 reports its length as `ArtMetadata.TrailingBytes`; a payload that runs past the
 end of the file is still refused as truncated. Existing callers keep the strict
-form; the universal loader opts in. An opt-in `RealData` test
-(`ArtStackRealDataTests`) reads every installed ART file this way: 13,993
-read, 437 with a tail, and exactly those 437 are refused by the strict form.
+form; the universal map loader is expected to opt in when it starts reading ART.
+An opt-in `RealData` test (`ArtStackRealDataTests`) reads every installed ART
+file this way: 13,993 read, 437 with a tail (44 / 134 / 259 in the size buckets
+above), exactly those 437 are refused by the strict form, and every frame of
+every tailed file decodes to `width × height` pixels.
 
 ## Unsupported and unresolved
 

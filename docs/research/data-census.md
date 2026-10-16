@@ -170,7 +170,8 @@ matters only for the game UI.
 - **U2 ART trailing bytes (closed by ARC-DATA-016):** every frame of the 437
   files decodes exactly; the tail is 1 byte in 44 files, 2–64 in 134 and more
   in 259, and the original reader never looks at it. The decoder now accepts it
-  on request ([ART format](../formats/art.md#trailing-bytes-after-the-last-frame-arc-data-016)).
+  on request ([ART format](../formats/art.md#trailing-bytes-after-the-last-frame-arc-data-016));
+  the counts in this census are for the strict default.
   Which world ART files placed objects reference stays open.
 - **U3 DLG refusals:** whether the 38 files are valid for the original reader.
   Next: when a world conversation needs one of them.
