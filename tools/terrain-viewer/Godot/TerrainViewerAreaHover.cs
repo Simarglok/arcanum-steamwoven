@@ -95,7 +95,8 @@ public partial class TerrainViewerApp
         if (_readyArea is not { } area || HoverIndex() is not { } index) return null;
         var transform = AreaDrawItem.RasterTransform(GetViewport());
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
-        return index.Pick(command => AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
+        // ARC-UI-004: an item the PC took is no longer in the world.
+        return index.Pick(command => !AreaTakenByPc(command) && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
             && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None);
     }
 
@@ -117,7 +118,8 @@ public partial class TerrainViewerApp
         var visible = overWorld && IsWorld && _worldInitialized && _worldFocused && !WorldModal;
         var open = visible && WorldClickInputOpen && _areaTransitions?.Pending is null;
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
-            _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null);
+            _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
+            _inventoryHidden);
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -140,6 +142,13 @@ public partial class TerrainViewerApp
                 var distance = Math.Max(Math.Abs(row.WorldX!.Value - actor.X), Math.Abs(row.WorldY!.Value - actor.Y));
                 return distance <= AreaTransitionCoordinator.UseRange ? AreaHoverAction.Use : AreaHoverAction.WalkToUse;
             }
+            if (InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } target)
+            {
+                var near = Chebyshev(target.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach;
+                return target.Kind == AreaInventoryTargetKind.GroundItem
+                    ? near ? AreaHoverAction.PickUp : AreaHoverAction.WalkToPickUp
+                    : near ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot;
+            }
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return AreaHoverAction.None;
@@ -158,7 +167,8 @@ public partial class TerrainViewerApp
             AreaHoverAction.Walk => Godot.Input.CursorShape.Cross,
             AreaHoverAction.NoRoute => Godot.Input.CursorShape.Forbidden,
             AreaHoverAction.Talk or AreaHoverAction.WalkToTalk => Godot.Input.CursorShape.Help,
-            AreaHoverAction.Use or AreaHoverAction.WalkToUse => Godot.Input.CursorShape.PointingHand,
+            AreaHoverAction.Use or AreaHoverAction.WalkToUse or AreaHoverAction.PickUp or AreaHoverAction.WalkToPickUp
+                or AreaHoverAction.Loot or AreaHoverAction.WalkToLoot => Godot.Input.CursorShape.PointingHand,
             _ => Godot.Input.CursorShape.Arrow,
         };
         if (cursor != _hoverCursor) { _hoverCursor = cursor; Godot.Input.SetDefaultCursorShape(cursor); }

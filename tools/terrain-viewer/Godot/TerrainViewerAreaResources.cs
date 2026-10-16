@@ -30,6 +30,8 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string code) { if (!value) throw new InvalidOperationException("AREA_RESOURCES_" + code); }
         var old = CaptureAreaResourceBaseline();
+        // ARC-UI-004: items the earlier smoke phases picked up are no longer in the world and are never drawn.
+        var taken = _readyArea!.Plan.Commands.Count(command => _canvas!.AreaHiddenOf(command));
         var bounds = old.Bounds; var viewport = WorldViewport;
         // Zoom 1 tiles the envelope with viewport-sized steps; the camera clamp
         // keeps edge views inside the envelope, so every command intersects one. The
@@ -48,6 +50,7 @@ public partial class TerrainViewerApp
                 await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
                 await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
                 steps++; seen.UnionWith(_canvas.AreaVisibleCommands);
+                Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
                 // GPU residency is a subset of the retained repository, never more.
@@ -69,7 +72,7 @@ public partial class TerrainViewerApp
         }
         var chunkCreated = _canvas!.AreaChunkCreatedCount; var chunkDisposed = _canvas.AreaChunkDisposedCount;
         var chunkedSweep = await Sweep(true);
-        Require(chunkedSweep.Swept == old.Commands, "SWEEP_COVERAGE");
+        Require(chunkedSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         // The envelope needs more chunks than the chunk cap, so the chunk LRU must have
         // evicted, and its own create/dispose accounting must balance.
         var chunkComposed = _canvas.AreaChunkCreatedCount - chunkCreated; var chunkEvictions = _canvas.AreaChunkDisposedCount - chunkDisposed;
@@ -78,7 +81,7 @@ public partial class TerrainViewerApp
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
         var commandSweep = await Sweep(false);
         _canvas.AreaTerrainChunksEnabled = true;
-        Require(commandSweep.Swept == old.Commands, "SWEEP_COVERAGE");
+        Require(commandSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         Require(ReferenceEquals(old.Result.Target, _readyArea) && _readyArea!.Frames.Count == old.CpuFrames
             && _readyArea.CpuRgbaBytes == old.CpuBytes, "CPU_REPOSITORY");
         // Per-command terrain needs more frames than visible + retained, so the frame
@@ -90,7 +93,7 @@ public partial class TerrainViewerApp
         var maxVisible = Math.Max(chunkedSweep.MaxVisible, commandSweep.MaxVisible);
         var maxLive = Math.Max(chunkedSweep.MaxLive, commandSweep.MaxLive); var maxBytes = Math.Max(chunkedSweep.MaxBytes, commandSweep.MaxBytes);
         var maxChunks = chunkedSweep.MaxChunks; var maxChunkBytes = chunkedSweep.MaxChunkBytes;
-        GD.Print($"ARC-RENDER-007 resources sweep steps={steps} commands={sweptCommands} maxVisible={maxVisible} maxGpu={maxLive}/{maxBytes} reuploads={reuploads} evictions={evictions} maxRetained={maxRetained} cpu={old.CpuFrames}/{old.CpuBytes} chunks={chunkComposed}/{chunkEvictions} maxChunks={maxChunks}/{maxChunkBytes}");
+        GD.Print($"ARC-RENDER-007 resources sweep steps={steps} commands={sweptCommands} taken={taken} maxVisible={maxVisible} maxGpu={maxLive}/{maxBytes} reuploads={reuploads} evictions={evictions} maxRetained={maxRetained} cpu={old.CpuFrames}/{old.CpuBytes} chunks={chunkComposed}/{chunkEvictions} maxChunks={maxChunks}/{maxChunkBytes}");
 
         static long Managed() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }

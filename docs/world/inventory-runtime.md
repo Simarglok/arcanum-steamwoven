@@ -5,8 +5,8 @@ Status: **Implemented bounded component**, ARC-WORLD-014 (steps 2 and 3 of the
 inventory domain in the [game session](game-session-runtime.md) (`Arcanum.Session`): it moves Crash Site items to the
 PC by ground pickup, by looting a dead NPC and by the dialog's negative `IN`, and saves the items the PC took in
 snapshot schema 5. It covers the transfer part of [FR-ITEM-001](../requirements/items-economy.md#fr-item-001) for
-these three paths only. **The AREA viewer is not wired to it yet** (`tools/terrain-viewer` is reserved by another task):
-the viewer still records `IN` in memory and has no pickup or loot input.
+these three paths only. Since ARC-UI-004 the AREA viewer uses it: seeds from its loaded maps, pickup and loot clicks,
+the inventory window and Virgil's `IN` ([viewer](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)).
 
 Categories as in the research: source claims (S) are read from `alexbatalov/arcanum-ce` at
 `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, not MIT); nothing is copied. Data claims (D) are
@@ -20,8 +20,8 @@ points, a non-null substitute-inventory handle and its life fact (`Dead`, set on
 dead), and every item with its facts (`SessionItemKind`: type, prototype, name class `OBJ_F_NAME`, description number;
 weight, complexity, inventory location, quantity, script attachment points) and either a ground cell or exactly one
 listing holder. For the Crash Site the host builds it from the [T0 inventory view](area-inventory-view.md)
-(ARC-DATA-012) and life from the [step rules](area-step-assessment.md) (`CRITTER_DEAD` evidence); the real-data test
-holds that mapping until the viewer wiring takes it. The seed is validated (unique entity ids, each item listed once or
+(ARC-DATA-012) and life from the [step rules](area-step-assessment.md) (`CRITTER_DEAD` evidence); the viewer's
+`AreaInventoryMap.Build` holds that mapping (ARC-UI-004). The seed is validated (unique entity ids, each item listed once or
 on the ground, no dead or substitute container, defined item types 5..14, a quantity on gold and ammunition and only
 there, distinct script points 0..35 (`SAP_EXAMINE`..`SAP_CRITICAL_MISS`); at most 2,048 items and holders and 512 per list; otherwise `InvalidInventorySeed`) and
 copied; at most `MaxMaps` seeds are attached (`BudgetExceeded`). Attaching moves no revision, is never saved, and is
@@ -113,15 +113,13 @@ in schema 4 to lose (its `IN` record was in memory only).
   (routing, capability, rejected and throwing port).
 - Real data (opt-in `RealData`, `ARC_AREA_CONVERSATION_GAME_ROOT`):
   [CrashSiteInventoryTests](../../tests/Arcanum.TerrainViewer.Tests/CrashSiteInventoryTests.cs). The step rules mark
-  exactly the four research NPCs with items dead (5699, 4457, 4200, 1201). Virgil's original first conversation runs
-  node 1's `IN -2804` through the session port and the ring (1714) enters the PC's list, leaving his weapon and worn
-  armor. Five of the six dead-NPC items loot; 2527 is refused for its `SAP_INSERT_ITEM` script (the research's open
+  exactly the four research NPCs with items dead (5699, 4457, 4200, 1201). Virgil's original first conversation, opened
+  by the viewer's conversation host, runs node 1's `IN -2804` through the session port and the ring (1714) enters the
+  PC's list, leaving his weapon and worn armor. Five of the six dead-NPC items loot; 2527 is refused for its `SAP_INSERT_ITEM` script (the research's open
   question). All 37 core ground items pick up. Virgil and a chest are not lootable. A save and load keep the 43 items,
   the re-attached seed agrees, and a second `IN -2804` changes nothing.
 
 ## Next steps
 
-Wire the AREA viewer (seed from the Area view and step evidence, the inventory port in its conversation ports, pickup
-and loot clicks, an inventory panel with [display names](../formats/mes-reader.md)); then a character owner for the
-insert check, the PC's starting kit ([ARC-RES-027](../research/starting-hero-evidence.md)), and the remaining source
+The AREA viewer is wired (ARC-UI-004). Next: a character owner for the insert check (the viewer accepts every item), the PC's starting kit ([ARC-RES-027](../research/starting-hero-evidence.md)), and the remaining source
 paths (drop and junk piles, stacks, chests) after their own research.

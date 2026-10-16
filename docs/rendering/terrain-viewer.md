@@ -595,9 +595,11 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   neighbour step entering the cell), else *walk here*. The bounded search itself is not run
   on hover, so a *walk here* goal can still end without a route; the reach is measured from
   the committed cell, while during a step the route plans from the step's target cell, so a
-  goal exactly at the 32-cell edge can differ by one. System cursor shapes: cross for walk,
-  forbidden for no route, help (question arrow) for talk, pointing hand for use, arrow
-  otherwise. A use or talk that is then refused (blocked step, no standable cell) is
+  goal exactly at the 32-cell edge can differ by one. Since ARC-UI-004 an item on the ground
+  is *pick up* within reach 1, else *walk to pick up*, and a dead NPC is *loot* or *walk to
+  loot* (checked after talk and use, before the ground). System cursor shapes: cross for walk,
+  forbidden for no route, help (question arrow) for talk, pointing hand for use, pickup and
+  loot, arrow otherwise. A use or talk that is then refused (blocked step, no standable cell) is
   reported by the click as before; the cursor shows the intent.
 - **Guards.** Over HUD or palette controls, outside the window, without window focus or
   with the palette or a dialog open there is no tooltip and the arrow cursor. While the
@@ -616,6 +618,68 @@ entrance walk to use, click-through sprites passed through to the body behind, t
 does what the cursor showed). Not
 verified: original cursor or message-window parity, hover art (the animated underlay), a
 human on a physical mouse and display.
+
+### Inventory window, pickup and loot (ARC-UI-004)
+
+In `crash-site-area` the [session inventory](../world/inventory-runtime.md) (ARC-WORLD-014)
+is wired to the viewer: items can be picked up from the ground and taken from dead NPCs, and
+the original Inventory key shows what the PC took (FR-ITEM-001, FR-UI-004). Code:
+[`AreaInventoryHost`](../../tools/terrain-viewer/Core/AreaInventoryHost.cs) (Godot-free) and
+the `TerrainViewerAreaInventory` partial with `AreaInventoryPanel`.
+
+- **Seeds.** When the area session is created, the exterior (and, with `--area-cave-mobile`,
+  the cave) seed is built from the [T0 inventory view](../world/area-inventory-view.md) and
+  life from the [step rules](../world/area-step-assessment.md): an NPC is dead only when a
+  step into its cell meets its `CRITTER_DEAD` evidence; no evidence counts as alive, so it is
+  never looted. Installed original: exterior 53 items, 45 holders, 4 dead NPCs; cave 28
+  items, 11 holders, 1 dead NPC (empty). A refused build or attach leaves the inventory
+  unavailable (the status line says why) and the rest of the area unchanged. Every F8 quick
+  load attaches the seeds to the restored session before anything changes; a save whose
+  taken items disagree with them is refused (`F8 quick load REFUSED: the save's inventory
+  does not match the loaded maps`), the running session kept.
+- **Pickup and loot clicks.** A left click arrives through the guarded ground-click path
+  (`WorldRouteClick`) after talk and cave use. On an item lying on the ground it picks the
+  item up; on a dead NPC it opens the body in the inventory window. Both act at once within
+  Chebyshev reach 1 and otherwise walk to a standable cell within reach first and act on
+  arrival, like walk-to-use (a ground click, the stick, another talk/use/item click,
+  reset/reload or a quick load cancel the walk; the guards drop it on arrival). Reach 1 is
+  the source's range for opening a container, PC or NPC
+  ([CE `sub_428930`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L6500-L6531));
+  the pickup goal's own move-near range is not pinned, so pickup uses the same reach (project
+  choice). Living NPCs, chests (contents generated on first open, not modelled) and items
+  inside holders are not targets. Not modelled: the pickup animation and action-point cost.
+- **Taken items.** An item the PC took is neither drawn nor picked any more (the canvas
+  skips its body; the hover pick passes over it), also after a quick load. The resource
+  sweep of the native smoke counts those bodies as taken.
+- **Window.** `I` (the original Inventory key, logical key down) toggles it while the area
+  inventory exists; I, Escape, the Close button or a controller cancel close it. It is
+  modal like the dialog panel (actor gate closed, clock paused, palette chord refused,
+  every key owned by the window). Left: the PC's list in the order items entered it, each
+  with its display name (the hover rule: `object_examine` order from the description
+  tables, type fallback without them), type and weight. When looting, right: the dead NPC's
+  current list with a *Take* button per item and *Take all*; a refusal stays on the body and
+  is named in the message line (on the installed exterior the item with its own
+  `SAP_INSERT_ITEM` script: "the item runs a script on this transfer"). Project
+  diagnostic window: no inventory grid, equipment, drop, stacks or weight; the insert check
+  accepts every item (carry weight, Technophobia and grid room need the created character,
+  NOT READY).
+- **Dialog.** Virgil's negative `IN` (the ring) goes to the same session inventory through
+  `SessionDialogInventoryPort` (the conversation host's `Inventory` port), so the ring
+  appears in the window, is saved by F7 and comes back with F8.
+- **HUD.** The status line shows `PC items <n>` and the last pickup/loot result.
+
+Checks: `AreaInventoryHostTests` (targets, taken items, transfers, window lines, re-attach
+after a load and a mismatched save, the dialog port), the opt-in `CrashSiteInventoryTests`
+(`ARC_AREA_CONVERSATION_GAME_ROOT`: seeds built by `AreaInventoryMap.Build`, every core ground
+item and dead NPC a target, Virgil's ring through the viewer's conversation host, 5 of 6 loot,
+37 pickups, save and load), the self-test `ARC-UI-004 self-test PASS` (synthetic seed over the
+production click path: walk-to-pickup hover, pickup next to the item, I/Escape, loot by the take
+button) and, with the cave input, the native smoke `ARC-UI-004 native-smoke inventory PASS`
+(one pickup next to an item, one walk to pick up, the four dead NPCs looted with *Take all*:
+5 taken, 1 left, every taken item named in the window; `ARC_AREA_INVENTORY_CAPTURE=PATH.png` saves a
+readback of the open window) and the quick-save phase, which now
+also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
+(grid, drag and drop, paper doll), a human on a physical mouse and display.
 
 ## Verification and evidence status
 
