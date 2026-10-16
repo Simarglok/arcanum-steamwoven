@@ -30,8 +30,8 @@ the same state at any frame rate). The clock it builds on is the
 - **Code (C)**: this repository at `origin/main` f500b76.
 - **Project policy (P)**: a proposal for this project where the source leaves
   a choice or where this note recommends a departure; open until the slice
-  that owns it, or until the owner decides the questions of
-  [section 9](#9-questions-for-the-owner) (OQ1..OQ3; Q1..Q11 in section 2 are
+  that owns it decides, except OQ1..OQ3, which the owner decided in
+  [section 9](#9-owner-decisions-2026-10-16) (Q1..Q11 in section 2 are
   scheduler claims, not questions).
 - **Event** is one scheduled record: a kind, a deadline and up to four
   parameters. **Kind** is one of the 35 source types (`TIMEEVENT_TYPE_*`).
@@ -227,7 +227,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 
 | Consumer | Source behaviour it needs | Queue requirement |
 | --- | --- | --- |
-| AI tick, [ARC-RES-039 I6](npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) | One tick per NPC (replace), distance-scaled delay, first-tick jitter, ticks run on game time, so in a round they wait until the +1 s round advance makes them due and then only reschedule (the tick re-checks turn-based mode; the round itself runs the heartbeat at subturn start, ARC-RES-042 H5), immediate tick when a sector loads, no save. | Replace-by-key, immediate (1 ms) scheduling, map scope "active map only", rebuild on activation, deterministic order; the random jitter comes from the session RNG (ARC-WORLD-019, merged) under a labelled roll. |
+| AI tick, [ARC-RES-039 I6](npc-combat-ai-plan.md#implementation-slices-proposals-after-the-matching-research) | One tick per NPC (replace), distance-scaled delay, first-tick jitter, ticks run on game time, so in a round they wait until the +1 s round advance makes them due and then only reschedule (the tick re-checks turn-based mode; the round itself runs the heartbeat at subturn start, ARC-RES-042 H5), immediate tick when a sector loads, no save. | Replace-by-key, immediate (1 ms) scheduling, map scope "active map only", rebuild on activation, the active map's ticks persisted in the snapshot with a named "rebuild on load" switch for the source behaviour (owner decision OQ2), deterministic order; the random jitter comes from the session RNG (ARC-WORLD-019, merged) under a labelled roll. |
 | SCR deferred calls, [ARC-RES-042 S5](scr-event-dispatcher.md#10-proposed-implementation-slices) | Call-in delay `seconds × 1000 × 8` (real seconds by inference), call-at delay to a time of day (TE1, TE2), remove-call removes the first call matching script and attachee, the call runs `SAP_USE` from the stored line with stored roles, saved. | Allow-many kind with a typed payload (script, line, triggerer, attachee), remove-first by key, persistence with entity references, scope by referenced entities. |
 | Durable effects, top-20 item 17, and MAGIC slices | Timed spells: MAINTAIN / END ticks per run, one pending tick per run, delayed interrupt; recharge of worn mana items; effect expiry. [ARC-RES-043](magic-core-evidence.md) fixes the durations (real seconds × 8). | Keep-existing, merge (recharge) and replace-by-key, cancel by key when a run ends, persistence, elapsed-aware handlers. |
 | Life state, top-20 item 2 | Fatigue recovery every 80 s, resting heal hourly for free NPCs, poison damage/recovery, body decay, combat-focus wipe. | Keep-existing by (critter, sub-kind); scheduling time in the payload and elapsed computation at fire time for fatigue and resting, one step per firing for poison and decay. Item 2 can ship the formulas as pure functions over elapsed time; the timer kinds land on E2. |
@@ -252,7 +252,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | --- | --- | --- |
 | TE1 | Call-in and the magic maintenance and END periods build `seconds × 1000` ms and then multiply only the millisecond word by 8 ([call-in][scr-call], [maintain][mt-maintain]). `seconds × 1000` overflows a signed int above 2,147,483 s; the × 8 wraps the 32-bit word above 536,870 s (about 6.2 real days, 49.7 game days); the unsigned millisecond sum of the add wraps a little earlier, from about 526,070 s depending on the time of day ([datetime helpers][te-dt]); a negative operand becomes a huge unsigned delay. The recharge delay uses the same pattern with a constant 60 s and cannot overflow. | Likely unintended edges, harmless for normal operands. Default: one checked signed64 delay `seconds × 8000`, typed refusal for negative or overflowing operands. |
 | TE2 | Call-at subtracts the module start time (the start-hour key of the module's startup resource, 15:00 for the selected startup per the [clock policy](../world/game-clock-policy.md#source-clock-startup-and-calendar); 15 when the resource is absent, static default 10) from the current time before taking the time of day, so the operand counts seconds from the start hour, not from midnight, while the displayed clock counts from midnight ([call-at][scr-call], [start hour][te-start], [startup][gameinit-start]). A target equal to now gives delay 0 → 1 ms (fires now, not tomorrow). | Unknown whether slip or convention, but nearly moot: the [ARC-RES-045 census](scr-census.md#action-types-d) finds call-at in 1 line of the data and in no live line, against 304 call-in lines (209 live, 125 scripts). SCRIPT S5 may keep the source arithmetic behind its switch or refuse call-at; call-in carries TE1. |
-| TE3 | Ties fire newest first for events scheduled outside a ping; events merged after a ping go in front of older equals, and among themselves keep creation order (Q3, Q4). | An implementation artefact, not a rule. Default: FIFO by a persisted sequence number (owner question OQ1). |
+| TE3 | Ties fire newest first for events scheduled outside a ping; events merged after a ping go in front of older equals, and among themselves keep creation order (Q3, Q4). | An implementation artefact, not a rule. Decided: FIFO by a persisted sequence number (owner decision OQ1). |
 | TE4 | "Remove first" can remove two events, one from the main list and one from the side list (Q9). Remove-call during a ping can therefore cancel two calls. | Default: remove exactly the first match in queue order. |
 | TE5 | The loop guard is shared across the three lists and resets when it trips, so the per-list budget depends on earlier lists (Q8). | Default: a fixed per-pass budget, reported in the pass result. |
 | TE6 | A side-list event with a stale handle is dropped at merge without the object-ID recovery that a firing event gets (Q4 against Q6). | Default: one validation rule at fire time, with a typed "entity missing" outcome. |
@@ -276,7 +276,7 @@ explicit limits, typed results, Godot-free assemblies):
 - **Kind registry.** Closed and versioned: per kind the domain, whether it is
   persisted, the uniqueness policy (replace, keep existing, merge, many) and
   its key, and the scope rule (global, the map of its referenced entities,
-  active map only and rebuilt). An unknown kind, a missing handler or a
+  active map only, rebuilt on activation and persisted while active, OQ2). An unknown kind, a missing handler or a
   payload that fails validation is refused at scheduling, never dropped later.
 - **Pass.** `ProcessDue(expected version, budget)` reads the clock once,
   takes due events of the active scope in order, but never one scheduled in
@@ -300,7 +300,7 @@ explicit limits, typed results, Godot-free assemblies):
 | Slice | Needs | Result |
 | --- | --- | --- |
 | E1 Queue core | clock runtime (delivered) | `Arcanum.Simulation` pure type: record, order, kind registry, schedule by delay and by absolute deadline, remove first / remove all / any by kind and key, uniqueness policies, scope eligibility, `ProcessDue` with budget and typed outcomes, explicit limits (proposed: 16,384 pending events, 500 per pass, payload bounds per kind). Synthetic tests: ties, same-pass exclusion, budget carry-over, uniqueness, refusal of unknown kinds, overflow, detached snapshots. **No session or schema change, so it can start now.** |
-| E2 Session owner and snapshot | E1, top-20 item 2 merged (schema lane; item 1 is merged) | `GameSessionOwner` owns one queue; clock advances and explicit waits drain passes; map activation and the PC's map change apply the scope rules (events that only reference travelling entities follow the PC, others stay with their map and become eligible when it is active again, AI-style kinds are removed and rebuilt, so no unsaved kind is carried by accident as in P3); snapshot event section with strict validation (unknown kind, duplicate or non-increasing sequence, negative deadline, duplicate unique key, unresolvable entity refused) and the next schema version. |
+| E2 Session owner and snapshot | E1, top-20 item 2 merged (schema lane; item 1 is merged) | `GameSessionOwner` owns one queue; clock advances and explicit waits drain passes; map activation and the PC's map change apply the scope rules (events that only reference travelling entities follow the PC, others stay with their map and become eligible when it is active again, AI-style kinds of the map left are removed and rebuilt when a map is activated, so no such kind is carried by accident as in P3); one queue for all maps with the scope field, no per-map files (OQ3); snapshot event section that keeps the active map's AI ticks, restored on load unless the "rebuild on load" switch asks for the source rebuild (OQ2), with strict validation (unknown kind, duplicate or non-increasing sequence, negative deadline, duplicate unique key, unresolvable entity refused) and the next schema version. |
 | E3 Host pump | E2 | The area viewer's ambient host calls the pass after each admitted advance and after each wait step; a diagnostic overlay line (pending count, next deadline, last pass outcomes). FR-RUNTIME-001 acceptance: one recorded sequence of admitted durations replayed at different frame rates gives equal snapshots. |
 | E4 First kinds | E2 and the owning slice | Each consumer slice adds its kinds with handlers: the AI tick (I6, with the RNG jitter label), script call-in / call-at / remove-call (SCRIPT S5, TE1/TE2 decided there), the life-state timers (fatigue 80 s, resting 1 h, poison 15 s/120 s, body decay), effect expiry and magic ticks (item 17 and MAGIC), the companion wait timeout after O3. The queue slice itself ships only a synthetic kind. |
 | E5 Animation domain | E2, animation scheduler (item 9) | A second clock that runs at the game rate while game time is frozen in a round, with its own list and pass, for animation goals and real-time combat cadence. |
@@ -309,13 +309,15 @@ Order: E1 now (no schema), E2 after item 2 in the schema lane (and
 before item 6 if that is next in the lane), then E3; the E4 kinds arrive with
 their owners (I6 and S5 first); E5 with real-time combat.
 
-## 9. Questions for the owner
+## 9. Owner decisions (2026-10-16)
 
-| ID | Question | Recommendation |
+The owner accepted the three recommendations; slices E1..E2 follow them.
+
+| ID | Question | Decision |
 | --- | --- | --- |
-| OQ1 | Ties between events with the same deadline: first scheduled first (FIFO), or the source's newest first? | FIFO by sequence. The source order is an artefact of the list insert (TE3) and depends on whether the event was created inside a ping; FIFO is deterministic and easy to explain in a trace. |
-| OQ2 | AI ticks are not saved in the source, so a quick load restarts every NPC's tick with fresh jitter. Persist the active map's AI ticks instead? | Persist them. A save then reloads into exactly the same timing, which the seeded replays of the AI plan (design rule 3) need; the source behaviour stays available as a named "rebuild on load" switch for comparison runs. |
-| OQ3 | Keep one queue with a map scope per event, or per-map event files like the source? | One queue in the session snapshot with a scope field. It keeps the source semantics (events follow the map of their objects, parked events fire late on return) without separate files and keeps a save atomic. |
+| OQ1 | Ties between events with the same deadline: first scheduled first (FIFO), or the source's newest first? | **FIFO by a persisted sequence.** The source order is an artefact of the list insert (TE3) and depends on whether the event was created inside a ping; FIFO is deterministic and easy to explain in a trace. |
+| OQ2 | AI ticks are not saved in the source, so a quick load restarts every NPC's tick with fresh jitter. Persist the active map's AI ticks instead? | **Persist them.** A save then reloads into exactly the same timing, which the seeded replays of the AI plan (design rule 3) need; the source behaviour stays available as a named "rebuild on load" switch for comparison runs. Map change still removes the ticks of the map left and rebuilds them on activation, as in the source. |
+| OQ3 | Keep one queue with a map scope per event, or per-map event files like the source? | **One queue in the session snapshot with a scope field.** It keeps the source semantics (events follow the map of their objects, parked events fire late on return) without separate files and keeps a save atomic. |
 
 ## Unknowns
 
