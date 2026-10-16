@@ -255,10 +255,13 @@ Proposal only; each line needs its own task and owner decision.
 
 ## Open questions
 
-- Fields of the 13 loose PC prototypes (CC-09) and the ART gate (CC-10).
-- Contents of the pre-made inventory sources (gold amounts, items) and of
-  schemes 76..87.
-- Background effects (effect ids in `+1`) and the context effects of
-  FR-CHAR-006; the clothes prototypes and armor-size rule of FR-CHAR-007.
+Answered by [ARC-RES-027](starting-hero-evidence.md) (2026-10-16): the fields
+of the 13 loose PC prototypes (CC-09: they equal CE's table) and the ART gate
+(CC-10: open, twelve heroes), the pre-made inventory sources and schemes
+76..87, the background, race and female effects, the context backgrounds of
+FR-CHAR-006 and the starting-kit prototypes of FR-CHAR-007.
+
+Still open:
+
 - Whether Crash Site scripts read the pre-made flags 2350..2361.
 - What the shop NPC on `ShopMap` sells (barter inventory).
