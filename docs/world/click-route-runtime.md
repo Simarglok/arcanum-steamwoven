@@ -46,11 +46,15 @@ interface IRouteStepSource { bool Contains(CellCoord cell); RouteStepVerdict Ass
    `2 × AxisDistance` (64) cells per axis, centred on the source/target box. Step cost
    10, +1 when the direction changes, estimate 10 × Chebyshev distance, at most
    `Expansions` (4,096) expanded cells, deterministic tie-break by cell index
-   (`ROUTE_LOCAL_SEARCH`). Cells outside the window are never asked about. The route
-   is the cheapest under this cost model, not a claim about original path quality.
-4. **No route:** `ROUTE_NOT_FOUND` when only Blocked/Unsupported steps closed the
-   search, `ROUTE_EVIDENCE_INCOMPLETE` when an `Unknown` step was met (a route may
-   exist through it), `ROUTE_EXPANSION_LIMIT` when a lowered budget ran out.
+   (`ROUTE_LOCAL_SEARCH`). Cells outside the window are never asked about. The search
+   keeps one entry per cell, so the turn cost only shapes which of the shortest routes
+   is chosen; it is not an exact turn-minimal search, and nothing here claims original
+   path quality.
+4. **No route:** `ROUTE_EVIDENCE_INCOMPLETE` when an `Unknown` step was met (a route
+   may exist through it), otherwise `ROUTE_WINDOW_EXHAUSTED` when the window edge cut
+   the search (a route may exist outside it), otherwise `ROUTE_NOT_FOUND` (only
+   Blocked/Unsupported steps closed it); `ROUTE_EXPANSION_LIMIT` when a lowered budget
+   ran out. `ROUTE_COORDINATE_OVERFLOW` refuses cells at the edge of the `int` range.
 
 Only `Open` is traversable; `Blocked`, `Unknown` and `Unsupported` are never promoted.
 Each directed step is asked at most once per plan; the plan reports the counts of
@@ -75,15 +79,20 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
   segment, so a goal farther than eight steps is reached in several segments
   (FR-NAV-004) instead of being cut off.
 - Decisions happen only at a settled cell or at the exact end of the current step, for
-  the cell the actor will stand on. The host advances to that boundary with one
-  `SetActorIntent` input there, so consecutive steps chain without an idle gap and no
-  input lands inside a step.
+  the cell the actor will stand on. The host advances to that boundary with the
+  `SetActorIntent` input there (a Neutral first when a denied direction is still
+  active), so consecutive steps chain without an idle gap and no input lands inside a
+  step. A goal observed later than the advance target waits for a later advance.
 - A new goal or `Stop` never cancels a started step: it takes effect at the next cell
   centre, so there is no jump. The same goal again is kept, not queued twice.
 - The goal is reached when the actor is settled on it (`Arrived`, intent Neutral). A
   failed plan stops with the plan's reason; a step the runtime denies stops with
-  `ROUTE_STEP_DENIED` and the follower then clears the intent. A route is never
-  continued through a denial.
+  `ROUTE_STEP_DENIED`, and the next advance clears the intent (possibly in the next
+  `Drive` call). A route is never continued through a denial; a new click after it
+  starts cleanly.
+- The follower clears only an intent it issued itself, so a host may drive it while
+  another input source owns movement. `Next` plans as it decides, so `LastPlan`,
+  `PlannedSegments` and a plan failure are recorded even if the host drops that advance.
 - `Drive` runs `Next`/`Observe` through the host's advance up to the frame target,
   at most 1,024 sub-advances per call, and returns every `MovementResult` in order for
   presentation.
@@ -109,8 +118,8 @@ runtime receives therefore share one Data verdict.
   `ARC_AREA_ORIGINAL=1` and the
   [area coordinator roles](../rendering/crash-site-area-viewer.md). On the development
   Mac (2026-10-16): spawn (6,1) to (4,1) detours around the scenery at (5,1);
-  occupied goals (5,1) and (3,1) end `ROUTE_NOT_FOUND` after about 2,000 expansions
-  in about 32 ms; of eight goals 20 cells from spawn four were found and walked to
+  occupied goals (5,1) and (3,1) end with no route after about 2,000 expansions
+  in 25–50 ms (`ROUTE_WINDOW_EXHAUSTED`: the search reached the window edge); of eight goals 20 cells from spawn four were found and walked to
   arrival through the session (plans 0.1–1.2 ms), four had no route inside the window.
 
 ## NOT READY

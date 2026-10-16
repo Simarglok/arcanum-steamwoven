@@ -99,7 +99,8 @@ public static class RoutePlanner
             long oy = Math.Min(from.Y, target.Y) - (size - Math.Abs((long)target.Y - from.Y)) / 2;
             int Index(CellCoord c) => (int)(c.X - ox) + (int)(c.Y - oy) * size;
             CellCoord At(int index) => new(checked((int)(ox + index % size)), checked((int)(oy + index / size)));
-            bool Inside(long x, long y) => x >= ox && x < ox + size && y >= oy && y < oy + size;
+            bool Inside(long x, long y) => x >= ox && x < ox + size && y >= oy && y < oy + size &&
+                x is >= int.MinValue and <= int.MaxValue && y is >= int.MinValue and <= int.MaxValue;
             int Estimate(int index)
             {
                 var c = At(index);
@@ -113,7 +114,7 @@ public static class RoutePlanner
             int start = Index(from), goal = Index(target);
             cost[start] = 0; parent[start] = -1; entered[start] = -1;
             open.Enqueue(start, (Estimate(start), start));
-            var unknownFrontier = false;
+            bool unknownFrontier = false, windowEdge = false;
             while (open.TryDequeue(out var current, out var priority))
             {
                 if (closed[current] || priority.Total != cost[current] + Estimate(current)) continue;
@@ -124,7 +125,7 @@ public static class RoutePlanner
                 foreach (var direction in Directions)
                 {
                     var (dx, dy) = MovementGeometry.Delta(direction);
-                    if (!Inside((long)cell.X + dx, (long)cell.Y + dy)) continue;
+                    if (!Inside((long)cell.X + dx, (long)cell.Y + dy)) { windowEdge = true; continue; }
                     var next = Index(MovementGeometry.Neighbor(cell, direction));
                     if (closed[next]) continue;
                     var verdict = Verdict(cell, direction);
@@ -136,8 +137,8 @@ public static class RoutePlanner
                     open.Enqueue(next, (total + Estimate(next), next));
                 }
             }
-            // Unknown evidence may hide a route; say so instead of reporting a proven blockage.
-            return (null, unknownFrontier ? "ROUTE_EVIDENCE_INCOMPLETE" : "ROUTE_NOT_FOUND");
+            // Unknown evidence or the window edge may hide a route; say so instead of reporting a proven blockage.
+            return (null, unknownFrontier ? "ROUTE_EVIDENCE_INCOMPLETE" : windowEdge ? "ROUTE_WINDOW_EXHAUSTED" : "ROUTE_NOT_FOUND");
         }
 
         private static NeighborDirection[] Backtrack(int[] parent, sbyte[] entered, int goal)

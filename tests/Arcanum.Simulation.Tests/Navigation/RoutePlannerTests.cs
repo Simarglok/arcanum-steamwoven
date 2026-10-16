@@ -71,6 +71,7 @@ public sealed class RoutePlannerTests
         Assert.AreEqual(RouteOutcome.Found, RoutePlanner.Plan(source, new(0, 0), new(32, 0)).Outcome);
         Assert.AreEqual("ROUTE_TARGET_OUT_OF_RANGE", RoutePlanner.Plan(source, new(0, 0), new(8, 0), new RouteLimits(axisDistance: 7)).ReasonCode);
         Assert.AreEqual("ROUTE_TARGET_OUTSIDE_AREA", RoutePlanner.Plan(source, new(0, 0), new(0, 3)).ReasonCode);
+        Assert.AreEqual("ROUTE_TARGET_OUT_OF_RANGE", RoutePlanner.Plan(GridSource.Open(3, 40), new(0, 0), new(0, 33)).ReasonCode);
         Assert.AreEqual("ROUTE_SOURCE_OUTSIDE_AREA", RoutePlanner.Plan(source, new(-1, 0), new(0, 0)).ReasonCode);
         var same = RoutePlanner.Plan(source, new(2, 2), new(2, 2));
         Assert.AreEqual((RouteOutcome.AlreadyAtTarget, 0, 0), (same.Outcome, same.Steps.Count, same.Segment.Count));
@@ -114,12 +115,23 @@ public sealed class RoutePlannerTests
         rows[2] = new string('#', 90) + new string('.', 10);
         var source = new GridSource(rows) { OriginX = -50 };
         var far = RoutePlanner.Plan(source, new(0, 0), new(0, 4));
-        Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_NOT_FOUND"), (far.Outcome, far.ReasonCode));
+        Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_WINDOW_EXHAUSTED"), (far.Outcome, far.ReasonCode), "A route may exist outside the window.");
         Assert.IsTrue(source.Asked.Keys.All(k => k.Item1.X >= -32 && k.Item1.X < 32), "No cell outside the window is expanded.");
         Assert.IsTrue(far.Expansions <= RouteLimits.ExpansionMaximum);
         var walled = new GridSource(".......", "...#...", "...#...", "...#...", ".......");
         var budget = RoutePlanner.Plan(walled, new(1, 2), new(5, 2), new RouteLimits(expansions: 2));
         Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_EXPANSION_LIMIT", 2), (budget.Outcome, budget.ReasonCode, budget.Expansions));
+    }
+
+    [TestMethod]
+    public void WindowIsClippedToTheCoordinateRange()
+    {
+        // All open except a wall at x = Max-2, y in [-2,2]; the detour stays below int.MaxValue.
+        var max = int.MaxValue;
+        var source = new GridSource(Enumerable.Range(0, 9).Select(y => y is >= 2 and <= 6 ? "..#." : "....").ToArray()) { OriginX = max - 3, OriginY = -4 };
+        var plan = RoutePlanner.Plan(source, new(max - 3, 0), new(max, 0));
+        Assert.AreEqual((RouteOutcome.Found, (RouteMethod?)RouteMethod.LocalSearch), (plan.Outcome, plan.Method));
+        Assert.IsTrue(plan.Cells.All(c => c.X <= max));
     }
 
     [TestMethod]

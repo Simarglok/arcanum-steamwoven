@@ -127,4 +127,76 @@ public sealed class RouteFollowerTests
         Assert.AreEqual(T(10), host.State.Time);
         Assert.ThrowsExactly<ArgumentException>(() => follower.Next(host.State, T(9)));
     }
+    [TestMethod]
+    public void ReclickAfterADenialAtTheFrameEndStartsAgain()
+    {
+        var source = GridSource.Open(8, 1);
+        var denials = 1;
+        var admission = new GridSource("........") { Override = (from, _) => from == new CellCoord(0, 0) && denials-- > 0 ? RouteStepVerdict.Blocked : null };
+        var host = new RouteHost(admission, new(0, 0), Step);
+        host.Advance(T(0), []); // Close the watermark: the click input then lands at the frame target.
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(5, 0), host.State.Time);
+        host.Frames(follower, 1);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED"), (follower.Status, follower.StopReason));
+        Assert.IsTrue(host.State.LatestIntent.Active, "The denial ended the drive; the stale direction is still set.");
+        Assert.IsTrue(follower.SetTarget(new(5, 0), host.State.Time));
+        host.Frames(follower, 4 * 8);
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(5, 0)), (follower.Status, host.State.CommittedCell));
+    }
+
+    [TestMethod]
+    public void AGoalObservedAfterTheAdvanceTargetWaits()
+    {
+        var source = GridSource.Open(8, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(3, 0), T(5));
+        var early = follower.Next(host.State, T(1));
+        Assert.AreEqual((T(1), 0), (early.Until, early.Batches.Count));
+        var drive = follower.Drive(host.State, T(10), host.Advance);
+        Assert.AreEqual(T(5), host.Events.First(e => e.Kind == MovementEventKind.StepStarted).Time);
+        Assert.AreEqual(RouteFollowStatus.Arrived, follower.Status);
+        Assert.IsTrue(drive.Completed);
+    }
+
+    [TestMethod]
+    public void IntentOwnedByAnotherSourceIsNeverCleared()
+    {
+        var source = GridSource.Open(16, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        host.Advance(T(0), [Batch(0, Press(0))]); // e.g. the stick
+        var follower = new RouteFollower(source);
+        host.Frames(follower, 4 * 4);
+        Assert.AreEqual(new CellCoord(4, 0), host.State.CommittedCell);
+        Assert.AreEqual(ActorIntent.Toward(NeighborDirection.XPlus), host.State.LatestIntent);
+        Assert.IsFalse(host.Events.Any(e => e.Kind is MovementEventKind.StepCancelled or MovementEventKind.StepRejected));
+    }
+
+    [TestMethod]
+    public void HostCancelledStepIsReplannedFromItsSourceCell()
+    {
+        var source = GridSource.Open(8, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(3, 0), host.State.Time);
+        host.Frames(follower, 1);
+        follower.Observe(host.Advance(T(3, 8), [new InputBatch(T(3, 8), [MovementInput.Set(host.State.LatestInputKey!.Value.Sequence + 1, ActorIntent.Neutral)])]));
+        Assert.AreEqual(MovementPhase.Returning, host.State.Phase);
+        host.Frames(follower, 4 * 6);
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(3, 0)), (follower.Status, host.State.CommittedCell));
+        Assert.AreEqual(1, host.Events.Count(e => e.Kind == MovementEventKind.StepCancelled));
+    }
+
+    [TestMethod]
+    public void RejectedHostAdvanceIsATypedDriveFailure()
+    {
+        var source = GridSource.Open(8, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(3, 0), host.State.Time);
+        var drive = follower.Drive(host.State, T(4), (until, batches) => MovementRuntime.AdvanceTo(null, new(until, batches.ToArray(), [])));
+        Assert.AreEqual((false, "ROUTE_ADVANCE_REJECTED", 1), (drive.Completed, drive.FailureCode, drive.Advances.Count));
+        Assert.AreSame(host.State, drive.State);
+    }
 }

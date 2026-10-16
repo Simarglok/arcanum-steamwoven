@@ -28,6 +28,7 @@ public sealed class RouteFollower
     private int _segmentNext;
     private CellCoord? _segmentCell;
     private SimulationTime? _requestedAt;
+    private ActorIntent? _issued;
 
     public RouteFollower(IRouteStepSource source, RouteLimits? limits = null)
     {
@@ -64,7 +65,9 @@ public sealed class RouteFollower
 
     /// <summary>
     /// The next advance toward <paramref name="target"/>. Decisions are made only at a settled cell or at the exact end
-    /// of the current step, for the cell the actor will stand on, so no input lands inside a step.
+    /// of the current step, for the cell the actor will stand on, so no input lands inside a step. Planning happens
+    /// here, so <see cref="LastPlan"/>, <see cref="PlannedSegments"/> and a plan failure are recorded even if the host
+    /// does not run the returned advance. The follower clears only an intent it issued itself.
     /// </summary>
     public RouteSubAdvance Next(MovementState state, SimulationTime target)
     {
@@ -73,18 +76,22 @@ public sealed class RouteFollower
         if (state.Segment is { } segment)
         {
             if (segment.EndTime.Value > target.Value) return new(target, []);
-            var cell = state.Phase == MovementPhase.Returning ? segment.From : segment.To;
-            var intent = Desired(cell);
-            return new(segment.EndTime, intent == state.LatestIntent ? [] : [Batch(state, segment.EndTime, intent)]);
+            var intent = Desired(state.Phase == MovementPhase.Returning ? segment.From : segment.To);
+            if (intent == state.LatestIntent || (!intent.Active && !Owned(state))) return new(segment.EndTime, []);
+            return new(segment.EndTime, [Issue(state, segment.EndTime, intent)]);
         }
         var desired = Desired(state.CommittedCell);
-        if (desired == state.LatestIntent) return new(target, []);
-        // A settled actor takes the input at the observation time if it is still open, otherwise at the target.
-        var at = _requestedAt is { } requested && Admissible(state, requested) && requested.Value <= target.Value ? requested : target;
+        if (!desired.Active && !(state.LatestIntent.Active && Owned(state))) return new(target, []);
+        // A settled actor takes the input when the goal was observed, or at the target if that time is already closed.
+        var at = target;
+        if (_requestedAt is { } requested && Admissible(state, requested))
+        {
+            if (requested.Value > target.Value) return new(target, []); // Not observed yet within this advance.
+            at = requested;
+        }
         if (!Admissible(state, at)) return new(target, []);
-        // A stale direction (for example after a denied step) is cleared first so the new one is material.
-        var inputs = desired.Active && state.LatestIntent.Active ? new[] { ActorIntent.Neutral, desired } : new[] { desired };
-        return new(at, [Batch(state, at, inputs)]);
+        // A settled actor with an active intent was denied its last step: clear it first so the new one is material.
+        return new(at, [desired.Active && state.LatestIntent.Active ? Issue(state, at, ActorIntent.Neutral, desired) : Issue(state, at, desired)]);
     }
 
     /// <summary>Records one completed advance: consumed segment steps, denials and arrival.</summary>
@@ -119,12 +126,12 @@ public sealed class RouteFollower
             var step = Next(state, target);
             var result = advance(step.Until, step.Batches);
             results.Add(result);
-            if (result.Status != MovementStatus.Completed || result.State is null) return new(state, results, "ROUTE_ADVANCE_REJECTED");
+            if (result.Status != MovementStatus.Completed || result.State is null) return new(state, results.AsReadOnly(), "ROUTE_ADVANCE_REJECTED");
             Observe(result);
             state = result.State;
-            if (step.Until == target) return new(state, results, null);
+            if (step.Until == target) return new(state, results.AsReadOnly(), null);
         }
-        return new(state, results, "ROUTE_SUB_ADVANCE_LIMIT");
+        return new(state, results.AsReadOnly(), "ROUTE_SUB_ADVANCE_LIMIT");
     }
 
     private ActorIntent Desired(CellCoord cell)
@@ -145,6 +152,14 @@ public sealed class RouteFollower
 
     private static bool Admissible(MovementState state, SimulationTime time) =>
         state.IsClosed ? time.Value > state.Time.Value : time.Value >= state.Time.Value;
+
+    private bool Owned(MovementState state) => _issued is { } issued && state.LatestIntent == issued;
+
+    private InputBatch Issue(MovementState state, SimulationTime time, params ActorIntent[] intents)
+    {
+        _issued = intents[^1];
+        return Batch(state, time, intents);
+    }
 
     private static InputBatch Batch(MovementState state, SimulationTime time, params ActorIntent[] intents)
     {
