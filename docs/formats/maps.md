@@ -7,6 +7,11 @@ now applies the bounded framing to the selected multisector area and reconciles
 its normal-game aggregate. It does not make the historical one-sector observations
 below a universal sector/map schema or establish runtime scene parity.
 
+`terrain.tdf` and the template sectors that stand in for missing sector files are
+researched separately in
+[generated-wilderness-evidence.md](../research/generated-wilderness-evidence.md)
+(ARC-RES-034).
+
 This note specifies only the inspected Crash Site sector described in
 [crash-site-slice.md](../research/crash-site-slice.md). The claims below are
 not a universal map-file format specification.
