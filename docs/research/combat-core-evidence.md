@@ -436,7 +436,9 @@ neither see nor hear the attacker; then the critical chance gains
   the AI section.
 - **O6** Weapon, armour and critter prototype fields (damage ranges, speed
   factor, range, to-hit, minimum strength, crit charts, AC, resistances) were
-  not read from data; the Crash Site combatants are unknown.
+  not read from data; the Crash Site combatants are unknown. *Update:* the
+  reader is [ARC-DATA-021](../formats/combat-fields.md), which lists the
+  Crash Site exterior and cave combatants and their gear.
 - **O7** Whether the recovery event re-arms itself while it runs (duplicate
   check against the event being processed) was not traced.
 

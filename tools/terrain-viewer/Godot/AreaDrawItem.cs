@@ -21,6 +21,10 @@ public partial class AreaDrawItem : Node2D
         uniform vec2 fade = vec2(1.0);
         uniform int fade_width = 1;
         uniform bool fade_flip = false;
+        // ARC-RENDER-014: the fade is a function of the Legacy column. An HD crop (N·c, N·m) maps
+        // its sampled index sx back to floor((sx - N·c) / N) = the Legacy column (Legacy: N = 1).
+        uniform int fade_scale = 1;
+        uniform int fade_start = 0;
         // ARC-RENDER-012 local light: 0 constant ambient, 1 horizontal two-colour gradient (walls),
         // 2 terrain lattice. raster = canvas origin and zoom, item_rect = world destination.
         uniform int light_mode = 0;
@@ -55,7 +59,8 @@ public partial class AreaDrawItem : Node2D
             int sx = x.x + x.y * 256 - 1;
             int sy = y.x + y.y * 256 - 1;
             if (sx < 0 || sy < 0) discard;
-            int column = fade_flip ? fade_width - 1 - sx : sx;
+            int legacy_column = (sx - fade_scale * fade_start) / fade_scale;
+            int column = fade_flip ? fade_width - 1 - legacy_column : legacy_column;
             float wall = fade.x + float(column) * (fade.y - fade.x) / float(fade_width);
             COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(light_tint(FRAGCOORD.xy), body_alpha * wall);
         }
@@ -66,7 +71,7 @@ public partial class AreaDrawItem : Node2D
     private ShaderMaterial? _material;
     private (bool Additive, int Alpha)? _materialState;
     private Color? _ambientState;
-    private (AreaWallFade Fade, int Width, bool Flip)? _fadeState;
+    private (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? _fadeState;
     private (int Mode, Color Right, AreaLatticeBinding? Lattice, TerrainRect Rect, Vector4 Raster)? _lightState;
     private ImageTexture? _mapping;
     private AreaMappingKey? _key;
@@ -76,6 +81,9 @@ public partial class AreaDrawItem : Node2D
     private Rect2 _primitive;
     private AreaActorGuide? _guide;
     public ImageTexture? FrameTexture { get; set; }
+    /// <summary>ARC-RENDER-014: N when <see cref="FrameTexture"/> is an HD frame (exactly N·w × N·h), 1 for Legacy.
+    /// The item samples the crop (N·c, N·m) with the Legacy destination, reflection and every other input unchanged.</summary>
+    public int HdScale { get; set; } = 1;
     public AreaDrawCommand? Command { get; set; }
     public ActorDiagnosticDrawCommand? Actor { get; set; }
     /// <summary>ARC-RENDER-010 ambient multiplier of this item's channel; white leaves source pixels unchanged.</summary>
@@ -130,7 +138,11 @@ public partial class AreaDrawItem : Node2D
         // AREA chart items are in world coordinates; do not silently use a
         // second transform/projection for testing or movement.
         if (GlobalTransform != Transform2D.Identity) throw new InvalidOperationException("AREA_NEAREST_ITEM_TRANSFORM_DOMAIN");
-        var source = Actor is null ? command.Source : new TerrainRect(0, 0, FrameTexture!.GetWidth(), FrameTexture.GetHeight());
+        if (HdScale < 1 || FrameTexture!.GetWidth() % HdScale != 0 || FrameTexture.GetHeight() % HdScale != 0)
+            throw new InvalidOperationException("AREA_HD_SCALE_DOMAIN");
+        // The Legacy crop: the plan's for bodies and terrain, the whole Legacy frame for the actor.
+        var legacy = Actor is null ? command.Source : new TerrainRect(0, 0, FrameTexture.GetWidth() / HdScale, FrameTexture.GetHeight() / HdScale);
+        var source = HdScale == 1 ? legacy : HdCrop.Scale(legacy, HdScale);
         if (source.X < 0 || source.Y < 0 || (long)source.X + source.Width > FrameTexture!.GetWidth()
             || (long)source.Y + source.Height > FrameTexture.GetHeight())
             throw new InvalidOperationException("AREA_NEAREST_SOURCE_CROP_DOMAIN");
@@ -150,13 +162,15 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("ambient", new Vector3(Ambient.R, Ambient.G, Ambient.B));
             _ambientState = Ambient;
         }
-        var fadeState = (WallFade, source.Width, command.FlipX);
+        var fadeState = (WallFade, legacy.Width, command.FlipX, HdScale, legacy.X);
         if (_fadeState != fadeState)
         {
             var (left, right) = FadeAlphas(WallFade);
             _material.SetShaderParameter("fade", new Vector2(left / 255f, right / 255f));
-            _material.SetShaderParameter("fade_width", source.Width);
+            _material.SetShaderParameter("fade_width", legacy.Width);
             _material.SetShaderParameter("fade_flip", command.FlipX);
+            _material.SetShaderParameter("fade_scale", HdScale);
+            _material.SetShaderParameter("fade_start", legacy.X);
             _fadeState = fadeState;
         }
         // Constant-ambient items (every item without local light) never re-send per camera move.

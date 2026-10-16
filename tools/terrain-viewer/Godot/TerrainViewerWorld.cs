@@ -23,6 +23,10 @@ public partial class TerrainViewerApp
     private IGridSession? _worldRouteSession;
     private string _worldRouteDiagnostic = "no click yet";
     private string _worldRouteClick = "none";
+    // ARC-WORLD-016: a route step denied by a live companion is planned again a few times for the same goal.
+    private bool _worldActorDenied;
+    private (CellCoord? Goal, int Count) _worldActorRetries;
+    private const int ActorDenialRetries = 8;
     private bool _worldResetPending;
     private bool _worldReloadPending;
     private IGridSession? _worldLifecycleSession;
@@ -110,6 +114,8 @@ public partial class TerrainViewerApp
         if (GetViewport() == GetWindow()) GetWindow().ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
         _worldSettings = _worldStore.Load();
         _worldPreferredZoom = _worldZoomStore.Load();
+        // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
+        _worldActor.AreaOccupancy = () => _areaCompanions?.OccupancyForPc();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
         _worldPanel.CloseRequested += ToggleWorldSettings;
@@ -422,7 +428,8 @@ public partial class TerrainViewerApp
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
             FollowAreaAmbient(); FollowAreaWalls();
-            _canvas!.PublishArea(_readyArea, actor, input, _cache); return;
+            _canvas!.SetAreaMovingBodies(AreaCompanionCommands());
+            _canvas.PublishArea(_readyArea, actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);
         _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current; _readyDiagnosticPlan = plan;
@@ -456,6 +463,9 @@ public partial class TerrainViewerApp
         // A following route also waits while a stick receipt is still open past the frontier
         // (a release observed after a click): deciding at an earlier step end would start a
         // step that receipt then cancels.
+        // ARC-WORLD-016: only a step the route itself drove, in a route that was following, is retried after a denial.
+        var routeDrove = false;
+        _worldActorDenied = false;
         if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
         {
             // Observed stick/neutral receipts close first; the follower only watches them.
@@ -465,11 +475,14 @@ public partial class TerrainViewerApp
         else
         {
             // No pending receipt: the route drives to the same frontier at exact step ends.
+            routeDrove = route.Status == RouteFollowStatus.Following;
             var drive = route.Drive(session.State, frontier, (until, input) => Run(until, input.ToArray()).Movement);
             if (!drive.Completed) throw new InvalidOperationException("GRID_" + drive.FailureCode);
         }
         _worldGridInput.PublishedThrough(frontier);
+        RetryActorDenial(routeDrove ? route : null, frontier);
         if (route is not null) _worldRouteDiagnostic = DescribeWorldRoute(route);
+        DriveAreaCompanions(session, frontier);
         PublishWorldSelection();
         if (ReferenceEquals(_worldLifecycleSession, session) && session.State.Phase == MovementPhase.Settled)
         {
@@ -484,7 +497,7 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time, chart: area.Chart);
+                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); }
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -494,15 +507,30 @@ public partial class TerrainViewerApp
             }
         }
     }
+    /// <summary>ARC-WORLD-016: the planner sees a companion where it stood when the route was planned; when it then steps
+    /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).
+    /// <paramref name="route"/> is null unless this frame's advance was driven by a following route, so a stick bump into
+    /// a companion never revives an earlier, finished route.</summary>
+    private void RetryActorDenial(RouteFollower? route, SimulationTime frontier)
+    {
+        var denied = _worldActorDenied; _worldActorDenied = false;
+        if (!denied || route is not { Status: RouteFollowStatus.Stopped, StopReason: "ROUTE_STEP_DENIED", Target: { } goal }) return;
+        var count = _worldActorRetries.Goal == goal ? _worldActorRetries.Count : 0;
+        if (count >= ActorDenialRetries) return;
+        _worldActorRetries = (goal, count + 1);
+        route.SetTarget(goal, frontier, route.Range);
+        GD.Print($"ARC-WORLD-016 route replanned around a companion target={goal} retry={count + 1}");
+    }
     private Action<GridAdvance>? _worldAdvanceObserverForSelfTest;
     private void PublishWorldAdvance(IGridSession session, GridAdvance advance)
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
+            _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
             var assessment = evidence.Assessment;
             _worldLastStepAttempt = $"({evidence.Key.From.X},{evidence.Key.From.Y})->({evidence.Key.To.X},{evidence.Key.To.Y}) {evidence.Key.Direction} {assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} epoch={session.EvidenceEpoch}";
-            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
+            _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode}{(evidence.Live is { } live ? $" live {live.Coverage}/{live.Disposition} {live.ReasonCode}" : "")} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
             // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
             GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
                 evidence.Key, coverage=assessment.Coverage.ToString(), disposition=assessment.Disposition?.ToString(),
@@ -530,7 +558,7 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart));
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy));
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -735,7 +763,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | {_canvas!.HdStatusText()} | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {

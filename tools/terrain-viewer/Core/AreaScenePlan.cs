@@ -14,7 +14,12 @@ public sealed record AreaFrameKey(AreaEntryIdentity Entry, int Palette, int Grou
 }
 public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, AreaObjectKey? Identity,
     TerrainRect Source, TerrainRect Destination, bool FlipX, bool FlipY, int Phase, int MapX, int MapY,
-    int FirstRank, int SecondRank, int Alpha, bool Additive);
+    int FirstRank, int SecondRank, int Alpha, bool Additive)
+{
+    /// <summary>The ART class of the drawn art (raw art id &gt;&gt; 28; 1 = wall, as <see cref="AreaScenePlan.Hotspot"/>
+    /// reads it). ARC-RENDER-014 binds HD for characters and objects, not walls.</summary>
+    public int ArtClass { get; init; }
+}
 
 /// <summary>One world chart and one stable immutable body policy. Body appearance
 /// belongs to DATA009; footprint terrain cropping belongs to the established
@@ -81,7 +86,7 @@ public sealed class AreaScenePlan
             var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
-                ranks.First, ranks.Second, state.Alpha, state.Additive));
+                ranks.First, ranks.Second, state.Alpha, state.Additive) { ArtClass = (int)(visual.RawArt >> 28) });
             coverage.Add(new(body.Key, visual.Key, state.Flat ? state.UnderAll ? AreaDisposition.FlatUnderAll : AreaDisposition.FlatBody
                 : AreaDisposition.UprightBody, "DATA009ResolvedBody"));
         }
@@ -189,16 +194,45 @@ public sealed class AreaUprightOrder
     public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
     {
         var marker = AreaScenePlan.ActorMarker(placement, actor, actorIdentity, _chart);
-        // Upper bound: the first body that orders strictly after the marker.
-        int low = 0, high = _bodies.Length;
-        while (low < high)
-        {
-            var middle = low + (high - low) / 2;
-            if (AreaScenePlan.CompareUpright(_bodies[middle], marker) <= 0) low = middle + 1; else high = middle;
-        }
+        var low = UpperBound(_bodies, _bodies.Length, marker);
         var ordered = new AreaDrawCommand[_bodies.Length + 1];
         Array.Copy(_bodies, ordered, low); ordered[low] = marker;
         Array.Copy(_bodies, low, ordered, low + 1, _bodies.Length - low);
         return Array.AsReadOnly(ordered);
+    }
+
+    /// <summary>ARC-WORLD-016: the same order with the bodies of <paramref name="moving"/>'s identities taken out of their
+    /// T0 place and each moved command inserted after every body with an equal or smaller key, then the actor marker,
+    /// exactly as a stable sort of the remaining bodies with the moved commands and the marker appended places them.</summary>
+    public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity,
+        IReadOnlyList<AreaDrawCommand>? moving)
+    {
+        if (moving is null || moving.Count == 0) return With(placement, actor, actorIdentity);
+        var keys = moving.Select(command => command.Identity).ToHashSet();
+        var ordered = new AreaDrawCommand[_bodies.Length + moving.Count + 1];
+        var count = 0;
+        foreach (var body in _bodies) if (!keys.Contains(body.Identity)) ordered[count++] = body;
+        foreach (var command in moving.Where(command => command.Phase == 4)) Insert(ordered, ref count, command);
+        Insert(ordered, ref count, AreaScenePlan.ActorMarker(placement, actor, actorIdentity, _chart));
+        return Array.AsReadOnly(ordered[..count]);
+    }
+
+    private static void Insert(AreaDrawCommand[] ordered, ref int count, AreaDrawCommand command)
+    {
+        var at = UpperBound(ordered, count, command);
+        Array.Copy(ordered, at, ordered, at + 1, count - at);
+        ordered[at] = command; count++;
+    }
+
+    // Upper bound: the first entry that orders strictly after the command.
+    private static int UpperBound(AreaDrawCommand[] ordered, int count, AreaDrawCommand command)
+    {
+        int low = 0, high = count;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (AreaScenePlan.CompareUpright(ordered[middle], command) <= 0) low = middle + 1; else high = middle;
+        }
+        return low;
     }
 }

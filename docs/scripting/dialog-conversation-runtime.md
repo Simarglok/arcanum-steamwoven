@@ -182,8 +182,10 @@ Observed with the user-owned installation: Virgil (script 1324) enters at SCR li
 node 1; choosing the first Direct reply each time walks 13 NPC nodes
 (1, 9, 15, 19, 24, 30, 32, 35, 57, 71, 120, 210, 74) with 16 applied effects
 (GF×4, IN, QU, RU×2, RE, MM×5, JO, AL) and exits to SCR line 5. Talking again while he
-follows enters at SCR line 6 → node 385, a frontier in the viewer (`WA` condition, no party port
-there yet; with the session party port it runs, see [party runtime](../world/party-runtime.md#tests)); since ARC-SCRIPT-006
+follows enters at SCR line 6 → node 385. Since ARC-WORLD-016 the viewer talks to Virgil with the
+session party port ([companion follow](../world/companion-follow-runtime.md#viewer-binding)): his `JO` joins the
+session party, and node 385 runs its `WA` conditions and `UW 0 518` instead of stopping at a frontier;
+the host without `party: true` (the test above) still stops there. Since ARC-SCRIPT-006
 this holds after the session went to the cave and back and through a snapshot round trip,
 with the four flags, one quest and two rumors restored. These are diagnostic runs, not
 original gameplay verification.

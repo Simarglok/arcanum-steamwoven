@@ -17,6 +17,9 @@ public partial class TerrainCanvas
     private AreaAmbientView? _areaAmbient;
     private IReadOnlyDictionary<AreaObjectKey, AreaWallFade>? _areaWallFades;
     private IReadOnlySet<AreaObjectKey>? _areaHidden;
+    // ARC-WORLD-016: bodies drawn where their live actor stands (companions), replacing their T0 command.
+    private IReadOnlyList<AreaDrawCommand>? _areaMoving;
+    private int _areaMovingStamp;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -58,7 +61,7 @@ public partial class TerrainCanvas
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
-        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks)? _areaView;
+        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks, int Moving)? _areaView;
 
     public void PublishArea(AreaLoadResult area, ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
         => PublishArea(area.Plan, area.Frames, actor, placement, textures);
@@ -73,6 +76,7 @@ public partial class TerrainCanvas
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
+            if (_area is not null) ReleaseAreaHd(); // a map change releases the previous map's HD textures
         }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
         if (!ReferenceEquals(_area, plan) || _areaIndex is null)
@@ -106,6 +110,13 @@ public partial class TerrainCanvas
         _areaHidden = hidden; _areaView = null; QueueRedraw();
     }
     internal IReadOnlySet<AreaObjectKey>? AreaHidden => _areaHidden;
+    /// <summary>ARC-WORLD-016: moved body commands from the next submission (null or empty = every body at T0).</summary>
+    public void SetAreaMovingBodies(IReadOnlyList<AreaDrawCommand>? moving)
+    {
+        if (moving is null or { Count: 0 } && _areaMoving is null or { Count: 0 }) return;
+        if (_areaMoving is { } old && moving is { } next && old.SequenceEqual(next)) return;
+        _areaMoving = moving; _areaMovingStamp++; _areaView = null; QueueRedraw();
+    }
     internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && _areaHidden?.Contains(key) == true;
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
@@ -173,7 +184,7 @@ public partial class TerrainCanvas
     }
     public override void _Process(double delta)
     {
-        if (_area is null) return;
+        if (_area is null) { ProcessWorldHd(); return; }
         try { UpdateAreaVisible(); }
         catch (Exception error) { AreaFailure?.Invoke(error); }
     }
@@ -181,17 +192,18 @@ public partial class TerrainCanvas
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
-        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled);
-        if (_areaView == state) { TrimAreaPool(); return; }
+        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled, _areaMovingStamp);
+        // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
+        if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
             command.Destination.Width, command.Destination.Height).Intersects(world);
-        var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel);
+        var upright = _areaUpright!.With(_areaActorPlacement, _actorPlan.Current, ActorSentinel, _areaMoving);
         var flat = _areaIndex!.Candidates(world.Position.X, world.Position.Y, world.End.X, world.End.Y);
         var ordered = flat.Select(index => _areaFlat[index]).Concat(upright);
         var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || (_showStatics && !AreaHiddenOf(command)))).ToArray();
-        if (visible.Length > _area.Commands.Count + 1) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
+        if (visible.Length > _area.Commands.Count + 1 + (_areaMoving?.Count ?? 0)) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
         // Index rows used by this submission stay resident; rows from earlier views are
         // reused across pans or evicted under the shared 16 MiB cap. The original ART
         // repository is not re-decoded.
@@ -219,6 +231,9 @@ public partial class TerrainCanvas
         _textures.UploadAreaVisible(_areaFrames, draw.Where(command => command.Identity != ActorSentinel && !_areaChunkCommands.ContainsKey(command))
             .Select(command => command.Frame).ToHashSet());
         var logical = visible; visible = draw;
+        // ARC-RENDER-014: HD textures for characters and objects, after the Legacy set (every
+        // fallback draws Legacy, so the Legacy visible set stays resident under both profiles).
+        var hd = BindAreaHd(visible); var hdScale = HdActive ? ActiveHdSource.Scale : 1;
         while (_areaItems.Count < visible.Length)
         {
             var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };
@@ -228,7 +243,7 @@ public partial class TerrainCanvas
         for (var index = visible.Length; index < _areaActive; index++)
         {
             var item = _areaItems[index];
-            item.Hide(); item.FrameTexture = null; item.ReleaseMapping();
+            item.Hide(); item.FrameTexture = null; item.HdScale = 1; item.ReleaseMapping();
         }
         _areaActive = visible.Length;
         for (var index = 0; index < visible.Length; index++)
@@ -240,6 +255,7 @@ public partial class TerrainCanvas
             if (_areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
+            if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
             (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
             // The source drops every alpha mode for an additive (or sub/mul) object, so such a wall never fades.
@@ -277,15 +293,17 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaIndex = null; _areaFlat = Array.Empty<AreaDrawCommand>(); _areaAmbient = null; _areaWallFades = null; _areaHidden = null; _areaMoving = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
         _areaMappings.Clear(); // after the items stopped sampling the rows
         _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
+        ReleaseAreaHd(); // after the items stopped sampling HD textures
     }
     public override void _ExitTree()
     {
         ClearArea();
+        ReleaseHd(); _hdOwnedSource?.Dispose(); _hdOwnedSource = null;
     }
 }

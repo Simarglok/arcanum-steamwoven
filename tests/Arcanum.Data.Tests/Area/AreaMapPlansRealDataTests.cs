@@ -13,10 +13,18 @@ public sealed class AreaMapPlansRealDataTests
 {
     private static readonly string[] Complete =
     [
-        "ashbury-scienticians underground", "caladon guardhouse basement", "caladon sanders basement", "crash site cave", "crematorium-lev 1",
-        "elven ruins", "iron clan - music box", "iron clan hq", "mannox's hole", "qintarra-queens chambers", "shopmap", "stillwater giants cave",
-        "the pit-fixed", "thieves cave", "tulla interior - battle - conveyance", "uncharted cave", "void - cave of kriggyrd's falchion",
-        "vollingers basement", "wolf-cave",
+        "ashbury-scienticians underground", "bates mansion lev 1", "bates mansion lev 2", "bates tunnel-fixed", "bessietoonesmine-fixed",
+        "caladon guardhouse basement", "caladon high security prison", "caladon sanders basement", "caladon trap disarm dungeon",
+        "caladon-castle main floor", "caladon-mafia underground", "caladon-panarrii temple-basement", "crash site cave", "crematorium-lev 1",
+        "dernholm-castle", "drogs cave", "elven ruins", "fal'kins maze", "iron clan - music box", "iron clan hq", "mannox's hole",
+        "pschuylers lev 3-fixed", "qintarra", "qintarra-queens chambers", "roseborough inn2", "ruins of szabo", "shopmap",
+        "shrouded hills-panarii temple lev 1", "stillwater giants cave", "stonecutter clan", "t'sen-ang", "tarant-city hall downstairs",
+        "the pit-fixed", "thieves cave", "tulla interior - battle - air", "tulla interior - battle - conveyance",
+        "tulla interior - battle - divination", "tulla interior - battle - earth", "tulla interior - battle - fire",
+        "tulla interior - battle - meta", "tulla interior - battle - morph", "tulla interior - battle - nature",
+        "tulla interior - battle - summoning", "tulla interior - battle - temporal", "tulla interior - battle - water", "uncharted cave",
+        "vendigroth underground", "void - arronax's interior", "void - cave of kriggyrd's falchion", "void-kerghans castle", "vollingers basement",
+        "wolf-cave",
     ];
 
     [TestMethod, TestCategory("RealData")]

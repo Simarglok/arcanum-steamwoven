@@ -96,8 +96,9 @@ public partial class TerrainViewerApp
         var transform = AreaDrawItem.RasterTransform(GetViewport());
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
         // ARC-UI-004: an item the PC took is no longer in the world.
+        // ARC-WORLD-016: a companion is picked where it is drawn now, never on its T0 cell.
         return index.Pick(command => !AreaTakenByPc(command) && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
-            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None);
+            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None, AreaCompanionCommands());
     }
 
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>
@@ -119,7 +120,7 @@ public partial class TerrainViewerApp
         var open = visible && WorldClickInputOpen && _areaTransitions?.Pending is null;
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
-            _inventoryHidden);
+            _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State);
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -135,7 +136,7 @@ public partial class TerrainViewerApp
         if (key is { } hit)
         {
             if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit) is { } speaker)
-                return AreaConversationHost.Distance(speaker, actor.X, actor.Y) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
+                return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
             if (_areaTransitions is not null && _areaTransitions.Triggers().Any(t => t.Trigger.Key == hit))
             {
                 var row = _hoverIndex!.Row(hit);

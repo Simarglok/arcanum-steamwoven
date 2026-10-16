@@ -1,4 +1,5 @@
 using Godot;
+using Arcanum.Data.Hd;
 using Arcanum.Data.Terrain;
 using Arcanum.TerrainViewer.Core;
 
@@ -10,6 +11,10 @@ public sealed class TerrainTextureCache : IDisposable
     private readonly Dictionary<StaticSceneryTextureKey, ImageTexture> _staticTextures = new();
     private readonly Dictionary<ActorDiagnosticTextureKey, ImageTexture> _actorTextures = new();
     private readonly Dictionary<AreaFrameKey, ImageTexture> _areaTextures = new();
+    // ARC-RENDER-014: the HD question and Legacy pixels of actor and static frames (the HD mask
+    // check needs this device's Legacy alpha). Released with their textures.
+    private readonly Dictionary<ActorDiagnosticTextureKey, (HdSpriteQuery Query, byte[] Rgba)> _actorHd = new();
+    private readonly Dictionary<StaticSceneryTextureKey, (HdSpriteQuery Query, byte[] Rgba)> _staticHd = new();
     private readonly Dictionary<AreaFrameKey, (long Bytes, long LastUse)> _areaUse = new();
     private long _areaSubmission;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaRepository;
@@ -75,6 +80,16 @@ public sealed class TerrainTextureCache : IDisposable
     public bool TryGet(StaticSceneryTextureKey key, out ImageTexture texture) => _staticTextures.TryGetValue(key, out texture!);
     public bool TryGet(ActorDiagnosticTextureKey key, out ImageTexture texture) => _actorTextures.TryGetValue(key, out texture!);
     public bool TryGet(AreaFrameKey key, out ImageTexture texture) => _areaTextures.TryGetValue(key, out texture!);
+    /// <summary>The HD question and Legacy pixels of an uploaded actor or static frame; false
+    /// when the frame has no ART identity (it then draws Legacy as <c>FrameMissing</c>).</summary>
+    public bool TryGetActorHd(ActorDiagnosticTextureKey key, out HdSpriteQuery query, out byte[] rgba)
+    {
+        var found = _actorHd.TryGetValue(key, out var hd); (query, rgba) = hd; return found;
+    }
+    public bool TryGetStaticHd(StaticSceneryTextureKey key, out HdSpriteQuery query, out byte[] rgba)
+    {
+        var found = _staticHd.TryGetValue(key, out var hd); (query, rgba) = hd; return found;
+    }
 
     /// <summary>All-or-fail visible residency, from the bounded CPU repository.
     /// No lease/decode runs on pan. Frames that left the view are retained within
@@ -164,12 +179,13 @@ public sealed class TerrainTextureCache : IDisposable
                 var texture = _createTexture(image);
                 CreatedCount++;
                 _staticTextures.Add(item.Key, texture);
+                if (item.Value.HdQuery is { } hd) _staticHd[item.Key] = (hd, item.Value.Rgba);
                 uploaded.Add(item.Key);
             }
         }
         catch
         {
-            foreach (var key in uploaded) { DisposeTexture(_staticTextures[key]); _staticTextures.Remove(key); }
+            foreach (var key in uploaded) { DisposeTexture(_staticTextures[key]); _staticTextures.Remove(key); _staticHd.Remove(key); }
             throw;
         }
     }
@@ -187,12 +203,13 @@ public sealed class TerrainTextureCache : IDisposable
                 var texture = _createTexture(image);
                 CreatedCount++;
                 _actorTextures.Add(item.Key, texture);
+                if (item.Value.HdQuery is { } hd) _actorHd[item.Key] = (hd, item.Value.Rgba);
                 uploaded.Add(item.Key);
             }
         }
         catch
         {
-            foreach (var key in uploaded) { DisposeTexture(_actorTextures[key]); _actorTextures.Remove(key); }
+            foreach (var key in uploaded) { DisposeTexture(_actorTextures[key]); _actorTextures.Remove(key); _actorHd.Remove(key); }
             throw;
         }
     }
@@ -229,8 +246,8 @@ public sealed class TerrainTextureCache : IDisposable
         foreach (var texture in _actorTextures.Values) DisposeTexture(texture);
         foreach (var texture in _areaTextures.Values) DisposeTexture(texture);
         _textures.Clear();
-        _staticTextures.Clear();
-        _actorTextures.Clear();
+        _staticTextures.Clear(); _staticHd.Clear();
+        _actorTextures.Clear(); _actorHd.Clear();
         _areaTextures.Clear(); _areaUse.Clear(); _areaRepository = null; AreaRgbaBytes = 0; AreaVisibleFrames = 0; AreaVisibleBytes = 0;
     }
 
