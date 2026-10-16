@@ -9,6 +9,9 @@ namespace Arcanum.Data.Traversal;
 public static class AreaStepInspector
 {
     private const string OriginalAreaProfile = "arc-data-009-complete-file-effective-source-v1";
+    private const string OriginalCaveProfile = "arc-world-009-cave-file-effective-source-v1";
+    // Window/opening wall pieces (docs/research/cave-transition-evidence.md T7); every other piece is a solid edge.
+    private static readonly int[] OpeningWallPieces = [10, 13, 14, 17, 18, 19, 22, 25, 26, 29, 30, 31, 32];
     private const string TileNamePath = "art/tile/tilename.mes", EffectPath = "rules/effect.mes", GameEffectPath = "rules/gameeffect.mes", PatchPath = "rules/map.patch";
     // Pinned payload identities of the authenticated original profile (docs/research/area-passability-closure.md).
     private static readonly IReadOnlyDictionary<string, (long Length, string Sha256)> OriginalPayloads = new Dictionary<string, (long, string)>
@@ -33,8 +36,9 @@ public static class AreaStepInspector
         return Sanitize(stage, () => Build(stage, AreaStepInputKind.Structural, area, module, tileNameArchive, effectArchive, patchArchive, mobileFile, evidenceEpoch));
     }
 
-    /// <summary>Authenticated original Crash Site profile: the strict original Area snapshot, its nine core sectors,
-    /// and pinned tile-name, effect, module-effect and map.patch payloads read from the explicitly named archives.</summary>
+    /// <summary>Authenticated original Crash Site profile: the strict original Area snapshot, its nine core sectors
+    /// (or the cave profile's single sector (32,31)), and pinned tile-name, effect, module-effect and map.patch
+    /// payloads read from the explicitly named archives.</summary>
     public static AreaStepSnapshot ValidateOriginalData(AreaSnapshot area, string modulePath, string tileNameResourcePath,
         string effectResourcePath, string patchArchivePath, string mobilePath, long evidenceEpoch)
     {
@@ -46,10 +50,11 @@ public static class AreaStepInspector
         var stage = new StageCursor();
         return Sanitize(stage, () =>
         {
-            if (area.Profile != OriginalAreaProfile) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+            if (area.Profile is not (OriginalAreaProfile or OriginalCaveProfile)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             var core = area.Sectors.Where(s => s.Scope == AreaScope.Core && s.Present).Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
-            if (core.Count != 9 || !core.SetEquals(from x in new long[] { 1451, 1452, 1453 } from y in new long[] { 1289, 1290, 1291 } select (x, y)))
-                throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
+            var expected = area.Profile == OriginalCaveProfile ? new HashSet<(long, long)> { (32, 31) }
+                : (from x in new long[] { 1451, 1452, 1453 } from y in new long[] { 1289, 1290, 1291 } select (x, y)).ToHashSet();
+            if (!core.SetEquals(expected)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             // Bound the read by the authenticated Area identity before reading the whole mobile file.
             var mobileInput = area.Inputs.SingleOrDefault(i => i.Key.Role == AreaSourceRole.NormalGameMobile)
                 ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
@@ -151,6 +156,7 @@ public static class AreaStepInspector
         stage.Current = AreaStepInvocationStage.Objects;
         var admitted = sectors.Select(s => (s.Coordinate.X, s.Coordinate.Y)).ToHashSet();
         var objects = new Dictionary<AreaStepCell, List<AreaStepObjectEvaluation>>();
+        var walls = new Dictionary<AreaStepCell, List<AreaStepWallEdge>>();
         foreach (var o in area.Objects)
         {
             if (o.WorldX is not { } x || o.WorldY is not { } y)
@@ -169,12 +175,21 @@ public static class AreaStepInspector
             }
             var cell = new AreaStepCell(x, y);
             if (!objects.TryGetValue(cell, out var list)) objects[cell] = list = [];
-            list.Add(Evaluate(o, cell, record, patchTargets, patchMalformed, effects));
+            var evaluation = Evaluate(o, cell, record, patchTargets, patchMalformed, effects);
+            list.Add(evaluation);
+            if (evaluation.Reason == WallEdgeReason && Number(o, 0) is { } aid)
+            {
+                // A wall blocks one tile edge: its rotation rounded up to odd. The tile itself stays walkable.
+                var art = unchecked((uint)aid);
+                if (!walls.TryGetValue(cell, out var edges)) walls[cell] = edges = [];
+                edges.Add(new(o.Key, cell, (int)((art >> 11) & 7) | 1, OpeningWallPieces.Contains((int)((art >> 14) & 63))));
+            }
         }
 
         var frozenObjects = objects.ToDictionary(p => p.Key, p => p.Value.OrderBy(e => e.Key.Kind).ThenBy(e => e.Key.SourceIndex).ThenBy(e => e.Key.Offset).ToArray());
-        var digest = Digest(kind, area.Profile, sources, admitted, terrain, frozenObjects);
-        return new(new(kind, area.Profile, sources, digest), epoch, admitted, terrain, frozenObjects);
+        var frozenWalls = walls.ToDictionary(p => p.Key, p => p.Value.OrderBy(e => e.Key.SourceIndex).ThenBy(e => e.Key.Offset).ToArray());
+        var digest = Digest(kind, area.Profile, sources, admitted, terrain, frozenObjects, frozenWalls);
+        return new(new(kind, area.Profile, sources, digest), epoch, admitted, terrain, frozenObjects, frozenWalls);
     }
 
     internal static AreaStepObjectEvaluation Evaluate(AreaObjectRecord o, AreaStepCell cell, ReadOnlySpan<byte> record,
@@ -192,9 +207,15 @@ public static class AreaStepInspector
             foreach (var target in patch)
                 if (record.IndexOf(target.TextOrder) >= 0 || record.IndexOf(target.MixedEndian) >= 0) return Unknown("MAP_PATCH_TARGETS_OBJECT");
         }
-        if (o.Type is 0 or 1) return Unknown("WALL_OR_PORTAL_UNSUPPORTED");
+        if (o.Type == 1) return Unknown("WALL_OR_PORTAL_UNSUPPORTED");
         if (Number(o, ObjectTypeFlagsSlot) is not { } rawFlags) return Unknown("FLAGS_UNRESOLVED");
         var flags = unchecked((uint)rawFlags);
+        if (o.Type == 0)
+        {
+            // Walls are edge components, never destination blockers; a pass-walled actor is outside the declared context.
+            if ((flags & FlagDestroyedOrOff) != 0) return Excluded("DESTROYED_OR_OFF_NOT_LISTED");
+            return Number(o, 0) is { } aid && unchecked((uint)aid) >> 28 == 1 ? Excluded(WallEdgeReason) : Unknown("WALL_ART_UNRESOLVED");
+        }
         if ((flags & FlagInventory) != 0) return Excluded("INVENTORY_NOT_LISTED");
         if ((flags & FlagDestroyedOrOff) != 0) return Excluded("DESTROYED_OR_OFF_NOT_LISTED");
         if (o.Type is >= 5 and <= 14) return Excluded("ITEM_TYPE_NOT_QUERIED");
@@ -213,6 +234,8 @@ public static class AreaStepInspector
         if (o.Type is not (2 or 3 or 4 or 17)) return Unknown("OBJECT_TYPE_UNSUPPORTED");
         return (flags & FlagNoBlock) != 0 ? Disposed(false, "NO_BLOCK_FLAG") : Disposed(true, "OBJECT_BLOCKS");
     }
+
+    internal const string WallEdgeReason = "WALL_EDGE_COMPONENT";
 
     private static long? Number(AreaObjectRecord o, int slot) =>
         o.EffectiveFields.FirstOrDefault(f => f.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } ? n : null;
@@ -239,7 +262,8 @@ public static class AreaStepInspector
         new(cell, raw, CardinalTraversalCoverage.Unknown, null, null, reason);
 
     private static string Digest(AreaStepInputKind kind, string profile, IEnumerable<AreaStepSourceIdentity> sources, IEnumerable<(long X, long Y)> admitted,
-        IReadOnlyDictionary<AreaStepCell, AreaStepTerrainEvidence> terrain, IReadOnlyDictionary<AreaStepCell, AreaStepObjectEvaluation[]> objects)
+        IReadOnlyDictionary<AreaStepCell, AreaStepTerrainEvidence> terrain, IReadOnlyDictionary<AreaStepCell, AreaStepObjectEvaluation[]> objects,
+        IReadOnlyDictionary<AreaStepCell, AreaStepWallEdge[]> walls)
     {
         using var stream = new MemoryStream(); using var w = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
         w.Write("AREA_STEP_EVIDENCE_V1"); w.Write(AreaStepRules.ProfileId); w.Write((int)kind); w.Write(profile);
@@ -256,6 +280,13 @@ public static class AreaStepInspector
             w.Write(e.Key.Sector ?? -1); w.Write(e.Key.SourceIndex); w.Write(e.Key.Offset); w.Write(e.Key.ObjectIdSha256); w.Write(e.Key.Length);
             w.Write(e.ObjectType); w.Write((int)e.Coverage); w.Write((int)e.Applicability); w.Write(e.Disposition is { } d ? (int)d : -1);
             w.Write(e.Reason); w.Write(e.HpMinimum ?? long.MinValue); w.Write(e.HpMaximum ?? long.MinValue);
+        }
+        // Wall edges are appended only when present, so evidence without walls keeps its earlier digest.
+        if (walls.Count != 0)
+        {
+            w.Write("WALL_EDGES_V1");
+            foreach (var e in walls.OrderBy(p => p.Key.Y).ThenBy(p => p.Key.X).SelectMany(p => p.Value))
+            { w.Write(e.Cell.X); w.Write(e.Cell.Y); w.Write(e.Key.SourceIndex); w.Write(e.Key.Offset); w.Write(e.Edge); w.Write(e.Opening); }
         }
         w.Flush();
         return Convert.ToHexString(SHA256.HashData(stream.ToArray())).ToLowerInvariant();

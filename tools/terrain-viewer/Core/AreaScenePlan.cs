@@ -72,8 +72,9 @@ public sealed class AreaScenePlan
             var width = checked(visual.Width * state.Scale / 100) / (state.Shrunk ? 2 : 1);
             var height = checked(visual.Height * state.Scale / 100) / (state.Shrunk ? 2 : 1);
             if (width <= 0 || height <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
-            var destination = new TerrainRect(checked(projected.X + visual.ObjectOffsetX + 40 - visual.HotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
-                checked(projected.Y + visual.ObjectOffsetY + 20 - visual.HotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), width, height);
+            var (hotX, hotY) = Hotspot(visual);
+            var destination = new TerrainRect(checked(projected.X + visual.ObjectOffsetX + 40 - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
+                checked(projected.Y + visual.ObjectOffsetY + 20 - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), width, height);
             var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
@@ -90,6 +91,17 @@ public sealed class AreaScenePlan
         var right = commands.Max(command => checked(command.Destination.X + command.Destination.Width));
         var bottom = commands.Max(command => checked(command.Destination.Y + command.Destination.Height));
         return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly());
+    }
+
+    /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009): rotations 0, 1, 6 and 7 move it
+    /// 40 left and 20 down, then the flip bit mirrors it as width − x − 2 (research T7 and the pinned
+    /// tig art.c 1235–1253). Every other body uses its frame hotspot unchanged.</summary>
+    public static (int X, int Y) Hotspot(AreaVisualRecord visual)
+    {
+        if (visual.RawArt >> 28 != 1) return (visual.HotX, visual.HotY);
+        var rotation = (int)((visual.RawArt >> 11) & 7);
+        var (x, y) = rotation is < 2 or > 5 ? (checked(visual.HotX - 40), checked(visual.HotY + 20)) : (visual.HotX, visual.HotY);
+        return (visual.RawArt & 1) != 0 ? (checked(visual.Width - x - 2), y) : (x, y);
     }
 
     /// <summary>The integral local ordering coordinates of the original object

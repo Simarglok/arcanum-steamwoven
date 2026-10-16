@@ -1,3 +1,5 @@
+using Arcanum.Data.Area;
+
 namespace Arcanum.Data.Traversal;
 
 /// <summary>
@@ -12,12 +14,15 @@ public sealed class AreaStepSnapshot
     private readonly HashSet<(long X, long Y)> _sectors;
     private readonly IReadOnlyDictionary<AreaStepCell, AreaStepTerrainEvidence> _terrain;
     private readonly IReadOnlyDictionary<AreaStepCell, AreaStepObjectEvaluation[]> _objects;
+    private readonly IReadOnlyDictionary<AreaStepCell, AreaStepWallEdge[]> _walls;
 
     internal AreaStepSnapshot(AreaStepInputIdentity identity, long epoch, IEnumerable<(long X, long Y)> admittedSectors,
-        IReadOnlyDictionary<AreaStepCell, AreaStepTerrainEvidence> terrain, IReadOnlyDictionary<AreaStepCell, AreaStepObjectEvaluation[]> objects)
+        IReadOnlyDictionary<AreaStepCell, AreaStepTerrainEvidence> terrain, IReadOnlyDictionary<AreaStepCell, AreaStepObjectEvaluation[]> objects,
+        IReadOnlyDictionary<AreaStepCell, AreaStepWallEdge[]>? walls = null)
     {
         InputIdentity = identity; EvidenceEpoch = epoch; DeclaredContext = CardinalTraversalRules.DeclaredContext();
-        _sectors = admittedSectors.ToHashSet(); _terrain = terrain; _objects = objects;
+        _sectors = admittedSectors.ToHashSet(); _terrain = terrain; _objects = objects; _walls = walls ?? new Dictionary<AreaStepCell, AreaStepWallEdge[]>();
+        WallEdges = _walls.Values.Sum(w => w.Length);
         AdmittedSectors = Array.AsReadOnly(_sectors.OrderBy(s => s.Y).ThenBy(s => s.X).ToArray());
         TerrainBlockedCells = terrain.Values.Count(t => t.Disposition == CardinalTraversalDisposition.Blocked);
         TerrainUnknownCells = terrain.Values.Count(t => t.Coverage != CardinalTraversalCoverage.Supported);
@@ -36,6 +41,8 @@ public sealed class AreaStepSnapshot
     public int TerrainUnknownCells { get; }
     public int ObjectBlockerCells { get; }
     public int UnknownObjects { get; }
+    /// <summary>Walls registered as tile-edge components (each blocks one edge, never its tile).</summary>
+    public int WallEdges { get; }
     public bool IsAdmitted(AreaStepCell cell) => _sectors.Contains((cell.X >> 6, cell.Y >> 6));
 
     public AreaStepRequest Request(AreaStepCell from, AreaStepCell to, CardinalTraversalDirection direction) =>
@@ -69,8 +76,30 @@ public sealed class AreaStepSnapshot
         }
         Collect(request.To, AreaStepObjectRole.Destination);
 
+        // Wall legs: a cardinal step crosses one edge; a diagonal step checks both L-shaped paths
+        // around it (counter-clockwise then clockwise, and clockwise then counter-clockwise), four legs.
+        AreaObjectKey? wallBlocker = null;
+        void Leg(AreaStepCell cell, int edge)
+        {
+            var next = Neighbor(cell, edge);
+            foreach (var wall in _walls.GetValueOrDefault(cell, []).Where(w => w.Edge == edge).Concat(_walls.GetValueOrDefault(next, []).Where(w => w.Edge == (edge + 4) % 8)))
+            {
+                if (wall.Opening) gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key));
+                else wallBlocker ??= wall.Key;
+            }
+        }
+        if ((direction & 1) == 1) Leg(request.From, direction);
+        else
+        {
+            int ccw = (direction + 7) % 8, cw = direction + 1;
+            Leg(request.From, ccw); Leg(Neighbor(request.From, ccw), cw);
+            Leg(request.From, cw); Leg(Neighbor(request.From, cw), ccw);
+        }
+
         if (terrain.Disposition == CardinalTraversalDisposition.Blocked)
             return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED", terrain, objects, gaps);
+        if (wallBlocker is not null)
+            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED", terrain, objects, gaps, wallBlocker);
         if (objects.Any(o => o.Disposition == CardinalTraversalDisposition.Blocked))
             return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
                 objects.First(o => o.Disposition == CardinalTraversalDisposition.Blocked).Role == AreaStepObjectRole.Destination
@@ -80,8 +109,8 @@ public sealed class AreaStepSnapshot
     }
 
     private AreaStepAssessment Result(AreaStepRequest request, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition,
-        string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps) =>
-        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps);
+        string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wall = null) =>
+        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps) { WallBlocker = wall };
 
     private static AreaStepCell Neighbor(AreaStepCell cell, int direction) => new(cell.X + Deltas[direction].Dx, cell.Y + Deltas[direction].Dy);
 

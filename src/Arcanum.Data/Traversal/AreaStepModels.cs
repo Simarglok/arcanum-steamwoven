@@ -135,7 +135,12 @@ public sealed class AreaStepAssessment
     public AreaStepTerrainEvidence? DestinationTerrain { get; }
     public IReadOnlyList<AreaStepObjectEvidence> Objects { get; }
     public IReadOnlyList<AreaStepGap> Gaps { get; }
+    /// <summary>The first solid wall whose edge the step crosses, when that decided the result.</summary>
+    public AreaObjectKey? WallBlocker { get; internal init; }
 }
+
+/// <summary>One wall on one tile edge (odd direction 1, 3, 5, 7). Opening pieces have their own rules and stay Unknown.</summary>
+internal sealed record AreaStepWallEdge(AreaObjectKey Key, AreaStepCell Cell, int Edge, bool Opening);
 
 internal sealed record AreaStepObjectEvaluation(AreaObjectKey Key, AreaStepCell Cell, int ObjectType, CardinalTraversalCoverage Coverage,
     CardinalTraversalApplicability Applicability, CardinalTraversalDisposition? Disposition, string Reason, long? HpMinimum = null, long? HpMaximum = null);

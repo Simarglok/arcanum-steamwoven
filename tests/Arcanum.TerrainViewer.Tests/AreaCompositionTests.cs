@@ -104,4 +104,22 @@ public sealed class AreaCompositionTests
         foreach (var bad in new[] { Body(0,flags:0x40),Body(0,flags:0x20000),Body(0,blit:0x20),Body(0,scale:0),Body(0,scale:201) })
             Assert.ThrowsExactly<InvalidOperationException>(()=>AreaScenePlan.Create([], [bad], [Visual(bad,160,160,40,80)]));
     }
+
+    [TestMethod]
+    public void WallHotspotsShiftForRotationsZeroOneSixSevenAndMirrorWithTheFlipBit()
+    {
+        var body = Body(0);
+        AreaVisualRecord Wall(uint raw) => Visual(body,100,60,30,50) with { RawArt = raw, Mirrored = (raw & 1) != 0 };
+        static uint Raw(int rotation, bool flip) => 0x10000000u | ((uint)rotation << 11) | (flip ? 0x11u : 0u);
+        Assert.AreEqual((-10,70), AreaScenePlan.Hotspot(Wall(Raw(1,false))));
+        Assert.AreEqual((30,50), AreaScenePlan.Hotspot(Wall(Raw(5,false))));
+        Assert.AreEqual((100-30-2,50), AreaScenePlan.Hotspot(Wall(Raw(3,true))));
+        Assert.AreEqual((100-(-10)-2,70), AreaScenePlan.Hotspot(Wall(Raw(7,true))), "Shift first, then mirror.");
+        Assert.AreEqual((30,50), AreaScenePlan.Hotspot(Visual(body,100,60,30,50)), "Non-wall bodies keep their frame hotspot.");
+        // The plan places a wall from that hotspot and draws it flipped.
+        var wall = Wall(Raw(7,true));
+        var command = AreaScenePlan.Create([], [body], [wall]).Commands.Single();
+        Assert.AreEqual((40-108, 20-70), (command.Destination.X, command.Destination.Y));
+        Assert.IsTrue(command.FlipX);
+    }
 }

@@ -242,7 +242,7 @@ public sealed class AreaStepTests
             Assert.AreEqual((CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.NotApplicable, (CardinalTraversalDisposition?)null, reason),
                 (excluded.Coverage, excluded.Applicability, excluded.Disposition, excluded.Reason), reason);
         }
-        foreach (var (type, fields, reason) in new[] { (0, new[] { Value(18, 0) }, "WALL_OR_PORTAL_UNSUPPORTED"), (1, [Value(18, 0)], "WALL_OR_PORTAL_UNSUPPORTED"),
+        foreach (var (type, fields, reason) in new[] { (0, new[] { Value(18, 0) }, "WALL_ART_UNRESOLVED"), (1, [Value(18, 0)], "WALL_OR_PORTAL_UNSUPPORTED"),
             (15, [Value(18, 0)], "PC_RECORD_UNSUPPORTED"), (3, [Value(19, 0)], "FLAGS_UNRESOLVED"), (16, [Value(18, 0)], "CRITTER_STATS_UNRESOLVED") })
         {
             var unknown = Eval(type, fields);
@@ -331,6 +331,43 @@ public sealed class AreaStepTests
         Assert.AreEqual("SOURCE_OUTSIDE_ADMITTED_AREA", snapshot.Assess(snapshot.Request(new(long.MaxValue, 0), new(64, 64), CardinalTraversalDirection.XMinus)).ReasonCode);
     }
 
+    [TestMethod]
+    public void Walls_block_the_edge_they_sit_on_from_both_sides_and_leave_their_tile_walkable()
+    {
+        // A wall on (80,80) on its y-1 edge (7), and an opening piece on (90,80) on its x+1 edge (5).
+        var snapshot = Synthetic(walls: [((80, 80), 7, false), ((90, 80), 5, true)]);
+        Assert.AreEqual(2, snapshot.WallEdges);
+        var leaving = Assess(snapshot, new(80, 80), CardinalTraversalDirection.YMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assert.IsNotNull(leaving.WallBlocker);
+        Assess(snapshot, new(80, 79), CardinalTraversalDirection.YPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(79, 80), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        Assess(snapshot, new(80, 80), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        Assess(snapshot, new(80, 80), CardinalTraversalDirection.YPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        // Diagonals check both L-shaped paths: any leg across the wall edge blocks.
+        Assess(snapshot, new(80, 80), CardinalTraversalDirection.XPlusYMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(79, 80), CardinalTraversalDirection.XPlusYMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(81, 79), CardinalTraversalDirection.XMinusYPlus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED");
+        Assess(snapshot, new(78, 80), CardinalTraversalDirection.XMinusYMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        // An opening piece is never guessed open or closed.
+        var opening = Assess(snapshot, new(90, 80), CardinalTraversalDirection.XPlus, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
+        Assert.AreEqual("WALL_OPENING_PIECE_UNSUPPORTED", opening.Gaps.Single().ReasonCode);
+        // Terrain is still decided first.
+        var terrain = Synthetic(blockedTerrain: [new(80, 79)], walls: [((80, 80), 7, false)]);
+        Assess(terrain, new(80, 80), CardinalTraversalDirection.YMinus, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED");
+    }
+
+    [TestMethod]
+    public void Wall_objects_are_edge_components_not_destination_blockers()
+    {
+        var table = new Dictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?>();
+        var wall = Object(0, [Value(0, 0x10b02800), Value(18, 0x4000)]);
+        Assert.AreEqual((CardinalTraversalApplicability.NotApplicable, AreaStepInspector.WallEdgeReason),
+            (AreaStepInspector.Evaluate(wall, new(64, 64), default, [], 0, table).Applicability, AreaStepInspector.Evaluate(wall, new(64, 64), default, [], 0, table).Reason));
+        Assert.AreEqual("DESTROYED_OR_OFF_NOT_LISTED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x10b02800), Value(18, 0x2)]), new(64, 64), default, [], 0, table).Reason);
+        Assert.AreEqual("WALL_ART_UNRESOLVED", AreaStepInspector.Evaluate(Object(0, [Value(0, 0x40000000), Value(18, 0)]), new(64, 64), default, [], 0, table).Reason);
+        Assert.AreEqual("WALL_OR_PORTAL_UNSUPPORTED", AreaStepInspector.Evaluate(Object(1, [Value(18, 0)]), new(64, 64), default, [], 0, table).Reason);
+    }
+
     private static (CardinalTraversalDisposition?, string) Disposition(AreaStepObjectEvaluation e) => (e.Disposition, e.Reason);
     private static AreaFieldValue Value(int slot, long value) => new(slot, AreaPresence.Value, AreaValueOrigin.Instance, value, [], null);
     private static AreaFieldValue ArrayValue(int slot, params long[] values) =>
@@ -372,7 +409,8 @@ public sealed class AreaStepTests
     }
 
     private static AreaStepSnapshot Synthetic(AreaStepCell[]? blockedTerrain = null, AreaStepCell[]? unknownTerrain = null,
-        AreaStepCell[]? blockers = null, AreaStepCell[]? open = null, AreaStepCell[]? unknownObjects = null, (long X, long Y)[]? sectors = null)
+        AreaStepCell[]? blockers = null, AreaStepCell[]? open = null, AreaStepCell[]? unknownObjects = null, (long X, long Y)[]? sectors = null,
+        ((long X, long Y) Cell, int Edge, bool Opening)[]? walls = null)
     {
         sectors ??= [(1, 1)];
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
@@ -392,6 +430,8 @@ public sealed class AreaStepTests
         foreach (var cell in blockers ?? []) objects[cell] = [new(Key(), cell, 3, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Blocked, "OBJECT_BLOCKS")];
         foreach (var cell in open ?? []) objects[cell] = [new(Key(), cell, 16, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.Applicable, CardinalTraversalDisposition.Open, "CRITTER_DEAD", -5, -5)];
         foreach (var cell in unknownObjects ?? []) objects[cell] = [new(Key(), cell, 16, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, "FIXTURE_OBJECT_UNKNOWN")];
-        return new(new(AreaStepInputKind.Structural, "fixture", [new("module", 1, "aa")], "f00d"), 3, sectors, terrain, objects);
+        var edges = (walls ?? []).GroupBy(w => new AreaStepCell(w.Cell.X, w.Cell.Y))
+            .ToDictionary(g => g.Key, g => g.Select(w => new AreaStepWallEdge(Key(), g.Key, w.Edge, w.Opening)).ToArray());
+        return new(new(AreaStepInputKind.Structural, "fixture", [new("module", 1, "aa")], "f00d"), 3, sectors, terrain, objects, edges);
     }
 }

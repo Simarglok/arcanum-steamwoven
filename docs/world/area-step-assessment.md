@@ -43,7 +43,10 @@ reuse the cardinal enums and context class. Both factories require a
 snapshot that its owner published as strict-complete (`LoadStrict`); an
 inspected snapshot with issues is refused. The original factory also requires
 the original profile (`arc-data-009-complete-file-effective-source-v1`) with
-exactly the nine core sectors. It reads these resources from the named
+exactly the nine core sectors, or the cave profile
+(`arc-world-009-cave-file-effective-source-v1`, ARC-WORLD-009) with exactly its
+one sector (32,31) and the cave's game-generated object file as the mobile file.
+It reads these resources from the named
 archives and requires each to match its pinned payload identity:
 
 | Resource | Archive (original installation) | Bytes | SHA-256 |
@@ -80,11 +83,22 @@ digest and epoch.
   `OF_NO_BLOCK` is set. An NPC blocks while alive; life uses the exact or
   interval HP rule, and effect grammar outside add/percent/min/max, an
   out-of-range effect index, a max-HP effect or an interval straddling zero are
-  `Unknown`. Walls, portals, PC records, unresolved flags or stats and any
+  `Unknown`. Portals, PC records, unresolved flags or stats and any
   mobile named by `map.patch` (in either GUID byte order, or when the patch has
   an unsupported line) are `Unknown`.
-- **Step** (F7): destination terrain first; then destination objects; for a map
-  diagonal also the objects on both shoulders. Shoulder terrain is never
+- **Walls** ([cave research](../research/cave-transition-evidence.md) T7): a
+  wall is retained as `NotApplicable` (`WALL_EDGE_COMPONENT`) and registered on
+  one tile edge, its art rotation rounded up to odd (1 x−1, 3 y+1, 5 x+1, 7 y−1).
+  It never blocks its own tile. A destroyed/off wall is not listed; a wall whose
+  art is not class 1 is `Unknown` (`WALL_ART_UNRESOLVED`).
+- **Step** (F7): destination terrain first; then wall edges; then destination
+  objects; for a map diagonal also the objects on both shoulders. A cardinal step
+  crosses one edge: it is blocked by a wall on the source tile on that edge or on
+  the destination tile on the opposite edge. A diagonal step checks both
+  L-shaped paths (counter-clockwise leg then clockwise leg, and clockwise then
+  counter-clockwise), four legs, and any blocked leg blocks; `WallBlocker` names
+  the first wall found. Window/opening pieces are never guessed: crossing one is
+  an `Unknown` gap (`WALL_OPENING_PIECE_UNSUPPORTED`). Shoulder terrain is never
   consulted. A blocker returns `Supported/Blocked` and keeps unrelated gaps.
   Any remaining gap returns `Unknown/null`. Only complete non-blocking evidence
   returns `Supported/Open`.
@@ -98,16 +112,16 @@ Terrain evidence codes: `SERIALIZED_BLOCK_MASK`, `FACADE_WALKABILITY_BIT`,
 `TILE_NAME_TABLE_UNSUPPORTED`, `TILE_NAME_MAPPING_UNRESOLVED`,
 `TILE_ART_CLASS_UNSUPPORTED` (Unknown). Object evidence codes: `OBJECT_BLOCKS`,
 `NO_BLOCK_FLAG`, `CRITTER_ALIVE`, `CRITTER_DEAD` (applicable);
-`INVENTORY_NOT_LISTED`, `DESTROYED_OR_OFF_NOT_LISTED`, `ITEM_TYPE_NOT_QUERIED`
-(not applicable); `MAP_PATCH_TARGETS_OBJECT`, `MAP_PATCH_LINE_UNSUPPORTED`,
-`WALL_OR_PORTAL_UNSUPPORTED`, `FLAGS_UNRESOLVED`, `PC_RECORD_UNSUPPORTED`,
+`INVENTORY_NOT_LISTED`, `DESTROYED_OR_OFF_NOT_LISTED`, `ITEM_TYPE_NOT_QUERIED`,
+`WALL_EDGE_COMPONENT` (not applicable); `MAP_PATCH_TARGETS_OBJECT`, `MAP_PATCH_LINE_UNSUPPORTED`,
+`WALL_OR_PORTAL_UNSUPPORTED` (portals), `WALL_ART_UNRESOLVED`, `FLAGS_UNRESOLVED`, `PC_RECORD_UNSUPPORTED`,
 `OBJECT_TYPE_UNSUPPORTED`, `CRITTER_STATS_UNRESOLVED`,
 `CRITTER_EFFECT_INDEX_UNSUPPORTED`, `CRITTER_EFFECT_UNSUPPORTED`,
 `CRITTER_MAX_HP_EFFECT_UNSUPPORTED`, `CRITTER_LIFE_INTERVAL_UNRESOLVED`
 (Unknown). A gap repeats the Unknown component's code with its cell, object and
 role.
 
-Assessment codes: `DESTINATION_TERRAIN_BLOCKED`, `DESTINATION_OBJECT_BLOCKER`,
+Assessment codes: `DESTINATION_TERRAIN_BLOCKED`, `WALL_EDGE_BLOCKED`, `DESTINATION_OBJECT_BLOCKER`,
 `SHOULDER_OBJECT_BLOCKER`, `REQUIRED_EVIDENCE_UNAVAILABLE`,
 `COMPLETE_NONBLOCKING_EVIDENCE`, `PATH_BRANCH_UNAVAILABLE`, and the unsupported
 codes `PROFILE_UNSUPPORTED`, `EVIDENCE_IDENTITY_MISMATCH`, `EPOCH_MISMATCH`,
@@ -141,7 +155,16 @@ tiles, 115 object-blocker cells, zero Unknown cells or objects, all seven spawn
 observations of the frozen profile (including the reverse step back to spawn), deterministic repeat construction, and
 **7,150** cells reachable from spawn `(92934,82561)` inside the core, equal to
 the research's core share. The only refusals at the reachable boundary are
-`DESTINATION_OUTSIDE_ADMITTED_AREA`.
+`DESTINATION_OUTSIDE_ADMITTED_AREA`. Its evidence digest does not change with
+wall support: wall edges enter the digest only when a snapshot has any.
+
+The cave check (same filter, plus `ARC_CAVE_MOBILE`) observed 4,096 admitted
+cells, 3,576 blocked tiles, 13 object-blocker cells, 125 wall edges and zero
+Unknown cells or objects. From the arrival (2087,2018) the north step is
+`WALL_EDGE_BLOCKED` by the arrival tile's own wall and the west, south and east
+steps are open; **506** cells are reachable, every step with complete evidence,
+all inside the cave walls, and one of them lies within use range 2 of the exit
+object (2093,2019).
 
 ## Not delivered
 

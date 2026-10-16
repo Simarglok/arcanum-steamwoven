@@ -211,7 +211,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 | FR-SCENE-004 | Частично — signed offsets/hotspots/scale/mirror для Area visuals | Частично — diagnostic projection; общий placement/visibility не ратифицирован | Частично — пять static placements и fixed Human в viewer | Частично — metadata/original frame checks и historical bounded raster |
 | FR-SCENE-005 | Частично — tile/facade данные всех выбранных Area sectors | Частично — bounded terrain/facade layer policy | Частично — diagnostic sector; full-area renderer не смержен | Частично — original Data и historical source/export viewer checks |
 | FR-SCENE-006 | Частично — Area occurrence/visual metadata, без общего depth model | Частично — finite diagnostic ordering; не original z-order/occlusion | Частично — terrain/facade/statics/actor policy, без wall/roof | Частично — bounded ordering/readback; полная сцена не сравнивалась |
-| FR-SCENE-007 | Частично: wall objects и выбор wall ART (пещера) | Нет: wall-piece connection rules | Нет: wall scene path | Частично: синтетические и real-data тесты выбора wall ART |
+| FR-SCENE-007 | Частично: wall objects и выбор wall ART (пещера) | Частично: стена блокирует край клетки в шаге (пещера); соединения кусков нет | Частично: план сцены ставит стену по hotspot и flip; отрисовки в viewer нет | Частично: синтетические и real-data тесты выбора wall ART |
 | FR-SCENE-008 | Нет: portal state/resources | Нет: physical door traversal | Нет: state-aware portal rendering | Нет |
 | FR-SCENE-009 | Нет: window/wall records | Нет: window traversal | Нет: wall/window integration | Нет |
 | FR-SCENE-010 | Частично: roof-section framing/discriminator only | Нет: piece topology rules | Нет: roof renderer | Нет: no roof scenario |
