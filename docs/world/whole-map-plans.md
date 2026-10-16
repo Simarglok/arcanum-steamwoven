@@ -56,28 +56,49 @@ A whole-map plan also:
 - looks a resource up in whichever of the two base archives holds it (one
   holder required), not only in the archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without
-  failing the map: roofs are not drawn yet.
+  failing the map: roofs are not drawn yet;
+- draws doors and windows (ARC-DATA-020): with the `Portal` mapping
+  (`art/portal/portal.mes`) a type-1 object's ART is the entry's first word for
+  its number (+1001 for a window), the busted bit turns the name's
+  sixth-from-last letter into `D`, the only group is drawn (the ART must hold
+  a single rotation) and flag bit 0 mirrors it; flag bits 1–3 and the unused
+  bits 6–8 are refused
+  ([portal facts](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008));
+- draws scrolls, keys and key rings (types 10–12) like every other item;
+- resolves no body, whatever the object's type, when its serialized state hides
+  it at T0 (destroyed 0x1, off 0x2 or don't-draw 0x100; every installed trap is
+  don't-draw, and about a hundred other objects, mostly NPCs, are hidden too),
+  so such an object needs no ART; the viewer draws no such body anyway. The
+  original still draws a don't-draw object's overlays, so their admission check
+  still applies to it; a destroyed or off object is not checked.
 
 ## Result on the installed original
 
 Opt-in `AreaMapPlansRealDataTests` (`DAT_ROOT`): all 80 interiors get a plan,
-open and inspect without an exception; 19 publish a complete snapshot and are
+open and inspect without an exception; 52 publish a complete snapshot and are
 pinned by the test (a map that starts publishing joins the list). The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
-What stops the other 61 (counts of issues, not maps; a one-off measurement
+What stops the other 28 (counts of issues, not maps; a one-off measurement
 with a scratch runner over `AreaMapPlans` on the installed original at the PR
 head, not asserted by tests):
 
 | Cause | Issues | Next |
 | --- | ---: | --- |
-| Object types the owner does not draw yet (portals, keys, keyrings, scrolls, traps, PC) | 2,568 | generalised object model |
-| ART path of an object not found in `arcanum1/2.dat` | 115 | stack-order resources (ARC-DATA-018) |
-| Unsupported art states (eye-candy overlays, critter poses beyond the admitted set) | 138 | generalised object model |
-| Read budget: entries over the 1 MiB cap (31) and the capped byte budgets of the two largest maps (K'na Tha, Void) | 16,589 | raise the entry cap; stream large maps |
+| Unsupported art states (eye-candy overlays, critter poses beyond the admitted set) | 138 | overlays and poses |
+| ART path of an object not found in `arcanum1/2.dat` | 114 | stack-order resources (ARC-DATA-018) |
+| Read budget: entries over the 1 MiB cap and the capped byte budgets of the largest maps (K'na Tha, Void) | 16,588 | raise the entry cap; stream large maps |
+
+Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
+19 maps were complete; those added 2,568 objects of the types the owner did not
+draw.
 
 ## Limits
+
+The viewer still places a door or window with the hot spot of an ordinary body;
+the wall rule (mirror and rotation shift, see the portal facts) applies to
+portals too and lands with the viewer map mode (ARC-RENDER-017).
 
 Resources resolve only in `arcanum1.dat` and `arcanum2.dat` (their overrides in
 `arcanum3/4.dat`, patches and loose folders are not seen), and the aggregate and
