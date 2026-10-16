@@ -298,7 +298,9 @@ contracts that the code currently enforces.
    uniforms) so panning does not rebuild per-sprite textures.
 3. **F3, 35 ms+ at zoom ≤ 0.25.** Reduce draw calls: shared material and
    batched or atlased submission, or pre-composited terrain chunks for the
-   immutable terrain layer (36,864 of 37,363 commands are terrain).
+   immutable terrain layer (36,864 of 37,363 commands are terrain). Researched in
+   [draw calls](crash-site-area-draw-calls.md): pre-composited terrain chunks are
+   exact for this profile and recommended next.
 4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy. Mostly done
    (L2 result above: the cost was the inflate projection, not pixel hashing).**
    The rest is SharpZipLib inflate and the projection, each paid twice per entry.
