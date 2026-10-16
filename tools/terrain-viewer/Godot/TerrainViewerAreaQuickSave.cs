@@ -256,7 +256,7 @@ public partial class TerrainViewerApp
             if (WorldModal) ToggleWorldSettings();
             _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
             System.IO.Directory.Delete(directory, recursive: true);
         }
     }

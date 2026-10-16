@@ -105,7 +105,7 @@ public partial class TerrainViewerApp
             _areaSmokeTime = (_areaSmokeTime + 9) / 10; // back to whole seconds for the next stages
             _numLockRun = numLock; _alwaysRunOption = option; _worldGait = MovementGait.Walk;
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
-            _worldFocused = focused; _worldTestTime = testTime;
+            _worldFocused = focused; RestoreWorldTestTime(testTime);
         }
     }
 }
