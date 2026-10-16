@@ -276,7 +276,8 @@ explicit limits, typed results, Godot-free assemblies):
 - **Kind registry.** Closed and versioned: per kind the domain, whether it is
   persisted, the uniqueness policy (replace, keep existing, merge, many) and
   its key, and the scope rule (global, the map of its referenced entities,
-  active map only, rebuilt on activation and persisted while active, OQ2). An unknown kind, a missing handler or a
+  active map only; an active-map kind is rebuilt on activation and, for the
+  AI tick, persisted while active, OQ2). An unknown kind, a missing handler or a
   payload that fails validation is refused at scheduling, never dropped later.
 - **Pass.** `ProcessDue(expected version, budget)` reads the clock once,
   takes due events of the active scope in order, but never one scheduled in
@@ -316,7 +317,7 @@ The owner accepted the three recommendations; slices E1..E2 follow them.
 | ID | Question | Decision |
 | --- | --- | --- |
 | OQ1 | Ties between events with the same deadline: first scheduled first (FIFO), or the source's newest first? | **FIFO by a persisted sequence.** The source order is an artefact of the list insert (TE3) and depends on whether the event was created inside a ping; FIFO is deterministic and easy to explain in a trace. |
-| OQ2 | AI ticks are not saved in the source, so a quick load restarts every NPC's tick with fresh jitter. Persist the active map's AI ticks instead? | **Persist them.** A save then reloads into exactly the same timing, which the seeded replays of the AI plan (design rule 3) need; the source behaviour stays available as a named "rebuild on load" switch for comparison runs. Map change still removes the ticks of the map left and rebuilds them on activation, as in the source. |
+| OQ2 | AI ticks are not saved in the source, so a quick load restarts every NPC's tick with fresh jitter. Persist the active map's AI ticks instead? | **Persist them.** A save then reloads into exactly the same timing, which the seeded replays of the AI plan (design rule 3) need; the source behaviour stays available as a named "rebuild on load" switch for comparison runs. (Note, E2 proposal unchanged: map change removes the ticks of the map left and rebuilds them on activation, without the source's P3 carry-over.) |
 | OQ3 | Keep one queue with a map scope per event, or per-map event files like the source? | **One queue in the session snapshot with a scope field.** It keeps the source semantics (events follow the map of their objects, parked events fire late on return) without separate files and keeps a save atomic. |
 
 ## Unknowns
