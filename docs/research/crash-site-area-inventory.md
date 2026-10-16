@@ -253,6 +253,10 @@ Minimal next research, only if needed for transitions: authenticate the cave's
 normal-game counterpart; validate the two SAP activations/object-focus conditions
 and their destination tiles; resolve script1324 against an explicit source policy.
 Do not search all game interiors or infer reachability from a literal operand.
+The first three are answered by [cave transition research](cave-transition-evidence.md)
+(ARC-WORLD-009): the cave aggregate is verified at T0, both actions are
+unconditional use-triggered teleports of the triggerer, and both arrival cells
+are terrain-passable. Script1324 stays open; it is not on the cave path.
 
 ## Reproduction and verification boundary
 
