@@ -64,6 +64,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--virgil-auto-level-self-test"])) { VirgilAutoLevelSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--item-inventory") return ProbeItemInventory(args[1..]);
             if (args.SequenceEqual(["--item-inventory-self-test"])) { ItemInventorySelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--world-transitions") return ProbeWorldTransitions(args[1..]);
+            if (args.SequenceEqual(["--world-transitions-self-test"])) { WorldTransitionSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--cave-transition") return ProbeCaveTransition(args[1..]);
             if (args.SequenceEqual(["--cave-transition-self-test"])) { CaveTransitionSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
@@ -95,6 +97,8 @@ internal static partial class Program
                     exception is InvalidOperationException && exception.Message.StartsWith("closure self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AREA_CLOSURE_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--cave-transition", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception is InvalidDataException or ArgumentException or InvalidOperationException && exception.Message.All(c => c is '_' or ' ' or '=' || char.IsAsciiLetter(c) || char.IsAsciiDigit(c)) && (exception.Message.StartsWith("CAVE_", StringComparison.Ordinal) || exception.Message.StartsWith("AGGREGATE_", StringComparison.Ordinal) || exception.Message.StartsWith("AREA_", StringComparison.Ordinal)) || exception.Message.StartsWith("cave self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CAVE_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--world-transitions", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("WORLD_", StringComparison.Ordinal) && exception.Message.All(c => c is '_' || char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c)) || exception.Message.StartsWith("world self-test failed: ", StringComparison.Ordinal) ? exception.Message : "WORLD_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--companion-consent", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("CONSENT_", StringComparison.Ordinal) || exception.Message.StartsWith("consent self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CONSENT_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--virgil-auto-level", StringComparison.Ordinal))
