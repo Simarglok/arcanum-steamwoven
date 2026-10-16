@@ -26,17 +26,22 @@ public enum PremadeHeroFailure
     InvalidRace,
     InvalidGender,
     /// <summary>State a new PC drops or that is not modelled: skills, experience, inventory, a gold object, bank money,
-    /// or an effect whose cause is neither race nor gender (<see cref="PremadeHeroRead.Detail"/> names the effect).</summary>
+    /// an effect whose cause is neither race nor gender (<see cref="PremadeHeroRead.Detail"/> names the effect), or more
+    /// than one stored effect of one of those causes (the stat setter removes only one per cause).</summary>
     UnsupportedPrototypeState,
     /// <summary>A race or gender effect the effect rules refuse (<see cref="PremadeHeroRead.EffectStatus"/>).</summary>
     EffectRefused,
     /// <summary>The inventory source set is refused (<see cref="PremadeHeroRead.SourceStatus"/>).</summary>
     InventorySourceRefused,
-    /// <summary>A coin range or an item rate that needs gameplay randomness, which is not modelled (FR-CONTENT-007).</summary>
+    /// <summary>A coin range (minimum ≠ maximum) or an item rate other than 100. A range or a rate 1..99 needs gameplay
+    /// randomness, which is not modelled (FR-CONTENT-007); rate 0 never creates the item and is refused with them.</summary>
     RandomInventorySource,
     ItemPrototypeMissing,
     ItemPrototypeAmbiguous,
     ItemPrototypeInvalid,
+    /// <summary>A kit item whose prototype attaches a <c>SAP_GET</c> or <c>SAP_INSERT_ITEM</c> script, which the source's
+    /// transfer to the PC runs and this reader does not.</summary>
+    ItemScriptUnsupported,
     /// <summary>A listed prototype that is not an item (types 5..14) or is gold, which the PC holds as coins.</summary>
     ItemTypeUnsupported,
 }
@@ -51,7 +56,9 @@ public sealed record PremadeHeroItem(int BasicPrototype, int Prototype, int Type
 /// stats 8, level 1, 5 unspent points, magick and tech points 0 (<see cref="StartPrimaryStats"/> etc.). The auto-level
 /// scheme (<see cref="AutoLevelScheme"/>) that then spends the points is NOT applied. <see cref="RaceEffect"/> is effect
 /// 64 + race and <see cref="GenderEffect"/> effect 330 for a woman, the innate effects the stat setter re-adds. Gold and
-/// items come from the inventory source set; the stored background is display data and adds no effect.
+/// items come from the inventory source set; the source then transfers each item to the PC, whose insert check (weight,
+/// room) is NOT evaluated here. The stored background is display data and adds no effect. The pre-made hero global flags
+/// the main menu sets (2350..2361, ARC-RES-025 CC-07) are not read: the host sets them.
 /// </summary>
 public sealed record PremadeHero(int BasicPrototype, int Prototype, int Race, int Gender, int Alignment, int Age, int Portrait,
     int Background, int AutoLevelScheme, EffectRule RaceEffect, EffectRule? GenderEffect, int InventorySource, int Gold,
@@ -77,7 +84,8 @@ public static class PremadeHeroReader
     public const int GoldType = 8;
     private const int StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, EffectSlot = 46, CauseSlot = 47, PortraitSlot = 49,
         GoldSlot = 50, InventoryCountSlot = 55, InventoryListSlot = 56, InventorySourceSlot = 57, SchemeSlot = 63,
-        BackgroundSlot = 73, BankSlot = 87, NameSlot = 21, DescriptionSlot = 22;
+        BackgroundSlot = 73, BankSlot = 87, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
+    private const int GetScript = 4, InsertItemScript = 21;
     private const int ExperienceStat = 18, AlignmentStat = 19, AgeStat = 25, GenderStat = 26, RaceStat = 27;
     private const int RaceCause = 0, GenderCause = 9, RaceCount = 11;
 
@@ -89,7 +97,8 @@ public static class PremadeHeroReader
         ArgumentNullException.ThrowIfNull(sources.Prototype);
         ArgumentNullException.ThrowIfNull(sources.Effects);
         ArgumentNullException.ThrowIfNull(sources.InventorySources);
-        var number = checked(basicPrototype + PrototypeOffset);
+        if (basicPrototype is < 0 or > 999_999 - PrototypeOffset) return new(PremadeHeroFailure.PrototypeMissing, null, basicPrototype);
+        var number = basicPrototype + PrototypeOffset;
         var file = Prototype(sources, number, out var record);
         if (file != PrototypeFileStatus.Found)
             return new(file == PrototypeFileStatus.Missing ? PremadeHeroFailure.PrototypeMissing
@@ -110,8 +119,9 @@ public static class PremadeHeroReader
             return new(PremadeHeroFailure.UnsupportedPrototypeState, null, number);
         var effects = Elements(f[EffectSlot]);
         var causes = Elements(f[CauseSlot]);
+        var innate = new HashSet<int>();
         foreach (var (index, effect) in effects)
-            if (causes.GetValueOrDefault(index, -1) is not (RaceCause or GenderCause))
+            if (causes.GetValueOrDefault(index, -1) is not ((RaceCause or GenderCause) and var cause) || !innate.Add(cause))
                 return new(PremadeHeroFailure.UnsupportedPrototypeState, null, effect);
 
         var raceEffect = EffectRules.Read(sources.Effects, EffectRules.RaceEffectBase + race);
@@ -136,13 +146,17 @@ public static class PremadeHeroReader
             gold = set.Set.MinCoins;
             foreach (var entry in set.Set.Items)
             {
-                var itemNumber = checked(entry.BasicPrototype + PrototypeOffset);
+                if (entry.BasicPrototype > 999_999 - PrototypeOffset) return new(PremadeHeroFailure.ItemPrototypeMissing, null, entry.BasicPrototype);
+                var itemNumber = entry.BasicPrototype + PrototypeOffset;
                 var status = Prototype(sources, itemNumber, out var item);
                 if (status != PrototypeFileStatus.Found)
                     return new(status == PrototypeFileStatus.Missing ? PremadeHeroFailure.ItemPrototypeMissing
                         : status == PrototypeFileStatus.Ambiguous ? PremadeHeroFailure.ItemPrototypeAmbiguous : PremadeHeroFailure.ItemPrototypeInvalid,
                         null, itemNumber);
                 if (item!.Type is < 5 or > 14 || item.Type == GoldType) return new(PremadeHeroFailure.ItemTypeUnsupported, null, itemNumber);
+                // An attachment with script number 0 is no script (word 2 of the 12-byte element).
+                if (item.Fields[ScriptsSlot].Elements.Any(e => e.Key is GetScript or InsertItemScript && e.Words.Count == 3 && e.Words[2] != 0))
+                    return new(PremadeHeroFailure.ItemScriptUnsupported, null, itemNumber);
                 items.Add(new(entry.BasicPrototype, itemNumber, item.Type, Int(item.Fields[NameSlot]), Int(item.Fields[DescriptionSlot])));
             }
         }

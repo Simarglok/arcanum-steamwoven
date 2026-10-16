@@ -93,7 +93,9 @@ internal sealed class HeroDomain
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
         int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect)
     {
-        if (prototype < 1 || stats is null || stats.Count != SessionHeroLimits.StoredStats.Length) return null;
+        // Checked on the copy, so a list whose count and contents disagree cannot pass.
+        var values = stats?.ToArray();
+        if (prototype < 1 || values is null || values.Length != SessionHeroLimits.StoredStats.Length) return null;
         if (level is < SessionHeroLimits.MinLevel or > SessionHeroLimits.MaxLevel ||
             unspentPoints is < SessionHeroLimits.MinUnspentPoints or > SessionHeroLimits.MaxUnspentPoints ||
             alignment is < SessionHeroLimits.MinAlignment or > SessionHeroLimits.MaxAlignment) return null;
@@ -103,7 +105,6 @@ internal sealed class HeroDomain
             : ImmutableDictionary<CharacterGender, StatEffectDefinition>.Empty.Add(gender, genderEffect);
         var created = CharacterStatsOwner.Create(new(race, gender, new(races, genders), CharacterStatLimits.Default));
         if (created.Owner is not { } owner) return null;
-        var values = stats.ToArray();
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
         return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect), owner);

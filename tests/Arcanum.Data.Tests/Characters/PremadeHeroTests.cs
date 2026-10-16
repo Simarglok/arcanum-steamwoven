@@ -24,7 +24,7 @@ public sealed class PremadeHeroTests
     [TestMethod]
     public void EffectEntriesParseEveryCollectionAndOperator()
     {
-        Assert.AreEqual(EffectRuleStatus.Parsed, Parse("dx +1 BE +1,cn -1\tmagicpts +2\nage +15", out var changes));
+        Assert.AreEqual(EffectRuleStatus.Parsed, Parse("dx +1 BE +1,cn -1 magicpts +2,,age +15", out var changes));
         CollectionAssert.AreEqual(new EffectChange[]
         {
             new(EffectAttributeKind.Stat, 1, EffectChangeOperator.Add, 1), new(EffectAttributeKind.Stat, 3, EffectChangeOperator.Add, 1),
@@ -57,7 +57,8 @@ public sealed class PremadeHeroTests
             ("st +", EffectRuleStatus.InvalidToken), ("st +%", EffectRuleStatus.InvalidToken), ("st +1234567890", EffectRuleStatus.InvalidToken),
             ("st min x", EffectRuleStatus.InvalidToken), ("st =1", EffectRuleStatus.InvalidToken), ("st", EffectRuleStatus.MissingOperand),
             ("st max", EffectRuleStatus.MissingOperand), (string.Join(" ", Enumerable.Repeat("dx +1", 8)), EffectRuleStatus.TooManyChanges),
-            ("st +1é", EffectRuleStatus.InvalidText),
+            ("st +1é", EffectRuleStatus.InvalidText), ("dx +1\tbe +1", EffectRuleStatus.InvalidText),
+            ("dx +1\nbe +1", EffectRuleStatus.InvalidText),
         })
         {
             var bytes = Encoding.Latin1.GetBytes(text);
@@ -103,6 +104,10 @@ public sealed class PremadeHeroTests
         // The lookup accepts only numbers below the entry count, so the last of 15 entries is out of reach.
         Assert.AreEqual(InventorySourceStatus.Unreachable, InventorySourceRules.Read(Mes("{1}{a: 1,1}{2}{b: 1,1}"), null, 2).Status);
         Assert.AreEqual(InventorySourceStatus.BuyListUnsupported, InventorySourceRules.Read(Sources, Mes("{13}{ALL}"), 13).Status);
+        Assert.AreEqual(InventorySourceStatus.BuyListUnsupported, InventorySourceRules.Read(Sources, Mes("{13}{ \t }"), 13).Status,
+            "a tab is a (failing) buy token in the source");
+        Assert.AreEqual(InventorySourceStatus.InvalidText,
+            InventorySourceRules.Read(Mes("{1}{a: 385,385\n100,6029}{2}{b: 1,1}"), null, 1).Status, "the source would read one token 385, LF, 100");
         Assert.AreEqual(InventorySourceStatus.InvalidText,
             InventorySourceRules.Read(MesFile.Parse(Encoding.Latin1.GetBytes("{1}{aé: 1,1}{2}{b: 1,1}")).File!, null, 1).Status);
     }
@@ -111,7 +116,7 @@ public sealed class PremadeHeroTests
     private const int PcType = 15;
 
     /// <summary>A v119 prototype: every slot of the type in order. Values: int for an int32 slot, a key→value map for an
-    /// int32 array, an int count for an object-id array, true for a present object id; every other slot is absent.</summary>
+    /// int32 array or a script array (attachment point → script number), an int count for an object-id array, true for a present object id; every other slot is absent.</summary>
     internal static byte[] Prototype(int number, int type, IReadOnlyDictionary<int, object>? values = null)
     {
         values ??= new Dictionary<int, object>();
@@ -130,6 +135,10 @@ public sealed class PremadeHeroTests
                     break;
                 case StaticObjectLoader.WireKind.ArrI32 or StaticObjectLoader.WireKind.ArrU32 when value is IReadOnlyDictionary<int, int> map:
                     Array(bytes, 4, map.OrderBy(pair => pair.Key).Select(pair => (pair.Key, BitConverter.GetBytes(pair.Value))).ToArray());
+                    break;
+                case StaticObjectLoader.WireKind.ArrScript when value is IReadOnlyDictionary<int, int> scripts:
+                    Array(bytes, 12, scripts.OrderBy(pair => pair.Key)
+                        .Select(pair => (pair.Key, (byte[])[.. new byte[8], .. BitConverter.GetBytes(pair.Value)])).ToArray());
                     break;
                 case StaticObjectLoader.WireKind.ArrObjectId when value is int count:
                     Array(bytes, 24, Enumerable.Range(0, count).Select(key => (key, IdBytes(2, 90 + key))).ToArray());
@@ -259,6 +268,11 @@ public sealed class PremadeHeroTests
             pc[47] = new Dictionary<int, int> { [0] = 0, [1] = 1 };
         }), 101);
         Refused(PremadeHeroFailure.UnsupportedPrototypeState, Changed(pc => pc[46] = new Dictionary<int, int> { [0] = 67, [1] = 102 }), 102);
+        Refused(PremadeHeroFailure.UnsupportedPrototypeState, Changed(pc =>
+        {
+            pc[46] = new Dictionary<int, int> { [0] = 67, [1] = 67 };
+            pc[47] = new Dictionary<int, int> { [0] = 0, [1] = 0 };
+        }), 67);
         Assert.AreEqual(PremadeHeroFailure.None, Read(Changed(pc => ((Dictionary<int, int>)pc[38])[0] = 12)).Failure,
             "stored primary stats are replaced by the level-1 defaults");
 
@@ -276,6 +290,15 @@ public sealed class PremadeHeroTests
         Refused(PremadeHeroFailure.ItemPrototypeInvalid, With(8188, new(PrototypeFileStatus.Found, [1, 2, 3])), 8188);
         Refused(PremadeHeroFailure.ItemTypeUnsupported, With(8188, new(PrototypeFileStatus.Found, Prototype(8188, 8))), 8188);
         Refused(PremadeHeroFailure.ItemTypeUnsupported, With(8188, new(PrototypeFileStatus.Found, Prototype(8188, 3))), 8188);
+        foreach (var point in new[] { 4, 21 })
+            Refused(PremadeHeroFailure.ItemScriptUnsupported, With(8188, new(PrototypeFileStatus.Found,
+                Prototype(8188, 7, new Dictionary<int, object> { [31] = new Dictionary<int, int> { [point] = 30001 } }))), 8188);
+        Assert.AreEqual(PremadeHeroFailure.None, Read(With(8188, new(PrototypeFileStatus.Found,
+            Prototype(8188, 7, new Dictionary<int, object> { [31] = new Dictionary<int, int> { [0] = 30001, [4] = 0 } })))).Failure,
+            "an examine script, and an attachment without a script number, do not run on the transfer");
+        Refused(PremadeHeroFailure.PrototypeMissing, With(16089, null!));
+        Assert.AreEqual(PremadeHeroFailure.PrototypeMissing, PremadeHeroReader.Read(Inputs(Files()), int.MaxValue).Failure);
+        Assert.AreEqual(PremadeHeroFailure.PrototypeMissing, PremadeHeroReader.Read(Inputs(Files()), -21).Failure);
     }
 
     [TestMethod]

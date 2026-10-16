@@ -11,7 +11,8 @@ public enum InventorySourceStatus
     /// <summary>The entry is not <c>name: min,max rate,proto …</c> as admitted here: no colon, an empty name or one of 70
     /// or more characters, a token that is not two comma-separated digit runs, no coin pair, or more than 300 items.</summary>
     Malformed,
-    /// <summary>A byte outside printable ASCII, space, tab or line feed.</summary>
+    /// <summary>A byte outside printable ASCII (space included): the source splits only on commas and spaces, so a tab or
+    /// line feed would glue a pair to the next one and empty the set.</summary>
     InvalidText,
     /// <summary>The set has a non-empty <c>rules\InvenSourceBuy.mes</c> line. A failing buy line empties the set in the
     /// source; buy lists are not modelled, so any non-empty one is refused.</summary>
@@ -29,7 +30,7 @@ public sealed record InventorySourceRead(InventorySourceStatus Status, Inventory
 /// <summary>
 /// <c>rules\InvenSource.mes</c> sets (ARC-RES-027; CE <c>invensource.c</c> at the pinned revision): set N is message N,
 /// numbered from 1 without gaps; the lookup accepts <c>0 &lt; N &lt; entry count</c>. An entry is the set name, a colon,
-/// then whitespace-separated <c>a,b</c> pairs: the first is the coin range, each further one an item's rate and basic
+/// then space-separated <c>a,b</c> pairs: the first is the coin range, each further one an item's rate and basic
 /// prototype. Project admission policy: a shape the source would empty, truncate or read partially is a typed refusal.
 /// Whether a listed prototype exists is the caller's check.
 /// </summary>
@@ -45,14 +46,15 @@ public static class InventorySourceRules
             if (sources.Find(number) is null) return new(InventorySourceStatus.Unreachable, null);
         var text = sources.Find(set)!.Bytes.Span;
         foreach (var b in text)
-            if (b is not ((>= 0x20 and <= 0x7e) or (byte)'\t' or (byte)'\n')) return new(InventorySourceStatus.InvalidText, null);
-        if (buy?.Find(set) is { } line && line.Bytes.Span.IndexOfAnyExcept(" \t\n"u8) >= 0)
+            if (b is < 0x20 or > 0x7e) return new(InventorySourceStatus.InvalidText, null);
+        // Only a line of spaces reads as empty in the source; any other byte, a tab included, is a (failing) buy list.
+        if (buy?.Find(set) is { } line && line.Bytes.Span.IndexOfAnyExcept((byte)' ') >= 0)
             return new(InventorySourceStatus.BuyListUnsupported, null);
 
         var entry = System.Text.Encoding.ASCII.GetString(text);
         var colon = entry.IndexOf(':');
         if (colon is < 1 or > MaxNameCharacters) return new(InventorySourceStatus.Malformed, null);
-        var pairs = entry[(colon + 1)..].Split([' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var pairs = entry[(colon + 1)..].Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (pairs.Length < 1 || pairs.Length - 1 > MaxItems) return new(InventorySourceStatus.Malformed, null);
         var values = new (int First, int Second)[pairs.Length];
         for (var i = 0; i < pairs.Length; i++)

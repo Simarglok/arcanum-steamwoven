@@ -27,7 +27,8 @@ public enum EffectRuleStatus
     UnsupportedOperator,
     /// <summary>More than seven changes in one collection, which would overrun the source's per-effect arrays.</summary>
     TooManyChanges,
-    /// <summary>A byte outside printable ASCII, space, tab or line feed.</summary>
+    /// <summary>A byte outside printable ASCII (space included). The source splits only on spaces and commas, so a tab or line
+    /// feed would glue two tokens together; such an entry is refused instead of read partially.</summary>
     InvalidText,
     /// <summary>An effect number outside 50..399, the range <c>rules\effect.mes</c> fills (0..49 are the module's).</summary>
     OutOfRange,
@@ -80,8 +81,8 @@ public static class EffectRules
     {
         changes = [];
         foreach (var b in text)
-            if (b is not ((>= 0x20 and <= 0x7e) or (byte)'\t' or (byte)'\n')) return EffectRuleStatus.InvalidText;
-        var tokens = System.Text.Encoding.ASCII.GetString(text).Split([' ', ',', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries);
+            if (b is < 0x20 or > 0x7e) return EffectRuleStatus.InvalidText;
+        var tokens = System.Text.Encoding.ASCII.GetString(text).Split([' ', ','], StringSplitOptions.RemoveEmptyEntries);
         var list = new List<EffectChange>();
         var counts = new int[Tokens.Length];
         for (var i = 0; i < tokens.Length; i++)

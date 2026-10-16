@@ -57,9 +57,9 @@ public sealed class GameSessionOwner : IDisposable
         {
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
                 definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect);
-            if (hero is null || definition.Gold < 0 || definition.Kit is null || definition.Kit.Count > limits.MaxPcItems)
+            var kit = definition.Kit?.ToArray();
+            if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
-            var kit = definition.Kit.ToArray();
             for (var index = 0; index < kit.Length; index++)
             {
                 if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type))

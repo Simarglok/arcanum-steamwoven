@@ -290,6 +290,8 @@ public sealed class HeroStateTests
         Refused(HeroGolden.Replace("\"entity\":\"kit:1\"", "\"entity\":\"kit:9\""), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("{\"entity\":\"kit:1\",\"map\":null", "{\"entity\":\"kit:1\",\"map\":79"), GameSessionFailure.InvalidSnapshot);
         Refused(HeroGolden.Replace("\"type\":\"Weapon\"", "\"type\":\"Gold\""), GameSessionFailure.InvalidItem);
+        var small = GameSessionOwner.Restore(Decode(HeroGolden), RestoreOptions(new GameSessionLimits(maxPcItems: 2)));
+        Assert.AreEqual((null, GameSessionFailure.BudgetExceeded), (small.Owner, small.Failure), "a kit above the caller's limit");
     }
 
     private static string Record(string id, string text = "", string alternate = "", string iq = "", string condition = "", string response = "", string action = "") =>

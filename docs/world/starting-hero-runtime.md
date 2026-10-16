@@ -31,17 +31,24 @@ alignment and age and writes the stat defaults (eight primary stats 8, level 1, 
 [defaults](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L115-L144)); the
 stat setter re-adds the race effect `64 + race` and, for a woman, effect 330. The stored background (39..50) is display
 data and adds nothing (ARC-RES-027 proposal 4). Gold is the set's coin amount and the items are its prototypes in order.
+The source then gives each item to the PC through `item_transfer`
+([inventory source](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2073-L2164)):
+an item whose prototype attaches a `SAP_GET` or `SAP_INSERT_ITEM` script is refused here (`ItemScriptUnsupported`), and
+the PC's insert check (carry weight, room) is **NOT evaluated**; a refused item would be destroyed in the source. For the
+twelve installed sets no item is refused (D), and the heaviest-kit check against ST 8 is NOT_VERIFIED.
 
 Typed refusals (`PremadeHeroFailure`, fail-closed): missing, ambiguous or invalid prototype (size, wire, trailing bytes,
 number); not a PC; race outside 0..10 or gender outside 0/1; prototype state a new PC would carry that is not modelled
-(skills, experience, inventory, gold object, bank money, an effect whose cause is neither race nor gender); an effect the
-rules refuse; an inventory set the rules refuse; a coin range or item rate that needs gameplay randomness
-(`RandomInventorySource`, FR-CONTENT-007); a missing, ambiguous or invalid item prototype; an item that is gold or not an
-item type.
+(skills, experience, inventory, gold object, bank money, an effect whose cause is neither race nor gender, more than one
+stored effect per innate cause); an effect the rules refuse; an inventory set the rules refuse; a coin range or an item
+rate other than 100 (`RandomInventorySource`: a range or rate 1..99 needs gameplay randomness, FR-CONTENT-007, and rate
+0 never creates its item); a missing, ambiguous or invalid item prototype; an item that is gold or not an item type; an
+item with a get or insert script.
 
 **Effect rules** (`EffectRules`, S: [effect_parse](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c#L360-L481)):
 effect N is message N of `rules\effect.mes` (50..399; an absent message is an empty effect, as the source's
-zero-initialised table). Tokens split on spaces and commas; an attribute keyword (ASCII case-insensitive) from the six
+zero-initialised table). Tokens split on spaces and commas only, as in the source, so any byte outside printable ASCII
+(a tab or line feed included, which would glue two tokens) is `InvalidText`; an attribute keyword (ASCII case-insensitive) from the six
 collections in source order (28 stats, 12 basic skills, 4 tech skills, 5 resistances, 8 tech disciplines, 10 special
 values), then `+n`/`-n` (add), the same with `%` (percent), `min n` or `max n`. Project admission policy: `*n` and
 `/n` are `UnsupportedOperator` (CE stores factor 0, original NOT_VERIFIED, SH-07); an unknown token, a missing operand,
@@ -51,8 +58,9 @@ ASCII are typed refusals instead of the source's partial effect.
 **Inventory source sets** (`InventorySourceRules`, S:
 [parser and lookup](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c#L167-L330)):
 set N is message N, numbered from 1 without gaps, reachable when `0 < N < entry count`. An entry is
-`name: min,max rate,proto …`; here the name must be 1..69 characters before the first colon and every
-whitespace-separated token a pair of digit runs, at most 300 items. A non-empty buy line for the set is refused
+`name: min,max rate,proto …`; here the entry must be printable ASCII (the source splits on commas and spaces only, so a
+tab or line feed would empty the set), the name 1..69 characters before the first colon and every space-separated token
+a pair of digit runs, at most 300 items. A buy line for the set with anything but spaces is refused
 (`BuyListUnsupported`): a failing one empties the set in the source and buy lists are not modelled.
 
 ## Session hero
@@ -71,7 +79,7 @@ stats list that is not ten values, a stored value outside the race's range (stri
 [stat.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L38-L110)),
 an effect the character owner refuses (no modifiers, more than seven, a magnitude above 1000, divisor 0, negative id),
 negative gold, a kit item of a type transfers cannot hold (gold, ammunition, key, key ring) and a kit larger than
-`MaxPcItems`. The definition is copied. Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
+`MaxPcItems`. The definition is copied (its lists are checked on the copy). Gold and the kit enter the inventory at revision 0: the kit as `kit:1`,
 `kit:2`, … with no origin map, at the head of the PC's list.
 
 | Entry | Contract |
@@ -127,6 +135,11 @@ so nothing is lost.
   replies 37 and 45 at node 35. A save and load keep the hero, gold and kit.
 
 ## Not implemented
+
+The pre-made hero global flags: the main menu sets flags 2350..2361 (`MainMenu.mes` 551..562) so that the chosen hero's
+flag is true and the others false (ARC-RES-025 CC-07). Neither the reader nor the session sets them; a host that starts
+a hero must set the chosen flag in the session's GF descriptor (the real-data test starts from the plain new-game flags,
+and whether Crash Site scripts read them is an open ARC-RES-025 question).
 
 The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet is **not** the original level-1 sheet;
 ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
