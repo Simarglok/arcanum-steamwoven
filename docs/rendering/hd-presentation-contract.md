@@ -4,8 +4,9 @@ Status: **contract and synthetic oracle tests, amended by ARC-DATA-014** (see
 [the amendment](#amendment-arc-data-014-2026-10-16)). The pack format, reader, import and
 device budget exist ([HD pack format](../formats/hd-pack.md)); the AREA/WORLD path for
 characters and objects exists since ARC-RENDER-014
-([viewer](terrain-viewer.md#hd-render-path-arc-render-014)); no setting, persistence or
-toggle key exists yet. The parts are ARC-DATA-014 (pack format and
+([viewer](terrain-viewer.md#hd-render-path-arc-render-014)); the setting, its persistence, the
+toggle key and the timed commit exist since ARC-UI-006
+([viewer](terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)). The parts are ARC-DATA-014 (pack format and
 loader), ARC-RENDER-014 (AREA/WORLD HD path for characters and objects), ARC-UI-006
 (on-the-fly toggle), ARC-DEV-003 (pack build tool), ARC-RENDER-015 (before/after
 review) and ARC-RENDER-016 (terrain). Each of them implements its part of this
@@ -255,6 +256,29 @@ light or clock change, during dialog, before or after a map change.
 The profile is not part of the session snapshot or quick save; a save made in either
 profile loads in either profile.
 
+**Implementation (ARC-UI-006).** The rules above are implemented as written; these points
+settle what they leave open, without changing a rule:
+
+- The diagnostic key is `H` without modifiers while the world owns input; the setting is the
+  palette action "Visual Legacy/HD (H)". Both request the other profile than the pending one,
+  else the active one, so a second press during a pending switch is the cancel of step 1.
+- A request equal to the profile already pending is a no-op, like one equal to the active
+  profile with nothing pending: no new generation, the wait is not restarted.
+- The bounded wait stays 500 ms (`VisualProfileSwitch.DefaultCommitWaitMilliseconds`): the
+  first bind of the whole Crash Site view from a 4× pack took about 0.1 s (ARC-RENDER-014).
+- A switch to `Legacy` has nothing to prepare (the Legacy visible set stays resident), so it
+  commits in the next submission. A request when nothing is published commits at once.
+- A map change during a pending switch drops its decodes (step 6) and keeps the request, which
+  commits on the new map's view.
+- Step 2's store is `VisualProfileSettingsStore` with the test override
+  `VISUAL_PROFILE_TEST_PATH`; an automated run (self-test, native smoke) without it neither reads
+  nor writes the file and starts `Legacy`. The ARC-RENDER-014 environment selection
+  (`ARC_HD_PACK`, `ARC_VISUAL_PROFILE`) still overrides the saved profile for that run and is
+  not saved.
+- One pack is active: `ARC_HD_PACK`, else the first pack that opened and is not rejected in the
+  game's pack folder (`user://hd-packs/`) and, in a source run, the checkout's `local/hd-packs/`;
+  a rejected pack only when it is the only one (every frame `PackRejected`).
+
 ## Gameplay never reads HD
 
 HD types and the pack loader live in the presentation layer and `Arcanum.Data`
@@ -301,8 +325,15 @@ fractional origins and with wall fades, and `FrameMissing`, `NoPack`, `PackRejec
 `SourceMismatch` and `Pending` are unit-tested)
 and the native smoke `ARC-RENDER-014 native-smoke AREA HD identity PASS` / `WORLD HD
 identity PASS` on the installed original with a nearest 4× pack in a temporary directory.
-Later: the toggle and Session-snapshot invariance (ARC-UI-006). Human review of real HD frames is ARC-RENDER-015 and never a merge
-gate.
+ARC-UI-006 added the toggle checks ([viewer](terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)):
+`VisualProfileSwitchTests` (codec, generations, settled or timed commit, cancel, pack choice), the
+self-tests `ARC-UI-006 self-test toggle PASS` (preparing frames wholly Legacy, one commit frame
+wholly HD, Legacy commit, cancel, bounded wait with frames pending, map change, `NoPack`) and
+`ARC-UI-006 self-test app PASS`, and the native smoke `ARC-UI-006 native-smoke Session invariance
+PASS`, which proves the acceptance above on the installed original: dialog, walk, one game hour and
+the cave entry from one quick save give byte-identical Session snapshots and drawn destinations
+under `Legacy`, under `Hd` and with switches before and during every step. Human review of real HD
+frames is ARC-RENDER-015 and never a merge gate.
 
 ## Amendment ARC-DATA-014 (2026-10-16)
 
@@ -349,10 +380,10 @@ rules above as follows; the [pack format](../formats/hd-pack.md) has the details
 
 ## Not ready / out of scope
 
-- The runtime HD path for characters and objects exists (ARC-RENDER-014), selected for a
-  diagnostic run by environment variables; the setting, its persistence, the toggle key and
-  the timed commit of the toggle protocol are ARC-UI-006. Until then a frame that is not
-  decoded yet draws Legacy (`Pending`) and switches on its own when ready.
+- The runtime HD path for characters and objects (ARC-RENDER-014) and the setting, its
+  persistence, the toggle key and the timed commit (ARC-UI-006) exist in the terrain viewer;
+  the exported app gets them with its next export. There is no pack picker: one pack is
+  chosen as above.
 - Terrain tiles, facades and terrain chunks stay Legacy until ARC-RENDER-016; walls,
   roofs, UI and cursors until a later stage.
 - No shader smoothing profile, VRAM compression, mipmaps or box-filtered downsample.

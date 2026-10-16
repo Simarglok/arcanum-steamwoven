@@ -33,29 +33,7 @@ public static partial class TerrainViewerSelfTest
         }
         try
         {
-            // Five bodies over one cell: sizes, a mirrored frame, scale 75, shrunk, additive.
-            var shapes = new (int W, int H, int HotX, int HotY, bool Mirrored, int Scale, uint Flags, uint Blit)[]
-            { (160, 160, 40, 80, false, 100, 0, 0), (37, 23, 10, 20, true, 100, 0, 0), (50, 40, -12, 30, false, 75, 0, 0),
-              (30, 30, 5, 5, false, 100, 0x80, 0), (24, 18, 20, 10, false, 100, 0, 0x10) };
-            var bodies = new List<AreaObjectRecord>(); var visuals = new List<AreaVisualRecord>();
-            var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>();
-            for (var i = 0; i < shapes.Length; i++)
-            {
-                var s = shapes[i];
-                var body = AreaCompositionFixture.Body(i, s.Flags, s.Scale, blit: s.Blit);
-                var rgba = HdPattern(s.W, s.H, i);
-                var visual = AreaCompositionFixture.Visual(body, s.W, s.H, s.HotX, s.HotY, mirrored: s.Mirrored) with
-                {
-                    PayloadSha256 = HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-hd-art-{i}")), ViewLength = 4096,
-                    RgbaSha256 = HdFrameQueries.Sha256(rgba),
-                };
-                bodies.Add(body); visuals.Add(visual); frames[AreaFrameKey.From(visual)] = new(s.W, s.H, rgba);
-            }
-            var plan = AreaScenePlan.Create([], bodies, visuals);
-            var placement = AreaCompositionFixture.Placement(AreaCompositionFixture.Cases[0]);
-            var actor = synthetic.Result.ActorPlan!.Select(placement);
-            var bodyFrames = frames.Select(pair => new HdNearestPack.Frame(HdFrameQueries.FromArea(pair.Key, pair.Value), pair.Value.Rgba)).ToArray();
-            var actorFrames = synthetic.Result.ActorTextures.Values.Select(texture => new HdNearestPack.Frame(texture.HdQuery!, texture.Rgba)).ToArray();
+            var (bodyCount, bodies, frames, plan, placement, actor, bodyFrames, actorFrames) = HdAreaScene(synthetic);
             HdFrameSource Source(string id, IEnumerable<HdNearestPack.Frame> packFrames, HdReviewStatus review = HdReviewStatus.Unreviewed, int tint = -1)
             {
                 var open = HdPack.Open(HdNearestPack.Write(System.IO.Path.Combine(root, id), id, 4, packFrames, review, tint, 0xFF));
@@ -113,7 +91,7 @@ public static partial class TerrainViewerSelfTest
             canvas.PublishArea(plan, frames, actor, placement, cache);
             await Settle();
             var legacy = await Capture();
-            var candidates = shapes.Length + 1;
+            var candidates = bodyCount + 1;
 
             // Identity: the nearest 4× pack draws the Legacy raster at every transform.
             var nearest = Source("nearest", bodyFrames.Concat(actorFrames));
@@ -164,7 +142,7 @@ public static partial class TerrainViewerSelfTest
                 Counts(label, hdCount, reason, fallback);
                 Same(legacy, images, label);
             }
-            await Fallback("frame-missing", Source("bodies-only", bodyFrames), null, shapes.Length, HdFallbackReason.FrameMissing, 1);
+            await Fallback("frame-missing", Source("bodies-only", bodyFrames), null, bodyCount, HdFallbackReason.FrameMissing, 1);
             await Fallback("no-pack", null, null, 0, HdFallbackReason.NoPack, candidates);
             await Fallback("pack-rejected", Source("rejected", bodyFrames.Concat(actorFrames), HdReviewStatus.Rejected), null, 0, HdFallbackReason.PackRejected, candidates);
             await Fallback("frame-rejected", Source("frame-rejected", bodyFrames.Select((f, i) => i == 1 ? f with { Review = HdReviewStatus.Rejected } : f).Concat(actorFrames)),
@@ -288,6 +266,38 @@ public static partial class TerrainViewerSelfTest
             System.IO.Directory.Delete(root, true);
         }
         GD.Print("ARC-RENDER-014 self-test WORLD HD PASS statics+actor 6 HD, nearest-4x identity and per-parent recoloured oracle at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
+    }
+
+    // The synthetic AREA scene of the HD self-tests: five bodies over one cell (sizes, a mirrored
+    // frame, scale 75, shrunk, additive) and the actor, with their nearest-pack frames.
+    private static (int Length, List<AreaObjectRecord> Bodies, Dictionary<AreaFrameKey, DecodedAreaFrame> Frames, AreaScenePlan Plan,
+        ActorDiagnosticPlacementInput Placement, ActorDiagnosticScenePlan Actor, HdNearestPack.Frame[] BodyFrames, HdNearestPack.Frame[] ActorFrames)
+        HdAreaScene(SyntheticActorLoad synthetic)
+    {
+        // Five bodies over one cell: sizes, a mirrored frame, scale 75, shrunk, additive.
+        var shapes = new (int W, int H, int HotX, int HotY, bool Mirrored, int Scale, uint Flags, uint Blit)[]
+        { (160, 160, 40, 80, false, 100, 0, 0), (37, 23, 10, 20, true, 100, 0, 0), (50, 40, -12, 30, false, 75, 0, 0),
+          (30, 30, 5, 5, false, 100, 0x80, 0), (24, 18, 20, 10, false, 100, 0, 0x10) };
+        var bodies = new List<AreaObjectRecord>(); var visuals = new List<AreaVisualRecord>();
+        var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>();
+        for (var i = 0; i < shapes.Length; i++)
+        {
+            var s = shapes[i];
+            var body = AreaCompositionFixture.Body(i, s.Flags, s.Scale, blit: s.Blit);
+            var rgba = HdPattern(s.W, s.H, i);
+            var visual = AreaCompositionFixture.Visual(body, s.W, s.H, s.HotX, s.HotY, mirrored: s.Mirrored) with
+            {
+                PayloadSha256 = HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-hd-art-{i}")), ViewLength = 4096,
+                RgbaSha256 = HdFrameQueries.Sha256(rgba),
+            };
+            bodies.Add(body); visuals.Add(visual); frames[AreaFrameKey.From(visual)] = new(s.W, s.H, rgba);
+        }
+        var plan = AreaScenePlan.Create([], bodies, visuals);
+        var placement = AreaCompositionFixture.Placement(AreaCompositionFixture.Cases[0]);
+        var actor = synthetic.Result.ActorPlan!.Select(placement);
+        var bodyFrames = frames.Select(pair => new HdNearestPack.Frame(HdFrameQueries.FromArea(pair.Key, pair.Value), pair.Value.Rgba)).ToArray();
+        var actorFrames = synthetic.Result.ActorTextures.Values.Select(texture => new HdNearestPack.Frame(texture.HdQuery!, texture.Rgba)).ToArray();
+        return (shapes.Length, bodies, frames, plan, placement, actor, bodyFrames, actorFrames);
     }
 
     // Distinct colours per texel with holes, so a wrong subtexel or crop changes pixels.

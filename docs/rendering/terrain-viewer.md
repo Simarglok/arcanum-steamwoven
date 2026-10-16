@@ -743,13 +743,13 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   (<reason> <count>, …), HD textures <count>/<bytes> bytes, decoding <n>; terrain and walls
   Legacy`, per submission; under Legacy `visual Legacy`, or `visual Legacy (HD pack <id>
   <N>x loaded)` when a pack is selected. In AREA it is refreshed with the status line.
-- **Selecting a pack (until ARC-UI-006).** The setting, its persistence and the toggle key
-  are ARC-UI-006. A diagnostic run selects them at start with environment variables:
-  `ARC_HD_PACK=DIR` (one pack directory outside the repository; implies profile Hd),
-  `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack draws everything Legacy as `NoPack`)
-  and `ARC_HD_BUDGET_PATH=FILE` (default `user://hd_budget_v1.json`; missing or invalid
-  means the ceilings). The start line `ARC-RENDER-014 visual profile=…` names the pack id,
-  scale and open status, never a path.
+- **Selecting a pack and the profile.** Since ARC-UI-006 the profile is a saved setting with an
+  on-the-fly toggle ([below](#visual-profile-setting-and-toggle-arc-ui-006)). A diagnostic run may
+  still override it for that run with environment variables: `ARC_HD_PACK=DIR` (one pack directory
+  outside the repository; implies profile Hd), `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack
+  draws everything Legacy as `NoPack`) and `ARC_HD_BUDGET_PATH=FILE` (default
+  `user://hd_budget_v1.json`; missing or invalid means the ceilings). The start line
+  `ARC-RENDER-014 visual profile=…` names the pack id, scale and open status, never a path.
 
 Checks: `HdPresentationTests` (scaled crop and axis limit; frame questions; the nearest pack at
 2× and 4×; every per-frame reason from the frame source, reset and release; residency in draw
@@ -770,9 +770,64 @@ the whole window to equal Legacy with no fallback:
 body frames and 55 actor frames, 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
 0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
 22 MB resident at 4×, first bind 90 ms) and `ARC-RENDER-014 native-smoke WORLD HD identity
-PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: a real upscaled pack (ARC-RES-038/ARC-DEV-003),
-the toggle protocol and Session-snapshot invariance (ARC-UI-006), walls and terrain in HD,
+PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: a real upscaled pack (ARC-RES-038/ARC-DEV-003), walls and terrain in HD,
 other GPUs and handhelds, human review (ARC-RENDER-015).
+
+### Visual profile setting and toggle (ARC-UI-006)
+
+The visual profile (Legacy or HD) is a saved setting that can be switched at any moment in WORLD and
+`crash-site-area`, following the toggle protocol of the
+[HD presentation contract](hd-presentation-contract.md#toggle-protocol). It changes textures only:
+plans, picking, routes, the wall check, light, animation, the clock and the Session never read it, and
+it is not part of a snapshot or quick save.
+
+- **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
+  (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
+  palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns
+  every key (the switch itself is safe then too: the self-test and smoke request it during a dialog).
+  A request during a pending switch toggles back to the active profile, which cancels the switch.
+- **Timed commit.** The active profile keeps drawing while the requested one is prepared for the
+  visible set (decodes off the main thread, at most 64 uploads per submission). The switch commits
+  between two submissions as soon as every visible frame is ready or refused, so one frame draws every
+  item with the new profile, or after 500 ms (`VisualProfileSwitch.DefaultCommitWaitMilliseconds`; the
+  first bind of the whole Crash Site view from a 4× pack took about 0.1 s), when frames still decoding
+  draw Legacy as `Pending` and switch one by one. A switch to Legacy commits in the next submission and
+  keeps HD textures within the retain limits, so switching back is cheap. A map change during a
+  pending switch keeps the request; it commits on the new view. With nothing published the request
+  commits at once.
+- **Persistence.** The request is saved at once to `user://visual_profile_v1.json`
+  (`{"schema":1,"profile":"Legacy"|"Hd"}`, codec `VisualProfileCodec`): a missing, unreadable or unknown
+  value loads as Legacy; a failed save is shown in the HUD and does not block the switch. Startup applies
+  the saved profile before the first submission (an environment override above wins for that run and is
+  not saved). `VISUAL_PROFILE_TEST_PATH` isolates tests; an automated run (self-test, native smoke)
+  without it neither reads nor writes the file and starts Legacy.
+- **Active pack.** `ARC_HD_PACK` when set; otherwise the first pack that opened and is not rejected in
+  the pack folder `user://hd-packs/<id>/` and, in a source run, the checkout's ignored
+  `local/hd-packs/<id>/` (locations in that order, packs in ordinal folder order; a rejected pack is
+  used only when it is the only one, every frame `PackRejected`). Automated runs do not look at these
+  folders. Without a pack, HD draws every frame Legacy as `NoPack`.
+- **HUD and palette.** The status line adds `H visual Legacy/HD: <active>[, switching to <profile>];
+  pack <id> <N>x (<how it was found>) | no HD pack (…); startup from <saved setting|environment|default>`
+  and any save failure, after the ARC-RENDER-014 counters, which add `switching to HD (generation n,
+  decoding k)` while a switch is pending. The palette shows the same line under its action.
+
+Checks: `VisualProfileSwitchTests` (codec round trip and every malformed or unknown value as Legacy;
+no-op requests, generations, commit only when settled or after the bounded wait, cancel, set; the
+active pack choice), the self-tests `ARC-UI-006 self-test store PASS`, `ARC-UI-006 self-test toggle
+PASS` (production AREA compositor with a tinted 4× pack at magnification 2: preparing frames are
+wholly Legacy, the commit frame binds every candidate HD and no read-back frame mixes the two; Legacy
+commits in the next submission and keeps HD retained; cancel drops decodes; the bounded wait commits
+with every frame pending; a map change keeps the request; NoPack and an unpublished canvas commit at
+once) and `ARC-UI-006 self-test app PASS` (the production app over the synthetic area owner: H, Ctrl+H,
+H under the palette, the palette action, cancel by a second H, the saved request, and two walks replayed
+from one quick save under Legacy twice, HD and with switches before and in the middle of each step:
+byte-identical Session snapshots and drawn destinations), and the native smoke on the installed original
+`ARC-UI-006 native-smoke Session invariance PASS` (a nearest 4× pack of every character and object frame
+of the exterior and the cave in a temporary directory; from one quick save next to Virgil: talk to him
+through his replies, walk, wait one game hour, enter the cave; under Legacy twice, HD and with switches
+by H and, during the dialog, by the setting: byte-identical Session snapshots and drawn destinations).
+Not verified: a real upscaled pack, the exported app (`./arcanum area` gets the toggle with its next
+export), switching on other GPUs and handhelds.
 
 ### Virgil follows the PC (ARC-WORLD-016)
 
