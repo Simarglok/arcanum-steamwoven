@@ -126,6 +126,10 @@ class GridReportTests(unittest.TestCase):
             with self.assertRaises(ValueError):validate_report(bad,'a'*40,'source')
         legacy=self.sample(); legacy['keyboardInert']=good['keyboardInert']
         with self.assertRaises(ValueError):validate_report(legacy,'a'*40,'source')
+        # ARC-INPUT-001 evidence must carry the route: a legacy WASD-moving matrix is rejected.
+        validate_report(self.sample(),'a'*40,'source')
+        with self.assertRaises(ValueError):validate_report(self.sample(),'a'*40,'source',require_keyboard_route=True)
+        validate_report(good,'a'*40,'source',require_keyboard_route=True)
 
     def test_literal_report_and_each_binding_rejects_changed_or_missing(self):
         good=self.sample(); validate_report(good,'a'*40,'source')

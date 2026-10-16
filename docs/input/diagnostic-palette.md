@@ -39,7 +39,12 @@ its Close button. Contents:
   accepted step settles; a failed reload is shown as a failure and the old scene is not
   republished. Without a loaded source the palette says "Reload unavailable".
 - **Show passability (unavailable)**: a disabled, non-navigable row reserved for
-  ARC-RENDER-008. It draws nothing and claims no Open/Blocked state.
+  ARC-RENDER-008. It draws nothing and claims no Open/Blocked state. The seam for
+  RENDER-008 is `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and the
+  `OverlayToggled` event (one report per user toggle; none while unavailable).
+- The status line reports how a palette action ended: "Reset scene done", "Reload
+  done: generation N published", or "Scene FAILED: stage=… code=…" (the old scene is not
+  republished).
 - Input preferences (deadzones, sensitivities, camera image X/Y and actor screen X/Y
   inversion) and **Reset preferences** (input defaults and zoom 2.00; the scene is
   not reset).

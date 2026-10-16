@@ -292,7 +292,8 @@ public partial class TerrainViewerApp
                 await ClickAsync(buttons.Single(b => b.Text == "Reset scene"));
                 Require(sceneClicks == 1 && _worldResetPending && WorldModal && status?.Text.StartsWith("Reset scene requested", StringComparison.Ordinal) == true, "palette Reset scene once");
                 WorldSettleForSelfTest();
-                Require(!_worldResetPending && _worldActor.State.Position == new DiagnosticSectorPosition(6, 1) && _worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false), "palette Reset scene settled, preferences kept");
+                Require(!_worldResetPending && _worldActor.State.Position == new DiagnosticSectorPosition(6, 1) && _worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)
+                    && status?.Text.StartsWith("Reset scene done", StringComparison.Ordinal) == true, "palette Reset scene settled and shown, preferences kept");
                 await ClickAsync(buttons.Single(b => b.Text == "Reload current source"));
                 Require(reloadClicks == 1 && WorldModal && status is not null
                     && (_arguments is null ? status.Text.StartsWith("Reload unavailable", StringComparison.Ordinal) && !_worldReloadPending

@@ -662,7 +662,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
                 entry.get("relativePath") for entry in recorded_evidence if isinstance(entry, dict))):
             raise ValueError("grid success-gate logs and exit receipts must be bound by the manifest inventory")
         from .grid_validation import validate_reports as validate_grid_reports
-        validate_grid_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
+        validate_grid_reports(manifest.parent / "evidence", payload["candidate"]["commit"], task)
     if task == "ARC-GPAD-005":
         from .gamepad_export_gates import validate_reports as validate_gamepad_reports
         required_evidence = validate_gamepad_reports(manifest.parent / "evidence", payload["candidate"]["commit"])

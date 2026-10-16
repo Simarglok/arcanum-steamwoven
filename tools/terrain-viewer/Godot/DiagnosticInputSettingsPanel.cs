@@ -78,6 +78,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         // The overlay state seam for ARC-RENDER-008. Until a real overlay exists the
         // row is visibly unavailable and is neither navigable nor toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
+        _overlay.Toggled += value => { if (!_binding && !_overlay.Disabled) OverlayToggled?.Invoke(value); };
         _rows.AddChild(_overlay);
         _actionStatus = new Label { Name = "PaletteActionStatus", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_actionStatus);
         _summary = new Label { Name = "PaletteSummary", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_summary);
@@ -135,7 +136,18 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; ((SpinBox)_controls[0]).GetLineEdit().GrabFocus(); }
     public void SetSummary(string text) => _summary.Text = "Diagnostic summary: " + text;
     public void SetActionStatus(string text) => _actionStatus.Text = text;
+    /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
+    /// availability and state; a user toggle is reported once through OverlayToggled.
+    /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>
+    public event Action<bool>? OverlayToggled;
     public bool OverlayAvailable => !_overlay.Disabled;
+    public void BindOverlay(bool available, bool on, string text)
+    {
+        _binding = true;
+        _overlay.Disabled = !available; _overlay.ButtonPressed = available && on; _overlay.Text = text;
+        _overlay.FocusMode = available ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        _binding = false;
+    }
     public void SetSaveStatus(bool saved) => _status.Text = saved ? "Preferences saved locally." : "Preferences save failed.";
     public void Navigate(int direction)
     {

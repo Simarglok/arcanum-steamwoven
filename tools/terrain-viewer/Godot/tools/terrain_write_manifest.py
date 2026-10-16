@@ -92,7 +92,7 @@ def main() -> None:
         from tools.local_dev.grid_export_gates import validate_reports as validate_gate_reports
         validate_gate_reports(evidence, head, task)
         from tools.local_dev.grid_validation import validate_reports as validate_grid_reports
-        validate_grid_reports(evidence, head)
+        validate_grid_reports(evidence, head, task)
     if task in AREA_TASKS:
         from tools.local_dev.area_validation import validate_reports as validate_area_reports
         validate_area_reports(evidence, head)

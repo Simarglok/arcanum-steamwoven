@@ -218,6 +218,7 @@ public partial class TerrainViewerApp : Node
             _worldGridInput = new(); QuarantineWorld(); PublishWorldSelection();
             _worldFitView = false;
             _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+            PaletteScenePublished();
         }
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         RefreshReadyStatus();
@@ -242,6 +243,7 @@ public partial class TerrainViewerApp : Node
             _worldGate.Close(); _worldReducer.Quarantine();
             _dragging = false; _worldMenuAnalogDirection = 0;
             _camera?.SafetyResetWorld();
+            PaletteSceneFailed(error);
         }
         _hud?.SetMode(mode);
         ClearPublishedScene();

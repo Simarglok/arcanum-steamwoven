@@ -244,6 +244,21 @@ public partial class TerrainViewerApp
                     var pixel = image.GetPixel((int)rect.Position.X + 3, (int)rect.Position.Y + 3);
                     Require(Math.Abs(pixel.R * 255 - 16) <= 1 && Math.Abs(pixel.G * 255 - 20) <= 1 && Math.Abs(pixel.B * 255 - 28) <= 1, "opaque palette pixels");
                 }
+                // The ARC-RENDER-008 seam: bound available, a native click reports once;
+                // binding never reports; unbound again it is inert.
+                var overlayEvents = new List<bool>(); void Overlay(bool on) => overlayEvents.Add(on);
+                _worldPanel.OverlayToggled += Overlay;
+                try
+                {
+                    _worldPanel.BindOverlay(true, false, "Show passability (seam test)");
+                    scroll.EnsureControlVisible(overlay); await NextFrameAsync(); scroll.EnsureControlVisible(overlay); await NextFrameAsync();
+                    await Click(overlay.GetGlobalRect().GetCenter());
+                    Require(overlayEvents.SequenceEqual(new[] { true }) && overlay.ButtonPressed, "overlay seam click reported once");
+                    _worldPanel.BindOverlay(false, false, "Show passability (unavailable)");
+                    await Click(overlay.GetGlobalRect().GetCenter());
+                    Require(overlayEvents.Count == 1 && overlay.Disabled && !overlay.ButtonPressed && overlay.FocusMode == Control.FocusModeEnum.None, "unavailable overlay seam inert");
+                }
+                finally { _worldPanel.OverlayToggled -= Overlay; }
                 await Press(buttons.Single(b => b.Text.StartsWith("Close", StringComparison.Ordinal)));
                 Require(!WorldModal && _worldActor.State == actor, "native Close");
                 GD.Print($"ARC-INPUT-001 palette UI PASS viewport={size.X}x{size.Y} chord-open/contained/field focus/overlay unavailable/1.00/2.00/Fit/surface click/Close/world LMB inert; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));

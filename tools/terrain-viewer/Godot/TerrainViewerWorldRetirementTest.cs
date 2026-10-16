@@ -39,6 +39,8 @@ public partial class TerrainViewerApp
             && successor.EvidenceEpoch == _generation && successor.State.LastOpportunity is null
             && successor.State.CommittedCell == new CellCoord(6,1) && _worldLifecycleSession is null
             && !_worldReloadPending && !_worldResetPending, "reload epoch/actor/pending ownership");
+        var reloadStatus = _worldPanel?.FindChild("PaletteActionStatus", true, false) as Label;
+        Require(reloadStatus?.Text == $"Reload done: generation {_generation} published; actor at spawn.", "palette did not show the reload outcome");
         Require(!_coordinator.TryPublish(epoch, () => throw new InvalidOperationException("stale reload result published")), "old publication remained current");
         ReleaseSimulatedPadForSelfTest();
         GD.Print("ARC-WORLD-003 original reload PASS palette Reload deferred until early-return CenterArrived; fresh guarded snapshot epoch/empty successor/retired publication rejected");
@@ -97,7 +99,9 @@ public partial class TerrainViewerApp
         catch (InvalidOperationException error) when (error.Message == "GRID_RELOAD_ARGUMENTS_REQUIRED") { }
         Require(beforeReload.State.Phase == MovementPhase.Settled && _worldActor.Session is null
             && !_worldResetPending && !_worldReloadPending && _worldLifecycleSession is null
-            && _hud!.Text.Contains("failure stage=ActorPlan", StringComparison.Ordinal), "missing reload arguments did not fail closed");
+            && _hud!.Text.Contains("failure stage=ActorPlan", StringComparison.Ordinal)
+            && (_worldPanel?.FindChild("PaletteActionStatus", true, false) as Label)?.Text.StartsWith("Scene FAILED: stage=ActorPlan", StringComparison.Ordinal) == true,
+            "missing reload arguments did not fail closed and visibly");
         PublishSyntheticForSelfTest(arguments, result);
         // Both catalogue/grid consumers use this production scope. Exercise
         // async success AND failure with an active session and pending reload;

@@ -32,7 +32,7 @@ public partial class TerrainViewerApp
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
-        _worldGridInput = new();
+        _worldGridInput = new(); PaletteScenePublished();
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
         _canvas!.AreaFailure = error =>
         {

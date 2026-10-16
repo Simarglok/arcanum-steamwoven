@@ -177,9 +177,25 @@ public partial class TerrainViewerApp
         ResetWorldScene();
         _worldPanel?.SetActionStatus("Reset scene requested: the accepted step settles, then actor/Follow reset; preferences kept.");
     }
+    // The palette reports how its Reset scene / Reload ended, not only the request.
+    private bool _worldPaletteReloadPending;
+    private void PaletteScenePublished()
+    {
+        if (!_worldPaletteReloadPending) return;
+        _worldPaletteReloadPending = false;
+        _worldPanel?.SetActionStatus($"Reload done: generation {_generation} published; actor at spawn.");
+        BindWorldPaletteSummary();
+    }
+    private void PaletteSceneFailed(TerrainViewerError error)
+    {
+        _worldPaletteReloadPending = false;
+        if (_worldPanel is { } panel && GodotObject.IsInstanceValid(panel))
+            panel.SetActionStatus($"Scene FAILED: stage={error.Stage} code={error.Code}; the old scene is not republished.");
+    }
     private void PaletteReload()
     {
         if (_arguments is null || _worldActor.Session is null) { _worldPanel?.SetActionStatus("Reload unavailable: no loaded source."); return; }
+        _worldPaletteReloadPending = true;
         WorldObservation(() => RequestWorldLifecycle(true));
         _worldPanel?.SetActionStatus("Reload requested: the accepted step settles, then the current source reloads; failures are shown, the old scene is not republished.");
     }
@@ -438,6 +454,8 @@ public partial class TerrainViewerApp
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                _worldPanel?.SetActionStatus("Reset scene done: actor at spawn, Follow; preferences kept.");
+                BindWorldPaletteSummary();
                 GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
             }
         }
@@ -488,7 +506,7 @@ public partial class TerrainViewerApp
         // also let focused native controls toggle/navigate the same event.
         var semanticKey = input is InputEventKey keyEvent &&
             (keyEvent.Keycode is Key.Escape or Key.Up or Key.Down
-            || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.KpEnter or Key.Space or Key.Backspace));
+            || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.Space or Key.Backspace));
         if ((wasModal || WorldModal) && (semanticKey || input is InputEventJoypadButton or InputEventJoypadMotion))
             GetViewport().SetInputAsHandled();
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");

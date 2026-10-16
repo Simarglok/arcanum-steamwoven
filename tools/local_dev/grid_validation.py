@@ -19,7 +19,11 @@ TRACES = {
 }
 
 
-def validate_report(report: object, head: str, host: str) -> None:
+# Tasks whose grid evidence must come from the original WORLD keyboard route (ARC-INPUT-001+).
+KEYBOARD_ROUTE_TASKS = ('ARC-INPUT-001',)
+
+
+def validate_report(report: object, head: str, host: str, require_keyboard_route: bool = False) -> None:
     if not isinstance(report, dict) or (
         report.get('schema'), report.get('task'), report.get('candidateCommit'),
         report.get('host'), report.get('kind'), report.get('outcome'), report.get('exitCode')
@@ -92,13 +96,13 @@ def validate_report(report: object, head: str, host: str) -> None:
     if report.get('keyboardRoute') == 'original-world':
         validate_screen_cases(report.get('screenCases'), digest, epoch, devices=('stick',))
         validate_keyboard_inert(report.get('keyboardInert'))
-    elif 'keyboardRoute' in report or 'keyboardInert' in report:
+    elif 'keyboardRoute' in report or 'keyboardInert' in report or require_keyboard_route:
         raise ValueError('grid keyboard route binding is invalid')
     else:
         validate_screen_cases(report.get('screenCases'), digest, epoch)
 
 
-def validate_reports(evidence: Path, head: str) -> None:
+def validate_reports(evidence: Path, head: str, task: str | None = None) -> None:
     for host in ('source', 'exported'):
         data = config.optional_authority_bytes(evidence / f'{host}-grid-original.log')
         if data is None:
@@ -107,4 +111,4 @@ def validate_reports(evidence: Path, head: str) -> None:
             report = json.loads(data)
         except (ValueError, UnicodeError) as error:
             raise ValueError('invalid grid original structured report') from error
-        validate_report(report, head, host)
+        validate_report(report, head, host, require_keyboard_route=task in KEYBOARD_ROUTE_TASKS)
