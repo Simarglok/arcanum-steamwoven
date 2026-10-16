@@ -41,17 +41,21 @@ memory. Original executable parity remains **NOT_VERIFIED**.
   screen near the PC) is moved by the same number of levels if he was at or
   below the PC's old level, or pulled up to the PC's new level at most if he
   was above it, never past 50. The NPC-minus-PC level gap therefore never grows
-  and never becomes positive through levelling.
+  and never becomes positive through levelling while the PC is below level 50
+  (at 50 see A1; the gap still stays at or below 0). No dialog action changes
+  an NPC's level, and XP goes to the PC only.
 - **No installed data moves it otherwise (D).** None of the 2,399 installed
   scripts adjusts the level stat (the only two stat adjustments touch
-  alignment), no effect entry names `level`, and no dialog action changes an
-  NPC's level (XP goes to the PC only).
+  alignment), no effect entry names `level`, and no magic-tech definition
+  names the level stat. Virgil's six attached scripts have no
+  transform-into-prototype action, the one other script path that could
+  replace his level.
 - **Consequence (S applied to D).** Virgil starts at level 1, the same as a new
   PC, so his level can never exceed the PC's. The level gate (refuse when he is
   at least 30 levels above the PC) is unreachable for him, both when he joins
   and in the leave check while he follows. If the PC levels up while Virgil is
   neither following nor waiting nearby, Virgil falls behind and keeps that gap
-  for the rest of the game.
+  for the rest of the game (A1 is the only, unreached, exception).
 - **What scheme 91 buys (D).** The winning copy (`Arcanum4.dat`) is 28 steps of
   healing, dodge, melee, lock picking, hit points and the white necromancy
   college up to level 4. The shadowed `arcanum3.dat` copy has one more step,
@@ -81,11 +85,13 @@ any refusal fails the probe.
 | Resource | Candidates (winner first) | Bytes | SHA-256 |
 | --- | --- | ---: | --- |
 | `rules/gamelevel.mes` | resource4 (`Arcanum4.dat`) | 18,492 | `5121e2fa…5919f55` |
-| | resource3 (`arcanum3.dat`), shadowed | 18,506 | `f76d56df…e2ef2e` |
+| | resource3 (`arcanum3.dat`), shadowed | 18,506 | `f76d56df…f47ef2e` |
 | `rules/userlevel.mes` | resource3 | 92 | `90f81657…62b645f` |
-| `mes/gamelevelname.mes` | resource3 | 1,259 | `21df5868…28e0ba4` |
+| `mes/gamelevelname.mes` | resource3 | 1,259 | `21df5868…306de53a` |
 | `rules/effect.mes` | resource3 | 17,497 | `8ac43304…0b6b2` |
 | `rules/gameeffect.mes` | module | 417 | `f8c921b7…ead0a85` |
+| `rules/spelllist.mes` | resource4 | 160,558 | `b2cdb912…1fc7878d` |
+| | resource3, shadowed | 162,769 | `1471e115…cd90dc864` |
 
 `gamelevel.mes` holds entries 50..106 (57 schemes) in both copies; the user
 file holds entry 1 only; the name file names both 91 and 70.
@@ -96,13 +102,13 @@ file holds entry 1 only; the name file names both 91 and 70.
 | --- | --- | --- |
 | L1 | A scheme number selects its rule: 1..49 from `rules\userlevel.mes`, 50..199 from `rules\gamelevel.mes`, anything else none. Both files are required at start-up. | [level.c 296–308][init], [level.c 678–701][rule] |
 | L2 | A rule is read as `<token> <score>,` repeated: the token up to the next space, the score with `atoi` up to the next comma. Tokens are matched case-insensitively against stats (`st`..`ch`), basic skills, tech skills, spell colleges, tech disciplines and `maxhps` / `maxfatigue`, in that order. An unknown token stops the rule as failed. There is no level token. | [level.c 68–159][tokens], [level.c 857–942][process] |
-| L3 | Each step buys one unit at a time until the critter's current value reaches the score: stats at the stat cost, a basic or tech skill point at 1 character point (4 skill levels per point, capped by the key stat), a spell college level at 1 point (the next spell must be allowed by level, intelligence and willpower), a tech degree at its cost, and one hit or fatigue point per character point. A step whose target is already met costs nothing. | [level.c 949–1212][buy], [skill.c 486–499][skill-base], [skill.c 909–915][skill-cost], [spell.c 347–352][spell-cost] |
-| L4 | Only "not enough points" stops a rule early. Any other failed purchase (a spell the level does not allow yet, a stat at its maximum) is skipped and the rule goes on to the next step. A stopped rule restarts from its first step at the next level-up. | [level.c 867–941][process], [level.c 1079–1126][spell-buy] |
+| L3 | Each step buys one unit at a time until the critter's current value reaches the score: stats at the stat cost, a basic or tech skill point at 1 character point (4 skill levels per point), a spell college level at 1 point, a tech degree at its cost, and one hit or fatigue point per character point. When a skill point is refused (the key stat caps the skill), the step buys +1 of that key stat instead and tries again; a refused spell buys intelligence or willpower unless the level is too low, and a refused tech degree buys intelligence. A step whose target is already met costs nothing. | [level.c 949–1212][buy], [level.c 1016–1023, 1061–1067, 1110–1121, 1160–1166][buy], [skill.c 486–499][skill-base], [skill.c 909–915][skill-cost], [spell.c 347–352][spell-cost] |
+| L4 | Only "not enough points" stops a rule early. Any other failure (a spell the level does not allow yet, or a stat purchase of L3 that cannot raise the stat) skips the step and the rule goes on to the next one. A stopped rule restarts from its first step at the next level-up. | [level.c 867–941][process], [level.c 1079–1126][spell-buy] |
 | L5 | For an NPC, a rule that finishes without running out of points is followed by the standard NPC scheme 70 in the same call. | [level.c 30–33][std], [level.c 813–821][apply] |
-| L6 | A PC levels up only from experience: setting the PC's XP recalculates the level, adds 1 character point per level plus 1 more at every multiple of 5, and runs the PC's own scheme. XP is awarded to PCs only; the dialog `XP` action gives it to the PC. | [stat.c 732–737][xp-recalc], [level.c 432–447][bonus], [level.c 454–534][recalc], [critter.c 1837–1868][give-xp], [dialog.c 2148–2150][dlg-xp] |
+| L6 | A PC levels up only from experience: setting the PC's XP recalculates the level, adds 1 character point per level plus 1 more at every multiple of 5, and runs the PC's own scheme if it has one (non-zero). XP is awarded to PCs only; the dialog `XP` action gives it to the PC. | [stat.c 732–737][xp-recalc], [level.c 432–447][bonus], [level.c 454–534][recalc], [critter.c 1837–1868][give-xp], [dialog.c 2148–2150][dlg-xp] |
 | L7 | After the PC's level-up, every follower in his follower list, and every living NPC within one screen of the PC who waits with the PC as leader, gets a new level: (PC new level + his level − PC old level) if he was at or below the PC's old level, otherwise the PC's new level; capped at 50; applied only if higher. He gets the matching character points and his scheme runs. | [level.c 536–556][recalc], [level.c 567–605][follower], [object.c 3524–3551][vicinity] |
 | L8 | The level stat runs 0..51, unspent character points 0..56; a base value outside the range is clamped when it is set. | [stat.c 97–101][max], [stat.c 624–656][base-set] |
-| L9 | The only other writers of an NPC's level are a script's adjust-stat action (any stat of any focus object) and the effects that name `level` (effective level). The script set-scheme action and the character sheet can change the scheme. The character sheet opens followers and dialog partners read-only, hides its scheme buttons then, and creates its level buttons only when it has no object. | [script.c 2767–2774][adjust], [script.c 2789–2797][set-scheme], [script.h 289–291][sat], [charedit_ui.c 1066–1097][sheet], [follower_ui.c 698][follower-sheet], [dialog_ui.c 325][dialog-sheet] |
+| L9 | The other writers of an NPC's level are a script's adjust-stat action (any stat of any focus object), a magic-tech trait-index component (sets any base stat of its target, named by the stat key `stat_level` for the level), a script's transform-into-prototype action (replaces the attachee with a new object whose level comes from the prototype), and the effects that name `level` (effective level). The script set-scheme action and the character sheet can change the scheme. The character sheet opens followers and dialog partners read-only, hides its scheme buttons then, and creates its level buttons only when it has no object. | [script.c 2767–2774][adjust], [magictech.c 2976–3003][trait-idx], [magictech.c 6117–6127][trait-idx-parse], [stat.c 225][stat-keys], [script.c 1804–1863][transform], [proto.c 16190–16191][proto-level], [script.c 2789–2797][set-scheme], [script.h 289–291][sat], [charedit_ui.c 1066–1097][sheet], [follower_ui.c 698][follower-sheet], [dialog_ui.c 325][dialog-sheet] |
 | L10 | The follow check refuses with "low level" when the NPC's effective level is at least the PC's effective level plus AI field 8 (30 for Virgil's row 5). The join check, the unwait check and the leave check while following all run it. | [ai.c 3185–3187][gate], [critter.c 877–928][join], [ai.c 1505–1530][unwait], [ai.c 2412–2443][leave] |
 
 ## 2. Virgil at T0 and scheme 91 (D)
@@ -152,6 +158,8 @@ Both rules parse completely: every token is known and every step has a score
 | --- | --- |
 | Script adjust-stat (action 137) | 2,399 script names in the six archives, all resolved by precedence (39 shadowed) and all framed. Two adjust-stat actions exist, both on stat 19 (alignment) with a literal stat operand: script 1997 (Virgil's enter-combat script) adds local variable 1 to the attachee's alignment, and script 30252 subtracts 200 from the triggerer's. None names the level, and no stat operand is computed. |
 | Script set-scheme (action 139) | One: script 2023 sets the triggerer's scheme to 101. No Crash Site object attaches script 2023, and Virgil's six scripts have no set-scheme action. |
+| Script transform-into-prototype (action 40) | 21 actions in 21 scripts; none in Virgil's six attached scripts. Scripts those six reach through call edges were not traced by the probe (U5). |
+| Magic-tech trait-index on the level | Both `spelllist.mes` copies contain no `stat_level` key and no trait-index component. |
 | Effects naming `level` | None of the 310 effect entries (engine 50..399, module 0..49). |
 | Dialog actions | None changes an NPC's level or scheme (L6, L9). |
 
@@ -166,11 +174,12 @@ Let *g* be Virgil's level minus the PC's.
 | --- | --- |
 | T0, new game | *g* = 0 (both level 1; the PC's level is set to 1 at creation, [player.c 290][player]) |
 | PC levels up while Virgil follows, or waits on screen near the PC | unchanged while *g* ≤ 0 (he gains as many levels as the PC, capped at 50) |
-| PC levels up while Virgil is elsewhere (not joined yet, waiting off screen, or left) | decreases by the PC's gain; he never catches up later, because L7 keeps the gap |
+| PC levels up while Virgil is elsewhere (not joined yet, waiting off screen, or left) | decreases by the PC's gain; he does not catch up later, because L7 keeps the gap (the only exception is the unreached A1 path at PC level 50) |
 | Any installed script, effect or dialog action | none (section 3) |
 
-*g* starts at 0 and can only stay or fall, so it never reaches +30: the "low
-level" refusal is unreachable for Virgil. With the consent results of
+*g* starts at 0 and never becomes positive (below PC level 50 it can only stay
+or fall; at 50 the A1 path could only raise him to the same 50), so it never
+reaches +30: the "low level" refusal is unreachable for Virgil. With the consent results of
 [ARC-RES-026](virgil-follow-consent.md#4-what-this-means-for-the-consent-check-s-applied-to-d),
 his only possible refusals stay "limit reached" and "already in group", and
 while he follows he leaves on his own only on dislike (reaction ≤ −1000); the
@@ -183,9 +192,13 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Anomalies (S)
 
-- **A1** When the PC reaches level 51 the recalculation stores the capped XP
-  but not the level, so the PC stays at 50; followers are capped at 50 too.
-  [level.c 492–500][recalc]
+- **A1** At PC level 50 with enough XP for 51, the recalculation caps the XP
+  instead of storing level 51. Setting the XP runs the recalculation again
+  (L6) with level 50 and nothing left to the next level, so as read it recurses
+  without end and never reaches the follower loops. If it ended (in the
+  original executable or a fix), every later XP award at level 50 would call
+  L7 with PC levels 50 → 51 and raise a lagging follower by one level, capped
+  at 50. [level.c 366–377][to-next], [level.c 492–500][recalc], [stat.c 732–737][xp-recalc]
 - **A2** The PC's level-up message is built with `sizeof` of a pointer as the
   remaining buffer length; only the PC path builds the message.
   [level.c 831–834][apply]
@@ -195,6 +208,9 @@ matters only once both schemes are complete, since a running rule spends them.
   for an NPC also starts scheme 70 early.
 - **A5** The follower-list loop of L7 has no death check, while the waiting
   loop has one. [level.c 536–556][recalc]
+- **A6** The recursive follower list used by L7 never advances its inner
+  cursor, so as read it would not end if a follower had followers of his own.
+  [object.c 3646–3688][all-followers]
 
 ## Proposal for implementation (P)
 
@@ -216,11 +232,17 @@ matters only once both schemes are complete, since a running rule spends them.
   points and the spell intelligence/willpower requirements. Next check: a
   replay over his T0 sheet with those tables.
 - **U2** Who triggers script 2023 (scheme 101) was not traced beyond the Crash
-  Site; it could only matter if Virgil is its triggerer.
+  Site. A scheme change never changes a level, so it could change only what
+  Virgil buys, not the gate.
 - **U3** Local variable 1 in his enter-combat script was not evaluated; it
   changes his alignment, not his level.
-- **U4** Original-executable behaviour of L7 (including A1 and A5) is
+- **U4** Original-executable behaviour of L7 (including A1, A5 and A6) is
   NOT_VERIFIED.
+- **U5** The probe does not follow call edges from Virgil's six scripts, so a
+  transform-into-prototype or adjust-stat action in a script they call is
+  counted only in the whole-archive totals above (no adjust-stat names the
+  level anywhere). Next check: the call-edge census of the
+  [cave research](cave-transition-evidence.md) applied to his scripts.
 
 ## Method
 
@@ -228,7 +250,8 @@ Source reading at the pinned commit through the call chains above, plus the
 read-only probe `--virgil-auto-level` (self-test
 `--virgil-auto-level-self-test` covers the rule grammar, the bonus-point rule,
 the follower-level rule with its gap invariant over every input, and the
-script action scan). No CE code or structure was copied; names in this
+script action scan; the real-data run also counts transform actions and the
+magic-tech level key). No CE code or structure was copied; names in this
 document are descriptive.
 
 [init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L296-L308
@@ -261,4 +284,11 @@ document are descriptive.
 [join]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L877-L928
 [unwait]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1505-L1530
 [leave]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2412-L2443
+[trait-idx]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L2976-L3003
+[trait-idx-parse]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L6117-L6127
+[stat-keys]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L225
+[transform]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1804-L1863
+[proto-level]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16190-L16191
+[to-next]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L366-L377
+[all-followers]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3646-L3688
 [player]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/player.c#L290

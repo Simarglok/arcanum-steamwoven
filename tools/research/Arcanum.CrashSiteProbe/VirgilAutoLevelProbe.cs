@@ -19,7 +19,7 @@ internal static partial class Program
     private const int AlBasicSkillSlot = 39, AlTechSkillSlot = 40, AlSpellTechSlot = 41;
     private const int AlStatExperience = 18, AlStatUnspent = 21, AlStatMagickPoints = 22, AlStatTechPoints = 23;
     private const int AlStandardNpcScheme = 70, AlLevelMax = 51, AlMaxRuleBytes = 2000;
-    private const int AlAdjustStatAction = 137, AlSetSchemeAction = 139, AlNumberOperand = 3;
+    private const int AlTransformAction = 40, AlAdjustStatAction = 137, AlSetSchemeAction = 139, AlNumberOperand = 3;
     private const int AlMaxScripts = 8192;
 
     // Rule-file vocabulary in the order the pinned source searches it (level.c 68-159):
@@ -215,6 +215,20 @@ internal static partial class Program
             .Concat(gameEffectCopies.Length == 0 ? [] : AlMes(gameEffectCopies[0].Bytes).Where(p => p.Key is >= 0 and < 50)).ToArray();
         var levelEffects = effectTable.Where(p => CcEffectStats(p.Value).Contains(CcStatLevel)).Select(p => p.Key).Order().ToArray();
 
+        // Magic-tech definitions: a trait-index component can set any base stat, the level
+        // included, but only through the stat key "stat_level" (stat.c 225); count it and the
+        // component keyword in every candidate (text stays in memory).
+        var spellCopies = Candidates("rules/spelllist.mes");
+        if (spellCopies.Length == 0) throw new InvalidDataException("AUTOLEVEL_SPELLLIST_MISSING");
+        static int Occurrences(byte[] bytes, string word)
+        {
+            var text = Encoding.Latin1.GetString(bytes); var count = 0;
+            for (var at = text.IndexOf(word, StringComparison.OrdinalIgnoreCase); at >= 0; at = text.IndexOf(word, at + word.Length, StringComparison.OrdinalIgnoreCase)) count++;
+            return count;
+        }
+        var magicTech = spellCopies.Select(c => new { source = c.Source, bytes = c.Bytes.Length, sha256 = AreaHash(c.Bytes),
+            stat_level_keys = Occurrences(c.Bytes, "stat_level"), trait_idx_components = Occurrences(c.Bytes, "traitidx") }).ToArray();
+
         // Script census: every scr/ name in the six archives, resolved by precedence, then
         // the adjust-stat and set-scheme actions of each winner.
         var scriptNames = new SortedSet<string>(StringComparer.Ordinal);
@@ -232,9 +246,9 @@ internal static partial class Program
             .SelectMany(o => o.EffectiveFields.FirstOrDefault(f => f.Slot == InvScriptsSlot) is { Presence: AreaPresence.Array } f
                 ? f.Elements.Where(e => e.Words[2] == script).Select(e => (o.Scope, Sap: e.Key)) : [])
             .GroupBy(x => (x.Scope, x.Sap)).Select(g => new { scope = g.Key.Scope.ToString(), sap = g.Key.Sap, objects = g.Count() }).ToArray();
-        var wanted = new HashSet<int> { AlAdjustStatAction, AlSetSchemeAction };
+        var wanted = new HashSet<int> { AlTransformAction, AlAdjustStatAction, AlSetSchemeAction };
         var framingFailures = new List<int>(); var shadowedScripts = 0; var scannedNumbers = new HashSet<int>();
-        var adjusts = new List<object>(); var schemeSets = new List<object>(); var adjustByStat = new SortedDictionary<string, int>(StringComparer.Ordinal);
+        var adjusts = new List<object>(); var schemeSets = new List<object>(); var transforms = new SortedDictionary<int, int>(); var adjustByStat = new SortedDictionary<string, int>(StringComparer.Ordinal);
         var attachedActions = attached.Select(a => a.Script).Distinct().ToDictionary(n => n, _ => 0);
         foreach (var name in scriptNames)
         {
@@ -256,6 +270,8 @@ internal static partial class Program
                     adjusts.Add(new { script = number, line = a.Line, branch = a.Branch, stat_kind = (int)a.Kinds[0], stat = a.Values[0],
                             focus = (int)a.Kinds[1], focus_index = a.Values[1], value_kind = (int)a.Kinds[2], value = a.Values[2] });
                 }
+                else if (a.Type == AlTransformAction)
+                    transforms[number] = transforms.GetValueOrDefault(number) + 1;
                 else
                     schemeSets.Add(new { script = number, line = a.Line, branch = a.Branch, focus = (int)a.Kinds[0], focus_index = a.Values[0],
                         scheme_kind = (int)a.Kinds[1], scheme = a.Values[1], crash_site_attachments = AttachmentsOf(number) });
@@ -279,7 +295,7 @@ internal static partial class Program
                 primary_stats = CcStatNames.Take(8).Select((n, i) => new { stat = i, name = n, value = Stat(i) }).ToArray(),
                 basic_skills = IntArray(AlBasicSkillSlot), tech_skills = IntArray(AlTechSkillSlot), spell_tech = IntArray(AlSpellTechSlot),
                 attached_scripts = attached.Select(a => new { sap = a.Sap, script = a.Script, scanned = scannedNumbers.Contains(a.Script),
-                    adjust_stat_or_set_scheme_actions = attachedActions[a.Script] }).ToArray(),
+                    transform_adjust_stat_or_set_scheme_actions = attachedActions[a.Script] }).ToArray(),
             },
             rules = new
             {
@@ -290,11 +306,13 @@ internal static partial class Program
                 standard_npc_scheme = RuleRow(AlStandardNpcScheme, gameLevel),
                 names_present = new { virgil_scheme = nameMes.ContainsKey(scheme), standard_npc_scheme = nameMes.ContainsKey(AlStandardNpcScheme) },
             },
+            magic_tech = magicTech,
             level_effects = new { effect = Copies(effectCopies), gameeffect = Copies(gameEffectCopies), table_entries = effectTable.Length, naming_level = levelEffects },
             scripts = new
             {
                 names = scriptNames.Count, scanned = scannedNumbers.Count, shadowed_by_precedence = shadowedScripts, framing_failures = framingFailures,
                 adjust_stat_by_literal_stat = adjustByStat, adjust_stat_actions = adjusts, set_scheme_actions = schemeSets,
+                transform_into_prototype = new { actions = transforms.Values.Sum(), by_script = transforms.Select(t => new { script = t.Key, actions = t.Value }).ToArray() },
             },
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
