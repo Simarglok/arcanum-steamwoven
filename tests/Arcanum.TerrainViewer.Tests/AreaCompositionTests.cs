@@ -10,6 +10,47 @@ namespace Arcanum.TerrainViewer.Tests;
 public sealed class AreaCompositionTests
 {
     [TestMethod]
+    public void CachedUprightOrderIsIdenticalToTheFullStableSortForEveryMarkerPosition()
+    {
+        var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);
+        foreach (var item in Cases)
+        {
+            var scene = Create(item); var input = Placement(item);
+            var actor = ActorDiagnosticScenePlan.Place(input,frame,ActorDiagnosticProfile.HumanFixed);
+            CollectionAssert.AreEqual(AreaScenePlan.UprightOrder(scene.Plan.Commands,input,actor,ActorKey).ToArray(),
+                new AreaUprightOrder(scene.Plan.Commands).With(input,actor,ActorKey).ToArray(),item.Name);
+        }
+        // Many bodies with duplicate keys in shuffled input order, including bodies whose
+        // seven keys tie with the actor marker: stability must match the full sort.
+        var random = new Random(7); var bodies = new List<AreaDrawCommand>();
+        for (var i = 0; i < 400; i++)
+        {
+            var tie = i % 10 == 0;
+            var identity = new AreaObjectKey("s", 1, tie ? AreaSourceKind.Mobile : (AreaSourceKind)random.Next(3), 1,
+                tie ? int.MaxValue : random.Next(4), tie ? 0 : random.Next(3), "id" + i, 1);
+            bodies.Add(new AreaDrawCommand(default, default!, identity, default, new(0,0,1,1), false, false, 4,
+                AreaScenePlan.CameraOriginX + random.Next(4), AreaScenePlan.CameraOriginY + random.Next(4),
+                random.Next(-2,3), random.Next(-2,3), 255, false));
+        }
+        var commands = bodies.OrderBy(_ => random.Next()).Concat(bodies.Take(5).Select(b => b with { Phase = 0 })).ToArray();
+        var cached = new AreaUprightOrder(commands); var ties = 0;
+        var actorFrame = ActorDiagnosticScenePlan.Place(Placement(Cases[0]),frame,ActorDiagnosticProfile.HumanFixed);
+        for (var x = -1; x <= 4; x++)
+        for (var y = -1; y <= 4; y++)
+        foreach (var (ox, oy) in new[] { (0,0), (40,0), (36,-4), (44,4), (39,1), (-1,-1) })
+        {
+            var placement = Placement(Cases[0]) with { MapX = x, MapY = y, InstanceOffsetX = ox, InstanceOffsetY = oy };
+            var expected = AreaScenePlan.UprightOrder(commands,placement,actorFrame,ActorKey);
+            var actual = cached.With(placement,actorFrame,ActorKey);
+            Assert.AreEqual(expected.Count, actual.Count);
+            for (var i = 0; i < expected.Count; i++) Assert.AreEqual(expected[i], actual[i], $"x={x} y={y} offset=({ox},{oy}) index={i}");
+            if (ox is 40 or 39) ties += bodies.Count(b => b.MapX == expected.Single(c => c.Identity == ActorKey).MapX
+                && b.MapY == expected.Single(c => c.Identity == ActorKey).MapY && b.FirstRank == 0 && b.SecondRank == 0 && b.Identity!.Value.SourceIndex == int.MaxValue);
+        }
+        Assert.IsTrue(ties > 0, "the matrix must contain full seven-key ties with the actor marker");
+    }
+
+    [TestMethod]
     public void CompleteNormalBranchMatrixHasLiteralGeometryAndInterleaving()
     {
         var frame = new ActorDiagnosticFrame(new(2667,0x20000000,0,0,0),9,7,4,3,0,0,1,6);

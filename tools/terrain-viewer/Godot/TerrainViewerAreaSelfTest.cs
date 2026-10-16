@@ -89,6 +89,23 @@ public static partial class TerrainViewerSelfTest
             canvas.PublishArea(next,frames,actor,input,cache); await Settle();
             if (canvas.AreaVisibleCount != 0 || cache.AreaCount != 0)
                 throw new InvalidOperationException("AREA stale generation command");
+            // Pool bound: after a large submission shrinks, at most max(256, 2 x visible)
+            // draw items remain, and growing again reuses them.
+            var bodies = Enumerable.Range(0,600).Select(i => body with { Key = bodyKey with { SourceIndex = i } }).ToArray();
+            var visuals = bodies.Select(b => Visual(new(AreaSourceKind.Static,new(digest,5051,100),b.Key.SourceIndex,digest,Object:b.Key),1,160,160,40,80)).ToArray();
+            var crowd = AreaScenePlan.Create([], bodies, visuals);
+            viewport.CanvasTransform=new Transform2D(0,new Vector2(1,1),0,new Vector2(100,100));
+            canvas.PublishArea(crowd,frames,actor,input,cache); await Settle();
+            int Shown() => canvas.GetChildren().OfType<AreaDrawItem>().Count(item => item.Visible);
+            var shownActor = Shown() - canvas.AreaVisibleCount;
+            if (canvas.AreaVisibleCount != 600 || canvas.AreaPoolCount != 600 + shownActor || shownActor is < 0 or > 1)
+                throw new InvalidOperationException("AREA crowd submission");
+            viewport.CanvasTransform=new Transform2D(0,new Vector2(2000,2000)); await Settle();
+            if (canvas.AreaVisibleCount != 0 || canvas.AreaPoolCount != 256 || Shown() != 0)
+                throw new InvalidOperationException("AREA draw item pool bound");
+            viewport.CanvasTransform=new Transform2D(0,new Vector2(1,1),0,new Vector2(100,100)); await Settle();
+            if (canvas.AreaVisibleCount != 600 || canvas.AreaPoolCount != 600 + shownActor || Shown() != 600 + shownActor)
+                throw new InvalidOperationException("AREA draw item pool regrowth");
             cache.Clear();
             if (cache.CreatedCount != cache.DisposedCount)
                 throw new InvalidOperationException("AREA texture ownership imbalance");
