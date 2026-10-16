@@ -604,7 +604,8 @@ public partial class TerrainViewerApp
                 if (decision.TogglePalette) ToggleWorldSettings();
                 return;
             }
-            if (decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
+            if (!RouteQuickKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
         }
         var raw = _worldAdapter.Map(input, _worldFocused);
