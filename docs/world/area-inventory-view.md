@@ -43,12 +43,18 @@ record that is not an item; an item listed twice; a listed item whose parent fie
 or that lacks the inventory flag; an inventory-flagged item that no holder lists; a ground item with a
 parent or without a location; a critter gold handle that is not a gold item in that critter's own list;
 an item or holder from a sector file (not admitted); a key ring with keys (not modelled); a missing
-mandatory field; duplicate mobile IDs; more than 2,048 items or holders or 512 list elements.
+mandatory field; duplicate mobile IDs or source indices; more than 2,048 items or holders or 512 list elements.
+
+The research reconciliation covers the list, parent, flag, double-listing and count rules. The other
+refusals were added by ARC-DATA-012 and are observed to hold on the exterior and the cave only: ground
+items unparented and located, gold handles inside the holder's own list, no sector-file items or holders,
+no filled key ring. A context holder whose item lies outside the loaded area would also refuse the view
+(`ListedObjectUnresolved`); that does not occur in either profile.
 
 ## Original data (opt-in `RealData` tests)
 
-Exterior aggregate `a548f611…de6a5`: the view reconciles 53 items and 45 holders and reproduces every
-number of the research tables: 52 core items, 37 on the ground (21 food, 16 generic, none scripted) and
+Exterior aggregate `a548f611…de6a5`: the view reconciles 53 items and 45 holders and the tests assert the
+research tables' lists, counts, prototypes, name and description numbers, gold, scripts and NO_DECAY items: 52 core items, 37 on the ground (21 food, 16 generic, none scripted) and
 15 in eight NPC lists; Virgil (2907) lists the ring 1714 at index 0, whose name class 2804 is unique in
 the area; the gold stacks 4459 (21) and 4458 (17) are their holders' gold handles; the two containers
 4453 and 6536 are empty. The one context list is holder 1382 with item 3488.
@@ -59,6 +65,6 @@ no ground item.
 
 ## NOT READY
 
-Life state (it needs the effect rules of `AreaStepInspector`), display text (ARC-DATA-013), chest
+Life state (it needs the effect rules of `AreaStepInspector`), display text, chest
 generation, transfers, pickup, loot, the dialog `IN` command and any save state belong to later tasks.
 The view describes serialized T0 only; nothing here mutates or tracks item location.

@@ -44,22 +44,23 @@ public sealed class AreaInventoryTests
         var fields = new List<AreaFieldValue>
         {
             Value(18, flags), Value(21, name), Value(22, name + 10), Value(36, itemFlags), Handle(37, parent), Value(38, 5), Value(40, 7),
-            Value(43, location), Value(45, complexity), Value(47, name + 20),
+            Value(43, location), Value(45, complexity), Value(47, name + 20), Null(31),
         };
         if (quantity is { } q) fields.Add(Value(60, q));
         return fields;
     }
     private static AreaObjectRecord Item(int index, int id, int type, int? parent, int name, int location = 0, int complexity = 0, uint itemFlags = 0,
         int? quantity = null, uint? flags = null, long? x = 100, AreaSourceKind kind = AreaSourceKind.Mobile, params AreaFieldValue[] extra) =>
-        Row(index, id, type, ItemFields(type, flags ?? (parent is null ? 0u : Inventory), parent, name, location, complexity, itemFlags, quantity).Concat(extra), x: x, kind: kind);
+        Row(index, id, type, ItemFields(type, flags ?? (parent is null ? 0u : Inventory), parent, name, location, complexity, itemFlags, quantity)
+            .Where(f => !extra.Any(e => e.Slot == f.Slot)).Concat(extra), x: x, kind: kind);
 
     private static AreaObjectRecord Critter(int index, int id, int[] list, int? count = null, int? gold = null, int? leader = null, int? substitute = null,
         int type = Npc, int source = 0, params AreaFieldValue[] extra) =>
-        Row(index, id, type, new[] { Value(18, 0), Value(22, 31000 + index), Handle(50, gold), Value(55, count ?? list.Length), List(56, list), Value(57, source), Handle(70, leader), Handle(83, substitute) }
-            .Where(f => type == Npc || f.Slot is not (70 or 83)).Concat(extra));
+        Row(index, id, type, new[] { Value(18, 0), Value(22, 31000 + index), Null(31), Handle(50, gold), Value(55, count ?? list.Length), List(56, list), Value(57, source), Handle(70, leader), Handle(83, substitute) }
+            .Where(f => (type == Npc || f.Slot is not (70 or 83)) && !extra.Any(e => e.Slot == f.Slot)).Concat(extra));
 
-    private static AreaObjectRecord Chest(int index, int id, int[] list, int source = 69) =>
-        Row(index, id, Container, [Value(18, 0), Value(22, 4000), Value(36, 0x209), Value(38, 0), Value(39, list.Length), List(40, list), Value(41, source)]);
+    private static AreaObjectRecord Chest(int index, int id, int[] list, int source = 69, AreaSourceKind kind = AreaSourceKind.Mobile) =>
+        Row(index, id, Container, [Value(18, 0), Value(22, 4000), Null(31), Value(36, 0x209), Value(38, 0), Value(39, list.Length), List(40, list), Value(41, source)], kind: kind);
 
     private static AreaSnapshot Snapshot(IEnumerable<AreaObjectRecord> objects, bool strict = true)
     {
@@ -168,13 +169,18 @@ public sealed class AreaInventoryTests
         Refused(AreaInventoryFailure.UnlistedInventoryItem, 30, With(5, Item(30, 5, Food, null, 3608, flags: Inventory)));
         Refused(AreaInventoryFailure.GroundItemParented, 30, With(5, Item(30, 5, Food, 1, 3608, flags: 0)));
         Refused(AreaInventoryFailure.GroundItemUnlocated, 30, With(5, Item(30, 5, Food, null, 3608, x: null)));
-        // A list element padding byte differs: a different raw ID, so it names no record.
-        var padded = World();
-        var words = Words(2).ToArray(); words[1] ^= 1;
-        padded[0] = Row(10, 1, Npc, [Value(18, 0), Value(22, 1), Handle(50, null), Value(55, 1), Value(57, 0), Handle(70, null), Handle(83, null),
-            new(56, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(0, words)], null)]);
-        padded.RemoveAt(2); padded.RemoveAt(2); padded.RemoveAt(1);
-        Refused(AreaInventoryFailure.ListedObjectUnresolved, 10, padded);
+        // A list element padding byte differs: a different raw ID, so it names no record. The control
+        // with the same words unflipped lists the ring.
+        List<AreaObjectRecord> Padded(bool flip)
+        {
+            var words = Words(2).ToArray(); if (flip) words[1] ^= 1;
+            var world = World();
+            world[0] = Critter(10, 1, [], extra: [Value(55, 1), new(56, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(0, words)], null)]);
+            world.RemoveAt(3); world.RemoveAt(2); // food and gold; the ring (id 2) stays
+            return world;
+        }
+        CollectionAssert.AreEqual(new[] { 11 }, Read(Padded(false)).Holders.First().Items.ToArray());
+        Refused(AreaInventoryFailure.ListedObjectUnresolved, 10, Padded(true));
     }
 
     [TestMethod]
@@ -184,6 +190,8 @@ public sealed class AreaInventoryTests
         Refused(AreaInventoryFailure.GoldHandleMismatch, 10, With(0, Critter(10, 1, [2, 4, 3], gold: 9)));
         Refused(AreaInventoryFailure.DuplicateIdentity, 60, World().Append(Row(60, 7, 3, [Value(18, 0)])));
         Refused(AreaInventoryFailure.StaticInventoryObjectUnsupported, 61, World().Append(Item(61, 61, Generic, null, 5600, kind: AreaSourceKind.Static)));
+        Refused(AreaInventoryFailure.StaticInventoryObjectUnsupported, 63, World().Append(Chest(63, 63, [], kind: AreaSourceKind.Static)));
+        Refused(AreaInventoryFailure.DuplicateIdentity, 50, World().Append(Row(50, 64, 3, [Value(18, 0)])));
         Refused(AreaInventoryFailure.KeyRingContentsUnsupported, 62, World().Append(Item(62, 62, KeyRing, null, 4800, extra: List(60, 3))));
         Assert.AreEqual(AreaInventoryFailure.None, AreaInventoryReader.Read(Snapshot(World().Append(Item(62, 62, KeyRing, null, 4800, extra: List(60))))).Failure);
 
@@ -195,8 +203,17 @@ public sealed class AreaInventoryTests
         var shortElement = new AreaFieldValue(56, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(0, [1, 2, 3])], null);
         Refused(AreaInventoryFailure.ListMalformed, 10, With(0, Row(10, 1, Npc, [Value(18, 0), Value(22, 1), Handle(50, null), Value(55, 1), shortElement, Value(57, 0), Handle(70, null), Handle(83, null)])));
 
+        // A handle with a value but no identity, and script elements that are not three words.
+        Refused(AreaInventoryFailure.FieldUnresolved, 30, With(5, Item(30, 5, Food, null, 3608, extra: new AreaFieldValue(37, AreaPresence.Value, AreaValueOrigin.Instance, 1, [], null))));
+        Refused(AreaInventoryFailure.FieldUnresolved, 30, With(5, Item(30, 5, Food, null, 3608,
+            extra: new AreaFieldValue(31, AreaPresence.Array, AreaValueOrigin.Instance, null, [new AreaSparseElement(0, [1, 2])], null))));
+        Refused(AreaInventoryFailure.FieldUnresolved, 30, With(5, Row(30, 5, Food, ItemFields(Food, 0, null, 3608).Where(f => f.Slot != 31))));
         var many = Enumerable.Range(1000, AreaInventoryReader.MaxListLength + 1).ToArray();
         Refused(AreaInventoryFailure.LimitExceeded, 10, With(0, Critter(10, 1, many)));
+        var crowd = Enumerable.Range(0, AreaInventoryReader.MaxItems + 1).Select(i => Item(100 + i, 100 + i, Food, null, 3600));
+        Refused(AreaInventoryFailure.LimitExceeded, null, crowd);
+        using var cancelled = new CancellationTokenSource(); cancelled.Cancel();
+        Assert.ThrowsExactly<OperationCanceledException>(() => AreaInventoryReader.Read(Snapshot(World()), cancelled.Token));
     }
 
     [TestMethod]

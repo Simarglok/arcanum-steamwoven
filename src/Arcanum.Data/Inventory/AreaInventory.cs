@@ -19,7 +19,7 @@ public enum AreaInventoryFailure
     LimitExceeded,
     /// <summary>A mandatory effective field is absent, null or not a plain number (or a list is neither array, empty nor null).</summary>
     FieldUnresolved,
-    /// <summary>Two mobile records share one object ID.</summary>
+    /// <summary>Two mobile records share one object ID or source index.</summary>
     DuplicateIdentity,
     /// <summary>An item or holder type outside the normal-game aggregate (a sector-file object); not admitted.</summary>
     StaticInventoryObjectUnsupported,
@@ -90,6 +90,7 @@ public sealed class AreaInventory
         CatalogueMap = snapshot.CatalogueMap; RuntimeMap = snapshot.RuntimeMap; Profile = snapshot.Profile;
         Holders = Array.AsReadOnly(holders.OrderBy(h => h.SourceIndex).ToArray());
         Items = Array.AsReadOnly(items.OrderBy(i => i.SourceIndex).ToArray());
+        // Source indices are unique: the reader refuses duplicates before construction.
         _holders = new ReadOnlyDictionary<int, AreaInventoryHolder>(Holders.ToDictionary(h => h.SourceIndex));
         _items = new ReadOnlyDictionary<int, AreaInventoryItem>(Items.ToDictionary(i => i.SourceIndex));
     }
@@ -133,7 +134,7 @@ public static class AreaInventoryReader
     internal const uint InventoryObjectFlag = 0x1000, IdentifiedItemFlag = 0x1;
 
     // Effective-field slots: common block, then the type's first and second group.
-    private const int LocationSlot = 1, ObjectFlagsSlot = 18, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
+    private const int ObjectFlagsSlot = 18, NameSlot = 21, DescriptionSlot = 22, ScriptsSlot = 31;
     private const int ContainerFlagsSlot = 36, ContainerKeySlot = 38, ContainerCountSlot = 39, ContainerListSlot = 40, ContainerSourceSlot = 41;
     private const int CritterGoldSlot = 50, CritterCountSlot = 55, CritterListSlot = 56, CritterSourceSlot = 57;
     private const int NpcLeaderSlot = 70, NpcSubstituteSlot = 83;
@@ -164,16 +165,17 @@ public static class AreaInventoryReader
             throw new Refusal(AreaInventoryFailure.StaticInventoryObjectUnsupported, stray.Key.SourceIndex);
         var mobiles = snapshot.Objects.Where(o => o.Key.Kind == AreaSourceKind.Mobile).ToArray();
         var byId = new Dictionary<string, AreaObjectRecord>(StringComparer.Ordinal);
+        var indices = new HashSet<int>();
         foreach (var o in mobiles)
-            if (!byId.TryAdd(o.Key.ObjectIdSha256, o)) throw new Refusal(AreaInventoryFailure.DuplicateIdentity, o.Key.SourceIndex);
+            if (!byId.TryAdd(o.Key.ObjectIdSha256, o) || !indices.Add(o.Key.SourceIndex)) throw new Refusal(AreaInventoryFailure.DuplicateIdentity, o.Key.SourceIndex);
         var itemRows = mobiles.Where(o => IsItem(o.Type)).ToArray();
         var holderRows = mobiles.Where(o => IsHolder(o.Type)).ToArray();
         if (itemRows.Length > MaxItems) throw new Refusal(AreaInventoryFailure.LimitExceeded, null);
         if (holderRows.Length > MaxHolders) throw new Refusal(AreaInventoryFailure.LimitExceeded, null);
 
         // Lists first: every element resolves to exactly one item record, listed once.
-        var lists = new Dictionary<AreaObjectRecord, AreaObjectRecord[]>();
-        var listedBy = new Dictionary<AreaObjectRecord, (AreaObjectRecord Holder, int Index)>();
+        var lists = new Dictionary<AreaObjectRecord, AreaObjectRecord[]>(ReferenceEqualityComparer.Instance);
+        var listedBy = new Dictionary<AreaObjectRecord, (AreaObjectRecord Holder, int Index)>(ReferenceEqualityComparer.Instance);
         foreach (var holder in holderRows)
         {
             token.ThrowIfCancellationRequested();
@@ -284,7 +286,8 @@ public static class AreaInventoryReader
     private static IReadOnlyList<AreaInventoryScript> Scripts(AreaObjectRecord o)
     {
         var field = Field(o, ScriptsSlot);
-        if (field is null or { Presence: AreaPresence.Null or AreaPresence.Empty }) return Array.Empty<AreaInventoryScript>();
+        if (field is null) throw new Refusal(AreaInventoryFailure.FieldUnresolved, o.Key.SourceIndex);
+        if (field.Presence is AreaPresence.Null or AreaPresence.Empty) return Array.Empty<AreaInventoryScript>();
         if (field.Presence != AreaPresence.Array || field.Elements.Any(e => e.Words.Count != 3)) throw new Refusal(AreaInventoryFailure.FieldUnresolved, o.Key.SourceIndex);
         return Array.AsReadOnly(field.Elements.Where(e => e.Words[2] != 0).Select(e => new AreaInventoryScript(e.Key, unchecked((int)e.Words[2]))).ToArray());
     }

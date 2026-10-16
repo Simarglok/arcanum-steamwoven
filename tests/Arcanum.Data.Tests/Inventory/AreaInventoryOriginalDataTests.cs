@@ -8,6 +8,8 @@ namespace Arcanum.Data.Tests.Inventory;
 [TestClass]
 public sealed class AreaInventoryOriginalDataTests
 {
+    private const uint NoDisplay = 0x10, NoDrop = 0x20, NoDecay = 0x20000;
+
     [TestMethod, TestCategory("RealData")]
     public void Original_crash_site_inventory_matches_the_item_research()
     {
@@ -33,7 +35,12 @@ public sealed class AreaInventoryOriginalDataTests
         var ground = core.Where(i => !i.InInventory).ToArray();
         Assert.AreEqual((37, 21, 16), (ground.Length, ground.Count(i => i.Type == AreaItemType.Food), ground.Count(i => i.Type == AreaItemType.Generic)));
         Assert.IsTrue(ground.All(i => i.Scripts.Count == 0 && i.Identified && i.WorldX is not null));
-        CollectionAssert.AreEquivalent(new[] { 10081, 10082, 10113, 15089, 15091, 15102, 15107 }, ground.Select(i => i.Prototype).Distinct().ToArray());
+        var byPrototype = ground.GroupBy(i => i.Prototype).ToDictionary(g => g.Key, g => g.Count());
+        CollectionAssert.AreEquivalent(new[] { (10081, 8), (10082, 10), (10113, 3), (15089, 4), (15091, 4), (15102, 4), (15107, 4) },
+            byPrototype.Select(p => (p.Key, p.Value)).ToArray());
+        CollectionAssert.AreEquivalent(new[] { 3600, 3608, 5600 }, ground.Select(i => i.Name).Distinct().ToArray());
+        CollectionAssert.AreEquivalent(new[] { 10061, 10062, 10093, 15069, 15071, 15082, 15087 }, ground.Select(i => i.Description).Distinct().ToArray());
+        Assert.IsTrue(ground.All(i => (i.ItemFlags & (NoDrop | NoDecay | NoDisplay)) == 0), "no OIF_NO_DROP/NO_DECAY/NO_DISPLAY on the ground");
 
         var lists = new Dictionary<int, int[]>
         {
@@ -79,8 +86,16 @@ public sealed class AreaInventoryOriginalDataTests
             Assert.AreEqual(0x209u, row.ContainerFlags!.Value & 0x209u);
         }
 
-        // Item attachments exist only on inventory items.
+        // Item attachments exist only on inventory items; two items carry NO_DECAY, the ring no item flag.
         CollectionAssert.AreEquivalent(new[] { 1714, 2527, 3312, 6177, 4201 }, core.Where(i => i.Scripts.Count > 0).Select(i => i.SourceIndex).ToArray());
+        int[] ScriptsOf(int item) => inventory.TryGetItem(item, out var row) ? row.Scripts.Select(s => s.Script).Distinct().Order().ToArray() : [];
+        CollectionAssert.AreEqual(new[] { 1327 }, ScriptsOf(3312)); CollectionAssert.AreEqual(new[] { 1118 }, ScriptsOf(6177));
+        CollectionAssert.AreEqual(new[] { 2014 }, ScriptsOf(4201)); CollectionAssert.Contains(ScriptsOf(2527), 1341);
+        Assert.AreEqual(2, inventory.Items.Single(i => i.SourceIndex == 2527).Scripts.Count);
+        CollectionAssert.AreEquivalent(new[] { 4201, 6177 }, core.Where(i => (i.ItemFlags & NoDecay) != 0).Select(i => i.SourceIndex).ToArray());
+
+        // The one context list: holder 1382 with item 3488.
+        Assert.AreEqual((1382, 3488), inventory.Holders.Where(h => h.Scope != AreaScope.Core && h.Items.Count > 0).Select(h => (h.SourceIndex, h.Items.Single())).Single());
         Assert.AreEqual(AreaInventoryFailure.None, AreaInventoryReader.Read(owner.LoadStrict()).Failure, "repeatable");
     }
 
