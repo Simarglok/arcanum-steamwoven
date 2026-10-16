@@ -100,7 +100,9 @@ public sealed class HdPack
             string[] children;
             try { children = System.IO.Directory.GetDirectories(root); }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException) { continue; }
-            foreach (var child in children.Where(c => !Path.GetFileName(c).StartsWith('.') && File.Exists(Path.Combine(c, ManifestFile)))
+            // A manifest that is a (possibly dangling) link is listed, as unreadable.
+            foreach (var child in children.Where(c => !Path.GetFileName(c).StartsWith('.')
+                         && (File.Exists(Path.Combine(c, ManifestFile)) || new FileInfo(Path.Combine(c, ManifestFile)).LinkTarget is not null))
                          .Order(StringComparer.Ordinal).Take(options.MaxPacksPerCollection))
                 found.Add(new(location, child, Open(child, options)));
         }
@@ -254,6 +256,11 @@ public sealed class HdPack
             // a link (unreadable), not a missing file.
             if (HdPackPath.HasLink(root, relative)) { status = HdPackOpenStatus.Unreadable; return null; }
             if (!File.Exists(path)) { status = HdPackOpenStatus.NotFound; return null; }
+            // Every pack file is a non-empty regular file. A FIFO or device reports length 0
+            // without being opened (opening a FIFO would block), so it is refused here.
+            var length = new FileInfo(path).Length;
+            if (length == 0) { status = HdPackOpenStatus.Unreadable; return null; }
+            if (length > maxBytes) { status = HdPackOpenStatus.TooLarge; return null; }
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > maxBytes) { status = HdPackOpenStatus.TooLarge; return null; }
             var bytes = new byte[stream.Length];
@@ -262,7 +269,7 @@ public sealed class HdPack
             status = HdPackOpenStatus.Opened;
             return bytes;
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             status = HdPackOpenStatus.Unreadable;
             return null;

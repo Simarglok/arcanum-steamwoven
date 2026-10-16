@@ -92,6 +92,24 @@ public sealed class HdPackImportTests
         Assert.AreEqual(1, Directory.GetDirectories(collection).Length, "no staging or replaced copy left");
         Assert.IsFalse(File.Exists(Path.Combine(collection, "synthetic-pack", "frames", "0001.png")), "nothing of the old pack survives");
 
+        // A damaged install of the same identity is repaired by an explicit replace.
+        var installedFrame = Path.Combine(collection, "synthetic-pack", "frames", "critter", "g0-f0-p2.png");
+        var good = File.ReadAllBytes(installedFrame);
+        var broken = (byte[])good.Clone(); broken[^16] ^= 1; File.WriteAllBytes(installedFrame, broken);
+        Assert.AreEqual(HdImportStatus.AlreadyExists, HdPackImport.Import(rebuilt.Directory, collection).Status, "replace stays explicit");
+        var repaired = HdPackImport.Import(rebuilt.Directory, collection, replace: true);
+        Assert.AreEqual(HdImportStatus.Imported, repaired.Status, repaired.Detail);
+        CollectionAssert.AreEqual(good, File.ReadAllBytes(installedFrame));
+        Assert.IsTrue(repaired.Pack!.VerifyIntegrity().Intact);
+
+        // A source inside the pack it would replace is refused before anything is deleted.
+        var inner = new SyntheticHdPack(Path.Combine(collection, "synthetic-pack", "inner"));
+        inner.Add(frame, SyntheticHdPack.Hd(frame, 2, tint: 9), file: "frames/critter/g0-f0-p2.png");
+        inner.Write();
+        Assert.AreEqual(HdImportStatus.SourceInvalid, HdPackImport.Import(inner.Directory, collection, replace: true).Status);
+        Assert.IsTrue(HdPack.Open(inner.Directory).Pack!.VerifyIntegrity().Intact, "the source survives");
+        Directory.Delete(inner.Directory, recursive: true);
+
         var damaged = Built("damaged", "damaged-pack").Pack;
         var file = Path.Combine(damaged.Directory, "frames", "0001.png");
         var bytes = File.ReadAllBytes(file); bytes[^16] ^= 1; File.WriteAllBytes(file, bytes);
@@ -143,5 +161,11 @@ public sealed class HdPackImportTests
         Assert.AreEqual(4, listed.Count);
         Assert.AreEqual(HdPackOpenStatus.Malformed, listed.Single(f => Path.GetFileName(f.Directory) == "corrupt-text").Result.Status);
         Assert.AreEqual(HdImportStatus.SourceInvalid, HdPackImport.Import(Path.Combine(collection, "corrupt-text"), Path.Combine(_root, "other")).Status);
+
+        // An empty manifest (or anything that is not a non-empty regular file) is unreadable, never opened as a stream.
+        var empty = Path.Combine(_root, "empty-pack");
+        Directory.CreateDirectory(empty);
+        File.WriteAllBytes(Path.Combine(empty, "manifest.json"), []);
+        Assert.AreEqual(HdPackOpenStatus.Unreadable, HdPack.Open(empty).Status);
     }
 }

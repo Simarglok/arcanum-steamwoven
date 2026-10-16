@@ -32,15 +32,18 @@ public static class HdPackImport
 
         var root = Path.GetFullPath(collection);
         var target = Path.Combine(root, source.Id);
-        if (PathsEqual(Path.TrimEndingDirectorySeparator(source.Directory), target))
-            return new(HdImportStatus.AlreadyExists, null, report, "source is the target");
+        var sourcePath = Path.TrimEndingDirectorySeparator(source.Directory);
+        if (PathsEqual(sourcePath, target)) return new(HdImportStatus.AlreadyExists, null, report, "source is the target");
+        if (sourcePath.Length > target.Length && PathsEqual(sourcePath[..target.Length], target) && sourcePath[target.Length] == Path.DirectorySeparatorChar)
+            return new(HdImportStatus.SourceInvalid, null, report, "source is inside the target");
         if (Directory.Exists(target))
         {
-            // The same pack (possibly the source itself reached through a link) is never
-            // replaced by a copy of itself.
-            var installed = HdPack.Open(target, options);
-            if (installed.Pack?.Identity == source.Identity) return new(HdImportStatus.AlreadyExists, null, report, "identical pack installed");
             if (!replace) return new(HdImportStatus.AlreadyExists, null, report, source.Id);
+            // An intact pack of the same identity (possibly the source itself, reached through
+            // a link) is never replaced by a copy of itself; a damaged one may be repaired.
+            var installed = HdPack.Open(target, options);
+            if (installed.Pack?.Identity == source.Identity && installed.Pack.VerifyIntegrity(token).Intact)
+                return new(HdImportStatus.AlreadyExists, null, report, "identical intact pack installed");
         }
 
         SweepStaging(root);
@@ -63,7 +66,7 @@ public static class HdPackImport
             if (copied.Status != HdPackOpenStatus.Opened || copied.Pack!.Identity != source.Identity)
             { Delete(staging); return new(HdImportStatus.CopyFailed, null, report, HdPack.ManifestFile); }
         }
-        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or NotSupportedException)
         {
             Delete(staging);
             return new(HdImportStatus.CopyFailed, null, report, error.GetType().Name);
@@ -74,8 +77,11 @@ public static class HdPackImport
         {
             if (Directory.Exists(target))
             {
-                previous = Path.Combine(root, ReplacedPrefix + Guid.NewGuid().ToString("N"));
-                Directory.Move(target, previous);
+                // Another import may have installed this id meanwhile.
+                if (!replace) { Delete(staging); return new(HdImportStatus.AlreadyExists, null, report, source.Id); }
+                var aside = Path.Combine(root, ReplacedPrefix + Guid.NewGuid().ToString("N"));
+                Directory.Move(target, aside);
+                previous = aside; // only once the old pack has really moved
             }
             Directory.Move(staging, target);
         }
@@ -118,22 +124,27 @@ public static class HdPackImport
     private static bool Copy(string sourceRoot, string targetRoot, string relative, string sha256, long expectedBytes)
     {
         if (HdPackPath.HasLink(sourceRoot, relative)) return false;
+        var from = HdPackPath.Full(sourceRoot, relative);
+        var length = new FileInfo(from).Length; // a FIFO or device reports 0; never open one
+        if (length == 0 || (expectedBytes >= 0 && length != expectedBytes)) return false;
         var to = HdPackPath.Full(targetRoot, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(to)!);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         long total = 0;
-        using (var input = new FileStream(HdPackPath.Full(sourceRoot, relative), FileMode.Open, FileAccess.Read, FileShare.Read))
+        using (var input = new FileStream(from, FileMode.Open, FileAccess.Read, FileShare.Read))
         using (var output = new FileStream(to, FileMode.CreateNew, FileAccess.Write, FileShare.None))
         {
             var buffer = new byte[81920];
             int read;
             while ((read = input.Read(buffer, 0, buffer.Length)) > 0)
             {
-                hash.AppendData(buffer, 0, read); output.Write(buffer, 0, read); total += read;
+                total += read;
+                if (total > length) return false; // grew while copying
+                hash.AppendData(buffer, 0, read); output.Write(buffer, 0, read);
             }
             output.Flush(true);
         }
-        return (expectedBytes < 0 || total == expectedBytes) && Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() == sha256;
+        return total == length && Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant() == sha256;
     }
 
     private static bool PathsEqual(string a, string b) =>

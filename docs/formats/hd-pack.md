@@ -41,7 +41,8 @@ device name (`con`, `prn`, `aux`, `nul`, `com0-9`, `lpt0-9`); entries end in `.p
 the recipe in `.json`. A file or any directory below the pack root that is a symbolic
 link (or a Windows junction), dangling or not, is refused when read, so a pack cannot
 reach outside itself; other reparse points such as cloud-sync placeholders are ordinary
-files. JSON files are UTF-8 without a byte-order mark; text that is not valid UTF-8 or
+files. Every pack file must be a non-empty regular file: an empty file, a FIFO or a device
+(which report length 0) is refused as unreadable without being opened. JSON files are UTF-8 without a byte-order mark; text that is not valid UTF-8 or
 holds an unpaired surrogate makes the file malformed.
 
 Where packs live (discovery, `HdPack.Discover`): a **collection** is a folder whose
@@ -139,7 +140,9 @@ ARC-RENDER-016 amendment.
 
 One PNG per entry in exactly one profile (`HdPng`): 8-bit RGBA (colour type 6), deflate,
 filter method 0 with any of the five row filters, no interlace, IDAT chunks consecutive,
-IEND last with nothing after it, every CRC correct, the zlib header and Adler-32 correct.
+IEND last with nothing after it, every CRC correct, a valid zlib header, inflated data of
+exactly the image size and a matching Adler-32 (the deflate framing itself is not
+checked beyond what .NET's inflater reports; the file hash covers the bytes).
 Ancillary chunks are skipped; any other critical chunk, PLTE included, is unsupported. The decoder refuses an image above
 the pixel limit before inflating it and requires the inflated data to be exactly
 `h·(1 + 4w)` bytes. `HdPng.EncodeRgba` writes this profile deterministically.
@@ -191,17 +194,20 @@ against the installation, not for reproducing someone else's pixels.
 2. Only `manifest.json`, the recipe and the entry files are copied (other files in the
    source are ignored), each re-hashed while copying, into a hidden
    `<collection>/.import-<guid>/`, which is opened again and must have the same identity.
-3. The staging directory is renamed to `<collection>/<id>`. An installed pack with the
-   same identity is never replaced (`AlreadyExists`; this also stops a pack reached
-   through a link from replacing itself). Another pack of that id is kept
-   (`AlreadyExists`) unless `replace` is set; then it is moved aside to a hidden
+3. The staging directory is renamed to `<collection>/<id>`. An installed pack of that id
+   is kept (`AlreadyExists`) unless `replace` is set, also when another import installed
+   it in the meantime. With `replace`, an installed pack of the same identity that is
+   intact is still kept (`AlreadyExists`; this also stops a pack reached through a link
+   from replacing itself), while a damaged one is repaired; a source inside the installed
+   pack's directory is refused (`SourceInvalid`). Otherwise the old pack is moved aside to a hidden
    `.replaced-<guid>`, replaced and deleted, and moved back if the rename fails. If even
    that fails, the result names the hidden directory that still holds it; such a
    directory is never removed automatically. A copy that is in place but does not open
    there is `InstalledButUnreadable`. Staging directories older than a day, left by an
    interrupted import, are removed at the next import.
 
-The source is never modified. The installation is not consulted at import: frames are
+The source is never modified (the copy reads each file once more and refuses one that
+changed size or hash since the check). The installation is not consulted at import: frames are
 checked against it when bound, so a pack imported onto a device with a modded or other
 game version still works for every frame whose Legacy bytes match, and the rest draw
 Legacy with a reason. Archives (`.zip`) are not read; ARC-DEV-003's `hd-import` may
@@ -236,7 +242,7 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
 | Kind | Required | Optional |
 | --- | --- | --- |
 | `network` | `tool`, `toolVersion`, `toolSha256`, `model`, `licence`, `modelFiles` (1..8 `{name, sha256}`), `nativeScale`, `downscale`, `tileSize` (1..4096, explicit), `tta` (must be `false`) | `parameters` |
-| `generative` | `tool`, `toolVersion`, `model`, `licence`, `modelFiles` (base model, control models), `nativeScale`, `downscale` | `toolSha256`, `tileSize`, `adapters` (1..16 `{name, sha256, weight}`: LoRA and similar), `seed` (0..2⁶³−1), `prompt`, `negativePrompt` (1..4,000 characters, any language, line feeds and tabs allowed, no other control characters), `parameters` |
+| `generative` | `tool`, `toolVersion`, `model`, `licence`, `modelFiles` (base model, control models), `nativeScale`, `downscale` | `toolSha256`, `tileSize`, `adapters` (1..16 `{name, sha256, weight}`: LoRA and similar), `seed` (0..2⁶³−1), `prompt`, `negativePrompt` (1..4,000 UTF-16 code units, any language, line feeds and tabs allowed, no other control characters, so CR LF line ends are refused), `parameters` |
 | `algorithm` | `tool`, `toolVersion`, `toolSha256`, `nativeScale`, `downscale` | `licence`, `parameters` |
 | `external` | `tool`, `toolVersion`, `nativeScale`, `downscale` | `toolSha256`, `licence`, `parameters` |
 
