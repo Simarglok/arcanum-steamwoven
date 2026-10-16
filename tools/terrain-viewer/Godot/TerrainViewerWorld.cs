@@ -93,7 +93,7 @@ public partial class TerrainViewerApp
     private bool _worldUiFocused;
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
-    private bool WorldModal => _worldPanel?.IsOpen == true;
+    private bool WorldModal => _worldPanel?.IsOpen == true || ConversationOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => DiagnosticActorMotion.Project(_worldActor.State.Position) + new Vec2(0, 20);
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -298,6 +298,7 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
+        if (ConversationOpen) { HandleConversationPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -571,6 +572,11 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
+        if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         var wasModal = WorldModal;
         _worldAdapter.PaletteOpen = WorldModal;
         if (input is InputEventKey chordKey)
@@ -615,6 +621,10 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
+        // Original LMB on a dialog NPC talks (ARC-SCRIPT-005); walking to a far NPC is pending.
+        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click && _conversationHost is not null
+            && _hud?.Rect.HasPoint(click.Position) != true && GetViewport().GuiGetFocusOwner() is null)
+            TalkAt(click.Position);
         // The world mouse route is free for original controls: LMB neither drags
         // the camera nor confirms (in crash-site-area an unhandled LMB press sets the
         // click-to-move goal, see _UnhandledInput), and wheel/+/- do not zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.

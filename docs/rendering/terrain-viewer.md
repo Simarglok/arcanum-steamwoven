@@ -130,6 +130,15 @@ A responsive synthetic HUD matrix checks containment,
 sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
+In `crash-site-area` mode, the original left click on an NPC whose effective SAP_DIALOG
+attachment names a script talks to it when the actor stands within 3 tiles (ARC-SCRIPT-005,
+project diagnostic reach; walking to a farther NPC waits for click-to-move). The modal
+conversation panel closes the actor gate; replies are clicked (controller menu navigates and
+confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
+closes the dialog. The HUD says whether a dialog NPC is in reach. Rules, state profile and
+limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
+self-test covers a synthetic panel and the click/keyboard routing in AREA mode.
+
 ## Integrated world diagnostic policy
 
 Merged [PR #44](https://github.com/Simarglok/arcanum-steamwoven/pull/44)
