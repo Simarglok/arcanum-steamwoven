@@ -163,7 +163,7 @@ authoritative, and a later respawn could regenerate it.
   Moving 2527 into the PC fires its own `SAP_INSERT_ITEM` script: a U frontier.
 - **Living NPCs.** Virgil's ring arrives through dialog (section 4). No other
   item of a living NPC (gold, food, two weapons, worn armor) is named by a dialog
-  `IN` operand. Virgil's DLG has one barter reply (`b:`), so barter reaches his
+  `IN` operand. Virgil's DLG has one barter reply (`b:`), so barter can reach his
   inventory; SCR-level item actions in his other scripts (dialog override 1848,
   heartbeat 1100 and others) and in the other NPCs' scripts were not scanned and
   stay Unknown, as do theft and death.

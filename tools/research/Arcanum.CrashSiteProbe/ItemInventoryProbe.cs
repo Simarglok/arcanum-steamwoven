@@ -255,7 +255,7 @@ internal static partial class Program
                 foreach (var record in document.Records)
                 {
                     // A player reply whose whole text is the "b:" directive opens barter.
-                    if (record.Role == DlgRecordRole.Player && Encoding.ASCII.GetString(record.Text.Bytes.ToArray()).Trim().Equals("b:", StringComparison.OrdinalIgnoreCase)) barter++;
+                    if (record.Role == DlgRecordRole.Player && Encoding.ASCII.GetString(record.Text.Bytes.ToArray()).Equals("b:", StringComparison.OrdinalIgnoreCase)) barter++;
                     var fields = record.Role == DlgRecordRole.Player ? new[] { ("condition", record.Condition), ("action", record.Action) } : [("action", record.Action)];
                     foreach (var (role, field) in fields)
                         foreach (var code in InvScanCodes(field.Bytes.ToArray()))
