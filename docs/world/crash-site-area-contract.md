@@ -215,6 +215,10 @@ mobiles are a labelled source observation, not verified normal-game aggregate
 provenance. Before executing a future connector, ratify catalogue/runtime ID
 conversion, source policy, activation, exact arrival tile and destination-source
 identity. Empty jump lists cannot erase script-driven endpoints.
+[Cave transition research](../research/cave-transition-evidence.md) (ARC-WORLD-009)
+now answers activation (use of the trigger scenery, unconditional), focus
+(the triggerer), ID conversion (catalogue − 4999), both arrival tiles and the
+cave's normal-game aggregate identity. The connector is still not executed.
 
 ## Dependency map and next acceptance boundaries
 
