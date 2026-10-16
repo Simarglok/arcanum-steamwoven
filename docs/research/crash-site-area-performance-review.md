@@ -269,6 +269,20 @@ The largest remaining step is the 1.8–2.8 s between the lighting stage and the
 snapshot: `VerifyFile` ×3 and the cave owner's own authentication passes over inputs
 already authenticated in the same load (L-C, not done).
 
+## D-A, I-A and M-A results
+
+- **D-A done.** The differential inflate test now uses mostly small streams (four of 100–200 KB per
+  compression level, the rest under 24 KB) with the same 2,160 comparisons and the same
+  pass thresholds; it takes about 2 s instead of 10.0 s.
+- **I-A dropped.** With Godot's low-processor mode switched on while idle, the idle view
+  still drew about 60 frames per second at the same CPU: something visible changes every
+  frame, so there is nothing to skip until that source is found. Idle CPU measured
+  11–24% in both runs on `f60dd31`, above the 5–9% measured on `cf691aa`; the cause was
+  not investigated (other sessions were loading the machine at the same time).
+- **M-A dropped.** The first visit of zoom 0.3 needs up to 141 full-resolution chunks
+  (141 MiB) at once. A 128 MiB cap would make such views fall back to per-command
+  terrain, so the 192 MiB cap stays.
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only (done).
@@ -277,7 +291,7 @@ already authenticated in the same load (L-C, not done).
    most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
 4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (share
    authentication, about 1.5–2 s more; not done).
-5. D-A, I-A, M-A: small comfort items.
+5. D-A (done), I-A and M-A (dropped, see above).
 6. Later, only if needed: L-D parallel decode, F-D body batching, L-F persistent
    cache.
 
