@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Scripts;
 
 namespace Arcanum.Scripting.NpcDialog;
 
@@ -320,13 +321,17 @@ public static class NpcDialogEntryResolver
     private static Dictionary<int, EntryInstruction> PrepareGraph(byte[] bytes, DlgDocument dialog, int caller, NpcDialogEntryLimits limits, CancellationToken token,
         out int count, out int capacity, out int maxDepth)
     {
-        if (bytes.Length < 64) throw Fail(NpcDialogStage.Container, NpcDialogCode.MalformedContainer);
-        count = I32(bytes, 52); capacity = I32(bytes, 56);
+        // Framing is the shared strict SCR reader (ARC-SCRIPT-007); this walk adds its own rules:
+        // at least one line, the capacity within the entry limit, no file flags.
+        var read = ScrProgram.Read(bytes, new() { MaxBytes = Math.Max(limits.MaxScriptBytes, ScrProgram.HeaderBytes), MaxLines = limits.MaxScriptEntries });
+        if (read.Status is ScrReadStatus.TooManyLines or ScrReadStatus.TooLarge) throw Fail(NpcDialogStage.Container, NpcDialogCode.Budget);
+        if (read.Status != ScrReadStatus.Read || read.Program!.Count == 0) throw Fail(NpcDialogStage.Container, NpcDialogCode.MalformedContainer);
+        var program = read.Program;
+        count = program.Count; capacity = program.Capacity;
         var entryCount = count;
-        if (count <= 0 || capacity < count || bytes.LongLength != 64L + 132L * count) throw Fail(NpcDialogStage.Container, NpcDialogCode.MalformedContainer);
-        if (count > limits.MaxScriptEntries || capacity > limits.MaxScriptEntries) throw Fail(NpcDialogStage.Container, NpcDialogCode.Budget);
+        if (capacity > limits.MaxScriptEntries) throw Fail(NpcDialogStage.Container, NpcDialogCode.Budget);
         if (caller >= count) throw Fail(NpcDialogStage.Graph, NpcDialogCode.MalformedOperand, line: caller);
-        if (I32(bytes, 48) != 0) throw Fail(NpcDialogStage.Container, NpcDialogCode.UnsupportedRepresentation, true, caller);
+        if (program.FileFlags != 0) throw Fail(NpcDialogStage.Container, NpcDialogCode.UnsupportedRepresentation, true, caller);
         var graph = new Dictionary<int, EntryInstruction>();
         var work = new Queue<(int Line, int Depth)>(); work.Enqueue((caller, 1)); maxDepth = 0;
         while (work.TryDequeue(out var next))
@@ -335,30 +340,33 @@ public static class NpcDialogEntryResolver
             if (next.Line == count || graph.ContainsKey(next.Line)) continue;
             if (next.Depth > limits.MaxGraphDepth) throw Fail(NpcDialogStage.Graph, NpcDialogCode.Budget, true, next.Line);
             maxDepth = Math.Max(maxDepth, next.Depth);
-            var offset = 64 + next.Line * 132;
-            var type = I32(bytes, offset);
-            var predicate = type switch { 0 => NpcDialogPredicateKind.True, 3 => NpcDialogPredicateKind.LocalFlag, 18 => NpcDialogPredicateKind.Following, 39 => NpcDialogPredicateKind.Jilted, _ => NpcDialogPredicateKind.Unsupported };
+            var row = program.Lines[next.Line];
+            var condition = row.Condition;
+            var type = condition.Type;
+            var predicate = type switch { ScrCatalogue.Condition.True => NpcDialogPredicateKind.True, ScrCatalogue.Condition.LocalFlag => NpcDialogPredicateKind.LocalFlag, ScrCatalogue.Condition.FollowingPc => NpcDialogPredicateKind.Following, ScrCatalogue.Condition.Jilted => NpcDialogPredicateKind.Jilted, _ => NpcDialogPredicateKind.Unsupported };
             NpcDialogCode? unsupported = predicate == NpcDialogPredicateKind.Unsupported ? NpcDialogCode.UnsupportedCondition : null;
-            if (type == 3 && bytes[offset + 4] != 3 || type == 18 && (bytes[offset + 4] != 1 || bytes[offset + 5] != 0) || type == 39 && bytes[offset + 4] != 1) unsupported = NpcDialogCode.UnsupportedOperand;
-            var flag = type == 3 && unsupported is null ? I32(bytes, offset + 12) : 0;
+            if (type == ScrCatalogue.Condition.LocalFlag && condition.Kind(0) != (byte)ScrValueKind.Number ||
+                type == ScrCatalogue.Condition.FollowingPc && (condition.Kind(0) != (byte)ScrFocusKind.Attachee || condition.Kind(1) != (byte)ScrFocusKind.Triggerer) ||
+                type == ScrCatalogue.Condition.Jilted && condition.Kind(0) != (byte)ScrFocusKind.Attachee) unsupported = NpcDialogCode.UnsupportedOperand;
+            var flag = type == ScrCatalogue.Condition.LocalFlag && unsupported is null ? condition.Value(0) : 0;
             if (flag is < 0 or > 31) throw Fail(NpcDialogStage.Graph, NpcDialogCode.MalformedOperand, line: next.Line);
             if (unsupported.HasValue) { graph.Add(next.Line, new(predicate, flag, null, null, unsupported)); continue; }
-            var yes = Action(offset + 44, next.Line);
-            var no = type == 0 ? null : Action(offset + 88, next.Line);
+            var yes = Action(row.OnTrue, next.Line);
+            var no = type == ScrCatalogue.Condition.True ? null : Action(row.OnFalse, next.Line);
             graph.Add(next.Line, new(predicate, flag, yes, no));
             foreach (var action in new[] { yes, no })
                 if (action is { Kind: NpcDialogActionKind.Advance or NpcDialogActionKind.Goto }) work.Enqueue((action.Value, next.Depth + 1));
         }
         return graph;
 
-        EntryAction Action(int offset, int line)
+        EntryAction Action(ScrClause clause, int line)
         {
-            var type = I32(bytes, offset);
-            if (type == 0) return new(NpcDialogActionKind.Advance, line + 1);
-            if (type is not 3 and not 4) return new(NpcDialogActionKind.Unsupported, 0, type == 7 ? NpcDialogCode.UnsupportedCallback : NpcDialogCode.UnsupportedAction);
-            if (bytes[offset + 4] != 3) return new(NpcDialogActionKind.Unsupported, 0, NpcDialogCode.UnsupportedOperand);
-            var value = I32(bytes, offset + 12);
-            if (type == 3)
+            var type = clause.Type;
+            if (type == ScrCatalogue.Action.DoNothing) return new(NpcDialogActionKind.Advance, line + 1);
+            if (type is not ScrCatalogue.Action.Goto and not ScrCatalogue.Action.Dialog) return new(NpcDialogActionKind.Unsupported, 0, type == ScrCatalogue.Action.CallScript ? NpcDialogCode.UnsupportedCallback : NpcDialogCode.UnsupportedAction);
+            if (clause.Kind(0) != (byte)ScrValueKind.Number) return new(NpcDialogActionKind.Unsupported, 0, NpcDialogCode.UnsupportedOperand);
+            var value = clause.Value(0);
+            if (type == ScrCatalogue.Action.Goto)
             {
                 if (value < 0 || value >= entryCount) throw Fail(NpcDialogStage.Graph, NpcDialogCode.MalformedOperand, line: line);
                 return new(NpcDialogActionKind.Goto, value);
