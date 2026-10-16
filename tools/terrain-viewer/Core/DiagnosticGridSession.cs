@@ -5,8 +5,12 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>One complete advance's full immutable Data evidence, correlated to runtime-generated keys.</summary>
 public sealed record GridStepEvidence(AdmissionKey Key, CardinalTraversalAssessment Assessment);
-/// <summary>One complete advance's whole-core Data evidence, correlated to runtime-generated keys.</summary>
-public sealed record AreaGridStepEvidence(AdmissionKey Key, AreaStepAssessment Assessment);
+/// <summary>One complete advance's whole-core Data evidence, correlated to runtime-generated keys. <see cref="Live"/> is the
+/// verdict the step was admitted with when the live actor overlay changed the T0 assessment (ARC-WORLD-016).</summary>
+public sealed record AreaGridStepEvidence(AdmissionKey Key, AreaStepAssessment Assessment)
+{
+    public AreaStepVerdict? Live { get; init; }
+}
 public sealed record GridAdvance(MovementResult Movement, IReadOnlyList<GridStepEvidence> Evidence)
 {
     public IReadOnlyList<AreaGridStepEvidence> AreaEvidence { get; init; } = Array.Empty<AreaGridStepEvidence>();
@@ -118,9 +122,13 @@ public sealed class AreaGridSession : IGridSession
     public GridAdvance? LastAdvance { get; private set; }
     public long EvidenceEpoch => Snapshot.EvidenceEpoch;
     public AreaChart Chart { get; }
+    /// <summary>ARC-WORLD-016: the live actors this session's steps are admitted against (read at every assessment); null is T0 alone.</summary>
+    public Func<AreaOccupancy?>? Occupancy { get; set; }
+    public const string PcActorId = "HUMAN_FIXED_DIAGNOSTIC", PcCapabilities = "ISOLATED_PC_HUMAN_FIXED_V1";
 
     public AreaGridSession(AreaStepSnapshot snapshot, SimulationTime initialTime, StepDuration? duration = null, MovementLimits? limits = null,
-        AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
+        AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus,
+        string actorId = PcActorId, string capabilities = PcCapabilities)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         Snapshot = snapshot; Chart = chart ?? AreaChart.Exterior;
@@ -132,8 +140,8 @@ public sealed class AreaGridSession : IGridSession
         // The context fingerprint is the declared context, the same for every request of this snapshot.
         var probe = new CellCoord(origin.X + 1, origin.Y);
         var context = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(origin), Chart.ToWorld(probe), CardinalTraversalDirection.XPlus)).ContextFingerprint;
-        var binding = new ActorBinding(Chart.BindingName, "HUMAN_FIXED_DIAGNOSTIC",
-            context, "ISOLATED_PC_HUMAN_FIXED_V1", "KIND15_ART2_FLAGS0_GROUND_NONPOLYMORPH_REGISTRY0",
+        var binding = new ActorBinding(Chart.BindingName, actorId,
+            context, capabilities, "KIND15_ART2_FLAGS0_GROUND_NONPOLYMORPH_REGISTRY0",
             snapshot.ProfileId, snapshot.EvidenceSha256, snapshot.EvidenceEpoch);
         State = MovementState.CreateSettled(binding, origin, initialTime, facing, limits);
     }
@@ -148,11 +156,13 @@ public sealed class AreaGridSession : IGridSession
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
         Action<MovementState, MovementResult>? validatePresentation = null)
     {
+        var occupancy = Occupancy?.Invoke();
         var (result, evidence) = GridReplay.Run(State, target, batches, key =>
         {
             var assessment = Assess(key.From, key.To, key.Direction);
-            return (GridReplay.Permit(key, assessment.Coverage, assessment.Disposition, assessment.ReasonCode, assessment.EvidenceSha256, Duration),
-                new AreaGridStepEvidence(key, assessment));
+            var live = AreaOccupancyRules.Apply(assessment, key.From, key.Direction, occupancy);
+            return (GridReplay.Permit(key, live.Coverage, live.Disposition, live.ReasonCode, assessment.EvidenceSha256, Duration),
+                new AreaGridStepEvidence(key, assessment) { Live = live.Overlaid ? live : null });
         }, validatePresentation);
         if (result.Movement.Status != MovementStatus.Completed) return result;
         result = new GridAdvance(result.Movement, Array.Empty<GridStepEvidence>()) { AreaEvidence = evidence };

@@ -110,6 +110,8 @@ public partial class TerrainViewerApp
         if (GetViewport() == GetWindow()) GetWindow().ContentScaleMode = Window.ContentScaleModeEnum.Disabled;
         _worldSettings = _worldStore.Load();
         _worldPreferredZoom = _worldZoomStore.Load();
+        // ARC-WORLD-016: the PC's AREA steps are admitted against the shown map's companions.
+        _worldActor.AreaOccupancy = () => _areaCompanions?.OccupancyForPc();
         _worldPanel = new DiagnosticInputSettingsPanel(); AddChild(_worldPanel);
         _worldPanel.Changed += SaveWorldSettings;
         _worldPanel.CloseRequested += ToggleWorldSettings;
@@ -422,7 +424,8 @@ public partial class TerrainViewerApp
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
             FollowAreaAmbient(); FollowAreaWalls();
-            _canvas!.PublishArea(_readyArea, actor, input, _cache); return;
+            _canvas!.SetAreaMovingBodies(AreaCompanionCommands());
+            _canvas.PublishArea(_readyArea, actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);
         _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current; _readyDiagnosticPlan = plan;
@@ -470,6 +473,7 @@ public partial class TerrainViewerApp
         }
         _worldGridInput.PublishedThrough(frontier);
         if (route is not null) _worldRouteDiagnostic = DescribeWorldRoute(route);
+        DriveAreaCompanions(session, frontier);
         PublishWorldSelection();
         if (ReferenceEquals(_worldLifecycleSession, session) && session.State.Phase == MovementPhase.Settled)
         {
@@ -484,7 +488,7 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time, chart: area.Chart);
+                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); }
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -530,7 +534,7 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart));
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart, area.Occupancy));
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;

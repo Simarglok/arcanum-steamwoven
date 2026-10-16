@@ -60,6 +60,7 @@ public partial class TerrainViewerApp
     private void StopAreaTransitions()
     {
         UnbindAreaInventory();
+        UnbindAreaCompanions();
         _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded";
     }
@@ -187,6 +188,8 @@ public partial class TerrainViewerApp
         }
         // A queued transfer waits while the palette is open.
         if (_areaTransitions.Pending is null || WorldModal || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
+        // ARC-WORLD-016: the companions stay on the map the PC leaves, where they stand (not carried yet).
+        RecordAreaCompanions("leaving map " + _areaTransitions.CurrentMap);
         var transition = _areaTransitions.Process(session.State.Facing)!;
         var target = _areaTransitions.Current;
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
@@ -212,6 +215,7 @@ public partial class TerrainViewerApp
     {
         _worldActor.Configure(map.Steps, WorldTime, chart: map.Chart, start: start, facing: facing);
         _worldGridInput = new(); _worldGate.Close();
+        BindAreaCompanions();
     }
 
     private string AreaTransitionStatus()

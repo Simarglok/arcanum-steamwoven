@@ -79,6 +79,8 @@ public partial class TerrainViewerApp
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
+        // ARC-WORLD-016: the companions' cells are session state too; a refused placement refuses the save.
+        if (!RecordAreaCompanions("quick save")) { SetQuickStatus("F7 quick save refused: " + _companionNotice); return; }
         var result = AreaQuickSave.Save(_areaSession!, placement, QuickSaveSlot);
         GD.Print("ARC-WORLD-011 quick-save " + System.Text.Json.JsonSerializer.Serialize(new {
             result.Saved, Failure = result.Write?.Failure.ToString(), result.Write?.Detail, result.Write?.Bytes, Place = result.PlaceFailure.ToString(),
