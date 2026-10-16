@@ -7,7 +7,30 @@ from pathlib import Path
 import subprocess
 from typing import Any
 
-from . import config
+from . import config, manifests
+
+# Single source of the ordinary launcher's original-input roles. Keep it in step with the viewer's
+# `TerrainViewerArguments` (tools/local_dev/test_launcher_sync.py fails on any drift):
+# a role -> (relative path inside the installed game root, expected bytes, SHA-256); directories carry None.
+GAME_ROLES: dict[str, tuple[str, int | None, str | None]] = {
+    "module": ("modules/Arcanum.dat", 355938305, "8bddf7ae4b8f0606efd64f9137f904cfa4787d80ef85fa04d06a3def9dadc76f"),
+    "actorResource": ("arcanum1.dat", 447470816, "6dd9d10ef0932e02fc88f0eb5367b1bc37275db51d60bd68ac9bd7ef2d478576"),
+    "terrainResource": ("arcanum2.dat", 147991122, "4078653c740b2b62473a6d6b60efe4c822390fc1b0958194ac0bffa1d493e24d"),
+    "areaEffects": ("arcanum3.dat", 9605011, "cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499"),
+    "areaPatch": ("modules/Arcanum.PATCH0", 18804, "d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce"),
+    "areaMobile": ("modules/Arcanum/maps/qrmvs-420-1zjcnpgn", 1823280, "a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5"),
+    "prototypes": ("data/proto", None, None),
+}
+# Viewer flag of each role, and the roles each terrain mode requires (sourceId is always required too).
+ROLE_FLAGS = {"module": "--module", "terrainResource": "--resource", "prototypes": "--prototypes", "actorResource": "--actor-resource",
+              "areaMobile": "--area-mobile", "areaEffects": "--area-effects", "areaPatch": "--area-patch"}
+MODE_ROLES: dict[str, tuple[str, ...]] = {
+    "terrain-only": ("module", "terrainResource"),
+    "combined": ("module", "terrainResource", "prototypes"),
+    "actor-diagnostic": ("module", "terrainResource", "prototypes", "actorResource"),
+    "world-diagnostic": ("module", "terrainResource", "prototypes", "actorResource"),
+    "crash-site-area": ("module", "terrainResource", "prototypes", "actorResource", "areaMobile", "areaEffects", "areaPatch"),
+}
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
@@ -71,17 +94,11 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     trust boundary.  The actor values are the documented diagnostic defaults,
     never recovered world state.
     """
-    if mode not in {"terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
+    if mode not in MODE_ROLES:
         raise ValueError("unsupported terrain diagnostic mode")
     if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
-    required = ("module", "terrainResource", "sourceId")
-    if mode in {"combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
-        required += ("prototypes",)
-    if mode in {"actor-diagnostic", "world-diagnostic", "crash-site-area"}:
-        required += ("actorResource",)
-    if mode == "crash-site-area":
-        required += ("areaMobile", "areaEffects", "areaPatch")
+    required = MODE_ROLES[mode] + ("sourceId",)
     if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
         raise ValueError("configure explicit terrain input roles before launch")
 
@@ -100,8 +117,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if mode in {"world-diagnostic", "crash-site-area"}:
         arguments.extend(("--actor-resource", local_file("actorResource")))
     if mode == "crash-site-area":
-        arguments.extend(("--area-mobile", local_file("areaMobile"), "--area-effects", local_file("areaEffects"),
-                          "--area-patch", local_file("areaPatch")))
+        for role in ("areaMobile", "areaEffects", "areaPatch"):
+            arguments.extend((ROLE_FLAGS[role], local_file(role)))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((
@@ -114,6 +131,30 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
         ))
     assert_ordinary(arguments)
     return arguments
+
+
+def discover_inputs(game_root: Path) -> tuple[dict[str, str], list[str]]:
+    """Map every GAME_ROLES role found with its exact identity inside an installed game root.
+
+    Files must be regular, link-free and match bytes and SHA-256; the prototype directory must
+    hold .pro files. Returns (role -> canonical path, missing roles); nothing is guessed.
+    """
+    root = config.canonical_existing(str(game_root), directory=True)
+    found: dict[str, str] = {}
+    missing: list[str] = []
+    for role, (relative, size, sha256) in GAME_ROLES.items():
+        candidate = (root / relative).absolute()
+        if candidate.is_symlink() or config._has_symlink_component(candidate):
+            missing.append(role); continue
+        if size is None:
+            ok = candidate.is_dir() and any(candidate.glob("*.pro"))
+        else:
+            ok = candidate.is_file() and candidate.stat().st_size == size and manifests.sha256(candidate) == sha256
+        if ok:
+            found[role] = str(candidate.resolve(strict=True))
+        else:
+            missing.append(role)
+    return found, missing
 
 
 def exact_executable_in_use(executable: Path) -> bool:

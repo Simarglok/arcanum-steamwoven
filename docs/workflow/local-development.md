@@ -2,6 +2,24 @@
 
 `tools/arcanum-local` is a Python-standard-library command for choosing only explicitly configured local diagnostic inputs and ignored artifact roots. It is not a game launcher, exporter, discovery scanner, cleaner, or acceptance authority.
 
+## Project launcher
+
+`./arcanum` in the repository root is a thin wrapper over `tools/arcanum-local`;
+every identity, artifact-authority and ordinary-launch check stays there.
+
+    ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-RENDER-007 build
+    ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
+    ./arcanum status                                      # which modes have every input configured
+
+`area` and `world` select the build named by that task's `current.json` pointer
+(never timestamps or directory order), then launch. **Rule:** a change that adds
+or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
+`MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
+adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when
+the viewer's `TerrainViewerArguments` flags and the launcher drift apart, or when a
+pinned role identity disagrees with the Data layer.
+
 ## Configuration and privacy
 
 The only persistent files are owner-only (0600), atomically replaced JSON documents:
@@ -11,10 +29,10 @@ The only persistent files are owner-only (0600), atomically replaced JSON docume
 
 They have schemas `arcanum-local-config-v1` and `build-registry-v1`. They hold registered artifact-root identifiers, explicit original-input roles, a safe non-path source label, preferences, selection, and acceptance lifecycle records. They never belong in Git. Test runs may set `ARCANUM_LOCAL_HOME` to an owned temporary directory.
 
-Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the three known candidates `modules/Arcanum.dat`, `arcanum1.dat`, and `arcanum2.dat`, without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate. `configure inputs` needs each original role explicitly. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
+Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
 
     tools/arcanum-local list [--json]
-    tools/arcanum-local configure discover --game-root PATH
+    tools/arcanum-local configure discover --game-root PATH [--write-inputs]
     tools/arcanum-local configure inputs --module PATH --terrain-resource PATH --actor-resource PATH --prototypes PATH [--source-id LABEL]
     tools/arcanum-local configure add-artifact-root --id ID PATH
     tools/arcanum-local configure select-launch --tool terrain --candidate ROOT_ID:ARC-DEV-001:CANDIDATE
