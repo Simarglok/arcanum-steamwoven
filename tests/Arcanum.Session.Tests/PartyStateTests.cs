@@ -154,7 +154,8 @@ public sealed class PartyStateTests
         using var owner = Create(new GameSessionLimits(maxCompanions: 2));
         var stale = owner.Version;
         Refused(owner.JoinParty(owner.Version, "bad id", Facts(), false), owner, GameSessionFailure.InvalidCompanion, 0);
-        Refused(owner.JoinParty(owner.Version, "virgil", null!, false), owner, GameSessionFailure.InvalidConsentFacts, 0);
+        Assert.ThrowsExactly<ArgumentNullException>(() => owner.JoinParty(owner.Version, "virgil", null!, false));
+        Assert.ThrowsExactly<ArgumentNullException>(() => owner.UnwaitParty(owner.Version, "virgil", null!, false));
         Refused(owner.JoinParty(owner.Version, "virgil", Facts() with { PcPersuasion = (PersuasionTraining)9 }, false), owner, GameSessionFailure.InvalidConsentFacts, 0);
         Refused(owner.UnwaitParty(owner.Version, "", Facts(), false), owner, GameSessionFailure.InvalidCompanion, 0);
         Refused(owner.ForceJoinParty(owner.Version, new string('x', 129)), owner, GameSessionFailure.InvalidCompanion, 0);
@@ -254,6 +255,89 @@ public sealed class PartyStateTests
         var half = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"f{i:D3}\",\"forced\":false,\"spreadOut\":false}}"));
         var rest = string.Join(",", Enumerable.Range(0, 40).Select(i => $"{{\"entity\":\"o{i:D3}\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}}"));
         Fails(",\"party\":{\"followers\":[" + half + "],\"others\":[" + rest + "]}", SnapshotDecodeFailure.BudgetExceeded, "$.party.others");
+    }
+
+    [TestMethod]
+    public void AnotherLeaderIsAReasonForAFreeNpcButContradictsOneThePcLeads()
+    {
+        using var owner = Create();
+        var otherLeader = Facts() with { OtherLeaderCharisma = 8 };
+        Refused(owner.JoinParty(owner.Version, "virgil", otherLeader, false), owner, GameSessionFailure.ConsentRefused, 0, FollowConsent.AlreadyInGroup);
+        Joined(owner.JoinParty(owner.Version, "virgil", Facts(), false), owner, 1);
+        Refused(owner.JoinParty(owner.Version, "virgil", otherLeader, false), owner, GameSessionFailure.InvalidConsentFacts, 1);
+        Changed(owner.WaitParty(owner.Version, "virgil"), owner, 2);
+        Refused(owner.UnwaitParty(owner.Version, "virgil", otherLeader, false), owner, GameSessionFailure.InvalidConsentFacts, 2);
+        Refused(owner.JoinParty(owner.Version, "virgil", otherLeader, false), owner, GameSessionFailure.InvalidConsentFacts, 2);
+    }
+
+    [TestMethod]
+    public void ForcedUnwaitIgnoresTheLimitAndJoiningAWaitingNpcAppendsIt()
+    {
+        using var owner = Create();
+        Joined(owner.JoinParty(owner.Version, "a", Facts(maxFollowers: 1), false), owner, 1);
+        Joined(owner.ForceJoinParty(owner.Version, "b"), owner, 2, consent: null);
+        Changed(owner.WaitParty(owner.Version, "b"), owner, 3);
+        Refused(owner.UnwaitParty(owner.Version, "b", Facts(maxFollowers: 1), false), owner, GameSessionFailure.ConsentRefused, 3, FollowConsent.LimitReached);
+        Joined(owner.UnwaitParty(owner.Version, "b", Facts(maxFollowers: 1), true), owner, 4);
+        Assert.AreEqual(Following("b", forced: true), owner.QueryCompanion("b"));
+
+        // JO while waiting (C5 leaves the old standing first): following again at the end of the array.
+        Joined(owner.JoinParty(owner.Version, "c", Facts(maxFollowers: 7), false), owner, 5);
+        Changed(owner.WaitParty(owner.Version, "a"), owner, 6);
+        Joined(owner.JoinParty(owner.Version, "a", Facts(maxFollowers: 7), false), owner, 7);
+        CollectionAssert.AreEqual(new[] { "b", "c", "a" }, owner.QueryParty().Followers.Select(f => f.Entity).ToArray());
+        Assert.AreEqual(0, owner.QueryParty().Others.Count);
+    }
+
+    [TestMethod]
+    public void ASpreadOutFollowerLeavesAFlaggedFreeRecord()
+    {
+        using var owner = Create();
+        Joined(owner.JoinParty(owner.Version, "virgil", Facts(), false), owner, 1);
+        Changed(owner.SetSpreadOut(owner.Version, "virgil", true), owner, 2);
+        Changed(owner.LeaveParty(owner.Version, "virgil", new(true)), owner, 3);
+        CollectionAssert.AreEqual(new[] { new SessionCompanion("virgil", CompanionStanding.Free, false, true, false) }, owner.QueryParty().Others.ToArray());
+        Changed(owner.SetSpreadOut(owner.Version, "virgil", false), owner, 4);
+        Assert.AreEqual(0, owner.QueryParty().Others.Count, "back at the baseline, the record is dropped");
+    }
+
+    [TestMethod]
+    public void PartyChangesStopAtTheRevisionLimit()
+    {
+        using var owner = Restore(Decode(GoldenJson.Replace("\"revision\":2,", "\"revision\":9223372036854775807,")));
+        var max = long.MaxValue;
+        Refused(owner.JoinParty(owner.Version, "a", Facts(), false), owner, GameSessionFailure.RevisionExhausted, max, FollowConsent.Accepted);
+        Refused(owner.ForceJoinParty(owner.Version, "a"), owner, GameSessionFailure.RevisionExhausted, max);
+        Rejected(owner.SetSpreadOut(owner.Version, "a", true), owner, GameSessionFailure.RevisionExhausted, max);
+        Assert.AreEqual(0, owner.QueryParty().Followers.Count + owner.QueryParty().Others.Count);
+    }
+
+    [TestMethod]
+    public void RestoreRefusesHandBuiltRecordsTheTransitionsCannotProduce()
+    {
+        using var owner = Create();
+        var saved = owner.Capture();
+        GameSessionFailure Restored(SessionCompanion[] followers, SessionCompanion[] others)
+        {
+            var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
+                saved.Actor, saved.Maps.ToArray(), saved.Story, new SessionPartyState(followers, others), saved.Lighting);
+            var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
+            result.Owner?.Dispose();
+            return result.Failure;
+        }
+
+        var waiting = new SessionCompanion("w", CompanionStanding.Waiting, false, false, false);
+        Assert.AreEqual(GameSessionFailure.None, Restored([Following("a", forced: true)], [waiting]));
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([Following("a") with { Jilted = true }], []), "jilted follower");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([waiting], []), "follower list holds a waiting record");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([Following("a b")], []), "invalid id");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([], [waiting with { Forced = true }]), "forced while waiting");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([], [waiting with { Jilted = true }]), "jilted while waiting");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([], [waiting with { Standing = CompanionStanding.Free }]), "baseline record");
+        Assert.AreEqual(GameSessionFailure.InvalidCompanion, Restored([], [Following("a")]), "others hold a follower");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored([Following("w")], [waiting]), "entity twice");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored([Following("a"), Following("a")], []), "follower twice");
+        Assert.AreEqual(GameSessionFailure.InvalidSnapshot, Restored([], [waiting with { Entity = "z" }, waiting]), "unsorted others");
     }
 
     private static void NoChangeAt(GameSessionMutationResult result, GameSessionOwner owner, long revision)

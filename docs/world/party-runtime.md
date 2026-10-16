@@ -52,17 +52,19 @@ true while following **or** waiting, as the source's `FO` / SCR `FOLLOWING` read
 leader. `Forced` exists only while following, `Jilted` only while free; `SpreadOut` is kept in
 every standing.
 
-| Entry | Contract (refusal order: input, version, standing, consent, NoChange, budget, revision) |
+| Entry | Contract (refusal order: input, version, standing, consent, NoChange, budget, revision; `LeaveParty` reports a free NPC as NoChange before its leave guard) |
 | --- | --- |
 | `QueryCompanion(entity)` / `QueryParty()` | One record (an unrecorded NPC reads as free with no flags; an invalid id throws) / detached `SessionPartyState`: `Followers` in array order, `Others` (waiting, or free with a flag) in ordinal entity order, and `NonForcedFollowers`. |
 | `JoinParty(expected, entity, facts, force)` | Dialog `JO force node` ([C1](../research/companion-follow-evidence.md#findings), [C5](../research/companion-follow-evidence.md#findings)): the follow check with the session's own inputs added (the NPC's forced flag, the PC's non-forced follower count, `IgnoreCharismaLimit = force`). A refusal is `ConsentRefused` with the reason in `PartyMutationResult.Consent`. Success leaves any standing and appends the NPC at the end of the array (never a duplicate), forced when `force`, jilted cleared. The last follower joining again unchanged is `NoChange`. As read in the source, an NPC already in the array counts toward the limit itself, and an unforced join makes a forced follower unforced. |
 | `ForceJoinParty(expected, entity)` | Script follow, mind control, the follow spell ([C17](../research/companion-follow-evidence.md#findings)): no check, always forced; also brings a waiting NPC back. |
 | `UnwaitParty(expected, entity, facts, force)` | Dialog `UW force node` ([C11](../research/companion-follow-evidence.md#findings)): only a waiting NPC (`NotWaiting` otherwise); the check as for join (a waiting NPC is never forced and is outside the array). A refusal keeps it waiting; success re-appends it. |
-| `WaitParty(expected, entity)` | Dialog `WA`, wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. Already waiting is `NoChange`; a free NPC is `NotInParty`. |
+| `WaitParty(expected, entity)` | The source's dialog `WA` action (not admitted by the conversation runtime yet), wait order, script wait: a follower leaves the array, forced cleared (wait is a forced leave), PC kept. Already waiting is `NoChange`; a free NPC is `NotInParty`. |
 | `LeaveParty(expected, entity, PartyLeave)` | [C6](../research/companion-follow-evidence.md#findings): a follower or waiting NPC becomes free, forced cleared, `SpreadOut` kept, `Jilted` when `Jilt`. An unforced leave under an extraordinary-charisma leader or mind control is `LeaveRefused`; a free NPC is `NoChange`. |
 | `SetSpreadOut(expected, entity, value)` | Dialog `SO` / `SC` in any standing. |
 
-Every change adds one session revision; refusals change nothing. `GameSessionLimits.MaxCompanions`
+Facts naming another leader (`OtherLeaderCharisma`) for an NPC the PC already leads contradict the
+session and are `InvalidConsentFacts`; a null facts or leave argument throws. Every change adds one
+session revision; refusals change nothing. `GameSessionLimits.MaxCompanions`
 (policy maximum 64) bounds the records; a new record over it is `BudgetExceeded`, while an
 existing record may still change. New failures: `InvalidCompanion`, `InvalidConsentFacts`,
 `ConsentRefused`, `LeaveRefused`, `NotInParty`, `NotWaiting`.
@@ -108,7 +110,7 @@ owner (quick load) builds a new port.
 
 For Virgil the inputs are in [ARC-RES-026](../research/virgil-follow-consent.md#2-virgil-at-t0-d):
 AI row 5 (−1000, 2001, 2001, 30), level 1, alignment 1, reaction base 60. With the diagnostic PC
-(charisma 8, level 1, max followers 2) only the follower limit can refuse him.
+(charisma 8, level 1, max followers 2) and no other leader, only the follower limit can refuse him.
 
 ## Tests
 

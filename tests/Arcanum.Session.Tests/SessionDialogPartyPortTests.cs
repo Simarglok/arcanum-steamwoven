@@ -45,8 +45,6 @@ public sealed class SessionDialogPartyPortTests
     public void ARefusalStopsAtTheFrontierAndKeepsTheReason()
     {
         using var owner = Create();
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, "golem").Disposition);
-        Assert.AreEqual(GameSessionDisposition.Changed, owner.WaitParty(owner.Version, "golem").Disposition);
         var port = Port(owner, maxFollowers: 1);
         Assert.AreEqual(GameSessionDisposition.Changed,
             owner.JoinParty(owner.Version, "sogg", PartyStateTests.Facts(), false).Disposition);

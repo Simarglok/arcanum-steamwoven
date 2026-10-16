@@ -119,8 +119,8 @@ Caller options may only lower the hard caps: 64 structural replies, 1024 turns (
 4096 effects, 4096 text bytes, 4096 operation-field bytes, 32 operations per field. Turn and
 effect budgets are checked before a step's first effect (`TurnLimit`/`EffectLimit`
 frontiers). A port `Rejected` result records `Rejected` and fails; a thrown exception records
-`Indeterminate` and fails; earlier `Applied` receipts stay. `JO` or `UW` refused by the follower
-rules is a `JoinRefused` frontier (the source then speaks a generated refusal). No rollback is claimed.
+`Indeterminate` and fails; earlier `Applied` receipts stay. `JO` or `UW` refused by the world or
+party port is a `JoinRefused` frontier (the source then speaks a generated refusal). No rollback is claimed.
 
 ## AREA viewer integration (PROJECT diagnostic)
 

@@ -18,7 +18,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly GameSessionLimits _limits;
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
     private readonly Story _story;
-    private readonly Party _party;
+    private readonly PartyDomain _party;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
@@ -28,7 +28,7 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        Party party, SessionLightingState? lighting)
+        PartyDomain party, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
         _story = story; _party = party; _lighting = lighting;
@@ -307,14 +307,18 @@ public sealed class GameSessionOwner : IDisposable
     /// follower array (never duplicated), forced when <paramref name="force"/>, jilted cleared, spread out kept. As read
     /// in the source, an NPC already in the array counts toward the limit itself. A refusal is
     /// <see cref="GameSessionFailure.ConsentRefused"/> with the reason in <see cref="PartyMutationResult.Consent"/>.
+    /// Facts naming another leader for an NPC the PC already leads (following or waiting) contradict the session and
+    /// are <see cref="GameSessionFailure.InvalidConsentFacts"/>.
     /// </summary>
     public PartyMutationResult JoinParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
         if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
         if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
+        if (current.LedByPc && facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         var consent = Consent(facts, current.Forced, force);
         if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
         return Append(current, force, consent);
@@ -340,19 +344,22 @@ public sealed class GameSessionOwner : IDisposable
     public PartyMutationResult UnwaitParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
     {
         ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
         if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
         if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
         var current = _party.Get(entity);
         if (current.Standing != CompanionStanding.Waiting) return RejectParty(GameSessionFailure.NotWaiting);
+        // The PC leads a waiting NPC, so facts naming another leader contradict the session.
+        if (facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
         var consent = Consent(facts, false, force);
         if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
         return Append(current, force, consent);
     }
 
     /// <summary>
-    /// Wait (dialog WA, wait order, script wait; C11): a follower leaves the array (forced cleared) and keeps the PC as
-    /// leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
+    /// Wait (C11; the source's dialog WA action, not admitted by the conversation runtime yet, the wait order and the
+    /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
     /// </summary>
     public GameSessionMutationResult WaitParty(GameSessionVersion expected, string entity)
     {
@@ -495,7 +502,7 @@ public sealed class GameSessionOwner : IDisposable
             facts.PcLevel, facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment,
             facts.NpcLevel, facts.MaxFollowers, _party.NonForcedFollowers, ignoreLimit));
 
-    private static bool ValidFacts(PartyConsentFacts? facts) => facts is not null && Enum.IsDefined(facts.PcPersuasion);
+    private static bool ValidFacts(PartyConsentFacts facts) => Enum.IsDefined(facts.PcPersuasion);
 
     // Join and unwait share the commit: leave any standing, append at the end of the array.
     private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent)
@@ -517,7 +524,7 @@ public sealed class GameSessionOwner : IDisposable
 
     // Followers keep their saved array order; the others are waiting NPCs or free NPCs with a flag, in ordinal order.
     // Every record must be one the transitions can produce, and the total stays within the caller's limit.
-    private static GameSessionFailure ImportParty(SessionPartyState saved, GameSessionLimits limits, out Party party)
+    private static GameSessionFailure ImportParty(SessionPartyState saved, GameSessionLimits limits, out PartyDomain party)
     {
         party = new();
         if (saved.Followers.Count + saved.Others.Count > limits.MaxCompanions) return GameSessionFailure.BudgetExceeded;

@@ -71,7 +71,7 @@ public readonly record struct PartyMutationResult(GameSessionDisposition Disposi
     FollowConsent? Consent, GameSessionVersion Version);
 
 /// <summary>Mutable party domain of one owner.</summary>
-internal sealed class Party
+internal sealed class PartyDomain
 {
     internal List<string> Order { get; } = [];
     internal Dictionary<string, SessionCompanion> Records { get; } = new(StringComparer.Ordinal);
