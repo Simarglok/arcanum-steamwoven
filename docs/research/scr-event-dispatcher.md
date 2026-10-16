@@ -357,7 +357,8 @@ these are settled by the slice that implements them.
 
 - **U1** Whether the original, like CE, fires `SAP_UNLOCK` on every open
   attempt (and whether lock picking fires it too) is NOT_VERIFIED.
-- **U2** Which points and opcodes the installed data uses (S0, Mac).
+- **U2** Which points and opcodes the installed data uses: answered by the
+  [S0 census](scr-census.md) (ARC-RES-045).
 - **U3** Whether tile and sector scripts fire during turn-based combat and in
   what order against jump points on the same step: the step handler runs the
   jump point before the tile script ([object.c 5236–5250][tile-trigger]); the
