@@ -49,21 +49,24 @@ not repeated here.
    ([init][gl-init], [base mount][gl-data]). The module is mounted later, in
    `mod_load` ([mod load][gl-modload], [module mount][gl-moddata]). So every
    file read in `init` comes from the base only; a module cannot replace it.
-   Of the combat domain only five tables are module-aware: AI rows 100..149
+   Module-aware data in or next to the combat domain: AI rows 100..149
    (`rules\gameai.mes`), effects 0..49 (`rules\gameeffect.mes`), item effect
    texts from 30000 (`mes\gameitemeffect.mes`), blessings and curses
-   (`mes\gamebless.mes`, `mes\gamecurse.mes`) and reputations
-   (`rules\gamerep.mes` and its texts), plus descriptions from 30000
-   (`mes\gamedesc.mes`) and object names (`oemes\gameoname.mes`).
+   (`mes\gamebless.mes`, `mes\gamecurse.mes`), reputations
+   (`rules\gamerep.mes` and its texts), descriptions from 30000
+   (`mes\gamedesc.mes`), object and faction names merged over the base
+   (`oemes\gameoname.mes`, `oemes\gamefaction.mes`), scripts 1..999,
+   `mes\storystate.mes` and `Rules\MapList.mes`.
 2. **Spells, technologies, skills, stats, levels, combat texts, backgrounds,
    inventory sources, traps and all prototypes are base-only and fixed for the
    process.** None of them has a `mod_load`; prototypes are read eagerly once,
    inside Map `init`, before any module exists ([proto init][proto-init]).
-3. **Order matters in four places.** MagicTech before MT-AT, MT-Item and Spell
-   (they read its spell table); Map (with Proto and Effect inside it) before
-   MagicTech-Post (summon prototypes) and Inven-Source (prototype checks);
-   Effect before Bless and Curse. `spelllist.mes` is therefore read in two
-   passes, one on each side of Map ([table][gl-table], [spell list][mt-load]).
+3. **Load order matters in two places.** MagicTech before MT-AT and Spell
+   (they read its spell table and `spell.mes`); Map (with Proto inside it)
+   before MagicTech-Post (summon prototypes) and Inven-Source (prototype
+   checks). `spelllist.mes` is therefore read in two passes, one on each side
+   of Map ([table][gl-table], [spell list][mt-load]). Bless and Curse only load
+   texts; they reach Effect at run time, not at load.
 4. **The AI owns 150 parameter rows and nothing else on disk.** Rows load
    positionally, not by entry number: the first entry must be 0 (base) or 100
    (module), and each next entry fills the next row whatever its number
@@ -72,8 +75,11 @@ not repeated here.
 5. **Spells carry the AI's action priorities.** Line +4 of every
    `spelllist.mes` record holds ten `AI_*` values; MT-AT builds ten lists
    sorted by them, descending, at `init` ([MT-AT][mtai-init]). Items join the
-   same lists only with `OIF_VALID_AI_ACTION` and a matching
-   `OBJ_F_ITEM_AI_ACTION`.
+   same choice in two ways: by `OIF_VALID_AI_ACTION` with a matching
+   `OBJ_F_ITEM_AI_ACTION`, or, with spell mana left, through any of their five
+   spells whose `AI_*` value for that action is set; a hexed wielded weapon is
+   the only item considered, and NPCs with a leader skip unidentified items
+   other than food and scrolls ([MT-AT items][mtai-items]).
 6. **Persistent combat-domain state lives in objects, not in modules.** Skills,
    stats, spell colleges, tech degrees, effects, blessings, reputations,
    danger flags, focus, enemy list and AI row are object fields saved with the
@@ -112,7 +118,7 @@ among them Effect (row 120) and Proto (row 124), run by Map's own hooks
 | init | process start, base mounted | table order | exits the modules before the failed one; the failed one's exit is not called ([init][gl-init]) |
 | mod_load | module chosen (`-mod:`, main menu, options, multiplayer) | table order | unloads the modules before the failed one, unmounts the module ([mod load][gl-modload]) |
 | reset | new game or load | table order | never fails; clears `Save\Current` first ([reset][gl-reset]) |
-| save | save game | table order | `Save\Current\data.sav`: version 25, then each module blob followed by `0xBEEFCAFE`; any failure deletes the file ([save][gl-save]) |
+| save | save game | table order | `Save\Current\data.sav`: version 25, then each module blob followed by `0xBEEFCAFE`; a failure while writing it deletes it ([save][gl-save]) |
 | load | load game | table order | checks each sentinel; a failure stops without rollback; the version is stored, not checked ([load][gl-load]) |
 | mod_unload, exit | module change, quit | reverse order | none ([mod unload][gl-modunload]) |
 
@@ -160,7 +166,7 @@ rebuilt by `load`.
 | Party | 191 | init, reset, exit | none | 8 multiplayer slots | no: save and load exist but are not registered ([party][party]) |
 
 Fate is not a module and reads nothing; critical hit and miss types are enums
-only, and every critical table is code in `combat.c` ([combat][combat-init]).
+only, and every critical table is code in `combat.c` ([tables][combat-tables]).
 Description (row 131) and O_Name (Map sub-module) supply the names and
 descriptions of [section 5](#5-prototypes-and-object-fields).
 
@@ -220,7 +226,8 @@ means a missing file fails that phase.
 | `Rules\AnimEyeCandy.mes`, `Rules\WeaponEyeCandy.mes` | Anim, init (not editor) | num. | yes | animation and weapon effects ([anim][anim-init]) |
 | `proto\*.pro` | Proto, init | file name number | generated if missing | every prototype ([proto][proto-init]) |
 | `rules\npc.txt`, `rules\monster.txt`, `rules\unique.txt` | Proto, init, only for generated prototypes | `Description: N` records | — | critter defaults ([rules text][proto-rules]) |
-| `oemes\oname.mes`, `oemes\gameoname.mes` | O_Name, init / mod_load | num. | base yes | object names ([oname][oname]) |
+| `oemes\oname.mes`, `oemes\gameoname.mes` | O_Name, init / mod_load (merged) | num. | base yes | object names ([oname][oname]) |
+| `oemes\faction.mes`, `oemes\gamefaction.mes` | O_Name, init / mod_load (merged) | num. | base yes | faction names; NPC faction is an AI input ([oname][oname]) |
 | `mes\description.mes`, `mes\gamedesc.mes` | Description, init / mod_load | below / from 30000 | base yes | descriptions ([description][description]) |
 | `scr\*.scr` | ScriptName, init / mod_load; Script on demand | file number 1000+ base, 1..999 module | — | scripts, cached on first use ([names][script-name], [cache][script-cache]) |
 | `mes\storystate.mes` | Script, mod_load | num. | no | story state texts ([script][script-init]) |
@@ -258,8 +265,8 @@ technology.
 
 | Line | Pass | Required | Content |
 | --- | --- | --- | --- |
-| +0 | A | yes | `AoE:` over 65 target names, `AoE_SF:`, `AoE_NO_SF:`, `Radius:`, `Count:`, then the same per action `[Begin]`, `[Maintain]`, `[End]`, `[Callback]`, `[EndCallback]`; "not invulnerable" is added except for spells 1, 2 and 9 |
-| +1 | A | yes | `IQ:` (used as minimum willpower, LM6), `Cost:`, `Maintain:(cost@period)`, `Duration:(period@stat)` and `DurationStatInfo:`, `DurationTriggerCount:`, `Resist:(STAT@value)`, `Range:`, `ChargesFromCells:`, `ChargeBeginCost:`, `Info:` (neutral, friendly, aggressive, may be aggressive), `Disabled:` |
+| +0 | A | always read; a missing line yields the error text, which matches no key, and init still succeeds | `AoE:` over 65 target names, `AoE_SF:`, `AoE_NO_SF:`, `Radius:`, `Count:`, then the same per action `[Begin]`, `[Maintain]`, `[End]`, `[Callback]`, `[EndCallback]`; "not invulnerable" is added except for spells 1, 2 and 9 |
+| +1 | A | as +0 | `IQ:` (used as minimum willpower, LM6), `Cost:`, `Maintain:(cost@period)`, `Duration:(period@stat)` and `DurationStatInfo:`, `DurationTriggerCount:`, `Resist:(STAT@value)`, `Range:`, `ChargesFromCells:`, `ChargeBeginCost:`, `Info:` (neutral, friendly, aggressive, may be aggressive), `Disabled:` |
 | +2 | A | no | casting animation, missile, caster and target effects per action, `Is_Tech:` |
 | +3 | A | no | `No_Stack:`, spell flags it cancels or forbids, `Disallowed_TCF:` critter flags, `ItemTriggers:` |
 | +4 | A | no | `AI_Flee:`, `AI_Summon:`, `AI_Defensive:(value@second)`, `AI_Offensive:`, `AI_HealingLight:`, `AI_HealingMedium:`, `AI_HealingHeavy:`, `AI_CurePoison:`, `AI_FatigueRecover:`, `AI_Resurrect:`; absent values are −1; `No_Resist:` and `No_Reflect:` act by presence |
@@ -306,8 +313,10 @@ An object stores applied effects as two parallel arrays (number and cause).
   the buy file lists prototypes or `ALL`; every prototype is validated at init
   ([sets][invensource]).
 - **Reputations**: three faction numbers, then up to five `adj origin faction`
-  effects; the digit-only scanner loses negative values (already recorded as
-  [ARC-RES-028 D1](npc-reaction-reputation-evidence.md)) ([parse][rep-parse]).
+  effects; after a signed adjustment the digit-only scanner re-reads the same
+  number, so origin and faction become equal to the adjustment (already
+  recorded as anomaly P1 with owner decision D1 in
+  [ARC-RES-028](npc-reaction-reputation-evidence.md)) ([parse][rep-parse]).
 - **Blessings and curses**: name, effect number and text per id; ids below 50
   are refused, and id 100 would collide with the UI message 1000, so 50..99 is
   the usable range (inference) ([bless][bless]).
@@ -357,9 +366,10 @@ the census).
 | Weapon | weapon flags (loud, silent, two-handed, throwable, boomerangs, ignore resistance, damage armour and others), to-hit bonus, damage minimum, maximum and magic adjustment for five types (normal, poison, electrical, fire, fatigue), speed, range, minimum strength (each with its magic adjustment), ammo type and use, missile and visual effect, critical hit and miss charts, magic critical chances and effects |
 | Ammo, armour, generic | ammo type and quantity; armour size and gender flags, AC and resistance adjustments, silent-move adjustment, unarmed bonus damage; generic flags (lockpick, trap device, healing item, grenade), usage bonus and count |
 
-Flag definitions: [object flags][obj-flags]. The AI finds grenades and healing
-items by generic flags, and spell items by the valid-AI-action flag plus the
-item AI action ([MT-AT items][mtai-items]).
+Flag definitions: [object flags][obj-flags]. The AI finds grenades
+([grenades][ai-grenade]) and healing items ([healing][ai-heal-item]) by
+generic flags, and spell items as Answer item 5 describes
+([MT-AT items][mtai-items]).
 
 **Names and descriptions.** Names come from `oemes\oname.mes` plus the
 module's `gameoname.mes` ([oname][oname]); descriptions below 30000 from
@@ -370,9 +380,11 @@ module's `gameoname.mes` ([oname][oname]); descriptions below 30000 from
 ### NPC weapon choice
 
 `item_wield_best` ([wield][wield]) is how an NPC picks gear, so it belongs to
-this map. Eligibility ([eligibility][wield-ok]) refuses polymorphed critters,
+this map. The current weapon is always unwielded before the search.
+Eligibility ([eligibility][wield-ok]) refuses polymorphed critters,
 magical items for the magick-allergic background, broken art, the wrong slot,
-two-handed weapons with a shield or crippled arm, any missing critter art for
+fixed two-handed weapons with a shield or a crippled arm, any weapon when both
+arms are crippled, any missing critter art for
 the weapon type, and armour of the wrong size, gender or for unique art; it
 does **not** check minimum strength. A weapon needs no ammo or enough ammo;
 its score is average damage × skill effectiveness / 100, untrained skills
@@ -387,26 +399,27 @@ take the highest worth. Two slips: LM1, LM2.
 | Prototypes | Proto pool, process lifetime | `.pro` files, never in the save |
 | Skills, stats, colleges, degrees, effects, blessings, curses, reputations, reaction memory, danger flags, focus, enemy list, AI row | the objects | object data in the save |
 | Turn-based combat | Combat | module blob: flags and turn; when a round is active also action points and three object IDs; required AP is read back and discarded ([save][combat-save]) |
-| Active spells | MagicTech-Post | module blob of 512 run slots in extents ([save][mt-save]); per map `Save\Current\maps\<map>\MT.dat` on map close and teleport ([map][mt-map]) |
+| Active spells | MagicTech-Post | module blob of 512 run slots in extents ([save][mt-save]); per map `Save\Current\maps\<map>\MT.dat` when a map closes during a teleport, plus the teleport notification ([map][mt-map], [close][te-map]) |
 | Script globals, flags, story state | Script | module blob ([script][script-init]) |
 | Timers | TimeEvent | module blob of saveable types per clock ([save][te-save]); per map `TimeEvent.dat` on teleport ([teleport][te-teleport]) |
 | Animation runs | Anim | module blob of 216 slots |
 | Next gambling roll | Skill | module blob, one value |
 | Spawn counters | MonsterGen | module blob of 256 bytes ([save][monstergen]) |
 | Followers | objects (leader, follower list) | object data; Party's own save is unregistered |
-| Per-critter spell/item AI cache | MT-AT | not saved; cleared on reset and teleport ([cache][mtai-cache]) |
+| Per-critter spell/item AI cache | MT-AT | not saved; cleared on reset ([reset][mtai-reset]) and on teleport ([teleport][mt-teleport]) |
 
 **Timers** ([table][te-table]). Saved: animation, script, magic/tech, poison,
 resting, fatigue, aging, turn-based combat, NPC wait here, lock, NPC respawn,
 magic item recharge, body decay, item decay, combat-focus wipe, traps, scenery
-respawn, random encounter and others. Not saved: **AI**, sleeping, light, UI,
-background and fidget animations, teleported. On map close, animation,
+respawn, random encounter and others. Not saved: **AI**, debug, background
+and fidget animations, sleeping, main menu, light, multiplayer, multiplayer
+control UI, UI and teleported. On map close, animation,
 magic/tech, AI, combat, turn-based combat, world map and teleport timers are
 cleared ([map close][te-map]).
 
 **AI restart.** Because AI timers are not saved, every non-destroyed NPC gets
 an immediate AI event when its sector's objects are folded into the sector
-list ([sector][sol], [reschedule][ai-sched]). A loaded game therefore resumes
+list ([sector][sol], [object][obj-ai-start], [reschedule][ai-sched]). A loaded game therefore resumes
 AI from object fields alone.
 
 ## 7. Rules that are code, not data
@@ -416,23 +429,25 @@ formulas; listed here is only which constants have no file behind them, so the
 loader does not look for one:
 
 - **Combat**: hit location penalties (torso 0, head −50, arm and leg −30),
-  random location (70/15/10/5), dodge critical chance by training, material
-  damage reduction for portals and containers, damage type to resistance
-  (fatigue uses normal), weapon wear by material, critical ladders, action
+  random location (torso 70, leg 15, arm 10, head 5), dodge critical chance
+  by training, material damage reduction for portals and containers, damage
+  type to resistance (fatigue uses normal) ([tables][combat-tables],
+  [location][combat-loc]), weapon wear by material, critical ladders, action
   points `max(5, Speed)`, attack cost from weapon speed, perception range
-  ([combat][combat-init]).
+  (formulas in the [combat core research](combat-core-evidence.md)).
 - **Skills**: key stat per skill, training minimums 0/1/9/18, maximum level by
   stat, opposed-skill table, gambling costs, pick-pocket penalties, monster
-  melee thresholds ([skill][skill-init]).
+  melee thresholds ([tables][skill-tables]).
 - **Stats**: limits and defaults, per-level cost, beauty to reaction, race
   maxima, background modifiers, derived formulas ([derived][stat-derived]).
 - **Technology**: degree cost, level percentage {0, 10, 20, 35, 50, 65, 80,
   100}, minimum intelligence {0, 5, 8, 11, 13, 15, 17, 19}, schematic number
   1990 + 200·discipline + 10·degree ([tables][tech-tables]).
 - **Magic**: minimum level per spell rank {1, 1, 5, 10, 15}, college icons,
-  spell price 100, dwarves pay double, mastery halves cost and doubles
-  maintenance ([spell][spell-init]); summon tables ([summon][mt-summon]).
-- **Reaction**: an 11×8 race table ([reaction][reaction]). **Traps**:
+  spell price 100, dwarves pay double, mastery halves the cost and doubles
+  the maintenance period ([levels][spell-levels], [cost][spell-cost]); summon
+  tables ([summon][mt-summon]).
+- **Reaction**: an 11×8 race table ([race table][reaction-table]). **Traps**:
   scripts 30000..30007, placed prototypes 26000..26007, disarm items
   ([trap][trap-init]). **Spawners**: rate intervals ([rates][monstergen-rates]).
 - **Items**: race to armour size table ([wield][wield]).
@@ -449,24 +464,26 @@ Recorded, not adopted. "Inference" marks a reading of intent.
 | LM4 | AI unload ([unload][ai-unload]) | module rows 100..149 survive a module unload | clear them |
 | LM5 | spell minimum intelligence ([iq][mt-iq]) | always 5 | per spell, or unused |
 | LM6 | spell `IQ:` ([iq][mt-iq]) | stored and used as minimum **willpower** | name mismatch only, or a slip; stage A5 decides |
-| LM7 | item spells ([MT-Item][mtitem-spell]) | item spell becomes a spell number by `& 0xFF`, so "none" (10000) becomes 16 | treat 10000 as none |
+| LM7 | item spells ([MT-Item][mtitem-spell]) | item spell becomes a spell number by `& 0xFF`, so "none" (10000) becomes 16 (Stone Throw) | CE's comment reads it as deliberate (every item can be thrown); low confidence that it is a slip |
 | LM8 | combat load ([save][combat-save]) | required action points are saved, read back and then set to 0 | restore them, or stop saving them |
 | LM9 | effects ([parse][effect-parse]) | `*N` and `/N` parse to 0 (the operator character reaches `atoi`), so a divide would be by zero; no bound on seven pairs; an unknown operator still counts | parse the number after the operator |
 | LM10 | item effects ([item effect][item-effect]) | the module file's last number overwrites the base maximum and is not restored on unload | keep both maxima |
 | LM11 | level cap ([cap][level-cap]) | when a level-up reaches the level maximum (51), the XP is capped but the level is not set, so the reachable cap is 50 | cap 50 or 51; one of the two is a slip |
-| LM12 | backgrounds ([race codes][bg-race]) | an 8-entry race code table is indexed by 11 races (dark elf, ogre, orc read out of bounds) | full table |
+| LM12 | backgrounds ([race codes][bg-race]) | an 8-entry race code table is indexed by the PC's race; only races 8..10 (not playable) would read out of bounds. The reaction race table has the same 11×8 shape ([race table][reaction-table]) | latent; full tables if NPC races ever reach it |
 | LM13 | inventory sources ([sets][invensource]) | `id < count` makes the last set unreachable | `id <= count` |
 | LM14 | melee damage scaling ([helper][skill-helper]) | a helper always returns 100, so melee damage range scaling does nothing | a real factor; unknown |
-| LM15 | prototype ranges ([ranges][proto-ranges]) | `proto.c` comments call 27309.. "monster" and 28310.. "unique", the description header says the opposite | labels only; the census decides |
-| LM16 | fatigue adjustment ([setter][critter-fatigue]) | setting the fatigue adjustment writes fatigue points (CE FIXME) | write the adjustment |
+| LM15 | prototype ranges ([ranges][proto-ranges]) | `proto.c` comments call 27309.. "monster" and 28310.. "unique", the description header says the opposite ([header][desc-header]) | labels only; the census decides |
+| LM16 | fatigue adjustment ([setter][critter-fatigue]) | the setter named for the adjustment writes fatigue points; CE's FIXME says the name is wrong, and nothing in CE calls it | dead code; name only |
 | LM17 | stat lookup keys ([keys][stat-keys]) | unspent points map to the poison key and magick points to age; `Resist:` in `spelllist.mes` uses this table | correct names |
 | LM18 | script cache ([cache][script-cache]) | unlock decrements only in editor mode | decrement always |
-| LM19 | spell run load ([save][mt-save]) | skipped slots are not cleared on load | clear them |
-| LM20 | bless/curse ([bless][bless]) | a missing module file leaves an invalid handle that is searched anyway; curse copies its name unbounded | guard both |
+| LM19 | spell run load ([save][mt-save]) | skipped slots are not cleared on load; latent, because a load first runs the reset that clears all 512 slots | clear them in the loader itself |
+| LM20 | bless/curse ([bless][bless]) | a missing module file leaves an invalid handle that is searched anyway; curse copies its name unbounded ([curse][curse-copy]) | guard both |
 
-Already recorded elsewhere and not renumbered: turn order without initiative
-(combat core anomalies), the reputation sign loss (ARC-RES-028 D1), and the
-plan's P1–P7.
+Already recorded elsewhere and not renumbered: the combat-core anomalies
+A1–A9 of [ARC-RES-030](combat-core-evidence.md), the signed reputation parse
+(ARC-RES-028 P1, decision D1) and the plan's P1–P7. LM1..LM20 follow the same
+rule as those: each is decided by the stage or slice that uses it and logged
+in the plan's [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions).
 
 ## 9. Consequences for Steamwoven (project policy proposals)
 
@@ -495,7 +512,7 @@ plan's P1–P7.
 6. **Prototype fields are the AI's inputs.** Slice I1 reads the AI row, I4
    the NPC flags, faction, reaction and enemy list, I8 the item AI action and
    spell `AI_*` values; all are present in the prototype and instance readers
-   the project already has or plans (ARC-DATA-015, census RES-036), so no new
+   the project already has or plans (ARC-DATA-015, census ARC-RES-036), so no new
    format work is needed beyond `spelllist.mes` and the two AI files.
 
 ## 10. Original data census (next task)
@@ -570,7 +587,6 @@ names in this document are descriptive.
 [mt-save]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L866-L987
 [mt-map]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L1012-L1271
 [mtai-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L76-L222
-[mtai-cache]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L373-L400
 [mtai-items]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L402-L492
 [mtitem-spell]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_item.c#L127-L137
 [spell-init]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L215-L256
@@ -625,3 +641,16 @@ names in this document are descriptive.
 [te-save]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L570-L676
 [te-map]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1249-L1270
 [te-teleport]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c#L1556-L1753
+[ai-grenade]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2546-L2561
+[ai-heal-item]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L3555-L3570
+[mtai-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c#L91-L95
+[mt-teleport]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c#L6946-L6949
+[obj-ai-start]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4151-L4159
+[combat-tables]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L77-L130
+[combat-loc]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L2564-L2571
+[skill-tables]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c#L37-L294
+[spell-levels]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L25-L40
+[spell-cost]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c#L359-L422
+[reaction-table]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L30-L142
+[desc-header]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/descriptions.h#L1036-L1037
+[curse-copy]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/curse.c#L70-L80
