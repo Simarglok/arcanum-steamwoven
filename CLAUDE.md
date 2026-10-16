@@ -19,10 +19,10 @@ summarizes the project and points to them.
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
   data runs on the owner's Mac (a Remote Control session in the owner's
-  checkout). Following the owner's project instructions, a docs-only task
-  (Markdown only) may run in a cloud clone, which has no .NET or Godot: run
-  `python3 -B tools/research/dat_probe.py --self-test` and state in the PR that
-  the .NET root checks were not run because no code changed.
+  checkout). A docs-only task (only Markdown documentation changes) may run in
+  a cloud clone, which has no .NET or Godot, and runs **no checks**: no root
+  checks, no task checks; the PR says "docs-only, no checks run". The
+  independent review still applies (`docs/workflow/tasks.md`).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
@@ -30,7 +30,7 @@ summarizes the project and points to them.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
   subagent on the exact diff first. Once the acceptance criteria, task checks and
-  root checks pass and the review is addressed, merge the PR yourself and report
+  root checks pass (none for docs-only) and the review is addressed, merge the PR yourself and report
   it, unless the owner explicitly asked to review it; then leave it open for the
   owner (`docs/workflow/tasks.md`).
 - **Stop and ask** when something you need is missing, a fix would change the
