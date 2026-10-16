@@ -10,7 +10,7 @@ public sealed class GameSessionOwnerIdentity
     internal GameSessionOwnerIdentity() { }
 }
 
-/// <summary>Freshness guard for actor and map mutations. Clock and flags keep their own tokens.</summary>
+/// <summary>Freshness guard for actor, map and story mutations. Clock and flags keep their own tokens.</summary>
 public readonly record struct GameSessionVersion(GameSessionOwnerIdentity? Owner, long Revision);
 
 /// <summary>Runtime map number (the Area <c>RuntimeMap</c>); positive.</summary>
@@ -70,7 +70,7 @@ public enum GameSessionFailure
 {
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
-    IncompatibleClockProfile, InvalidSnapshot,
+    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -99,6 +99,56 @@ public sealed class SessionFlagState
     public IReadOnlyList<GlobalFlagEntry> Entries { get; }
 }
 
+/// <summary>Quest states in source order. <see cref="Botched"/> is reported over a kept underlying state.</summary>
+public enum SessionQuestState
+{
+    Unknown = 0, Mentioned = 1, Accepted = 2, Achieved = 3, Completed = 4, OtherCompleted = 5, Botched = 6,
+}
+
+/// <summary>
+/// The PC's record of one quest: the stored state (never <see cref="SessionQuestState.Botched"/>), the botched
+/// mark kept over it, and the session game time of the last change.
+/// </summary>
+public readonly record struct SessionQuest(int Quest, SessionQuestState State, bool Botched, long TimestampMs)
+{
+    public SessionQuestState Effective => Botched ? SessionQuestState.Botched : State;
+}
+
+/// <summary>A quest's shared state once it left the source default (Accepted): Completed or Botched.</summary>
+public readonly record struct SessionGlobalQuest(int Quest, SessionQuestState State);
+
+/// <summary>A rumor the PC knows, with the session game time it was learned.</summary>
+public readonly record struct SessionRumor(int Rumor, long TimestampMs);
+
+/// <summary>Number ranges of the story domain: the source indexes quests and rumors from 1000.</summary>
+public static class SessionStoryLimits
+{
+    public const int FirstQuest = 1000;
+    public const int LastQuest = 1999;
+    public const int FirstRumor = 1000;
+    public const int LastRumor = 2999;
+    public const int MaxQuests = LastQuest - FirstQuest + 1;
+    public const int MaxRumors = LastRumor - FirstRumor + 1;
+
+    public static bool IsQuest(int quest) => quest is >= FirstQuest and <= LastQuest;
+    public static bool IsRumor(int rumor) => rumor is >= FirstRumor and <= LastRumor;
+}
+
+/// <summary>Saved story state: PC quests, non-default shared quest states and known rumors, each ascending.</summary>
+public sealed class SessionStoryState
+{
+    internal SessionStoryState(SessionQuest[] quests, SessionGlobalQuest[] globalQuests, SessionRumor[] rumors)
+    {
+        Quests = Array.AsReadOnly(quests);
+        GlobalQuests = Array.AsReadOnly(globalQuests);
+        Rumors = Array.AsReadOnly(rumors);
+    }
+
+    public IReadOnlyList<SessionQuest> Quests { get; }
+    public IReadOnlyList<SessionGlobalQuest> GlobalQuests { get; }
+    public IReadOnlyList<SessionRumor> Rumors { get; }
+}
+
 /// <summary>Changes of one map in canonical key order; a map without changes is not listed.</summary>
 public sealed class SessionMapState
 {
@@ -118,13 +168,13 @@ public sealed class SessionMapState
 /// </summary>
 public sealed class GameSessionSnapshot
 {
-    public const int CurrentSchemaVersion = 1;
+    public const int CurrentSchemaVersion = 2;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
-        SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps)
+        SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
-        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps);
+        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story;
     }
 
     public int SchemaVersion { get; }
@@ -134,6 +184,7 @@ public sealed class GameSessionSnapshot
     public SessionFlagState Flags { get; }
     public ActorPlacement Actor { get; }
     public IReadOnlyList<SessionMapState> Maps { get; }
+    public SessionStoryState Story { get; }
 }
 
 internal static class SessionValidation

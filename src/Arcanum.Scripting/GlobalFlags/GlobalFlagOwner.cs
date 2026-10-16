@@ -1,7 +1,7 @@
 namespace Arcanum.Scripting.GlobalFlags;
 
 /// <summary>Finite, synchronous in-memory GF owner. The host must serialize all calls.</summary>
-public sealed class GlobalFlagOwner : IGlobalFlagOwner, IDisposable
+public sealed class GlobalFlagOwner : IVersionedGlobalFlagOwner, IDisposable
 {
     private readonly Dictionary<FlagId, bool?> _values;
     private long _revision;

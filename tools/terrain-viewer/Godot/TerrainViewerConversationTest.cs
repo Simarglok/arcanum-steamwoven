@@ -2,7 +2,6 @@ using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
-using Arcanum.Scripting.GlobalFlags;
 using Arcanum.TerrainViewer.Core;
 using Arcanum.TerrainViewer.Tests;
 using GamepadLab.Core;
@@ -15,7 +14,7 @@ public static partial class TerrainViewerSelfTest
 {
     // Invented synthetic records; no original dialogue.
     private const string SyntheticDialog =
-        "{1}{Greetings, @pcname@. The road is closed.}{Greetings, madam.}{}{}{}{GF 7 1, QU 3 1}" +
+        "{1}{Greetings, @pcname@. The road is closed.}{Greetings, madam.}{}{}{}{GF 7 1, QU 1003 1}" +
         "{2}{Why is it closed?}{}{1}{GF 7 1}{10}{}" +
         "{3}{Barter.}{}{1}{}{0}{}" +
         "{4}{b:}{}{1}{}{0}{}" +
@@ -30,15 +29,13 @@ public static partial class TerrainViewerSelfTest
         try
         {
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
-            var state = new AreaConversationState(50);
-            var owner = GlobalFlagOwner.Create(new GlobalFlagOwnerDescriptor(
-                new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid())), new OwnerEpoch(Guid.NewGuid()), 0,
-                new[] { new FlagId(7) }, new[] { new GlobalFlagBootstrapValue(new FlagId(7), false) })).Owner!;
+            using var session = ConversationSessionFixture.Create();
+            var state = new AreaConversationState(session, new(1), ["oid:synthetic-0"], 50);
             var conversation = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(SyntheticDialog)),
                 new DialogConversationRequest(new DialogNodeId(1),
                     new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
                     new DialogScriptLine(4), AreaConversationProfile.Diagnostic.Pc, AreaConversationProfile.Diagnostic.Names),
-                new DialogConversationPorts(state, state, owner, state));
+                new DialogConversationPorts(state, state, session.Flags, state));
             panel.Open("Synthetic NPC", conversation);
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             Require(panel.IsOpen && panel.NpcLineForSelfTest == "Greetings, [PC]. The road is closed.", "panel shows the substituted NPC line");
@@ -51,7 +48,8 @@ public static partial class TerrainViewerSelfTest
             await ScreenshotAsync(host, "synthetic");
             panel.Choose(1);
             Require(conversation.Phase == DialogConversationPhase.Ended && panel.OutcomeForSelfTest.Contains("SCR line 5") && panel.ButtonsForSelfTest.Count == 0, "Exit returns to the caller's next SCR line");
-            Require(state.LocalFlag(0, 2) && state.Quests[3] == 1 && state.Rumors.Contains(1001), "typed effects reached the diagnostic owner");
+            Require(state.LocalFlag(0, 2) && session.QueryQuest(1003)?.State == Arcanum.Session.SessionQuestState.Mentioned && session.QueryRumor(1001) is not null,
+                "typed effects reached the session");
             panel.Choose(1);
             Require(closed == 1 && !panel.IsOpen, "any choice dismisses a finished dialog");
             panel.Open("Synthetic NPC", conversation); panel.LeaveForSelfTest.EmitSignal(BaseButton.SignalName.Pressed);
@@ -103,7 +101,9 @@ public static partial class TerrainViewerSelfTest
         if (string.IsNullOrWhiteSpace(root)) throw new InvalidOperationException("CONVERSATION_GAME_ROOT_REQUIRED");
         using var data = AreaOriginalValidator.OpenFiles(Path.Combine(root, "modules/Arcanum.dat"), Path.Combine(root, "arcanum1.dat"),
             Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), Path.Combine(root, "data/proto"));
-        var conversations = new AreaConversationHost(data.LoadStrict(), Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"));
+        var snapshot = data.LoadStrict();
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var conversations = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session);
         var start = conversations.Begin(conversations.Speakers.FirstOrDefault());
         GD.Print($"ARC-SCRIPT-005 original speakers={conversations.Speakers.Count} status={start.Status} detail={start.Detail}");
         if (start.Conversation is not { } conversation) throw new InvalidOperationException("ORIGINAL_CONVERSATION_NOT_STARTED");
