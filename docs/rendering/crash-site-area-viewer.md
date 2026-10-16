@@ -301,13 +301,16 @@ and nearest probes as receipt-bound source and exported gates
 
 The endpoint reads every original role from the configured `ARCANUM_LOCAL_HOME`,
 which therefore needs the seven area roles (module, terrain resource, actor
-resource, prototypes, `areaMobile`, `areaEffects`, `areaPatch`) and the `world`
-artifact root. It also needs three private, ignored references in the
-environment: `ARC_AREA_ORACLE` (the area oracle above),
-`ARC_AREA_PRIVATE_EVIDENCE` (an ignored directory under the candidate's
-`local/`) and `RENDER006_HUMAN_ORACLE` (the inherited human gates). Without the
-last one `source-human-original` fails at `private-reference-admission`. A
-failed same-head run cannot be retried: the endpoint keeps the partial candidate
+resource, prototypes, `areaMobile`, `areaEffects`, `areaPatch`) plus `sourceId`,
+and an ignored artifact root registered with `arcanum-local configure
+add-artifact-root` and named by `ARCANUM_LOCAL_ROOT_ID` (for example `world`).
+It also needs three private references in the environment: `ARC_AREA_ORACLE`
+(the independent numeric oracle of the [area loader](../world/crash-site-area-loader.md),
+pinned by digest), `ARC_AREA_PRIVATE_EVIDENCE` (an ignored directory under the
+candidate's `local/`) and `RENDER006_HUMAN_ORACLE` (the private human reference
+used by the inherited human and grid gates). Without the last one
+`source-human-original` fails first, at `private-reference-admission`. A failed
+same-head run cannot be retried: the endpoint keeps the partial candidate
 intact, so a corrected run needs a new committed head.
 
 After its sampled-pixel stage, the original `crash-site-area` native smoke
