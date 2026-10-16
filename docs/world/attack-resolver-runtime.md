@@ -120,8 +120,10 @@ those draws are modelled as well.
 
 `AttackDamage` is a packet: hit-point, fatigue and poison damage, the rolled
 and final values per type, multiplier, critical effects, armour wear and why
-damage was prevented. Applying it to HP, fatigue, poison, knockout, death,
-item wear or busting is the vital-state and item owners' job.
+damage was prevented. Applying it to HP, fatigue, poison, knockout, death and
+injuries is the [life state](life-state-runtime.md)'s job (ARC-COMBAT-002:
+`LifeDamage.FromAttack`, `LifeRules.ApplyDamage`, `GameSessionOwner.ApplyDamage`);
+item wear, drops and busting stay with the item owners.
 
 ## Rule settings and anomaly switches
 

@@ -117,7 +117,8 @@ hero under the same checks as `Create` (`InvalidHero`) and refuses gold or a kit
 is not the next `kit:n` (`InvalidSnapshot`).
 
 **Migration decision: none.** Schemas 1..5 are `UnsupportedSchema` (and schema 6 since ARC-WORLD-019, which added
-[`random`](session-random-runtime.md#snapshot-schema-7)); a schema-5 quick save loads as "written by an
+[`random`](session-random-runtime.md#snapshot-schema-7), and schema 7 since ARC-COMBAT-002, which added
+[`life`](life-state-runtime.md#snapshot-schema-8)); a schema-5 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer's sessions have no hero,
 so nothing is lost.
 
@@ -147,7 +148,8 @@ and whether Crash Site scripts read them is an open ARC-RES-025 question).
 
 The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet is **not** the original level-1 sheet;
 ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
-kits), backgrounds and their context effects, skills, spells, tech, hit points and fatigue, item wielding
+kits), backgrounds and their context effects, skills, spells, tech, hit-point and fatigue pools (the hero's life state is
+[ARC-COMBAT-002](life-state-runtime.md), with pools 0 as every pre-made prototype stores them), item wielding
 (`item_wield_best_all`: the kit is carried, not worn), the PC object and name, the viewer wiring and a hero picker.
 When the viewer starts a hero, its inventory window and insert check must read `QueryHeroKit()` too: the ARC-UI-004 host
 builds the PC list from `QueryPcInventory()` alone.
