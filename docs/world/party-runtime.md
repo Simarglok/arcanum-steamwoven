@@ -140,4 +140,5 @@ ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.Terr
 ## Next
 
 The viewer wiring and follower movement (slice 3) are ARC-WORLD-016
-([companion follow runtime](companion-follow-runtime.md)); next is the cross-map group (slice 4, ARC-WORLD-017).
+([companion follow runtime](companion-follow-runtime.md)); the cross-map group (slice 4) is ARC-WORLD-017
+([map change](companion-follow-runtime.md#map-change-arc-world-017)). Next: orders, loyalty and the wait timer (slice 5).

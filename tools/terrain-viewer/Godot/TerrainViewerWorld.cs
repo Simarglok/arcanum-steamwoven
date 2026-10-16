@@ -430,7 +430,7 @@ public partial class TerrainViewerApp
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
             FollowAreaAmbient(); FollowAreaWalls();
-            _canvas!.SetAreaMovingBodies(AreaCompanionCommands());
+            _canvas!.SetAreaMovingBodies(AreaCompanionCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
             _canvas.PublishArea(_readyArea, actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);

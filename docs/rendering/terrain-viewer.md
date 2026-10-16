@@ -842,10 +842,16 @@ follower entry (node 385) offers its `WA`/`UW` replies. While he follows he walk
 over the same step evidence (start beyond 4 cells, stop within 2, stand on the PC beyond 30 then step off); the PC and
 Virgil block each other where they stand, and his T0 cell no longer blocks. His T0 body frame is drawn where he stands
 (no walk cycle or turning), talk reach uses his current cell, a waiting Virgil stays, and his cell is written to the
-session on F7 and when the PC enters the cave (he does not come along yet). HUD: `companion script 1324 <standing> at
+session on F7 and when the PC leaves the map. HUD: `companion script 1324 <standing> at
 (x,y) …`. Contract and checks: [companion follow runtime](../world/companion-follow-runtime.md); native smoke
 `ARC-WORLD-016 native-smoke follow PASS` (with the cave input, after the quick-save phase;
 `ARC_AREA_FOLLOW_CAPTURE=PATH.png` saves the frame).
+
+ARC-WORLD-017: a following Virgil goes with the PC through the cave entrance and exit onto the authored arrival cell
+and steps off it; in the cave he is drawn (his exterior T0 frame, lit by the cave where he stands), picked, talked to
+and followed like outside, while the exterior shows no T0 Virgil. A waiting Virgil stays on the map where he waits.
+Contract: [map change](../world/companion-follow-runtime.md#map-change-arc-world-017); native smoke
+`ARC-WORLD-017 native-smoke cave PASS` (after the follow stage; `ARC_AREA_CAVE_FOLLOW_CAPTURE=PATH.png`).
 
 ## Verification and evidence status
 
