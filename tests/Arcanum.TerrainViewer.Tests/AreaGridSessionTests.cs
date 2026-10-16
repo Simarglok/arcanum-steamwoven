@@ -95,6 +95,19 @@ public sealed class AreaGridSessionTests
     }
 
     [TestMethod]
+    public void AreaPlacementAndFollowAnchorUseTheChartLocationOrigin()
+    {
+        var actor = new DiagnosticGridActor(); actor.Configure(Steps(), SimulationTime.At(0), StepDuration.Of(8));
+        var placement = actor.Placement();
+        Assert.AreEqual((40L, 0L, 6L, 1L), (placement.CameraOriginX!.Value, placement.CameraOriginY!.Value, placement.MapX!.Value, placement.MapY!.Value));
+        Assert.AreEqual(AreaCellPicking.Center(new(6, 1)), actor.FootAnchor, "AREA follows the diamond centre the actor stands on.");
+        // The one-sector WORLD profile keeps its retained origin and foot point.
+        using var fixture = new GridWireFixture(); var world = new DiagnosticGridActor(); world.Configure(fixture.Snapshot, SimulationTime.At(0), StepDuration.Of(8));
+        Assert.AreEqual((0L, 0L), (world.Placement().CameraOriginX!.Value, world.Placement().CameraOriginY!.Value));
+        Assert.AreEqual(DiagnosticActorMotion.Project(world.State.Position) + new GamepadLab.Core.Vec2(0, 20), world.FootAnchor);
+    }
+
+    [TestMethod]
     public void AreaSessionRequiresAnAdmittedSpawnAndValidDuration()
     {
         var steps = Steps();

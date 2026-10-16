@@ -15,6 +15,7 @@ public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaV
 public partial class TerrainCanvas
 {
     private AreaAmbientView? _areaAmbient;
+    private IReadOnlyDictionary<AreaObjectKey, AreaWallFade>? _areaWallFades;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -81,6 +82,15 @@ public partial class TerrainCanvas
         if (!ReferenceEquals(_areaAmbient?.Channels, ambient?.Channels)) _areaChunkChannels.Clear();
         _areaAmbient = ambient; _areaView = null; QueueRedraw();
     }
+    /// <summary>ARC-RENDER-011: the wall check's fade of each wall from the next submission (null or absent = opaque).
+    /// Only the per-item alpha changes; plan, order and index rows are reused.</summary>
+    public void SetAreaWallFades(IReadOnlyDictionary<AreaObjectKey, AreaWallFade>? fades)
+    {
+        if (ReferenceEquals(_areaWallFades, fades)) return;
+        _areaWallFades = fades; _areaView = null; QueueRedraw();
+    }
+    internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
+        => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
     // when all its terrain shares one channel (null = mixed, drawn per command instead).
     private readonly Dictionary<(int X, int Y), AreaAmbientChannel?> _areaChunkChannels = new();
@@ -211,6 +221,8 @@ public partial class TerrainCanvas
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
             (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
+            // The source drops every alpha mode for an additive (or sub/mul) object, so such a wall never fades.
+            item.WallFade = isActor || command.Additive ? AreaWallFade.None : AreaWallFadeOf(command);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }
@@ -244,7 +256,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null; DisposeAreaLattice();
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null; _areaWallFades = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

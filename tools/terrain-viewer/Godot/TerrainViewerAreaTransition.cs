@@ -327,6 +327,7 @@ public partial class TerrainViewerApp
             await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
         }
         var capture = System.Environment.GetEnvironmentVariable("ARC_AREA_TRANSITION_CAPTURE");
+        if (_areaWallCheck is { WallCount: > 0 }) await CheckAreaWallFadeAsync(string.IsNullOrWhiteSpace(capture) ? null : $"{capture}-map{expected}");
         if (!string.IsNullOrWhiteSpace(capture))
         {
             using var image = GetViewport().GetTexture().GetImage();

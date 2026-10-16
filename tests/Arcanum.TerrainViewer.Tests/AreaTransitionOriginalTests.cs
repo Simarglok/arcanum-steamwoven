@@ -31,6 +31,7 @@ public sealed class AreaTransitionOriginalTests
         Assert.AreEqual((1, 79), (exterior.RuntimeMap, caveMap.RuntimeMap));
         Assert.AreEqual(new CellCoord(39, 34), cave.Chart.Spawn, "The cave chart starts at the entrance's authored arrival (2087,2018).");
         Assert.AreEqual(125, cave.Area.Plan.Commands.Count(c => c.Identity is { } id && cave.Area.Snapshot.Objects.Single(o => o.Key == id).Type == 0), "Every wall is drawn.");
+        AssertCaveWallCheck(cave.Area.Snapshot, cave.Area.Plan, cave.Steps);
         // ARC-RENDER-012: the cave has its own map-default scheme and four stationary lights; the exterior core none.
         Assert.AreEqual((2, 4), (cave.Area.Lighting!.Source.MapDefaultScheme, cave.Area.Lighting.Local!.LightCount));
         Assert.AreEqual(0, result.Area!.Lighting!.Local!.LightCount);
@@ -78,6 +79,32 @@ public sealed class AreaTransitionOriginalTests
         var back = new AreaGridSession(result.AreaStepSnapshot!, SimulationTime.At(0), StepDuration.Of(1), start: outbound.ArrivalChartCell);
         Assert.AreEqual(outbound.ArrivalChartCell, back.State.CommittedCell, "The return cell is admitted for movement.");
         Console.WriteLine($"cave transition PASS: entrance used from {near} (exterior chart), exit used from {exitNear} (cave chart), session revision {session.Version.Revision}");
+    }
+
+    // ARC-RENDER-011: at the arrival the wall check fades the corridor's front wall row (y 2022, x 2087..2092) and the
+    // row behind it (y 2026, x 2078..2082, its corners fading towards the edge); no admitted cell probes a fade-edge tile
+    // that holds more than one wall, so the source's head-of-list choice never matters in the cave.
+    private static void AssertCaveWallCheck(Arcanum.Data.Area.AreaSnapshot snapshot, AreaScenePlan plan, AreaStepSnapshot steps)
+    {
+        var check = AreaWallCheck.FromArea(snapshot, plan);
+        Assert.AreEqual(125, check.WallCount);
+        var arrival = check.Recalculate(2087, 2018);
+        Assert.AreEqual((2086L, 2018L, AreaWallRegions.LowY, 11), (arrival.BlockX, arrival.BlockY, arrival.Regions, arrival.Fades.Count));
+        var walls = snapshot.Objects.Where(o => o.Type == 0).ToDictionary(o => o.Key);
+        string Fade(long x, long y) => string.Join("", walls.Values.Where(w => w.WorldX == x && w.WorldY == y).Select(w => arrival.FadeOf(w.Key) switch
+            { AreaWallFade.Both => "B", AreaWallFade.Left => "L", AreaWallFade.Right => "R", _ => "-" }));
+        Assert.AreEqual("BBBBBB", string.Concat(Enumerable.Range(2087, 6).Select(x => Fade(x, 2022))));
+        Assert.AreEqual("LBBBR", string.Concat(Enumerable.Range(2078, 5).Select(x => Fade(x, 2026))));
+        var cells = 0; var faded = 0;
+        for (long y = 1984; y < 2048; y++)
+            for (long x = 2048; x < 2112; x++)
+            {
+                if (!steps.IsAdmitted(new(x, y))) continue;
+                check.Reset(); var state = check.Recalculate(x, y);
+                cells++; if (state.Fades.Count != 0) faded++;
+                Assert.AreEqual(0, state.SharedEdgeTiles, $"shared edge tile from ({x},{y})");
+            }
+        Console.WriteLine($"cave wall check: {cells} admitted cells, {faded} with faded walls, arrival {arrival.Fades.Count} faded");
     }
 
     // Finds a reachable cell within use range of the target by breadth-first search over the same step

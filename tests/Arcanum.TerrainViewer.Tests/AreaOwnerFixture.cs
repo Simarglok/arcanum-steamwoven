@@ -30,7 +30,7 @@ internal sealed class AreaOwnerFixture : IDisposable
             ("facade.mes",Encoding.ASCII.GetBytes("{0}{fixture}")),
             ("scenery.mes",Encoding.ASCII.GetBytes("{0}{fixture.art}")),
             ("art/tile/stonebse0a.art",Art(80,40,0,0,false,seamMarkers)),
-            ("art/scenery/fixture.art",Art(128,160,motionBodies ? 20 : -3,motionBodies ? 80 : 11,true))];
+            ("art/scenery/fixture.art",Art(128,160,motionBodies ? -20 : -3,motionBodies ? 80 : 11,true))];
         var resource = Dat(entries);
         (AreaInputKey Key, byte[] Bytes)[] files = [
             (new(AreaSourceRole.Module),module), (new(AreaSourceRole.Resource1),resource),

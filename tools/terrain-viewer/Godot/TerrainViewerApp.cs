@@ -921,7 +921,7 @@ public partial class TerrainViewerApp : Node
     {
         // The conversation host borrows the area session, so it is unbound before the session is disposed.
         UnbindAreaConversations();
-        StopAreaAmbient(); StopAreaTransitions();
+        StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls();
         _readyArea = null;
         _readySourceId = null;
         _readyDecodedCount = 0;

@@ -131,10 +131,10 @@ runtime receives therefore share one Data verdict.
   space and picks the diamond of the drawn ground: cell (x,y) is centred at
   `(40(y-x)+40, 20(y+x)+20)`, the centre of the AREA tile rectangle and the anchor of
   AREA scenery (CE `location_xy` plus the object `+40,+20`). Shared diamond edges go to
-  the larger map coordinate. The HumanFixed actor's retained foot projection
-  `(40(y-x), 20(y+x)+20)` is 40 px left of that centre (checked on a zoom-2 capture on
-  2026-10-16): a settled actor stands on the left vertex of its diamond. Picking
-  follows the ground, not the sprite; correcting the actor offset is a separate change.
+  the larger map coordinate. Since ARC-RENDER-011 a settled actor stands on that
+  centre too ([actor anchor](../rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011));
+  before it the actor was drawn 40 px left, on the left vertex of its diamond. Picking
+  follows the ground, not the sprite.
 - **Driving.** `AdvanceWorldGrid` closes the same complete-observation frontier as
   before. Pending stick/neutral receipts run first as one ordinary advance and the
   follower only observes it. A following route also waits while a stick receipt is
@@ -191,7 +191,7 @@ runtime receives therefore share one Data verdict.
 ## NOT READY
 
 No hover cursor or route preview, no physical mouse check (synthetic and local
-software checks only), and the actor's 40 px foot offset is not corrected. No running,
+software checks only). No running,
 NPC/object goals, doors, windows, traps, followers, other actors, state after T0,
 movement speed or original path choice. Unknown or unsupported evidence is
 reported, not explored. A target more than 32 cells away on an axis is refused,

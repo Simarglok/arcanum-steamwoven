@@ -76,7 +76,10 @@ public partial class TerrainViewerApp
         // 3. Geometry and classification at the required zooms and viewports.
         var layer = _overlayLayer!;
         Require(layer.GetParent() == _canvas && layer.GetGlobalTransformWithCanvas() == _canvas!.GetGlobalTransformWithCanvas(), "overlay shares the canvas transform (no double scaling)");
-        Require(PassabilityOverlayLayer.Center(_worldActor.Session!.State.CommittedCell) == new Vector2((float)WorldAnchor.X, (float)WorldAnchor.Y),
+        int OriginX() => layer.Overlay?.OriginX ?? throw new InvalidOperationException("ARC-RENDER-008 overlay: not bound");
+        Vector2 Center(CellCoord cell) => PassabilityOverlayLayer.Center(cell, OriginX());
+        Require(OriginX() == (mode == "crash-site-area" ? 40 : 0), "AREA diamonds share the terrain tile origin (ARC-RENDER-011)");
+        Require(Center(_worldActor.Session!.State.CommittedCell) == new Vector2((float)WorldAnchor.X, (float)WorldAnchor.Y),
             "overlay cell center is the actor's projected anchor");
         var samples = new List<string>();
         // Raster samples need a settled camera: no smoothing between the readback and the transform used to sample it.
@@ -109,10 +112,10 @@ public partial class TerrainViewerApp
                 // untouched; the outside center lies on its middle gray hatch line (zoom >= 1).
                 Color Pixel(Image image, CellCoord cell)
                 {
-                    var p = _canvas!.GetGlobalTransformWithCanvas() * PassabilityOverlayLayer.Center(cell);
+                    var p = _canvas!.GetGlobalTransformWithCanvas() * Center(cell);
                     return image.GetPixel(Math.Clamp((int)p.X, 0, image.GetWidth() - 1), Math.Clamp((int)p.Y, 0, image.GetHeight() - 1));
                 }
-                bool OnScreen(CellCoord cell) => viewport.GetVisibleRect().HasPoint(_canvas!.GetGlobalTransformWithCanvas() * PassabilityOverlayLayer.Center(cell));
+                bool OnScreen(CellCoord cell) => viewport.GetVisibleRect().HasPoint(_canvas!.GetGlobalTransformWithCanvas() * Center(cell));
                 // The HUD is its own layer above the world: with it shown the overlay must not change HUD pixels;
                 // world samples are taken with it hidden so cells under the HUD panel stay observable.
                 using var hudOn = viewport.GetTexture().GetImage();
@@ -138,7 +141,7 @@ public partial class TerrainViewerApp
                 if (z >= 1 && OnScreen(outside))
                 {
                     // The middle hatch line passes through the center; allow its 1px rasterization offset.
-                    var c = _canvas!.GetGlobalTransformWithCanvas() * PassabilityOverlayLayer.Center(outside);
+                    var c = _canvas!.GetGlobalTransformWithCanvas() * Center(outside);
                     var drawn = false;
                     for (var dy = -2; dy <= 2 && !drawn; dy++) for (var dx = -2; dx <= 2 && !drawn; dx++)
                     {
@@ -155,7 +158,7 @@ public partial class TerrainViewerApp
                         .FirstOrDefault(r => r is not null && r.BlockedEdges.Any() && OnScreen(r.Cell));
                     Require(edgeCell is not null, $"z{z} {size} no on-screen edge-only blocker to raster-check");
                     var e = edgeCell!.BlockedEdges.First();
-                    var to = PassabilityOverlayLayer.Center(edgeCell.Cell); var from = PassabilityOverlayLayer.Center(e.From);
+                    var to = Center(edgeCell.Cell); var from = Center(e.From);
                     var mark = _canvas!.GetGlobalTransformWithCanvas() * ((to + from) / 2 + (to - from).Normalized() * 7);
                     var red = false;
                     for (var dy = -1; dy <= 1 && !red; dy++) for (var dx = -1; dx <= 1 && !red; dx++)

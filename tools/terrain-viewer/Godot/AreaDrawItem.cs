@@ -17,6 +17,10 @@ public partial class AreaDrawItem : Node2D
         uniform ivec2 screen_size;
         uniform float body_alpha = 1.0;
         uniform vec3 ambient = vec3(1.0);
+        // ARC-RENDER-011 wall fade: alpha at the left and right drawn edges, linear across the frame width.
+        uniform vec2 fade = vec2(1.0);
+        uniform int fade_width = 1;
+        uniform bool fade_flip = false;
         // ARC-RENDER-012 local light: 0 constant ambient, 1 horizontal two-colour gradient (walls),
         // 2 terrain lattice. raster = canvas origin and zoom, item_rect = world destination.
         uniform int light_mode = 0;
@@ -51,7 +55,9 @@ public partial class AreaDrawItem : Node2D
             int sx = x.x + x.y * 256 - 1;
             int sy = y.x + y.y * 256 - 1;
             if (sx < 0 || sy < 0) discard;
-            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(light_tint(FRAGCOORD.xy), body_alpha);
+            int column = fade_flip ? fade_width - 1 - sx : sx;
+            float wall = fade.x + float(column) * (fade.y - fade.x) / float(fade_width);
+            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(light_tint(FRAGCOORD.xy), body_alpha * wall);
         }
         """;
     // Two immutable shader programs for process lifetime, not per-object copies.
@@ -60,6 +66,7 @@ public partial class AreaDrawItem : Node2D
     private ShaderMaterial? _material;
     private (bool Additive, int Alpha)? _materialState;
     private Color? _ambientState;
+    private (AreaWallFade Fade, int Width, bool Flip)? _fadeState;
     private (int Mode, Color Right, AreaLatticeBinding? Lattice, TerrainRect Rect, Vector4 Raster)? _lightState;
     private ImageTexture? _mapping;
     private AreaMappingKey? _key;
@@ -73,6 +80,8 @@ public partial class AreaDrawItem : Node2D
     public ActorDiagnosticDrawCommand? Actor { get; set; }
     /// <summary>ARC-RENDER-010 ambient multiplier of this item's channel; white leaves source pixels unchanged.</summary>
     public Color Ambient { get; set; } = Colors.White;
+    /// <summary>ARC-RENDER-011 wall check fade of this item; None draws it opaque.</summary>
+    public AreaWallFade WallFade { get; set; }
     /// <summary>ARC-RENDER-012: right-end colour of a wall gradient; equal to <see cref="Ambient"/> otherwise.</summary>
     public Color AmbientRight { get; set; } = Colors.White;
     /// <summary>ARC-RENDER-012: the terrain light lattice, or null.</summary>
@@ -134,12 +143,21 @@ public partial class AreaDrawItem : Node2D
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
             _materialState = (command.Additive, command.Alpha);
-            _ambientState = null; _lightState = null; // re-send the ambient uniforms with every shader swap
+            _ambientState = null; _lightState = null; _fadeState = null; // re-send the per-item uniforms with every shader swap
         }
         if (_ambientState != Ambient)
         {
             _material.SetShaderParameter("ambient", new Vector3(Ambient.R, Ambient.G, Ambient.B));
             _ambientState = Ambient;
+        }
+        var fadeState = (WallFade, source.Width, command.FlipX);
+        if (_fadeState != fadeState)
+        {
+            var (left, right) = FadeAlphas(WallFade);
+            _material.SetShaderParameter("fade", new Vector2(left / 255f, right / 255f));
+            _material.SetShaderParameter("fade_width", source.Width);
+            _material.SetShaderParameter("fade_flip", command.FlipX);
+            _fadeState = fadeState;
         }
         // Constant-ambient items (every item without local light) never re-send per camera move.
         var mode = Lattice is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
@@ -201,6 +219,17 @@ public partial class AreaDrawItem : Node2D
         _primitive = new(a, b - a); _state = state;
     }
 
+    /// <summary>Alpha at the left and right drawn edges: the source's 64 for a whole wall, 128 on the faded side of a
+    /// corner (<c>OWAF_TRANS_LEFT</c> fades the left side).</summary>
+    internal static (int Left, int Right) FadeAlphas(AreaWallFade fade) => fade switch
+    {
+        AreaWallFade.None => (255, 255),
+        AreaWallFade.Both => (AreaWallCheck.FadedAlpha, AreaWallCheck.FadedAlpha),
+        AreaWallFade.Left => (AreaWallCheck.EdgeAlpha, 255),
+        AreaWallFade.Right => (255, AreaWallCheck.EdgeAlpha),
+        _ => throw new ArgumentOutOfRangeException(nameof(fade)),
+    };
+
     // Both origins integral (always the case with pixel snapping) and below 2^24, so
     // they and their difference are exact integers; otherwise the key is recomputed.
     private static Vector2I? IntegerShift(Vector2 from, Vector2 to)
@@ -236,7 +265,7 @@ public partial class AreaDrawItem : Node2D
 
     public override void _ExitTree()
     {
-        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null; _lightState = null;
+        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null; _fadeState = null; _lightState = null;
         _ownMappings?.Dispose(); _ownMappings = null;
     }
 }

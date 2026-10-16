@@ -132,7 +132,7 @@ selection. Historical standalone actor preview remains MonsterRegression.
 | Logical actions / cadence | Idle0/Walk1; positive raw6/17 rates drive diagnostic clock; action reset, same-action facing retains phase | Original animation/motion-speed parity; fallback cadence |
 | Facing | Project octants clockwise up..up-left 0..7; source facings opaque 0..7; both action group tables `[0,7,6,5,4,5,6,7]`, flips `[false,true,true,true,false,false,false,false]` | Original compass meanings |
 | Geometry | Per-frame signed hotspots/unequal dimensions; mirrored hotX=`width-hotX-1`; no ART offset added in normal uncached scale100 placement | Normalized-size sprites, HD replacement assets |
-| Anchor | Single world foot anchor Project(position)+(0,20); baseline Idle rect(-9,-55,28,77), Walk(-14,-53,27,75) | Sprite bounds as collision or gameplay footprint |
+| Anchor | Single world foot anchor Project(position)+(0,20) (WORLD; the AREA chart uses +(40,20), the diamond centre, since ARC-RENDER-011); baseline Idle rect(-9,-55,28,77), Walk(-14,-53,27,75) | Sprite bounds as collision or gameplay footprint |
 | Coverage | Exactly 55 reachable keys (Idle5/Walk50), 457676 packed RGBA bytes (36384/421292); physical 88 rows are not 88 cache entries | OS/native allocation from algebraic byte sums |
 | Presentation | Original raster size, nearest filtering; source/export actual main-viewport comparisons must independently cover all admitted directions/frames and reject hidden/wrong-facing controls | Headless or texture-only comparisons as GUI passes |
 

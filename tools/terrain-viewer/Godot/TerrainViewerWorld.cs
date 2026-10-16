@@ -97,7 +97,7 @@ public partial class TerrainViewerApp
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
     private bool WorldModal => PaletteOpen || ConversationOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
-    private Vec2 WorldAnchor => DiagnosticActorMotion.Project(_worldActor.State.Position) + new Vec2(0, 20);
+    private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
 
     private void InitializeWorld()
@@ -417,7 +417,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not null)
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
-            FollowAreaAmbient();
+            FollowAreaAmbient(); FollowAreaWalls();
             _canvas!.PublishArea(_readyArea, actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);

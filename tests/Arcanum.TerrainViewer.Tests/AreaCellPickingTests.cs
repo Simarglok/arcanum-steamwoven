@@ -37,12 +37,21 @@ public sealed class AreaCellPickingTests
     }
 
     [TestMethod]
-    public void TheActorFootAnchorIsTheDiamondsLeftVertexNotItsCentre()
+    public void TheAreaActorStandsOnTheDiamondCentreLikeEveryBody()
     {
-        // DiagnosticActorMotion.Project + (0,20) for a settled actor: 40 px left of the drawn diamond centre.
-        var foot = DiagnosticActorMotion.Project(new(6, 1)) + new Vec2(0, 20);
-        Assert.AreEqual(AreaCellPicking.Center(new(6, 1)) - new Vec2(40, 0), foot);
-        Assert.AreNotEqual(new CellCoord(6, 1), AreaCellPicking.Pick(foot), "A shared vertex goes to the larger map coordinate.");
+        // ARC-RENDER-011: the AREA placement restates CE location_xy (40(y-x-1)) from the chart's location origin
+        // (+40,0), so the drawn anchor and the followed foot point are the picked diamond's centre.
+        var frame = new ActorDiagnosticFrame(new(2667, 0x20000000u, 5, 0, 0), 10, 9, 3, 7, 29, -13, 1, 6);
+        foreach (var (x, y) in new[] { (6.0, 1.0), (-3.0, 100.0), (12.0, 6.0) })
+        {
+            var cell = new CellCoord((int)x, (int)y);
+            var placement = DiagnosticActorMotion.ToPlacement(new(new(x, y), 5, ActorDiagnosticAction.Idle), 0, AreaGridSession.MinimumChartCell, AreaGridSession.MaximumChartCell)
+                with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY,
+                    Width = 10, Height = 9, HotX = 3, HotY = 7, ArtOffsetX = 29, ArtOffsetY = -13 };
+            var drawn = ActorDiagnosticScenePlan.Place(placement, frame, ActorDiagnosticProfile.HumanFixed);
+            Assert.AreEqual(AreaCellPicking.Center(cell), new Vec2(drawn.AnchorX, drawn.AnchorY), $"cell {cell}");
+            Assert.AreEqual(cell, AreaCellPicking.Pick(new(drawn.AnchorX, drawn.AnchorY)));
+        }
     }
 
     [TestMethod]

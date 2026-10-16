@@ -61,8 +61,10 @@ Open; the diagonal `(6,1)->(5,0)` is an edge-only blocker (shoulder `(5,1)`).
 ## Geometry
 
 Cells are drawn in the canvas' own chart space with the shared projection: a cell's
-top vertex is `(40*(Y-X), 20*(Y+X))`, its diamond 80x40, its centre the actor's
-projected anchor. The overlay layer is a child of the scene canvas (same transform, no
+top vertex is `(originX + 40*(Y-X), 20*(Y+X))`, its diamond 80x40, its centre the actor's
+projected anchor. On the AREA chart `originX` is 40, so each diamond is the terrain tile
+the actor stands on ([ARC-RENDER-011](terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011));
+`world-diagnostic` keeps 0, as its actor does. The overlay layer is a child of the scene canvas (same transform, no
 second scaling) and draws above terrain, scenery and actor; the HUD is a separate layer
 above it. Pan, Fit, zoom and resize change only what is visible, never a cell's class.
 

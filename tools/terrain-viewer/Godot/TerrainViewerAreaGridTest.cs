@@ -207,7 +207,7 @@ public partial class TerrainViewerApp
 
         // Literal world witnesses from the independent area_motion_oracle.py,
         // not produced placement/ordering/nearest data. The strict wire canopy
-        // at cell6,1 has dest(-254,120,128,160) and ranks(97,-17). The actor is
+        // at cell6,1 has dest(-214,120,128,160) and ranks(97,-17). The actor is
         // behind it in map cell6 (second rank -20/-21) and ahead in cell7.
         // The independent oracle output is generated before native readback and
         // pinned by digest; every literal below must equal its value.
@@ -215,7 +215,7 @@ public partial class TerrainViewerApp
             ?? throw new InvalidOperationException("AREA_MOTION_ORACLE_REQUIRED");
         var oracleBytes = File.ReadAllBytes(oraclePath);
         Require(Convert.ToHexString(SHA256.HashData(oracleBytes)).ToLowerInvariant()
-            == "d40cdf7a0fe4d84e9593fd9b260c161890f84f2bb8a90c05e5035d14ff5c9d7a", "motion oracle identity");
+            == "f5b26e1784a392e4ed6b299090912e6c7b800a16ad005880c5b95fe018b40f9e", "motion oracle identity");
         var oracle = JsonDocument.Parse(oracleBytes).RootElement.Clone();
         static int[] Ints(JsonElement value) => value.EnumerateArray().Select(item => item.GetInt32()).ToArray();
         JsonElement OracleView(string name) => oracle.GetProperty("views").EnumerateArray().Single(view => view.GetProperty("name").GetString() == name);
@@ -272,29 +272,29 @@ public partial class TerrainViewerApp
         Prepare(); _hud!.Visible = false;
         var canopy = _readyArea!.Plan.Commands.Single(c => c.Identity?.Sector == 86570436012 && c.Identity?.SourceIndex == 1);
         GD.Print($"ARC-RENDER-007 AREA grid actual canopy={canopy.Destination} ranks=({canopy.FirstRank},{canopy.SecondRank})");
-        Require(Ints(oracle.GetProperty("canopyRect")).SequenceEqual([-254,120,128,160]) && Ints(oracle.GetProperty("canopyRanks")).SequenceEqual([97,-17]),
+        Require(Ints(oracle.GetProperty("canopyRect")).SequenceEqual([-214,120,128,160]) && Ints(oracle.GetProperty("canopyRanks")).SequenceEqual([97,-17]),
             "canopy literal differs from the independent oracle");
-        Require(canopy.Destination == new TerrainRect(-254,120,128,160) && canopy.FirstRank == 97 && canopy.SecondRank == -17,
+        Require(canopy.Destination == new TerrainRect(-214,120,128,160) && canopy.FirstRank == 97 && canopy.SecondRank == -17,
             $"wire canopy literal placement actual={canopy.Destination} ranks=({canopy.FirstRank},{canopy.SecondRank})");
-        Placement("Idle-behind", new TerrainRect(-204,157,9,7));
-        await Render("Idle-behind",-197,158,idleRight,false);
+        Placement("Idle-behind", new TerrainRect(-164,157,9,7));
+        await Render("Idle-behind",-157,158,idleRight,false);
         Keys(10,true,Key.S,Key.A); Frame(12); Frame(13); // complete12 => anchor6.25,1
-        Placement("Walk-behind", new TerrainRect(-214,162,9,7));
-        await Render("Walk-behind",-213,163,walkLeft,false);
+        Placement("Walk-behind", new TerrainRect(-174,162,9,7));
+        await Render("Walk-behind",-173,163,walkLeft,false);
         Keys(14,false,Key.S,Key.A); Frame(19); Frame(20);
         Require(_worldActor.Session!.State.CommittedCell == new CellCoord(7,1), "entry-equality finishes at data-derived cell7");
-        Placement("Idle-front", new TerrainRect(-244,177,9,7));
-        await Render("Idle-front",-237,178,idleRight,true);
+        Placement("Idle-front", new TerrainRect(-204,177,9,7));
+        await Render("Idle-front",-197,178,idleRight,true);
         Keys(21,true,Key.S,Key.A); Frame(23); Frame(24); // complete23 => anchor7.25,1 in map cell7
-        Placement("Walk-front", new TerrainRect(-254,182,9,7));
-        await Render("Walk-front",-247,183,walkRight,true);
+        Placement("Walk-front", new TerrainRect(-214,182,9,7));
+        await Render("Walk-front",-207,183,walkRight,true);
         Keys(24,false,Key.S,Key.A); Frame(28); Frame(29);
         Require(_worldActor.Session!.State.CommittedCell == new CellCoord(7,1)
             && _worldActor.Session.State.Phase == MovementPhase.Settled, "outbound7 early return settles at cell7");
         Keys(29,true,Key.W,Key.D); Frame(31); Frame(32); // complete31 => anchor6.75,1 in map cell6, mirrored
-        Placement("Walk-return-behind", new TerrainRect(-234,172,9,7));
+        Placement("Walk-return-behind", new TerrainRect(-194,172,9,7));
         // Mirrored source column1 (left green) lands at destination column7.
-        await Render("Walk-return-behind",-227,173,walkLeft,false);
+        await Render("Walk-return-behind",-187,173,walkLeft,false);
         Case("native-moving-overlap");
         _hud.Visible = true; ReleaseSimulatedPadForSelfTest();
         return new { Schema = "arcanum-area-grid-synthetic-v1", Task = "ARC-RENDER-007", Outcome = "PASS", result.Generation,

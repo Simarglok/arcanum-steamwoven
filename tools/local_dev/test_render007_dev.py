@@ -15,7 +15,7 @@ class Render007DevTests(unittest.TestCase):
     def test_motion_oracle_is_frozen_and_matches_the_native_probe_literals(self):
         oracle = runpy.run_path(str(Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools/area_motion_oracle.py"))["oracle"]()
         probe = (Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/TerrainViewerAreaGridTest.cs").read_text()
-        self.assertIn("d40cdf7a0fe4d84e9593fd9b260c161890f84f2bb8a90c05e5035d14ff5c9d7a", probe)
+        self.assertIn("f5b26e1784a392e4ed6b299090912e6c7b800a16ad005880c5b95fe018b40f9e", probe)
         self.assertIn("new TerrainRect({},{},{},{})".format(*oracle["canopyRect"]), probe)
         for view in oracle["views"]:
             self.assertIn('Placement("{}", new TerrainRect({},{},{},{}))'.format(view["name"], *view["actorRect"]), probe)
