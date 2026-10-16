@@ -31,7 +31,8 @@ public sealed class CorePolicyTests
         foreach (var extra in new[] { new[] { "--prototypes", "p" }, ["--area-mobile", "o"], ["--area-effects", "e"], ["--area-patch", "x"],
             ["--area-cave-mobile", "c"], ["--actor-map-x", "1"], ["--area-map", "other"], ["--game-root", "h"] })
             AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map, .. extra]));
-        foreach (var name in new[] { "", " ", "maps/x", "a\\b", "line\nbreak" })
+        Assert.AreEqual(new string('x', 128), TerrainViewerArguments.Parse([.. map[..^1], new string('x', 128)]).AreaMapName);
+        foreach (var name in new[] { "", " ", "maps/x", "a\\b", "line\nbreak", new string('x', 129) })
             AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map[..^1], name]));
         // Map mode needs the game folder and the actor archive, and only crash-site-area has it.
         AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(map.Where((_, i) => i is not (10 or 11)).ToArray()));

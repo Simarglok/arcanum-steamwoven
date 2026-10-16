@@ -118,7 +118,8 @@ def command_launch(args: argparse.Namespace) -> None:
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
     # ARC-RENDER-017: one whole interior; only the newest AREA builds (ARC-RENDER-008 exports) carry map mode.
-    if args.area_map is not None and (tool != "terrain" or args.mode != "crash-site-area" or manifest.get("task") != "ARC-RENDER-008"):
+    if args.area_map is not None and (tool != "terrain" or args.mode != "crash-site-area"
+                                   or (manifest.get("schema"), manifest.get("task")) != ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
         raise ValueError("--area-map requires terrain --mode crash-site-area from an ARC-RENDER-008 build exported with map mode")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":

@@ -20,6 +20,8 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// instead of the pinned Crash Site exterior; prototypes come from the content stack, and the area mobile,
     /// effects, patch, cave and prototype folder arguments are refused.</summary>
     public string? AreaMapName { get; init; }
+    /// <summary>Longest <c>--area-map</c> folder name (the launcher's <c>MAX_MAP_NAME</c>).</summary>
+    public const int MaxAreaMapName = 128;
     public static TerrainViewerArguments Parse(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -84,7 +86,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (mode == TerrainViewerMode.CrashSiteArea && areaMap is null && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
                 || string.IsNullOrWhiteSpace(areaEffects) || string.IsNullOrWhiteSpace(areaPatch) || actorSpecified || gameRoot is not null))
             // A whole interior map: its inputs come from the game folder's content stack.
-            || (areaMap is not null && (mode != TerrainViewerMode.CrashSiteArea || string.IsNullOrWhiteSpace(areaMap) || areaMap.Any(char.IsControl) ||
+            || (areaMap is not null && (mode != TerrainViewerMode.CrashSiteArea || string.IsNullOrWhiteSpace(areaMap) || areaMap.Length > MaxAreaMapName || areaMap.Any(char.IsControl) ||
                 areaMap.Contains('/') || areaMap.Contains('\\') || string.IsNullOrWhiteSpace(gameRoot) || prototypes is not null ||
                 string.IsNullOrWhiteSpace(actorResource) || areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null || actorSpecified))
             || (areaMap is null && gameRoot is not null)

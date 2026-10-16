@@ -47,7 +47,11 @@ public partial class TerrainViewerApp
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
-        if (clock is not { } profile) { _areaUseStatus = "cave: not loaded (no session clock)"; return; }
+        if (clock is not { } profile)
+        {
+            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock" : "cave: not loaded (no session clock)";
+            return;
+        }
         // The game-generated object file carries an empty module GUID here, so the session's module id is
         // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
         var header = Convert.FromHexString(moduleSha)[..16];
