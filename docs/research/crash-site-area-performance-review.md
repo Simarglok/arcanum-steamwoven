@@ -201,6 +201,23 @@ Same probe and machine, two runs each (before = the table above):
 
 The remaining redraws during a pan come from newly assessed cells entering the view.
 
+## L-A result: release export
+
+The terrain endpoint now exports with the release template, and `Directory.Build.props`
+optimizes every project built in Godot's ExportRelease configuration: a first release
+export without that setting still shipped `Arcanum.Data` unoptimized and loaded in the
+same 23.6–23.9 s as Debug. Same machine, original-data native smoke of a scratch export
+at `42a76c8` plus the change, two runs:
+
+| Measurement | Debug source run | Release export |
+| --- | ---: | ---: |
+| Load (`ElapsedMilliseconds`, first and reload generation) | 23.0–24.1 s | 12.2–13.1 s |
+| Whole native smoke (two loads, sweeps, lighting, cave, reload) | 57–66 s | 36.8 s |
+
+Exported self-tests (headless and GUI), `hostfxr_validate.py` and `codesign --verify`
+pass on the release export. The ordinary `./arcanum area` launch gets this once a
+release export is registered by the endpoint.
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only.
