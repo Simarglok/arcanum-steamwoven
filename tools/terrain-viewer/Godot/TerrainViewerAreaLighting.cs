@@ -100,7 +100,15 @@ public partial class TerrainViewerApp
     // Off sends no ambient at all (identical white pixels), so unlit views keep terrain chunks
     // even where a chunk mixes indoor and outdoor tiles. Local lights are part of the lit view only.
     private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
-        ? new AreaAmbientView(driver.Effective, lighting.Channels) { Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective) } : null);
+        ? new AreaAmbientView(driver.Effective, lighting.Channels)
+        {
+            Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective),
+            // ARC-WORLD-017: companion bodies are lit where they stand on the shown map, by their own visual. One
+            // delegate reads the current pair and map at draw time, so equal views stay equal.
+            Moving = _companionLight ??= command => _areaAmbient is { Enabled: true } current && _readyArea?.Lighting is { } shown
+                ? _areaCompanions?.Light(command, current.Effective, shown.Local) : null,
+        } : null);
+    private Func<AreaDrawCommand, AreaLitColors?>? _companionLight;
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).
     private void PaletteGameHour()

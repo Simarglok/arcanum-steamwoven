@@ -8,10 +8,12 @@ namespace Arcanum.TerrainViewer;
 /// character and object draw asks the frame source for its HD frame; a valid one is bound with
 /// the scaled crop and the unchanged destination, anything else draws Legacy with a typed
 /// reason (counted per submission). Terrain, terrain chunks and walls stay Legacy in this
-/// stage. Plans, picking, routes, light, the wall check and Session never see HD.</summary>
+/// stage. Plans, picking, routes, light, the wall check and Session never see HD. ARC-UI-006 adds
+/// the requested switch with its timed commit (<see cref="RequestVisualProfile"/>).</summary>
 public partial class TerrainCanvas
 {
-    private VisualProfile _visualProfile = VisualProfile.Legacy;
+    // ARC-UI-006: the active profile (it draws) and a pending switch with its timed commit.
+    private readonly VisualProfileSwitch _visualSwitch = new(VisualProfile.Legacy);
     private HdFrameSource? _hdSource;
     private HdDeviceBudget? _hdBudget;
     private HdResidency<ImageTexture>? _hdArea;
@@ -22,7 +24,17 @@ public partial class TerrainCanvas
     /// <summary>Walls (ART class 1) stay Legacy in this stage.</summary>
     private static bool HdArtClassEligible(int artClass) => artClass != 1;
 
-    public VisualProfile VisualProfile => _visualProfile;
+    public VisualProfile VisualProfile => _visualSwitch.Active;
+    /// <summary>The requested profile being prepared (ARC-UI-006), or null.</summary>
+    public VisualProfile? PendingVisualProfile => _visualSwitch.Pending;
+    /// <summary>The profile a toggle asks for: the other one than pending, else than active.</summary>
+    public VisualProfile ToggledVisualProfile => _visualSwitch.Toggled;
+    public long VisualGeneration => _visualSwitch.Generation;
+    /// <summary>Commits of a requested switch so far, and how the last one went.</summary>
+    public long VisualCommits { get; private set; }
+    public VisualCommitRecord? LastVisualCommit { get; private set; }
+    /// <summary>The monotonic millisecond clock of the timed commit; replaceable by self-tests.</summary>
+    internal Func<long> VisualClock { get; set; } = () => (long)Time.GetTicksMsec();
     public HdFrameSource? HdSource => _hdSource;
     public HdDeviceBudget? HdBudget => _hdBudget;
     /// <summary>Counts of the last AREA and WORLD submissions (HD draws and Legacy draws by reason).</summary>
@@ -43,17 +55,35 @@ public partial class TerrainCanvas
         if (!ReferenceEquals(source, _hdSource) || !Equals(budget, _hdBudget)) ReleaseHd();
         if (_hdOwnedSource is { } owned && !ReferenceEquals(owned, source)) { if (ReferenceEquals(_hdSource, owned)) _hdSource = null; owned.Dispose(); _hdOwnedSource = null; }
         _hdSource = source; _hdBudget = budget;
-        _visualProfile = profile;
-        if (profile == VisualProfile.Legacy && _hdSource is { } legacySource)
-        {
-            // Pending decodes are dropped (their pixels would sit outside every budget) and HD
-            // textures are kept down to the retain limits.
-            legacySource.CancelPending();
-            _hdArea?.ReleaseToRetained(legacySource); _hdWorld?.ReleaseToRetained(legacySource);
-            AreaHdStats.Clear(); WorldHdStats.Clear();
-        }
+        _visualSwitch.Set(profile);
+        if (profile == VisualProfile.Legacy) DropHdPreparation();
+        ResubmitForVisual();
+    }
+
+    /// <summary>ARC-UI-006 toggle protocol (ARC-RENDER-013 steps 1, 3 and 4): requests
+    /// <paramref name="profile"/> with a new generation. The active profile keeps drawing while the
+    /// requested one is prepared for the visible set (off-thread decodes, bounded uploads); the
+    /// switch commits between two submissions once every visible frame is ready or refused, or after
+    /// <see cref="VisualProfileSwitch.DefaultCommitWaitMilliseconds"/> (still pending frames then draw
+    /// Legacy and switch individually). A request for the active profile while a switch is pending
+    /// cancels it and drops its pending decodes; HD textures already made stay within the retain
+    /// limits. The plan, camera, zoom, wall fade, light, animation and Session are never touched.</summary>
+    public VisualRequestOutcome RequestVisualProfile(VisualProfile profile)
+    {
+        var outcome = _visualSwitch.Request(profile, VisualClock());
+        if (outcome == VisualRequestOutcome.NoOp) return outcome;
+        if (outcome == VisualRequestOutcome.Cancelled && _visualSwitch.Active == VisualProfile.Legacy) DropHdPreparation();
+        // Nothing published draws, so nothing is visible: the switch commits at once.
+        if (_area is null && _plan is null) CommitVisual(settled: true, 0);
+        ResubmitForVisual();
+        return outcome;
+    }
+
+    // The next submission binds for the new state; AREA items are rebound now, so none keeps
+    // sampling an HD texture released by a switch to Legacy.
+    private void ResubmitForVisual()
+    {
         _areaView = null; _hdSeenCompletions = -1; QueueRedraw();
-        // Rebind the AREA items now: none may keep sampling an HD texture released above.
         if (_area is not null && IsInsideTree())
         {
             try { UpdateAreaVisible(); }
@@ -61,7 +91,33 @@ public partial class TerrainCanvas
         }
     }
 
-    private bool HdActive => _visualProfile == VisualProfile.Hd;
+    // Pending decodes are dropped (their pixels would sit outside every budget) and HD textures are
+    // kept down to the retain limits: a switch to Legacy, or a cancelled switch to HD.
+    private void DropHdPreparation()
+    {
+        if (_hdSource is { } source)
+        {
+            source.CancelPending();
+            _hdArea?.ReleaseToRetained(source); _hdWorld?.ReleaseToRetained(source);
+        }
+        AreaHdStats.Clear(); WorldHdStats.Clear();
+    }
+
+    // Step 4: commits a pending switch when settled or timed out; a commit to Legacy releases HD
+    // textures down to the retain limits. Called by each submission before it binds textures.
+    private bool CommitVisual(bool settled, int pendingFrames)
+    {
+        var now = VisualClock(); var requested = _visualSwitch.RequestedAt; var target = _visualSwitch.Pending;
+        if (!_visualSwitch.TryCommit(settled, now)) return false;
+        VisualCommits++;
+        LastVisualCommit = new(target!.Value, _visualSwitch.Generation, now - requested, TimedOut: !settled, pendingFrames);
+        if (_visualSwitch.Active == VisualProfile.Legacy) DropHdPreparation();
+        return true;
+    }
+
+    private bool HdActive => _visualSwitch.Active == VisualProfile.Hd;
+    // The profile a submission binds for: the pending one if any (it may commit in this submission).
+    private bool HdTarget => (_visualSwitch.Pending ?? _visualSwitch.Active) == VisualProfile.Hd;
     // The frame source used under Hd: the selected one, or a pack-less one (NoPack everywhere).
     private HdFrameSource ActiveHdSource => _hdSource ??= _hdOwnedSource = new HdFrameSource(null);
     private HdDeviceBudget ActiveHdBudget => _hdBudget ?? HdDeviceBudget.Ceiling(Math.Max(2, ActiveHdSource.Scale));
@@ -79,7 +135,10 @@ public partial class TerrainCanvas
     /// submission, so the same view must be submitted again to bind those frames.</summary>
     private bool HdRefreshDue()
     {
-        if (!HdActive || _hdSource is not { } source) return false;
+        // A pending switch resubmits until it commits: at once to Legacy, and to HD when decodes
+        // finish, uploads were deferred or the bounded wait has passed.
+        if (_visualSwitch.Pending == VisualProfile.Legacy || _visualSwitch.TimedOut(VisualClock())) return true;
+        if (!HdTarget || _hdSource is not { } source) return false;
         return source.CompletedCount != _hdSeenCompletions || _hdArea?.UploadsDeferred == true || _hdWorld?.UploadsDeferred == true;
     }
 
@@ -103,7 +162,7 @@ public partial class TerrainCanvas
     private HdBinding<ImageTexture>[] BindAreaHd(IReadOnlyList<AreaDrawCommand> draw)
     {
         AreaHdStats.Clear();
-        if (!HdActive) return new HdBinding<ImageTexture>[draw.Count];
+        if (!HdTarget) { CommitVisual(settled: true, 0); return new HdBinding<ImageTexture>[draw.Count]; }
         var source = ActiveHdSource; var scale = source.Scale;
         _hdSeenCompletions = source.CompletedCount;
         var draws = new HdDraw[draw.Count];
@@ -125,6 +184,7 @@ public partial class TerrainCanvas
             draws[index] = new(HdFrameQueries.FromArea(command.Frame, frame), () => frame.Rgba);
         }
         var bindings = HdResidency(ref _hdArea, HdDomainBudget.Area).Submit(draws, source);
+        if (!HdActive && !CommitPreparedHd(bindings)) return new HdBinding<ImageTexture>[draw.Count];
         foreach (var binding in bindings) if (binding.Candidate) AreaHdStats.Add(binding.Reason);
         return bindings;
     }
@@ -133,29 +193,56 @@ public partial class TerrainCanvas
     private HdBinding<ImageTexture>[] BindWorldHd(IReadOnlyList<(Arcanum.Data.Hd.HdSpriteQuery? Query, byte[]? Pixels)> draws)
     {
         WorldHdStats.Clear();
-        if (!HdActive) return new HdBinding<ImageTexture>[draws.Count];
+        if (!HdTarget) { CommitVisual(settled: true, 0); return new HdBinding<ImageTexture>[draws.Count]; }
         var source = ActiveHdSource;
         _hdSeenCompletions = source.CompletedCount;
         var requests = draws.Select(draw => draw.Query is { } query
             ? HdCrop.Fits(new(0, 0, query.Legacy.Width, query.Legacy.Height), source.Scale) ? new HdDraw(query, () => draw.Pixels!) : new HdDraw(null, null, HdFallbackReason.HdAxisLimit)
             : new HdDraw(null, null, HdFallbackReason.FrameMissing)).ToArray();
         var bindings = HdResidency(ref _hdWorld, HdDomainBudget.World).Submit(requests, source);
+        if (!HdActive && !CommitPreparedHd(bindings)) return new HdBinding<ImageTexture>[draws.Count];
         foreach (var binding in bindings) if (binding.Candidate) WorldHdStats.Add(binding.Reason);
         return bindings;
     }
 
+    // A switch to HD is being prepared: these bindings were made for the visible set (decodes
+    // requested, textures uploaded within the batch) while Legacy still draws. They are used, all at
+    // once, only when the switch commits in this submission; otherwise this submission draws Legacy.
+    private bool CommitPreparedHd(HdBinding<ImageTexture>[] bindings)
+    {
+        var pending = bindings.Count(binding => binding.Reason == HdFallbackReason.Pending);
+        return CommitVisual(settled: pending == 0, pending);
+    }
+
     private void ProcessWorldHd()
     {
+        if (_area is null && _plan is null && _visualSwitch.Pending is not null) CommitVisual(settled: true, 0);
         if (_area is null && _plan is not null && HdRefreshDue()) QueueRedraw();
+    }
+
+    /// <summary>The world destinations of the drawn character and object items, in draw order, as
+    /// a count and a SHA-256 prefix (ARC-UI-006 invariance: equal under Legacy and HD).</summary>
+    internal string DrawnDestinationsForSelfTest()
+    {
+        var items = GetChildren().OfType<AreaDrawItem>().Where(item => item.Visible && item.Command?.Identity is not null).ToArray();
+        var text = string.Join(";", items.Select(item => $"{item.Command!.Identity}@{item.Command.Destination.X},{item.Command.Destination.Y},{item.Command.Destination.Width},{item.Command.Destination.Height}"));
+        return $"{items.Length} items {Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(text)))[..16]}";
     }
 
     /// <summary>HUD text: profile, pack, counts of the last submission and HD residency.</summary>
     public string HdStatusText()
     {
-        if (!HdActive) return _hdSource?.Pack is { } idle ? $"visual Legacy (HD pack {idle.Id} {idle.Scale}x loaded)" : "visual Legacy";
+        var switching = _visualSwitch.Pending is { } pending
+            ? $"; switching to {(pending == VisualProfile.Hd ? "HD" : "Legacy")} (generation {_visualSwitch.Generation}, decoding {_hdSource?.PendingCount ?? 0})" : "";
+        if (!HdActive) return (_hdSource?.Pack is { } idle ? $"visual Legacy (HD pack {idle.Id} {idle.Scale}x loaded)" : "visual Legacy") + switching;
         var source = ActiveHdSource;
         var pack = source.Pack is { } p ? $"pack {p.Id} {p.Scale}x {p.Review.ToString().ToLowerInvariant()}" : "no pack";
         var stats = _area is not null ? AreaHdStats : WorldHdStats;
-        return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}; terrain and walls Legacy";
+        return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}; terrain and walls Legacy" + switching;
     }
 }
+
+/// <summary>How a requested switch committed (ARC-UI-006): the profile, its generation, the time
+/// from request to commit, whether the bounded wait ended it, and how many visible frames were
+/// still pending then (they draw Legacy until ready).</summary>
+public sealed record VisualCommitRecord(VisualProfile Profile, long Generation, long Milliseconds, bool TimedOut, int PendingFrames);

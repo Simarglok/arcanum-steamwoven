@@ -34,10 +34,16 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   second and third values); the plan's start sector is its sector when that has
   a file, else the first sector file. (`startloc.txt` holds the same pair for
   every installed map and is not used.)
-- **Limits:** count limits follow the map exactly; byte budgets are the exterior
-  profile's (20 present sectors, 524 objects) scaled by the map's sectors or
-  objects, whichever grows more, at most 16×, so an oversized map fails with a
-  budget error instead of exhausting memory.
+- **Limits:** count limits follow the map exactly; memory budgets are the
+  exterior profile's (20 present sectors, 524 objects) scaled by the map's
+  sectors or objects, whichever grows more, at most 16×, and frame budgets are
+  that 16× cap outright (interiors read larger ART per visual than the
+  exterior), so an oversized map fails with a budget error instead of exhausting
+  memory. A whole map with the original's ART rules reads archive entries
+  (sectors, mappings, ART) up to 16 MiB (1 MiB for pinned profiles), with a
+  32 MiB frame-operation budget. Other caps stay as they are: 1 MiB per object
+  record and per prototype, and the strict ART frame limits (4 Mi pixels,
+  16 MiB RGBA, 256 KiB frame table).
 
 ## Rules of a whole-map plan
 
@@ -78,20 +84,20 @@ A whole-map plan also:
 ## Result on the installed original
 
 Opt-in `AreaMapPlansRealDataTests` (`DAT_ROOT`): all 80 interiors get a plan,
-open and inspect without an exception; 52 publish a complete snapshot and are
+open and inspect without an exception; 54 publish a complete snapshot and are
 pinned by the test (a map that starts publishing joins the list). The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
-What stops the other 28 (counts of issues, not maps; a one-off measurement
+What stops the other 26 (counts of issues, not maps; a one-off measurement
 with a scratch runner over `AreaMapPlans` on the installed original at the PR
 head, not asserted by tests):
 
 | Cause | Issues | Next |
 | --- | ---: | --- |
 | Unsupported art states (eye-candy overlays, critter poses beyond the admitted set) | 138 | overlays and poses |
-| ART path of an object not found in `arcanum1/2.dat` | 114 | stack-order resources (ARC-DATA-018) |
-| Read budget: entries over the 1 MiB cap and the capped byte budgets of the largest maps (K'na Tha, Void) | 16,588 | raise the entry cap; stream large maps |
+| Critter ART the owner's path rule does not find in any archive (a unique NPC and a monster pose) | 114 | the original's missing-art fallback |
+| Frame budget cap of the largest map (K'na Tha, 43,219 objects) | 15,367 | stream large maps |
 
 Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
 19 maps were complete; those added 2,568 objects of the types the owner did not

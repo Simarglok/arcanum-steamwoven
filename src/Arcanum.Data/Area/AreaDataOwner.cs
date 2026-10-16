@@ -78,7 +78,7 @@ public sealed partial class AreaDataOwner : IDisposable
                     owner._archives.Add(identity.Key, DatArchive.Open(stream, new DatReaderOptions
                     {
                         MaxArchiveBytes = 536870912, MaxIndexBytes = 67108864, MaxEntryCount = 131072,
-                        MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576,
+                        MaxStoredEntryBytes = (uint)EntryCap(plan), MaxDecodedEntryBytes = (uint)EntryCap(plan),
                         MaxNameBytes = 4096, MaxTotalNameBytes = 67108864
                     }, leaveOpen: true));
                     owner._indexes.Add(identity.Key, owner._archives[identity.Key].Entries.GroupBy(owner.Name, StringComparer.Ordinal)
@@ -242,6 +242,11 @@ public sealed partial class AreaDataOwner : IDisposable
             foreach (var input in _inputs.Inputs) if (!input.LeaveOpen) input.Stream.Dispose();
         }
     }
+    /// <summary>Largest archive entry (sector, mapping or ART) the owner reads: 16 MiB for whole-map
+    /// plans with the original's ART rules, whose maps hold larger ART (ARC-DATA-019); 1 MiB
+    /// otherwise, so pinned profiles are unchanged.</summary>
+    internal static long EntryCap(AreaSourcePlan plan) =>
+        !plan.Original && plan.Selection == AreaSectorSelection.AllSectors && plan.AllowArtTrailingBytes ? 16L * 1048576 : 1048576;
     private void Alive() { if (_disposed) throw new ObjectDisposedException(nameof(AreaDataOwner)); }
     private static AreaException Fail(AreaErrorCode code, AreaStage stage, long? offset = null, int? index = null) => new(new(code, stage, offset, index));
     private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
@@ -365,7 +370,7 @@ public sealed partial class AreaDataOwner : IDisposable
         if (identity.Ordinal < 0 || identity.Ordinal >= archive.Entries.Count) throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
         var entry = archive.Entries[identity.Ordinal];
         if (EntryIdentity(identity.Source, entry) != identity) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
-        if (entry.StoredSize > 1048576 || entry.DeclaredOutputSize > 1048576) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
+        if (entry.StoredSize > EntryCap(_plan) || entry.DeclaredOutputSize > EntryCap(_plan)) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
         // Shared DAT admission charges the stored array before its single read,
         // then the full structure-dependent inflate envelope before decoding.
         return archive.ReadEntry(entry, (IDatEntryAdmission?)ownership ?? _budget, token);

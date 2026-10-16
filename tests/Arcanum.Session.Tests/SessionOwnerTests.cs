@@ -165,6 +165,61 @@ public sealed class SessionOwnerTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameSessionLimits(maxTotalChanges: 16385));
     }
 
+    // ARC-WORLD-017: a map transfer that carries followers is one atomic step.
+    [TestMethod]
+    public void ApplyChangesMovesTheActorAndSeveralMapChangesInOneRevisionOrNothing()
+    {
+        using var owner = Create();
+        var cell = MapChangeKey.ForEntity("oid:npc", "npc.cell");
+        var away = MapChangeKey.ForEntity("oid:npc", "npc.map");
+        Changed(owner.SetMapChange(owner.Version, Exterior, cell, 7), owner, 1);
+        var arrival = new ActorPlacement(Cave, new(2087, 2018), NeighborDirection.YPlus);
+        Changed(owner.ApplyChanges(owner.Version, arrival, [new(Exterior, cell, null), new(Cave, cell, 9), new(Exterior, away, 80)]), owner, 2);
+        Assert.AreEqual(arrival, owner.QueryActor());
+        Assert.AreEqual((null, 9L, 80L), (owner.QueryMapChange(Exterior, cell), owner.QueryMapChange(Cave, cell), owner.QueryMapChange(Exterior, away)));
+        // Nothing differs: NoChange, also with an empty list and without an actor; clearing an absent key is no change.
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ApplyChanges(owner.Version, arrival, [new(Cave, cell, 9), new(Exterior, cell, null)]).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.ApplyChanges(owner.Version, null, []).Disposition);
+        Assert.AreEqual(2, owner.Version.Revision);
+        // Changes only: the actor stays.
+        Changed(owner.ApplyChanges(owner.Version, null, [new(Exterior, away, null), new(Cave, cell, null)]), owner, 3);
+        Assert.AreEqual((arrival, 0, 0), (owner.QueryActor(), owner.QueryMapChanges(Exterior).Count, owner.QueryMapChanges(Cave).Count));
+        Assert.AreEqual(0, owner.Capture().Maps.Count, "a map left without changes is dropped");
+
+        // Every refusal applies nothing: invalid actor, map or key, a key listed twice, a stale version.
+        Rejected(owner.ApplyChanges(owner.Version, Start with { Map = new(0) }, [new(Exterior, cell, 1)]), owner, GameSessionFailure.InvalidActor, 3);
+        Rejected(owner.ApplyChanges(owner.Version, Start, [new(new(0), cell, 1)]), owner, GameSessionFailure.InvalidMap, 3);
+        Rejected(owner.ApplyChanges(owner.Version, Start, [new(Exterior, MapChangeKey.ForEntity("bad id", "p"), 1)]), owner, GameSessionFailure.InvalidChangeKey, 3);
+        Rejected(owner.ApplyChanges(owner.Version, Start, [new(Exterior, cell, 1), new(Exterior, cell, null)]), owner, GameSessionFailure.InvalidChangeKey, 3);
+        Rejected(owner.ApplyChanges(default, Start, [new(Exterior, cell, 1)]), owner, GameSessionFailure.StaleVersion, 3);
+        Assert.AreEqual((arrival, 0), (owner.QueryActor(), owner.QueryMapChanges(Exterior).Count));
+        Assert.ThrowsExactly<ArgumentNullException>(() => owner.ApplyChanges(owner.Version, null, null!));
+    }
+
+    [TestMethod]
+    public void ApplyChangesChecksTheBudgetAfterTheWholeStep()
+    {
+        using var total = Create(new GameSessionLimits(maxTotalChanges: 2));
+        var a = MapChangeKey.ForSector(1, "p"); var b = MapChangeKey.ForSector(2, "p"); var c = MapChangeKey.ForSector(3, "p");
+        Changed(total.ApplyChanges(total.Version, null, [new(Exterior, a, 1), new(Exterior, b, 1)]), total, 1);
+        // At capacity a move (clear one, add another) fits; a net new key does not, and nothing of it applies.
+        Changed(total.ApplyChanges(total.Version, Start with { Map = Cave }, [new(Exterior, a, null), new(Cave, a, 1), new(Exterior, b, 5)]), total, 2);
+        Rejected(total.ApplyChanges(total.Version, Start, [new(Exterior, c, 1), new(Cave, a, 2)]), total, GameSessionFailure.BudgetExceeded, 2);
+        Assert.AreEqual((Cave, 1L, 5L, (long?)null), (total.QueryActor().Map, total.QueryMapChange(Cave, a)!.Value, total.QueryMapChange(Exterior, b)!.Value, total.QueryMapChange(Exterior, c)));
+
+        using var maps = Create(new GameSessionLimits(maxMaps: 1));
+        Changed(maps.ApplyChanges(maps.Version, null, [new(Exterior, a, 1)]), maps, 1);
+        Rejected(maps.ApplyChanges(maps.Version, null, [new(Cave, a, 1)]), maps, GameSessionFailure.BudgetExceeded, 1);
+        Changed(maps.ApplyChanges(maps.Version, null, [new(Exterior, a, null), new(Cave, a, 1)]), maps, 2);
+
+        using var perMap = Create(new GameSessionLimits(maxChangesPerMap: 1));
+        Rejected(perMap.ApplyChanges(perMap.Version, null, [new(Exterior, a, 1), new(Exterior, b, 1)]), perMap, GameSessionFailure.BudgetExceeded, 0);
+        // No-op edits beside one that needs room: the room is still checked, and nothing applies.
+        Changed(perMap.ApplyChanges(perMap.Version, null, [new(Exterior, a, 1)]), perMap, 1);
+        Rejected(perMap.ApplyChanges(perMap.Version, Start with { Map = Cave }, [new(Exterior, a, 1), new(Cave, c, null), new(Exterior, b, 2)]), perMap, GameSessionFailure.BudgetExceeded, 1);
+        Assert.AreEqual((Start, (long?)null), (perMap.QueryActor(), perMap.QueryMapChange(Exterior, b)));
+    }
+
     [TestMethod]
     public void CaptureIsADetachedCoherentValue()
     {

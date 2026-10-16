@@ -50,7 +50,9 @@ copied. Original executable parity is **NOT_VERIFIED**.
   build the source's bare-hands and monster attacks.
 - `ICombatRollSource`: the injected randomness, `Roll(purpose, min, max)`
   inclusive. A seeded source replays a fight exactly; tests script each roll.
-  The seeded session RNG is a separate later task.
+  `GameSessionOwner.CombatRolls` is the seeded session generator as such a
+  source, its rolls labelled by purpose ([session randomness](session-random-runtime.md),
+  ARC-WORLD-019); nothing calls the resolver with it yet.
 - `ICriticalEffects`: the critical-effect tables of FR-COMBAT-009 (stun,
   knockout, knockdown, crippling, blinding, scars, drops, weapon and armour
   damage; weapon destruction and ammunition loss on a critical miss). The
