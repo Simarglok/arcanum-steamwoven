@@ -76,6 +76,8 @@ public static partial class TerrainViewerSelfTest
         app.WorldGridObservationMatrixForSelfTest();
         app.WorldPaletteChordMatrixForSelfTest();
         await app.WorldPaletteGraphicalMatrixForSelfTestAsync();
+        // ARC-RENDER-008: synthetic WORLD fixture blocker (5,1), Open (7,1), (20,20) outside the bounded zone.
+        await app.WorldPassabilityOverlayMatrixForSelfTestAsync(new(5, 1), new(7, 1), new(20, 20), "world-diagnostic");
         app.WorldControlMatrixForSelfTest();
         await app.WorldZoomMatrixForSelfTestAsync();
         app.WorldLifecycleMatrixForSelfTest();
@@ -163,13 +165,24 @@ public static partial class TerrainViewerSelfTest
         }
         app.ReleaseSimulatedPadForSelfTest();
         GD.Print("ARC-WORLD-003 bounded adjacent zone/Blocked/Unsupported/envelope actual app PASS; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
+        // ARC-RENDER-008 invalidation: a republish binds a fresh authority; a failure leaves no overlay cells.
+        app.SetPassabilityOverlayForSelfTest(true); app.PassabilityOverlayFillForSelfTest();
+        var previousOverlay = app.PassabilityOverlayLayerForSelfTest?.Overlay ?? throw new InvalidOperationException("ARC-RENDER-008 overlay not bound before republish");
         app.PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result);
+        app.PassabilityOverlayFillForSelfTest();
+        if (app.PassabilityOverlayLayerForSelfTest?.Overlay is not { } republished || republished.Failure is not null || republished.CachedCells == 0
+            || ReferenceEquals(republished, previousOverlay) || !ReferenceEquals(republished.Authority.Owner, app.WorldSessionForSelfTest))
+            throw new InvalidOperationException("ARC-RENDER-008 overlay did not rebind after republish");
         var reloaded = app.GetSelfTestSnapshot();
         if (reloaded.CreatedTextures != 122 || reloaded.DisposedTextures != 61 || reloaded.CacheCount != 61)
             throw new InvalidOperationException("WORLD reload ownership failed.");
         app.PublishSyntheticFailureForSelfTest(TerrainViewerMode.WorldDiagnostic,new(TerrainViewerErrorCode.RenderFailure,Stage:TerrainViewerFailureStage.Upload));
         if (app.GetSelfTestSnapshot().DisposedTextures != 122 || app.GetSelfTestSnapshot().CacheCount != 0)
             throw new InvalidOperationException("WORLD failure ownership failed.");
+        if (app.PassabilityOverlayLayerForSelfTest is { Overlay: not null } || !app.GetSelfTestSnapshot().Hud.Contains("failure stage=", StringComparison.Ordinal))
+            throw new InvalidOperationException("ARC-RENDER-008 failure left overlay cells");
+        app.SetPassabilityOverlayForSelfTest(false);
+        GD.Print("ARC-RENDER-008 overlay invalidation PASS republish rebinds the authority; failure drops every overlay cell");
         app.ClearSyntheticForSelfTest(); viewport.QueueFree();
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         // Inject failures independently at each uploaded domain in the SAME app.

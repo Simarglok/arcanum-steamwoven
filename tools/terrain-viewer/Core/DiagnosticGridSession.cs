@@ -58,13 +58,16 @@ public sealed class DiagnosticGridSession : IGridSession
 
     private static CardinalTraversalDirection MapDirection(NeighborDirection direction) => GridReplay.MapDirection(direction);
 
+    /// <summary>The exact production assessment movement admission uses for this directed step (pure, no state).</summary>
+    public CardinalTraversalAssessment Assess(CellCoord from, CellCoord to, NeighborDirection direction) => Snapshot.Assess(Request(from, to, direction));
+
     /// <summary>Selection is preflighted before either state or evidence is published.</summary>
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
         Action<MovementState, MovementResult>? validatePresentation = null)
     {
         var (result, evidence) = GridReplay.Run(State, target, batches, key =>
         {
-            var assessment = Snapshot.Assess(Request(key.From, key.To, key.Direction));
+            var assessment = Assess(key.From, key.To, key.Direction);
             return (GridReplay.Permit(key, assessment.Coverage, assessment.Disposition, assessment.ReasonCode,
                 assessment.StepEvidence.SelectedEvidenceSha256, Duration), new GridStepEvidence(key, assessment));
         }, validatePresentation);
@@ -133,12 +136,16 @@ public sealed class AreaGridSession : IGridSession
     /// <summary>The exterior chart's world cell. Use <see cref="AreaChart.ToWorld"/> for another map.</summary>
     public static AreaStepCell Cell(CellCoord cell) => new(ChartOriginX + cell.X, ChartOriginY + cell.Y);
 
+    /// <summary>The exact production assessment movement admission uses for this directed step (pure, no state).</summary>
+    public AreaStepAssessment Assess(CellCoord from, CellCoord to, NeighborDirection direction)
+        => Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
+
     public GridAdvance Advance(SimulationTime target, ReadOnlySpan<InputBatch> batches,
         Action<MovementState, MovementResult>? validatePresentation = null)
     {
         var (result, evidence) = GridReplay.Run(State, target, batches, key =>
         {
-            var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(key.From), Chart.ToWorld(key.To), GridReplay.MapDirection(key.Direction)));
+            var assessment = Assess(key.From, key.To, key.Direction);
             return (GridReplay.Permit(key, assessment.Coverage, assessment.Disposition, assessment.ReasonCode, assessment.EvidenceSha256, Duration),
                 new AreaGridStepEvidence(key, assessment));
         }, validatePresentation);

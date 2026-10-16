@@ -93,12 +93,12 @@ public partial class TerrainViewerApp
         var scroll = panel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
         // Navigable palette controls: 8 input settings, zoom editor, 3 presets, Fit,
         // Reset scene, Reload, Game time +1 hour, Ambient lighting on/off (ARC-RENDER-010),
-        // Reset preferences, Close. The unavailable overlay
-        // row (ARC-RENDER-008 seam) is disabled and not navigable.
+        // the passability checkbox (ARC-RENDER-008, available with a movement authority),
+        // Reset preferences, Close.
         var overlay = scroll.GetChild(0).GetChildren().OfType<CheckButton>().Single(c => c.Name == "PassabilityOverlay");
-        Require(overlay.Disabled && overlay.FocusMode == Control.FocusModeEnum.None, "overlay row unavailable until ARC-RENDER-008");
-        var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton && c != overlay).ToArray();
-        Require(controls.Length == 19, "all camera/actor/zoom/palette controls retained");
+        Require(!overlay.Disabled && overlay.FocusMode == Control.FocusModeEnum.All, "overlay checkbox available and navigable");
+        var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton).ToArray();
+        Require(controls.Length == 20, "all camera/actor/zoom/palette controls retained");
         var last = controls.Length - 1;
         var none = new RawInputFrame(-1, default); var pad = new RawInputFrame(3, default);
         var viewport = GetViewport(); var original = viewport.GetVisibleRect().Size;
