@@ -86,21 +86,27 @@ public sealed class AreaStepSnapshot
         foreach (var evaluation in _objects.GetValueOrDefault(request.From, []))
             if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported)
                 gaps.Add(new(evaluation.Reason, request.From, evaluation.Key));
-        void Leg(AreaStepCell cell, int edge)
+        void Leg(AreaStepCell cell, int edge, bool diagonal)
         {
             var next = Neighbor(cell, edge);
             foreach (var wall in _walls.GetValueOrDefault(cell, []).Where(w => w.Edge == edge).Concat(_walls.GetValueOrDefault(next, []).Where(w => w.Edge == (edge + 4) % 8)))
             {
-                if (wall.Opening) gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key));
-                else wallBlocker ??= wall.Key;
+                switch (wall.Rule)
+                {
+                    case AreaStepEdgeRule.Legacy when wall.Opening: gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key)); break;
+                    case AreaStepEdgeRule.Legacy or AreaStepEdgeRule.Block: wallBlocker ??= wall.Key; break;
+                    case AreaStepEdgeRule.Unknown: gaps.Add(new(wall.Reason ?? "EDGE_RULE_UNKNOWN", wall.Cell, wall.Key)); break;
+                    case AreaStepEdgeRule.WindowJump when diagonal: wallBlocker ??= wall.Key; break;
+                    case AreaStepEdgeRule.WindowJump: gaps.Add(new("WINDOW_JUMP_UNMODELLED", wall.Cell, wall.Key)); break;
+                }
             }
         }
-        if ((direction & 1) == 1) Leg(request.From, direction);
+        if ((direction & 1) == 1) Leg(request.From, direction, false);
         else
         {
             int ccw = (direction + 7) % 8, cw = direction + 1;
-            Leg(request.From, ccw); Leg(Neighbor(request.From, ccw), cw);
-            Leg(request.From, cw); Leg(Neighbor(request.From, cw), ccw);
+            Leg(request.From, ccw, true); Leg(Neighbor(request.From, ccw), cw, true);
+            Leg(request.From, cw, true); Leg(Neighbor(request.From, cw), ccw, true);
         }
 
         if (terrain.Disposition == CardinalTraversalDisposition.Blocked)

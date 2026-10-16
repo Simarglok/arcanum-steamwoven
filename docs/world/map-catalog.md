@@ -74,8 +74,10 @@ header (1.8 MB for the main map); this costs time, not correctness.
   aggregate and falls back to the editor files, reporting `WorldMobileSource`,
   because a module may ship a map without an aggregate (the `Vormantown` shop
   map does).
-- **Start location.** `startloc.txt` is the map's own start; a new game starts
-  where the map catalogue says, which is separate (ARC-RES-035).
+- **Start location.** `startloc.txt` is read as the original reads it, but every
+  installed map holds the same pair (477, 178), which is not a tile of most of
+  them; arrival tiles come from `rules/maplist.mes` instead
+  (`AreaMapPlan.StartTile`, ARC-WORLD-018; transitions are ARC-RES-035).
 - **Raw sections.** Lights, roofs, tile and sector scripts and metadata stay raw
   words: their meaning belongs to the components that render or run them.
 

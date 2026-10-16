@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data.Content;
@@ -12,9 +13,13 @@ public enum AreaMapPlanStatus { Ready, UnknownMap, NoSectors, TooLarge, MissingS
 /// <see cref="Open"/> transfers the inputs to a new <see cref="AreaDataOwner"/>.</summary>
 public sealed class AreaMapPlan
 {
-    internal AreaMapPlan(WorldMap map, AreaSourcePlan plan, IReadOnlyList<(AreaInputKey Key, string Path)> files, AreaLoaderOptions limits)
-    { Map = map; Plan = plan; Files = files; Limits = limits; }
+    internal AreaMapPlan(WorldMap map, AreaSourcePlan plan, IReadOnlyList<(AreaInputKey Key, string Path)> files, AreaLoaderOptions limits, WorldLocation? startTile)
+    { Map = map; Plan = plan; Files = files; Limits = limits; StartTile = startTile; }
     public WorldMap Map { get; }
+    /// <summary>The map's start tile from <c>rules/maplist.mes</c> (where a new arrival lands), or
+    /// null for an unlisted map. <c>startloc.txt</c> holds the same two numbers for every installed
+    /// map and is not a tile of it, so it is not used.</summary>
+    public WorldLocation? StartTile { get; }
     public AreaSourcePlan Plan { get; }
     public AreaLoaderOptions Limits { get; }
     internal IReadOnlyList<(AreaInputKey Key, string Path)> Files { get; }
@@ -140,14 +145,14 @@ public static class AreaMapPlans
             }
         }
 
-        var (catalogueMap, runtimeMap) = CatalogueNumbers(stack, map.Name);
-        var start = map.StartLocation is { } location && map.HasSectorFile(WorldSectorCoordinate.Containing(location))
-            ? WorldSectorCoordinate.Containing(location) : map.SectorFiles[0];
+        var (catalogueMap, runtimeMap, startTile) = CatalogueEntry(stack, map.Name);
+        var start = startTile is { } tile && map.HasSectorFile(WorldSectorCoordinate.Containing(tile))
+            ? WorldSectorCoordinate.Containing(tile) : map.SectorFiles[0];
         var plan = new AreaSourcePlan(catalogueMap, runtimeMap, new(start.X, start.Y), 0, map.Folder, identities, mappings)
         {
             Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true,
         };
-        return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count)));
+        return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count), startTile));
     }
 
     /// <summary>Limits scaled from the pinned exterior profile (20 present sectors, 524
@@ -175,19 +180,32 @@ public static class AreaMapPlans
     /// the catalogue number minus 4999. 0/0 when the map is not listed or the list does not parse.</summary>
     internal static (int Catalogue, int Runtime) CatalogueNumbers(ContentStack stack, string mapName)
     {
+        var (catalogue, runtime, _) = CatalogueEntry(stack, mapName);
+        return (catalogue, runtime);
+    }
+
+    /// <summary>The map list entry: catalogue and runtime numbers and the start tile (the entry's
+    /// second and third values read like C strtoll; null when the entry has fewer values).</summary>
+    internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName)
+    {
         var winner = stack.Resolve("rules/maplist.mes").Winner;
-        if (winner is null) return (0, 0);
+        if (winner is null) return (0, 0, null);
         var read = stack.Read(winner);
-        if (read.Status != ContentReadStatus.Read) return (0, 0);
+        if (read.Status != ContentReadStatus.Read) return (0, 0, null);
         var parsed = MesFile.Parse(read.Bytes!);
-        if (parsed.Status != MesParseStatus.Parsed) return (0, 0);
+        if (parsed.Status != MesParseStatus.Parsed) return (0, 0, null);
         for (var number = 5000; number < 5200; number++)
         {
             if (parsed.File!.Find(number) is not { } message) break;
-            var name = Encoding.Latin1.GetString(message.Bytes.Span).Split(',')[0].Trim();
-            if (string.Equals(name, mapName, StringComparison.OrdinalIgnoreCase)) return (number, number - 4999);
+            var values = Encoding.Latin1.GetString(message.Bytes.Span).Split(',');
+            if (!string.Equals(values[0].Trim(), mapName, StringComparison.OrdinalIgnoreCase)) continue;
+            // Read like C strtoll (leading digits, else 0), as the original's value parser does; a
+            // negative coordinate is not a tile, so it is treated as absent.
+            WorldLocation? start = null;
+            if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
+            return (number, number - 4999, start);
         }
-        return (0, 0);
+        return (0, 0, null);
     }
 
     private static ContentSource? BaseArchive(ContentStack stack, string fileName) =>
