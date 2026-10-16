@@ -13,7 +13,9 @@ world/new-game bootstrap, save service, LF owner, inventory/IN, reaction/RE,
 quest/QU, rumor/RU, UI or conversation implementation. Current
 [DialogTransitionRuntime](dialog-transition-runtime.md) still rejects GF as
 `UnsupportedOperation`, retains its serialized structural cap5 and its existing
-LF/QU/RU grammar/limits. Virgil's conversation is not playable. The
+LF/QU/RU grammar/limits. ARC-SCRIPT-005's separate
+[conversation runtime](dialog-conversation-runtime.md) reads and writes GF in DLG conditions
+and actions through this owner (Unknown is a frontier there). The
 [RES-019 contract](dialog-state-contract.md) remains research/proposal for all
 other seams and the eventual integrated trace.
 

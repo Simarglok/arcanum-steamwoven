@@ -71,6 +71,15 @@ public static partial class TerrainViewerSelfTest
                 host.GetTree().Quit(0);
                 return;
             }
+            if (System.Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_PROBE") == "1")
+            {
+                await AssertConversationPanelAsync(host);
+                await AssertConversationRoutingAsync(host);
+                if (!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT")))
+                    await AssertOriginalConversationAsync(host);
+                host.GetTree().Quit(0);
+                return;
+            }
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_ADMISSION_PROBE") == "1")
             {
                 await AssertAreaAdmissionAsync(host);
@@ -99,6 +108,8 @@ public static partial class TerrainViewerSelfTest
             if (DisplayServer.GetName() != "headless") await AssertAreaOwnerAsync(host);
             await AssertAreaCompositionMatrixAsync(host);
             await AssertAreaLightingAsync(host);
+            await AssertConversationPanelAsync(host);
+            await AssertConversationRoutingAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {

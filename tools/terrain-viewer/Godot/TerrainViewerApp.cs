@@ -918,6 +918,7 @@ public partial class TerrainViewerApp : Node
     private void ClearReadyMetrics()
     {
         StopAreaAmbient(); StopAreaTransitions();
+        UnbindAreaConversations();
         _readyArea = null;
         _readySourceId = null;
         _readyDecodedCount = 0;

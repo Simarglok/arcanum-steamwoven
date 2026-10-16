@@ -8,6 +8,9 @@ caller-selected NPC record, exposes its immediate eligible Player records, and
 executes at most one selected checked Direct edge plus the destination NPC entry
 action. The caller must serialize session, port, and externally mutated state.
 
+The separate multi-turn [conversation runtime](dialog-conversation-runtime.md)
+(ARC-SCRIPT-005) has its own admission table; this runtime is unchanged.
+
 This is not a DLG parser, text decoder, SCR/expression VM, UI, persistence,
 transaction service, world integration, or full conversation traversal. It does
 not infer NPC association, script invocation, archive precedence, or a runtime

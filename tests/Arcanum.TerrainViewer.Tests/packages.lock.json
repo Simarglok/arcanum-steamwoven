@@ -134,6 +134,7 @@
           "Arcanum.Data": "[1.0.0, )",
           "Arcanum.Input": "[1.0.0, )",
           "Arcanum.Presentation": "[1.0.0, )",
+          "Arcanum.Scripting": "[1.0.0, )",
           "Arcanum.Session": "[1.0.0, )",
           "Arcanum.Simulation": "[1.0.0, )"
         }
