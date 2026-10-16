@@ -29,10 +29,10 @@ summarizes the project and points to them.
   `hermes`.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
-  subagent on the exact diff first. Once the acceptance criteria, task checks and
-  root checks pass (none for docs-only) and the review is addressed, merge the PR yourself and report
-  it, unless the owner explicitly asked to review it; then leave it open for the
-  owner (`docs/workflow/tasks.md`).
+  subagent on the exact diff first. Once the acceptance criteria, task checks
+  and root checks pass (none for docs-only) and the review is addressed, merge
+  the PR yourself and report it, unless the owner explicitly asked to review it;
+  then leave it open for the owner (`docs/workflow/tasks.md`).
 - **Stop and ask** when something you need is missing, a fix would change the
   task's contract, or the same failure repeats twice; offer options. Do not guess,
   mock or loop.
