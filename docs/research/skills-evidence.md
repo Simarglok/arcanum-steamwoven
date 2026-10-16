@@ -509,10 +509,10 @@ to apply to every skill), LM1, LM2 and LM14. SK3 is numbered here only to confir
    training, the facts of 5.3, a labelled roller from the session RNG, fate as
    an input). The attack resolver of ARC-COMBAT-001 consumes the same function
    for its attack and dodge rolls instead of owning a second copy.
-5. **A2 and SK1..SK8 under D2.** Default: A2 counts the modifier once, SK1
+5. **A2 and SK1..SK8 under D2.** Steamwoven setting (D8; "Default" before): A2 counts the modifier once, SK1
    returns, SK2 refunds one point per click, SK4 checks pick locks, SK5 reads
    the PC, SK8 forces the paid service; SK3 and SK6 need no behaviour; SK7 stays as CE until the original is
-   observed. The Source profile reproduces each where harmless (SK1 and SK2
+   observed. The Original setting ("Source" before D8) reproduces each where harmless (SK1 and SK2
    never: a spell cast from a read, a hang).
 6. **Dialog thresholds before rolls.** `ps`, `ha`, `sk`, `tr` and `et` are
    pure reads of the hero's skills and unlock real dialog branches without any

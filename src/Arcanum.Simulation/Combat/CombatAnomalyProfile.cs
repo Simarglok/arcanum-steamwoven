@@ -1,15 +1,20 @@
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
-/// Switches between the fixed default and the source (CE) behaviour of each confirmed slip the attack resolver
-/// touches (owner decision D2, recorded in docs/research/npc-combat-ai-plan.md#anomaly-decisions). <see cref="Default"/>
-/// is the source with the fixes; <see cref="Source"/> keeps every slip. A read of the original 1.0.7.4 executable at
-/// the CE addresses shows that all four switches here are bugs of the original game too, so <see cref="Source"/> is
-/// also the retail behaviour. The profile holds no state, so it may change between attacks. Anomaly A8 has no switch:
-/// the original uses 0, as the default does, and CE's unassigned value is a reconstruction slip.
+/// The two combat rule settings of owner decision D8: <see cref="Steamwoven"/> (the original with the recorded D2
+/// fixes, the default) and <see cref="Original"/> (the retail 1.0.7.4 behaviour, bugs included). Each switch is one
+/// bug of the original game that the attack resolver touches, confirmed in the original executable and recorded in
+/// docs/research/npc-combat-ai-plan.md#anomaly-decisions. CE-only reconstruction slips (A1, A3, A4, A5, A8) have no
+/// switch: both settings behave as the original there. The profile holds no state, so it may change between attacks.
 /// </summary>
 public sealed record CombatAnomalyProfile
 {
+    /// <summary>
+    /// Stable setting name, <c>steamwoven</c> or <c>original</c>. It identifies only the two built-in settings; a
+    /// profile changed with <c>with</c> is a custom mix and should get its own name.
+    /// </summary>
+    public required string Name { get; init; }
+
     /// <summary>A2: the bed's −30 invocation modifier is counted twice (−60).</summary>
     public bool InvocationModifierCountedTwice { get; init; }
 
@@ -28,15 +33,23 @@ public sealed record CombatAnomalyProfile
     /// <summary>A10: the backstab damage bonus also applies when a critical miss turns the attack on the attacker.</summary>
     public bool BackstabDamageOnSelfHit { get; init; }
 
-    /// <summary>The source with every recorded D2 fix.</summary>
-    public static readonly CombatAnomalyProfile Default = new();
+    /// <summary>The original with every recorded D2 fix; the default setting.</summary>
+    public static readonly CombatAnomalyProfile Steamwoven = new() { Name = "steamwoven" };
 
-    /// <summary>The slip for every switch: CE behaviour, which here is also the original 1.0.7.4 behaviour.</summary>
-    public static readonly CombatAnomalyProfile Source = new()
+    /// <summary>The retail 1.0.7.4 behaviour: every switch keeps the original game's bug.</summary>
+    public static readonly CombatAnomalyProfile Original = new()
     {
+        Name = "original",
         InvocationModifierCountedTwice = true,
         ArmorClassEffectsCountedTwice = true,
         CriticalSelfHitRolledTwice = true,
         BackstabDamageOnSelfHit = true,
     };
+
+    /// <summary>Both settings, default first.</summary>
+    public static IReadOnlyList<CombatAnomalyProfile> All { get; } = new[] { Steamwoven, Original };
+
+    /// <summary>The setting with this name, or null when there is none.</summary>
+    public static CombatAnomalyProfile? FromName(string? name) =>
+        All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 }
