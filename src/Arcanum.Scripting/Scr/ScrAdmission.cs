@@ -88,6 +88,12 @@ public sealed class ScrAdmissionSet
     public static ScrAdmissionSet S2 { get; } = new("S2", S1.Conditions,
         S1.Actions.Append(ScrCatalogue.Action.RemoveThisScript).Append(ScrCatalogue.Action.ChangeThisScript), S1.ValueKinds, S1.FocusKinds);
 
+    /// <summary>The dialogue set (ARC-SCRIPT-009): <see cref="S2"/> plus the follower and jilted conditions and the
+    /// dialog action, with the single-object focus kinds triggerer, attachee, extra object and player.</summary>
+    public static ScrAdmissionSet S3 { get; } = new("S3", S2.Conditions.Append(ScrCatalogue.Condition.FollowingPc).Append(ScrCatalogue.Condition.Jilted),
+        S2.Actions.Append(ScrCatalogue.Action.Dialog), S2.ValueKinds,
+        [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player]);
+
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
     {
@@ -100,9 +106,17 @@ public sealed class ScrAdmissionSet
 /// Only <see cref="ScrAdmission.Admit"/> creates one, so holding it is the proof of admission.</summary>
 public sealed class ScrAdmittedProgram
 {
-    internal ScrAdmittedProgram(ScrProgram program, ScrAdmissionSet set) { Program = program; Set = set; }
+    internal ScrAdmittedProgram(ScrProgram program, ScrAdmissionSet set, int? entryLine = null, IReadOnlyList<int>? region = null)
+    {
+        Program = program; Set = set; EntryLine = entryLine; Region = region ?? Array.AsReadOnly(Enumerable.Range(0, program.Count).ToArray());
+    }
+
     public ScrProgram Program { get; }
     public ScrAdmissionSet Set { get; }
+    /// <summary>The line a region admission started from, or null for the whole script.</summary>
+    public int? EntryLine { get; }
+    /// <summary>The admitted lines in ascending order: every line, or the lines a run from <see cref="EntryLine"/> can reach.</summary>
+    public IReadOnlyList<int> Region { get; }
 }
 
 /// <summary>Exactly one of <see cref="Admitted"/> and <see cref="Refusal"/>.</summary>
@@ -137,6 +151,47 @@ public static class ScrAdmission
         }
         return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set));
     }
+
+    /// <summary>
+    /// Region admission (ARC-SCRIPT-009): the lines a run that starts at <paramref name="entryLine"/> can reach, found
+    /// by following each admitted action (a literal goto, the next line, or the end of the run for a return or a
+    /// dialog action), all run under the set. The run of an admitted region can only reach lines inside it, so it still
+    /// never stops half-way on something unsupported; lines outside it are never read. The first refusal is reported
+    /// in line order, as for <see cref="Admit"/>. An entry outside the script admits an empty region (such a run ends on
+    /// an unreadable line).
+    /// </summary>
+    public static ScrAdmissionResult AdmitFrom(ScrProgram program, ScrAdmissionSet set, int entryLine)
+    {
+        ArgumentNullException.ThrowIfNull(program);
+        ArgumentNullException.ThrowIfNull(set);
+        var count = program.Count;
+        var region = new SortedSet<int>();
+        var work = new Stack<int>();
+        if (entryLine >= 0 && entryLine < count) { region.Add(entryLine); work.Push(entryLine); }
+        var refusals = new List<ScrRefusal>();
+        while (work.TryPop(out var at))
+        {
+            var line = program.Lines[at];
+            var always = line.Condition.Type == ScrCatalogue.Condition.True;
+            var refusal = Check(line, ScrClauseSide.Condition, line.Condition, set, count)
+                ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, count)
+                ?? (always ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, count));
+            if (refusal is not null) { refusals.Add(refusal); continue; }
+            foreach (var action in always ? new[] { line.OnTrue } : [line.OnTrue, line.OnFalse])
+                foreach (var next in Successors(action, at, count))
+                    if (region.Add(next)) work.Push(next);
+        }
+        if (refusals.Count > 0) return ScrAdmissionResult.Of(refusals.OrderBy(r => r.Line).First());
+        return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set, entryLine, Array.AsReadOnly(region.ToArray())));
+    }
+
+    // Successor lines of an admitted action; a line at the count is the end of the run, not a line.
+    private static IEnumerable<int> Successors(ScrClause action, int line, int count) => action.Type switch
+    {
+        ScrCatalogue.Action.ReturnSkipDefault or ScrCatalogue.Action.ReturnRunDefault or ScrCatalogue.Action.Dialog => [],
+        ScrCatalogue.Action.Goto => action.Value(0) < count ? [action.Value(0)] : [],
+        _ => line + 1 < count ? [line + 1] : [],
+    };
 
     private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
     {

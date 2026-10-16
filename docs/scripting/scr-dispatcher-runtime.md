@@ -124,6 +124,50 @@ Set and clear global flag (100, 101) write 1 and 0 and never spill. The D2 fixes
 above are recorded by this slice; `ScrRuleProfile` is part of
 `GameRules` (`Scripts`).
 
+## Dialogue (ARC-SCRIPT-009, slice S3)
+
+- **Region admission.** The dispatcher admits, for each event, only the lines a
+  run from the event's line can reach (`ScrAdmission.AdmitFrom`): it follows a
+  literal goto, the next line, and ends a path at a return or a dialog action;
+  both actions of a conditional line are followed, the dead false action of an
+  always-true line is not. A run of an admitted region can only reach lines
+  inside it, so it still never stops half-way on an unsupported command, and
+  lines outside it are never read. The whole-script `Admit` stays for the census
+  and tools. This lets Virgil talk: his entry lines 0..4 and the dialog lines
+  they reach are inside the set, while later lines (float line, calls, loops) are
+  not reached by the talk.
+- **`ScrAdmissionSet.S3`** (the default of `ScrRunOptions`) is S2 plus condition
+  18 (the first object's leader is the second object) and 39 (a jilted NPC),
+  action 4 (dialog) and the single-object focus kinds triggerer, attachee,
+  extra object and player. The host answers `Player`, `Leader`, `IsJilted` and
+  `IsPc`. An object operand naming a role the event does not have (no
+  triggerer, attachee, extra or player) stops the run with `MissingObject`
+  (skip default); the original would pass a null handle (both fixed).
+- **Dialog action (4).** It ends the run with `Stop = Dialog` and skip default;
+  auto-removal applies as for a return. When the triggerer is a PC, `Effects.Dialog`
+  (`ScrDialogStart`: PC, NPC, script, line, node) asks the caller to start the
+  DLG of the run's script (2188 for a mind-controlled NPC) at the node after it
+  applied the writeback: the original stores the slot before its start callback
+  (X1 in the original: flags to flags).
+- **Resumption.** A DLG end of 0 resumes the dialog script at the action's line
+  + 1, −N at line N: the caller dispatches a dialog event with that line, and the
+  region is admitted from it.
+
+The AREA viewer's conversation host (`AreaConversationHost`) now runs the talk
+request and the resumption through the dispatcher with `AreaScriptHost`
+(`tools/terrain-viewer/Core`): the speaker's dialog slot is its effective area
+attachment overridden by the session's entity map changes `dialog.lf`,
+`dialog.counters` and `dialog.script` (no schema change; a value equal to the
+loaded one clears its key); global flags are the session's; the PC leads a
+following speaker. It runs `S3` without the story-state actions (the session has
+no story-state number yet, so such a script is refused instead of run on a
+made-up value). Run default is the original's generic greeting (shown as a
+status, not modelled); a skip default without a dialog action ends the talk; a
+refusal is `EntryNotAdmitted` with the line, code and type. The session applies
+global flags and the slot as separate steps (it has no transaction across its
+flag owner and its map changes); a refused step stops the later ones and is
+reported as `ScriptEffectsRejected`.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -143,14 +187,17 @@ above are recorded by this slice; `ScrRuleProfile` is part of
 
 ## Not ready
 
-- No session binding: the session has no script slot store, story-state number
-  or global variables, so nothing applies `ScrEffects` yet; that needs a snapshot
-  schema change (a later slice, coordinated with other schema work).
+- The session has no story-state number and no global variables (a snapshot
+  schema change, coordinated with other schema work); the viewer binding refuses
+  the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- No engine event calls the dispatcher yet; dialogue through it is slice S3, use,
-  tile and sector events S4, deferred calls S5, heartbeat S6, combat S7, items S8.
-- Not in the admitted set yet: object operands and focus groups, loops, calls
-  and call-ex, the dialog action and resumption, and every world action.
+- Only the AREA viewer's talk and resumption call the dispatcher (S3); use, tile
+  and sector events are S4, deferred calls S5, heartbeat S6, combat S7, items S8.
+- Not in the admitted set yet: focus groups and local objects, loops, calls and
+  call-ex, and every world action (float line, teleport, quests, reactions...).
+- The viewer's script host models only the dialog slot of the map's speakers;
+  generators, traps, death, surrender, mind control and the jilted flag answer
+  "no", and the generic greeting is a status line.
 - X2 (an uninitialised attachee type without attachee) is reachable only through
   call-script and is left to the slice that admits calls.

@@ -62,7 +62,7 @@ public static class ScrDispatcher
             }
         }
 
-        var run = Execute(program, number, own, e.Line, ownFlags, host, options);
+        var run = Execute(program, number, own, e.Line, ownFlags, new(e.Triggerer, e.Attachee, e.Extra), host, options);
         if (run.Refusal is not null) return run.Result;
         var after = run.Slot;
         // A mind-controlled run keeps the NPC's own number whatever 2188 did to its own.
@@ -84,7 +84,7 @@ public static class ScrDispatcher
         options ??= new();
         options.Validate();
         if (e.Triggerer.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
-        return RunPlaced(ScrSource.Tile, e.Slot, host, options, discard: options.Rules.TileScriptChangesDiscarded);
+        return RunPlaced(ScrSource.Tile, e.Slot, new(e.Triggerer, null, null), host, options, discard: options.Rules.TileScriptChangesDiscarded);
     }
 
     /// <summary>A sector script on the player's entry (X3 sector): the changed number, flags and counters are written
@@ -95,10 +95,10 @@ public static class ScrDispatcher
         options ??= new();
         options.Validate();
         if (e.Player.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
-        return RunPlaced(ScrSource.Sector, e.Slot, host, options, discard: false);
+        return RunPlaced(ScrSource.Sector, e.Slot, new(e.Player, null, null), host, options, discard: false);
     }
 
-    private static ScrRunResult RunPlaced(ScrSource source, ScrSlot slot, IScrHost host, ScrRunOptions options, bool discard)
+    private static ScrRunResult RunPlaced(ScrSource source, ScrSlot slot, ScrRoles roles, IScrHost host, ScrRunOptions options, bool discard)
     {
         ArgumentNullException.ThrowIfNull(host);
         if (slot.Script == 0) return Ended(ScrOutcome.RunDefault, ScrStop.NoScript);
@@ -106,7 +106,7 @@ public static class ScrDispatcher
         if (Unavailable(lookup) is { } missing) return Ended(ScrOutcome.SkipDefault, missing);
         var program = lookup.Program!;
         if (IsTrapScript(slot.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
-        var run = Execute(program, slot.Script, slot, 0, program.FileFlags, host, options);
+        var run = Execute(program, slot.Script, slot, 0, program.FileFlags, roles, host, options);
         if (run.Refusal is not null) return run.Result;
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
@@ -124,18 +124,23 @@ public static class ScrDispatcher
 
     private static ScrRunResult Ended(ScrOutcome outcome, ScrStop stop) => new(outcome, stop, null, null, null, Array.Empty<ScrTraceStep>(), ScrEffects.None);
 
-    private static Run Execute(ScrProgram program, int number, ScrSlot slot, int line, uint ownFileFlags, IScrHost host, ScrRunOptions options)
+    private static Run Execute(ScrProgram program, int number, ScrSlot slot, int line, uint ownFileFlags, ScrRoles roles, IScrHost host, ScrRunOptions options)
     {
-        var admission = ScrAdmission.Admit(program, options.Admission);
+        // Only the lines a run from this line can reach are admitted and read (ARC-SCRIPT-009).
+        var admission = ScrAdmission.AdmitFrom(program, options.Admission, line);
         if (!admission.IsAdmitted)
             return new(new(ScrOutcome.Refused, ScrStop.Refused, number, null, admission.Refusal, Array.Empty<ScrTraceStep>(), ScrEffects.None), slot, admission.Refusal);
-        return new ScrInterpreter(admission.Admitted!, number, slot, ownFileFlags, host, options).Run(line);
+        return new ScrInterpreter(admission.Admitted!, number, slot, ownFileFlags, roles, host, options).Run(line);
     }
 
+    /// <summary>The objects an event names; any may be absent.</summary>
+    internal readonly record struct ScrRoles(ScrObjectRef? Triggerer, ScrObjectRef? Attachee, ScrObjectRef? Extra);
+
     /// <summary>A finished run before its writeback is decided.</summary>
-    internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null)
+    internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
-            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null ? ScrEffects.None : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story));
+            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null ? ScrEffects.None
+                : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog));
     }
 }

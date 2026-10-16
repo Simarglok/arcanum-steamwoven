@@ -2,6 +2,10 @@
 
 ## Status and boundary
 
+Superseded in the AREA viewer by the [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)
+(ARC-SCRIPT-009), which runs the talk request and the resumption; the resolver stays as a tested, query-only
+library and is no longer called by production code.
+
 `Arcanum.Scripting.NpcDialog` is an independently authored, Godot-free net8.0
 bridge in the existing Scripting assembly. It selects an effective SAP_DIALOG
 attachment from a production `Arcanum.Data.Area.AreaSnapshot`, authenticates

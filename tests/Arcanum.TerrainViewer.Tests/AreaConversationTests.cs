@@ -3,6 +3,7 @@ using System.Text;
 using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
+using Arcanum.Scripting.Scr;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
@@ -207,6 +208,17 @@ public sealed class AreaConversationTests
         }, conversation.Effects.Select(e => e.Command.GetType().Name).ToArray());
         Assert.IsTrue(conversation.Effects.All(e => e.Outcome == DialogCommandAttemptOutcome.Applied));
         Assert.IsTrue(host.State.Follows(0));
+        // ARC-SCRIPT-009: the talk ran SAP_DIALOG through the dispatcher (FOLLOWING, LF 31, JILTED, LF 1 false, then the
+        // dialog action on line 4); the DLG's return resumes the script on line 5, which returns with skip default.
+        Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.Dialog, 4), (host.LastRun!.Outcome, host.LastRun.Stop, host.LastRun.StopLine));
+        CollectionAssert.AreEqual(new[] { 0, 1, 2, 3, 4 }, host.LastRun.Trace.Select(step => step.Line).ToArray());
+        var resumed = host.Resume(host.Speakers[0], conversation.End!.ScriptLine!.Value);
+        Assert.AreEqual(AreaConversationStartStatus.ScriptEnded, resumed.Status, resumed.Detail);
+        Assert.AreEqual("script 1324 ReturnSkipDefault at SCR line 5: skip default", resumed.Detail);
+        Assert.IsNull(resumed.Conversation);
+        // A resumption the S3 set cannot run (line 16 shows a float line) is refused before anything runs.
+        var refused = host.Resume(host.Speakers[0], new DialogScriptLine(16));
+        Assert.AreEqual((AreaConversationStartStatus.EntryNotAdmitted, "script 1324 SCR line 16: ActionNotAdmitted type 23"), (refused.Status, refused.Detail));
         // ARC-SCRIPT-006: every flag, the quest, both rumors and the follow consent are session state.
         var written = conversation.Effects.Select(e => e.Command).OfType<GlobalFlagWriteCommand>().ToArray();
         Assert.AreEqual(4, written.Length);
@@ -224,6 +236,7 @@ public sealed class AreaConversationTests
         // Following now: the SCR picks another entry; that follower dialog needs WA, an explicit frontier.
         var again = host.Begin(host.Speakers[0]);
         Assert.AreEqual("script 1324 SCR line 6 -> DLG node 385", again.Detail);
+        CollectionAssert.AreEqual(new[] { 0, 6 }, host.LastRun!.Trace.Select(step => step.Line).ToArray());
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, again.Conversation!.Frontier!.Kind);
         Assert.AreEqual(0, again.Conversation.Effects.Count);
         Assert.AreEqual(dialogHash, Fingerprint(P("arcanum3.dat")), "input unchanged");

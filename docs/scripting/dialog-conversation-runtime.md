@@ -56,8 +56,10 @@ instead of the world port; `IN` then needs only one of the two.
 
 Source references are the pinned CE lineage below; implementation is independent.
 
-1. **Entry** — the caller supplies the checked NPC node (in the viewer: the
-   [entry resolver](npc-dialog-entry-runtime.md)'s computed `DlgNode` and `ScrLine`).
+1. **Entry** — the caller supplies the checked NPC node (in the viewer: the dialog
+   action the [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)
+   reached, with its line; ARC-SCRIPT-009 replaced the [entry resolver](npc-dialog-entry-runtime.md)
+   there). A "return to script" end resumes the dialog script through the dispatcher.
 2. **Static step plan before any effect** — NPC action grammar, NPC text, the whole reply
    group (gender selector, condition grammar, text, markers, response targets) are checked
    before the NPC action runs. Unsupported → frontier, malformed → failure, zero effects.
@@ -171,7 +173,8 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, reaction outside `int`, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
 
-The SCR entry resolver reads Following and LF from the same session, so Virgil's
+The SCR dispatcher's viewer host (ARC-SCRIPT-009) reads Following and LF from the same session, and also
+stores the dialog slot's counters and number as `dialog.counters` and `dialog.script`, so Virgil's
 follow consent picks his follower entry after a round trip to the cave or a restore. The
 HUD status shows the session story (quests, rumors, followers). In the synthetic
 self-test without area lighting the session clock is an invented synthetic profile.

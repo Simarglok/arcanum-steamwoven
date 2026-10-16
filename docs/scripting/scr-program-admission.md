@@ -95,6 +95,13 @@ slice widens admission by publishing a larger set, not by changing the rules.
 | Value kinds | counter, local variable, number, global flag |
 | Focus kinds | none |
 
+`ScrAdmission.AdmitFrom(program, set, line)` (ARC-SCRIPT-009) is the region
+admission the dispatcher uses: only the lines a run from `line` can reach, with
+the same rules and the same first-refusal order; `ScrAdmittedProgram.EntryLine`
+and `Region` record what was admitted. `ScrAdmissionSet.S3` adds the follower and
+jilted conditions, the dialog action and the single-object focus kinds
+([dispatcher dialogue](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)).
+
 `ScrAdmissionSet.S2` (ARC-SCRIPT-008) is S1 plus 5 remove this script and 6
 change this script; it is the set the [dispatcher core](scr-dispatcher-runtime.md)
 runs and admits 148 installed scripts. `IsSubsetOf` compares two sets.

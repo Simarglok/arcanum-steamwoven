@@ -446,7 +446,9 @@ line, the component and the type number.
   a later slice).
 - **P7 What is checked.** Every line of the script, not only the lines the live
   model reaches: the model is a lower bound (DLG −N resumption, call-ex), and a
-  whole-script check needs no entry-line knowledge.
+  whole-script check needs no entry-line knowledge. (ARC-SCRIPT-009 keeps this
+  for `Admit` and adds region admission for the dispatcher: the lines a run from
+  the event's line can reach, which is exact for the admitted set.)
 
 ## Unknowns
 

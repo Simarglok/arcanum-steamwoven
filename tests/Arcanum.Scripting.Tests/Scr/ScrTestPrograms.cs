@@ -66,4 +66,12 @@ internal sealed class FakeHost : IScrHost
     public ScrDialogState DialogState(ScrObjectRef attachee) { Calls.Add("dialog"); return Dialog; }
     public ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee) { Calls.Add("trap"); return Trap; }
     public bool IsTrapObject(ScrObjectRef attachee) { Calls.Add("trap object"); return TrapObject; }
+    public ScrObjectRef? PlayerRef { get; set; } = ScrTestPrograms.Pc;
+    public Dictionary<ScrObjectRef, ScrObjectRef> Leaders { get; } = new();
+    public HashSet<ScrObjectRef> Jilted { get; } = new();
+    public HashSet<ScrObjectRef> Pcs { get; } = new() { ScrTestPrograms.Pc };
+    public ScrObjectRef? Player() => PlayerRef;
+    public ScrObjectRef? Leader(ScrObjectRef critter) => Leaders.TryGetValue(critter, out var leader) ? leader : null;
+    public bool IsJilted(ScrObjectRef critter) => Jilted.Contains(critter);
+    public bool IsPc(ScrObjectRef critter) => Pcs.Contains(critter);
 }
