@@ -83,8 +83,10 @@ WORLD host (`TerrainViewerWorld.cs`).
    implemented**: Escape, F1–F5, F7, F8, F12, NumLock, Enter, Space, Home, 1–0, A, C, F,
    I, L, O, R, S, T, V, W, and the CE-source-only F6, F10, E, K, M, plus held `,` `.` `/`.
    A reserved key has no debug action and is not redirected; the HUD names the last
-   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Every other key is
-   unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Exception: while
+   `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
+   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)).
+   Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.

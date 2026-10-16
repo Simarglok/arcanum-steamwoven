@@ -7,8 +7,9 @@ the actor's placement and map-local changes, plus a versioned snapshot schema wi
 strict JSON codec. It covers the state boundary of
 [FR-WORLD-013](../requirements/world.md#fr-world-013) and
 [FR-LIFECYCLE-003](../requirements/ui-media-lifecycle.md#fr-lifecycle-003).
-It is **not** a save system: there is no save/load screen, save store or file I/O,
-no module list, no autosave and no original `.gsi`/sector-diff format.
+The owner itself does no file I/O. One [save slot](#save-slot-arc-world-011)
+(ARC-WORLD-011) writes and reads a snapshot file atomically; there is still no
+save/load screen or save list, no autosave and no original `.gsi`/sector-diff format.
 
 ## Why a separate assembly
 
@@ -119,6 +120,23 @@ restore returns no owner and leaves the caller's current session as it was.
 There is **no migration**: schema 1 is the only accepted version, and adding a
 domain (inventory, quests, party) needs schema 2 with an explicit migration decision.
 
+## Save slot (ARC-WORLD-011)
+
+`GameSessionSaveSlot` (same assembly, Godot-free) is one file that holds exactly the
+`GameSessionSnapshotCodec.Encode` text of a snapshot. It knows nothing about the
+snapshot's sections, so a domain added to the snapshot and its codec (live clock,
+dialog state, a schema bump) is saved and loaded by the slot without changing it.
+
+| Entry | Contract |
+| --- | --- |
+| `new GameSessionSaveSlot(path)` / `QuickSave(directory)` | An absolute file path; `QuickSave` is `<directory>/quicksave.json`. Invalid paths throw (programming error). |
+| `Write(snapshot)` | Encodes, decodes the text back in memory (a save this build cannot load is never written), writes `<path>.tmp`, flushes it to disk, reads it back and compares, then moves it over the slot. Creates the directory. Returns `SaveSlotWriteResult` (`None`, `TooLarge`, `WriteFailed`, `VerifyFailed`); on any failure the temporary file is removed and the previous save is untouched. A stale temporary file from an interrupted save is overwritten. |
+| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory), `TooLarge` (over 8 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
+
+The slot does not restore: the caller passes the snapshot to `Restore` with its own
+expectations. Durability: file data is flushed before the rename; the directory entry
+is not separately synced. One process per slot; there is no cross-process lock.
+
 ## Tests
 
 [Session tests](../../tests/Arcanum.Session.Tests) use synthetic ids and fingerprints
@@ -127,6 +145,11 @@ and a literal, independently written canonical JSON text:
 - `SessionOwnerTests`: creation and rejection, leave-and-return across two maps with an
   untouched neighbour sector, version guards and revision counting, key validation,
   budgets, detached capture, clock forwarding, disposal.
+- `SaveSlotTests`: the file is exactly the codec text and restores the same session;
+  missing file or directory; overwrite; a failure before the replace keeps the previous
+  save and removes the temporary file; an unwritable slot; a stale temporary file;
+  truncated, empty, BOM, invalid UTF-8, newer-schema, foreign-format and out-of-range
+  files as typed failures; the byte limit; path validation.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
@@ -139,8 +162,10 @@ and a literal, independently written canonical JSON text:
 
 ## Not implemented / remaining work
 
-- Save/load UI, save slots, files, atomic writes, backups, autosave, thumbnails.
-- Session revision or GF/clock integration with dialog, scripts, lighting or the viewer.
+- Save/load UI, a save list, more than one slot, backups, autosave, thumbnails (the
+  one quick-save slot is ARC-WORLD-011).
+- Session revision or GF/clock integration with dialog, scripts or lighting (the area
+  viewer records map transfers and quick saves in the session).
 - Concrete map-change vocabulary (doors, containers, NPC state) and their application
   to rendering or step assessment; original sector-diff and mobile-object formats.
 - Movement mid-step persistence, party, inventory, quests, RNG and other domains.

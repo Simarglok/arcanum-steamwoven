@@ -420,6 +420,45 @@ checks the same transfers. The ordinary launcher passes the cave input only to a
 ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
 it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
 
+### Quick save and quick load (ARC-WORLD-011)
+
+While `crash-site-area` has a game session (today: when the cave input is loaded),
+the original **F7** saves and **F8** loads one quick-save slot,
+`user://saves/quicksave.json` (Godot user data of the viewer). There is no save
+list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
+
+- **Keys.** Both act on key release, as the source does
+  ([keyboard requirements](../requirements/original-keyboard-mouse.md)). A key acts
+  only when its fresh press and its release both came with the window focused and
+  no palette, dialog or UI focus; otherwise it is ignored and the HUD says so. Echo
+  repeats do nothing.
+- **Save.** Refused while a reset/reload or a map transfer is pending. Otherwise the
+  actor's committed cell and facing on the current map go into the session
+  (`PlaceActor`), the whole session is captured and written atomically by
+  `GameSessionSaveSlot` ([save slot](../world/game-session-runtime.md#save-slot-arc-world-011)).
+  A started step, click route and walk-to-use/talk are host state and are not saved:
+  a save during a step records the cell the actor is committed to.
+- **Load.** Refused during a reset/reload. The slot is read and decoded, the saved map
+  must be loaded in this run and the cell admitted on its chart, and `Restore` must
+  accept it: same module id and exact clock profile as the running session (the
+  world id is taken from the save, which continues that playthrough). Every check
+  runs before anything changes, so a missing, damaged, newer-schema or foreign save
+  leaves the running session and scene as they were and the HUD names the reason.
+  On success the new session replaces the old one, the route, approaches and any
+  queued transfer are dropped, and the actor stands settled on the saved map and
+  cell (the scene is swapped as a transfer swaps it). Snapshot sections other domains
+  add later are restored with the session; the viewer's day/night clock does not
+  read the session clock yet.
+- **HUD.** The area status line shows the slot and the last F7/F8 result.
+
+The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after
+the transition phase, on a temporary slot, never the player's: F7 through the
+production key route next to the entrance, F7 ignored under the palette with the file
+unchanged, the entrance into the cave, F8 back to the saved exterior cell under a new
+session, then a damaged file makes F8 fail without changing the session or map; it
+prints `ARC-WORLD-011 native-smoke quicksave PASS`. Core rules are covered by
+`AreaQuickSaveTests` (terrain viewer tests) and `SaveSlotTests` (session tests).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
