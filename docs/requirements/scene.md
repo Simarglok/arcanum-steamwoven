@@ -110,7 +110,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** Отдельные portal records и state-aware draw pipeline не загружаются; пять ART resource chains относятся к конечному static-scene диагностическому профилю. Паритет двери не заявлен.
 
-**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): у первого дома одна дверь (ART 55, 7 кадров, открыта при кадре ≠ 0) и четыре окна с одним кадром; поля портала, зеркалирование и путь к ART описаны по CE и данным. Реализации нет.
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): у первого дома одна дверь (ART номер 55, 7 кадров, открыта при кадре ≠ 0) и четыре окна с одним кадром; поля портала, зеркалирование и путь к ART описаны по CE и данным. Реализации нет.
 
 <a id="fr-scene-009"></a>
 
@@ -132,7 +132,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** Для выбранной секции зафиксирован только framing roof section и empty discriminator; нет roof data model, ART-resolution chain, roof renderer или synthetic roof piece matrix. [Static scene scope](../rendering/static-scenery-contract.md#scope-and-status), [loader boundary](../world/static-object-loader.md#scope).
 
-**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): крыша первого дома — 9 из 256 слотов (3×3 блока по 4×4 клетки, ART 7, все девять видов кусков прямоугольника), кусок = кадр + флаг зеркала; fill/fade в данных сброшены. Реализации нет.
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): крыша первого дома — 9 из 256 слотов (3×3 блока по 4×4 клетки, ART номер 7, все девять видов кусков прямоугольника), кусок = кадр + флаг зеркала; fill/fade в данных сброшены. Реализации нет.
 
 **Ограничение persistence.** Roof DIF API присутствует, но load/save тела пусты и `is_modified` возвращает false ([CE stubs](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_roof_list.c#L87-L123)). Piece-topology rendering не доказывает поддержку изменённой крыши в DIF/save; исходное поведение остаётся неизвестным.
 

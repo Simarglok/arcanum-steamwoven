@@ -193,6 +193,9 @@ internal static partial class Program
             var module = archives[0];
             // 1. Every exterior sector: walls, portals and non-empty roof slots.
             var census = new List<BuildingCensus>(); byte[]? selectedBytes = null; DatEntry? selectedEntry = null;
+            // Sectors come from the module only: no other archive may carry this map folder.
+            if (archives.Skip(1).Any(a => a.Entries.Any(e => AreaName(e).StartsWith(ExteriorSectorPrefix, StringComparison.OrdinalIgnoreCase))))
+                throw new InvalidDataException("BUILDING_SECTOR_SHADOWED");
             var sectorEntries = module.Entries.Where(e => AreaName(e).StartsWith(ExteriorSectorPrefix, StringComparison.Ordinal) && AreaName(e).EndsWith(".sec", StringComparison.Ordinal)).OrderBy(e => e.Ordinal).ToArray();
             foreach (var entry in sectorEntries)
             {
@@ -231,12 +234,14 @@ internal static partial class Program
             var instancesSelected = ObjectWire.ParseWindow(sector.AsSpan(sframing.ObjectStart, sframing.ObjectBytes), sslice.TrailingInt32);
             var prototypes = ObjectWire.ReadReferencedPrototypesFromDirectory(prototypeRoot, instancesSelected.Select(v => v.PrototypeId).ToArray());
             Remember(prototypes, prototypeInputs);
+            var objectWindow = sector.AsSpan(sframing.ObjectStart).ToArray();
+            int Field(IReadOnlyDictionary<int, int> numeric, int slot) => numeric.TryGetValue(slot, out var v) ? v : throw new InvalidDataException("BUILDING_FIELD_ABSENT");
             var objects = ObjectWire.ResolveEffectiveInstances(instancesSelected, prototypes.Prototypes).Select(value =>
             {
                 var proto = prototypes.Prototypes.Single(p => p.Id.Matches(value.Instance.PrototypeId));
                 if (value.Instance.Location is not { } loc) throw new InvalidDataException("BUILDING_LOCATION_ABSENT");
                 var (wx, wy) = RebaseSectorLocation(loc, sx, sy);
-                return (Value: value, Proto: proto, X: wx, Y: wy, Numeric: EffectiveNumeric(value.Instance, proto), Scripts: EffectiveScripts(sector.AsSpan(sframing.ObjectStart).ToArray(), value.Instance, proto));
+                return (Value: value, Proto: proto, X: wx, Y: wy, Numeric: EffectiveNumeric(value.Instance, proto), Scripts: EffectiveScripts(objectWindow, value.Instance, proto));
             }).ToArray();
             var walls = objects.Where(o => o.Value.Instance.Type == 0).ToArray();
             var portals = objects.Where(o => o.Value.Instance.Type == 1).ToArray();
@@ -266,8 +271,9 @@ internal static partial class Program
             // Roofs: slot -> art, then coverage, fill decisions and the flood each makes.
             var roofWords = RoofWords(sector, sframing);
             var roofBlocks = new Dictionary<(int X, int Y), RoofArt>();
-            for (var slot = 0; slot < roofWords.Length; slot++)
-                if (roofWords[slot] != InvalidArt) roofBlocks[(ox + 4 * (slot % RoofCellsPerSide), oy + 4 * (slot / RoofCellsPerSide))] = DecodeRoofArt(roofWords[slot]);
+            for (var by = 0; by < 64; by += 4)
+                for (var bx = 0; bx < 64; bx += 4)
+                    if (roofWords[RoofSlot(bx, by)] is var word && word != InvalidArt) roofBlocks[(ox + bx, oy + by)] = DecodeRoofArt(word);
             RoofArt? BlockAt(int x, int y) => roofBlocks.TryGetValue((x & ~3, y & ~3), out var r) ? r : null;
             var coverage = new List<object>(); var uncoveredIndoor = new List<object>(); var offsetOutside = 0;
             var covered = 0; var indoorTiles = 0;
@@ -309,7 +315,7 @@ internal static partial class Program
                 if (art.ArtClass != 3) throw new InvalidDataException("BUILDING_PORTAL_ART_CLASS");
                 var across = CaveStep((p.X, p.Y), art.EdgeRotation)!.Value;
                 var edge = EdgeObjects(edgeObjects, (p.X, p.Y), art.EdgeRotation);
-                var flags = (uint)p.Numeric[PortalFlagsField];
+                var flags = (uint)Field(p.Numeric, PortalFlagsField);
                 var hereIndoor = Indoor(p.X, p.Y); var acrossIndoor = Indoor(across.X, across.Y);
                 return new
                 {
@@ -317,7 +323,7 @@ internal static partial class Program
                     open = art.Frame != 0, open_frames = PortalOpenFrames(art.Door, art.Rotation),
                     portal_flags = flags, locked = (flags & 0x01) != 0, jammed = (flags & 0x02) != 0, magically_held = (flags & 0x04) != 0, never_locked = (flags & 0x08) != 0,
                     always_locked = (flags & 0x10) != 0, locked_day = (flags & 0x20) != 0, locked_night = (flags & 0x40) != 0, busted = (flags & 0x80) != 0, sticky = (flags & 0x100) != 0,
-                    lock_difficulty = p.Numeric[PortalLockDifficultyField], key_id = p.Numeric[PortalKeyField], notify_npc = p.Numeric[PortalNotifyField],
+                    lock_difficulty = Field(p.Numeric, PortalLockDifficultyField), key_id = Field(p.Numeric, PortalKeyField), notify_npc = Field(p.Numeric, PortalNotifyField),
                     object_flags = p.Value.EffectiveFlags, no_block = (p.Value.EffectiveFlags & 0x400) != 0, see_through = (p.Value.EffectiveFlags & 0x10) != 0, shoot_through = (p.Value.EffectiveFlags & 0x20) != 0,
                     off = (p.Value.EffectiveFlags & 0x2) != 0, dont_draw = (p.Value.EffectiveFlags & 0x100) != 0, scripts = p.Scripts,
                     edge = new
@@ -335,13 +341,15 @@ internal static partial class Program
             var doorAdmission = portals.Where(p => DecodePortalArt((uint)p.Value.CurrentAid).Door).Select(p =>
             {
                 var art = DecodePortalArt((uint)p.Value.CurrentAid);
-                var flags = (uint)p.Numeric[PortalFlagsField];
+                var flags = (uint)Field(p.Numeric, PortalFlagsField);
                 var across = CaveStep((p.X, p.Y), art.EdgeRotation)!.Value;
                 var unlockScript = p.Scripts.Any(s => s.sap == 3 && s.script != 0);
                 // Leaving holds only for a mover stepping out of the portal's own tile, when that
                 // tile is indoor and the tile across the edge is not. The pinned source swaps the
                 // two tiles for a mover coming from across with a self-assignment, so that side
                 // compares one tile with itself and never counts as leaving.
+                // The source steps by the raw ART rotation; it equals the edge for odd rotations.
+                if (art.Rotation != art.EdgeRotation || Indoor(p.X, p.Y) is null || Indoor(across.X, across.Y) is null) throw new InvalidDataException("BUILDING_DOOR_EDGE_NOT_ADMITTED");
                 bool Leaving(bool fromPortalTile) => fromPortalTile && Indoor(p.X, p.Y) == true && Indoor(across.X, across.Y) != true;
                 return new
                 {
@@ -360,7 +368,7 @@ internal static partial class Program
                 edge_rotations = wallArt.GroupBy(a => a.EdgeRotation).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count()),
                 window_pieces = wallArt.Count(a => WindowWallPieces.Contains(a.Piece)), doorway_pieces = wallArt.Count(a => DoorwayWallPieces.Contains(a.Piece)),
                 damaged = walls.Count(w => ((uint)w.Value.CurrentAid & 0x480) != 0),
-                wall_flags = walls.GroupBy(w => w.Numeric[WallFlagsField]).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count()),
+                wall_flags = walls.GroupBy(w => Field(w.Numeric, WallFlagsField)).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count()),
                 passwalled = walls.Count(w => ((uint)w.Numeric.GetValueOrDefault(SpellFlagsSlot) & PassWalledSpellFlag) != 0),
                 object_flags = walls.GroupBy(w => w.Value.EffectiveFlags).OrderBy(g => g.Key).ToDictionary(g => g.Key, g => g.Count()),
                 with_scripts = walls.Count(w => w.Scripts.Any(s => s.script != 0)),
@@ -387,7 +395,8 @@ internal static partial class Program
             var portalArt = portals.Select(p => DecodePortalArt((uint)p.Value.CurrentAid)).Distinct().Select(a =>
             {
                 var key = a.Number + (a.Door ? 0 : 1001);
-                var name = portalNames[key].Split(' ')[0];
+                if (!portalNames.TryGetValue(key, out var entry)) throw new InvalidDataException("BUILDING_PORTAL_NAME");
+                var name = entry.Split(' ')[0];
                 if (!ObjectArt.IsSafeRelativeArtFilename(name) || a.Busted) throw new InvalidDataException("BUILDING_PORTAL_NAME");
                 // One physical group; bit 0 of the low nibble mirrors it for the other side.
                 return new { key, art = a, mirrored = (a.LowFlags & 1) != 0, file = ArtFile("art/portal/" + name, 0, a.Frame) };
@@ -397,12 +406,14 @@ internal static partial class Program
             var roofKeysContiguous = roofNames.Keys.SequenceEqual(Enumerable.Range(0, roofNames.Count));
             var roofArt = roofBlocks.Values.Select(r => (r.Number, r.Frame)).Distinct().Order().Select(r =>
             {
-                var name = roofNames.Values.ElementAt(r.Number);
-                if (!roofKeysContiguous || name.Length == 0 || name.Any(c => c is '/' or '\\' or < ' ' or > '~')) throw new InvalidDataException("BUILDING_ROOF_NAME");
+                if (!roofKeysContiguous || !roofNames.TryGetValue(r.Number, out var name) || name.Length == 0 || name.Any(c => c is '/' or '\\' or < ' ' or > '~')) throw new InvalidDataException("BUILDING_ROOF_NAME");
                 return new { r.Number, r.Frame, file = ArtFile("art/roof/" + name + ".art", 0, r.Frame) };
             }).ToArray();
             var shadeFile = Unique("art/roof/roofshade.mes");
             var shade = ObjectArt.ParseMes(shadeFile.Bytes);
+            // Full opacity, partial opacity, full transparency: three byte values, nothing else.
+            if (!shade.Keys.SequenceEqual([0, 1, 2])) throw new InvalidDataException("BUILDING_ROOF_SHADE");
+            var shadeValues = shade.ToDictionary(kv => kv.Key, kv => int.TryParse(kv.Value.Trim(), System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var v) && v <= 255 ? v : throw new InvalidDataException("BUILDING_ROOF_SHADE"));
 
             // Map changes: the exterior jump list and every script attached in the sector
             // (objects, tiles, sector, mobiles located in it), plus one hop of literal calls.
@@ -470,6 +481,7 @@ internal static partial class Program
                     walls = census.Sum(c => c.Walls), portals = census.Sum(c => c.Portals), roof_cells = census.Sum(c => c.RoofCells), aggregate_walls_portals = aggregateWallsPortals,
                     nearest_buildings = buildings.Take(12).Select(c => new { c.Id, c.X, c.Y, c.Townmap, c.Walls, c.Portals, roof_cells = c.RoofCells, c.Distance }).ToArray(),
                     nearest_towns = towns.Take(3).ToArray(),
+                    nearest_town_sectors = census.Where(c => c.Townmap == towns[0].townmap && c.Walls + c.Portals + c.RoofCells > 0).OrderBy(c => c.Distance).ThenBy(c => c.Id).Select(c => new { c.X, c.Y, c.Walls, c.Portals, roof_cells = c.RoofCells, c.Distance }).ToArray(),
                 },
                 selected = new
                 {
@@ -485,7 +497,7 @@ internal static partial class Program
                     slots = roofBlocks.Count,
                     blocks = roofBlocks.OrderBy(kv => kv.Key.Y).ThenBy(kv => kv.Key.X).Select(kv => new { kv.Key.X, kv.Key.Y, kv.Value.Number, kv.Value.Frame, kv.Value.Flipped, piece = kv.Value.Piece.ToString(), kv.Value.Fill, kv.Value.Fade, kv.Value.Palette }).ToArray(),
                     art = roofArt, mapping = new { archive = CaveArchives[roofMesFile.Archive].Role, sha256 = AreaHash(roofMesFile.Bytes), entries = roofNames.Count, contiguous = roofKeysContiguous },
-                    shade = new { archive = CaveArchives[shadeFile.Archive].Role, sha256 = AreaHash(shadeFile.Bytes), values = shade.ToDictionary(kv => kv.Key, kv => kv.Value.Trim()) },
+                    shade = new { archive = CaveArchives[shadeFile.Archive].Role, sha256 = AreaHash(shadeFile.Bytes), values = shadeValues },
                     indoor_covered = covered, indoor_uncovered = uncoveredIndoor, indoor_offset_outside_sector = offsetOutside,
                     outside_tiles_under_roof = underRoofOutside.Length, outside_tiles_that_hide = underRoofOutsideHiding, outside_restores = restoreCounts,
                     fill_outcomes = outcomes.Select(o => new { interior_tiles = o.Value.Tiles, fill = o.Value.Fill, changed_blocks = o.Value.Changed.Select(c => new { c.X, c.Y }).ToArray() }).OrderByDescending(o => o.interior_tiles).ToArray(),
@@ -540,6 +552,16 @@ internal static partial class Program
         Check(Count(RoofPiece.Center) == 16 && Count(RoofPiece.West) == 12 && Count(RoofPiece.North) == 8 && Count(RoofPiece.South) == 12 && Count(RoofPiece.East) == 8, "edge bands");
         Check(Count(RoofPiece.NorthWestOutside) == 6 && Count(RoofPiece.SouthWestInside) == 15 && Count(RoofPiece.NorthEastOutside) == 4 && Count(RoofPiece.SouthEastOutside) == 6, "corner bands");
         Check(!RoofBand(RoofPiece.SouthWestInside, 3, 3) && RoofBand(RoofPiece.NorthWestInside, 0, 0) && !RoofBand(RoofPiece.NorthWestInside, 0, 3), "inside corners");
+        // Every piece as a literal 16-bit mask, bit (row * 4 + column), written from the band
+        // description (west = columns 0-2, east = 2-3, north = rows 2-3, south = rows 0-2).
+        var masks = new Dictionary<RoofPiece, int>
+        {
+            [RoofPiece.NorthWestOutside] = 0x7700, [RoofPiece.West] = 0x7777, [RoofPiece.North] = 0xFF00, [RoofPiece.NorthWestInside] = 0xFF77,
+            [RoofPiece.SouthWestOutside] = 0x0777, [RoofPiece.SouthWestInside] = 0x7FFF, [RoofPiece.NorthEastInside] = 0xFFCC, [RoofPiece.NorthEastOutside] = 0xCC00,
+            [RoofPiece.Center] = 0xFFFF, [RoofPiece.SouthEastOutside] = 0x0CCC, [RoofPiece.South] = 0x0FFF, [RoofPiece.East] = 0xCCCC, [RoofPiece.SouthEastInside] = 0xCFFF,
+        };
+        foreach (var (piece, mask) in masks)
+            for (var i = 0; i < 16; i++) Check(RoofBand(piece, i / 4, i % 4) == (((mask >> i) & 1) == 1), "literal mask " + piece);
         // Coverage reads the block at +3 and needs indoor, unfilled; fill reads the tile itself.
         var centre = new RoofArt(10, 0, 8, false, RoofPiece.Center, false, false, 0);
         Check(RoofCovers(true, centre, 1, 1) && !RoofCovers(false, centre, 1, 1) && !RoofCovers(true, centre with { Fill = true }, 1, 1) && !RoofCovers(true, null, 1, 1), "coverage gates");
@@ -563,6 +585,9 @@ internal static partial class Program
         Check(AdmitPlayerDoor(0x01, true, false, 12, false) == DoorAdmission.Locked && AdmitPlayerDoor(0x01, true, false, 12, true) == DoorAdmission.Open, "locked needs key");
         Check(AdmitPlayerDoor(0x01, true, true, 12, false) == DoorAdmission.IndoorToOutdoor && AdmitPlayerDoor(0x11, true, true, 12, false) == DoorAdmission.Locked, "leaving a building");
         Check(AdmitPlayerDoor(0x09, true, false, 12, false) == DoorAdmission.Open && AdmitPlayerDoor(0x21, true, false, 3, false) == DoorAdmission.Open && AdmitPlayerDoor(0x21, true, false, 12, false) == DoorAdmission.Locked && AdmitPlayerDoor(0x41, true, false, 12, false) == DoorAdmission.Open, "never, day and night locks");
+        foreach (var (hour, day) in new[] { (6, false), (7, true), (21, true), (22, false) })
+            Check(AdmitPlayerDoor(0x21, true, false, hour, false) == (day ? DoorAdmission.Locked : DoorAdmission.Open) &&
+                AdmitPlayerDoor(0x41, true, false, hour, false) == (day ? DoorAdmission.Open : DoorAdmission.Locked), "day boundary " + hour);
         Check(AdmitPlayerDoor(0x83, false, false, 12, false) == DoorAdmission.Busted && AdmitPlayerDoor(0x02, false, false, 12, true) == DoorAdmission.ScriptRefused && AdmitPlayerDoor(0x06, true, true, 12, true) == DoorAdmission.Jammed && AdmitPlayerDoor(0x04, true, true, 12, true) == DoorAdmission.MagicallyHeld, "refusal order");
         // Indoor tests and edges with a portal.
         Check(TileIndoor(0) == true && TileIndoor(1u << 8) == false && TileIndoor(0xB000_0000u) == true && TileIndoor(0xB000_0000u | (1u << 25)) == false && TileIndoor(0x1000_0000u) is null, "indoor tiles");
