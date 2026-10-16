@@ -117,6 +117,20 @@ public partial class TerrainViewerApp
         Require(State().Phase == MovementPhase.Settled, "stick release settles");
         Case("stick-takeover");
 
+        // A click observed after a step end, then a stick release observed after the frontier: the route does not
+        // decide at that earlier step end (the release would cancel such a step); it takes over afterwards.
+        Prepare(); Stick(true, Key.S, Key.A); Run(8); // stick steps east start at 3, 7, 11; the frontier is 10
+        _worldTestTime = new SimulationTime(ExactScalar.Create(23, 2));
+        _UnhandledInput(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = Screen(new(8, 5)) });
+        _worldTestTime = SimulationTime.At(12);
+        SimulatedSectorKey(Key.S, false); SimulatedSectorKey(Key.A, false); level = SimulatedPadLevel();
+        Run(40);
+        Require(Route().Status == RouteFollowStatus.Arrived, "late-click route arrived: " + DescribeWorldRoute(Route()));
+        Settled(new(8, 5), "late click");
+        Require(events.Where(e => e.Kind == MovementEventKind.StepCancelled).All(e => e.Key.Direction == NeighborDirection.XPlus),
+            "only the stick's own step returned; no route step was cancelled");
+        Case("click-before-stick-release");
+
         // The palette (a quarantine) stops the route; the started step ends at its cell centre.
         Prepare(); Click(new(14, 1)); Run(6);
         var stepping = State().Segment ?? throw new InvalidOperationException("AREA route: palette case needs a step in progress");
@@ -139,6 +153,8 @@ public partial class TerrainViewerApp
         Case("occupied-goal");
 
         // Native dispatch: a ground click reaches _UnhandledInput; a click on the HUD panel is GUI's.
+        // This harness disables _Input (SetProcessInput(false)), so InputWorldObserved is not on this path; it never
+        // marks a mouse button handled, which the WORLD palette/lifecycle matrices cover on their own route.
         Prepare();
         var hud = _hud!.Rect;
         var ground = Screen(new(12, 6));

@@ -22,6 +22,7 @@ public partial class TerrainViewerApp
     private RouteFollower? _worldRoute;
     private IGridSession? _worldRouteSession;
     private string _worldRouteDiagnostic = "no click yet";
+    private string _worldRouteClick = "none";
     private bool _worldResetPending;
     private bool _worldReloadPending;
     private IGridSession? _worldLifecycleSession;
@@ -434,7 +435,10 @@ public partial class TerrainViewerApp
             PublishWorldAdvance(session, advance);
             return advance;
         }
-        if (route is null || batches.Length > 0)
+        // A following route also waits while a stick receipt is still open past the frontier
+        // (a release observed after a click): deciding at an earlier step end would start a
+        // step that receipt then cancels.
+        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
         {
             // Observed stick/neutral receipts close first; the follower only watches them.
             var advance = Run(frontier, batches);
@@ -507,7 +511,7 @@ public partial class TerrainViewerApp
         if (!ReferenceEquals(_worldRouteSession, session))
         {
             _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot));
-            _worldRouteSession = session; _worldRouteDiagnostic = "no click yet";
+            _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
     }
@@ -535,13 +539,14 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null || !_worldGate.IsOpen || _worldLifecycleSession is not null)
         {
-            _worldRouteDiagnostic = "click ignored: input quarantined/modal/lifecycle";
+            _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
             RefreshReadyStatus(); return;
         }
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
         var accepted = route.SetTarget(cell, WorldTime);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
+        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
         GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
         RefreshReadyStatus();
     }
@@ -681,7 +686,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {

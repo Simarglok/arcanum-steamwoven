@@ -137,7 +137,10 @@ runtime receives therefore share one Data verdict.
   follows the ground, not the sprite; correcting the actor offset is a separate change.
 - **Driving.** `AdvanceWorldGrid` closes the same complete-observation frontier as
   before. Pending stick/neutral receipts run first as one ordinary advance and the
-  follower only observes it; with none pending, `RouteFollower.Drive` runs the
+  follower only observes it. A following route also waits while a stick receipt is
+  still open after the frontier (a release observed just after a click), so it never
+  starts a step at an earlier step end that the release would cancel. Otherwise
+  `RouteFollower.Drive` runs the
   sub-advances to the frontier through the same `DiagnosticGridActor.Advance` and
   presentation selection, and every sub-advance's evidence and events are logged.
   A drive failure is the ordinary observation fault (`GRID_ROUTE_*`).
@@ -147,7 +150,7 @@ runtime receives therefore share one Data verdict.
   saves, Fit, Reset scene and Reload. A started step is never cancelled by a stop or
   a new click: it ends at its cell centre, then the follower clears its own intent.
 - **HUD.** `LMB click-to-move route <status> target=<cell> <reason> plan=<reason>
-  segments=<n>`; the log prints `ARC-WORLD-007 route click` and `route stop` lines.
+  segments=<n> (last click <cell> goal set | same goal kept | ignored ...)`; the log prints `ARC-WORLD-007 route click` and `route stop` lines.
 
 ## Evidence
 
@@ -172,7 +175,8 @@ runtime receives therefore share one Data verdict.
   [area viewer](../rendering/crash-site-area-viewer.md)): `ARC-WORLD-007 AREA route
   synthetic PASS` over the strict owner fixture: a detour around the blocker at
   (5,1) from an off-centre click, a new click mid-step (the started step completes),
-  the same goal kept, a stick takeover in the route's own direction, the palette stop
+  the same goal kept, a stick takeover in the route's own direction, a click observed
+  just before a stick release (no route step is cancelled), the palette stop
   (step ends at its centre, a click under the palette is ignored), an occupied goal
   (`ROUTE_NOT_FOUND`, no step), and native dispatch (a ground click through
   `SubViewport.PushInput` sets the goal, a HUD click does not).
