@@ -438,7 +438,7 @@ public static class AttackResolver
     {
         var attacker = request.Attacker;
         var weapon = request.Weapon;
-        // A8: CE leaves this chance unassigned when the weapon's magic was cancelled; both profiles use 0.
+        // A8: CE leaves this chance unassigned when the weapon's magic was cancelled; the original uses 0, as here.
         var chance = (weapon.Kind == WeaponKind.Weapon && !magicCancelled ? weapon.MagicCriticalEffectChance : 0)
             + attacker.CriticalEffectChanceAdjustment + (aimed ? 10 : 0);
         var npcHitsPc = recipient.IsPc && !attacker.IsPc;

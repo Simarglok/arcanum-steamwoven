@@ -428,6 +428,29 @@ neither see nor hear the attacker; then the critical chance gains
 The decisions on A1–A10 (owner decision D2) are recorded in the [NPC combat
 AI plan](npc-combat-ai-plan.md#anomaly-decisions).
 
+## Original executable check (ARC-COMBAT-001)
+
+On the owner's request the ten anomalies were checked against the original
+game, not only CE: the retail **1.0.7.4** `Arcanum.exe` of the owner's local
+GOG install (SHA-256 `9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52`;
+GOG only adds a `ddraw.dll` import section) was disassembled read-only with
+`llvm-objdump` at the addresses CE gives for each function, which match the
+binary's layout. No bytes, listings or game content are stored in the
+repository; the table records only the observed behaviour.
+
+| Anomaly | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| A1 | `sort_combat_list` (0x4B7EB0) | The second test reads the **type of the PC leader** that `critter_pc_leader_get` returned: PCs and the PCs' followers move to the tail. | CE reconstruction slip |
+| A2 | `skill_invocation_run` (0x4C7160), `skill_invocation_difficulty` (0x4C8430) | The difficulty starts from the invocation modifier and the run adds it again: the bed counts −60. | In the original |
+| A3 | `AGbeginGetUpAnim` (0x42E590) | In a round: refused unless it is the critter's own turn, then refused unless 5 AP are paid. | CE reconstruction slip |
+| A4 | run step AP (0x430FC0) | Every 5th run step in combat mode (20th fatigue-limiting, every step fatigue-draining) writes **fatigue damage + 1**. | CE reconstruction slip |
+| A5 | `combat_dmg` (0x4B4390), `combat_heal` (0x4B58C0) | The crippled-arm branch reuses one handle, so the **shield** is dropped; partial healing of a leg injury clears **crippled legs**. | CE reconstruction slips |
+| A6 | `object_get_ac` (0x43D880) | AC-adjustment effects are applied to the whole AC, then the AcAdjustment stat is added. | In the original |
+| A7 | `combat_process_crit_miss` (0x4B6410), `combat_dmg` | The critical-miss branch calls the critical-hit procedure and `combat_dmg` calls it again. | In the original |
+| A8 | `combat_process_crit_hit` (0x4B5F40) | With the weapon's magic cancelled the critical effect chance is **0** before effects. | CE reconstruction slip |
+| A9 | `combat_turn_based_next_subturn` (0x4B7690) | After the skip loop ends the round, the begin-turn path starts the first subturn and the function starts it again. | In the original |
+| A10 | `combat_process_crit_miss`, `combat_calc_dmg` (0x4B6680) | The backstab flags survive the retarget to the attacker and the damage step adds the backstab bonus. | In the original |
+
 ## Open questions
 
 - **O1** Retail parity of every constant and formula above (NOT_VERIFIED).
