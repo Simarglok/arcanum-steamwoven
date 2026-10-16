@@ -16,7 +16,8 @@ public sealed class AreaCaveOriginalTests
         Assert.AreEqual(new AreaSectorCoordinate(32, 31), plan.Start); Assert.AreEqual(141, plan.Townmap);
         Assert.AreEqual("arc-world-009-cave-file-effective-source-v1", plan.Profile);
         Assert.AreEqual(4 + CaveProfile.Prototypes.Count, plan.Identities.Count);
-        CollectionAssert.AreEquivalent(Enum.GetValues<AreaMappingRole>(), plan.Mappings.Select(m => m.Role).ToArray());
+        // Every role except the portal names, which only whole-map plans bind (ARC-DATA-020).
+        CollectionAssert.AreEquivalent(Enum.GetValues<AreaMappingRole>().Where(r => r != AreaMappingRole.Portal).ToArray(), plan.Mappings.Select(m => m.Role).ToArray());
         Assert.AreEqual(CaveProfile.NormalGameMobileSha256, plan.Identities.Single(i => i.Key.Role == AreaSourceRole.NormalGameMobile).Sha256);
         // The exterior keeps its own profile, mappings and identity.
         var exterior = OriginalProfile.Plan();
