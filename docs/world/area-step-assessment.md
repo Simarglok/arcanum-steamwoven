@@ -170,6 +170,36 @@ steps are open; **506** cells are reachable, every step with complete evidence,
 all inside the cave walls, and one of them lies within use range 2 of the exit
 object (2093,2019).
 
+## Whole maps (ARC-WORLD-018)
+
+`AreaStepInspector.InspectWholeMap(area, stack, aggregatePath, epoch)` builds
+the same evidence for a strictly published whole-map snapshot
+([whole-map plans](whole-map-plans.md)): the module archive and the rule
+resources (tile names, effects, the module's game effects, `map.patch`) come
+from the archives that win them in the content stack, the mobiles from the
+map's aggregate. Only for such snapshots, walls and portals state their edge
+rule (pinned evidence keeps the earlier rule and digest; the rules are appended
+to the digest only when present):
+
+- a doorway wall piece (22, 25, 26, 29–32) never blocks: the portal on its edge
+  decides; a window piece (10, 13, 14, 17–19) blocks walking (window jumping is
+  not modelled); every other piece blocks;
+- a portal sits on edge `rotation | 1` like a wall and decides for the player
+  at T0 as the original's open attempt does
+  ([door rules](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008)):
+  open or busted passes, a window blocks, a closed door passes when walking
+  opens it and blocks when jammed, magically held or always locked (no key at
+  T0); an unlock script, a plain lock (only leaving a building passes) or an
+  hour-dependent lock is Unknown.
+
+`AreaMapPlan.StartTile` is the map-list arrival tile. On the installed original
+(opt-in `AreaWholeMapStepTests`) every one of the 52 complete interiors builds
+evidence with no Unknown terrain; the generic Crash Site cave reaches the same
+506 tiles from its start as the pinned cave profile; at least 48 interiors are
+walkable from their start (four list a start tile that is blocked, so a walker
+there cannot move). Remaining Unknown steps come from critter effects the rules
+do not model and from the lock cases above.
+
 ## Not delivered
 
 No route search, state after T0, context-ring or southern admission, other

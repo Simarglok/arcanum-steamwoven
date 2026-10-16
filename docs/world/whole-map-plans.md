@@ -30,7 +30,10 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
 - **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
   missing number (at most 200), as the original does; runtime = catalogue − 4999;
   0/0 for an unlisted map or a list that does not parse.
-- **Start:** the sector of `startloc.txt` when it has a file, else the first one.
+- **Start:** `AreaMapPlan.StartTile` is the map-list arrival tile (the entry's
+  second and third values); the plan's start sector is its sector when that has
+  a file, else the first sector file. (`startloc.txt` holds the same pair for
+  every installed map and is not used.)
 - **Limits:** count limits follow the map exactly; byte budgets are the exterior
   profile's (20 present sectors, 524 objects) scaled by the map's sectors or
   objects, whichever grows more, at most 16×, so an oversized map fails with a

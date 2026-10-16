@@ -91,8 +91,12 @@ public sealed class AreaStepSnapshot
             var next = Neighbor(cell, edge);
             foreach (var wall in _walls.GetValueOrDefault(cell, []).Where(w => w.Edge == edge).Concat(_walls.GetValueOrDefault(next, []).Where(w => w.Edge == (edge + 4) % 8)))
             {
-                if (wall.Opening) gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key));
-                else wallBlocker ??= wall.Key;
+                switch (wall.Rule)
+                {
+                    case AreaStepEdgeRule.Legacy when wall.Opening: gaps.Add(new("WALL_OPENING_PIECE_UNSUPPORTED", wall.Cell, wall.Key)); break;
+                    case AreaStepEdgeRule.Legacy or AreaStepEdgeRule.Block: wallBlocker ??= wall.Key; break;
+                    case AreaStepEdgeRule.Unknown: gaps.Add(new(wall.Reason ?? "EDGE_RULE_UNKNOWN", wall.Cell, wall.Key)); break;
+                }
             }
         }
         if ((direction & 1) == 1) Leg(request.From, direction);
