@@ -147,5 +147,6 @@ the research's core share. The only refusals at the reachable boundary are
 
 No route search, state after T0, context-ring or southern admission, other
 actors or original executable comparison. The native synthetic AREA grid and
-camera probes and the ARC-RENDER-007 area gates run on whole-core evidence
-(structural fixture for the probes, the original profile for `area-original`).
+camera probes use structural whole-core evidence, and the source `area-original`
+gate loads the original profile; the exported ARC-RENDER-007 gates have not yet
+been re-run on it.

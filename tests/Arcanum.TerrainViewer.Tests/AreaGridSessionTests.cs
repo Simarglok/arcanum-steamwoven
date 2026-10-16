@@ -1,5 +1,3 @@
-using System.Text;
-using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
@@ -15,7 +13,7 @@ public sealed class AreaGridSessionTests
         [MovementInput.Set(sequence, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral)]);
     private static string[] Trace(GridAdvance advance) => advance.Movement.Events.Select(e => $"{e.Kind}@{e.Time.Value.Numerator}/{e.Time.Value.Denominator}:{e.Key.From.X},{e.Key.From.Y}>{e.Key.To.X},{e.Key.To.Y}").ToArray();
 
-    // Public strict owner fixture: core sectors 1452..1453 x 1290..1291 with blocking scenery at base-sector cells (5,1) and (6,1).
+    // Public strict owner fixture: core sectors 1452..1453 x 1290..1291 with blocking scenery at base-sector cell (5,1) and an OF_NO_BLOCK canopy at (6,1).
     private static AreaStepSnapshot Steps(long epoch = 7)
     {
         using var source = new AreaOwnerFixture(motionBodies: true);
@@ -46,6 +44,19 @@ public sealed class AreaGridSessionTests
         Assert.IsTrue(walk.AreaEvidence.All(e => e.Assessment.Disposition == CardinalTraversalDisposition.Open));
         Assert.IsTrue(walk.AreaEvidence.Any(e => e.Assessment.From == new AreaStepCell(92991, 82561) && e.Assessment.To == new AreaStepCell(92992, 82561)), "Sector boundary crossing.");
         Assert.AreSame(walk, session.LastAdvance);
+    }
+
+    [TestMethod]
+    public void NoBlockCanopyCellIsEnterableAndUnknownTilesAreUnknown()
+    {
+        var steps = Steps();
+        var back = steps.Assess(steps.Request(AreaGridSession.Cell(new(7, 1)), AreaGridSession.Cell(new(6, 1)), CardinalTraversalDirection.XMinus));
+        Assert.AreEqual((CardinalTraversalDisposition?)CardinalTraversalDisposition.Open, back.Disposition);
+        Assert.AreEqual("NO_BLOCK_FLAG", back.Objects.Single().ReasonCode);
+        using var source = new AreaOwnerFixture(motionBodies: true);
+        var unknown = AreaOwnerFixture.Steps(source.Owner.LoadStrict(), source.Streams[new(AreaSourceRole.Module)].Bytes, 7, tileNamesResolved: false);
+        var step = unknown.Assess(unknown.Request(AreaGridSession.Cell(new(6, 1)), AreaGridSession.Cell(new(7, 1)), CardinalTraversalDirection.XPlus));
+        Assert.AreEqual((CardinalTraversalCoverage.Unknown, "TILE_NAME_TABLE_UNSUPPORTED"), (step.Coverage, step.Gaps.Single().ReasonCode));
     }
 
     [TestMethod]
