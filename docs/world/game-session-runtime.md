@@ -105,8 +105,8 @@ another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`); unkno
 duplicate or missing fields; wrong JSON types; fractions, exponents and out-of-range
 integers; non-canonical GUIDs, enum names or identifiers (`OutOfRange`); unsorted or
 repeated flags, maps or change keys (`NotCanonical`); and counts above the policy
-maxima (`BudgetExceeded`), plus `-0` and strings with a lone UTF-16 surrogate escape
-(`MalformedJson`). Format and version are read before the field set, so a newer schema
+maxima (`BudgetExceeded`). `-0` is `OutOfRange`; a string with a lone UTF-16
+surrogate escape is `MalformedJson`. Format and version are read before the field set, so a newer schema
 reports `UnsupportedSchema` rather than a field error. Decoding accepts whitespace,
 object field order and JSON string escapes; only `Encode` output is canonical.
 
