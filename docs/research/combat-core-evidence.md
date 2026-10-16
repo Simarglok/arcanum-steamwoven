@@ -465,7 +465,9 @@ take randomness from an injected, seedable source so tests can pin every roll.
    returning hit location, hit/miss/dodge, critical and the per-type damage
    with the difficulty and resistance steps (C17–C21), with the critical-effect
    table left as an injected FR-COMBAT-009 hook. Anomalies A1–A9 are settled
-   by an explicit owner decision, not copied.
+   by an explicit owner decision, not copied: owner decision D2 of 2026-10-16
+   ([NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16))
+   fixes a confirmed slip in the default and logs it there.
 3. **Turn-based round**: participants, skip rules, AP grant and costs,
    overexertion, end of round +1 s and save/restore of round state as a new
    snapshot schema version (C6–C14, C30). Initiative stays "scan order, PCs
