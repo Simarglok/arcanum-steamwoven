@@ -38,7 +38,8 @@ public partial class TerrainViewerApp
     // ARC-WORLD-025: a smoke stage drives the actor on test time, which can run ahead of the wall clock. The time it
     // restores must not be older than the actor's session or the stage's last observation, or the next observation (a
     // quarantine on a pad change, the next frame) is refused as late or non-monotonic (GRID_OBSERVATION_LATE_OR_INVALID,
-    // GRID_OBSERVATION_NONMONOTONIC): the clock then stays at the later of the two.
+    // GRID_OBSERVATION_NONMONOTONIC): the clock then stays at the later of the two, possibly for the rest of the smoke.
+    // Call it after the stage's last observation (its pad release), never before.
     private void RestoreWorldTestTime(SimulationTime? saved)
     {
         var floor = _worldTestTime;

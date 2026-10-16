@@ -862,7 +862,7 @@ Contract: [map change](../world/companion-follow-runtime.md#map-change-arc-world
 
 The AREA smoke stages drive the actor on test time, which can run ahead of the wall clock. Each stage restores the
 clock it found unless that is older than the actor's session or the stage's last observation; then the clock stays at
-the later time (ARC-WORLD-025). Restoring the wall clock regardless made the first observation after the follow stage
+the later time (ARC-WORLD-025), possibly for the rest of the smoke. Restoring the wall clock regardless made the first observation after the follow stage
 fail as late (`GRID_OBSERVATION_LATE_OR_INVALID`) whenever the run reached it in less real time than it had simulated.
 
 ### Walking and running (ARC-WORLD-020)
