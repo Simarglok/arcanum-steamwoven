@@ -4,7 +4,9 @@ using Godot;
 
 namespace Arcanum.TerrainViewer;
 
-/// <summary>Bounded modal controls; storage and lifecycle remain owned by the host.</summary>
+/// <summary>The WORLD diagnostic palette (ARC-INPUT-001): bounded modal controls for
+/// Fit, Reset scene, Reload, exact zoom and input preferences. Storage, camera and
+/// lifecycle remain owned by the host; this is a diagnostic tool, not original UI.</summary>
 public partial class DiagnosticInputSettingsPanel : CanvasLayer
 {
     private PanelContainer _panel = null!;
@@ -22,6 +24,11 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? CloseRequested;
     public event Action<double>? ZoomRequested;
     public event Action? FitRequested;
+    public event Action? ResetSceneRequested;
+    public event Action? ReloadRequested;
+    private Label _summary = null!;
+    private Label _actionStatus = null!;
+    private CheckButton _overlay = null!;
     public InputSettings Settings { get; private set; } = DiagnosticWorldPolicy.DefaultInputSettings;
     public bool IsOpen => Visible;
     public override void _Ready()
@@ -39,7 +46,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         contents.AddChild(new Label
         {
             Name = "WorldSettingsLimitation",
-            Text = "Diagnostic input settings — new intent gated; accepted step settles\nBounded adjacent grid — original Data admission, not gameplay\nOriginal parity NOT VERIFIED",
+            Text = "Diagnostic palette — new intent gated; accepted step settles\nBounded adjacent grid — original Data admission, not gameplay\nOriginal parity NOT VERIFIED",
             AutowrapMode = TextServer.AutowrapMode.WordSmart
         });
         var scroll = new ScrollContainer { FollowFocus = true, HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled, SizeFlagsVertical = Control.SizeFlags.ExpandFill };
@@ -65,8 +72,19 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Fit (session view only)", () => FitRequested?.Invoke());
         _zoomStatus = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_zoomStatus);
         _rows.AddChild(new Label { Text = "LT out / RT in: deadzone 0.10, full drive 1 octave/s.\nShoulders adjust selected zoom by 0.05.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
-        AddAction("Reset defaults and scene", () => ResetRequested?.Invoke());
-        AddAction("Close (F1 / Start / Cancel)", () => CloseRequested?.Invoke());
+        _rows.AddChild(new Label { Text = "Reset scene: actor and Follow return to spawn; preferences kept.\nReload: the current source loads again; the scene resets.\nBoth wait for an accepted step to settle.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddAction("Reset scene", () => ResetSceneRequested?.Invoke());
+        AddAction("Reload current source", () => ReloadRequested?.Invoke());
+        // The overlay state seam for ARC-RENDER-008. Until a real overlay exists the
+        // row is visibly unavailable and is neither navigable nor toggleable.
+        _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
+        _overlay.Toggled += value => { if (!_binding && !_overlay.Disabled) OverlayToggled?.Invoke(value); };
+        _rows.AddChild(_overlay);
+        _actionStatus = new Label { Name = "PaletteActionStatus", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_actionStatus);
+        _summary = new Label { Name = "PaletteSummary", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_summary);
+        _rows.AddChild(new Label { Text = "Passability overlay: not implemented yet (ARC-RENDER-008).\nReset preferences: input settings and zoom 2.00; scene unchanged.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddAction("Reset preferences", () => ResetRequested?.Invoke());
+        AddAction("Close (Ctrl+Shift+F9/Start)", () => CloseRequested?.Invoke());
         _status = new Label { AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_status);
         GetViewport().SizeChanged += ResizePanel;
         ResizePanel(); Hide();
@@ -116,6 +134,20 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _binding = false;
     }
     public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; ((SpinBox)_controls[0]).GetLineEdit().GrabFocus(); }
+    public void SetSummary(string text) => _summary.Text = "Diagnostic summary: " + text;
+    public void SetActionStatus(string text) => _actionStatus.Text = text;
+    /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
+    /// availability and state; a user toggle is reported once through OverlayToggled.
+    /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>
+    public event Action<bool>? OverlayToggled;
+    public bool OverlayAvailable => !_overlay.Disabled;
+    public void BindOverlay(bool available, bool on, string text)
+    {
+        _binding = true;
+        _overlay.Disabled = !available; _overlay.ButtonPressed = available && on; _overlay.Text = text;
+        _overlay.FocusMode = available ? Control.FocusModeEnum.All : Control.FocusModeEnum.None;
+        _binding = false;
+    }
     public void SetSaveStatus(bool saved) => _status.Text = saved ? "Preferences saved locally." : "Preferences save failed.";
     public void Navigate(int direction)
     {

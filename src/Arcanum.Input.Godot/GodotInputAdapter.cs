@@ -14,6 +14,12 @@ public sealed class GodotInputAdapter
 
 
     public Vector2 LastMousePosition => _mouse;
+    /// <summary>WORLD route (docs/input/diagnostic-palette.md): keyboard never makes an
+    /// actor vector; arrows pan; only the open palette receives keyboard UI pulses.
+    /// Off (default) keeps the historical Gamepad Lab keyboard scaffolding.</summary>
+    public bool WorldRoute { get; set; }
+    /// <summary>The diagnostic palette is the current modal surface (WORLD route only).</summary>
+    public bool PaletteOpen { get; set; }
     public RawInputFrame Map(InputEvent input, bool focused)
     {
         if (input is InputEventJoypadMotion motion)
@@ -39,7 +45,9 @@ public sealed class GodotInputAdapter
         {
             _keyboardComplete = false;
             if (key.Pressed) _keys.Add(key.Keycode); else _keys.Remove(key.Keycode);
-            return KeyboardFrame(focused, key.Pressed && !key.Echo, key.Echo);
+            // A key without a WORLD role is not a keyboard input-method event either.
+            var routed = !WorldRoute || WorldRole(key.Keycode) is WorldKeyRole.CameraPan or WorldKeyRole.PaletteControl;
+            return KeyboardFrame(focused, routed && key.Pressed && !key.Echo, routed && key.Echo);
         }
         if (input is InputEventMouseMotion mouseMotion)
         {
@@ -84,9 +92,24 @@ public sealed class GodotInputAdapter
                 (flags, pair) => Has(pair.Button) ? flags | pair.Flag : flags)
         };
     }
+    private WorldKeyRole WorldRole(Key key) => global::Arcanum.Input.OriginalWorldKeyboard.Role(ToWorldKey(key), PaletteOpen);
     private RawInputFrame KeyboardFrame(bool focused, bool keyboardEvent, bool echo)
     {
         bool Has(Key key) => _keys.Contains(key);
+        if (WorldRoute)
+        {
+            bool Pan(Key key) => Has(key) && WorldRole(key) == WorldKeyRole.CameraPan;
+            bool Ui(Key key) => Has(key) && WorldRole(key) == WorldKeyRole.PaletteControl;
+            var pan = new Vec2((Pan(Key.Right) ? 1 : 0) - (Pan(Key.Left) ? 1 : 0), (Pan(Key.Down) ? 1 : 0) - (Pan(Key.Up) ? 1 : 0));
+            return new RawInputFrame(-1, default,
+                Confirm: Ui(Key.Enter) || Ui(Key.Space), Cancel: Ui(Key.Escape) || Ui(Key.Backspace),
+                MenuUp: Ui(Key.Up), MenuDown: Ui(Key.Down), Focused: focused,
+                Keyboard: keyboardEvent, Echo: echo, KeyboardCamera: pan)
+            {
+                KeyboardCameraHeld = Pan(Key.Up) || Pan(Key.Down) || Pan(Key.Left) || Pan(Key.Right),
+                CompleteObservation = _keyboardComplete
+            };
+        }
         var actor = new Vec2((Has(Key.D) ? 1 : 0) - (Has(Key.A) ? 1 : 0), (Has(Key.S) ? 1 : 0) - (Has(Key.W) ? 1 : 0));
         var camera = new Vec2((Has(Key.Right) ? 1 : 0) - (Has(Key.Left) ? 1 : 0), (Has(Key.Down) ? 1 : 0) - (Has(Key.Up) ? 1 : 0));
         return new RawInputFrame(-1, default,
@@ -136,5 +159,17 @@ public sealed class GodotInputAdapter
         _devices[device] = replacement;
         return true;
     }
+    /// <summary>Godot logical key to the engine-free WORLD key identity.</summary>
+    public static WorldKey ToWorldKey(Key key) => key switch
+    {
+        Key.Up => WorldKey.Up, Key.Down => WorldKey.Down, Key.Left => WorldKey.Left, Key.Right => WorldKey.Right,
+        Key.Home => WorldKey.Home, Key.Enter or Key.KpEnter => WorldKey.Enter, Key.Space => WorldKey.Space,
+        Key.Escape => WorldKey.Escape, Key.Backspace => WorldKey.Backspace, Key.Tab => WorldKey.Tab, Key.Numlock => WorldKey.NumLock,
+        >= Key.F1 and <= Key.F12 => WorldKey.F1 + (int)(key - Key.F1),
+        >= Key.Key0 and <= Key.Key9 => WorldKey.Digit0 + (int)(key - Key.Key0),
+        >= Key.A and <= Key.Z => WorldKey.A + (int)(key - Key.A),
+        Key.Comma => WorldKey.Comma, Key.Period => WorldKey.Period, Key.Slash => WorldKey.Slash,
+        _ => WorldKey.Other,
+    };
     private static Vec2 ToCore(Vector2 value) => new(value.X, value.Y);
 }

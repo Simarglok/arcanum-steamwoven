@@ -2,20 +2,30 @@
 from __future__ import annotations
 
 
-def validate_screen_cases(cases: object, digest: str, epoch: int) -> None:
+def validate_keyboard_inert(rows: object) -> None:
+    """ARC-INPUT-001 WORLD keyboard route: every former W/A/S/D sector chord, at every
+    actual viewport, leaves the settled interior center without a single movement event."""
+    viewports = [[1280, 800], [1440, 900], [800, 600]]
+    expected = [dict(viewport=viewport, sector=sector, events=0, cell=[7, 2], phase='Settled')
+                for viewport in viewports for sector in range(8)]
+    if rows != expected:
+        raise ValueError('grid keyboard route must leave all eight former sector chords inert')
+
+
+def validate_screen_cases(cases: object, digest: str, epoch: int, devices: tuple[str, ...] = ('keyboard', 'stick')) -> None:
     offsets = [(-1, -1), (-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1)]
     signs = [(0, -1), (1, -1), (1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1)]
     inversions = [[0, 1, 2, 3, 4, 5, 6, 7], [0, 7, 6, 5, 4, 3, 2, 1],
                   [4, 3, 2, 1, 0, 7, 6, 5], [4, 5, 6, 7, 0, 1, 2, 3]]
     viewports = [[1280, 800], [1440, 900], [800, 600]]
-    if not isinstance(cases, list) or len(cases) != 192:
-        raise ValueError('grid screen matrix requires all8/four inversions/two devices/three actual viewports')
+    if not isinstance(cases, list) or len(cases) != 96 * len(devices):
+        raise ValueError('grid screen matrix requires all8/four inversions/every device/three actual viewports')
     seen = set()
     for row in cases:
         if not isinstance(row, dict):
             raise ValueError('invalid grid screen row')
         viewport, device, sector, flags = (row.get(k) for k in ('viewport', 'device', 'sector', 'flags'))
-        if (viewport not in viewports or device not in ('keyboard', 'stick')
+        if (viewport not in viewports or device not in devices
                 or type(sector) is not int or not 0 <= sector < 8 or type(flags) is not int or not 0 <= flags < 4):
             raise ValueError('invalid grid screen row identity')
         identity = (tuple(viewport), device, sector, flags)

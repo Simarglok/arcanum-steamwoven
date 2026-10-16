@@ -85,21 +85,23 @@ public partial class TerrainViewerApp
         Require(new[] { "left", "right", "top", "bottom" }.All(reached.Contains), "whole envelope reachable: " + string.Join(",", reached));
         checks.Add("pan-reaches-all-envelope-edges-actor-fixed");
 
-        // Wheel zoom through the production callback, then the settle window
-        // persists it (a discrete step at once); a fresh initialization reloads it for the next publish.
+        // Exact palette zoom (ARC-INPUT-001: the world wheel no longer zooms) is a
+        // discrete step, saved at once; a fresh initialization reloads it for the next publish.
         ResetWorldScene(); WorldSettleForSelfTest(); Rearm();
+        var beforeWheel = _camera.State;
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = viewport - Vector2.One });
+        Require(_camera.State == beforeWheel, "world wheel zoomed");
+        SetPreferredWorldZoom(3.75);
         var wheel = _camera.State.Zoom;
-        // A discrete wheel step is saved at once; continuous drive waits for settle.
-        Require(wheel > 3, $"wheel zoom={wheel}");
+        Require(wheel == 3.75, $"palette zoom={wheel}");
         Frame(none); Frame(none); Frame(none);
-        Require(!_worldZoomPending && _worldZoomStore.Load() == wheel, "settled wheel zoom persisted");
+        Require(!_worldZoomPending && _worldZoomStore.Load() == wheel, "palette zoom persisted");
         ExitWorld(); InitializeWorld();
         Require(_worldPreferredZoom == wheel, "reinitialization reloads the persisted zoom");
         PublishSyntheticForSelfTest(arguments, result);
         Require(_readyArea is not null && _camera.State.Zoom == wheel && _camera.FollowState.Mode == CameraMode.Follow,
             $"republished AREA uses persisted zoom state={_camera.State}");
-        checks.Add("wheel-zoom-persisted-reinitialized-republished");
+        checks.Add("palette-zoom-persisted-reinitialized-republished-wheel-inert");
         SetPreferredWorldZoom(2); FlushWorldZoom();
         GD.Print("ARC-RENDER-007 AREA camera synthetic PASS " + string.Join("/", checks) + $" bounds={bounds}");
         return new { Schema = "arcanum-area-camera-synthetic-v1", Task = "ARC-RENDER-007", Outcome = "PASS",

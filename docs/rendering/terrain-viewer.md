@@ -186,17 +186,18 @@ bridge to the checked source-derived normal placement; camera origin stays 0.
 Follow targets continuous projected baseline plus `(0,20)`, not rounded sprite
 position. No sprite repositioning/visual nudge substitutes for source geometry.
 
-WASD/left stick requests **screen sectors**. The reducer applies circular deadzone
+Since ARC-INPUT-001 the WORLD keyboard has no actor route (see
+[diagnostic palette](../input/diagnostic-palette.md)); the left stick requests
+**screen sectors** (the table keeps the former W/A/S/D names as sector labels). The reducer applies circular deadzone
 and linear sensitivity once; WORLD then applies separate actor X/Y inversion
 (defaults false/false) once. Retain each nonzero component whose magnitude is at
 least half the largest (inclusive ties), then map the screen sector to one
 neighbor. Camera inversion remains independent and authored v1 camera settings
 are preserved when migrating files without actor fields. Sensitivity affects
-magnitude, not the fixed diagnostic half-second step duration. Opposing keys net
-neutral but still count as activity for safety/Follow. The literal mapping follows
+magnitude, not the fixed diagnostic half-second step duration. The literal mapping follows
 `(40*(Y-X),20*(Y+X))`, not a compass alias or original-executable claim:
 
-| Input | Map direction | Unzoomed projected cell delta | Human octant / physical group / flip |
+| Sector (former key) / stick | Map direction | Unzoomed projected cell delta | Human octant / physical group / flip |
 | --- | --- | --- | --- |
 | W / stick N | XMinusYMinus | `(0,-40)` | `0 / 0 / no` |
 | W+D / stick NE | XMinus | `(40,-20)` | `1 / 7 / yes` |
@@ -236,18 +237,19 @@ center clamps to a stable envelope of terrain, five statics and **all** actor
 corner/frame/mirror extents, including rounding guard; small maps center at
 their midpoint. Movement never changes the envelope/cache or reads archives.
 
-Left drag selects Manual without moving the actor; wheel/+/- changes bounded
-zoom without changing Follow eligibility. HUD/settings consumes pointer input;
+Arrows keep one fixed pan direction whatever the camera inversion (KM-05);
+inversion applies to the right stick. LMB, drag, wheel and `+`/`-` have no world
+effect (ARC-INPUT-001). HUD/palette consumes pointer input;
 UI keyboard focus blocks world input. Resize clamps the center to viewport
-bounds but never derives actor state from `Camera2D`. `F` fits and remains
-Manual/unarmed; `R` requests explicit safe scene/Follow reset without resetting
-preferences; `L` requests generation-aware reload. Both enqueue neutral and
+bounds but never derives actor state from `Camera2D`. Palette **Fit** fits and remains
+Manual/unarmed; **Reset scene** requests explicit safe scene/Follow reset without resetting
+preferences; **Reload current source** requests generation-aware reload. Both enqueue neutral and
 wait for accepted return/finish to reach Settled before replacing the session.
 The successor has a fresh input queue/sequence and snapshot epoch binding;
 old pending lifecycle flags cannot execute in it. Missing reload arguments
 fail closed, never fall back to reset. Failure/exit disposes the session,
-distinct from (and without manufacturing) CenterArrived. F11/Escape use ordinary
-window controls. Focus loss/gain, modal transitions and active disconnect/acquisition
+distinct from (and without manufacturing) CenterArrived. F11 is an ordinary
+window control; Escape is the reserved original game-menu key. Focus loss/gain, modal transitions and active disconnect/acquisition
 enqueue timestamped neutral and quarantine **new input**, not accepted motion. Inactive
 disconnect preserves scene. Rearm requires two complete observed-neutral frame
 samples of every mapped keyboard and active-controller level; cached/event or
@@ -259,9 +261,11 @@ preserved. Already accepted return/finish and its Walk clock continue under the
 closed gate. Held input on recovery cannot
 substitute for those two complete neutral frames.
 
-F1/Start or the HUD button opens bounded settings: independent camera X/Y and
+Ctrl+Shift+F9, Start or the HUD button opens the bounded diagnostic palette
+([contract](../input/diagnostic-palette.md)): Fit, Reset scene, Reload, exact zoom,
+the unavailable passability row, independent camera X/Y and
 actor screen X/Y inversion, independent actor/camera deadzones and sensitivities,
-reset and close.
+Reset preferences (scene kept) and close.
 WORLD first launch and Reset use **false/false**: stick right/down moves the
 camera right/down (world image left/up). True reverses only the selected
 camera axis; actor and menu directions are unchanged. Explicit saved values,
@@ -359,21 +363,21 @@ drive one octave/second. The ratio remains 0.125..8 with nearest filtering;
 camera zoom never changes simulation, asset geometry, UI scale or display DPI.
 Numerical 1.00 does not prove physical 1:1 on a HiDPI framebuffer.
 
-F1/Start opens paused settings: World zoom numeric editor (keyboard text/Enter/
+The palette (Ctrl+Shift+F9/Start/HUD button) holds the World zoom numeric editor (keyboard text/Enter/
 Tab; controller shoulders adjust by 0.05), exact 100% (1.00), 200% (2.00),
 300% (3.00), and Fit. Native clicks activate only the clicked control once;
 controller A activates the selected action. Keyboard/controller navigation and
 native Tab automatically scroll the focused control (including numeric editors)
-into view; navigation alone never edits zoom. Modal triggers do not zoom. Ordinary
-wheel/+/- retain factors 1.25/0.8 but stop exactly at 1.00 on a crossing event;
-the next event can leave 1.00. These shortcuts require admitted, unfocused world
-input and wheel outside the HUD. Standalone preview controls remain unchanged.
+into view; navigation alone never edits zoom. Modal triggers do not zoom. Since
+ARC-INPUT-001 the world wheel and `+`/`-` do not zoom in WORLD (they did, with
+factors 1.25/0.8 stopping exactly at 1.00); exact zoom is a palette action.
+Standalone preview controls remain unchanged.
 
 Separate `user://world_diagnostic_zoom_v1.json` stores numeric
 `{"version":1,"zoom":2.0}` with finite inclusive 0.125..8. Missing, unreadable,
-malformed/type/version/range-invalid files fall back to 2.00. R/reload retain
-the preferred value and reset actor/Follow; Reset defaults and scene persists
-input false/false plus zoom 2.00. Fit is a session-only Manual/unarmed view and
+malformed/type/version/range-invalid files fall back to 2.00. Reset scene/Reload retain
+the preferred value and reset actor/Follow; Reset preferences persists
+input false/false plus zoom 2.00 and does not reset the scene (ARC-INPUT-001). Fit is a session-only Manual/unarmed view and
 never overwrites the preferred startup ratio; the next explicit zoom does.
 Discrete edits save once, held changes coalesce with 0.25s settled debounce and
 shutdown flushing. Pending values survive quarantine/reload; failures are shown

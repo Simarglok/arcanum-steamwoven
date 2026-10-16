@@ -14,32 +14,36 @@ public partial class TerrainViewerApp
             throw new InvalidOperationException("Original native reload requires guarded input.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("GRID original reload: " + why); }
         _worldActor.Configure(result.TraversalSnapshot!, SimulationTime.At(0));
-        _worldGridInput = new(); RetireWorldLifecycle(); _worldAdapter.Clear();
-        _worldReducer.SetStartupDevices(Array.Empty<int>()); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
-        if (WorldModal) ToggleWorldSettings(); GetViewport().GuiReleaseFocus(); QuarantineWorld();
+        _worldGridInput = new(); RetireWorldLifecycle(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
+        if (WorldModal) ToggleWorldSettings(); GetViewport().GuiReleaseFocus(); SelectSimulatedPadForSelfTest();
         var none = new RawInputFrame(-1, default);
-        void Frame(int numerator) => WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(numerator,16));
+        // Frames carry the selected pad's current stick level (no keyboard actor route).
+        void Frame(int numerator) => WorldFrameForSelfTest(none, new[] { SimulatedPadLevel() }, .1, observationTime: SimulationTime.At(numerator,16));
         Frame(1); Frame(2); Frame(3);
         _worldTestTime = SimulationTime.At(1);
-        _Input(new InputEventKey { Keycode = Key.S, Pressed = true }); _Input(new InputEventKey { Keycode = Key.A, Pressed = true });
-        WorldFrameForSelfTest(none with {KeyboardActor = new(-1,1), KeyboardActorHeld = true}, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(17,16));
+        SimulatedSectorKey(Key.S, true); SimulatedSectorKey(Key.A, true);
+        Frame(17);
         var retired = _worldActor.Session!; var epoch = retired.EvidenceEpoch; var previousLoad = _lastLoad;
-        _worldTestTime = SimulationTime.At(9,8); _Input(new InputEventKey { Keycode = Key.L, Pressed = true });
-        Require(ReferenceEquals(retired,_worldActor.Session) && _worldReloadPending && ReferenceEquals(previousLoad,_lastLoad), "L loaded before settlement");
+        // The palette Reload action (ARC-INPUT-001; no L key), while a step is accepted.
+        _worldTestTime = SimulationTime.At(9,8); PaletteReload();
+        Require(ReferenceEquals(retired,_worldActor.Session) && _worldReloadPending && ReferenceEquals(previousLoad,_lastLoad), "Reload loaded before settlement");
         Frame(19); Frame(20);
         Require(ReferenceEquals(retired,_worldActor.Session) && retired.State.Phase == MovementPhase.Returning
-            && retired.State.Anchor.U == ExactScalar.Create(49,8), "early L did not return");
+            && retired.State.Anchor.U == ExactScalar.Create(49,8), "early Reload did not return");
         Frame(21);
         Require(!ReferenceEquals(previousLoad,_lastLoad) && retired.State.Phase == MovementPhase.Settled
-            && retired.State.CommittedCell == new CellCoord(6,1), "L not started after real arrival");
+            && retired.State.CommittedCell == new CellCoord(6,1), "Reload not started after real arrival");
         await (_lastLoad ?? throw new InvalidOperationException("Reload task missing."));
         var successor = _worldActor.Session;
         Require(successor is not null && !ReferenceEquals(retired,successor) && successor.EvidenceEpoch > epoch
             && successor.EvidenceEpoch == _generation && successor.State.LastOpportunity is null
             && successor.State.CommittedCell == new CellCoord(6,1) && _worldLifecycleSession is null
             && !_worldReloadPending && !_worldResetPending, "reload epoch/actor/pending ownership");
+        var reloadStatus = _worldPanel?.FindChild("PaletteActionStatus", true, false) as Label;
+        Require(reloadStatus?.Text == $"Reload done: generation {_generation} published; actor at spawn.", "palette did not show the reload outcome");
         Require(!_coordinator.TryPublish(epoch, () => throw new InvalidOperationException("stale reload result published")), "old publication remained current");
-        GD.Print("ARC-WORLD-003 original reload PASS actual L deferred until early-return CenterArrived; fresh guarded snapshot epoch/empty successor/retired publication rejected");
+        ReleaseSimulatedPadForSelfTest();
+        GD.Print("ARC-WORLD-003 original reload PASS palette Reload deferred until early-return CenterArrived; fresh guarded snapshot epoch/empty successor/retired publication rejected");
     }
 
     internal async Task WorldRetirementMatrixForSelfTestAsync(TerrainViewerArguments arguments, TerrainLoadResult result)
@@ -47,32 +51,32 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap) throw new InvalidOperationException("Synthetic test bootstrap required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("GRID retirement: " + why); }
         var none = new RawInputFrame(-1, default);
-        var held = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
-        void Frame(int time, RawInputFrame? keys = null) => WorldFrameForSelfTest(keys ?? none, Array.Empty<RawInputFrame>(), .1, observationTime: SimulationTime.At(time));
+        // The actor moves by the selected pad's stick; Reset scene/Reload are palette actions.
+        var held = StickLevel(new(-1,1));
+        void Frame(int time, RawInputFrame? pad = null) => WorldFrameForSelfTest(none, new[] { pad ?? SimulatedPadLevel() }, .1, observationTime: SimulationTime.At(time));
         void Prepare()
         {
             _worldTestTime = SimulationTime.At(0); _worldObservationTime = null;
             _worldActor.Configure(result.TraversalSnapshot!, SimulationTime.At(0), StepDuration.Of(8));
-            _worldGridInput = new(); RetireWorldLifecycle(); _worldAdapter.Clear();
-            _worldReducer.SetStartupDevices(Array.Empty<int>()); _worldFocused = true;
-            QuarantineWorld(); PublishWorldSelection(); Frame(1); Frame(2); Frame(3);
+            _worldGridInput = new(); RetireWorldLifecycle(); _worldFocused = true;
+            SelectSimulatedPadForSelfTest(); PublishWorldSelection(); Frame(1); Frame(2); Frame(3);
             _worldTestTime = SimulationTime.At(10);
-            _Input(new InputEventKey { Keycode = Key.S, Pressed = true }); _Input(new InputEventKey { Keycode = Key.A, Pressed = true });
+            SimulatedSectorKey(Key.S, true); SimulatedSectorKey(Key.A, true);
             Frame(11, held); Frame(12, held);
             Require(_worldActor.Session!.State.Phase == MovementPhase.OutboundBeforeEntry, "moving setup");
         }
         foreach (var release in new[] { 12, 14, 16 })
         {
             Prepare(); var retired = _worldActor.Session!; var oldQueue = _worldGridInput;
-            _worldTestTime = SimulationTime.At(release); _Input(new InputEventKey { Keycode = Key.R, Pressed = true });
-            Require(ReferenceEquals(retired, _worldActor.Session) && _worldResetPending && !_worldGate.IsOpen, "R must defer replacement");
-            Frame(release + 1); Frame(release + 2);
+            _worldTestTime = SimulationTime.At(release); PaletteResetScene();
+            Require(ReferenceEquals(retired, _worldActor.Session) && _worldResetPending && !_worldGate.IsOpen, "Reset scene must defer replacement");
+            Frame(release + 1, held); Frame(release + 2, held);
             Require(ReferenceEquals(retired, _worldActor.Session) && retired.State.Action == MovementAction.Walk,
                 "accepted return/finish must remain old Walk session");
             if (release == 12)
                 Require(retired.State.Anchor.U == ExactScalar.Create(49,8) && retired.State.CommittedCell == new CellCoord(6,1), "early13 literal anchor/cell");
             else Require(retired.State.CommittedCell == new CellCoord(7,1), "entry precedes equality/late neutral");
-            Frame(20); Frame(21);
+            Frame(20, held); Frame(21, held);
             var last = retired.LastAdvance!;
             Require(retired.State.Phase == MovementPhase.Settled && retired.State.CommittedCell == new CellCoord(release == 12 ? 6 : 7,1), "old generation exact center");
             Require(last.Movement.Events.Count(e => e.Kind == MovementEventKind.CenterArrived) == 1
@@ -82,6 +86,7 @@ public partial class TerrainViewerApp
                 "explicit successor starts clean at diagnostic spawn");
             try { oldQueue.Observe(_worldActor.Session!, SimulationTime.At(22), ActorIntent.Neutral); throw new InvalidOperationException("old queue accepted successor"); }
             catch (InvalidOperationException error) when (error.Message == "GRID_OBSERVATION_RETIRED_SESSION") { }
+            ClearSimulatedSectorKeys(); _worldAdapter.Clear();
             Frame(22); Frame(23); Frame(24,held); Frame(25,held);
             Require(_worldActor.Session!.State.LastOpportunity!.Value.MaterialIntentKey.Sequence == 0, "old input sequence leaked into successor");
         }
@@ -89,12 +94,14 @@ public partial class TerrainViewerApp
         // reset. Fault disposal clears the live scene only after old settlement.
         Prepare(); var beforeReload = _worldActor.Session!; _arguments = null;
         _worldTestTime = SimulationTime.At(12); RequestWorldLifecycle(true);
-        Frame(13); Frame(14);
-        try { Frame(15); throw new InvalidOperationException("missing reload succeeded"); }
+        Frame(13, held); Frame(14, held);
+        try { Frame(15, held); throw new InvalidOperationException("missing reload succeeded"); }
         catch (InvalidOperationException error) when (error.Message == "GRID_RELOAD_ARGUMENTS_REQUIRED") { }
         Require(beforeReload.State.Phase == MovementPhase.Settled && _worldActor.Session is null
             && !_worldResetPending && !_worldReloadPending && _worldLifecycleSession is null
-            && _hud!.Text.Contains("failure stage=ActorPlan", StringComparison.Ordinal), "missing reload arguments did not fail closed");
+            && _hud!.Text.Contains("failure stage=ActorPlan", StringComparison.Ordinal)
+            && (_worldPanel?.FindChild("PaletteActionStatus", true, false) as Label)?.Text.StartsWith("Scene FAILED: stage=ActorPlan", StringComparison.Ordinal) == true,
+            "missing reload arguments did not fail closed and visibly");
         PublishSyntheticForSelfTest(arguments, result);
         // Both catalogue/grid consumers use this production scope. Exercise
         // async success AND failure with an active session and pending reload;
@@ -182,7 +189,7 @@ public partial class TerrainViewerApp
         var focusedAfterExit = _worldFocused;
         nativeWindow.EmitSignal(Window.SignalName.FocusExited);
         Require(_worldFocusWindow is null && _worldFocused == focusedAfterExit, "retired window signal retained focus ownership");
-        _Input(new InputEventKey { Keycode=Key.F1, Pressed=true });
+        SendPaletteChordForSelfTest();
         Require(!retiredPanel.IsOpen && _worldPanel is null, "inactive input opened panel");
         // Legitimate later initialization reacquires exactly one subscription
         // and one live panel. Test the native HUD event, not a direct Toggle call.
@@ -192,14 +199,14 @@ public partial class TerrainViewerApp
             && !_worldGate.IsOpen && _worldPreferredZoom == 3,
             "reinitialization duplicated or lost ownership or bypassed quarantine");
         var settingsButton = _hud!.GetNode<VBoxContainer>("TerrainDiagnosticPanel/DiagnosticContents")
-            .GetChildren().OfType<Button>().Single(button => button.Text == "Input settings (F1 / Start)");
+            .GetChildren().OfType<Button>().Single(button => button.Text == "Diagnostic palette (Ctrl+Shift+F9 / Start)");
         settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
         Require(successorPanel.IsOpen, "reowned HUD settings subscription absent or duplicated");
         settingsButton.EmitSignal(BaseButton.SignalName.Pressed);
         Require(!successorPanel.IsOpen, "reowned HUD close subscription absent or duplicated");
         _worldTestTime = SimulationTime.At(0);
         PublishSyntheticForSelfTest(arguments,result);
-        _worldFocused = true; _worldReducer.SetStartupDevices(Array.Empty<int>()); _worldAdapter.Clear();
+        _worldFocused = true; ClearSimulatedSectorKeys(); _worldAdapter.Clear(); _worldReducer.SetStartupDevices(new[] { SimulatedPadId });
         Frame(1); Require(!_worldGate.IsOpen,"first neutral reinitialization opened gate");
         Frame(2); Require(_worldGate.IsOpen,"second complete neutral reinitialization did not open gate");
         // Synthetic signal delivery proves subscription ownership, not OS focus.
@@ -227,10 +234,10 @@ public partial class TerrainViewerApp
         }
         finally { _worldInputTraceForSelfTest = null; _worldFocusSimulationForSelfTest = simulation; }
         GD.Print("ARC-WORLD-003 window signal ownership PASS synthetic loss/idempotence/return/held-neutral rearm/retire-reinitialize; OS focus requires separate native probe");
-        _Input(new InputEventKey { Keycode=Key.F1, Pressed=true });
-        Require(successorPanel.IsOpen,"reinitialized settings callback missing or duplicated");
-        _Input(new InputEventKey { Keycode=Key.F1, Pressed=false });
-        ToggleWorldSettings();
+        SendPaletteChordForSelfTest();
+        Require(successorPanel.IsOpen,"reinitialized palette chord missing or duplicated");
+        SendPaletteChordForSelfTest();
+        Require(!successorPanel.IsOpen,"reinitialized palette chord did not close once");
         PublishSyntheticForSelfTest(arguments, result); Prepare();
         var reownedSession = _worldActor.Session!; var reownedState = reownedSession.State;
         ExitWorld(); ExitWorld();
@@ -241,6 +248,6 @@ public partial class TerrainViewerApp
         // Leave one live initialization with a pending preference: the host
         // tree exit must flush it and retire children without republishing.
         InitializeWorld(); _worldZoomPending = true; _worldPreferredZoom = 2;
-        GD.Print("ARC-WORLD-003 retirement/ownership PASS production R early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/once-owned teardown/pending zoom flush/retired window signals/reinitialization/native HUD subscription/exit disposal distinct from CenterArrived");
+        GD.Print("ARC-WORLD-003 retirement/ownership PASS production palette Reset scene early/equality/late/settled replacement/retired queue/reload missing args/async readback success-failure/stale app publication/once-owned teardown/pending zoom flush/retired window signals/reinitialization/native HUD subscription/exit disposal distinct from CenterArrived");
     }
 }

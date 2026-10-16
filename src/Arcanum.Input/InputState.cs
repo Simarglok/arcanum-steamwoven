@@ -29,6 +29,9 @@ public sealed record InputContext(
 {
     public bool WorldZoomEnabled { get; init; }
     public bool ExplicitGamepadBindingsEnabled { get; init; }
+    /// <summary>Keyboard arrows keep one fixed pan direction (the false/false
+    /// image sign); camera inversion then applies to the right stick only.</summary>
+    public bool KeyboardCameraFixedSign { get; init; }
 }
 
 public sealed record IntentFrame(
@@ -168,7 +171,12 @@ public sealed class InputStateReducer
         // physical-stick and keyboard vectors use the same policy; normalization
         // only caps a mixed diagonal command and must not erase sensitivity.
         var actor = CombineDirection(left, Normalize(raw.KeyboardActor)) * context.ActorSensitivity;
-        var cameraDirection = CombineDirection(right, Normalize(raw.KeyboardCamera));
+        // Fixed-sign keyboard arrows are pre-flipped so the shared inversion
+        // below always yields the false/false sign for them (sign-symmetric combine).
+        var keyboardCamera = Normalize(raw.KeyboardCamera);
+        if (context.KeyboardCameraFixedSign)
+            keyboardCamera = new Vec2(context.InvertCameraX ? -keyboardCamera.X : keyboardCamera.X, context.InvertCameraY ? -keyboardCamera.Y : keyboardCamera.Y);
+        var cameraDirection = CombineDirection(right, keyboardCamera);
         // WORLD's valid huge finite trigger-only frames must not manufacture
         // NaN from zero * an overflowing pan scale. Keep the historical lab
         // route unchanged, and leave real nonzero overflow for host quarantine.

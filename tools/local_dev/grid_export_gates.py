@@ -27,7 +27,7 @@ GATES = {
 def gates_for(task: str) -> dict[str, str]:
     if task == 'ARC-WORLD-003':
         return dict(GATES)
-    if task == 'ARC-RENDER-007':
+    if task in ('ARC-RENDER-007', 'ARC-INPUT-001'):
         return {**GATES, **{f'{host}-{name}': f'{host}-{name}.log' for host in ('source', 'exported')
                             for name in ('area-original', 'area-grid', 'area-seams', 'area-nearest')}}
     raise ValueError('unsupported exact export task')
@@ -92,7 +92,7 @@ def main() -> int:
     parser.add_argument('--evidence', type=Path, required=True)
     parser.add_argument('--head', required=True)
     parser.add_argument('--log', required=True)
-    parser.add_argument('--task', choices=('ARC-WORLD-003', 'ARC-RENDER-007'), default='ARC-WORLD-003')
+    parser.add_argument('--task', choices=('ARC-WORLD-003', 'ARC-RENDER-007', 'ARC-INPUT-001'), default='ARC-WORLD-003')
     parser.add_argument('command', nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ['--'] else args.command

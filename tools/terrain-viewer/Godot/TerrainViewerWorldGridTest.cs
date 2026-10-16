@@ -31,12 +31,15 @@ public partial class TerrainViewerApp
             if (advance is not null) events.AddRange(advance.Movement.Events.Where(e => !events.Any(old => old.Ordinal == e.Ordinal)));
         }
         void At(int time, Action callback) { _worldTestTime = SimulationTime.At(time); callback(); }
-        void SendKey(Key key, bool pressed) => _Input(new InputEventKey { Keycode = key, Pressed = pressed });
+        // The WORLD keyboard has no actor route (ARC-INPUT-001); the selected
+        // controller's stick replays the former S/A key edges callback for callback.
+        void SendKey(Key key, bool pressed) => SimulatedSectorKey(key, pressed);
         void SendOpen(bool pressed) { SendKey(Key.S, pressed); SendKey(Key.A, pressed); }
-        void Prepare(bool pad = false)
+        RawInputFrame[] Pad() => new[] { SimulatedPadLevel() };
+        void Prepare(bool pad = true)
         {
             if (WorldModal) ToggleWorldSettings();
-            GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); RetireWorldLifecycle();
+            GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); ClearSimulatedSectorKeys(); RetireWorldLifecycle();
             observed = none;
             Configure(SimulationTime.At(0), StepDuration.Of(8));
             _worldGridInput = new(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
@@ -53,30 +56,30 @@ public partial class TerrainViewerApp
         // All material input occurs BETWEEN frames, including two entries at13.
         Prepare(); At(10, () => SendOpen(true)); At(12, () => SendOpen(false));
         At(13, () => { SendKey(Key.S, true); SendKey(Key.S, false); });
-        Frame(14); Frame(15);
+        Frame(14, true, Pad()); Frame(15, true, Pad());
         Require(Trace() == start + cancel + arrive, "between-frame/same-tick full transcript: " + Trace());
         Require(_worldActor.Session!.State.Anchor.U == ExactScalar.Integer(6)
             && _worldActor.Session.State.CommittedCell == new CellCoord(6,1), "same-tick neutral suppressed stale start");
         // S then A form one completed chord; its second same-tick material
         // observation (sequence1) owns the frozen segment, not interim S.
         Require(events.Select(e => e.Key).Distinct().Count() == 1 && events[0].Key.MaterialIntentKey == new InputKey(SimulationTime.At(10), 1), "literal original callback chord key");
+        Require(events.All(e => e.Kind != MovementEventKind.StepStarted || e.Key.From == new CellCoord(6,1)), "stick sector route");
         // Safety notifications at early/equality/late release. Entry precedes
         // equal-time neutral; Return/Finish remain Walk even though gate closes.
         foreach (var safety in new[] { "focus", "modal", "disconnect", "incomplete" })
         foreach (var release in new[] { 12, 14, 16 })
         {
-            var padMode = safety == "disconnect";
-            Prepare(padMode);
-            var pads = padMode ? new[] { new RawInputFrame(3, default) } : Array.Empty<RawInputFrame>();
+            Prepare();
             At(10, () => SendOpen(true));
-            observed = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
+            var pads = Pad();
             At(release, () =>
             {
                 if (safety == "focus") _Notification((int)NotificationApplicationFocusOut);
-                else if (safety == "modal") SendKey(Key.F1, true);
+                else if (safety == "modal") SendPaletteChordForSelfTest();
                 else if (safety == "disconnect") WorldConnectionChanged(3, false);
                 else Frame(release, false, pads);
             });
+            if (safety == "modal") Require(WorldModal, "Ctrl+Shift+F9 opened the palette");
             Frame(release + 1, true, pads); Frame(release + 2, true, pads);
             var state = _worldActor.Session!.State;
             if (release == 12)
