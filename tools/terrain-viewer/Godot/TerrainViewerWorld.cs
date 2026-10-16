@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
     }
     private void RetireWorldLifecycle()
     {
-        _worldResetPending = false; _worldReloadPending = false; _worldLifecycleSession = null;
+        _worldResetPending = false; _worldReloadPending = false; _worldLifecycleSession = null; _worldPaletteReloadRequested = false;
     }
     private readonly DiagnosticInputSettingsStore _worldStore = new();
     private readonly DiagnosticZoomSettingsStore _worldZoomStore = new();
@@ -178,25 +178,28 @@ public partial class TerrainViewerApp
         _worldPanel?.SetActionStatus("Reset scene requested: the accepted step settles, then actor/Follow reset; preferences kept.");
     }
     // The palette reports how its Reset scene / Reload ended, not only the request.
-    private bool _worldPaletteReloadPending;
+    // A palette Reload is reported only for the load generation it started; a
+    // retired request or an unrelated later publish never reads as "Reload done".
+    private bool _worldPaletteReloadRequested;
+    private long? _worldPaletteReloadGeneration;
     private void PaletteScenePublished()
     {
-        if (!_worldPaletteReloadPending) return;
-        _worldPaletteReloadPending = false;
+        if (_worldPaletteReloadGeneration != _generation) return;
+        _worldPaletteReloadGeneration = null;
         _worldPanel?.SetActionStatus($"Reload done: generation {_generation} published; actor at spawn.");
         BindWorldPaletteSummary();
     }
     private void PaletteSceneFailed(TerrainViewerError error)
     {
-        _worldPaletteReloadPending = false;
+        _worldPaletteReloadGeneration = null;
         if (_worldPanel is { } panel && GodotObject.IsInstanceValid(panel))
             panel.SetActionStatus($"Scene FAILED: stage={error.Stage} code={error.Code}; the old scene is not republished.");
     }
     private void PaletteReload()
     {
         if (_arguments is null || _worldActor.Session is null) { _worldPanel?.SetActionStatus("Reload unavailable: no loaded source."); return; }
-        _worldPaletteReloadPending = true;
         WorldObservation(() => RequestWorldLifecycle(true));
+        _worldPaletteReloadRequested = _worldReloadPending;
         _worldPanel?.SetActionStatus("Reload requested: the accepted step settles, then the current source reloads; failures are shown, the old scene is not republished.");
     }
     private void BindWorldPaletteSummary()
@@ -443,8 +446,10 @@ public partial class TerrainViewerApp
         {
             if (_worldReloadPending && _arguments is not null)
             {
+                var paletteReload = _worldPaletteReloadRequested;
                 RetireWorldLifecycle();
                 _lastLoad = StartLoadAsync(_arguments, false);
+                _worldPaletteReloadGeneration = paletteReload ? _generation : null;
             }
             else
             {
@@ -608,7 +613,7 @@ public partial class TerrainViewerApp
         try
         {
             FlushWorldZoom();
-            _worldChord.Reset(); _worldAdapter.PaletteOpen = false;
+            _worldChord.Reset(); _worldAdapter.PaletteOpen = false; _worldPaletteReloadGeneration = null;
             QuarantineWorld();
             GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
         }
