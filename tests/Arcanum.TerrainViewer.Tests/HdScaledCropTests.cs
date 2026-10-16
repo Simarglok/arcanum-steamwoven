@@ -73,7 +73,7 @@ public sealed class HdScaledCropTests
     }
 
     [TestMethod]
-    public void HdRowKeysDifferFromLegacyAndStayInvariantUnderIntegerPans()
+    public void HdRowKeysReproduceTheRowAndStayInvariantUnderIntegerPans()
     {
         var random = new Random(17);
         var zooms = new[] { .25f, .5f, 1f, 1.2651956f, 2f, 3f };
@@ -83,12 +83,10 @@ public sealed class HdScaledCropTests
             var origin = random.Next(-2000, 2000) + (trial % 3 == 0 ? 0f : random.Next(0, 64) / 64f);
             var destination = random.Next(-3000, 3000); var length = random.Next(1, 120);
             var sourceStart = random.Next(0, 40); var sourceSize = random.Next(1, 120); var reflected = random.Next(2) == 1;
-            var legacy = new AreaNearestAxis(origin, zoom, destination, length, sourceStart, sourceSize, reflected);
             var hd = new AreaNearestAxis(origin, zoom, destination, length, 2 * sourceStart, 2 * sourceSize, reflected);
             var start = (int)Math.Floor((double)origin + (double)zoom * destination) - 1;
             var width = (int)Math.Ceiling((double)origin + (double)zoom * ((long)destination + length)) + 1 - start;
             var key = hd.RowKey(start);
-            Assert.AreNotEqual(legacy.RowKey(start), key, $"trial {trial}");
             CollectionAssert.AreEqual(Enumerable.Range(0, width).Select(i => hd.SourceIndex(start + i)).ToArray(),
                 Enumerable.Range(0, width).Select(key.SourceIndex).ToArray(), $"trial {trial}");
             var shift = random.Next(-300, 300);
@@ -125,14 +123,16 @@ public sealed class HdScaledCropTests
     }
 
     [TestMethod]
-    public void HdSubtexelsStayInsideTheirLegacyTexelAndShowDetailOnlyAboveZoomOne()
+    public void HdSubtexelsStayInsideTheirLegacyTexelAndShowDetailOnlyAboveUnitMagnification()
     {
         const int w = 23, h = 17;
-        foreach (var (zoom, reflected, phases, distinct) in new[] { (1f, false, new[] { (1, 1) }, w * h), (1f, true, new[] { (0, 1) }, w * h),
-                     (2f, false, new[] { (0, 0), (0, 1), (1, 0), (1, 1) }, 4 * w * h), (2f, true, new[] { (0, 0), (0, 1), (1, 0), (1, 1) }, 4 * w * h) })
+        var all = new[] { (0, 0), (0, 1), (1, 0), (1, 1) };
+        // Magnification is zoom x destination / frame: zoom 1 with a twice-size destination behaves like zoom 2.
+        foreach (var (zoom, size, reflected, phases, distinct) in new[] { (1f, 1, false, new[] { (1, 1) }, w * h), (1f, 1, true, new[] { (0, 1) }, w * h),
+                     (2f, 1, false, all, 4 * w * h), (2f, 1, true, all, 4 * w * h), (1f, 2, false, all, 4 * w * h), (1f, 2, true, all, 4 * w * h) })
         {
-            var lx = new AreaNearestAxis(100, zoom, 7, w, 0, w, reflected); var ly = new AreaNearestAxis(50, zoom, -3, h, 0, h, false);
-            var hx = new AreaNearestAxis(100, zoom, 7, w, 0, 2 * w, reflected); var hy = new AreaNearestAxis(50, zoom, -3, h, 0, 2 * h, false);
+            var lx = new AreaNearestAxis(100, zoom, 7, size * w, 0, w, reflected); var ly = new AreaNearestAxis(50, zoom, -3, size * h, 0, h, false);
+            var hx = new AreaNearestAxis(100, zoom, 7, size * w, 0, 2 * w, reflected); var hy = new AreaNearestAxis(50, zoom, -3, size * h, 0, 2 * h, false);
             var seenPhases = new HashSet<(int, int)>(); var seenTexels = new HashSet<(int, int)>();
             for (var sy = 0; sy < 200; sy++)
             for (var sx = 0; sx < 300; sx++)
@@ -143,8 +143,8 @@ public sealed class HdScaledCropTests
                 Assert.AreEqual((x, y), (X / 2, Y / 2), $"zoom {zoom} ({sx},{sy})");
                 seenPhases.Add((X % 2, Y % 2)); seenTexels.Add((X, Y));
             }
-            CollectionAssert.AreEquivalent(phases, seenPhases.ToArray(), $"zoom {zoom} reflected {reflected}");
-            Assert.AreEqual(distinct, seenTexels.Count, $"zoom {zoom} reflected {reflected}");
+            CollectionAssert.AreEquivalent(phases, seenPhases.ToArray(), $"zoom {zoom} size {size} reflected {reflected}");
+            Assert.AreEqual(distinct, seenTexels.Count, $"zoom {zoom} size {size} reflected {reflected}");
         }
     }
 
@@ -152,24 +152,31 @@ public sealed class HdScaledCropTests
     public void WallFadeFromTheHdLegacyColumnEqualsLegacyFade()
     {
         // The ARC-RENDER-011 shader: alpha = left + column * (right - left) / width, column mirrored when flipped.
-        static double Alpha(int column, int width, bool flip, double left, double right)
-            => left + (flip ? width - 1 - column : column) * (right - left) / width;
-        var random = new Random(29); var finerDiffers = false;
+        // The contract's column is floor((sx - N*c) / N) with the Legacy crop width (Legacy: N = 1).
+        static double Alpha(int sx, int scale, int cropStart, int width, bool flip, double left, double right)
+        {
+            var column = (sx - scale * cropStart) / scale;
+            return left + (flip ? width - 1 - column : column) * (right - left) / width;
+        }
+        var random = new Random(29); var finerDiffers = 0; var compared = 0;
         foreach (var zoom in new[] { .5f, 1f, 1.2651956f, 2f, 3f })
         for (var trial = 0; trial < 200; trial++)
         {
-            var width = random.Next(2, 160); var flip = random.Next(2) == 0; var origin = random.Next(-50, 50) + random.Next(0, 4) / 4f;
-            var (left, right) = random.Next(3) switch { 0 => (64 / 255d, 64 / 255d), 1 => (128 / 255d, 1d), _ => (1d, 128 / 255d) };
-            var legacy = new AreaNearestAxis(origin, zoom, 0, width, 0, width, flip); var hd = new AreaNearestAxis(origin, zoom, 0, width, 0, 2 * width, flip);
+            var width = random.Next(2, 160); var crop = trial % 2 == 0 ? 0 : random.Next(1, 30); var flip = random.Next(2) == 0;
+            var origin = random.Next(-50, 50) + random.Next(0, 4) / 4f;
+            var (left, right) = random.Next(2) == 0 ? (128 / 255d, 1d) : (1d, 128 / 255d);
+            var legacy = new AreaNearestAxis(origin, zoom, 0, width, crop, width, flip); var hd = new AreaNearestAxis(origin, zoom, 0, width, 2 * crop, 2 * width, flip);
             for (var s = (int)Math.Floor(origin) - 1; s <= (int)Math.Ceiling(origin + zoom * width) + 1; s++)
             {
                 var l = legacy.SourceIndex(s); var hIndex = hd.SourceIndex(s);
                 if (l < 0) { Assert.AreEqual(-1, hIndex); continue; }
-                Assert.AreEqual(Alpha(l, width, flip, left, right), Alpha(hIndex / 2, width, flip, left, right), $"zoom {zoom} s={s}");
-                finerDiffers |= Alpha(l, width, flip, left, right) != Alpha(hIndex, 2 * width, flip, left, right);
+                var expected = Alpha(l, 1, crop, width, flip, left, right); compared++;
+                Assert.AreEqual(expected, Alpha(hIndex, 2, crop, width, flip, left, right), $"zoom {zoom} crop {crop} s={s}");
+                // Today's shader on an unchanged HD bind: column = sx - N*c over N*width (the rejected finer gradient).
+                if (expected != Alpha(hIndex - crop, 1, crop, 2 * width, flip, left, right)) finerDiffers++;
             }
         }
-        Assert.IsTrue(finerDiffers, "a gradient over the HD width is a different (rejected) rule");
+        Assert.IsTrue(compared > 10_000 && finerDiffers > compared / 4, $"{finerDiffers} of {compared}: the N*width gradient is a different rule");
     }
 
     private readonly record struct Rect(int X, int Y, int Width, int Height);

@@ -19,7 +19,8 @@ graphics](../architecture/decisions.md). Exact sampling it extends:
   hotspot, mirroring and palette, as the existing Data/AREA/WORLD paths load it.
 - **HD frame**: an RGBA image of exactly `N·w × N·h` made outside the game from one
   Legacy frame. **N** is a positive integer scale declared by the pack. The first
-  slice accepts only `N = 2` (owner decision 2026-10-16); the rules are written for any
+  slice accepts only `N = 2` (owner decision 2026-10-16, recorded in
+  [decisions](../architecture/decisions.md)); the rules are written for any
   integer `N ≥ 2` so a later 3× or 4× pack needs no new contract.
 - **Frame key**: the identity of a Legacy frame (resource entry, effective palette
   slot, physical group, frame, plus the hashes the existing `AreaFrameKey` carries).
@@ -28,7 +29,7 @@ graphics](../architecture/decisions.md). Exact sampling it extends:
   texture draws a frame key; nothing else.
 - **HD pack**: a local directory outside the repository (`local/hd-packs/<id>/`,
   ignored by git) with a manifest and HD frames. It is built by the owner on their
-  machine and is not distributed (option B of the 2026-10-16 legal review). Pack
+  machine and is not distributed ([decisions](../architecture/decisions.md), HD pack). Pack
   frames, screenshots and recordings never enter git, PRs or attachments; tests use
   synthetic sprites and synthetic "HD" only.
 
@@ -57,8 +58,9 @@ when reflected.
 **same** `o, z, d, n` and reflection and the crop `(N·c, N·m)` in the HD frame, on each
 axis independently. Nothing else in the rule changes: no epsilon, no interpolation,
 no filtering, no mipmaps, no shader smoothing, no change of destination. The
-production sampler (`AreaNearestAxis`, the index rows and the shader) needs no new
-mode: HD is only a different crop and texture.
+production sampler (`AreaNearestAxis` and the index rows) needs no new mode: for
+sampling, HD is only a different crop and texture. The only shader change HD needs is
+the wall-fade column below.
 
 **Consequences** (exact, for every screen pixel, every transform the Legacy rule
 accepts and every integer `N ≥ 1`). Let `L` be the Legacy source index and `H` the HD
@@ -71,12 +73,15 @@ source index on one axis.
    `floor(N·u) = N·q + r`, `0 <= r < N`, `H = N·(c + m - 1 - q) + (N - 1 - r)`, so
    `floor(H / N) = c + m - 1 - q`, and `q = floor(u)`. Every HD screen pixel shows one
    of the `N × N` subtexels of the Legacy texel the same pixel shows in Legacy.
-3. **Which subtexel.** The subtexel offset is `floor(N·u) mod N`. With integer origin
-   and destination, `n = m` and zoom 1, `u` sits at a texel center, so `N = 2` always shows
-   subtexel 1 (subtexel 0 when reflected): HD at zoom 1 is a point sample of the HD
-   frame with no extra detail. At zoom 2 every subtexel reaches the screen (1:1 HD).
-   Detail appears only above zoom 1; a box-filtered downsample would be a different
-   rule and is out of this contract.
+3. **Which subtexel.** The subtexel offset is `r = floor(N·u) mod N`, or `N − 1 − r`
+   when reflected. What reaches the screen depends on the effective magnification
+   `z·n/m`, not on the viewport zoom alone. With integer origin and destination at
+   magnification 1 (zoom 1, `n = m`), `u` sits at a texel center, so `N = 2` always
+   shows subtexel 1 (subtexel 0 when reflected): a point sample of the HD frame with no
+   extra detail. At magnification 2 (zoom 2, or zoom 1 on a body drawn at twice its
+   frame size) every subtexel reaches the screen (1:1 HD). Detail appears only above
+   magnification 1; a box-filtered downsample would be a different rule and is out of
+   this contract.
 4. **Nearest-replicated HD is invisible.** If every HD texel equals its parent Legacy
    texel (a nearest `N×` upscale), the HD raster equals the Legacy raster pixel for
    pixel. This is the identity oracle for fallback and toggle tests.
@@ -117,13 +122,16 @@ screen envelope, not on the texture.
 - **Mirroring** is the Legacy decision (`Mirrored` xor the body flip). In AREA it is
   applied as discrete reflection inside the HD crop (consequence 2); in WORLD as the
   existing `-1` X transform around the unchanged destination.
-- **Wall fade** (ARC-RENDER-011) is a function of the Legacy column. The shader
-  computes the column from the sampled index `sx` (Legacy: `sx − c`, walls are drawn
-  with `c = 0` today); on an HD draw it uses `floor((sx − N·c) / N)`, which equals the
-  Legacy `sx − c` (consequence 2), and the Legacy crop width as `fade_width`, so every
-  screen pixel gets exactly the alpha it gets in Legacy. A finer gradient over
-  `N·width` would differ by up to half a Legacy step and is not allowed. The fade set
-  itself comes from the wall check, which never sees textures.
+- **Wall fade** (ARC-RENDER-011) is a function of the Legacy column. Today the shader
+  takes the column straight from the sampled index `sx` and sets `fade_width` to the
+  crop width (`AreaDrawItem`), which is correct for Legacy walls because they are
+  drawn with crop start `c = 0`. Binding an HD crop without a shader change would give
+  a gradient over `N·width`, which differs by up to half a Legacy step and is **not
+  allowed**. ARC-RENDER-014 therefore adds the scale `N` and the crop start to the
+  fade uniforms: the column is `floor((sx − N·c) / N)` (Legacy: `N = 1`), which equals
+  the Legacy column `sx − c` (consequence 2), and `fade_width` stays the Legacy crop
+  width. Every screen pixel then gets exactly the alpha it gets in Legacy. The fade
+  set itself comes from the wall check, which never sees textures.
 - **Light** (ARC-RENDER-010/012) is computed in world coordinates (lattice, ambient,
   wall gradient across the world destination) and is profile-independent.
 - **Alpha.** The default HD alpha is the parent Legacy alpha (nearest, hard edge);
@@ -172,8 +180,9 @@ per-frame Legacy draw with a reason.
 
 ## Budgets
 
-HD textures live in their own caches, keyed by `(profile, frame key)`, with their own
-budgets. Legacy budgets and behaviour are unchanged. HD at scale `N` costs `N²` bytes
+HD textures live in their own caches, keyed by `(pack identity, N, frame key)`, with
+their own budgets. Loading, replacing or unloading a pack releases every HD texture of
+the previous pack, as a map change does. Legacy budgets and behaviour are unchanged. HD at scale `N` costs `N²` bytes
 per Legacy byte, so the HD limits are `N²` times the Legacy ones they shadow (×4 at
 `N = 2`):
 
@@ -181,7 +190,7 @@ per Legacy byte, so the HD limits are `N²` times the Legacy ones they shadow (�
 | --- | --- | --- |
 | AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B | same frame count, `N² · 81,853,096` B |
 | AREA retained (left the view) | 512 frames, 32 MiB | 512 frames, `N² · 32` MiB |
-| WORLD actor + static textures | inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | key caps of the actor/static domains, `N²` times their Legacy bytes, at most 256 MiB |
+| WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of 256 MiB, not shared with the Legacy 256 MiB |
 | Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | none until ARC-RENDER-016 (terrain stays Legacy) |
 
 - There is no whole-area HD CPU repository: HD pixels are decoded only for the
@@ -221,7 +230,7 @@ light or clock change, during dialog, before or after a map change.
 5. **Nothing else moves.** Commit does not touch the scene plan, camera, zoom, wall
    fade set, light, animation phase, Session or clock; it re-binds textures and
    crops. Index rows rebuild because the crop changed; that is expected.
-6. **Release.** A map change, reload or exit cancels pending work, and every HD
+6. **Release.** A map change, reload, pack change or exit cancels pending work, and every HD
    texture and staging buffer is released with its cache, under the same single-owner
    discipline as the [actor visual contract](actor-visual-contract.md). A switch to
    `Legacy` releases HD textures down to the HD retain limit.
@@ -257,10 +266,13 @@ independent exact rational oracle and the production `AreaNearestAxis`:
 consequences 1 and 2 for `N = 2, 3, 4` on random transforms including fractional
 binary origins, non-unit zooms, nonzero crops, destinations smaller or larger than the
 frame and reflection; the literal table above; the axis limit; row-key separation and
-pan invariance for HD crops; the identity of a nearest-replicated `N = 2` frame in a
+pan invariance of HD row keys; the identity of a nearest-replicated `N = 2` frame in a
 painter-order raster of overlapping sprites with holes; that HD subtexels stay inside
-their Legacy texel and reach the screen only above zoom 1; and that the wall fade
-column taken from `floor(H / N)` reproduces the Legacy fade alpha.
+their Legacy texel and all reach the screen only above magnification 1 (zoom 1 and 2,
+and a twice-size body at zoom 1); and that the wall-fade column
+`floor((sx − N·c) / N)` with the Legacy width reproduces the Legacy fade alpha with
+nonzero crop starts, while the rejected `N·width` gradient does not. The axis-limit
+test checks the sampler refusal only; the `HdAxisLimit` fallback is ARC-RENDER-014.
 
 Later tasks must add: native HD draws on real viewports (ARC-RENDER-014), the toggle
 and Session-snapshot invariance (ARC-UI-006), pack validation fixtures
