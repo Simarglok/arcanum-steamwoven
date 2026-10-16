@@ -94,6 +94,12 @@ public sealed class ScrAdmissionSet
         S2.Actions.Append(ScrCatalogue.Action.Dialog), S2.ValueKinds,
         [ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player]);
 
+    /// <summary>The deferred-call set (ARC-SCRIPT-010): <see cref="S3"/> plus call script in (54) and remove script call
+    /// (125). Call script at (55) stays outside: one installed line uses it, none a run reaches (ARC-RES-045), and its
+    /// time-of-day arithmetic (TE2) is not settled.</summary>
+    public static ScrAdmissionSet S5 { get; } = new("S5", S3.Conditions,
+        S3.Actions.Append(ScrCatalogue.Action.CallScriptIn).Append(ScrCatalogue.Action.RemoveScriptCall), S3.ValueKinds, S3.FocusKinds);
+
     /// <summary>Whether every type and kind of this set is also in <paramref name="other"/>.</summary>
     public bool IsSubsetOf(ScrAdmissionSet other)
     {

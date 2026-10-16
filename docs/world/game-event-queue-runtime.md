@@ -45,6 +45,7 @@ seeing the final time.
 | `GameEventQueue(registry, limits)` | An empty queue. `GameEventQueueLimits` defaults: 16,384 pending events, 500 per pass, 4 entity and 8 value slots per event. Limits out of range, or a kind wider than them, throw `ArgumentException`. |
 | `ScheduleAfter(kind, payload, delayMs, now)` / `ScheduleAt(kind, payload, deadlineMs)` | `GameEventScheduleResult`: `Added`, `Replaced` (new deadline and sequence; `Previous` is the old event), `KeptExisting` (the pending event, nothing added), `Merged` (the pending event with the merged payload, same deadline and sequence) or `Rejected` with a failure: `UnknownKind`, `InvalidPayload` (slot counts, map below 1, entity code, value check), `InvalidScope` (a scoped event's entities on two maps), `InvalidDelay`, `InvalidDeadline`, `InvalidClocks`, `TimeOverflow`, `InvalidMerge` (the merge result fails the checks or changes the key or map), `QueueFull`, `SequenceExhausted`. A refusal changes nothing. Kept and merged requests take no sequence number; a replacement needs no free slot. |
 | `Any(kind, match)` / `RemoveFirst(kind, match)` / `RemoveAll(kind, match)` | Queries and cancellation in queue order. An unregistered kind throws `ArgumentException`. |
+| `RelocateEntities(kind, fromMap, toMap, travels)` | ARC-SCRIPT-010: for a global, any-number kind, moves each entity on `fromMap` that travels, the event's other entities stay; deadline and sequence kept. Other kinds `UnknownKind`, maps below 1 `InvalidScope`, from a handler `PassInProgress`. |
 | `Relocate(fromMap, toMap, travels)` | ARC-WORLD-024: moves every event whose entities are all on `fromMap` and all travel to `toMap` (entity maps and, when scoped, the scope map), keeping kind, deadline, sequence and values. Atomic: a key collision moves nothing (`DuplicateKey`); maps below 1 are `InvalidScope`; from a handler `PassInProgress`. |
 | `ProcessDue(GameEventPassRequest)` | One pass with the three clocks, the active map (0: none, only global events), a budget of 1..`MaxPerPass` and an entity-existence check. Returns `GameEventPassResult(Failure, Outcomes, BudgetExhausted)`. A pass started from a handler is `PassInProgress`; a bad request is `InvalidPass`. Each event leaves the queue before its handler runs; a handler may schedule and cancel; a handler exception (or one from the entity check) propagates with its event consumed, and the outcomes of the earlier events of the pass are not returned. The pass draws no randomness. |
 | `QueryPending()` | All pending events, in queue order (domain, deadline, sequence). |
@@ -86,6 +87,25 @@ that ARC-COMBAT-002 left for the queue. All run on game time, are saved, and kee
 | `life.hero.poison-damage`, `life.npc.poison-damage` | hero / NPC | the poison level is written with a positive value | 15 s | while poisoned: the poison damage tick (which may kill), then the next tick |
 | `life.hero.poison-recovery`, `life.npc.poison-recovery` | hero / NPC | as above | 120 s | while poisoned: the level loses PoisonRecovery; while it stays positive the next tick |
 | `life.npc.resting` | NPC | hit-point damage is written with a positive value | 1 h | a living NPC without a PC leader (free, not following or waiting) heals `HealRate × max(1, elapsed h)` hit points and three times that fatigue; positive writes set their timers again |
+
+**Deferred SCR calls (ARC-SCRIPT-010).** The kind `scr.call` (added to registry version 1 without a new version: the
+life kinds are unchanged, a save without a deferred call is byte-identical, and a build without the kind refuses a save
+that holds one as an unknown kind) is global, game time, saved, any number per key, at most
+`SessionEventKinds.MaxScriptCalls` (1,024) on top of the life timers. Its entities are the triggerer and the attachee
+(the player as `SessionEventKinds.PlayerEntity` `pc`; an absent role is the marker `-` on the map active when it was
+scheduled), its values the game time it was set at, the delay, the script and the line. When the actor changes map, a
+call's player and follower roles move with it one by one (`GameEventQueue.RelocateEntities`; the original keeps their
+handles across maps), its other roles keep their map.
+`ScheduleScriptCall(expected, call, delayMs)` (1 ms up to `MaxScriptCallDelayMs`) and `RemoveScriptCall(expected,
+script, attachee)` (the first pending call of that script and attachee in queue order, the attachee compared by
+entity id whatever map is stored, as the original compares the handle) each move one revision; `QueryScriptCalls()`
+lists the pending ones. In a pass, a call whose objects the host does not report is dropped (an NPC with a life record
+is asked through `CritterFacts`, any other object through `ISessionScriptWorld.ObjectExists`, which means present on its
+stored map; the original drops an object that is not loaded), the others go to `ISessionScriptWorld.RunScriptCall`, which runs the
+[SCR dispatcher](../scripting/scr-dispatcher-runtime.md#deferred-calls-arc-script-010-slice-s5) and applies its effects;
+a host that is only an `ISessionEventWorld` consumes a due call unrun. `SessionEventPassResult.ScriptCalls` reports each.
+A restore checks a saved call as a life timer (set no later than the saved clock, exactly its delay before its deadline)
+and its two roles; whether its objects still exist is decided when it fires.
 
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's

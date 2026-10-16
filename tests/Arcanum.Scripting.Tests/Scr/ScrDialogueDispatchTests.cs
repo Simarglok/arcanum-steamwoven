@@ -168,7 +168,7 @@ public sealed class ScrDialogueDispatchTests
         CollectionAssert.AreEquivalent(ScrAdmissionSet.S2.Conditions.Append(18).Append(39).ToArray(), ScrAdmissionSet.S3.Conditions.ToArray());
         CollectionAssert.AreEquivalent(ScrAdmissionSet.S2.Actions.Append(4).ToArray(), ScrAdmissionSet.S3.Actions.ToArray());
         CollectionAssert.AreEquivalent(new[] { ScrFocusKind.Triggerer, ScrFocusKind.Attachee, ScrFocusKind.ExtraObject, ScrFocusKind.Player }, ScrAdmissionSet.S3.FocusKinds.ToArray());
-        Assert.AreSame(ScrAdmissionSet.S3, new ScrRunOptions().Admission);
+        Assert.IsTrue(ScrAdmissionSet.S3.IsSubsetOf(new ScrRunOptions().Admission));
         // A group focus is outside the set.
         var group = ScrDispatcher.RunObject(new(Dialog, Npc, Pc, null), With(Program(L(C(39, (8, 0)), C(2), C(1)))));
         Assert.AreEqual((ScrOutcome.Refused, ScrRefusalCode.FocusKindNotAdmitted), (group.Outcome, group.Refusal!.Code));

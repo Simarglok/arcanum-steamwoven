@@ -323,6 +323,20 @@ public sealed class GameEventQueueTests
     }
 
     [TestMethod]
+    public void EntityRelocationIsOnlyForGlobalAnyNumberKinds()
+    {
+        var queue = Queue(new Recorder());
+        Added(queue.ScheduleAt(Pair, GameEventPayload.Of([Npc("virgil"), Npc("wolf")]), 30));
+        // Scoped or keyed kinds keep the whole-event rule of Relocate (ARC-SCRIPT-010 uses it for its global call kind,
+        // tested with the session).
+        foreach (var kind in new[] { Pair, Call, Tick, Recharge, "missing" })
+            Assert.AreEqual(GameEventFailure.UnknownKind, queue.RelocateEntities(kind, 1, 2, _ => true).Failure, kind);
+        Assert.AreEqual(GameEventFailure.InvalidScope, queue.RelocateEntities(Global, 0, 2, _ => true).Failure);
+        Assert.AreEqual((GameEventFailure.None, 0), (queue.RelocateEntities(Global, 1, 2, _ => true).Failure, queue.RelocateEntities(Global, 1, 2, _ => true).Moved.Length));
+        Assert.ThrowsExactly<ArgumentNullException>(() => queue.RelocateEntities(Global, 1, 2, null!));
+    }
+
+    [TestMethod]
     public void RelocationMovesOnlyEventsWhoseEntitiesAllTravel()
     {
         var recorder = new Recorder();

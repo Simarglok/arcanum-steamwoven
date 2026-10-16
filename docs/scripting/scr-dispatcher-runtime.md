@@ -175,6 +175,49 @@ number is the script's (`dlg\NNNNN*.dlg`) and its node must be an NPC record.
 In the Godot viewer only the player's close of a finished conversation resumes
 the script; a reset, reload or map change closes the panel without resuming.
 
+## Deferred calls (ARC-SCRIPT-010, slice S5)
+
+- **`ScrAdmissionSet.S5`** (the default of `ScrRunOptions`) is S3 plus call
+  script in (54) and remove script call (125). Call script at (55) stays
+  outside: one installed line uses it and no run reaches it (ARC-RES-045), and
+  its time-of-day arithmetic counted from the module's start hour (TE2) is not
+  settled.
+- **Call script in** asks for a call (`ScrEffects.Calls`, in action order):
+  script, line, triggerer and attachee (an absent role is stored as absent, as
+  the original stores a null handle) and a game delay of the seconds × 8000 ms
+  (real seconds at the 8× game rate). The original makes a 32-bit millisecond
+  count of `seconds × 1000`, raises 0 to 1 and multiplies by 8 (call-in case
+  0x44867B, `sub_45A950`), so 0 seconds is 8 ms. TE1, an original bug at the
+  edges: that count wraps above 536,870 s and a negative count gives weeks.
+  Steamwoven computes without wrapping and reads a negative count as 0 (8 ms);
+  the Original setting wraps (`ScrRuleProfile.CallDelayWraps`). Not modelled:
+  the later wrap of the unsigned millisecond sum when the queue adds the delay
+  to the current time of day (from about 526,070 s, depending on the hour).
+- **Remove script call** asks to remove the first pending call of a script whose
+  attachee is the named object.
+- **`ScrDispatcher.RunCall(ScrCallEvent)`** runs a call that came due: the named
+  script from its file header (initial local flags and counters), at the stored
+  line, as a use event with the stored roles and no extra object; a missing or
+  trap script and a monster generator attachee end it as for an object event; a
+  role an operand reads but the call does not have stops it with
+  `MissingObject`. A deferred call has no attachment, so nothing is written
+  back, with the original's one exception: a dialog action (PC triggerer)
+  stores the run's local flags and counters into the attachee's **use** slot
+  (the run's point) before the conversation starts, when they differ, keeping
+  the slot's number (0x447282). In the installed data most call-in targets an
+  S5 run reaches are such delayed conversations. The conversation's "return to
+  script" end resumes the NPC's **dialog** slot (the original's DLG end runs
+  `SAP_DIALOG` of the NPC), which may be another script than the call's;
+  `ScrDialogStart` says so.
+
+The session keeps the calls on its event queue as the kind `scr.call`
+([event queue](../world/game-event-queue-runtime.md#session-wiring-arc-world-024)):
+the caller applies `ScrEffects.Calls` with `ScheduleScriptCall` and
+`RemoveScriptCall`, and an event pass hands each due call to an
+`ISessionScriptWorld` host, which runs `RunCall` and applies the effects. The AREA
+viewer does not run event passes yet (slice E3 of the queue plan) and keeps its
+dialogue set at S3, so its talks never schedule a call.
+
 ## Checks
 
 - `tests/Arcanum.Scripting.Tests/Scr/ScrDispatcherTests.cs`: every step of the
@@ -213,8 +256,9 @@ the script; a reset, reload or map change closes the panel without resuming.
   the story-state actions and no admitted set reads global variables.
 - Tile and sector writebacks name no location; the caller applies them to the
   tile or sector it dispatched.
-- Only the AREA viewer's talk and resumption call the dispatcher (S3); use, tile
-  and sector events are S4, deferred calls S5, heartbeat S6, combat S7, items S8.
+- Only the AREA viewer's talk and resumption call the dispatcher (S3), and no
+  host runs deferred calls yet (S5 is headless until the viewer pumps the event
+  queue); use, tile and sector events are S4, heartbeat S6, combat S7, items S8.
 - Not in the admitted set yet: focus groups and local objects, loops, calls and
   call-ex, and every world action (float line, teleport, quests, reactions...).
 - The viewer's script host models only the dialog slot of the map's speakers;

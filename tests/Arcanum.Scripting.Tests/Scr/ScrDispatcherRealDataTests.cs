@@ -22,7 +22,7 @@ public sealed class ScrDispatcherRealDataTests
         Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
         using var stack = opened.Stack!;
         var host = new FakeHost();
-        var total = 0; var admitted = 0; var wholeS2 = 0; var stops = new Dictionary<ScrStop, int>();
+        var total = 0; var admitted = 0; var wholeS2 = 0; var regionS3 = 0; var stops = new Dictionary<ScrStop, int>();
         foreach (var key in stack.Keys("scr/").Where(k => k.EndsWith(".scr", StringComparison.Ordinal) && k.Count(c => c == '/') == 1))
         {
             var program = ScrProgram.Read(stack.Read(stack.Resolve(key).Winner!).Bytes!).Program!;
@@ -33,7 +33,8 @@ public sealed class ScrDispatcherRealDataTests
             host.Attach(Npc, 19, number, program);
             if (ScrAdmission.Admit(program, ScrAdmissionSet.S2).IsAdmitted) wholeS2++;
             // The dispatcher admits the region a run from the event's line reaches (ARC-SCRIPT-009).
-            var isAdmitted = ScrAdmission.AdmitFrom(program, ScrAdmissionSet.S3, 0).IsAdmitted;
+            var isAdmitted = ScrAdmission.AdmitFrom(program, ScrAdmissionSet.S5, 0).IsAdmitted;
+            if (ScrAdmission.AdmitFrom(program, ScrAdmissionSet.S3, 0).IsAdmitted) regionS3++;
             var trap = number is >= ScrDispatcher.FirstTrapScript and <= ScrDispatcher.LastTrapScript &&
                 (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
             if (isAdmitted) admitted++;
@@ -47,15 +48,17 @@ public sealed class ScrDispatcherRealDataTests
             stops[steamwoven.Stop] = stops.GetValueOrDefault(steamwoven.Stop) + 1;
         }
         Assert.AreEqual(2399, total);
-        // Measured on the 1.0.7.4 GOG installation: S2 admits 148 scripts whole (ARC-SCRIPT-008); the dispatcher's S3
-        // region from line 0 admits 376 (ARC-SCRIPT-009): 160 end on a return, 184 on a dialog action, 25 empty scripts
-        // on an unreadable line 0, and the seven trap scripts go to trap code without running.
+        // Measured on the 1.0.7.4 GOG installation: S2 admits 148 scripts whole (ARC-SCRIPT-008), the S3 region from line
+        // 0 376 (ARC-SCRIPT-009), the dispatcher's S5 region 385 (ARC-SCRIPT-010): 168 end on a return, 185 on a dialog
+        // action, 25 empty scripts on an unreadable line 0, and the seven trap scripts go to trap code without running.
         Assert.AreEqual(148, wholeS2);
-        Assert.AreEqual(376, admitted);
+        Assert.AreEqual(376, regionS3);
+        // ARC-SCRIPT-010: the S5 region (call script in, remove script call) admits 385.
+        Assert.AreEqual(385, admitted);
         CollectionAssert.AreEquivalent(new Dictionary<ScrStop, int>
         {
-            [ScrStop.TrapScript] = 7, [ScrStop.ReturnSkipDefault] = 66, [ScrStop.ReturnRunDefault] = 94, [ScrStop.LineOutOfRange] = 25,
-            [ScrStop.Dialog] = 184, [ScrStop.Refused] = 2023,
+            [ScrStop.TrapScript] = 7, [ScrStop.ReturnSkipDefault] = 67, [ScrStop.ReturnRunDefault] = 101, [ScrStop.LineOutOfRange] = 25,
+            [ScrStop.Dialog] = 185, [ScrStop.Refused] = 2014,
         }, stops);
     }
 }

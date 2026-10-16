@@ -70,6 +70,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 | Scripts | `ScrRuleProfile` | `GlobalFlagWriteSpills` | X10 | a value written into a global flag is ORed, shifted, into the flag's 32-flag word (ARC-SCRIPT-008) |
 | Scripts | `ScrRuleProfile` | `TileScriptChangesDiscarded` | X3, tile | a tile script's changes to its own number, flags and counters are not stored (ARC-SCRIPT-008) |
+| Scripts | `ScrRuleProfile` | `CallDelayWraps` | TE1 | a call script in delay is computed in 32 bits (wraps above 536,870 s; a negative count gives weeks) (ARC-SCRIPT-010) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
 until then both modes behave as the original):
@@ -81,7 +82,7 @@ until then both modes behave as the original):
 | Skills | SK8, LM17, SK3 repair off-by-one (multiplayer only), auto-level A3 (both fixed: null read) | SK1, SK2, SK4, SK5, LM1, LM2 and dodge are CE slips, no switch; dodge already follows the original's 2 × level in `AttackRules`. |
 | AI and reaction | LM3 and LM12 (both fixed: out-of-bounds, latent), reputation A5 (both fixed: out-of-bounds read, latent), reaction A2 (a deliberate hit raises the follower's reaction; Steamwoven fix proposed, owner to confirm), reaction A4 charm asymmetry (decision D2 of that study), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (decision D1 to revisit) and the companion wait timer are CE slips. |
 | Scripts | X2 (both fixed: uninitialised read, with call-script); `int.MinValue / −1` divide (both fixed: the original faults); a global flag number outside 0..3199 (both fixed: out of bounds); admission strictness in both modes: negative gotos (X6) and literal change-this-script numbers outside 0..99999, which no installed script uses | X1, X3 sector, X6 detail, X7, X8 are CE slips. X3 tile and X10 are implemented (above). |
-| Event queue | TE1 (overflow edges), TE3/OQ1 tie order (FIFO decided without a switch) | |
+| Event queue | TE3/OQ1 tie order (FIFO decided without a switch) | TE1 is implemented in scripts (above). |
 | World | LA4 direction-5 leaving on the portal tile; clock day carry only above one day (off by one), clock subtraction underflow, exchanged current day/month getters (dead code); wilderness A6 (both fixed: a null name faults) | LA1, LA2 and the tile swap itself are CE slips. |
 
 The list covers every "Original bug" and "CE change" row of the ledger.

@@ -13,6 +13,35 @@ public interface ISessionEventWorld
     LifeFacts? CritterFacts(SessionMapId map, string entity);
 }
 
+/// <summary>An object a deferred script call names (ARC-SCRIPT-010): the runtime map and the session entity id.</summary>
+public readonly record struct SessionScriptRole(SessionMapId Map, string Entity);
+
+/// <summary>A deferred SCR call (call script in): the script, the line it starts at and the stored roles, either absent.</summary>
+public sealed record SessionScriptCall(int Script, int Line, SessionScriptRole? Triggerer, SessionScriptRole? Attachee);
+
+/// <summary>
+/// A host that can run deferred SCR calls during an event pass (ARC-SCRIPT-010). A pass given only an
+/// <see cref="ISessionEventWorld"/> consumes due calls without running them and reports them as not run.
+/// </summary>
+public interface ISessionScriptWorld : ISessionEventWorld
+{
+    /// <summary>
+    /// Whether an object a call names still exists (an NPC with a life record is asked through
+    /// <see cref="ISessionEventWorld.CritterFacts"/> instead); a call naming a missing object is dropped. The map is the
+    /// object's map: when the actor changes map, a call's <see cref="SessionEventKinds.PlayerEntity"/> and follower
+    /// roles move with it (the original keeps their handles across maps) and other roles keep the map they had.
+    /// </summary>
+    bool ObjectExists(SessionMapId map, string entity);
+    /// <summary>Runs the call through the host's SCR dispatcher and applies its effects; false when it could not.</summary>
+    bool RunScriptCall(SessionScriptCall call);
+}
+
+/// <summary>A deferred call that came due in a pass, and whether the host ran it.</summary>
+public sealed record SessionScriptCallFiring(GameEvent Event, SessionScriptCall Call, bool Ran);
+
+/// <summary>A pending deferred call: its queue sequence, deadline and call.</summary>
+public sealed record SessionPendingScriptCall(long Sequence, long DeadlineMs, SessionScriptCall Call);
+
 /// <summary>One timer that ran in a pass and the life step it made (a refused step is reported, the event is consumed).</summary>
 public sealed record SessionLifeFiring(GameEvent Event, SessionLifeResult Life);
 
@@ -21,7 +50,11 @@ public sealed record SessionLifeFiring(GameEvent Event, SessionLifeResult Life);
 /// ran, and the session version after the pass. <see cref="Pass"/> is null for a refused pass.
 /// </summary>
 public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEventPassResult? Pass,
-    IReadOnlyList<SessionLifeFiring> Life, GameSessionVersion Version);
+    IReadOnlyList<SessionLifeFiring> Life, GameSessionVersion Version)
+{
+    /// <summary>The deferred SCR calls that came due (ARC-SCRIPT-010), in firing order.</summary>
+    public IReadOnlyList<SessionScriptCallFiring> ScriptCalls { get; init; } = Array.Empty<SessionScriptCallFiring>();
+}
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
 public sealed record SessionPendingEvent(long Sequence, string Kind, long DeadlineMs, ImmutableArray<GameEventEntity> Entities,
@@ -52,7 +85,27 @@ public sealed class SessionEventState
 /// </summary>
 public static class SessionEventKinds
 {
+    /// <summary>
+    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/> without a new version: the life kinds are unchanged, a save with no
+    /// deferred call is byte-identical, and a build without the kind refuses a save holding one as an unknown kind.
+    /// </summary>
     public const int RegistryVersion = 1;
+
+    /// <summary>
+    /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee (the
+    /// player as <see cref="PlayerEntity"/>; player and follower roles follow the actor across maps), an absent role
+    /// written as <see cref="AbsentRole"/> on the map that was active when it was scheduled; values: the game time it was
+    /// scheduled at, its delay, the script, the line.
+    /// </summary>
+    public const string ScriptCall = "scr.call";
+    /// <summary>The entity id standing for an absent role of a <see cref="ScriptCall"/>.</summary>
+    public const string AbsentRole = "-";
+    /// <summary>The entity id of the player character in a <see cref="ScriptCall"/>; it travels with the actor.</summary>
+    public const string PlayerEntity = "pc";
+    /// <summary>Pending deferred calls a session holds.</summary>
+    public const int MaxScriptCalls = 1024;
+    /// <summary>The longest delay: a call-in of int.MaxValue seconds at the game rate (8 game ms per real ms).</summary>
+    public const long MaxScriptCallDelayMs = int.MaxValue * 8000L;
 
     public const string HeroFatigue = "life.hero.fatigue";
     public const string HeroPoisonDamage = "life.hero.poison-damage";
@@ -73,7 +126,7 @@ public static class SessionEventKinds
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
     /// can always set its timers.</summary>
-    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3;
+    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls;
 
     internal static GameEventQueueLimits Limits { get; } = new(MaxPending: MaxPending);
 
@@ -91,7 +144,27 @@ public static class SessionEventKinds
             Hero(HeroPoisonRecovery, LifeTimer.PoisonRecovery),
             Npc(NpcFatigue, LifeTimer.Fatigue), Npc(NpcPoisonDamage, LifeTimer.PoisonDamage),
             Npc(NpcPoisonRecovery, LifeTimer.PoisonRecovery), Npc(NpcResting, LifeTimer.Resting),
+            new(ScriptCall, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 2, 4, 0, 0,
+                new ScriptCallHandler(owner), Validate: ScriptCallPayload),
         ]);
+    }
+
+    // Scheduled at a game time, a delay of 1 ms up to the longest, any script and line number (a missing script or line
+    // ends the run when it fires, as in the original).
+    private static bool ScriptCallPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= MaxScriptCallDelayMs &&
+        payload.Values[2] is >= int.MinValue and <= int.MaxValue && payload.Values[3] is >= int.MinValue and <= int.MaxValue;
+
+    internal static GameEventPayload Payload(SessionScriptCall call, long scheduledAt, long delayMs, int currentMap)
+    {
+        GameEventEntity Role(SessionScriptRole? role) => role is { } r ? new(r.Map.RuntimeMap, r.Entity) : new(currentMap, AbsentRole);
+        return GameEventPayload.Of([Role(call.Triggerer), Role(call.Attachee)], scheduledAt, delayMs, call.Script, call.Line);
+    }
+
+    internal static SessionScriptCall Call(GameEventPayload payload)
+    {
+        SessionScriptRole? Role(GameEventEntity e) => e.Code == AbsentRole ? null : new(new(e.Map), e.Code);
+        return new((int)payload.Values[2], (int)payload.Values[3], Role(payload.Entities[0]), Role(payload.Entities[1]));
     }
 
     internal static string Kind(LifeTimer timer, bool hero) => (timer, hero) switch
@@ -127,6 +200,12 @@ internal enum LifeTimer { Fatigue, PoisonDamage, PoisonRecovery, Resting }
 internal sealed class SessionEventSink
 {
     internal GameSessionOwner? Owner { get; set; }
+}
+
+internal sealed class ScriptCallHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireScriptCall(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LifeTimerHandler(SessionEventSink sink, LifeTimer timer) : IGameEventHandler

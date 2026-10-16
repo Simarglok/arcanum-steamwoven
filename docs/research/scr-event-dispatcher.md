@@ -330,7 +330,7 @@ Codes are allocated when each task is created. All slices run on the Mac
 | S2 Dispatcher core ([ARC-SCRIPT-008](../scripting/scr-dispatcher-runtime.md)) | S1, session | Event record (point, roles, line, source kind), object/tile/sector entry points behind ports, outcome and atomic writeback, budgets and trace; synthetic tests for every row of section 1. |
 | S3 Dialogue through the dispatcher ([ARC-SCRIPT-009](../scripting/scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3)) | S2 | Talk request and resumption run `SAP_DIALOG` through S2; the NPC-entry resolver becomes an adapter or is retired; generic greeting on *run default*. |
 | S4 Use, tile and sector events | S2, M3 coordinator | Use on scenery and portals, tile scripts for any critter, sector scripts and `SAP_NEW_SECTOR`; teleport action as a port to the transition coordinator; conditional transitions of ARC-RES-035. |
-| S5 Deferred calls | S2, top-20 item 3 | Call-in, call-at and remove-call on the event queue, in the snapshot. |
+| S5 Deferred calls ([ARC-SCRIPT-010](../scripting/scr-dispatcher-runtime.md#deferred-calls-arc-script-010-slice-s5)) | S2, top-20 item 3 | Call-in, call-at and remove-call on the event queue, in the snapshot. |
 | S6 Heartbeat hook | S2, RES-039 I6 | First heartbeat and heartbeat on the AI time event, at subturn start and after each animation in a subturn, gating the AI pass. |
 | S7 Combat hooks | S2, RES-039 I3/I4, combat slices | Enter/exit/start/end, WILL_KOS, dying, hit/miss and damage events at the positions of section 2. |
 | S8 Item events | S2, inventory owner | Get, drop, transfer, insert, remove, wield, buy; lifts the current "item with script refused" rule. |
