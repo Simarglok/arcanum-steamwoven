@@ -44,6 +44,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Crash Site day/night ambient and cave lighting (ARC-RENDER-010, ARC-RENDER-012)](rendering/area-lighting.md)
 - [Actor anchor and original wall fade (ARC-RENDER-011)](rendering/terrain-viewer.md#actor-anchor-and-wall-fade-arc-render-011)
 - [ARC-RENDER-008 passability overlay](rendering/passability-overlay.md)
+- [HD presentation contract: scaled crop, Legacy anchors, per-frame fallback, toggle (ARC-RENDER-013) — no HD runtime yet](rendering/hd-presentation-contract.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)
