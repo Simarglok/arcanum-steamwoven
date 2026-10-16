@@ -72,8 +72,9 @@ public static class AreaStepInspector
                 var moduleArchive = Open(module.Path);
                 var names = Open(ArchiveOf(TileNamePath, true));
                 var effects = Open(ArchiveOf(EffectPath, true));
-                var patchPath = ArchiveOf(PatchPath, false);
-                return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, names, effects, patchPath.Length == 0 ? null : Open(patchPath), mobile, evidenceEpoch);
+                var patchPath = ArchiveOf(PatchPath, false); var gameEffectsPath = ArchiveOf(GameEffectPath, false);
+                return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, names, effects, patchPath.Length == 0 ? null : Open(patchPath), mobile, evidenceEpoch,
+                    gameEffectsPath.Length == 0 ? moduleArchive : Open(gameEffectsPath));
             }
             finally { foreach (var archive in opened.Values) archive.Dispose(); }
         });
@@ -116,7 +117,7 @@ public static class AreaStepInspector
     }
 
     private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module, DatArchive tileNameArchive,
-        DatArchive effectArchive, DatArchive? patchArchive, ReadOnlyMemory<byte> mobileFile, long epoch)
+        DatArchive effectArchive, DatArchive? patchArchive, ReadOnlyMemory<byte> mobileFile, long epoch, DatArchive? gameEffectArchive = null)
     {
         stage.Current = AreaStepInvocationStage.Selection;
         // Only a strict-complete publication: an inspected snapshot with issues may omit unlocated objects.
@@ -149,7 +150,7 @@ public static class AreaStepInspector
         var effects = new Dictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?>();
         foreach (var (key, value) in AreaStepRules.ParseMes(Resource(effectArchive, EffectPath, true)).Where(r => r.Key is >= 50 and < 400))
             effects[key] = AreaStepRules.ParseEffect(value);
-        if (Resource(module, GameEffectPath, false) is { } gameEffects)
+        if (Resource(gameEffectArchive ?? module, GameEffectPath, false) is { } gameEffects)
             foreach (var (key, value) in AreaStepRules.ParseMes(gameEffects).Where(r => r.Key is >= 0 and < 50))
                 effects[key] = AreaStepRules.ParseEffect(value);
         IReadOnlyList<AreaStepRules.PatchTarget> patchTargets = [];
@@ -219,7 +220,7 @@ public static class AreaStepInspector
             }
             var cell = new AreaStepCell(x, y);
             if (!objects.TryGetValue(cell, out var list)) objects[cell] = list = [];
-            var evaluation = wholeMap && o.Type == 1 ? PortalEvaluation(o, cell) : Evaluate(o, cell, record, patchTargets, patchMalformed, effects);
+            var evaluation = wholeMap && o.Type == 1 ? PortalEvaluation(o, cell, record, patchTargets, patchMalformed) : Evaluate(o, cell, record, patchTargets, patchMalformed, effects);
             list.Add(evaluation);
             if (evaluation.Reason is WallEdgeReason or PortalEdgeReason && Number(o, 0) is { } aid)
             {
@@ -295,48 +296,65 @@ public static class AreaStepInspector
 
     /// <summary>Whole-map wall rule (docs/research/first-building-evidence.md, pinned CE object.c
     /// traversal): a doorway piece never blocks, the portal on its edge decides; a window piece
-    /// blocks walking (window jumping is not modelled); every other piece blocks.</summary>
+    /// blocks a diagonal step and makes a cardinal one a window jump for a critter walker, which is
+    /// not modelled (Unknown); every other piece blocks.</summary>
     internal static (AreaStepEdgeRule Rule, string Reason) WallPieceRule(int piece) =>
         DoorwayWallPieces.Contains(piece) ? (AreaStepEdgeRule.Pass, "DOORWAY_PIECE_PORTAL_DECIDES")
-        : WindowWallPieces.Contains(piece) ? (AreaStepEdgeRule.Block, "WINDOW_PIECE_BLOCKS_WALKING")
+        : WindowWallPieces.Contains(piece) ? (AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP")
         : (AreaStepEdgeRule.Block, "WALL_PIECE_BLOCKS");
 
     /// <summary>A portal's edge for the player at T0 (pinned CE ai_attempt_open_portal and
-    /// object_locked_get as restated in the first-building research): an open or busted portal
-    /// passes; a window blocks walking; a closed door passes when walking can open it, blocks when
-    /// it is jammed, magically held or always locked (no key is held at T0), and is Unknown when
-    /// an unlock script, a plain lock (only leaving a building passes) or an hour-dependent lock
-    /// decides.</summary>
+    /// object_locked_get): open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
+    /// magically held blocks; otherwise the portal is locked only when its LOCKED bit is set and it
+    /// is not never-locked, and a by-day or by-night bit can unlock it by the hour (Unknown, the
+    /// static evidence has no clock). A locked portal needs its key (none is held at T0) unless the
+    /// walker leaves a building, which always-locked disables: always-locked blocks, a plain lock is
+    /// Unknown (leaving is directional). Doors and windows follow the same attempt; a window's wall
+    /// piece then makes the step a jump.</summary>
     internal static (AreaStepEdgeRule Rule, string Reason) PortalEdgeRule(uint art, long? portalFlags, bool unlockScript)
     {
-        var door = ((art >> 10) & 1) != 0; var frame = (art >> 14) & 31;
+        var frame = (art >> 14) & 31;
         if (portalFlags is not { } raw) return (AreaStepEdgeRule.Unknown, "PORTAL_FLAGS_UNRESOLVED");
         var flags = unchecked((uint)raw);
         if ((art & 0x200) != 0 || (flags & 0x80) != 0) return (AreaStepEdgeRule.Pass, "PORTAL_BUSTED");
         if (frame != 0) return (AreaStepEdgeRule.Pass, "PORTAL_OPEN");
-        if (!door) return (AreaStepEdgeRule.Block, "WINDOW_BLOCKS_WALKING");
-        if (unlockScript) return (AreaStepEdgeRule.Unknown, "DOOR_UNLOCK_SCRIPT");
-        if ((flags & 0x6) != 0) return (AreaStepEdgeRule.Block, "DOOR_JAMMED_OR_HELD");
-        if ((flags & 0x10) != 0) return (AreaStepEdgeRule.Block, "DOOR_ALWAYS_LOCKED");
-        if ((flags & 0x8) != 0) return (AreaStepEdgeRule.Pass, "DOOR_NEVER_LOCKED_OPENS_ON_WALK");
-        if ((flags & 0x60) != 0) return (AreaStepEdgeRule.Unknown, "DOOR_LOCK_DEPENDS_ON_HOUR");
-        if ((flags & 0x1) != 0) return (AreaStepEdgeRule.Unknown, "DOOR_LOCKED_LEAVING_ONLY");
-        return (AreaStepEdgeRule.Pass, "DOOR_OPENS_ON_WALK");
+        if (unlockScript) return (AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT");
+        if ((flags & 0x6) != 0) return (AreaStepEdgeRule.Block, "PORTAL_JAMMED_OR_HELD");
+        if ((flags & 0x8) != 0 || (flags & 0x1) == 0) return (AreaStepEdgeRule.Pass, "PORTAL_UNLOCKED_OPENS_ON_WALK");
+        if ((flags & 0x60) != 0) return (AreaStepEdgeRule.Unknown, "PORTAL_LOCK_DEPENDS_ON_HOUR");
+        if ((flags & 0x10) != 0) return (AreaStepEdgeRule.Block, "PORTAL_ALWAYS_LOCKED_NO_KEY");
+        return (AreaStepEdgeRule.Unknown, "PORTAL_LOCKED_LEAVING_ONLY");
     }
 
-    private static AreaStepObjectEvaluation PortalEvaluation(AreaObjectRecord o, AreaStepCell cell)
+    private static AreaStepObjectEvaluation PortalEvaluation(AreaObjectRecord o, AreaStepCell cell, ReadOnlySpan<byte> record,
+        IReadOnlyList<AreaStepRules.PatchTarget> patch, int patchMalformed)
     {
-        if (Number(o, ObjectTypeFlagsSlot) is { } flags && (unchecked((uint)flags) & FlagDestroyedOrOff) != 0)
+        AreaStepObjectEvaluation Unknown(string reason) => new(o.Key, cell, o.Type, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, reason);
+        if (PatchGap(o, record, patch, patchMalformed) is { } gap) return Unknown(gap);
+        if (Number(o, ObjectTypeFlagsSlot) is not { } flags) return Unknown("FLAGS_UNRESOLVED");
+        if ((unchecked((uint)flags) & FlagDestroyedOrOff) != 0)
             return new(o.Key, cell, o.Type, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.NotApplicable, null, "DESTROYED_OR_OFF_NOT_LISTED");
         return Number(o, 0) is { } aid && unchecked((uint)aid) >> 28 == 3
             ? new(o.Key, cell, o.Type, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.NotApplicable, null, PortalEdgeReason)
-            : new(o.Key, cell, o.Type, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, "PORTAL_ART_UNRESOLVED");
+            : Unknown("PORTAL_ART_UNRESOLVED");
     }
 
-    /// <summary>A script attached at the unlock slot (SAP 3) with a non-zero script number.</summary>
+    /// <summary>A script attached at the unlock slot (SAP 3) with a non-zero script number; an
+    /// attachment too short to read counts as one (fail closed).</summary>
     private static bool HasUnlockScript(AreaObjectRecord o) =>
         o.EffectiveFields.FirstOrDefault(f => f.Slot == ScriptsSlot) is { Presence: AreaPresence.Array } scripts &&
-        scripts.Elements.Any(e => e.Key == UnlockScriptSap && e.Words.Count >= 3 && e.Words[2] != 0);
+        scripts.Elements.Any(e => e.Key == UnlockScriptSap && (e.Words.Count < 3 || e.Words[2] != 0));
+
+    /// <summary>map.patch is applied to mobiles before sectors load; an unmodeled patch line or a
+    /// patch that targets this mobile record leaves its evidence Unknown.</summary>
+    private static string? PatchGap(AreaObjectRecord o, ReadOnlySpan<byte> record, IReadOnlyList<AreaStepRules.PatchTarget> patch, int patchMalformed)
+    {
+        if (o.Key.Kind != AreaSourceKind.Mobile) return null;
+        if (patchMalformed != 0) return "MAP_PATCH_LINE_UNSUPPORTED";
+        foreach (var target in patch)
+            if (record.IndexOf(target.TextOrder) >= 0 || record.IndexOf(target.MixedEndian) >= 0) return "MAP_PATCH_TARGETS_OBJECT";
+        return null;
+    }
 
     private static long? Number(AreaObjectRecord o, int slot) =>
         o.EffectiveFields.FirstOrDefault(f => f.Slot == slot) is { Presence: AreaPresence.Value, Number: { } n } ? n : null;

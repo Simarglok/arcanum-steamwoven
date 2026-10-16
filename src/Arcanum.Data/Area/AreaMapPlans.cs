@@ -185,7 +185,7 @@ public static class AreaMapPlans
     }
 
     /// <summary>The map list entry: catalogue and runtime numbers and the start tile (the entry's
-    /// second and third values, read like the original's 64-bit value parser; null when absent).</summary>
+    /// second and third values read like C strtoll; null when the entry has fewer values).</summary>
     internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName)
     {
         var winner = stack.Resolve("rules/maplist.mes").Winner;
@@ -199,8 +199,10 @@ public static class AreaMapPlans
             if (parsed.File!.Find(number) is not { } message) break;
             var values = Encoding.Latin1.GetString(message.Bytes.Span).Split(',');
             if (!string.Equals(values[0].Trim(), mapName, StringComparison.OrdinalIgnoreCase)) continue;
-            WorldLocation? start = values.Length >= 3 && long.TryParse(values[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var x) &&
-                long.TryParse(values[2].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var y) ? new(x, y) : null;
+            // Read like C strtoll (leading digits, else 0), as the original's value parser does; a
+            // negative coordinate is not a tile, so it is treated as absent.
+            WorldLocation? start = null;
+            if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
             return (number, number - 4999, start);
         }
         return (0, 0, null);

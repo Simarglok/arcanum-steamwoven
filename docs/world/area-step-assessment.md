@@ -176,29 +176,36 @@ object (2093,2019).
 the same evidence for a strictly published whole-map snapshot
 ([whole-map plans](whole-map-plans.md)): the module archive and the rule
 resources (tile names, effects, the module's game effects, `map.patch`) come
-from the archives that win them in the content stack, the mobiles from the
-map's aggregate. Only for such snapshots, walls and portals state their edge
-rule (pinned evidence keeps the earlier rule and digest; the rules are appended
-to the digest only when present):
+from the archives that win them in the content stack (each must be an archive
+member), the mobiles from the map's aggregate. Only for such snapshots, walls
+and portals state their edge rule (pinned evidence keeps the earlier rule and
+digest; the rules are appended to the digest only when present):
 
 - a doorway wall piece (22, 25, 26, 29–32) never blocks: the portal on its edge
-  decides; a window piece (10, 13, 14, 17–19) blocks walking (window jumping is
-  not modelled); every other piece blocks;
+  decides; a window piece (10, 13, 14, 17–19) blocks a diagonal step, and a
+  cardinal step across it is a window jump for the original's critter walker,
+  which is not modelled (Unknown); every other piece blocks;
 - a portal sits on edge `rotation | 1` like a wall and decides for the player
-  at T0 as the original's open attempt does
-  ([door rules](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008)):
-  open or busted passes, a window blocks, a closed door passes when walking
-  opens it and blocks when jammed, magically held or always locked (no key at
-  T0); an unlock script, a plain lock (only leaving a building passes) or an
-  hour-dependent lock is Unknown.
+  at T0 as the original's open attempt does (pinned CE `ai_attempt_open_portal`,
+  `object_locked_get`;
+  [door rules](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008)):
+  open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
+  magically held blocks; a portal without the LOCKED bit, or never-locked,
+  passes (walking opens it); a locked one with a by-day or by-night bit is
+  Unknown because the evidence has no clock; otherwise it needs a key, none is
+  held at T0, and only leaving a building passes: always-locked (which disables
+  that shortcut) blocks, a plain lock is Unknown (the shortcut is directional).
+  Doors and windows follow the same attempt; a window's wall piece then makes
+  the step a jump. Mobile portals targeted by `map.patch` are Unknown, as other
+  mobiles are.
 
 `AreaMapPlan.StartTile` is the map-list arrival tile. On the installed original
 (opt-in `AreaWholeMapStepTests`) every one of the 52 complete interiors builds
 evidence with no Unknown terrain; the generic Crash Site cave reaches the same
 506 tiles from its start as the pinned cave profile; at least 48 interiors are
-walkable from their start (four list a start tile that is blocked, so a walker
-there cannot move). Remaining Unknown steps come from critter effects the rules
-do not model and from the lock cases above.
+walkable from their start (the others list no start tile, or one a walker
+cannot leave). In a one-off run the remaining Unknown steps came from critter
+effects the rules do not model and from the lock cases above.
 
 ## Not delivered
 

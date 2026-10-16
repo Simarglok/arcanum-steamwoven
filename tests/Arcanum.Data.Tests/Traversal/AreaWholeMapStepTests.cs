@@ -17,7 +17,7 @@ public sealed class AreaWholeMapStepTests
     public void Wall_pieces_split_into_doorways_windows_and_solid_edges()
     {
         foreach (var piece in new[] { 22, 25, 26, 29, 30, 31, 32 }) Assert.AreEqual(AreaStepEdgeRule.Pass, AreaStepInspector.WallPieceRule(piece).Rule, piece.ToString());
-        foreach (var piece in new[] { 10, 13, 14, 17, 18, 19 }) Assert.AreEqual(("WINDOW_PIECE_BLOCKS_WALKING", AreaStepEdgeRule.Block), Swap(AreaStepInspector.WallPieceRule(piece)));
+        foreach (var piece in new[] { 10, 13, 14, 17, 18, 19 }) Assert.AreEqual(("WINDOW_PIECE_JUMP", AreaStepEdgeRule.WindowJump), Swap(AreaStepInspector.WallPieceRule(piece)));
         foreach (var piece in new[] { 0, 9, 21, 23, 34 }) Assert.AreEqual(("WALL_PIECE_BLOCKS", AreaStepEdgeRule.Block), Swap(AreaStepInspector.WallPieceRule(piece)));
     }
 
@@ -27,18 +27,58 @@ public sealed class AreaWholeMapStepTests
         (string, AreaStepEdgeRule) Rule(uint art, long? flags, bool script = false) => Swap(AreaStepInspector.PortalEdgeRule(art, flags, script));
         Assert.AreEqual(("PORTAL_FLAGS_UNRESOLVED", AreaStepEdgeRule.Unknown), Rule(Door, null));
         Assert.AreEqual(("PORTAL_BUSTED", AreaStepEdgeRule.Pass), Rule(Door | 0x200, 0x1));
-        Assert.AreEqual(("PORTAL_BUSTED", AreaStepEdgeRule.Pass), Rule(Door, 0x80 | 0x10));
-        Assert.AreEqual(("PORTAL_OPEN", AreaStepEdgeRule.Pass), Rule(Door | (2u << 14), 0x10));
-        Assert.AreEqual(("WINDOW_BLOCKS_WALKING", AreaStepEdgeRule.Block), Rule(Door & ~(1u << 10), 0));
-        Assert.AreEqual(("DOOR_UNLOCK_SCRIPT", AreaStepEdgeRule.Unknown), Rule(Door, 0, script: true));
-        Assert.AreEqual(("DOOR_JAMMED_OR_HELD", AreaStepEdgeRule.Block), Rule(Door, 0x2));
-        Assert.AreEqual(("DOOR_JAMMED_OR_HELD", AreaStepEdgeRule.Block), Rule(Door, 0x4 | 0x8));
-        Assert.AreEqual(("DOOR_ALWAYS_LOCKED", AreaStepEdgeRule.Block), Rule(Door, 0x10 | 0x8));
-        Assert.AreEqual(("DOOR_NEVER_LOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0x8 | 0x41));
-        Assert.AreEqual(("DOOR_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x40));
-        Assert.AreEqual(("DOOR_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x21));
-        Assert.AreEqual(("DOOR_LOCKED_LEAVING_ONLY", AreaStepEdgeRule.Unknown), Rule(Door, 0x1));
-        Assert.AreEqual(("DOOR_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0));
+        Assert.AreEqual(("PORTAL_BUSTED", AreaStepEdgeRule.Pass), Rule(Door, 0x80 | 0x10 | 0x1));
+        Assert.AreEqual(("PORTAL_OPEN", AreaStepEdgeRule.Pass), Rule(Door | (2u << 14), 0x10 | 0x1));
+        Assert.AreEqual(("PORTAL_UNLOCK_SCRIPT", AreaStepEdgeRule.Unknown), Rule(Door, 0, script: true));
+        Assert.AreEqual(("PORTAL_JAMMED_OR_HELD", AreaStepEdgeRule.Block), Rule(Door, 0x2));
+        Assert.AreEqual(("PORTAL_JAMMED_OR_HELD", AreaStepEdgeRule.Block), Rule(Door, 0x4 | 0x8));
+        // Unlocked: never-locked, or no LOCKED bit whatever the always-locked and hour bits say.
+        Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0x8 | 0x41));
+        Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0x10));
+        Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0x40));
+        Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0));
+        Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door & ~(1u << 10), 0));
+        // Locked: the hour may unlock it; always-locked removes the leaving shortcut; a plain lock leaves only.
+        Assert.AreEqual(("PORTAL_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x41));
+        Assert.AreEqual(("PORTAL_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x21 | 0x10));
+        Assert.AreEqual(("PORTAL_ALWAYS_LOCKED_NO_KEY", AreaStepEdgeRule.Block), Rule(Door, 0x11));
+        Assert.AreEqual(("PORTAL_LOCKED_LEAVING_ONLY", AreaStepEdgeRule.Unknown), Rule(Door, 0x1));
+    }
+
+    [TestMethod]
+    public void Edge_rules_decide_cardinal_and_diagonal_legs()
+    {
+        // One open 3x3 patch; a single edge on the east side of the centre tile (edge 5 = +X).
+        AreaStepAssessment Step(AreaStepEdgeRule rule, CardinalTraversalDirection direction, (long X, long Y) to)
+        {
+            var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+            for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
+                terrain[new(x, y)] = new(new(x, y), 0, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
+            var key = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 0, "o", 1);
+            var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]> { [new(10, 10)] = [new(key, new(10, 10), 5, false, rule, "TEST_EDGE")] };
+            var snapshot = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
+                new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
+            return snapshot.Assess(snapshot.Request(new(10, 10), new(to.X, to.Y), direction));
+        }
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.Block, CardinalTraversalDirection.XPlus, (11, 10)).ReasonCode);
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.Legacy, CardinalTraversalDirection.XPlus, (11, 10)).ReasonCode);
+        Assert.AreEqual(CardinalTraversalDisposition.Open, Step(AreaStepEdgeRule.Pass, CardinalTraversalDirection.XPlus, (11, 10)).Disposition);
+        var unknown = Step(AreaStepEdgeRule.Unknown, CardinalTraversalDirection.XPlus, (11, 10));
+        Assert.AreEqual(CardinalTraversalCoverage.Unknown, unknown.Coverage);
+        Assert.AreEqual("TEST_EDGE", unknown.Gaps.Single().ReasonCode);
+        var jump = Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.XPlus, (11, 10));
+        Assert.AreEqual("WINDOW_JUMP_UNMODELLED", jump.Gaps.Single().ReasonCode);
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.XPlusYPlus, (11, 11)).ReasonCode);
+        Assert.AreEqual(CardinalTraversalDisposition.Open, Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.YPlus, (10, 11)).Disposition);
+    }
+
+    [TestMethod]
+    public void Whole_map_evidence_refuses_a_pinned_or_structural_snapshot()
+    {
+        using var f = new Arcanum.Data.Tests.Area.AreaIdentityTests.Fixture([(67108865, [])]);
+        var area = f.Owner.LoadStrict();
+        var stack = ContentStack.Open(new ContentMountPlan(Path.GetTempPath(), "none", [])).Stack;
+        Assert.ThrowsExactly<AreaStepInvocationException>(() => AreaStepInspector.InspectWholeMap(area, stack!, null, 1));
     }
 
     [TestMethod, TestCategory("RealData")]
