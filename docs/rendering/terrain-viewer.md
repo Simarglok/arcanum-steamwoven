@@ -194,7 +194,8 @@ phase determine facing, including reversed facing on early cancellation;
 denial does not rotate the actor. Cell floor and ToEven fractional projected pixel offsets
 bridge to the checked source-derived normal placement; camera origin stays 0.
 Follow targets continuous projected baseline plus `(0,20)`, not rounded sprite
-position. No sprite repositioning/visual nudge substitutes for source geometry.
+position (in `world-diagnostic`; `crash-site-area` uses `(40,20)` since
+[ARC-RENDER-011](#actor-anchor-and-wall-fade-arc-render-011)). No sprite repositioning/visual nudge substitutes for source geometry.
 
 Since ARC-INPUT-001 the WORLD keyboard has no actor route (see
 [diagnostic palette](../input/diagnostic-palette.md)); the left stick requests
@@ -439,9 +440,12 @@ here). The synthetic moving-overlap oracle moved with it (actor
 rectangles +40; the fixture canopy's hotspot is now `(-20,80)` so its opaque half still
 covers the witnesses; ranks unchanged).
 
-**Wall check.** The original fades walls in front of the player (CE `wallcheck.c`,
-the wall branch of `object.c` and the blit alpha rules of `tig/art.c` at the pinned
-research revision). `AreaWallCheck` (viewer Core) restates it:
+**Wall check.** The original fades walls in front of the player. At the pinned research
+revision: CE `src/game/wallcheck.c` (block regions 47-60, corner offsets 63-91, edge
+table 94-560, `wallcheck_recalc` 712-910, wall-flag update 941-1106), `object.c`
+(wall skip under a faded roof 560-575, wall render alpha 4336-4400, tile object lists
+3304) and `first_party/tig/src/art.c` (alpha lerp 3221-3260 and 3486-3493).
+`AreaWallCheck` (viewer Core) restates it:
 
 - Walls stand on a lattice of corners every four tiles. The player's committed tile
   is resolved to the 4×4 block with corner `(x - (x-2) mod 4, y - (y-2) mod 4)`; on
@@ -451,7 +455,7 @@ research revision). `AreaWallCheck` (viewer Core) restates it:
   regions; a tile on a diagonal is in two.
 - 34 lattice edges around the block (the three tiles between two corners), in a fixed
   order, are checked: 22 can hide others when complete (a wall on all three tiles),
-  four of them only test; 30 fade. A hidden edge hides nothing. Some hides apply only
+  eight of them only test; 26 fade, 12 of them only fade. A hidden edge hides nothing. Some hides apply only
   while the player is in a given region. An edge that is not hidden makes the first
   wall of each of its tiles see-through (alpha 64) and marks its corners: a corner
   wall fades on the side towards the edge (alpha 128 there, 255 on the other side,
@@ -465,7 +469,11 @@ CE function gave the same fades as `AreaWallCheck` for every tile of the cave se
 and a 4,000-step random walk (stateful); the port is not part of the repository.
 The viewer recalculates when the actor's committed cell changes and draws each faded
 wall through the same shader with the alpha at its left and right edges. The HUD
-shows the faded count and block.
+shows the faded count and block. The walls are validated at load (`AreaLoadResult.Walls`):
+authored wall translucency flags, or a core wall the plan does not draw although the
+source would still find it on its tile, fail the load. A quick load (ARC-WORLD-011)
+starts the check afresh, as the source's flush on map load does. An additive wall would
+never fade (the source drops alpha modes for additive objects); the cave has none.
 
 Evidence: synthetic `AreaWallCheckTests` (regions, front edge and corners, X-edge
 corners by rotation, a complete back edge hiding, region-only hides, the same-block

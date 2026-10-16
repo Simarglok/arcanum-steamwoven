@@ -127,6 +127,7 @@ public partial class TerrainViewerApp
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
         _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport);
+        StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
         PushAreaAmbient(); FollowAreaAmbient();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();

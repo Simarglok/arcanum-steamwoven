@@ -15,6 +15,8 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
 {
     /// <summary>ARC-RENDER-010 day/night inputs; absent for structural fixtures (drawn unlit).</summary>
     public AreaLightingPlan? Lighting { get; init; }
+    /// <summary>ARC-RENDER-011 wall check inputs, validated at load (empty when the area has no walls).</summary>
+    public IReadOnlyList<AreaWallPiece> Walls { get; init; } = Array.Empty<AreaWallPiece>();
 }
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
@@ -156,6 +158,7 @@ internal static class AreaLoadOperation
         Console.WriteLine("ARC-RENDER-007 load stage=strict-snapshot");
         var plan = AreaScenePlan.Create(snapshot, chartFor?.Invoke(snapshot));
         Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
+        var walls = AreaWallCheck.Pieces(snapshot, plan);
         var initial = owner.Usage;
         var frames = CopyFrames(owner, snapshot, plan, token);
         var retained = frames.Values.Sum(frame => (long)frame.Rgba.Length);
@@ -163,7 +166,7 @@ internal static class AreaLoadOperation
         token.ThrowIfCancellationRequested();
         return new(generation, snapshot, plan, frames, initial, owner.Usage, retained,
             GC.GetTotalAllocatedBytes() - allocated, GC.GetTotalMemory(false),
-            System.Diagnostics.Process.GetCurrentProcess().WorkingSet64, Environment.TickCount64 - started);
+            System.Diagnostics.Process.GetCurrentProcess().WorkingSet64, Environment.TickCount64 - started) { Walls = walls };
     }
 
     // Internal production stage shared with structural owner-path tests. Tests

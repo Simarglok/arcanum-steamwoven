@@ -151,6 +151,42 @@ public sealed class AreaWallCheckTests
     }
 
     [TestMethod]
+    public void ACornerBetweenTwoFadingEdgesFadesWhole()
+    {
+        // (14,14) ends Y(1,0) and starts Y(1,1); a wall facing across X there takes both marks.
+        var corner = Wall(14, 14, 1);
+        var state = new AreaWallCheck([.. Run(14, 10, 3, 0, 1, 1), .. Run(14, 14, 3, 0, 1, 1), corner]).Recalculate(11, 11);
+        Assert.AreEqual(AreaWallFade.Both, state.FadeOf(corner.Key));
+        var locked = Wall(14, 10, 1, disallowed: true);
+        Assert.AreEqual(AreaWallFade.None, new AreaWallCheck([.. Run(14, 10, 3, 0, 1, 1), locked]).Recalculate(11, 11).FadeOf(locked.Key),
+            "a disallowed corner wall stays opaque");
+    }
+
+    [TestMethod]
+    public void ATestOnlyEdgeHidesSomeEdgesOnlyFromSomeRegions()
+    {
+        // X(2,0) (tiles (17..15,10)) only tests; complete, it hides Y(2,-2) (tiles (18,3..5)) from HighY and HighX only.
+        var tester = Run(18, 10, 3, -1, 0, 3);
+        var far = Run(18, 2, 3, 0, 1, 1);
+        var highY = new AreaWallCheck([.. tester, .. far]).Recalculate(11, 13);
+        Assert.AreEqual(AreaWallRegions.HighY, highY.Regions);
+        Assert.AreEqual(0, highY.Fades.Count);
+        var lowY = new AreaWallCheck([.. tester, .. far]).Recalculate(11, 10);
+        foreach (var wall in far) Assert.AreEqual(AreaWallFade.Both, lowY.FadeOf(wall.Key));
+        foreach (var wall in tester) Assert.AreEqual(AreaWallFade.None, lowY.FadeOf(wall.Key), "a test-only edge never fades");
+    }
+
+    [TestMethod]
+    public void TheEdgeListHasTheSourcesShape()
+    {
+        // 8 edges only test, 14 test and fade, 12 only fade; every hide points at a later edge (so hiding before fading
+        // equals the source's single pass); the edges use the source's 27 corner offsets.
+        Assert.AreEqual((8, 14, 12), AreaWallCheck.EdgeKinds);
+        Assert.IsTrue(AreaWallCheck.HidesPointForward);
+        Assert.AreEqual(27, AreaWallCheck.CornerCount);
+    }
+
+    [TestMethod]
     public void OnlyTheFirstWallOfASharedEdgeTileFadesAndItIsCounted()
     {
         var edge = Run(14, 10, 3, 0, 1, 1);

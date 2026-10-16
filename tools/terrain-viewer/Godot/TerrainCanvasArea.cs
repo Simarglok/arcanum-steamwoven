@@ -182,7 +182,8 @@ public partial class TerrainCanvas
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
             item.Ambient = AreaAmbientColor(command, isActor);
-            item.WallFade = isActor ? AreaWallFade.None : AreaWallFadeOf(command);
+            // The source drops every alpha mode for an additive (or sub/mul) object, so such a wall never fades.
+            item.WallFade = isActor || command.Additive ? AreaWallFade.None : AreaWallFadeOf(command);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }

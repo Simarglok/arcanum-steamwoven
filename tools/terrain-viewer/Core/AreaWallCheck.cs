@@ -29,16 +29,18 @@ public enum AreaWallRegions { None = 0, LowY = 1, LowX = 2, HighY = 4, HighX = 8
 
 /// <summary>
 /// ARC-RENDER-011: the original wall check, which makes walls in front of the player see-through. Restated from the
-/// study of CE <c>src/game/wallcheck.c</c> and the wall branch of <c>object.c</c> at the pinned research revision
-/// (see docs/rendering/terrain-viewer.md); no CE code or structure is copied.
+/// study of CE <c>src/game/wallcheck.c</c> (tables 47-91 and 94-560, <c>wallcheck_recalc</c> 712-910, 941-1106) and
+/// <c>object.c</c> 560-575 and 4336-4400 at the pinned research revision (see docs/rendering/terrain-viewer.md); no CE
+/// code or structure is copied.
 ///
 /// Walls stand on a lattice of corners every four tiles. The player's tile is resolved to the 4×4 block whose corner
-/// is <c>(x - (x-2) mod 4, y - (y-2) mod 4)</c>; a player on the block's low-X (or low-Y) line who shares the tile with
-/// a wall facing the other way belongs to the previous block. Around that block the check walks a fixed, ordered list of
-/// lattice edges (three tiles between two corners). A complete edge (a wall on all three tiles) hides edges behind it;
-/// an edge that is not hidden and is a fade edge makes the walls on its three tiles see-through and marks its two
-/// corners, whose walls fade on the side that faces the edge. While the player stays in the same block and shares a
-/// region with the previous position, the previous set is kept.
+/// is <c>(x - (x-2) mod 4, y - (y-2) mod 4)</c>; on the block's low-X line a wall on the player's tile with rotation 4/5
+/// moves the player one tile back along X and one with rotation 2/3 along Y, and on the low-Y line a rotation 2/3 wall
+/// moves it along Y. Around that block the check walks a fixed, ordered list of lattice edges (three tiles between two
+/// corners). A complete edge (a wall on all three tiles) hides edges behind it; an edge that is not hidden and is a fade
+/// edge makes the first wall of each of its three tiles see-through and marks its two corners, whose walls fade on the
+/// side that faces the edge. While the player stays in the same block and shares a region with the previous
+/// calculation, the previous set is kept.
 /// </summary>
 public sealed class AreaWallCheck
 {
@@ -51,6 +53,13 @@ public sealed class AreaWallCheck
     public AreaWallCheckState State { get; private set; } = AreaWallCheckState.Empty;
     public int WallCount { get; }
 
+    /// <summary>The kinds of the ordered edges: those that only test, those that occlude and fade, those that only fade.</summary>
+    internal static (int TestOnly, int Both, int FadeOnly) EdgeKinds => (Edges.Count(e => e.Occludes && !e.Fades),
+        Edges.Count(e => e.Occludes && e.Fades), Edges.Count(e => !e.Occludes && e.Fades));
+    /// <summary>Every hide of an edge targets a later edge, and the distinct corners the edges use.</summary>
+    internal static bool HidesPointForward => Edges.Select((edge, index) => edge.Hides.Concat(edge.HidesIn.SelectMany(h => h.Targets)).All(t => t > index)).All(x => x);
+    internal static int CornerCount => Edges.SelectMany(edge => new[] { edge.Start, edge.End }).Distinct().Count();
+
     public AreaWallCheck(IEnumerable<AreaWallPiece> walls)
     {
         ArgumentNullException.ThrowIfNull(walls);
@@ -62,11 +71,21 @@ public sealed class AreaWallCheck
     }
 
     /// <summary>Every wall of a loaded area in the area's own same-tile order (the drawn upright order, ties by source
-    /// index). Wall flags other than <c>OWAF_TRANS_DISALLOW</c> are refused: authored translucency is not supported.</summary>
-    public static AreaWallCheck FromArea(AreaSnapshot snapshot, AreaScenePlan plan)
+    /// index). Fails closed: wall flags other than <c>OWAF_TRANS_DISALLOW</c> (authored translucency) and a core wall
+    /// that the source would still find on its tile but the plan does not draw (not off or destroyed) are refused.</summary>
+    public static IReadOnlyList<AreaWallPiece> Pieces(AreaSnapshot snapshot, AreaScenePlan plan)
     {
         ArgumentNullException.ThrowIfNull(snapshot); ArgumentNullException.ThrowIfNull(plan);
         var objects = snapshot.Objects.Where(body => body.Type == 0).ToDictionary(body => body.Key);
+        var drawn = plan.Commands.Where(command => command.Identity is { } key && objects.ContainsKey(key)).Select(command => command.Identity!.Value).ToHashSet();
+        foreach (var wall in objects.Values.Where(wall => wall.Scope == AreaScope.Core && !drawn.Contains(wall.Key)))
+        {
+            // CE lists a tile's walls without OF_DESTROYED|OF_OFF only (object_list_location); any other undrawn wall
+            // would still take part in the check.
+            var flags = wall.EffectiveFields.SingleOrDefault(field => field.Slot == 18 && field.Presence == AreaPresence.Value)?.Number
+                ?? throw new InvalidOperationException("AREA_WALL_FLAGS_REQUIRED");
+            if ((flags & 0x3) == 0) throw new InvalidOperationException("AREA_WALL_NOT_DRAWN");
+        }
         var pieces = new List<AreaWallPiece>();
         foreach (var command in plan.Commands.Where(command => command.Identity is { } key && objects.ContainsKey(key)))
         {
@@ -77,8 +96,10 @@ public sealed class AreaWallCheck
             if ((flags & ~1L) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_WALL_FLAGS");
             pieces.Add(new(body.Key, body.WorldX!.Value, body.WorldY!.Value, (int)((visual.RawArt >> 11) & 7), flags == 1));
         }
-        return new(pieces);
+        return pieces.AsReadOnly();
     }
+
+    public static AreaWallCheck FromArea(AreaSnapshot snapshot, AreaScenePlan plan) => new(Pieces(snapshot, plan));
 
     /// <summary>Forgets the previous position and every fade, as a map change does.</summary>
     public void Reset() => State = AreaWallCheckState.Empty;
@@ -86,7 +107,8 @@ public sealed class AreaWallCheck
     /// <summary>Recalculates for the player's tile and returns (and keeps) the new state.</summary>
     public AreaWallCheckState Recalculate(long x, long y)
     {
-        if (x < 2 || y < 2) throw new ArgumentOutOfRangeException(nameof(x), "AREA_WALL_CHECK_LOCATION");
+        if (x < 2) throw new ArgumentOutOfRangeException(nameof(x), "AREA_WALL_CHECK_LOCATION");
+        if (y < 2) throw new ArgumentOutOfRangeException(nameof(y), "AREA_WALL_CHECK_LOCATION");
         var localX = (int)((x - 2) % 4); var localY = (int)((y - 2) % 4);
         // A wall shared with the player's tile on a block line can move the player to the previous block.
         if (localX == 0)

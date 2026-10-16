@@ -6,8 +6,9 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
-    // ARC-RENDER-011: the original wall check for the published map. One check per map (a map change starts from an
-    // empty set, as the source's flush on map load); it is recalculated when the actor's committed tile changes.
+    // ARC-RENDER-011: the original wall check for the published map, from the walls validated at load. One check per
+    // map (a map change or a quick load starts from an empty set, as the source's flush on map load); it is
+    // recalculated when the actor's committed tile changes.
     private AreaWallCheck? _areaWallCheck;
     private AreaLoadResult? _areaWallArea;
     private AreaStepCell? _areaWallCell;
@@ -17,7 +18,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not { } area || _worldActor.Session is not AreaGridSession session || _canvas is null) return;
         if (!ReferenceEquals(_areaWallArea, area))
         {
-            _areaWallCheck = AreaWallCheck.FromArea(area.Snapshot, area.Plan); _areaWallArea = area; _areaWallCell = null;
+            _areaWallCheck = new AreaWallCheck(area.Walls); _areaWallArea = area; _areaWallCell = null;
             _canvas.SetAreaWallFades(null);
         }
         if (_areaWallCheck!.WallCount == 0) return;
