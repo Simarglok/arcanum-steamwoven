@@ -16,8 +16,10 @@ public partial class TerrainViewerApp
     private int _pacingTarget, _pacingCap;
     private double _pacingTargetSince, _pacingMeasuredAt;
     private const double PacingSettleSeconds = 2;
-    // Automated self-tests and smokes keep uncapped pacing and per-frame status text.
-    private bool PacingAutomated => SelfTestBootstrap || _nativeSmoke;
+    // Automated self-tests (their bootstrap apps and the process hosting them) and smokes keep
+    // uncapped pacing and per-frame status text.
+    private bool _automatedHost;
+    private bool PacingAutomated => SelfTestBootstrap || _automatedHost || _nativeSmoke;
     private static double PacingNow() => Time.GetTicksUsec() / 1e6;
     private void NotePacingActivity() => _pacingLastActivity = PacingNow();
 
