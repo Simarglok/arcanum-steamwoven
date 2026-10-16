@@ -10,9 +10,9 @@ namespace Arcanum.Data.Combat;
 /// critters (ARC-RES-030 open question O6; FR-ITEM-006 data side; field list in docs/research/combat-domain-load-map.md
 /// section 5). Two inputs: a loose prototype file by number, or an Area object's effective fields, where an instance's own
 /// fields replace its prototype's whole field. Slots are the v119 layout of the StaticObjects loader: common block 0..35,
-/// item 36..58 with weapon, ammunition or armour from 59, critter 36..68 with NPC from 69 (contract
-/// docs/formats/combat-fields.md). Sparse int32 arrays read like the source: a missing key is 0; a key outside the array's
-/// range is refused. Read-only and fail-closed; no stat, effect, aptitude scaling or wielder rule is applied.
+/// item 36..58 with weapon, ammunition, armour or generic from 59, critter 36..68 with NPC from 69 (contract
+/// docs/formats/combat-fields.md). Sparse int32 arrays read like the source where it is safe: a missing key is 0; a key
+/// outside the array's range, which the source would ignore, is refused (fail-closed). Read-only and fail-closed; no stat, effect, aptitude scaling or wielder rule is applied.
 /// NOT READY: portals, containers and other attackable non-items; critter ammunition pools (object handles); the spell
 /// and AI tables the stored numbers point to.
 /// </summary>
@@ -20,7 +20,7 @@ public static class CombatFieldReader
 {
     /// <summary>The stored ammunition type of a weapon that uses none.</summary>
     public const int NoAmmo = 10000;
-    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, PcType = 15, NpcType = 16;
+    public const int WeaponType = 5, AmmoType = 6, ArmorType = 7, GenericType = 14, PcType = 15, NpcType = 16;
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
     // Common block.
@@ -34,11 +34,13 @@ public static class CombatFieldReader
         SpeedSlot = 66, MagicSpeedSlot = 67, RangeSlot = 68, MagicRangeSlot = 69, MinStrengthSlot = 70, MagicMinStrengthSlot = 71,
         WeaponAmmoTypeSlot = 72, AmmoConsumptionSlot = 73, CritHitChartSlot = 76, MagicCritHitChanceSlot = 77, MagicCritHitEffectSlot = 78,
         CritMissChartSlot = 79, MagicCritMissChanceSlot = 80, MagicCritMissEffectSlot = 81;
-    // Ammunition block (59..63).
+    // Ammunition block (59..65).
     private const int AmmoFlagsSlot = 59, AmmoQuantitySlot = 60, AmmoTypeSlot = 61;
-    // Armour block (59..71).
+    // Armour block (59..70).
     private const int ArmorFlagsSlot = 59, AcAdjustmentSlot = 61, MagicAcAdjustmentSlot = 62, ResistanceAdjustmentSlot = 63,
         MagicResistanceAdjustmentSlot = 64, SilentMoveSlot = 65, MagicSilentMoveSlot = 66, UnarmedBonusSlot = 67;
+    // Generic block (59..63).
+    private const int GenericFlagsSlot = 59, UsageBonusSlot = 60, UsageCountSlot = 61;
     // Critter block (36..68).
     private const int CritterFlagsSlot = 36, CritterFlags2Slot = 37, StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, SpellTechSlot = 41,
         FatigueSlot = 42, FatigueAdjustmentSlot = 43, FatigueDamageSlot = 44, CritterCritHitChartSlot = 45, InventorySourceSlot = 57,
@@ -72,18 +74,23 @@ public static class CombatFieldReader
     public static CombatFieldRead Read(AreaObjectRecord record)
     {
         ArgumentNullException.ThrowIfNull(record);
-        var fields = record.EffectiveFields.ToDictionary(f => f.Slot);
+        // First value wins for a caller-built record that repeats a slot, as in the inventory view.
+        var fields = new Dictionary<int, AreaFieldValue>();
+        foreach (var value in record.EffectiveFields) fields.TryAdd(value.Slot, value);
         return Read(CombatFieldOrigin.AreaObject, record.Type, record.PrototypeNumber, slot =>
             fields.TryGetValue(slot, out var value) && value.Presence != AreaPresence.Absent
                 ? new Field((Presence)((int)value.Presence - 1), value.Number, value.Elements.Select(e => (e.Key, e.Words)).ToArray())
                 : null);
     }
 
-    /// <summary>Every mobile item and critter of a strict Area snapshot, by source index; the first refusal stops the read.</summary>
+    /// <summary>Every mobile item and critter of a strict Area snapshot, by source index; the first refusal stops the read. An
+    /// item or critter from a sector file (not the mobile aggregate) is refused, as the inventory view refuses it.</summary>
     public static CombatAreaRead ReadArea(AreaSnapshot snapshot, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         if (!snapshot.StrictlyPublished) return new(CombatFieldFailure.SnapshotNotStrict, null);
+        if (snapshot.Objects.FirstOrDefault(o => o.Key.Kind != AreaSourceKind.Mobile && Supported(o.Type)) is { } stray)
+            return new(CombatFieldFailure.StaticObjectUnsupported, null, stray.Key.SourceIndex, stray.Type);
         var objects = new List<CombatAreaObject>();
         foreach (var record in snapshot.Objects.Where(o => o.Key.Kind == AreaSourceKind.Mobile && Supported(o.Type)).OrderBy(o => o.Key.SourceIndex))
         {
@@ -149,7 +156,7 @@ public static class CombatFieldReader
                     Int(ReactionBaseSlot), Int(SocialClassSlot),
                     Ranges(damage.Where((_, i) => i % 2 == 0).ToArray(), damage.Where((_, i) => i % 2 == 1).ToArray()));
             }
-            return new(origin, common, null, null, null, null, critter, npc);
+            return new(origin, common, null, null, null, null, null, critter, npc);
         }
 
         var item = new CombatItemFields(Flags(ItemFlagsSlot), Int(WeightSlot), Int(WorthSlot), Int(ManaStoreSlot), Int(ComplexitySlot),
@@ -158,6 +165,7 @@ public static class CombatFieldReader
         CombatWeaponFields? weapon = null;
         CombatAmmoFields? ammo = null;
         CombatArmorFields? armor = null;
+        CombatGenericFields? generic = null;
         if (type == WeaponType)
         {
             var flags = (CombatWeaponFlags)Flags(WeaponFlagsSlot);
@@ -175,7 +183,9 @@ public static class CombatFieldReader
             armor = new((CombatArmorFlags)Flags(ArmorFlagsSlot), Int(AcAdjustmentSlot), Int(MagicAcAdjustmentSlot),
                 Array(ResistanceAdjustmentSlot, Resistances), Array(MagicResistanceAdjustmentSlot, Resistances), Int(SilentMoveSlot),
                 Int(MagicSilentMoveSlot), Int(UnarmedBonusSlot));
-        return new(origin, common, item, weapon, ammo, armor, null, null);
+        else if (type == GenericType)
+            generic = new(Flags(GenericFlagsSlot), Int(UsageBonusSlot), Int(UsageCountSlot));
+        return new(origin, common, item, weapon, ammo, armor, generic, null, null);
     }
 
     // A dense copy of a sparse int32 array: a null or empty array, or a missing key, is 0; a 32-bit word is reinterpreted

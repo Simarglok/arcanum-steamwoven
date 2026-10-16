@@ -8,12 +8,12 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Data.Tests.Combat;
 
-// ARC-DATA-021: combat fields of synthetic v119 prototypes and Area objects. Every number is invented; each slot gets a
-// distinct value so a wrong slot shows up as a wrong value.
+// ARC-DATA-021: combat fields of synthetic v119 prototypes and Area objects. Every value is invented (prototype numbers are only
+// labels); each slot gets a distinct value so a wrong slot shows up as a wrong value.
 [TestClass]
 public sealed class CombatFieldReaderTests
 {
-    private const int Weapon = 5, Ammo = 6, Armor = 7, Generic = 14, Pc = 15, Npc = 16, Scenery = 3;
+    private const int Weapon = 5, Ammo = 6, Armor = 7, Gold = 8, Generic = 14, Pc = 15, Npc = 16, Scenery = 3;
     private const string Source = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
     private static Dictionary<int, int> Map(params int[] values) => values.Select((v, i) => (v, i)).Where(p => p.v != 0).ToDictionary(p => p.i, p => p.v);
@@ -23,7 +23,7 @@ public sealed class CombatFieldReaderTests
     {
         var values = new Dictionary<int, object>
         {
-            [18] = 0x1000, [19] = 0x40, [21] = 2000, [22] = 6178, [25] = 7, [26] = 20, [27] = -3, [28] = 4, [29] = 5,
+            [18] = 0x1000, [19] = 0x40, [21] = 2010, [22] = 6290, [25] = 7, [26] = 20, [27] = -3, [28] = 4, [29] = 5,
             [30] = Map(10, 20, 30, 40, 50),
         };
         foreach (var (slot, value) in extra ?? []) values[slot] = value;
@@ -36,27 +36,27 @@ public sealed class CombatFieldReaderTests
     {
         var values = Common(new()
         {
-            [36] = 0x2, [38] = 20, [40] = 9, [41] = 3, [43] = 1004, [45] = complexity, [46] = 6,
+            [36] = 0x2, [38] = 23, [40] = 11, [41] = 3, [43] = 1004, [45] = complexity, [46] = 2,
             [49] = 10000, [50] = 31, [51] = 10000, [52] = 10000, [53] = 10000, [54] = 12, [55] = 4,
         });
         foreach (var (slot, value) in extra ?? []) values[slot] = value;
         return values;
     }
 
-    private static Dictionary<int, object> WeaponValues(int flags = 0x1A, int complexity = -5, int range = 1, int ammo = CombatFieldReader.NoAmmo) => Item(complexity, new()
+    private static Dictionary<int, object> WeaponValues(int flags = 0x16, int complexity = -5, int range = 1, int ammo = CombatFieldReader.NoAmmo) => Item(complexity, new()
     {
-        [59] = flags, [61] = 5, [62] = 2, [63] = Map(2, 0, 1, 0, 3), [64] = Map(6, 0, 4, 0, 9), [65] = Map(1, 0, 0, 2, 0), [66] = 6, [67] = -1,
+        [59] = flags, [61] = 5, [62] = 2, [63] = Map(3, 0, 1, 0, 4), [64] = Map(7, 0, 5, 0, 8), [65] = Map(1, 0, 0, 2, 0), [66] = 7, [67] = -1,
         [68] = range, [69] = 3, [70] = 4, [71] = -2, [72] = ammo, [73] = 1, [76] = 2, [77] = 15, [78] = 25, [79] = 3, [80] = 35, [81] = 45,
     });
 
     private static Dictionary<int, object> CritterValues(Dictionary<int, object>? extra = null)
     {
-        var stats = new int[28]; stats[0] = 11; stats[1] = 13; stats[2] = 9; stats[5] = 11; stats[17] = 3; stats[27] = 2;
+        var stats = new int[28]; stats[0] = 14; stats[1] = 6; stats[2] = 10; stats[5] = 12; stats[17] = 4; stats[27] = 2;
         var spellTech = new int[25]; spellTech[3] = 2; spellTech[16] = -1; spellTech[17 + 4] = 1;
         var values = Common(new()
         {
-            [36] = 0x2008, [37] = 0x10, [38] = Map(stats), [39] = Map(0, 2 | (1 << 6), 3 | (3 << 6)), [40] = Map(0, 5), [41] = Map(spellTech),
-            [42] = 12, [43] = 2, [44] = 1, [45] = 1, [57] = 84, [63] = 91,
+            [36] = 0x2108, [37] = 0x10, [38] = Map(stats), [39] = Map(0, 2 | (1 << 6), 3 | (3 << 6)), [40] = Map(0, 5), [41] = Map(spellTech),
+            [42] = 12, [43] = 2, [44] = 6, [45] = 2, [57] = 84, [63] = 91,
         });
         foreach (var (slot, value) in extra ?? []) values[slot] = value;
         return values;
@@ -64,7 +64,7 @@ public sealed class CombatFieldReaderTests
 
     private static Dictionary<int, object> NpcValues() => CritterValues(new()
     {
-        [69] = 0x1102, [71] = 19, [74] = 40, [75] = 7, [81] = 9, [84] = 50, [85] = 3, [92] = Map(3, 7, 0, 0, 0, 0, 1, 2, 0, 0),
+        [69] = 0x1306, [71] = 23, [74] = 40, [75] = 7, [81] = 11, [84] = 50, [85] = 3, [92] = Map(2, 6, 0, 0, 0, 0, 1, 2, 0, 0),
     });
 
     private static Func<int, PrototypeFile> Files(params (int Number, int Type, Dictionary<int, object> Values)[] prototypes)
@@ -86,22 +86,22 @@ public sealed class CombatFieldReaderTests
         var fields = Read(6218, Weapon, WeaponValues());
         Assert.AreEqual(CombatFieldOrigin.Prototype, fields.Origin);
         var o = fields.Object;
-        Assert.AreEqual((Weapon, 6218, 0x1000u, 0x40u, 2000, 6178, 7, 20, -3, 4, 5), (o.Type, o.Prototype, o.Flags, o.SpellFlags, o.Name, o.Description,
+        Assert.AreEqual((Weapon, 6218, 0x1000u, 0x40u, 2010, 6290, 7, 20, -3, 4, 5), (o.Type, o.Prototype, o.Flags, o.SpellFlags, o.Name, o.Description,
             o.ArmorClass, o.HitPoints, o.HitPointAdjustment, o.HitPointDamage, o.Material));
         CollectionAssert.AreEqual(new[] { 10, 20, 30, 40, 50 }, o.Resistances.ToArray());
         var i = fields.Item!;
-        Assert.AreEqual((0x2u, 20, 9, 3, -5, 6, 1004, 12, 4), (i.Flags, i.Weight, i.Worth, i.ManaStore, i.MagickTechComplexity, i.Discipline,
+        Assert.AreEqual((0x2u, 23, 11, 3, -5, 2, 1004, 12, 4), (i.Flags, i.Weight, i.Worth, i.ManaStore, i.MagickTechComplexity, i.Discipline,
             i.InventoryLocation, i.SpellManaStore, i.AiAction));
         CollectionAssert.AreEqual(new[] { 10000, 31, 10000, 10000, 10000 }, i.Spells.ToArray());
         var w = fields.Weapon!;
-        Assert.AreEqual(CombatWeaponFlags.Silent | CombatWeaponFlags.HandCountFixed | CombatWeaponFlags.Throwable, w.Flags);
+        Assert.AreEqual(CombatWeaponFlags.Silent | CombatWeaponFlags.TwoHanded | CombatWeaponFlags.Throwable, w.Flags);
         Assert.AreEqual(CombatWeaponSkill.Melee, w.Skill);
-        Assert.AreEqual((5, 2, 6, -1, 1, 3, 4, -2, CombatFieldReader.NoAmmo, 1), (w.BonusToHit, w.MagicHitAdjustment, w.SpeedFactor, w.MagicSpeedAdjustment,
+        Assert.AreEqual((5, 2, 7, -1, 1, 3, 4, -2, CombatFieldReader.NoAmmo, 1), (w.BonusToHit, w.MagicHitAdjustment, w.SpeedFactor, w.MagicSpeedAdjustment,
             w.Range, w.MagicRangeAdjustment, w.MinimumStrength, w.MagicMinimumStrengthAdjustment, w.AmmoType, w.AmmoConsumption));
         Assert.AreEqual((2, 15, 25, 3, 35, 45), (w.CriticalHitChart, w.MagicCriticalHitChance, w.MagicCriticalHitEffect, w.CriticalMissChart,
             w.MagicCriticalMissChance, w.MagicCriticalMissEffect));
         // Damage by damage type: normal, poison, electrical, fire, fatigue.
-        CollectionAssert.AreEqual(new CombatDamageRange[] { new(2, 6), new(0, 0), new(1, 4), new(0, 0), new(3, 9) }, w.Damage.ToArray());
+        CollectionAssert.AreEqual(new CombatDamageRange[] { new(3, 7), new(0, 0), new(1, 5), new(0, 0), new(4, 8) }, w.Damage.ToArray());
         CollectionAssert.AreEqual(new[] { 1, 0, 0, 2, 0 }, w.MagicDamageAdjustment.ToArray());
         Assert.IsNull(fields.Ammo); Assert.IsNull(fields.Armor); Assert.IsNull(fields.Critter); Assert.IsNull(fields.Npc);
     }
@@ -109,35 +109,41 @@ public sealed class CombatFieldReaderTests
     [TestMethod]
     public void AmmunitionArmourAndOtherItemsReadTheirOwnBlocks()
     {
-        var ammo = Read(7059, Ammo, Item(0, new() { [59] = 0x1, [60] = 15, [61] = (int)CombatAmmoType.Bullet }));
-        Assert.AreEqual(new CombatAmmoFields(0x1, 15, 1), ammo.Ammo);
+        var ammo = Read(7160, Ammo, Item(0, new() { [59] = 0x4, [60] = 23, [61] = (int)CombatAmmoType.PowerCell }));
+        Assert.AreEqual(new CombatAmmoFields(0x4, 23, 2), ammo.Ammo);
         Assert.IsNull(ammo.Weapon); Assert.IsNotNull(ammo.Item);
 
-        var armor = Read(8114, Armor, Item(0, new()
+        var armor = Read(8230, Armor, Item(0, new()
         {
-            [59] = 0x12, [61] = 3, [62] = 1, [63] = Map(3, -5, 0, 0, 7), [64] = Map(0, 0, 2, 0, 0), [65] = -10, [66] = 4, [67] = 6,
+            [59] = 0x12, [61] = 4, [62] = 1, [63] = Map(4, -6, 0, 0, 7), [64] = Map(0, 0, 2, 0, 0), [65] = -10, [66] = 4, [67] = 6,
         }));
         var a = armor.Armor!;
         Assert.AreEqual(CombatArmorFlags.SizeMedium | CombatArmorFlags.FemaleOnly, a.Flags);
-        Assert.AreEqual((3, 1, -10, 4, 6), (a.ArmorClassAdjustment, a.MagicArmorClassAdjustment, a.SilentMoveAdjustment, a.MagicSilentMoveAdjustment, a.UnarmedBonusDamage));
+        Assert.AreEqual((4, 1, -10, 4, 6), (a.ArmorClassAdjustment, a.MagicArmorClassAdjustment, a.SilentMoveAdjustment, a.MagicSilentMoveAdjustment, a.UnarmedBonusDamage));
         // Resistance order: normal, fire, electrical, poison, magic.
-        CollectionAssert.AreEqual(new[] { 3, -5, 0, 0, 7 }, a.ResistanceAdjustment.ToArray());
+        CollectionAssert.AreEqual(new[] { 4, -6, 0, 0, 7 }, a.ResistanceAdjustment.ToArray());
         CollectionAssert.AreEqual(new[] { 0, 0, 2, 0, 0 }, a.MagicResistanceAdjustment.ToArray());
 
-        var generic = Read(15100, Generic, Item(0, new() { [59] = 0x8 }));
+        var generic = Read(15100, Generic, Item(0, new() { [59] = 0x8, [60] = 15, [61] = 3 }));
+        Assert.AreEqual(new CombatGenericFields(0x8, 15, 3), generic.Generic);
         Assert.IsNotNull(generic.Item);
         Assert.IsTrue(generic.Weapon is null && generic.Ammo is null && generic.Armor is null && generic.Critter is null);
+        Assert.IsNull(armor.Generic);
+
+        // Other item types (here gold) carry the item block only.
+        var gold = Read(9076, Gold, Item(0, new() { [59] = 0x8, [60] = 15 }));
+        Assert.IsTrue(gold.Item is not null && gold.Weapon is null && gold.Ammo is null && gold.Armor is null && gold.Generic is null);
     }
 
     [TestMethod]
     public void CrittersReadStoredStatsSkillsAndNpcsTheirMonsterDamage()
     {
-        var npc = Read(28359, Npc, NpcValues());
+        var npc = Read(29001, Npc, NpcValues());
         var c = npc.Critter!;
-        Assert.AreEqual((0x2008u, 0x10u, 12, 2, 1, 1, 84, 91), (c.Flags, c.Flags2, c.FatiguePoints, c.FatigueAdjustment, c.FatigueDamage,
+        Assert.AreEqual((0x2108u, 0x10u, 12, 2, 6, 2, 84, 91), (c.Flags, c.Flags2, c.FatiguePoints, c.FatigueAdjustment, c.FatigueDamage,
             c.CriticalHitChart, c.InventorySource, c.AutoLevelScheme));
         Assert.AreEqual(28, c.BaseStats.Count);
-        Assert.AreEqual((11, 13, 9, 11, 3, 2, 0), (c.BaseStats[0], c.BaseStats[1], c.BaseStats[2], c.BaseStats[5], c.BaseStats[17], c.BaseStats[27], c.BaseStats[6]));
+        Assert.AreEqual((14, 6, 10, 12, 4, 2, 0), (c.BaseStats[0], c.BaseStats[1], c.BaseStats[2], c.BaseStats[5], c.BaseStats[17], c.BaseStats[27], c.BaseStats[6]));
         Assert.AreEqual((12, 4, 25), (c.BasicSkills.Count, c.TechSkills.Count, c.SpellTech.Count));
         Assert.AreEqual((2, 1), (CombatFieldReader.SkillPoints(c.BasicSkills[1]), CombatFieldReader.SkillTraining(c.BasicSkills[1])));
         Assert.AreEqual((3, 3), (CombatFieldReader.SkillPoints(c.BasicSkills[2]), CombatFieldReader.SkillTraining(c.BasicSkills[2])));
@@ -145,8 +151,8 @@ public sealed class CombatFieldReaderTests
         // The mastery college is stored as −1 in an unsigned array.
         Assert.AreEqual((2, -1, 1), (c.SpellTech[3], c.SpellTech[16], c.SpellTech[21]));
         var n = npc.Npc!;
-        Assert.AreEqual((0x1102u, 19, 40, 7, 9, 50, 3), (n.Flags, n.AiData, n.ExperienceWorth, n.ExperiencePool, n.Faction, n.ReactionBase, n.SocialClass));
-        CollectionAssert.AreEqual(new CombatDamageRange[] { new(3, 7), new(0, 0), new(0, 0), new(1, 2), new(0, 0) }, n.Damage.ToArray());
+        Assert.AreEqual((0x1306u, 23, 40, 7, 11, 50, 3), (n.Flags, n.AiData, n.ExperienceWorth, n.ExperiencePool, n.Faction, n.ReactionBase, n.SocialClass));
+        CollectionAssert.AreEqual(new CombatDamageRange[] { new(2, 6), new(0, 0), new(0, 0), new(1, 2), new(0, 0) }, n.Damage.ToArray());
         Assert.IsNull(npc.Item);
 
         var pc = Read(16089, Pc, CritterValues());
@@ -175,7 +181,7 @@ public sealed class CombatFieldReaderTests
         var weapon = Read(6218, Weapon, values).Weapon!;
         CollectionAssert.AreEqual(new[] { 0, 0, 0, 0, 0 }, weapon.Damage.Select(d => d.Minimum).ToArray());
         CollectionAssert.AreEqual(new[] { 0, 0, 0, 0, 0 }, weapon.MagicDamageAdjustment.ToArray());
-        CollectionAssert.AreEqual(new[] { 6, 0, 4, 0, 9 }, weapon.Damage.Select(d => d.Maximum).ToArray());
+        CollectionAssert.AreEqual(new[] { 7, 0, 5, 0, 8 }, weapon.Damage.Select(d => d.Maximum).ToArray());
 
         var wide = WeaponValues(); wide[64] = new Dictionary<int, int> { [5] = 1 };
         var read = CombatFieldReader.ReadPrototype(Files((6218, Weapon, wide)), 6218);
@@ -233,15 +239,15 @@ public sealed class CombatFieldReaderTests
     [TestMethod]
     public void AnAreaObjectReadsItsInstanceValuesOverItsPrototype()
     {
-        var npc = Row(4, 28359, Npc, NpcValues(), Instance(27, -6), Instance(71, 14),
-            new AreaFieldValue(92, AreaPresence.Array, AreaValueOrigin.Instance, null, [new(0, [5]), new(1, [10])], null));
+        var npc = Row(4, 29001, Npc, NpcValues(), Instance(27, -7), Instance(71, 17),
+            new AreaFieldValue(92, AreaPresence.Array, AreaValueOrigin.Instance, null, [new(0, [4]), new(1, [9])], null));
         var read = CombatFieldReader.Read(npc);
         Assert.AreEqual(CombatFieldFailure.None, read.Failure);
         Assert.AreEqual(CombatFieldOrigin.AreaObject, read.Fields!.Origin);
-        Assert.AreEqual((28359, -6, 14, 9), (read.Fields.Object.Prototype, read.Fields.Object.HitPointAdjustment, read.Fields.Npc!.AiData, read.Fields.Npc.Faction));
+        Assert.AreEqual((29001, -7, 17, 11), (read.Fields.Object.Prototype, read.Fields.Object.HitPointAdjustment, read.Fields.Npc!.AiData, read.Fields.Npc.Faction));
         // An instance array replaces the prototype's whole array.
-        CollectionAssert.AreEqual(new CombatDamageRange[] { new(5, 10), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }, read.Fields.Npc.Damage.ToArray());
-        Assert.AreEqual(11, read.Fields.Critter!.BaseStats[0]);
+        CollectionAssert.AreEqual(new CombatDamageRange[] { new(4, 9), new(0, 0), new(0, 0), new(0, 0), new(0, 0) }, read.Fields.Npc.Damage.ToArray());
+        Assert.AreEqual(14, read.Fields.Critter!.BaseStats[0]);
 
         var weapon = Row(5, 6218, Weapon, WeaponValues(), Instance(43, 1004), Instance(70, 9));
         Assert.AreEqual((1004, 9), (CombatFieldReader.Read(weapon).Fields!.Item!.InventoryLocation, CombatFieldReader.Read(weapon).Fields!.Weapon!.MinimumStrength));
@@ -250,13 +256,16 @@ public sealed class CombatFieldReaderTests
     [TestMethod]
     public void AnAreaObjectWithoutAMandatoryFieldIsRefusedAtThatSlot()
     {
-        var row = Row(4, 28359, Npc, NpcValues());
+        var row = Row(4, 29001, Npc, NpcValues());
         var missing = row with { EffectiveFields = row.EffectiveFields.Where(f => f.Slot != 81).ToArray() };
         Assert.AreEqual((CombatFieldFailure.FieldUnresolved, 81), Refusal(CombatFieldReader.Read(missing)));
         var absent = row with { EffectiveFields = row.EffectiveFields.Select(f => f.Slot == 71 ? f with { Presence = AreaPresence.Absent } : f).ToArray() };
         Assert.AreEqual((CombatFieldFailure.FieldUnresolved, 71), Refusal(CombatFieldReader.Read(absent)));
         var notArray = row with { EffectiveFields = row.EffectiveFields.Select(f => f.Slot == 38 ? Instance(38, 1) : f).ToArray() };
         Assert.AreEqual((CombatFieldFailure.FieldUnresolved, 38), Refusal(CombatFieldReader.Read(notArray)));
+        // A repeated slot: the first value wins.
+        var repeated = row with { EffectiveFields = [Instance(71, 31), .. row.EffectiveFields] };
+        Assert.AreEqual(31, CombatFieldReader.Read(repeated).Fields!.Npc!.AiData);
         var wideElement = row with { EffectiveFields = row.EffectiveFields.Select(f => f.Slot == 30
             ? new AreaFieldValue(30, AreaPresence.Array, AreaValueOrigin.Instance, null, [new(0, [1, 2])], null) : f).ToArray() };
         Assert.AreEqual((CombatFieldFailure.ArrayMalformed, 30), Refusal(CombatFieldReader.Read(wideElement)));
@@ -265,17 +274,20 @@ public sealed class CombatFieldReaderTests
     [TestMethod]
     public void AnAreaReadListsMobileItemsAndCrittersOnlyFromAStrictSnapshot()
     {
-        // A sector-file (static) armour and a scenery object are not listed.
-        var armor = Row(7, 8114, Armor, Item(0));
-        var objects = new[]
-        {
-            Row(9, 6218, Weapon, WeaponValues()), Row(2, 28359, Npc, NpcValues()), Row(5, 4047, Scenery, Common()),
-            armor with { Key = armor.Key with { Kind = AreaSourceKind.Static, Sector = 1 } },
-        };
+        // A scenery object is not listed.
+        var objects = new[] { Row(9, 6218, Weapon, WeaponValues()), Row(2, 29001, Npc, NpcValues()), Row(5, 4047, Scenery, Common()) };
         var read = CombatFieldReader.ReadArea(Snapshot(objects));
         Assert.AreEqual(CombatFieldFailure.None, read.Failure);
-        CollectionAssert.AreEqual(new[] { (2, 28359), (9, 6218) }, read.Objects!.Select(o => (o.SourceIndex, o.Prototype)).ToArray());
+        CollectionAssert.AreEqual(new[] { (2, 29001), (9, 6218) }, read.Objects!.Select(o => (o.SourceIndex, o.Prototype)).ToArray());
         Assert.AreEqual(CombatFieldFailure.SnapshotNotStrict, CombatFieldReader.ReadArea(Snapshot(objects, strict: false)).Failure);
+
+        // A sector-file (static) item is refused, not skipped; a static scenery object is not an item.
+        var armor = Row(7, 8230, Armor, Item(0));
+        var withStatic = CombatFieldReader.ReadArea(Snapshot([.. objects, armor with { Key = armor.Key with { Kind = AreaSourceKind.Static, Sector = 1 } }]));
+        Assert.AreEqual((CombatFieldFailure.StaticObjectUnsupported, 7, Armor), (withStatic.Failure, withStatic.SourceIndex!.Value, withStatic.Detail!.Value));
+        Assert.IsNull(withStatic.Objects);
+        var scenery = objects[2];
+        Assert.AreEqual(CombatFieldFailure.None, CombatFieldReader.ReadArea(Snapshot([.. objects, scenery with { Key = scenery.Key with { Kind = AreaSourceKind.Static, Sector = 1, SourceIndex = 6 } }])).Failure);
 
         var broken = objects[1] with { EffectiveFields = objects[1].EffectiveFields.Where(f => f.Slot != 92).ToArray() };
         var refused = CombatFieldReader.ReadArea(Snapshot([objects[0], broken]));

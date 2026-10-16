@@ -26,21 +26,22 @@ Code: [`src/Arcanum.Data/Combat`](../../src/Arcanum.Data/Combat); tests:
   Origin `AreaObject`.
 - `CombatFieldReader.ReadArea(AreaSnapshot)` reads every mobile item and
   critter of a strictly published snapshot in source-index order; the first
-  refusal stops it.
+  refusal stops it. An item or critter from a sector file instead of the mobile
+  aggregate is refused (`StaticObjectUnsupported`), as the inventory view does.
 - `CombatFieldReader.WeaponSkill(flags, complexity, range, ammoType)` is the
   source's `item_weapon_skill` over stored fields; `SkillPoints` and
   `SkillTraining` split a stored skill value.
 
 Every result is a `CombatFieldRead` or `CombatAreaRead`: `Failure` `None` with
 fields, or a typed refusal (`PrototypeMissing`, `PrototypeAmbiguous`,
-`PrototypeInvalid`, `TypeUnsupported`, `SnapshotNotStrict`, `FieldUnresolved`,
+`PrototypeInvalid`, `TypeUnsupported`, `SnapshotNotStrict`, `StaticObjectUnsupported`, `FieldUnresolved`,
 `ArrayMalformed`) with the slot, prototype number or object type in `Detail`.
 No exception crosses the boundary except for null arguments and cancellation.
 
 ## What is read
 
 `CombatFields` holds the blocks that exist for the object's type: `Object`
-always, `Item` for types 5..14 with `Weapon` (5), `Ammo` (6) or `Armor` (7),
+always, `Item` for types 5..14 with `Weapon` (5), `Ammo` (6), `Armor` (7) or `Generic` (14),
 `Critter` for PCs and NPCs (15, 16) with `Npc` for NPCs. Slots are the v119
 layout of the StaticObjects loader, in the source's field order
 ([`obj.h`][obj-h]).
@@ -52,6 +53,7 @@ layout of the StaticObjects loader, in the source's field order
 | Weapon | 59..81 | weapon flags, to-hit bonus and magic adjustment, damage lower and upper (five types), magic damage adjustment, speed factor, range, minimum strength (each with its magic adjustment), ammunition type and consumption, critical hit and miss charts with magic chance and effect; derived skill |
 | Ammunition | 59..61 | flags, quantity, ammunition type |
 | Armour | 59..67 | armour flags, AC adjustment and magic adjustment, resistance adjustments and magic adjustments (five each), silent-move adjustment and magic adjustment, unarmed bonus damage |
+| Generic | 59..61 | generic flags (lockpick, trap device, healing item, grenade and others), usage bonus, remaining usage count |
 | Critter | 36..63 | critter flags and flags 2, 28 base stats, 12 basic and 4 tech skills, 25 spell/tech values, fatigue points, adjustment and damage, critical-hit body type, inventory source, auto-level scheme |
 | NPC | 69..92 | NPC flags, AI parameter row, experience worth and pool, faction, reaction base, social class, monster damage (five min/max pairs) |
 
@@ -64,8 +66,9 @@ A weapon without ammunition stores 10000 (`NoAmmo`); ammunition types are
 arrow 0, bullet 1, power cell 2, fuel 3 ([ammo][item-ammo]).
 
 Sparse arrays read like the source ([`sa_get`][sa-get]): a missing key, a null
-or an empty array is 0. A key outside the array's range or an element that is
-not one 32-bit word is `ArrayMalformed`; unsigned words are reinterpreted as
+or an empty array is 0. A key outside the array's range, which the source would
+simply never ask for, is refused as a deliberate fail-closed choice; it and an
+element that is not one 32-bit word are `ArrayMalformed`; unsigned words are reinterpreted as
 signed, so the stored "no mastery college" is −1. A scalar that is absent, null
 or not a number is `FieldUnresolved`.
 
@@ -98,9 +101,10 @@ tests: `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1/2`, `ARC_AREA_MOBILE`,
 `ARC_AREA_PROTOTYPES`, `ARC_CAVE_MOBILE`), first observation 2026-10-16:
 
 - **Crash Site exterior.** Every mobile item and critter reads. 25 creatures
-  (NPCs with a monster damage table, normal damage only) of five prototypes:
-  28359 (10 core + 3 context, 1–3), 27356 (3, 3–8), 28447 (3, 1–4), 27359
-  (1, 5–10, the only one holding a weapon: 6198 wielded, melee 2–6, speed 6)
+  (NPCs with a monster damage table, normal damage only, stored base HP 0) of
+  five prototypes: 28359 (10 core + 3 context, 1–3), 27356 (3, 3–8), 28447
+  (3, 1–4), 27359 (1, 5–10, the only creature holding anything: weapon 6198
+  wielded, melee 2–6, speed 6)
   and 28339 (5 context, 3–7). Virgil carries weapon 6057 unwielded (normal 1–4,
   fatigue 2–9) and wears armour 8114 (AC +3). Two weapons, four armour items,
   no ammunition.
@@ -110,7 +114,7 @@ tests: `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1/2`, `ARC_AREA_MOBILE`,
 - **All loose prototypes.** All 1,308 item and critter prototypes read
   (150 weapons: 89 melee, 12 bow, 8 throwing, 41 firearms; 4 ammunition,
   one per type, stack 10; 251 armour; 13 PCs; 497 NPCs); the other 115 are
-  refused as `TypeUnsupported`.
+  refused as `TypeUnsupported`. 148 generic items carry the generic block.
 
 These are reader acceptance checks, not the combat census: per-field
 distributions, AI rows, flags and first-fight candidates stay with ARC-RES-041.

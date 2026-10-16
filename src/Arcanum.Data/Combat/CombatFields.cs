@@ -64,6 +64,10 @@ public sealed record CombatArmorFields(CombatArmorFlags Flags, int ArmorClassAdj
     IReadOnlyList<int> ResistanceAdjustment, IReadOnlyList<int> MagicResistanceAdjustment, int SilentMoveAdjustment,
     int MagicSilentMoveAdjustment, int UnarmedBonusDamage);
 
+/// <summary>Generic item fields: flags (lockpick, trap device, healing item, grenade and others), usage bonus and remaining
+/// usage count. The AI finds grenades and healing items by these flags.</summary>
+public sealed record CombatGenericFields(uint Flags, int UsageBonus, int UsageCountRemaining);
+
 /// <summary>
 /// Critter (PC and NPC) fields as stored: <see cref="BaseStats"/> are the 28 base stats (strength 0 .. race 27), not the
 /// effective stats; <see cref="BasicSkills"/> (12) and <see cref="TechSkills"/> (4) hold points in bits 0..5 and training
@@ -82,11 +86,11 @@ public sealed record CombatNpcFields(uint Flags, int AiData, int ExperienceWorth
 
 /// <summary>
 /// The combat-relevant stored fields of one object (ARC-DATA-021): the common block always; the item block for items
-/// (types 5..14) with the weapon, ammunition or armour block for those types; the critter block for PCs and NPCs (15, 16)
+/// (types 5..14) with the weapon, ammunition, armour or generic block for those types; the critter block for PCs and NPCs (15, 16)
 /// with the NPC block for NPCs. Raw values only: no stat, effect, aptitude, difficulty or wielder is applied.
 /// </summary>
 public sealed record CombatFields(CombatFieldOrigin Origin, CombatObjectFields Object, CombatItemFields? Item, CombatWeaponFields? Weapon,
-    CombatAmmoFields? Ammo, CombatArmorFields? Armor, CombatCritterFields? Critter, CombatNpcFields? Npc);
+    CombatAmmoFields? Ammo, CombatArmorFields? Armor, CombatGenericFields? Generic, CombatCritterFields? Critter, CombatNpcFields? Npc);
 
 public enum CombatFieldFailure
 {
@@ -99,6 +103,9 @@ public enum CombatFieldFailure
     TypeUnsupported,
     /// <summary>An Area snapshot that is not strictly published.</summary>
     SnapshotNotStrict,
+    /// <summary>An item or critter of an Area snapshot that comes from a sector file, not the mobile aggregate
+    /// (<see cref="CombatAreaRead.Detail"/> is its type).</summary>
+    StaticObjectUnsupported,
     /// <summary>A mandatory field is absent or not a plain number (<see cref="CombatFieldRead.Detail"/> names its slot).</summary>
     FieldUnresolved,
     /// <summary>An array field that is not an int32 array, has an element of another width or a key outside its range.</summary>

@@ -57,6 +57,7 @@ public sealed class CombatFieldRealDataTests
                 CollectionAssert.AreEqual(expected.Stats, new[] { critter.BaseStats[0], critter.BaseStats[1], critter.BaseStats[2], critter.BaseStats[5], critter.BaseStats[17] }, row.SourceIndex.ToString());
                 CollectionAssert.AreEqual(expected.Resistances, row.Fields.Object.Resistances.ToArray(), row.SourceIndex.ToString());
                 Assert.IsTrue(critter.BasicSkills.All(s => s == 0), row.SourceIndex.ToString());
+                Assert.AreEqual(0, row.Fields.Object.HitPoints, "stored base HP");
             }
         }
 
@@ -65,7 +66,10 @@ public sealed class CombatFieldRealDataTests
             read.Objects!.Count(o => o.Fields.Ammo is not null)));
         var inventory = AreaInventoryReader.Read(snapshot).Inventory!;
 
-        // The armed creature 6460 wields weapon 70: melee 2-6, speed 6, range 1, minimum strength 3, technological 5.
+        // The armed creature 6460 (the only creature holding anything) wields weapon 70: melee 2-6, speed 6, range 1,
+        // minimum strength 3, technological 5.
+        CollectionAssert.AreEqual(new[] { (6460, 27359) }, creatures.Where(c => inventory.TryGetHolder(c.SourceIndex, out var h) && h.Items.Count > 0)
+            .Select(c => (c.SourceIndex, c.Prototype)).ToArray());
         Assert.IsTrue(inventory.TryGetHolder(6460, out var armed));
         CollectionAssert.AreEqual(new[] { 70 }, armed.Items.ToArray());
         var dagger = objects[70].Fields;
@@ -149,7 +153,10 @@ public sealed class CombatFieldRealDataTests
         // projectiles and traps are not combat items.
         Assert.AreEqual((150, 4, 251, 13, 497), (byType[5], byType[6], byType[7], byType[15], byType[16]));
         Assert.AreEqual(1308, byType.Values.Sum());
-        Assert.IsTrue(reads.Where(r => r.Read.Failure == CombatFieldFailure.TypeUnsupported).All(r => r.Read.Detail is (>= 0 and <= 4) or 17));
+        var unsupported = reads.Where(r => r.Read.Failure == CombatFieldFailure.TypeUnsupported).ToArray();
+        Assert.AreEqual(115, unsupported.Length);
+        Assert.IsTrue(unsupported.All(r => r.Read.Detail is (>= 0 and <= 4) or 17));
+        Assert.AreEqual(148, reads.Count(r => r.Read.Fields?.Generic is not null));
         var skills = reads.Select(r => r.Read.Fields?.Weapon?.Skill).OfType<CombatWeaponSkill>().GroupBy(s => s).ToDictionary(g => g.Key, g => g.Count());
         Assert.AreEqual((89, 12, 8, 41), (skills[CombatWeaponSkill.Melee], skills[CombatWeaponSkill.Bow], skills[CombatWeaponSkill.Throwing], skills[CombatWeaponSkill.Firearms]));
         // One ammunition prototype per type, stack 10.
