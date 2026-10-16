@@ -321,8 +321,18 @@ the load with the owner's input error instead of the viewer's. Same test-host me
 | Debug load | 6.9–7.6 s | 6.2–6.9 s |
 
 Removing more of the owner's passes (parallel hashing inside the owner, or skipping I0
-right after opening) would change the tested authentication contract and is left to the
+right after opening) would change the tested authentication contract and was left to the
 owner's decision.
+
+**Owner passes (owner-approved contract change).** The first strict build after `Open`
+now uses the open-time hashes as its I0 (keeping the cheap path and length checks), and
+whole-set passes hash inputs of 1 MiB and more in parallel; see the [loader
+contract](../world/crash-site-area-loader.md). That removes one 0.96 GB pass per owner
+(two per load) and shortens I7, the frame batch's `Complete` and later I0 passes to
+about the largest input. Alternating Release test-host runs of the same build with the
+old behaviour switched back on by a temporary flag, on a machine busy with other
+sessions: 8.0–11.7 s with the old passes, 4.8–7.6 s with the new ones (two loads per
+run, four runs).
 
 ## Recommended order
 
@@ -330,8 +340,8 @@ owner's decision.
 2. L-A Release assemblies for daily runs: halves the load (done, release export).
 3. F-C chunk composition (done as parallel composition), then F-B spatial index (done):
    most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
-4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (partly done
-   outside the owner, about 0.5 s; the owner's own passes are an owner decision).
+4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (done: outside
+   the owner, then inside it after the owner's approval).
 5. D-A (done), I-A and M-A (dropped, see above).
 6. Later, only if needed: L-D parallel decode, F-D body batching, L-F persistent
    cache.
