@@ -8,13 +8,14 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
 regression_task=$task
 # ARC-INPUT-001 (diagnostic palette) is delivered on the whole-core AREA build and
 # keeps every ARC-RENDER-007 gate; its palette matrices run in the synthetic gates.
+# ARC-WORLD-007 (LMB click-to-move) likewise; its route matrix runs in the area-grid probe.
 area_task=0
-case "$task" in ARC-RENDER-007|ARC-INPUT-001) area_task=1; regression_task=ARC-WORLD-003 ;; esac
+case "$task" in ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003 ;; esac
 if test "$build_root" != "$main_root/artifacts/$artifact_dir/$task/$head"; then printf '%s\n' 'Build root must bind the closed exact-head terrain task.' >&2; exit 2; fi
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then

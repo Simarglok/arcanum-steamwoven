@@ -14,7 +14,7 @@ KM-01, KM-02, KM-05, KM-06, KM-07, KM-09 (variant B, chosen 2026-10-04), KM-10, 
 | `F` Fit, `R` reset scene, `L` reload | palette buttons **Fit**, **Reset scene**, **Reload current source** |
 | wheel and `+`/`-` world zoom | palette exact zoom: **100% (1.00)**, **200% (2.00)**, 300% (3.00) and the numeric editor (current zoom) |
 | W/A/S/D moved the actor by screen sectors | keyboard has **no actor route**; the gamepad left stick keeps the eight screen sectors |
-| left drag panned the camera; LMB could act as Confirm | LMB in the world does nothing yet (click-to-move is **PENDING**) |
+| left drag panned the camera; LMB could act as Confirm | LMB never drags or confirms; in `crash-site-area` an LMB press on the ground sets the [click-to-move goal](../world/click-route-runtime.md#viewer-binding-stage-2) (ARC-WORLD-007), in `world-diagnostic` it does nothing |
 | arrows panned with the camera inversion setting | arrows pan with **one fixed direction** (KM-05); inversion applies to the right stick only |
 | Escape left fullscreen | Escape is the reserved original game-menu key; F11 still toggles fullscreen as a host window control |
 

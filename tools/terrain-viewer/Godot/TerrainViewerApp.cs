@@ -230,6 +230,8 @@ public partial class TerrainViewerApp : Node
     {
         RetireWorldLifecycle();
         _worldActor.DisposeSession(); _worldGridInput = new();
+        // A disposed session's follower must not keep its step snapshot reachable.
+        _worldRoute = null; _worldRouteSession = null;
         ClearReadyMetrics();
         _canvas!.ClearScene();
         _cache.Clear();

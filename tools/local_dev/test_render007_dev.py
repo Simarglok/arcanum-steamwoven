@@ -106,13 +106,33 @@ class Render007DevTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
         tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
-        self.assertIn("ARC-RENDER-007|ARC-INPUT-001) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
         writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
         self.assertEqual("world-builds", writer["TASKS"]["ARC-INPUT-001"])
         self.assertIn("ARC-INPUT-001", writer["AREA_TASKS"])
         with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
             with self.assertRaises(ValueError):
                 grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-INPUT-001")
+
+    def test_world007_binds_literally_to_the_area_gate_set(self):
+        # ARC-WORLD-007 (LMB click-to-move) ships on the same whole-core AREA build; its route
+        # matrix runs inside the area-grid probe, so the gate set is exactly ARC-RENDER-007's.
+        self.assertIn("ARC-WORLD-007", manifests.SUPPORTED_TOOLS["terrain"])
+        self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for("ARC-WORLD-007"))
+        self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES["ARC-WORLD-007"])
+        self.assertIn("ARC-WORLD-007", retention.AREA_TASKS)
+        for other in ("ARC-WORLD-008", "ARC-WORLD-009", "ARC-WORLD"):
+            self.assertNotIn(other, manifests.SUPPORTED_TOOLS["terrain"])
+            with self.assertRaises(ValueError):
+                grid_export_gates.gates_for(other)
+        tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
+        self.assertEqual("world-builds", writer["TASKS"]["ARC-WORLD-007"])
+        self.assertIn("ARC-WORLD-007", writer["AREA_TASKS"])
+        with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
+            with self.assertRaises(ValueError):
+                grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-WORLD-007")
 
 
 if __name__ == "__main__":

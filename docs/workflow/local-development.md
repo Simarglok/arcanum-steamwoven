@@ -8,14 +8,14 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-INPUT-001 build, else ARC-RENDER-007
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-007 build, else ARC-INPUT-001, else ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` tries its tasks in the
-fixed order ARC-INPUT-001 (the same AREA build plus the [diagnostic palette](../input/diagnostic-palette.md)),
-then ARC-RENDER-007; a real run leaves the terrain
+fixed order ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
+ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
@@ -137,8 +137,16 @@ gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003
 and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
 `crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
-an exact ARC-RENDER-007 or ARC-INPUT-001 v2 artifact and nothing broader. The
-owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+an exact ARC-RENDER-007, ARC-INPUT-001 or ARC-WORLD-007 v2 artifact and nothing
+broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+
+## Click-to-move candidate (ARC-WORLD-007)
+
+ARC-WORLD-007 uses the same endpoint, root and literal task mechanism
+(`ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-007`) with exactly the ARC-RENDER-007 gate
+set. Its route matrix runs inside the source and exported `area-grid` probes
+(`ARC-WORLD-007 AREA route synthetic PASS`, a failure exits non-zero), and its
+grid-original reports must carry the keyboard route like ARC-INPUT-001's.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 

@@ -207,7 +207,7 @@ public partial class TerrainViewerApp
                 if (WorldModal) ToggleWorldSettings();
                 GetViewport().GuiReleaseFocus(); WorldFocusForSelfTest(true); ResetWorldScene(); WorldSettleForSelfTest(); Frame(); Frame(); Frame();
                 var actor = _worldActor.State;
-                // A world LMB with the palette closed is inert (click-to-move pending).
+                // A world LMB with the palette closed is inert: world-diagnostic has no click route.
                 var camera = _camera!.State; var follow = _camera.FollowState;
                 await Click(WorldViewport - new Vector2(40, 40)); Frame();
                 Require(_worldActor.State == actor && _camera.State == camera && _camera.FollowState == follow && !WorldModal, "world LMB acted");

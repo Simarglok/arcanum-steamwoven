@@ -313,6 +313,14 @@ canopy-only negative controls; actual rectangles are logged before asserting.
 The matrix owns its simulated focus: native window focus belongs to the
 separate WORLD main-window probe, not to whichever application holds the desktop.
 
+Next it runs the ARC-WORLD-007 [click-to-move](../world/click-route-runtime.md)
+route matrix on the same fixture: clicks through the production `_UnhandledInput`
+seam and `SubViewport.PushInput` (a HUD click is consumed by GUI), a detour around
+the 5,1 blocker, a new click mid-step, the same goal kept, a stick takeover, a click
+just before a stick release, the
+palette stop with the started step ending at its cell centre, and an occupied goal
+(`ARC-WORLD-007 AREA route synthetic PASS`).
+
 The same probe then runs the AREA camera matrix: R restores the stored preferred
 zoom in Follow; Fit centers the complete envelope, reports `Fit limited by
 minimum zoom` at 0.125 and leaves the preference unchanged; keyboard camera pans
