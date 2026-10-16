@@ -8,8 +8,10 @@ Godot-independent and read-only. Independently authored from the pinned CE
 behaviour cited below; no CE code or structure is reused.
 
 **Status:** the reader, catalog and resolver are merged with synthetic tests and
-one opt-in real-data check. **NOT READY:** no consumer is wired yet (the AREA
-viewer, conversation and session do not call it), there is no examine/hover UI, no
+one opt-in real-data check. The AREA viewer's hover tooltip
+([ARC-UI-005](../rendering/terrain-viewer.md#hover-tooltip-and-action-cursor-arc-ui-005)) is the
+first consumer. **NOT READY:** the conversation and session do not call it, there is no
+examine panel, no "met before" recognition (the hover shows every NPC unmet), no
 identification state change, no item effect lines, no quantity text and no
 localization other than the declared byte profiles below.
 

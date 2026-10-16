@@ -48,21 +48,12 @@ public partial class TerrainViewerApp
         return (world.X, world.Y);
     }
 
-    /// <summary>The dialog NPC whose drawn sprite has an opaque pixel under the screen point, if any.</summary>
+    /// <summary>The dialog NPC that is the frontmost pickable object under the screen point, if any (ARC-UI-005 pick:
+    /// an NPC behind another opaque, not click-through sprite is not clicked through it).</summary>
     private AreaSpeaker? SpeakerAtScreen(Vector2 screen)
     {
-        if (!TalkMapActive || _readyArea is not { } area) return null;
-        var transform = AreaDrawItem.RasterTransform(GetViewport());
-        var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
-        for (var index = area.Plan.Commands.Count - 1; index >= 0; index--)
-        {
-            var command = area.Plan.Commands[index];
-            if (command.Identity is not { } identity || command.Additive) continue;
-            if (AreaAlphaAt(command, area.Frames, transform, sx, sy) == 0) continue;
-            // The frontmost opaque body decides: an NPC hidden behind another sprite is not clicked through it.
-            return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity);
-        }
-        return null;
+        if (!TalkMapActive || AreaObjectAtScreen(screen) is not { } identity) return null;
+        return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity);
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC.</summary>

@@ -374,8 +374,8 @@ cave under its pinned profile (`OpenCaveFiles`), its scene plan on its own chart
 (origin of sector (32,31), start at the entrance's authored arrival (2087,2018))
 and its step evidence with wall edges.
 
-- **Use.** A left press whose screen pixel is an opaque pixel of the entrance or
-  exit sprite is the original use action. It arrives through the ground-click path
+- **Use.** A left press whose [hover pick](#hover-tooltip-and-action-cursor-arc-ui-005) is the
+  entrance or exit object is the original use action. It arrives through the ground-click path
   (`_UnhandledInput`, so a HUD or palette click never reaches it) under the same
   focus, modal, safety-gate and reset/reload guards as a click-to-move goal. `AreaTransitionCoordinator` accepts it
   within Chebyshev distance 2 of the object when the object's tile is not
@@ -548,6 +548,74 @@ unchanged, the entrance into the cave, F8 back to the saved exterior cell under 
 session, then a damaged file makes F8 fail without changing the session or map; it
 prints `ARC-WORLD-011 native-smoke quicksave PASS`. Core rules are covered by
 `AreaQuickSaveTests` (terrain viewer tests) and `SaveSlotTests` (session tests).
+
+### Hover tooltip and action cursor (ARC-UI-005)
+
+In `crash-site-area` the pointer names the object under it and the cursor shows what a
+left click would do there (FR-UI-005). Nothing is clicked or changed by hovering.
+
+- **Pick.** The object under the pointer is the frontmost drawn body with an opaque pixel
+  there, skipping bodies whose `OBJ_F_FLAGS` has `OF_CLICK_THROUGH` (0x800), as the
+  original's screen pick does ([CE `sub_43D9F0`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1792-L1990)).
+  On the installed Crash Site exterior 419 of the 426 drawn scenery bodies (trees, plants,
+  blood) are click-through, so 80 bodies can be hovered: 2 containers, 7 scenery, 21 food,
+  16 generic items and 34 NPCs. A wall drawn faded near the actor (ARC-RENDER-011) is
+  see-through for the pick, as the original skips walls flagged `OWAF_TRANS_LEFT`/`RIGHT`.
+  The talk click and the cave use click take the same pick, so a click acts on the object
+  the tooltip names. Before ARC-UI-005 the talk click took the frontmost opaque non-additive
+  body, click-through ones included, and the use click took any opaque trigger pixel
+  whatever was drawn in front; now click-through bodies never block and additive bodies do,
+  as in the original. Not modelled: the original's 5×5 pixel fallback and the
+  objects-on-the-tile fallback, the roof hit test, and the diagnostic actor, which is not a
+  hover target and does not hide objects behind it.
+- **Tooltip.** The name is `ObjectDisplayName` ([MES reader](../formats/mes-reader.md#which-name-is-shown))
+  decoded as Windows-1252, with a second line `Left click: <action>`. As in the original's
+  message window, walls and projectiles are picked but show nothing, and an empty or
+  missing description shows nothing. Every NPC is shown as not yet met (its unknown
+  description, which for Virgil is a generic one, not his name), which is the new-game state: "met before" is not
+  session state yet ([reaction research R6](../research/npc-reaction-reputation-evidence.md)),
+  so the name does not change after the first talk (NOT READY). The tooltip sits below
+  right of the pointer and flips inside the window; it is recomputed when the pointer, the
+  camera, the map, the actor's cell or the input guards change, so it never stays on an
+  old position. The area status line repeats it as `hover <name> -> <action>`.
+- **Names.** The description tables come from the content stack of the game folder that
+  holds the area's module archive (`<game>/modules/<Name>.dat`, the installed layout; the
+  mounted module archive must be that same file). They load once in the background
+  (about 0.2 s on the owner's installation) and are kept across reloads and the cave.
+  Without them (another layout, a mount or parse failure) the tooltip names the object
+  type, e.g. `[NPC: name unavailable]`, and the status line gives the status (never a path).
+- **Action cursor.** Project policy, not original behaviour: the original main-mode cursor
+  changes with weapon and called-shot keys, not with the target
+  ([CE `intgame_refresh_cursor`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L6150-L6190)).
+  The decision follows `WorldRouteClick` in its order and guards without running it:
+  a dialog NPC is *talk* within the 3-tile reach, else *walk to talk*; the cave
+  entrance or exit is *use* within use range 2, else *walk to use*; anything else is a
+  ground goal: *no route* when the route planner refuses it without a search (the cell or
+  the actor outside the area, the goal more than 32 cells from the actor on an axis, or no
+  neighbour step entering the cell), else *walk here*. The bounded search itself is not run
+  on hover, so a *walk here* goal can still end without a route; the reach is measured from
+  the committed cell, while during a step the route plans from the step's target cell, so a
+  goal exactly at the 32-cell edge can differ by one. System cursor shapes: cross for walk,
+  forbidden for no route, help (question arrow) for talk, pointing hand for use, arrow
+  otherwise. A use or talk that is then refused (blocked step, no standable cell) is
+  reported by the click as before; the cursor shows the intent.
+- **Guards.** Over HUD or palette controls, outside the window, without window focus or
+  with the palette or a dialog open there is no tooltip and the arrow cursor. While the
+  safety gate is closed, a reset/reload is pending or a map transfer is queued, the name
+  stays and no action is shown, because the click would be ignored.
+
+Checks: `AreaHoverTests` (pick order and click-through, name chain and fallbacks,
+Windows-1252, the planner refusals and goal pre-check, game-folder rules), the opt-in `AreaHoverOriginalTests`
+(counts above, every pickable body named, Virgil's unknown description), the
+self-test `ARC-UI-005 self-test PASS` over the synthetic owner (tooltip, both ground
+outcomes, the left click on the hovered body sets that cell as goal, GUI under the pointer,
+modal, closed gate, focus and window guards, injected names) and, with the cave input, the native smoke
+`ARC-UI-005 native-smoke hover PASS` and, in the cave, `ARC-UI-005 native-smoke faded-wall
+pick PASS` (a faded wall is never picked, the same wall drawn opaque is) (Virgil walk to talk with his unknown description, the
+entrance walk to use, click-through sprites passed through to the body behind, the press
+does what the cursor showed). Not
+verified: original cursor or message-window parity, hover art (the animated underlay), a
+human on a physical mouse and display.
 
 ## Verification and evidence status
 

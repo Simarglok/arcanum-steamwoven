@@ -67,6 +67,19 @@ public partial class TerrainViewerApp
             }
             if (walls.Length == 0 || changed == 0 || outside != 0 || unstable != 0)
                 throw new InvalidOperationException($"AREA_WALL_FADE_NOT_OBSERVED visible={walls.Length} changed={changed} outside={outside} unstable={unstable}");
+            // ARC-UI-005: a faded wall is see-through for the pick (original OWAF_TRANS_LEFT/RIGHT); drawn opaque it is picked.
+            var wallKeys = state.Fades.Keys.ToHashSet();
+            var wallPixels = new List<Vector2>();
+            for (var y = 0; y < faded.GetHeight() && wallPixels.Count < 400; y += 3)
+            for (var x = 0; x < width && wallPixels.Count < 400; x += 3)
+                if (walls.Any(command => AreaAlphaAt(command, _readyArea!.Frames, transform, x, y) != 0)) wallPixels.Add(new(x + .5f, y + .5f));
+            var pickedFaded = wallPixels.Count(p => AreaObjectAtScreen(p) is { } key && wallKeys.Contains(key));
+            _canvas.SetAreaWallFades(null);
+            var pickedOpaque = wallPixels.Count(p => AreaObjectAtScreen(p) is { } key && wallKeys.Contains(key));
+            _canvas.SetAreaWallFades(state.Fades);
+            if (wallPixels.Count == 0 || pickedFaded != 0 || pickedOpaque == 0)
+                throw new InvalidOperationException($"AREA_FADED_WALL_PICK pixels={wallPixels.Count} faded={pickedFaded} opaque={pickedOpaque}");
+            GD.Print($"ARC-UI-005 native-smoke faded-wall pick PASS pixels={wallPixels.Count} pickedWhenFaded=0 pickedWhenOpaque={pickedOpaque}");
             if (!string.IsNullOrWhiteSpace(capture)
                 && (faded.SavePng(capture + "-walls-faded.png") != Error.Ok || opaque.SavePng(capture + "-walls-opaque.png") != Error.Ok))
                 throw new InvalidOperationException("AREA_WALL_CAPTURE_FAILED");
