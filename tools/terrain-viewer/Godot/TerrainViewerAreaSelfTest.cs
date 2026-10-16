@@ -77,17 +77,33 @@ public static partial class TerrainViewerSelfTest
                     throw new InvalidOperationException("AREA fixture occurrence/residency reconciliation");
             }
             var created=cache.CreatedCount;
+            // Default residency keeps a frame that left the view (LRU retention) ...
             viewport.CanvasTransform=new Transform2D(0,new Vector2(2000,2000)); await Settle();
-            if (cache.AreaCount != 0 || canvas.AreaVisibleCount != 0 || canvas.AreaCulledCount != 1)
-                throw new InvalidOperationException("AREA offscreen eviction");
+            if (cache.AreaCount != 1 || cache.AreaRgbaBytes != 160*160*4 || canvas.AreaVisibleCount != 0 || canvas.AreaCulledCount != 1)
+                throw new InvalidOperationException("AREA offscreen retention");
             viewport.CanvasTransform=new Transform2D(0,new Vector2(100,100)); await Settle();
-            if (cache.AreaCount != 1 || cache.CreatedCount != created+1)
-                throw new InvalidOperationException("AREA pan reupload/dedup");
+            if (cache.AreaCount != 1 || cache.CreatedCount != created)
+                throw new InvalidOperationException("AREA pan reuse of a retained frame");
+            // ... and with no retention it is evicted offscreen and uploaded again on return.
+            using (var strict = new TerrainTextureCache { AreaRetainFrames = 0 })
+            {
+                strict.UploadActor(synthetic.Result.ActorTextures);
+                canvas.PublishArea(plan,frames,actor,input,strict); await Settle();
+                var strictCreated=strict.CreatedCount;
+                viewport.CanvasTransform=new Transform2D(0,new Vector2(2000,2000)); await Settle();
+                if (strict.AreaCount != 0 || strict.AreaRgbaBytes != 0 || canvas.AreaVisibleCount != 0)
+                    throw new InvalidOperationException("AREA offscreen eviction without retention");
+                viewport.CanvasTransform=new Transform2D(0,new Vector2(100,100)); await Settle();
+                if (strict.AreaCount != 1 || strict.CreatedCount != strictCreated+1)
+                    throw new InvalidOperationException("AREA pan reupload without retention");
+                canvas.PublishArea(plan,frames,actor,input,cache); await Settle();
+            }
             // Same camera and actor, different immutable generation: replacement
-            // must invalidate culling and never keep the retired scene's command.
+            // must invalidate culling and never keep the retired scene's command
+            // (its frame may stay retained in the same repository).
             var next = AreaScenePlan.Create([], [body with {WorldX=93000}], [bv]);
             canvas.PublishArea(next,frames,actor,input,cache); await Settle();
-            if (canvas.AreaVisibleCount != 0 || cache.AreaCount != 0)
+            if (canvas.AreaVisibleCount != 0 || canvas.AreaVisibleCommands.Count != 0 || cache.AreaCount != 1)
                 throw new InvalidOperationException("AREA stale generation command");
             // Pool bound: after a large submission shrinks, at most max(256, 2 x visible)
             // draw items remain, and growing again reuses them.

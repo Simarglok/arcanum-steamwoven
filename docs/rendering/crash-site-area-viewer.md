@@ -140,8 +140,12 @@ The CPU repository is limited to 2,444 frames and 81,853,096 packed RGBA bytes.
 Visible GPU uploads have the same area count/byte envelope; the controlled actor
 retains its separate closed catalogue. Keys include source entry/payload, view,
 policy, physical selection, effective palette and output identity. Occurrences
-remain separate commands even when their frame is shared. Camera pan can evict
-and reupload GPU textures from retained CPU copies without another DATA decode.
+remain separate commands even when their frame is shared. Frames that leave the
+view stay uploaded within a least-recently-used allowance of 512 frames and 32 MiB
+beyond the visible set; older ones are evicted and reuploaded from retained CPU
+copies without another DATA decode. A different frame repository (a new load)
+releases every area frame texture first, so equal keys never reuse another load's
+pixels.
 Integer sampling metadata has a separate 16 MiB cap. Terrain chunk textures have
 their own 192 MiB / 1,024-texture cap, with chunks of the current view never evicted
 and older chunks evicted least recently used; terrain frames are uploaded only when
@@ -155,6 +159,15 @@ coverage reports compare source occurrences, selected appearances, eligibility,
 commands and observed samples against an independent original oracle. Original
 frame proofs, screenshots, paths and detailed reports stay ignored/local and
 must not enter Git or an app payload.
+
+In an interactive run the viewer caps its frame rate (`FramePacingPolicy`): at
+the current display's refresh rate while input is held or recent (0.5 s) or the
+camera moves, and at 60 FPS (or the display rate, if lower) otherwise. The engine
+cap is corrected once per second from the measured rate, within 1–4 times the
+target, because Godot's limiter alone undershoots on macOS. The per-frame WORLD
+status line is rebuilt at most ten times per second; event-driven refreshes stay
+immediate. Self-tests and the native smoke run uncapped with per-frame status.
+These are interactive comfort policies, not frame-time guarantees.
 
 ## Independent synthetic checks
 
@@ -335,9 +348,12 @@ intact, so a corrected run needs a new committed head.
 
 After its sampled-pixel stage, the original `crash-site-area` native smoke
 measures resources on the published area. A zoom-1 sweep tiles the whole
-envelope; every one of the 37,363 commands must be submitted at least once while
-GPU residency stays within the 2,444-frame/81,853,096-byte admission caps, and
-textures are evicted and reuploaded from the unchanged CPU repository. Two
+envelope twice, first with terrain chunks (the default) and then with per-command
+terrain; every one of the 37,363 commands must be submitted at least once per
+sweep while visible GPU residency stays within the 2,444-frame/81,853,096-byte
+admission caps and chunks within their own cap. Both caches must exceed their
+allowance and evict: chunks in the first sweep, frame textures (reuploaded from
+the unchanged CPU repository) in the second. Two
 overlapped production reloads follow: the cancelled first generation must not
 publish, and the successor must show the same fresh-owner usage counters. After
 the replaced generation the retired load result and its frame repository must

@@ -10,7 +10,8 @@ public static partial class TerrainViewerSelfTest
 {
     private static async Task AssertAreaCompositionMatrixAsync(Node host)
     {
-        using var cache = new TerrainTextureCache();
+        // Exact visible residency is asserted below: no LRU retention.
+        using var cache = new TerrainTextureCache { AreaRetainFrames = 0 };
         var synthetic = SyntheticActorFixture.Create(human:true);
         cache.UploadActor(synthetic.Result.ActorTextures);
         var viewport = new SubViewport { Size=new(480,400),TransparentBg=true,RenderTargetUpdateMode=SubViewport.UpdateMode.Always };

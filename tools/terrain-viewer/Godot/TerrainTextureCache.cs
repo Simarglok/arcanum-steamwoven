@@ -10,8 +10,16 @@ public sealed class TerrainTextureCache : IDisposable
     private readonly Dictionary<StaticSceneryTextureKey, ImageTexture> _staticTextures = new();
     private readonly Dictionary<ActorDiagnosticTextureKey, ImageTexture> _actorTextures = new();
     private readonly Dictionary<AreaFrameKey, ImageTexture> _areaTextures = new();
+    private readonly Dictionary<AreaFrameKey, (long Bytes, long LastUse)> _areaUse = new();
+    private long _areaSubmission;
+    private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaRepository;
     public int AreaCount => _areaTextures.Count;
+    /// <summary>RGBA bytes of every resident area frame texture, visible or retained.</summary>
     public long AreaRgbaBytes { get; private set; }
+    /// <summary>Frames that left the view stay resident, least recently used evicted first,
+    /// while at most this many frames and bytes are retained beyond the visible set.</summary>
+    public int AreaRetainFrames { get; init; } = 512;
+    public long AreaRetainBytes { get; init; } = 32L * 1024 * 1024;
     private readonly Func<Image, ImageTexture> _createTexture;
     private readonly Action<ImageTexture> _disposeTexture;
 
@@ -63,13 +71,28 @@ public sealed class TerrainTextureCache : IDisposable
     public bool TryGet(AreaFrameKey key, out ImageTexture texture) => _areaTextures.TryGetValue(key, out texture!);
 
     /// <summary>All-or-fail visible residency, from the bounded CPU repository.
-    /// No lease/decode runs on pan. Dispose offscreen GPU allocations first.</summary>
+    /// No lease/decode runs on pan. Frames that left the view are retained within
+    /// <see cref="AreaRetainFrames"/>/<see cref="AreaRetainBytes"/>, least recently used
+    /// evicted first, before any new upload. A different repository (a new load or
+    /// fixture) owns its own pixels for equal keys, so every area texture is released.</summary>
     public void UploadAreaVisible(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames, IReadOnlySet<AreaFrameKey> visible)
     {
+        if (!ReferenceEquals(_areaRepository, frames))
+        {
+            foreach (var texture in _areaTextures.Values) DisposeTexture(texture);
+            _areaTextures.Clear(); _areaUse.Clear(); AreaRgbaBytes = 0; _areaRepository = frames;
+        }
         var bytes = visible.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
         if (visible.Count > AreaRepositoryPolicy.MaxFrames || bytes > AreaRepositoryPolicy.MaxCpuBytes) throw new InvalidOperationException("AREA_GPU_BUDGET");
-        foreach (var key in _areaTextures.Keys.Where(key => !visible.Contains(key)).ToArray())
-        { DisposeTexture(_areaTextures[key]); _areaTextures.Remove(key); }
+        _areaSubmission++;
+        var retained = _areaTextures.Keys.Where(key => !visible.Contains(key)).OrderBy(key => _areaUse[key].LastUse).ToList();
+        var retainedBytes = retained.Sum(key => _areaUse[key].Bytes); var retainedCount = retained.Count;
+        foreach (var key in retained)
+        {
+            if (retainedCount <= AreaRetainFrames && retainedBytes <= AreaRetainBytes) break;
+            DisposeTexture(_areaTextures[key]); _areaTextures.Remove(key);
+            retainedBytes -= _areaUse[key].Bytes; _areaUse.Remove(key); retainedCount--;
+        }
         var uploaded = new List<AreaFrameKey>();
         try
         {
@@ -82,11 +105,12 @@ public sealed class TerrainTextureCache : IDisposable
                 var texture = _createTexture(image); CreatedCount++;
                 _areaTextures.Add(key, texture); uploaded.Add(key);
             }
-            AreaRgbaBytes = bytes;
+            foreach (var key in visible) _areaUse[key] = (checked((long)frames[key].Width * frames[key].Height * 4), _areaSubmission);
+            AreaRgbaBytes = checked(bytes + retainedBytes);
         }
         catch
         {
-            foreach (var key in uploaded) { DisposeTexture(_areaTextures[key]); _areaTextures.Remove(key); }
+            foreach (var key in uploaded) { DisposeTexture(_areaTextures[key]); _areaTextures.Remove(key); _areaUse.Remove(key); }
             AreaRgbaBytes = _areaTextures.Keys.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
             throw;
         }
@@ -200,7 +224,7 @@ public sealed class TerrainTextureCache : IDisposable
         _textures.Clear();
         _staticTextures.Clear();
         _actorTextures.Clear();
-        _areaTextures.Clear(); AreaRgbaBytes = 0;
+        _areaTextures.Clear(); _areaUse.Clear(); _areaRepository = null; AreaRgbaBytes = 0;
     }
 
     public void Dispose() => Clear();
