@@ -163,6 +163,12 @@ class AreaValidationTests(unittest.TestCase):
             originalAppearanceCoverage='PASS',drawCoverage='PASS',coreTerrain=36864,coreBodies=499,notApplicable=15,submitted=37363,
             resources=area.resource_summary(RESOURCES))
         area.validate_report(good,head,'source')
+        # Items picked up before the sweep keep the receipt valid only inside the bound.
+        area.validate_report(good|{'resources':good['resources']|{'sweepCommands':37361,'sweepTaken':2}},head,'source')
+        for taken in ({'sweepCommands':37364,'sweepTaken':-1},{'sweepCommands':37363-17,'sweepTaken':17},
+                      {'sweepCommands':37361,'sweepTaken':True},{'sweepCommands':37361,'sweepTaken':'2'},{'sweepCommands':37361,'sweepTaken':1}):
+            with self.subTest(taken=taken),self.assertRaises(ValueError):
+                area.validate_report(good|{'resources':good['resources']|taken},head,'source')
         for change in ({'task':'ARC-WORLD-003'},{'candidateCommit':'b'*40},{'host':'exported'}, {'graphical':False},
                        {'exitCode':1},{'drawCoverage':'NOT_VERIFIED'},{'submitted':37362},{'resources':None}):
             with self.subTest(change=change),self.assertRaises(ValueError):area.validate_report(good|change,head,'source')

@@ -512,6 +512,7 @@ def validate_report(report: object, head: str, host: str, task: str = 'ARC-RENDE
     resources = report.get('resources')
     _require(isinstance(resources, dict) and resources.get('outcome') == 'PASS'
              and type(resources.get('sweepCommands')) is int and type(resources.get('sweepTaken', 0)) is int
+             and 0 <= resources.get('sweepTaken', 0) <= MAX_SWEEP_TAKEN
              and resources.get('sweepCommands') + resources.get('sweepTaken', 0) == 37363, 'area resource observation')
     # The summary task names the gate schema; the cave receipt binds the export task's own smoke.
     _require(report.get('caveTransition') == ('PASS' if task in CAVE_TASKS else None), 'area cave transition binding')
