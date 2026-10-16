@@ -16,9 +16,10 @@ summarizes the project and points to them.
   profiles, logs with secrets) and do not run `hermes`.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
-  subagent on the exact diff first. The owner merges PRs unless the owner
-  authorized the agent to merge, for the task or as a standing project
-  instruction (`docs/workflow/tasks.md`).
+  subagent on the exact diff first. Once the acceptance criteria, task checks and
+  root checks pass and the review is addressed, merge the PR yourself and report
+  it, unless the owner explicitly asked to review it; then leave it open for the
+  owner (`docs/workflow/tasks.md`).
 - **Stop and ask** when something you need is missing, a fix would change the
   task's contract, or the same failure repeats twice; offer options. Do not guess,
   mock or loop.
@@ -58,7 +59,7 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
 - Hard rules: no original/extracted game content, toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
   are ignored); synthetic fixtures only; no mechanical copying/translation from CE;
-  record provenance; GitHub account `Simarglok` only; merge only as the owner authorizes.
+  record provenance; GitHub account `Simarglok` only; agent merges unless the owner explicitly asked to review.
 - Style: dense, defensive, immutable records; explicit limits/options objects;
   typed failure results instead of exceptions at runtime boundaries; docs state
   scope and "NOT READY" boundaries precisely.

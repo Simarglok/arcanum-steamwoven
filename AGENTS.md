@@ -47,4 +47,4 @@ For this project, use the GitHub account `Simarglok`, not a bot or other account
 
 Independent review targets the exact candidate diff before the PR is opened. Report Implemented, Not implemented, Remaining work, checks and material uncertainties.
 
-Publish a PR only when the accepted task authorizes it. The owner merges unless the owner authorized the agent to merge for the task or as a standing project instruction; then follow [review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge). A narrower task restriction still applies. Never start new work based solely on an Obsidian note or a proposed milestone.
+Publish a PR only when the accepted task authorizes it. The agent merges its own PR once the acceptance criteria, task and root checks pass and the review is addressed, unless the owner explicitly asked to review it; follow [review, publication and merge](docs/workflow/tasks.md#review-publication-and-merge). A narrower task restriction still applies. Never start new work based solely on an Obsidian note or a proposed milestone.
