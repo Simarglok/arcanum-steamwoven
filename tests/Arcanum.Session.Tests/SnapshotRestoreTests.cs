@@ -126,25 +126,28 @@ public sealed class SnapshotRestoreTests
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":8,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":9,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         // Schema 1 (no story, no lighting), schema 2 (story without lighting), schema 3 (no party), schema 4 (no inventory),
-        // schema 5 (no hero, no gold) and schema 6 (no random) are refused, not migrated.
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + LightingTail, "}"),
+        // schema 5 (no hero, no gold), schema 6 (no random) and schema 7 (no life) are refused, not migrated.
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + NoLife + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(EmptyParty + NoHero + EmptyInventory + FreshRandom + LightingTail, "}"),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(EmptyParty + NoHero + EmptyInventory + FreshRandom + NoLife + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(EmptyParty + NoHero + EmptyInventory + FreshRandom, ""),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(EmptyParty + NoHero + EmptyInventory + FreshRandom + NoLife, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":4,\"world\"").Replace(NoHero + EmptyInventory + FreshRandom, ""),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":4,\"world\"").Replace(NoHero + EmptyInventory + FreshRandom + NoLife, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":5,\"world\"").Replace(NoHero + EmptyInventory + FreshRandom, ",\"inventory\":{\"pc\":[]}"),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":5,\"world\"").Replace(NoHero + EmptyInventory + FreshRandom + NoLife, ",\"inventory\":{\"pc\":[]}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":6,\"world\"").Replace(FreshRandom, ""),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":6,\"world\"").Replace(FreshRandom + NoLife, ""),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":7,\"world\"").Replace(NoLife, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With(EmptyParty, ""), SnapshotDecodeFailure.MissingField, "$.party");
         Fails(With(EmptyInventory, ""), SnapshotDecodeFailure.MissingField, "$.inventory");
         Fails(With(NoHero, ""), SnapshotDecodeFailure.MissingField, "$.hero");
         Fails(With(FreshRandom, ""), SnapshotDecodeFailure.MissingField, "$.random");
+        Fails(With(NoLife, ""), SnapshotDecodeFailure.MissingField, "$.life");
         Fails(With("\"revision\":2,", "\"revision\":2,\"extra\":0,"), SnapshotDecodeFailure.UnknownField, "$.extra");
         Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":3,"), SnapshotDecodeFailure.DuplicateField, "$.revision");
         Fails(With("\"revision\":2,", ""), SnapshotDecodeFailure.MissingField, "$.revision");
@@ -192,13 +195,13 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":8,\"equipment\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":9,\"equipment\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":7,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":8,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));
-        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + LightingTail,
+        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + NoLife + LightingTail,
             SnapshotDecodeFailure.BudgetExceeded, "$.maps");
         var tooManyFlags = string.Join(",", Enumerable.Range(0, GlobalFlagLimits.MaxFlags + 1).Select(flag => $"{{\"flag\":{flag},\"value\":null}}"));
         Fails(With("\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]", "\"entries\":[" + tooManyFlags + "]"),
@@ -211,7 +214,7 @@ public sealed class SnapshotRestoreTests
         var changes = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxChangesPerMap)
             .Select(sector => $"{{\"scope\":\"sector\",\"sector\":{sector},\"property\":\"p\",\"value\":{sector}}}"));
         var text = GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] +
-            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + LightingTail;
+            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + FreshRandom + NoLife + LightingTail;
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionLimits.PolicyMaxChangesPerMap, restored.QueryMapChanges(Exterior).Count);
         Assert.AreEqual(4095, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(4095, "p")));

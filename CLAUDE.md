@@ -69,12 +69,12 @@ under `docs/research`. Details: `docs/project/status.md`.
   plans, step evidence `Traversal`, T0 `Inventory`, `Lighting`, pre-made hero
   `Characters`, item/critter `Combat` fields, `Hd` pack/recipe reader), `Arcanum.Simulation`
   (exact grid `Movement`, click-to-move `Navigation`, `Clock`, `Character`
-  stats, `Party`, `Combat` attack resolver), `Arcanum.Scripting` (`Dialog`
+  stats, `Party`, `Combat` attack resolver and life rules), `Arcanum.Scripting` (`Dialog`
   transition and conversation, `NpcDialog` entry, `GlobalFlags`),
   `Arcanum.Presentation` (animation timeline), `Arcanum.Input` (+
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
-  starting hero, snapshot schema 6), `Arcanum.Godot` (ART viewer and HD
+  starting hero, randomness, life state, snapshot schema 8), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`

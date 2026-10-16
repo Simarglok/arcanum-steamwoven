@@ -483,8 +483,11 @@ already derives `Speed`, `DamageBonus`, `AcAdjustment` and `HealRate` with the
 same source formulas ([contract](../world/character-stats-runtime.md)); the
 session clock provides game time for the 80-second recovery and the
 one-second round advance; exact movement and the click-route planner provide
-steps. Skills, training, hit points, fatigue, resistances, AC, items and
-equipment do not exist yet.
+steps. Skills, training, resistances, AC, items and equipment do not exist yet.
+*Update:* slice 2 is the [attack resolver](../world/attack-resolver-runtime.md)
+(ARC-COMBAT-001) and slice 1 the [life state](../world/life-state-runtime.md)
+(ARC-COMBAT-002: hit points, fatigue, poison, injuries, knockout, death,
+healing and the recovery steps in the session, snapshot schema 8).
 
 ## Proposed implementation slices (project policy, not accepted)
 

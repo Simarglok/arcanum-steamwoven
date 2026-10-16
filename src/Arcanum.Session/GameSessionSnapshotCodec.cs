@@ -6,6 +6,7 @@ using System.Text.Json;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -20,7 +21,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 7. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 8. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -30,7 +31,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -55,6 +56,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
     private static readonly string[] RandomFields = ["seed", "draws"];
+    private static readonly string[] LifeFields = ["hero", "critters"];
+    private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
+    private static readonly string[] CritterLifeFields = ["entity", "hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -242,6 +246,25 @@ public static class GameSessionSnapshotCodec
             w.WriteNumber("draws", snapshot.Random.Draws);
             w.WriteEndObject();
 
+            w.WriteStartObject("life");
+            if (snapshot.Life.Hero is { } heroLife)
+            {
+                w.WriteStartObject("hero");
+                WriteLifeRecord(w, heroLife);
+                w.WriteEndObject();
+            }
+            else w.WriteNull("hero");
+            w.WriteStartArray("critters");
+            foreach (var critter in snapshot.Life.Critters)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", critter.Entity);
+                WriteLifeRecord(w, critter.Record);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -253,6 +276,21 @@ public static class GameSessionSnapshotCodec
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static void WriteLifeRecord(Utf8JsonWriter w, SessionLifeRecord record)
+    {
+        var state = record.State;
+        w.WriteNumber("hpDamage", state.HitPointDamage);
+        w.WriteNumber("fatigueDamage", state.FatigueDamage);
+        w.WriteNumber("poison", state.PoisonLevel);
+        w.WriteStartArray("conditions");
+        for (var i = 0; i < ConditionNames.Length; i++)
+            if (((int)state.Conditions & (1 << i)) != 0) w.WriteStringValue(ConditionNames[i]);
+        w.WriteEndArray();
+        w.WriteNumber("scars", state.Scars);
+        if (record.DeathTimeMs is { } time) w.WriteNumber("deathTimeMs", time);
+        else w.WriteNull("deathTimeMs");
     }
 
     private static void WriteEffect(Utf8JsonWriter w, string name, StatEffectDefinition? effect)
@@ -313,7 +351,51 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Lighting(f["lighting"]));
+    }
+
+    // Ranges and canonical spelling; the hero's presence, death times against the clock and budgets are Restore's.
+    private static SessionLifeState Life(JsonElement element)
+    {
+        const string p = "$.life";
+        var f = Fields(element, p, LifeFields);
+        SessionLifeRecord? hero = f["hero"].ValueKind == JsonValueKind.Null
+            ? null
+            : LifeRecord(Fields(f["hero"], p + ".hero", LifeRecordFields), p + ".hero");
+        var items = Array(f["critters"], p + ".critters", GameSessionLimits.PolicyMaxLifeRecords);
+        var critters = new SessionCritterLife[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.critters[{i}]";
+            var item = Fields(items[i], path, CritterLifeFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(critters[i - 1].Entity, entity) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            critters[i] = new(entity, LifeRecord(item, path));
+        }
+        return new(hero, critters);
+    }
+
+    private static SessionLifeRecord LifeRecord(Dictionary<string, JsonElement> f, string path)
+    {
+        var conditionItems = Array(f["conditions"], path + ".conditions", ConditionNames.Length);
+        var conditions = LifeConditions.None;
+        var last = -1;
+        for (var i = 0; i < conditionItems.Length; i++)
+        {
+            var at = $"{path}.conditions[{i}]";
+            var index = Name(conditionItems[i], at, ConditionNames);
+            // Flag order, each once: one spelling per set.
+            if (index <= last) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, at);
+            last = index;
+            conditions |= (LifeConditions)(1 << index);
+        }
+        var death = f["deathTimeMs"];
+        return new(new(Int(f["hpDamage"], path + ".hpDamage", 0, LifeLimits.MaxDamage),
+                Int(f["fatigueDamage"], path + ".fatigueDamage", 0, LifeLimits.MaxDamage),
+                Int(f["poison"], path + ".poison", 0, LifeLimits.MaxPoisonLevel), conditions,
+                Int(f["scars"], path + ".scars", 0, LifeLimits.MaxScars)),
+            death.ValueKind == JsonValueKind.Null ? null : Long(death, path + ".deathTimeMs", 0, long.MaxValue));
     }
 
     private static SessionRandomState Random(JsonElement element)
@@ -706,6 +788,8 @@ public static class GameSessionSnapshotCodec
         "ReactionModifier", "MaxFollowers", "MagickTechAptitude",
     ];
     private static readonly string[] OperatorNames = ["Add", "Multiply", "Divide", "Minimum", "Maximum", "Percent"];
+    /// <summary>Wire names of <see cref="LifeConditions"/> by bit, in flag order.</summary>
+    private static readonly string[] ConditionNames = ["Stunned", "Blinded", "CrippledArmOne", "CrippledArmsBoth", "CrippledLegsBoth"];
     /// <summary>Field names of <c>hero.stats</c> in <see cref="SessionHeroLimits.StoredStats"/> order.</summary>
     private static readonly string[] StoredStatNames =
         ["strength", "dexterity", "constitution", "beauty", "intelligence", "perception", "willpower", "charisma", "magickPoints", "techPoints"];

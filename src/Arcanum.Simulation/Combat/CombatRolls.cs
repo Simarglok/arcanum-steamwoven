@@ -24,6 +24,10 @@ public enum CombatRollPurpose
     CriticalHitEffect,
     /// <summary>A roll made by an <see cref="ICriticalEffects"/> critical-miss table.</summary>
     CriticalMissEffect,
+    /// <summary>The 10..20 a knockout adds to maximum fatigue (<see cref="LifeRules.ApplyDamage"/>).</summary>
+    KnockoutFatigue,
+    /// <summary>The d100 (≤ 50) that cripples the second arm of a critter with one crippled arm (<see cref="LifeRules.ApplyDamage"/>).</summary>
+    CrippleBothArms,
 }
 
 /// <summary>

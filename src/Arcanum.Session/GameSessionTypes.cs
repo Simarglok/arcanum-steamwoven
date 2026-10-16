@@ -56,17 +56,21 @@ public sealed class GameSessionLimits
     public const int PolicyMaxCompanions = 64;
     /// <summary>Items the PC took from the world; the same bound as one list of the project's T0 inventory reader.</summary>
     public const int PolicyMaxPcItems = 512;
+    /// <summary>NPC life records (ARC-COMBAT-002): critters whose life the session changed.</summary>
+    public const int PolicyMaxLifeRecords = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
-        int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems)
+        int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
+        int maxLifeRecords = PolicyMaxLifeRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
         if (maxTotalChanges is < 1 or > PolicyMaxTotalChanges) throw new ArgumentOutOfRangeException(nameof(maxTotalChanges));
         if (maxCompanions is < 1 or > PolicyMaxCompanions) throw new ArgumentOutOfRangeException(nameof(maxCompanions));
         if (maxPcItems is < 1 or > PolicyMaxPcItems) throw new ArgumentOutOfRangeException(nameof(maxPcItems));
+        if (maxLifeRecords is < 1 or > PolicyMaxLifeRecords) throw new ArgumentOutOfRangeException(nameof(maxLifeRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
-        MaxPcItems = maxPcItems;
+        MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
     }
 
     public int MaxMaps { get; }
@@ -74,6 +78,7 @@ public sealed class GameSessionLimits
     public int MaxTotalChanges { get; }
     public int MaxCompanions { get; }
     public int MaxPcItems { get; }
+    public int MaxLifeRecords { get; }
 }
 
 /// <summary>
@@ -108,6 +113,8 @@ public enum GameSessionFailure
     InvalidHero,
     // Session randomness (ARC-WORLD-019).
     InvalidRoll, RandomExhausted,
+    // Life domain (ARC-COMBAT-002).
+    InvalidLifeTarget, InvalidLifeFacts, InvalidLifeState, InvalidLifeAmount,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -207,18 +214,18 @@ public sealed class GameSessionSnapshot
 {
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
     /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 added
-    /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 adds <see cref="Random"/>
-    /// (ARC-WORLD-019). Schemas 1..6 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 7;
+    /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 added <see cref="Random"/>
+    /// (ARC-WORLD-019); schema 8 adds <see cref="Life"/> (ARC-COMBAT-002). Schemas 1..7 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 8;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
-        SessionLightingState? lighting)
+        SessionLifeState life, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Random = random; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Random = random; Life = life; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -235,6 +242,8 @@ public sealed class GameSessionSnapshot
     public SessionInventoryState Inventory { get; }
     /// <summary>The gameplay generator's seed and position (ARC-WORLD-019).</summary>
     public SessionRandomState Random { get; }
+    /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>
+    public SessionLifeState Life { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
 }

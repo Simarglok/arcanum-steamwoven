@@ -77,7 +77,8 @@ Any seed and position restore, including the last one: a hand-edited save at dra
 needs a draw, and through `CombatRolls` that refusal is an exception out of the resolver, after any earlier rolls of
 that attack. Normal play cannot reach it; a typed path is part of wiring combat.
 
-**Migration decision: none.** Schemas 1..6 are `UnsupportedSchema`. A schema-6 quick save loads as "written by an
+**Migration decision: none.** Schemas 1..6 are `UnsupportedSchema` (and schema 7 since ARC-COMBAT-002 added
+[`life`](life-state-runtime.md#snapshot-schema-8)). A schema-6 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. No host made gameplay rolls
 before this schema, so nothing is lost.
 
@@ -99,7 +100,9 @@ before this schema, so nothing is lost.
 
 ## Not implemented / remaining work
 
-- No host rolls yet: the viewer passes no seed (its sessions use 0) and combat is not wired to a session.
+- No host rolls yet: the viewer passes no seed (its sessions use 0) and combat is not wired to a session. The life
+  state's knockout and second-arm rolls (`combat.KnockoutFatigue`, `combat.CrippleBothArms`, ARC-COMBAT-002) draw from
+  the same generator.
 - The original's other draws (AI reactions, sounds, effect stat checks) are not modelled, so a session fight is not a
   CE fight draw for draw.
 - The original's re-seeding for spawned inventories and dialog replies; a derived, independent sequence per purpose (if

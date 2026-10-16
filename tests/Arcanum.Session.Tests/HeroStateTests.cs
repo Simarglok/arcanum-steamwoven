@@ -205,7 +205,9 @@ public sealed class HeroStateTests
         ",\"inventory\":{\"gold\":385,\"kit\":[{\"entity\":\"kit:1\",\"type\":\"Weapon\",\"prototype\":6049,\"name\":4021,\"description\":6029}," +
         "{\"entity\":\"kit:2\",\"type\":\"Armor\",\"prototype\":8188,\"name\":2850,\"description\":8168}," +
         "{\"entity\":\"kit:3\",\"type\":\"Armor\",\"prototype\":8069,\"name\":2851,\"description\":8049}],\"pc\":[]}";
-    internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory);
+    internal const string UnharmedHeroLife =
+        ",\"life\":{\"hero\":{\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[],\"scars\":0,\"deathTimeMs\":null},\"critters\":[]}";
+    internal static readonly string HeroGolden = GoldenJson.Replace(NoHero + EmptyInventory, HeroJson + KitInventory).Replace(NoLife, UnharmedHeroLife);
 
     private static GameSessionOwner HeroGoldenSession()
     {
@@ -292,7 +294,7 @@ public sealed class HeroStateTests
         Refused(HeroGolden.Replace("\"value\":-1}", "\"value\":1001}"), GameSessionFailure.InvalidHero);
 
         // Gold and kit items come only with a hero; the kit is kit:1, kit:2, … in order.
-        var noHero = HeroGolden.Replace(HeroJson, NoHero);
+        var noHero = HeroGolden.Replace(HeroJson, NoHero).Replace(UnharmedHeroLife, NoLife);
         Refused(noHero, GameSessionFailure.InvalidSnapshot);
         Refused(noHero.Replace("\"gold\":385", "\"gold\":0"), GameSessionFailure.InvalidSnapshot);
         Refused(noHero.Replace(KitInventory, ",\"inventory\":{\"gold\":1,\"kit\":[],\"pc\":[]}"), GameSessionFailure.InvalidSnapshot);
