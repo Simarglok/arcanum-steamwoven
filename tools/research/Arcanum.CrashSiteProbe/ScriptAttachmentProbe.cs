@@ -92,91 +92,10 @@ internal static partial class Program
             return null;
         }
 
-        // Prototypes by number, for objects that inherit their scripts.
-        var prototypes = new Dictionary<int, PrototypeInfo>();
-        var hits = new List<SaHit>();
-        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("proto/", StringComparison.Ordinal) && k.Key.EndsWith(".pro", StringComparison.Ordinal)))
-        {
-            if (Read(winner, "prototype") is not { } bytes) continue;
-            PrototypeInfo proto;
-            try { proto = ObjectWire.ParsePrototype(bytes); } catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("prototype|parse"); continue; }
-            var number = proto.Id.AidValue();
-            if (!prototypes.TryAdd(number, proto)) refusals.Add("prototype|duplicate_number");
-            int? Num(int slot) => proto.NumericFields.TryGetValue(slot, out var v) ? v : null;
-            foreach (var s in proto.Scripts.Where(s => targets.Contains(s.script)))
-                hits.Add(new("", "prototype", key, null, proto.Type, number, s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), null, null));
-        }
-
-        var unresolvedPrototypes = 0;
-        void Objects(string map, string kind, string file, ReadOnlySpan<byte> window, IEnumerable<InstanceInfo> instances)
-        {
-            foreach (var instance in instances)
-            {
-                PrototypeInfo? proto = instance.PrototypeId.Type == 1 && prototypes.TryGetValue(instance.PrototypeId.AidValue(), out var p) ? p : null;
-                if (proto is null && !instance.ScriptsOverridden) { unresolvedPrototypes++; continue; }
-                var scripts = instance.ScriptsOverridden ? DecodeScripts(window, instance.Arrays) : proto!.Scripts;
-                foreach (var s in scripts.Where(s => targets.Contains(s.script)))
-                {
-                    int? Num(int slot) => instance.NumericFields.TryGetValue(slot, out var v) ? v : proto is not null && proto.NumericFields.TryGetValue(slot, out var w) ? w : null;
-                    int? x = instance.Location is { } loc ? unchecked((int)loc) : null, y = instance.Location is { } loc2 ? unchecked((int)(loc2 >> 32)) : null;
-                    hits.Add(new(map, kind, file, instance.SourceIndex, instance.Type, proto is null ? null : instance.PrototypeId.AidValue(), s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), x, y));
-                }
-            }
-        }
-        void Sector(string map, string kind, string file, byte[] bytes)
-        {
-            if (bytes.Length > CensusMaxSectorBytes) { refusals.Add($"{kind}|bytes"); return; }
-            SectorSlice slice; SectorFraming framing;
-            try { slice = SectorSlice.Parse(bytes, false); framing = SectorFraming.Parse(bytes, slice.LightCount); }
-            catch (InvalidDataException) { refusals.Add($"{kind}|framing"); return; }
-            // Tile attachments: count word, then 24-byte nodes whose fifth word is the script; the sector script is three words.
-            for (var i = 0; i < framing.TileScriptCount; i++)
-            {
-                var script = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.TileScriptsStart + 4 + i * 24 + 16));
-                // The node's second word is the tile within the sector (x + 64 * y); report the world tile.
-                var tile = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.TileScriptsStart + 4 + i * 24 + 4));
-                var (sx, sy) = SaSector(file);
-                if (targets.Contains(script)) hits.Add(new(map, kind + "-tile", file, i, null, null, -1, script, null, null,
-                    sx is { } ax ? ax * 64 + (tile & 63) : null, sy is { } ay ? ay * 64 + ((tile >> 6) & 63) : null));
-            }
-            if (framing.SectorScriptBytes == 12 && BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.SectorScriptStart + 8)) is var sectorScript && targets.Contains(sectorScript))
-                hits.Add(new(map, kind + "-script", file, null, null, null, -1, sectorScript, null, null, null, null));
-            try
-            {
-                var window = bytes.AsSpan(framing.ObjectStart, framing.ObjectBytes);
-                Objects(map, kind + "-object", file, window, ObjectWire.ParseWindow(window, slice.TrailingInt32));
-            }
-            catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add($"{kind}|objects"); }
-        }
-
-        var maps = 0; var sectors = 0; var mobiles = 0; var aggregates = 0; var templates = 0;
-        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("maps/", StringComparison.Ordinal) && k.Key.Count(c => c == '/') == 2))
-        {
-            var parts = key.Split('/'); var map = parts[1]; var file = parts[2];
-            if (file.EndsWith(".sec", StringComparison.Ordinal)) { if (Read(winner, "sector") is { } b) { sectors++; Sector(map, "sector", file, b); } }
-            else if (file.EndsWith(".mob", StringComparison.Ordinal) && Read(winner, "mobile") is { } m)
-            {
-                mobiles++;
-                try { var instance = ObjectWire.ParseNext(m, out _); Objects(map, "mobile", file, m, [instance]); }
-                catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("mobile|parse"); }
-            }
-        }
-        maps = keys.Keys.Where(k => k.StartsWith("maps/", StringComparison.Ordinal) && k.Count(c => c == '/') == 2).Select(k => k.Split('/')[1]).Distinct().Count();
-        var mapNames = keys.Keys.Where(k => k.StartsWith("maps/", StringComparison.Ordinal) && k.Count(c => c == '/') == 2).Select(k => k.Split('/')[1]).Distinct().ToArray();
-        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("maps/", StringComparison.Ordinal) && k.Key.Count(c => c == '/') == 1))
-        {
-            if (Read(winner, "aggregate") is not { } bytes) continue;
-            var owner = mapNames.FirstOrDefault(n => string.Equals(CaveAggregateSelector(n), key[5..], StringComparison.OrdinalIgnoreCase)) ?? "?";
-            try
-            {
-                foreach (var record in FrameAggregate(bytes, CensusMaxAggregateBytes))
-                    Objects(owner, "aggregate", "<aggregate>", bytes.AsSpan(record.Offset, record.Length), [record.Instance]);
-                aggregates++;
-            }
-            catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("aggregate|parse"); }
-        }
-        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("terrain/", StringComparison.Ordinal) && k.Key.EndsWith(".sec", StringComparison.Ordinal)))
-            if (Read(winner, "template") is { } b) { templates++; Sector("<terrain>", "template", key, b); }
+        var walk = SaWalk(keys, Read, targets.Contains, refusals);
+        var (hits, prototypes) = (walk.Hits, walk.Prototypes);
+        var (maps, sectors, mobiles, aggregates, templates, unresolvedPrototypes) = (walk.Maps, walk.Sectors, walk.Mobiles, walk.Aggregates, walk.Templates, walk.UnresolvedPrototypes);
+        var mapNames = walk.MapNames;
 
         // DLG GF writers, strict and lenient.
         var dialogs = 0; var refusedDialogs = 0; var flagHits = new List<object>(); var digitFiles = flags.ToDictionary(f => f, _ => 0);
@@ -231,6 +150,101 @@ internal static partial class Program
         };
         Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         return 0;
+    }
+
+    private sealed record SaWalkResult(List<SaHit> Hits, Dictionary<int, PrototypeInfo> Prototypes, int Maps, int Sectors, int Mobiles, int Aggregates, int Templates, int UnresolvedPrototypes, string[] MapNames);
+
+    /// <summary>Every script attachment of the module that <paramref name="want"/> accepts: prototypes,
+    /// sector objects, tile and sector scripts, mobiles, map aggregates and terrain templates.
+    /// Shared by ARC-RES-037 (given scripts) and ARC-RES-045 (every nonzero script).</summary>
+    private static SaWalkResult SaWalk(SortedDictionary<string, ContentCandidate> keys, Func<ContentCandidate, string, byte[]?> Read, Func<int, bool> want, CensusTally refusals)
+    {
+        // Prototypes by number, for objects that inherit their scripts.
+        var prototypes = new Dictionary<int, PrototypeInfo>();
+        var hits = new List<SaHit>();
+        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("proto/", StringComparison.Ordinal) && k.Key.EndsWith(".pro", StringComparison.Ordinal)))
+        {
+            if (Read(winner, "prototype") is not { } bytes) continue;
+            PrototypeInfo proto;
+            try { proto = ObjectWire.ParsePrototype(bytes); } catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("prototype|parse"); continue; }
+            var number = proto.Id.AidValue();
+            if (!prototypes.TryAdd(number, proto)) refusals.Add("prototype|duplicate_number");
+            int? Num(int slot) => proto.NumericFields.TryGetValue(slot, out var v) ? v : null;
+            foreach (var s in proto.Scripts.Where(s => want(s.script)))
+                hits.Add(new("", "prototype", key, null, proto.Type, number, s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), null, null));
+        }
+
+        var unresolvedPrototypes = 0;
+        void Objects(string map, string kind, string file, ReadOnlySpan<byte> window, IEnumerable<InstanceInfo> instances)
+        {
+            foreach (var instance in instances)
+            {
+                PrototypeInfo? proto = instance.PrototypeId.Type == 1 && prototypes.TryGetValue(instance.PrototypeId.AidValue(), out var p) ? p : null;
+                if (proto is null && !instance.ScriptsOverridden) { unresolvedPrototypes++; continue; }
+                var scripts = instance.ScriptsOverridden ? DecodeScripts(window, instance.Arrays) : proto!.Scripts;
+                foreach (var s in scripts.Where(s => want(s.script)))
+                {
+                    int? Num(int slot) => instance.NumericFields.TryGetValue(slot, out var v) ? v : proto is not null && proto.NumericFields.TryGetValue(slot, out var w) ? w : null;
+                    int? x = instance.Location is { } loc ? unchecked((int)loc) : null, y = instance.Location is { } loc2 ? unchecked((int)(loc2 >> 32)) : null;
+                    hits.Add(new(map, kind, file, instance.SourceIndex, instance.Type, proto is null ? null : instance.PrototypeId.AidValue(), s.sap, s.script, Num(SaNameSlot), Num(SaDescriptionSlot), x, y));
+                }
+            }
+        }
+        void Sector(string map, string kind, string file, byte[] bytes)
+        {
+            if (bytes.Length > CensusMaxSectorBytes) { refusals.Add($"{kind}|bytes"); return; }
+            SectorSlice slice; SectorFraming framing;
+            try { slice = SectorSlice.Parse(bytes, false); framing = SectorFraming.Parse(bytes, slice.LightCount); }
+            catch (InvalidDataException) { refusals.Add($"{kind}|framing"); return; }
+            // Tile attachments: count word, then 24-byte nodes whose fifth word is the script; the sector script is three words.
+            for (var i = 0; i < framing.TileScriptCount; i++)
+            {
+                var script = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.TileScriptsStart + 4 + i * 24 + 16));
+                // The node's second word is the tile within the sector (x + 64 * y); report the world tile.
+                var tile = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.TileScriptsStart + 4 + i * 24 + 4));
+                var (sx, sy) = SaSector(file);
+                if (want(script)) hits.Add(new(map, kind + "-tile", file, i, null, null, -1, script, null, null,
+                    sx is { } ax ? ax * 64 + (tile & 63) : null, sy is { } ay ? ay * 64 + ((tile >> 6) & 63) : null));
+            }
+            if (framing.SectorScriptBytes == 12 && BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(framing.SectorScriptStart + 8)) is var sectorScript && want(sectorScript))
+                hits.Add(new(map, kind + "-script", file, null, null, null, -1, sectorScript, null, null, null, null));
+            try
+            {
+                var window = bytes.AsSpan(framing.ObjectStart, framing.ObjectBytes);
+                Objects(map, kind + "-object", file, window, ObjectWire.ParseWindow(window, slice.TrailingInt32));
+            }
+            catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add($"{kind}|objects"); }
+        }
+
+        var sectors = 0; var mobiles = 0; var aggregates = 0; var templates = 0;
+        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("maps/", StringComparison.Ordinal) && k.Key.Count(c => c == '/') == 2))
+        {
+            var parts = key.Split('/'); var map = parts[1]; var file = parts[2];
+            if (file.EndsWith(".sec", StringComparison.Ordinal)) { if (Read(winner, "sector") is { } b) { sectors++; Sector(map, "sector", file, b); } }
+            else if (file.EndsWith(".mob", StringComparison.Ordinal) && Read(winner, "mobile") is { } m)
+            {
+                mobiles++;
+                try { var instance = ObjectWire.ParseNext(m, out _); Objects(map, "mobile", file, m, [instance]); }
+                catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("mobile|parse"); }
+            }
+        }
+        var maps = keys.Keys.Where(k => k.StartsWith("maps/", StringComparison.Ordinal) && k.Count(c => c == '/') == 2).Select(k => k.Split('/')[1]).Distinct().Count();
+        var mapNames = keys.Keys.Where(k => k.StartsWith("maps/", StringComparison.Ordinal) && k.Count(c => c == '/') == 2).Select(k => k.Split('/')[1]).Distinct().ToArray();
+        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("maps/", StringComparison.Ordinal) && k.Key.Count(c => c == '/') == 1))
+        {
+            if (Read(winner, "aggregate") is not { } bytes) continue;
+            var owner = mapNames.FirstOrDefault(n => string.Equals(CaveAggregateSelector(n), key[5..], StringComparison.OrdinalIgnoreCase)) ?? "?";
+            try
+            {
+                foreach (var record in FrameAggregate(bytes, CensusMaxAggregateBytes))
+                    Objects(owner, "aggregate", "<aggregate>", bytes.AsSpan(record.Offset, record.Length), [record.Instance]);
+                aggregates++;
+            }
+            catch (Exception e) when (e is InvalidDataException or OverflowException or ArgumentException) { refusals.Add("aggregate|parse"); }
+        }
+        foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("terrain/", StringComparison.Ordinal) && k.Key.EndsWith(".sec", StringComparison.Ordinal)))
+            if (Read(winner, "template") is { } b) { templates++; Sector("<terrain>", "template", key, b); }
+        return new(hits, prototypes, maps, sectors, mobiles, aggregates, templates, unresolvedPrototypes, mapNames);
     }
 
     private static void ScriptAttachmentSelfTest()
