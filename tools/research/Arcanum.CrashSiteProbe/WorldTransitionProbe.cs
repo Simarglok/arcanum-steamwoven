@@ -37,6 +37,7 @@ internal static partial class Program
     private const uint ScriptTrapFlags = 0x3;
     // OF_DONTDRAW | OF_INVISIBLE | OF_CLICK_THROUGH: a use click cannot pick the object.
     private const uint ObjectUnclickableFlags = 0x100 | 0x200 | 0x800;
+    private const int ContainerFlagsField = 36;
 
     internal sealed record WorldClause(int Type, byte[] Kinds, int[] Values)
     {
@@ -45,8 +46,8 @@ internal static partial class Program
     internal sealed record WorldLine(int Line, WorldClause Condition, WorldClause True, WorldClause False);
     internal sealed record WorldScript(uint Flags, int Capacity, IReadOnlyList<WorldLine> Lines);
 
-    /// <summary>Header: 40 description bytes the probe never reads, then flags (48), line count (52),
-    /// capacity (56). Each 132-byte line is a condition clause and its true and false action clauses,
+    /// <summary>Header: an 8-byte script header and 40 description bytes the probe never reads, then
+    /// flags (48), line count (52), capacity (56) and 4 more bytes. Each 132-byte line is a condition clause and its true and false action clauses,
     /// 44 bytes each: type, eight operand kinds, eight operand values.</summary>
     internal static WorldScript DecodeWorldScript(ReadOnlySpan<byte> bytes)
     {
@@ -138,10 +139,12 @@ internal static partial class Program
     {
         var count = script.Lines.Count;
         IReadOnlyList<int> Fall() => line + 1 < count ? [line + 1] : [];
+        // The loop end is the first later line whose condition is always true and whose true
+        // action ends the loop; the walk resumes after it.
         int? AfterLoopEnd()
         {
             for (var l = line + 1; l < count; l++)
-                if (script.Lines[l].True.Type == SatLoopEnd || script.Lines[l].False.Type == SatLoopEnd) return l + 1 < count ? l + 1 : null;
+                if (script.Lines[l].Condition.Type == 0 && script.Lines[l].True.Type == SatLoopEnd) return l + 1 < count ? l + 1 : null;
             return null;
         }
         switch (action.Type)
@@ -166,7 +169,7 @@ internal static partial class Program
     }
 
     internal sealed record WorldSite(int Script, int Line, bool Branch, int Action, int FocusKind, int FocusValue, bool LiteralDestination, int Map, int X, int Y, int? Time, int? Sound, int? Movie);
-    internal sealed record WorldCall(int Line, bool Branch, int Action, int? Target, int? EntryLine, int? TriggererFocus);
+    internal sealed record WorldCall(int Line, bool Branch, int Action, int? Target, int? EntryLine, int? TriggererFocus, int? AttacheeFocus = null);
 
     /// <summary>Teleport (44: focus, map, x, y) and fade-and-teleport (102: time, sound, movie, focus,
     /// map, x, y) actions on either branch of every line.</summary>
@@ -187,7 +190,8 @@ internal static partial class Program
 
     /// <summary>Script-number edges: call (7), call-in (54), call-at (55): script operand 0, entry line
     /// operand 1, triggerer focus operand 2; change-this-script (6) operand 0; change-script (99)
-    /// operand 2 (runs on a later invocation, entry 0). Call-ex (81) runs an object's own attachment
+    /// operand 2 (runs on a later invocation, entry 0). A call runs the callee once per resolved
+    /// triggerer (operand 2) and attachee (operand 3), so an empty focus group skips it. Call-ex (81) runs an object's own attachment
     /// and is always unresolved (Target null).</summary>
     internal static IReadOnlyList<WorldCall> WorldCalls(WorldScript script)
     {
@@ -198,7 +202,7 @@ internal static partial class Program
                 switch (clause.Type)
                 {
                     case SatCall or SatCallIn or SatCallAt:
-                        calls.Add(new(row.Line, branch, clause.Type, clause.Literal(0) ? clause.Values[0] : null, clause.Literal(1) ? clause.Values[1] : null, clause.Kinds[2]));
+                        calls.Add(new(row.Line, branch, clause.Type, clause.Literal(0) ? clause.Values[0] : null, clause.Literal(1) ? clause.Values[1] : null, clause.Kinds[2], clause.Kinds[3]));
                         break;
                     case SatChangeThis: calls.Add(new(row.Line, branch, clause.Type, clause.Literal(0) ? clause.Values[0] : null, 0, null)); break;
                     case SatChangeScript: calls.Add(new(row.Line, branch, clause.Type, clause.Literal(2) ? clause.Values[2] : null, 0, null)); break;
@@ -247,7 +251,8 @@ internal static partial class Program
     {
         if (bytes.Length > WorldMaxTextBytes) throw new InvalidDataException("WORLD_TEXT_BOUND");
         // A line read needs at least one character before end of file; the text after the last
-        // newline is a line only when it is not empty.
+        // newline is a line only when it is not empty. Each value reads like strtoll: leading
+        // blanks, an optional sign, digits; no digits gives 0 (a blank line included).
         var lines = Encoding.ASCII.GetString(bytes).Replace("\r", "", StringComparison.Ordinal).Split('\n').ToList();
         if (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
         if (lines.Count < 2) throw new InvalidDataException("WORLD_STARTLOC_FRAMING");
@@ -255,11 +260,9 @@ internal static partial class Program
 
         static long LeadingNumber(string line)
         {
-            var text = line.TrimStart(' ', '\t'); var end = 0;
-            if (end < text.Length && text[end] is '-' or '+') end++;
+            var text = line.TrimStart(' ', '\t'); var start = text.Length > 0 && text[0] is '-' or '+' ? 1 : 0; var end = start;
             while (end < text.Length && char.IsAsciiDigit(text[end])) end++;
-            if (end == 0 || (end == 1 && text[0] is '-' or '+')) throw new InvalidDataException("WORLD_STARTLOC_NUMBER");
-            return long.Parse(text[..end], System.Globalization.CultureInfo.InvariantCulture);
+            return end == start ? 0 : long.TryParse(text[..end], System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : throw new InvalidDataException("WORLD_STARTLOC_NUMBER");
         }
     }
 
@@ -308,7 +311,7 @@ internal static partial class Program
         return rows;
     }
 
-    internal sealed record WorldAttachment(int Map, string Source, int X, int Y, int ObjectType, int? Prototype, uint? ObjectFlags, int Sap, uint ScriptFlags, int Script);
+    internal sealed record WorldAttachment(int Map, string Source, int X, int Y, int ObjectType, int? Prototype, uint? ObjectFlags, int Sap, uint ScriptFlags, int Script, uint? ContainerFlags = null);
 
     internal sealed record WorldPath(WorldSite Site, WorldReach Reach, IReadOnlyList<string> Guards, IReadOnlyList<int> Chain, IReadOnlyList<string> Hops);
 
@@ -336,10 +339,15 @@ internal static partial class Program
             {
                 var here = At(call.Line, call.Branch); if (here == WorldReach.Unreached || call.Target is not { } target || call.EntryLine is not { } line || active.Contains((target, line))) continue;
                 var deferred = call.Action is SatCallIn or SatCallAt or SatChangeThis or SatChangeScript;
-                var next = (WorldReach)Math.Min((int)reach, (int)(deferred ? WorldReach.Conditional : here));
                 var g = new SortedSet<string>(guards, StringComparer.Ordinal); g.UnionWith(GuardsAt(call.Line, call.Branch));
                 if (deferred) g.Add("deferred_" + call.Action.ToString(System.Globalization.CultureInfo.InvariantCulture));
                 if (call.TriggererFocus is { } focus && focus is not (FocusTriggerer or FocusPlayer)) g.Add("call_triggerer_" + focus.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                // Single-object focus kinds: triggerer, attachee, player. Any other may resolve to none.
+                var group = call.AttacheeFocus is { } attachee && attachee is not (FocusTriggerer or 1 or FocusPlayer);
+                if (group) g.Add("call_attachee_" + call.AttacheeFocus!.Value.ToString(System.Globalization.CultureInfo.InvariantCulture));
+                var trap = !deferred && (scripts(target)?.Flags ?? 0) is var calleeFlags && (calleeFlags & ScriptTrapFlags) != 0;
+                if (trap) g.Add("callee_trap");
+                var next = (WorldReach)Math.Min((int)reach, (int)(deferred || group || trap ? WorldReach.Conditional : here));
                 Visit(target, line, next, g, [.. chain, target], [.. hops, $"{script}:{call.Line}:{(call.Branch ? "t" : "f")}:{call.Action}"], [.. active, (target, line)]);
             }
         }
@@ -366,6 +374,9 @@ internal static partial class Program
         if (!path.Site.LiteralDestination) reasons.Add("computed_destination");
         if (path.Site.FocusKind is not (FocusTriggerer or FocusPlayer)) reasons.Add("moves_focus_" + path.Site.FocusKind.ToString(System.Globalization.CultureInfo.InvariantCulture));
         if (path.Guards.Any(g => g.StartsWith("call_triggerer_", StringComparison.Ordinal))) reasons.Add("call_changes_triggerer");
+        // A use click on a container opens it first (unlock script, lock, jam and magic-hold checks)
+        // and runs its use script only from the loot screen.
+        if (attachment.ObjectType == 2 && attachment.Source is "sector_object" or "mobile" && attachment.Sap == 1) reasons.Add("container_open_check");
         return reasons;
     }
 
@@ -414,12 +425,17 @@ internal static partial class Program
             var catalogueTail = catalogueMes.Keys.Count(k => k >= WorldCatalogueBase + catalogue.Count);
             var byName = catalogue.ToDictionary(r => r.Name.ToLowerInvariant(), r => r, StringComparer.Ordinal);
             var maps = catalogue.ToDictionary(r => r.Catalogue, r => new WorldMapFiles(r, new Dictionary<string, string>(StringComparer.Ordinal)));
-            var unlistedDirectories = new SortedSet<string>(StringComparer.Ordinal); var nested = 0;
+            var unlistedDirectories = new SortedSet<string>(StringComparer.Ordinal); var nested = 0; var unlistedSectors = 0; var unlistedMobiles = 0;
             foreach (var key in keys.Where(k => k.StartsWith("maps/", StringComparison.Ordinal)))
             {
                 var parts = key.Split('/');
                 if (parts.Length < 3) continue; // normal-game aggregates and other files directly under maps/
-                if (!byName.TryGetValue(parts[1], out var row)) { unlistedDirectories.Add(AreaHash(Encoding.ASCII.GetBytes(parts[1]))); continue; }
+                if (!byName.TryGetValue(parts[1], out var row))
+                {
+                    unlistedDirectories.Add(AreaHash(Encoding.ASCII.GetBytes(parts[1])));
+                    if (key.EndsWith(".sec", StringComparison.Ordinal)) unlistedSectors++; else if (key.EndsWith(".mob", StringComparison.Ordinal)) unlistedMobiles++;
+                    continue;
+                }
                 if (parts.Length > 3) { nested++; continue; }
                 maps[row.Catalogue].Keys[parts[2]] = key;
             }
@@ -544,7 +560,9 @@ internal static partial class Program
                 if (scripts is null) { gaps.Add(new { map, file = source, code = "WORLD_PROTOTYPE_UNRESOLVED" }); return; }
                 uint? flags = instance.DirectFlags ?? proto?.Flags;
                 int? aid = instance.PrototypeId.Type == 1 ? instance.PrototypeId.AidValue() : null;
-                foreach (var s in scripts.Where(s => s.script != 0)) attachments.Add(new(map, source, x, y, instance.Type, aid, flags, s.sap, s.flags, s.script));
+                // Container flags (first container field, serialized slot 36): direct value, else prototype.
+                uint? containerFlags = instance.Type != 2 ? null : instance.NumericFields.TryGetValue(ContainerFlagsField, out var own) ? unchecked((uint)own) : proto?.NumericFields.TryGetValue(ContainerFlagsField, out var inherited) == true ? unchecked((uint)inherited) : null;
+                foreach (var s in scripts.Where(s => s.script != 0)) attachments.Add(new(map, source, x, y, instance.Type, aid, flags, s.sap, s.flags, s.script, containerFlags));
             }
 
             // Scripts: scr/<digits>*.scr; several names with one number keep the last in sorted order.
@@ -621,13 +639,27 @@ internal static partial class Program
             }
 
             var edges = new List<object>(); var scriptEdges = new List<(int From, int To, bool Unconditional, string Trigger, IReadOnlyList<string> Guards)>();
-            var attachedTeleportScripts = new HashSet<int>();
+            // Steps the walk cannot follow, in every script that holds or reaches a teleport: computed
+            // or out-of-range gotos and unmatched loop breaks (from line 0), and script edges without a
+            // literal target (computed calls and every call-ex).
+            var unresolvedSteps = reachesTeleport.Order().Select(n => (Script: n, Lines: Flow(n, 0)?.UnresolvedLines ?? [])).Where(p => p.Lines.Count > 0).Select(p => new { script = p.Script, lines = p.Lines }).ToArray();
+            var unresolvedCalls = reachesTeleport.Order().SelectMany(n => Calls(n).Where(c => c.Target is null).Select(c => new { script = n, line = c.Line, branch = c.Branch ? "true" : "false", action = c.Action })).ToArray();
+            var coveredSites = new HashSet<WorldSite>();
+            // One-shot: the attached script removes or replaces itself on a reached branch, or carries
+            // the auto-removing file flag (0x4), so the trigger works once.
+            bool OneShot(int script)
+            {
+                if (Script(script) is not { } root) return false;
+                if ((root.Flags & 0x4) != 0) return true;
+                var flow = Flow(script, 0)!;
+                return root.Lines.Any(l => (flow.True[l.Line] != WorldReach.Unreached && l.True.Type is 5 or SatChangeThis) || (flow.False[l.Line] != WorldReach.Unreached && l.False.Type is 5 or SatChangeThis));
+            }
             foreach (var attachment in attachments.Where(a => reachesTeleport.Contains(a.Script)))
             {
                 var rootFlags = Script(attachment.Script)?.Flags ?? 0;
                 foreach (var path in WorldPaths(attachment.Script, attachment.Sap == 9 && attachment.Source is "sector_object" or "mobile" ? ResumeLines(attachment.Script) : [], Script, Flow, Sites, Calls))
                 {
-                    attachedTeleportScripts.Add(path.Site.Script);
+                    coveredSites.Add(path.Site);
                     var fromRuntime = attachment.Map - WorldCatalogueBase + 1;
                     var toRuntime = path.Site.LiteralDestination ? path.Site.Map - 4999 : (int?)null;
                     if (toRuntime == -1) toRuntime = fromRuntime; // map -1 keeps the current map
@@ -637,7 +669,7 @@ internal static partial class Program
                     edges.Add(new
                     {
                         map = attachment.Map, runtime = fromRuntime, source = attachment.Source, x = attachment.X, y = attachment.Y, object_type = attachment.ObjectType, prototype = attachment.Prototype,
-                        object_flags = attachment.ObjectFlags, sap = attachment.Sap, attached_script = attachment.Script, script_header_flags = attachment.ScriptFlags,
+                        object_flags = attachment.ObjectFlags, container_flags = attachment.ContainerFlags, one_shot = OneShot(attachment.Script), sap = attachment.Sap, attached_script = attachment.Script, script_header_flags = attachment.ScriptFlags,
                         site_script = path.Site.Script, site_line = path.Site.Line, site_branch = path.Site.Branch ? "true" : "false", action = path.Site.Action, focus = path.Site.FocusKind,
                         destination_catalogue = path.Site.LiteralDestination ? path.Site.Map : (int?)null, destination_runtime = toRuntime, destination_x = path.Site.X, destination_y = path.Site.Y,
                         same_map = toRuntime == fromRuntime, arrival_in_bounds = inBounds, arrival_sector_file = arrivalSector,
@@ -648,7 +680,7 @@ internal static partial class Program
                 }
             }
             var attachedScripts = attachments.Select(a => a.Script).ToHashSet();
-            var orphanSites = allSites.Where(s => !attachedTeleportScripts.Contains(s.Script)).Select(s => new { script = s.Script, line = s.Line, branch = s.Branch ? "true" : "false", action = s.Action, focus = s.FocusKind, attached = attachedScripts.Contains(s.Script), attached_saps = attachments.Where(a => a.Script == s.Script).Select(a => a.Sap).Distinct().Order().ToArray(), literal_callers = callers[s.Script].Distinct().Order().ToArray(), destination_catalogue = s.LiteralDestination ? s.Map : (int?)null, destination_x = s.X, destination_y = s.Y }).ToArray();
+            var orphanSites = allSites.Where(s => !coveredSites.Contains(s)).Select(s => new { script = s.Script, line = s.Line, branch = s.Branch ? "true" : "false", action = s.Action, focus = s.FocusKind, attached = attachedScripts.Contains(s.Script), attached_saps = attachments.Where(a => a.Script == s.Script).Select(a => a.Sap).Distinct().Order().ToArray(), literal_callers = callers[s.Script].Distinct().Order().ToArray(), destination_catalogue = s.LiteralDestination ? s.Map : (int?)null, destination_x = s.X, destination_y = s.Y }).ToArray();
 
             // Map graph from the start map: jump points, then unconditional script edges, then all edges.
             var startRuntime = catalogue.FirstOrDefault(r => r.StartMap) is { } startRow ? startRow.Catalogue - WorldCatalogueBase + 1 : 1;
@@ -697,15 +729,15 @@ internal static partial class Program
                 directory_sources = plan.SearchOrder.Where(s => s.Kind == ContentSourceKind.Directory).Select(s => new { role = s.Role.ToString(), number = s.Number }).ToArray(),
                 summary = new
                 {
-                    catalogue_rows = catalogue.Count, catalogue_tail_keys = catalogueTail, unlisted_map_directories = unlistedDirectories.Count, nested_map_files = nested,
+                    catalogue_rows = catalogue.Count, catalogue_tail_keys = catalogueTail, unlisted_map_directories = unlistedDirectories.Count, unlisted_sector_files = unlistedSectors, unlisted_mobile_files = unlistedMobiles, nested_map_files = nested,
                     sector_files = sectorSets.Values.Sum(v => v.Count), objects = objectsPerMap.Values.Sum(),
                     jump_points = jumps.Count, maps_with_jump_points = jumpEdges.Select(e => e.From).Distinct().Count(),
                     scripts = byNumber.Count, script_numbers_with_several_files = byNumber.Count(p => p.Value.Length > 1), scripts_shadowed = scriptShadowed, script_failures = scriptFailures.Count, dialog_files = dialogKeys.Count, dialog_failures = dialogFailures.Count, dialog_resume_targets = dialogResumeTargets,
                     teleport_sites = allSites.Length, teleport_scripts = siteCache.Count(p => p.Value.Count > 0), fade_teleport_sites = allSites.Count(s => s.Action == SatFadeTeleport),
                     computed_destination_sites = allSites.Count(s => !s.LiteralDestination), attachments = attachments.Count, teleport_attachments = attachments.Count(a => reachesTeleport.Contains(a.Script)),
-                    edges = edges.Count, orphan_sites = orphanSites.Length, prototypes_loaded = prototypes.Count(p => p.Value is not null), prototypes_unresolved = prototypes.Count(p => p.Value is null), gaps = gaps.Count,
+                    edges = edges.Count, orphan_sites = orphanSites.Length, unresolved_step_scripts = unresolvedSteps.Length, unresolved_calls = unresolvedCalls.Length, prototypes_loaded = prototypes.Count(p => p.Value is not null), prototypes_unresolved = prototypes.Count(p => p.Value is null), gaps = gaps.Count,
                 },
-                maps = mapRows, jump_points = jumps, teleport_sites = siteRows, edges, orphan_sites = orphanSites, graph, script_failures = scriptFailures, dialog_failures = dialogFailures, gaps,
+                maps = mapRows, jump_points = jumps, teleport_sites = siteRows, edges, orphan_sites = orphanSites, graph, unresolved_steps = unresolvedSteps, unresolved_calls = unresolvedCalls, script_failures = scriptFailures, dialog_failures = dialogFailures, gaps,
             };
             Console.WriteLine(JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true }));
         }
@@ -757,7 +789,7 @@ internal static partial class Program
         Check(flow.False[1].Equals(WorldReach.Conditional) && flow.FalseGuards[1].SetEquals(["!43"]) && flow.TrueGuards[4].SetEquals(["43", "!43"]) && WorldGuard(new WorldClause(4, [1, 3, 0, 0, 0, 0, 0, 0], new int[8])) == "4:1/3", "guards");
         Check(flow.True[4] == WorldReach.Conditional && flow.UnresolvedLines.Count == 0, "goto after condition stays conditional");
         var calls = WorldCalls(script);
-        Check(calls.Count == 1 && calls[0] == new WorldCall(4, true, 7, 9, 1, 0), "call edge");
+        Check(calls.Count == 1 && calls[0] == new WorldCall(4, true, 7, 9, 1, 0, 1), "call edge");
         // Callee 9: line 0 conditional, line 1 always teleport from entry 1.
         var callee = Script(2); Clause(callee, 0, 0, 43, (3, 1)); Clause(callee, 1, 1, 44, (0, 0), (3, 5002), (3, 10), (3, 11));
         var scripts = new Dictionary<int, WorldScript> { [1] = script, [9] = DecodeWorldScript(callee) };
@@ -774,6 +806,14 @@ internal static partial class Program
         Check(WorldEdgeReasons(use with { Sap = 9 }, paths[0], 0).SequenceEqual(["sap_9"]) && WorldEdgeReasons(use with { ObjectFlags = 2 }, paths[0], 0).SequenceEqual(["object_off_or_destroyed"]), "sap and off reasons");
         Check(WorldEdgeReasons(use, paths[0], 1).SequenceEqual(["trap_script"]) && WorldEdgeReasons(use, paths[1], 0).SequenceEqual(["conditional_path", "computed_destination"]), "trap, path and destination reasons");
         Check(WorldEdgeReasons(use with { Source = "tile", Sap = 1, ObjectFlags = null }, paths[0], 0).Count == 0, "tile entry");
+        Check(WorldEdgeReasons(use with { ObjectType = 2, ContainerFlags = 0 }, paths[0], 0).SequenceEqual(["container_open_check"]) && WorldEdgeReasons(use with { ObjectType = 2, Sap = 9 }, paths[0], 0).SequenceEqual(["sap_9"]), "container use");
+        // A call whose attachee is a focus group (10, looped object) may run zero times.
+        var grouped = Script(2); Clause(grouped, 0, 1, 7, (3, 9), (3, 1), (0, 0), (10, 0)); var groupedScripts = new Dictionary<int, WorldScript> { [4] = DecodeWorldScript(grouped), [9] = DecodeWorldScript(callee) };
+        var groupedPath = WorldPaths(4, [], n => groupedScripts.GetValueOrDefault(n), (n, e) => AnalyseWorldFlow(groupedScripts[n], e), n => WorldSites(n, groupedScripts[n]), n => WorldCalls(groupedScripts[n])).Single();
+        Check(groupedPath.Reach == WorldReach.Conditional && groupedPath.Guards.Contains("call_attachee_10"), "call attachee group");
+        var trapped = (byte[])callee.Clone(); trapped[48] = 2; groupedScripts[9] = DecodeWorldScript(trapped); Clause(grouped, 0, 1, 7, (3, 9), (3, 1), (0, 0), (1, 0)); groupedScripts[4] = DecodeWorldScript(grouped);
+        var trappedPath = WorldPaths(4, [], n => groupedScripts.GetValueOrDefault(n), (n, e) => AnalyseWorldFlow(groupedScripts[n], e), n => WorldSites(n, groupedScripts[n]), n => WorldCalls(groupedScripts[n])).Single();
+        Check(trappedPath.Reach == WorldReach.Conditional && trappedPath.Guards.SequenceEqual(["callee_trap"]), "callee trap");
         Check(WorldEdgeReasons(use with { ObjectFlags = 0x800 }, paths[0], 0).SequenceEqual(["object_not_clickable"]) && WorldEdgeReasons(use with { Sap = 9, ObjectFlags = 0x100 }, paths[0], 0).SequenceEqual(["sap_9"]), "clickability");
         // A script calling itself at another entry line is followed once; the same entry is a cycle.
         var self = Script(3); Clause(self, 0, 1, 7, (3, 3), (3, 2), (0, 0), (1, 0)); Clause(self, 1, 1, 1); Clause(self, 2, 1, 44, (0, 0), (3, 5004), (3, 1), (3, 2));
@@ -783,6 +823,8 @@ internal static partial class Program
         // Loop: line 0 loop-for, line 1 teleport, line 2 loop-end, line 3 teleport after the loop.
         var loop = Script(4); Clause(loop, 0, 1, 18, (2, 0)); Clause(loop, 1, 1, 44, (10, 0), (3, 5000), (3, 1), (3, 1)); Clause(loop, 2, 1, 19); Clause(loop, 3, 1, 44, (0, 0), (3, 5000), (3, 2), (3, 2));
         var loopFlow = AnalyseWorldFlow(DecodeWorldScript(loop), 0);
+        var falseEnd = Script(3); Clause(falseEnd, 0, 1, 18, (2, 0)); Clause(falseEnd, 1, 0, 43, (3, 1)); Clause(falseEnd, 1, 2, 19); Clause(falseEnd, 2, 1, 19);
+        Check(WorldStep(DecodeWorldScript(falseEnd), 0, DecodeWorldScript(falseEnd).Lines[0].True).Next.SequenceEqual([1]), "loop end needs an always-true line");
         Check(loopFlow.True[0] == WorldReach.Always && loopFlow.True[1] == WorldReach.Conditional && loopFlow.TrueGuards[1].SetEquals(["loop"]) && loopFlow.True[3] == WorldReach.Conditional, "loop");
         var computedGoto = Script(1); Clause(computedGoto, 0, 1, 3, (4, 1));
         Check(AnalyseWorldFlow(DecodeWorldScript(computedGoto), 0).UnresolvedLines.SequenceEqual([0]), "computed goto");
@@ -808,7 +850,7 @@ internal static partial class Program
         // Text files: synthetic content only.
         Check(DecodeWorldStartLocation("123\r\n-45 trailing\r\n"u8) == (123, -45), "startloc");
         Rejects(() => DecodeWorldStartLocation("12\n"u8), "WORLD_STARTLOC_FRAMING");
-        Rejects(() => DecodeWorldStartLocation("x\n1\n"u8), "WORLD_STARTLOC_NUMBER");
+        Check(DecodeWorldStartLocation("x\n\n"u8) == (0, 0) && DecodeWorldStartLocation(" +7z\n-\n"u8) == (7, 0), "startloc reads like strtoll");
         var info = DecodeWorldMapInfo("lightscheme: 4\r\nSoundScheme: 3, 5\r\nOther: 1\r\n\r\n"u8);
         Check(info.LightSchemes.SequenceEqual([4]) && info.SoundSchemes.SequenceEqual([(3, 5)]) && info.OtherLines == 1, "mapinfo");
         // Catalogue: unbroken run from 5000, tags, a gap ends the run.
@@ -817,6 +859,6 @@ internal static partial class Program
         Check(rows.Count == 2 && rows[0] == new WorldCatalogueRow(5000, "Alpha", 10, 20, true, 0, 0) && rows[1] == new WorldCatalogueRow(5001, "beta", 1, 2, false, null, 7), "catalogue");
         Rejects(() => DecodeWorldCatalogue(new SortedDictionary<int, string> { [5000] = "../x,1,2" }), "WORLD_CATALOGUE_SELECTOR");
         Rejects(() => DecodeWorldCatalogue(new SortedDictionary<int, string> { [5000] = "x,1" }), "WORLD_CATALOGUE_ROW");
-        Console.WriteLine("world-transitions-self-test: PASS (script framing, sites, calls, forced/conditional reach, guards, loops, computed goto, call paths, self calls, dialog re-entry, edge reasons, clickability, jump points, properties, startloc, mapinfo, catalogue)");
+        Console.WriteLine("world-transitions-self-test: PASS (script framing, sites, calls, forced/conditional reach, guards, loops, computed goto, call paths, self calls, call focus groups and traps, dialog re-entry, edge reasons, container use, clickability, loop end, jump points, properties, startloc, mapinfo, catalogue)");
     }
 }
