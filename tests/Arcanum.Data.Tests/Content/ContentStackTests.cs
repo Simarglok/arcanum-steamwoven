@@ -14,7 +14,13 @@ public sealed class ContentStackTests
     public void Create() => Directory.CreateDirectory(_root = Path.Combine(Path.GetTempPath(), "arc-content-" + Guid.NewGuid().ToString("N")));
 
     [TestCleanup]
-    public void Remove() => Directory.Delete(_root, recursive: true);
+    public void Remove()
+    {
+        if (!OperatingSystem.IsWindows())
+            foreach (var directory in Directory.EnumerateDirectories(_root, "*", SearchOption.AllDirectories).Prepend(_root))
+                File.SetUnixFileMode(directory, (UnixFileMode)0b111_000_000);
+        Directory.Delete(_root, recursive: true);
+    }
 
     [TestMethod]
     public void Discover_mounts_sources_in_original_order_with_later_mounts_on_top()
@@ -57,16 +63,29 @@ public sealed class ContentStackTests
             Assert.AreEqual(ContentMountStatus.InvalidModuleName, ContentMountPlan.Discover(_root, name).Status, name);
         Directory.CreateDirectory(Path.Combine(_root, "arcanum5.dat"));
         Assert.AreEqual(ContentMountStatus.UnsupportedLayout, ContentMountPlan.Discover(_root, "Mod").Status);
+        Directory.Delete(Path.Combine(_root, "arcanum5.dat"));
+        Directory.CreateDirectory(Path.Combine(_root, "modules", "Mod.dat"));
+        Assert.AreEqual(ContentMountStatus.UnsupportedLayout, ContentMountPlan.Discover(_root, "Mod").Status);
+        Directory.Delete(Path.Combine(_root, "modules", "Mod.dat"));
+        Assert.AreEqual(ContentMountStatus.Ready, ContentMountPlan.Discover(_root, "Mod").Status);
+
+        var plan = ContentMountPlan.Discover(_root, "Mod").Plan!;
+        Assert.ThrowsExactly<ArgumentException>(() => new ContentMountPlan(_root, "Mod", [plan.SearchOrder[0], plan.SearchOrder[0]]));
+        Assert.ThrowsExactly<ArgumentException>(() => new ContentMountPlan(_root, "Mod", [plan.SearchOrder[0], plan.SearchOrder[0] with { Number = 1 }]));
     }
 
     [TestMethod]
     public void Discover_refuses_names_that_differ_only_in_case()
     {
         Dat("tig.dat"); Dat("arcanum1.dat");
-        if (File.Exists(Path.Combine(_root, "ARCANUM1.DAT"))) return; // case-insensitive file system: cannot arise
+        if (File.Exists(Path.Combine(_root, "ARCANUM1.DAT"))) Assert.Inconclusive("Case-insensitive file system: the layout cannot arise here.");
         Dat("ARCANUM1.DAT");
         Directory.CreateDirectory(Path.Combine(_root, "modules", "Mod"));
         Assert.AreEqual(ContentMountStatus.AmbiguousName, ContentMountPlan.Discover(_root, "Mod").Status);
+        File.Delete(Path.Combine(_root, "ARCANUM1.DAT"));
+        Loose("modules/Mod/a.mes", "x");
+        Loose("modules/Mod/A.MES", "y");
+        Assert.AreEqual(ContentStackStatus.AmbiguousLooseName, OpenResult("Mod").Status);
     }
 
     [TestMethod]
@@ -133,6 +152,9 @@ public sealed class ContentStackTests
         Assert.AreEqual(ContentResolutionStatus.NotFound, stack.Resolve("a/gone").Status);
         Assert.AreEqual(1, stack.Resolve("a/kept").Candidates.Count);
         Assert.AreEqual(1, stack.ExcludedCacheFiles);
+        // Deleted on mount, so not a candidate through the enclosing game folder either.
+        Assert.AreEqual(ContentResolutionStatus.NotFound, stack.Resolve("modules/Mod/TIGCache/a/kept").Status);
+        Assert.AreEqual(1, stack.Resolve("modules/Mod/tigcache2/a/kept").Candidates.Count);
         Assert.AreEqual("real", Text(stack.Read(stack.Resolve("tigcache2/a/kept").Winner!)));
         // Once under data/ and once under the game folder, which is itself a source.
         Assert.AreEqual(2, stack.SkippedLooseFiles);
@@ -153,6 +175,11 @@ public sealed class ContentStackTests
         DatRaw("arcanum1.dat", ("aé", 1u, "x"));
         Assert.AreEqual(ContentStackStatus.UnsupportedEntryName, OpenResult("Mod").Status);
         DatRaw("arcanum1.dat", ("a", 1u, "x"));
+        DatRaw("arcanum2.dat", ("a", 0x400u, ""));
+        var collision = OpenResult("Mod");
+        Assert.AreEqual(ContentStackStatus.DirectoryRecordCollision, collision.Status);
+        Assert.AreEqual("a", collision.Detail);
+        File.Delete(Path.Combine(_root, "arcanum2.dat"));
         File.WriteAllText(Path.Combine(_root, "ARCANUM1.DAT.IGNORE"), "a\n");
         Assert.AreEqual(ContentStackStatus.IgnoreListUnsupported, OpenResult("Mod").Status);
         File.Delete(Path.Combine(_root, "ARCANUM1.DAT.IGNORE"));
@@ -179,6 +206,9 @@ public sealed class ContentStackTests
 
         using var other = Open("Mod");
         Assert.ThrowsExactly<ArgumentException>(() => stack.Read(other.Resolve("b").Winner!));
+        var issued = stack.Resolve("b").Winner!;
+        Assert.ThrowsExactly<ArgumentException>(() => stack.Read(issued with { FilePath = Path.Combine(_root, "tig.dat") }));
+        Assert.ThrowsExactly<ArgumentException>(() => stack.Read(issued with { }));
         var winner = other.Resolve("b").Winner!;
         other.Dispose();
         Assert.ThrowsExactly<ObjectDisposedException>(() => other.Read(winner));
@@ -259,5 +289,37 @@ public sealed class ContentStackTests
         Span<byte> bytes = stackalloc byte[4];
         BinaryPrimitives.WriteUInt32LittleEndian(bytes, value);
         stream.Write(bytes);
+    }
+
+    [TestMethod]
+    public void Archive_reads_report_limits_and_corrupt_payloads_as_typed_results()
+    {
+        Dat("tig.dat");
+        Directory.CreateDirectory(Path.Combine(_root, "modules", "Mod"));
+        DatRaw("arcanum1.dat", ("bad", 2u, "zzzz"), ("big", 1u, "123456"));
+        var opened = ContentStack.Open(Plan("Mod"), new() { Dat = new DatReaderOptions { MaxDecodedEntryBytes = 5 } });
+        using var stack = opened.Stack!;
+        Assert.AreEqual(ContentReadStatus.TooLarge, stack.Read(stack.Resolve("big").Winner!).Status);
+        Assert.AreEqual(ContentReadStatus.Unreadable, stack.Read(stack.Resolve("bad").Winner!).Status);
+    }
+
+    [TestMethod]
+    public void Open_reports_an_unreadable_loose_folder()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            Assert.Inconclusive("Unix permissions only.");
+            return;
+        }
+        Dat("tig.dat");
+        Loose("modules/Mod/locked/a", "x");
+        File.SetUnixFileMode(Path.Combine(_root, "modules", "Mod", "locked"), UnixFileMode.None);
+        try
+        {
+            _ = Directory.EnumerateFileSystemEntries(Path.Combine(_root, "modules", "Mod", "locked")).Count();
+            Assert.Inconclusive("Running with permissions that ignore the folder mode.");
+        }
+        catch (UnauthorizedAccessException) { }
+        Assert.AreEqual(ContentStackStatus.LooseUnreadable, OpenResult("Mod").Status);
     }
 }

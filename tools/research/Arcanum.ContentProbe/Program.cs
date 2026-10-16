@@ -74,7 +74,12 @@ internal static class Program
         output.WriteLine("|---|---|---|---|");
         foreach (var row in rows)
         {
-            string Copy(int index) => $"`{Relative(plan, row.Override.Candidates[index].Source.Path)}`#{row.Override.Candidates[index].Entry?.Ordinal} ({row.Digests[index].Length:N0} B)";
+            string Copy(int index)
+            {
+                var candidate = row.Override.Candidates[index];
+                var place = candidate.Entry is { } entry ? $"`{Relative(plan, candidate.Source.Path)}`#{entry.Ordinal}" : $"`{Relative(plan, candidate.FilePath!)}`";
+                return $"{place} ({row.Digests[index].Length:N0} B)";
+            }
             var same = row.Digests.All(d => d.Sha == row.Digests[0].Sha);
             output.WriteLine($"| `{row.Override.Key}` | {Copy(0)} | {string.Join(", ", Enumerable.Range(1, row.Digests.Length - 1).Select(Copy))} | {(same ? "identical" : "differs")} |");
         }
@@ -90,7 +95,9 @@ internal static class Program
         try
         {
             Archive(Path.Combine(root, "tig.dat"));
-            Archive(Path.Combine(root, "arcanum1.dat"), ("rules\\a.mes", "old"), ("rules\\b.mes", "same"));
+            Archive(Path.Combine(root, "arcanum1.dat"), ("rules\\a.mes", "old"), ("rules\\b.mes", "same"), ("rules\\c.mes", "base"));
+            Directory.CreateDirectory(Path.Combine(root, "data", "rules"));
+            File.WriteAllText(Path.Combine(root, "data", "rules", "c.mes"), "loose");
             Archive(Path.Combine(root, "Arcanum2.dat"), ("rules\\a.mes", "new"), ("rules\\b.mes", "same"));
             Archive(Path.Combine(root, "Modules", "Synthetic.dat"));
             Archive(Path.Combine(root, "Modules", "Synthetic.patch0"), ("rules\\b.mes", "patched"));
@@ -100,15 +107,17 @@ internal static class Program
             string[] expected =
             [
                 "| 1 | patch0 | `modules/synthetic.patch0` |",
-                "| 3 | base[1] | `arcanum2.dat` |",
-                "overridden paths: 2",
+                "| 4 | base[1] | `arcanum2.dat` |",
+                "overridden paths: 3",
+                "| `data > arcanum1.dat` | 1 | 0 |",
+                "| `rules/c.mes` | `data/rules/c.mes` (5 B) | `arcanum1.dat`#2 (4 B) | differs |",
                 "| `arcanum2.dat > arcanum1.dat` | 1 | 0 |",
                 "| `modules/synthetic.patch0 > arcanum2.dat > arcanum1.dat` | 1 | 0 |",
                 "| `rules/a.mes` | `arcanum2.dat`#0 (3 B) | `arcanum1.dat`#0 (3 B) | differs |",
             ];
             foreach (var line in expected)
                 if (!text.Contains(line, StringComparison.Ordinal)) throw new InvalidOperationException($"self-test missing: {line}");
-            Console.WriteLine("content-probe self-test: PASS (mount order, chains, payload comparison)");
+            Console.WriteLine("content-probe self-test: PASS (mount order, archive and loose chains, payload comparison)");
             return 0;
         }
         finally

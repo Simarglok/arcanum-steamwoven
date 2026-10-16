@@ -52,8 +52,9 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
 
 ## Lookup rule (source facts and derivation)
 
-- **Archive member names** are converted to forward slashes and ASCII-lowercased when
-  an archive is opened, and every member gets the "check loose first" flag `0x100`
+- **Archive member names** are ASCII-lowercased when an archive is opened (CE's
+  non-Windows port also turns backslashes into slashes, [`compat.c` 9–22](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/compat.c#L9-L22);
+  the Windows build keeps backslashes), and every member gets the "check loose first" flag `0x100`
   ([`database.c` 55–206](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L55-L206)). Lookup is a
   binary search over the lowercased names; a member flagged `0x800` is treated as
   absent ([`database.c` 356–375](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L356-L375)). A
@@ -64,18 +65,24 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   try every folder **above that archive**, top-down; the first loose file found wins
   (and the member is marked `0x200`). Otherwise the archive wins and both flags are
   cleared, so later opens never look for a loose file again. With no archive holding
-  the name, the topmost folder holding it wins. Folder lookups resolve each path
-  segment case-insensitively ([`compat.c` 24–78](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/compat.c#L24-L78)).
+  the name, the topmost folder holding it wins. Folder names match without regard to
+  letter case: the Windows original relies on its file system, CE's port resolves each
+  segment itself ([`compat.c` 24–78](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/compat.c#L24-L78)).
 - **Exists** ([`file.c` 1064–1135](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L1064-L1135)) and
   **extract**, used for sounds and movies ([`file.c` 837–934](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L837-L934),
   [`sound.c` 449](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/sound.c#L449), [`gmovie.c` 82](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gmovie.c#L82)),
   take the first source in plain search order, archive or folder.
 - Mounting a folder deletes its top-level `TIGCache` folder
   ([`file.c` 573–659](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c#L573-L659)), so cached extracts
-  are never seen as candidates after a mount.
-- Scripts and dialogs are found by listing `scr\*.scr` / `dlg\*.dlg` across all
-  sources ([`script_name.c` 50, 112, 150–180](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L150-L180))
-  and then opened through the rule above ([`script.c` 3440](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3440)).
+  are never seen as candidates after a mount, also not through an enclosing folder
+  such as the game folder.
+- A script's file name comes from listing `scr\*.scr` across all sources; the sorted,
+  de-duplicated list maps each number to a name, and a later name with the same number
+  replaces an earlier one ([`script_name.c` 40–80, 112–135](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L40-L80)).
+  The dialog name is the script name with `scr` swapped for `dlg`
+  ([`script_name.c` 185–209](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L185-L209)); the `dlg\*.dlg`
+  listing in [`dialog.c` 2968](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2968) is a debug check only. Both
+  files are then opened through the rule above ([`script.c` 3440](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3440)).
 
 **Derivation.** On a static installation, a folder above the topmost archive that holds
 a name is, by construction, earlier in search order than that archive; if no folder
@@ -87,15 +94,18 @@ the path wins**. The API implements exactly this single rule.
 
 - `ContentMountPlan.Discover(gameRoot, module = "Arcanum")` returns a typed
   `ContentMountDiscovery` (`Ready`, `MissingGameRoot`, `MissingTig`, `MissingModule`,
-  `InvalidModuleName`, `AmbiguousName`, `UnsupportedLayout`) with the search order.
+  `InvalidModuleName`, `AmbiguousName`, `UnsupportedLayout`, `Unreadable`) with the
+  search order.
 - `ContentStack.Open(plan, options)` opens every archive with `DatReaderOptions`, indexes
   members and loose files once, and returns `ContentStackOpenResult` (`Ready`,
   `ArchiveUnreadable`, `UnsortedArchiveIndex`, `UnsupportedEntryName`,
-  `IgnoreListUnsupported`, `LooseLimitExceeded`, `AmbiguousLooseName`, `LooseUnreadable`).
+  `IgnoreListUnsupported`, `DirectoryRecordCollision`, `LooseLimitExceeded`,
+  `AmbiguousLooseName`, `LooseUnreadable`).
 - `Resolve(path)` → `ContentResolution`: `Resolved`/`NotFound`/`InvalidPath`, the
   normalized key, every candidate in search order, `Winner` and `Shadowed`.
   `Overrides()` lists every key held by two or more sources. `Read(candidate)` returns
-  `ContentReadResult` (`Read`, `TooLarge`, `Unreadable`).
+  `ContentReadResult` (`Read`, `TooLarge`, `Unreadable`) and accepts only candidates
+  this stack issued.
 
 Tests: [synthetic](../../tests/Arcanum.Data.Tests/Content/ContentStackTests.cs) (order,
 patch-only-with-module, case and separator handling, invalid paths, directory/ignored
@@ -113,9 +123,16 @@ records, TIGCache, sort refusal, ignore list, limits, reads, disposal) and
   search could miss members), a non-printable-ASCII member name, any `.ignore`
   sidecar (pattern semantics not implemented), two loose names or two mount names that
   differ only in case (the original takes the first directory entry, which is
-  unordered), and an `arcanum*.dat` that is a folder. The original skips unreadable
-  `arcanum*.dat` files; this API refuses them.
-- **Not indexed**: archive directory records (`0x400`), symbolic links, loose names
+  unordered), an archive directory record (`0x400`) whose name is also a file somewhere
+  in the stack (the original's member lookup would return the record), and a folder
+  named `tig.dat`, `arcanum*.dat`, `NAME.dat` or `NAME.patchN`. The original skips
+  unreadable `arcanum*.dat` files and creates a missing module folder; this API refuses
+  both (`ArchiveUnreadable`, `MissingModule`).
+- **Script names.** Two different `.scr` names with the same number would be decided by
+  name order, not by search order. The owner's installation has none; the API does not
+  map script numbers to names.
+- **Not indexed**: archive directory records (`0x400`, checked only for the collision
+  above), symbolic links, loose names
   outside printable ASCII (counted in `SkippedLooseFiles`), files under a folder's
   top-level `TIGCache` (counted in `ExcludedCacheFiles`). Paths that start with
   `.`, `/`, `\` or a drive letter are opened directly by the original and are
@@ -142,7 +159,7 @@ records, TIGCache, sort refusal, ignore list, limits, reads, disposal) and
 | 9 | game folder | `./` | folder | |
 | 10 | tig | `tig.dat` | 57,149 | `c9b48eb6396c514eba3805fb4847df67db3c67ef9f13a79ea21bbf7dd329a09b` |
 
-keys: 97,675; excluded TIGCache files: 45; skipped non-ASCII loose names: 0
+keys: 97,630; excluded TIGCache files: 45; skipped non-ASCII loose names: 0
 overridden paths: 109
 
 All **109** overridden paths are archive members; no loose file overrides or is

@@ -14,6 +14,7 @@ public sealed class ContentStack : IDisposable
     private const string CacheFolder = "tigcache";
     private readonly Dictionary<string, List<ContentCandidate>> _index;
     private readonly Dictionary<ContentSource, DatArchive> _archives;
+    private readonly HashSet<ContentCandidate> _issued;
     private readonly ContentStackOptions _options;
     private bool _disposed;
 
@@ -21,12 +22,14 @@ public sealed class ContentStack : IDisposable
         Dictionary<ContentSource, DatArchive> archives, int cacheFiles, int skippedLoose)
     {
         Plan = plan; _options = options; _index = index; _archives = archives;
+        _issued = new HashSet<ContentCandidate>(index.Values.SelectMany(list => list), ReferenceEqualityComparer.Instance);
         ExcludedCacheFiles = cacheFiles; SkippedLooseFiles = skippedLoose;
     }
 
     public ContentMountPlan Plan { get; }
     /// <summary>Files under a directory source's top-level <c>TIGCache</c> folder; the original
-    /// deletes that folder when it mounts the directory, so they are never candidates.</summary>
+    /// deletes that folder when it mounts the directory, so they are never candidates, also
+    /// not through an enclosing source such as the game folder. Each file is counted once.</summary>
     public int ExcludedCacheFiles { get; }
     /// <summary>Loose files skipped because their relative path is not printable ASCII; such
     /// names are outside the supported virtual-path space. Links are never followed.</summary>
@@ -40,19 +43,26 @@ public sealed class ContentStack : IDisposable
         options.Validate();
         var index = new Dictionary<string, List<ContentCandidate>>(StringComparer.Ordinal);
         var archives = new Dictionary<ContentSource, DatArchive>(ReferenceEqualityComparer.Instance);
+        var directoryRecords = new HashSet<string>(StringComparer.Ordinal);
         int cacheFiles = 0, skipped = 0, looseFiles = 0;
         try
         {
+            var cacheRoots = CacheRoots(plan, out var failure);
             foreach (var source in plan.SearchOrder)
             {
-                var failure = source.Kind == ContentSourceKind.Archive
-                    ? IndexArchive(source, options, index, archives)
-                    : IndexDirectory(source, options, index, ref cacheFiles, ref skipped, ref looseFiles);
-                if (failure is not null)
-                {
-                    foreach (var archive in archives.Values) archive.Dispose();
-                    return failure;
-                }
+                if (failure is not null) break;
+                failure = source.Kind == ContentSourceKind.Archive
+                    ? IndexArchive(source, options, index, archives, directoryRecords)
+                    : IndexDirectory(source, options, index, cacheRoots!, ref cacheFiles, ref skipped, ref looseFiles);
+            }
+            // The original's member lookup does not skip directory records, so one above a file
+            // of the same name would shadow it; such a layout is refused, not modelled.
+            if (failure is null && directoryRecords.FirstOrDefault(index.ContainsKey) is { } collision)
+                failure = new(ContentStackStatus.DirectoryRecordCollision, null, collision);
+            if (failure is not null)
+            {
+                foreach (var archive in archives.Values) archive.Dispose();
+                return failure;
             }
         }
         catch
@@ -94,17 +104,11 @@ public sealed class ContentStack : IDisposable
         ThrowIfDisposed();
         try
         {
-            if (!Plan.SearchOrder.Any(source => ReferenceEquals(source, candidate.Source)))
-                throw new ArgumentException("The candidate belongs to a different stack.", nameof(candidate));
-            if (candidate.Entry is { } entry)
-            {
-                if (!_archives.TryGetValue(candidate.Source, out var archive) || entry.Ordinal >= archive.Entries.Count || !ReferenceEquals(archive.Entries[entry.Ordinal], entry))
-                    throw new ArgumentException("The candidate belongs to a different stack.", nameof(candidate));
-                return new(ContentReadStatus.Read, archive.ReadEntry(entry));
-            }
-            if (candidate.FilePath is null || candidate.Source.Kind != ContentSourceKind.Directory)
-                throw new ArgumentException("The candidate has no readable location.", nameof(candidate));
-            using var stream = new FileStream(candidate.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            // Only candidates this stack issued are readable; a copied or edited record is not.
+            if (!_issued.Contains(candidate))
+                throw new ArgumentException("The candidate was not issued by this stack.", nameof(candidate));
+            if (candidate.Entry is { } entry) return new(ContentReadStatus.Read, _archives[candidate.Source].ReadEntry(entry));
+            using var stream = new FileStream(candidate.FilePath!, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > _options.MaxLooseFileBytes) return new(ContentReadStatus.TooLarge, null, candidate.FilePath);
             var bytes = new byte[stream.Length];
             stream.ReadExactly(bytes);
@@ -129,11 +133,14 @@ public sealed class ContentStack : IDisposable
     /// faithful model needs every name strictly ordered once lowercased, in both the
     /// backslash form and the slash form; anything else is refused, not guessed.</summary>
     private static ContentStackOpenResult? IndexArchive(ContentSource source, ContentStackOptions options,
-        Dictionary<string, List<ContentCandidate>> index, Dictionary<ContentSource, DatArchive> archives)
+        Dictionary<string, List<ContentCandidate>> index, Dictionary<ContentSource, DatArchive> archives, HashSet<string> directoryRecords)
     {
-        if (HasIgnoreList(source.Path)) return new(ContentStackStatus.IgnoreListUnsupported, null, source.Path);
         DatArchive archive;
-        try { archive = DatArchive.Open(source.Path, options.Dat); }
+        try
+        {
+            if (HasIgnoreList(source.Path)) return new(ContentStackStatus.IgnoreListUnsupported, null, source.Path);
+            archive = DatArchive.Open(source.Path, options.Dat);
+        }
         catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException)
         {
             return new(ContentStackStatus.ArchiveUnreadable, null, source.Path);
@@ -154,14 +161,20 @@ public sealed class ContentStack : IDisposable
             if (previousBackslash is not null && (string.CompareOrdinal(previousBackslash, backslash) >= 0 || string.CompareOrdinal(previousSlash, slash) >= 0))
                 return new(ContentStackStatus.UnsortedArchiveIndex, null, source.Path);
             previousBackslash = backslash; previousSlash = slash;
-            if ((entry.Flags & (DirectoryFlag | IgnoredFlag)) != 0) continue;
+            if ((entry.Flags & IgnoredFlag) != 0) continue;
+            if ((entry.Flags & DirectoryFlag) != 0)
+            {
+                directoryRecords.Add(slash);
+                continue;
+            }
             Add(index, slash, new(source, entry, null, entry.DeclaredOutputSize));
         }
         return null;
     }
 
     private static ContentStackOpenResult? IndexDirectory(ContentSource source, ContentStackOptions options,
-        Dictionary<string, List<ContentCandidate>> index, ref int cacheFiles, ref int skipped, ref int looseFiles)
+        Dictionary<string, List<ContentCandidate>> index, IReadOnlyList<(string Owner, string Path)> cacheRoots,
+        ref int cacheFiles, ref int skipped, ref int looseFiles)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var walk = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = false, AttributesToSkip = FileAttributes.ReparsePoint, ReturnSpecialDirectories = false };
@@ -169,15 +182,15 @@ public sealed class ContentStack : IDisposable
         {
             foreach (var info in new DirectoryInfo(source.Path).EnumerateFileSystemInfos("*", walk))
             {
-                var relative = Path.GetRelativePath(source.Path, info.FullName).Replace(Path.DirectorySeparatorChar, '/');
-                var key = ContentMountPlan.AsciiLower(relative);
-                var top = key.Split('/')[0];
-                if (top == CacheFolder)
+                var cache = cacheRoots.FirstOrDefault(root => info.FullName.StartsWith(root.Path + Path.DirectorySeparatorChar, StringComparison.Ordinal) || info.FullName == root.Path);
+                if (cache.Path is not null)
                 {
-                    if (info is FileInfo) cacheFiles++;
+                    if (info is FileInfo && cache.Owner == source.Path) cacheFiles++;
                     continue;
                 }
                 if (info is DirectoryInfo) continue;
+                var relative = Path.GetRelativePath(source.Path, info.FullName).Replace(Path.DirectorySeparatorChar, '/');
+                var key = ContentMountPlan.AsciiLower(relative);
                 if (relative.Any(c => c is < ' ' or > '\x7e'))
                 {
                     skipped++;
@@ -195,6 +208,28 @@ public sealed class ContentStack : IDisposable
             return new(ContentStackStatus.LooseUnreadable, null, source.Path);
         }
         return null;
+    }
+
+    /// <summary>Each directory source's top-level <c>TIGCache</c> folders (any letter case).</summary>
+    private static IReadOnlyList<(string Owner, string Path)>? CacheRoots(ContentMountPlan plan, out ContentStackOpenResult? failure)
+    {
+        failure = null;
+        var roots = new List<(string, string)>();
+        foreach (var source in plan.SearchOrder.Where(source => source.Kind == ContentSourceKind.Directory))
+        {
+            try
+            {
+                roots.AddRange(Directory.EnumerateDirectories(source.Path)
+                    .Where(path => ContentMountPlan.AsciiLower(Path.GetFileName(path)) == CacheFolder)
+                    .Select(path => (source.Path, Path.GetFullPath(path))));
+            }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+            {
+                failure = new(ContentStackStatus.LooseUnreadable, null, source.Path);
+                return null;
+            }
+        }
+        return roots;
     }
 
     private static void Add(Dictionary<string, List<ContentCandidate>> index, string key, ContentCandidate candidate)

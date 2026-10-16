@@ -14,10 +14,10 @@ public sealed record ContentSource(ContentSourceRole Role, int Number, string Pa
         ? ContentSourceKind.Directory : ContentSourceKind.Archive;
 }
 
-public enum ContentMountStatus { Ready, MissingGameRoot, MissingTig, MissingModule, InvalidModuleName, AmbiguousName, UnsupportedLayout }
+public enum ContentMountStatus { Ready, MissingGameRoot, MissingTig, MissingModule, InvalidModuleName, AmbiguousName, UnsupportedLayout, Unreadable }
 public sealed record ContentMountDiscovery(ContentMountStatus Status, ContentMountPlan? Plan, string? Detail = null);
 
-public enum ContentStackStatus { Ready, ArchiveUnreadable, UnsortedArchiveIndex, UnsupportedEntryName, IgnoreListUnsupported, LooseLimitExceeded, AmbiguousLooseName, LooseUnreadable }
+public enum ContentStackStatus { Ready, ArchiveUnreadable, UnsortedArchiveIndex, UnsupportedEntryName, IgnoreListUnsupported, DirectoryRecordCollision, LooseLimitExceeded, AmbiguousLooseName, LooseUnreadable }
 
 /// <summary>Opened stack or the typed reason it could not be opened. <see cref="Detail"/>
 /// names the failing source path; it never carries payload bytes.</summary>

@@ -17,6 +17,9 @@ public sealed class ContentMountPlan
         ModuleName = moduleName;
         SearchOrder = Array.AsReadOnly(searchOrder.ToArray());
         if (SearchOrder.Any(source => source is null)) throw new ArgumentException("A source is null.", nameof(searchOrder));
+        if (SearchOrder.Distinct(ReferenceEqualityComparer.Instance).Count() != SearchOrder.Count ||
+            SearchOrder.Select(source => source.Path).Distinct(StringComparer.Ordinal).Count() != SearchOrder.Count)
+            throw new ArgumentException("A source is mounted twice.", nameof(searchOrder));
     }
 
     public string GameRoot { get; }
@@ -37,10 +40,11 @@ public sealed class ContentMountPlan
         try
         {
             if (!Directory.Exists(gameRoot)) return new(ContentMountStatus.MissingGameRoot, null, gameRoot);
-            var root = Path.GetFullPath(gameRoot);
+            var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(gameRoot));
             var mounted = new List<ContentSource>();
 
             var tig = Child(root, "tig.dat");
+            if (tig.Status == ChildStatus.Directory) return new(ContentMountStatus.UnsupportedLayout, null, tig.Path);
             if (tig.Status != ChildStatus.File) return Fail(tig, ContentMountStatus.MissingTig, "tig.dat");
             mounted.Add(new(ContentSourceRole.Tig, 0, tig.Path!));
             mounted.Add(new(ContentSourceRole.GameRoot, 0, root));
@@ -67,7 +71,8 @@ public sealed class ContentMountPlan
             if (modules.Status == ChildStatus.Directory)
             {
                 var dat = Child(modules.Path!, moduleName + ".dat");
-                if (dat.Status is ChildStatus.Ambiguous or ChildStatus.Directory) return Fail(dat, ContentMountStatus.AmbiguousName, moduleName + ".dat");
+                if (dat.Status == ChildStatus.Ambiguous) return Fail(dat, ContentMountStatus.AmbiguousName, moduleName + ".dat");
+                if (dat.Status == ChildStatus.Directory) return new(ContentMountStatus.UnsupportedLayout, null, dat.Path);
                 if (dat.Status == ChildStatus.File)
                 {
                     mounted.Add(new(ContentSourceRole.ModuleArchive, 0, dat.Path!));
@@ -75,7 +80,8 @@ public sealed class ContentMountPlan
                     for (var number = 0; number < MaxPatches; number++)
                     {
                         var patch = Child(modules.Path!, $"{moduleName}.patch{number}");
-                        if (patch.Status is ChildStatus.Ambiguous or ChildStatus.Directory) return Fail(patch, ContentMountStatus.AmbiguousName, $"{moduleName}.patch{number}");
+                        if (patch.Status == ChildStatus.Ambiguous) return Fail(patch, ContentMountStatus.AmbiguousName, $"{moduleName}.patch{number}");
+                        if (patch.Status == ChildStatus.Directory) return new(ContentMountStatus.UnsupportedLayout, null, patch.Path);
                         if (patch.Status == ChildStatus.File) mounted.Add(new(ContentSourceRole.ModulePatch, number, patch.Path!));
                     }
                 }
@@ -94,7 +100,7 @@ public sealed class ContentMountPlan
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            return new(ContentMountStatus.MissingGameRoot, null, gameRoot);
+            return new(ContentMountStatus.Unreadable, null, gameRoot);
         }
     }
 
