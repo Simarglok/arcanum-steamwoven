@@ -342,7 +342,9 @@ rows are inputs, not the level-1 result.
 
 ## Proposal for Steamwoven
 
-Proposal only; ARC-WORLD-015 or a later task decides.
+Proposal only; ARC-WORLD-015 or a later task decides. ARC-WORLD-015 took proposal 1 without the scheme replay (the
+points stay unspent), a bounded proposal 2 (PC prototype, effect and inventory-source readers; schemes not read),
+proposal 3 (`*`/`/` refused) and proposal 4: [starting hero runtime](../world/starting-hero-runtime.md).
 
 1. **Default hero for the first playable start:** one pre-made hero is the
    simplest exact start: race/gender/portrait from the prototype, the race
