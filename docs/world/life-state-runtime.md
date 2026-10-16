@@ -11,7 +11,7 @@ Two layers, both Godot-free:
 - `Arcanum.Simulation.Combat.LifeRules`: pure functions over one critter's `LifeState` (hit-point damage, fatigue
   damage, poison level, stun and injury conditions, scars) and its `LifeFacts` (pools, effective stats, traits).
 - `GameSessionOwner` life domain: the hero's life and every NPC life the session changed, with the session's version
-  guard, revision, seeded rolls and snapshot schema 8.
+  guard, revision, seeded rolls and snapshot schema 8 (schema 9 since ARC-WORLD-024 adds the timers' event queue).
 
 Numbers and order are the CE reading at `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, read only,
 nothing copied). The fatigue recovery step was also checked in the original 1.0.7.4 executable (`Arcanum.exe` at
@@ -75,7 +75,8 @@ only when the step runs to the end; a refusal draws nothing. As in the source, a
 
 ## Snapshot schema 8
 
-`life` is encoded between `random` and `lighting`:
+`life` is encoded between `random` and `lighting` (since schema 9 `events` follows it,
+[event queue](game-event-queue-runtime.md#snapshot-schema-9)):
 
 ```json
 "life":{"hero":{"hpDamage":4,"fatigueDamage":6,"poison":0,"conditions":[],"scars":0,"deathTimeMs":null},
@@ -98,9 +99,10 @@ before this schema, so nothing is lost.
 ## Not implemented
 
 - No host calls it: the viewer applies no damage, the attack resolver's output is applied only in tests.
-- Timers: the 80-second fatigue recovery, 15/120-second poison ticks, the hourly NPC resting heal and body decay are
-  scheduled by the game event queue (ARC-RES-046, slices E2/E4); this task ships the steps they call. Pending events are
-  not saved yet.
+- Timers: since ARC-WORLD-024 the 80-second fatigue recovery, the 15/120-second poison ticks and the hourly NPC resting
+  heal are scheduled by every life step on the session's game event queue and saved with it
+  ([session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024)); no host runs the pass yet. Body decay,
+  encumbrance fatigue damage and the combat-focus wipe have no timer.
 - What other owners do on these events: experience and alignment on a kill, the party leaving of a dead follower,
   AI focus and near-death reactions, spell demaintenance on unconsciousness, item drops and wear, the death slide and
   return to the main menu for a dead PC, logbook injuries.

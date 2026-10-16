@@ -39,7 +39,7 @@ the same state at any frame rate). The clock it builds on is the
   call of the source's per-frame time function. **Due** means the list's clock
   has reached the deadline.
 - **CE anomaly** is a branch that looks like a reconstruction slip or an
-  unintended edge, numbered TE1..TE9 in [section
+  unintended edge, numbered TE1..TE10 in [section
   7](#7-ce-anomalies-recorded-not-adopted). Under owner decision
   [D2](npc-combat-ai-plan.md#owner-decisions-2026-10-16) the slice that
   implements the branch decides it; nothing is adopted silently.
@@ -260,6 +260,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | TE6 | A side-list event with a stale handle is dropped at merge without the object-ID recovery that a firing event gets (Q4 against Q6). | Default: one validation rule at fire time, with a typed "entity missing" outcome. |
 | TE7 | Handler results are ignored and dropped events leave at most a debug line (Q6, Q7); nothing tells the caller or a trace that a timer did not run. | Default: typed outcomes in the pass result and the trace. |
 | TE8 | The companion wait timer is scheduled only for an extraordinary-charisma leader and never gets its NPC parameter ([wait][ai-wait]). | Already open as [ARC-RES-024 O3](companion-follow-evidence.md#open-questions); listed here for completeness. |
+| TE10 | The poison recovery handler writes the new level through the stat setter, which schedules a recovery event because none is pending (the firing one already left its list), and then adds another itself, so from the first tick on two recovery events run every 120 s ([poison][st-poison], [poison schedule][st-poison-sched], [stat write][stat-poison-set]). Found by ARC-WORLD-024. | Likely unintended. Decided in ARC-WORLD-024: one recovery timer per critter, under both rule settings; the original executable is NOT_VERIFIED. |
 | TE9 | An object lost before the event fires — not found when the event was loaded (P2), or whose handle fails the force recovery at map open (P5) — turns into a null parameter, and the handler runs with a null object instead of the event being dropped like one whose object is destroyed (Q6). Most life-state handlers return early on a null object, but the deferred script call still runs `SAP_USE` with a null triggerer or attachee ([script call][scr-process], [handle reader][obj-load], [recover][te-recover]). | Default: one rule, "entity missing" is a typed drop at fire time, whatever the path. |
 
 ## 8. Proposed implementation slices (`WORLD`)
@@ -309,7 +310,9 @@ explicit limits, typed results, Godot-free assemblies):
 | E5 Animation domain | E2, animation scheduler (item 9) | A second clock that runs at the game rate while game time is frozen in a round, with its own list and pass, for animation goals and real-time combat cadence. |
 
 E1 is implemented as ARC-WORLD-022 ([runtime](../world/game-event-queue-runtime.md)), which records the
-decisions it took per row of section 7.
+decisions it took per row of section 7. E2 with the life-state timers is ARC-WORLD-024
+([session wiring](../world/game-event-queue-runtime.md#session-wiring-arc-world-024)); it keeps no per-kind
+ActiveMapOnly removal yet because no such kind exists before the AI tick.
 
 Order: E1 now (no schema), E2 after item 2 in the schema lane (and
 before item 6 if that is next in the lane), then E3; the E4 kinds arrive with
@@ -402,6 +405,7 @@ code or structure was copied; names in this note are descriptive.
 [cr-wipe]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1613-L1663
 [st-poison]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1007-L1082
 [st-poison-sched]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1092-L1135
+[stat-poison-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L774-L783
 [cb-tb-step]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L3041-L3076
 [cb-tb]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L3079-L3103
 [cb-round]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L3322-L3329

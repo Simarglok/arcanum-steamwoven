@@ -323,6 +323,48 @@ public sealed class GameEventQueueTests
     }
 
     [TestMethod]
+    public void RelocationMovesOnlyEventsWhoseEntitiesAllTravel()
+    {
+        var recorder = new Recorder();
+        var queue = Queue(recorder);
+        var tick = Added(queue.ScheduleAt(Tick, GameEventPayload.Of([Npc("virgil")]), 10));
+        var stays = Added(queue.ScheduleAt(Call, With(Npc("wolf"), 1), 20));
+        var pair = Added(queue.ScheduleAt(Pair, GameEventPayload.Of([Npc("virgil"), Npc("wolf")]), 30));
+        var global = Added(queue.ScheduleAt(Recharge, With(Npc("virgil"), 5), 40));
+        var elsewhere = Added(queue.ScheduleAt(Call, With(Npc("virgil", 3), 1), 50));
+
+        var result = queue.Relocate(1, 2, entity => entity.Code == "virgil");
+        Assert.AreEqual(GameEventFailure.None, result.Failure);
+        // Same sequence and deadline; a scoped event takes the new map, a global one keeps scope 0.
+        CollectionAssert.AreEqual(new[]
+        {
+            tick with { ScopeMap = 2, Payload = GameEventPayload.Of([Npc("virgil", 2)]) },
+            global with { Payload = With(Npc("virgil", 2), 5) },
+        }, result.Moved.ToArray());
+        CollectionAssert.Contains(queue.QueryPending().ToArray(), stays);
+        CollectionAssert.Contains(queue.QueryPending().ToArray(), pair, "one of its entities stays behind");
+        CollectionAssert.Contains(queue.QueryPending().ToArray(), elsewhere);
+        // The key index follows: the moved tick replaces on its new map, a new one on the old map is added.
+        Assert.AreEqual(GameEventScheduleDisposition.Replaced, queue.ScheduleAt(Tick, GameEventPayload.Of([Npc("virgil", 2)]), 1).Disposition);
+        Assert.AreEqual(GameEventScheduleDisposition.Added, queue.ScheduleAt(Tick, GameEventPayload.Of([Npc("virgil")]), 1).Disposition);
+
+        // A collision moves nothing.
+        var before = queue.QueryPending();
+        Assert.AreEqual(GameEventFailure.DuplicateKey, queue.Relocate(1, 2, entity => entity.Code == "virgil").Failure);
+        CollectionAssert.AreEqual(before.ToArray(), queue.QueryPending().ToArray());
+        Assert.AreEqual(GameEventFailure.None, queue.Relocate(4, 4, _ => true).Failure);
+        Assert.AreEqual(GameEventFailure.InvalidScope, queue.Relocate(0, 2, _ => true).Failure);
+
+        recorder.OnFire = (_, q) =>
+        {
+            Assert.AreEqual(GameEventFailure.PassInProgress, q.Relocate(2, 1, _ => true).Failure);
+            return GameEventHandlerOutcome.Completed;
+        };
+        Run(queue, Pass(Game(1), activeMap: 2));
+        Assert.IsTrue(recorder.Fired.Count > 0);
+    }
+
+    [TestMethod]
     public void HandlersMayCancelButNotNestPassesOrSnapshots()
     {
         var recorder = new Recorder();

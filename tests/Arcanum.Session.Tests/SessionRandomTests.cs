@@ -70,7 +70,7 @@ public sealed class SessionRandomTests
         using var owner = Seeded();
         for (var i = 0; i < 3; i++) Rolled(owner.Roll("warmup", 1, 100));
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
-        StringAssert.Contains(text, ",\"random\":{\"seed\":\"0123456789abcdef\",\"draws\":3}" + NoLife + ",\"lighting\":null}");
+        StringAssert.Contains(text, ",\"random\":{\"seed\":\"0123456789abcdef\",\"draws\":3}" + NoLife + NoEvents + ",\"lighting\":null}");
         var expected = new[] { 41, 53, 47, 2, 10 };
         CollectionAssert.AreEqual(expected, Enumerable.Range(0, 5).Select(_ => Rolled(owner.Roll("after", 1, 100)).Value).ToArray());
 
@@ -171,7 +171,7 @@ public sealed class SessionRandomTests
         using var owner = Seeded();
         var saved = owner.Capture();
         var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
-            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, new(Seed, -1), saved.Life, saved.Lighting);
+            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, new(Seed, -1), saved.Life, saved.Events, saved.Lighting);
         var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
         Assert.AreEqual((null, GameSessionFailure.InvalidSnapshot), (result.Owner, result.Failure));
     }

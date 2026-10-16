@@ -202,6 +202,10 @@ public sealed record GameEventPassResult(GameEventFailure Failure, ImmutableArra
     public int Dropped => Outcomes.Length - Fired;
 }
 
+/// <summary>The result of <see cref="GameEventQueue.Relocate"/>: the moved events as they now are, or a failure with none
+/// moved.</summary>
+public sealed record GameEventRelocateResult(GameEventFailure Failure, ImmutableArray<GameEvent> Moved);
+
 /// <summary>
 /// Detached persisted state: the registry version, the next sequence number and the pending events of saved kinds in
 /// queue order (domain, deadline, sequence).
