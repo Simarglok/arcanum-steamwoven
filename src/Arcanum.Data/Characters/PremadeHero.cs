@@ -80,7 +80,7 @@ public sealed record PremadeHeroRead(PremadeHeroFailure Failure, PremadeHero? He
 /// </summary>
 public static class PremadeHeroReader
 {
-    public const int PcType = 15, PrototypeOffset = 20, MaxPrototypeBytes = 64 * 1024;
+    public const int PcType = 15, PrototypeOffset = 20, MaxPrototypeBytes = PrototypeRecords.MaxPrototypeBytes;
     public const int GoldType = 8;
     private const int StatSlot = 38, BasicSkillSlot = 39, TechSkillSlot = 40, EffectSlot = 46, CauseSlot = 47, PortraitSlot = 49,
         GoldSlot = 50, InventoryCountSlot = 55, InventoryListSlot = 56, InventorySourceSlot = 57, SchemeSlot = 63,
@@ -88,8 +88,6 @@ public static class PremadeHeroReader
     private const int GetScript = 4, InsertItemScript = 21;
     private const int ExperienceStat = 18, AlignmentStat = 19, AgeStat = 25, GenderStat = 26, RaceStat = 27;
     private const int RaceCause = 0, GenderCause = 9, RaceCount = 11;
-
-    private static readonly StaticObjectLoaderOptions Limits = new() { MaxPrototypeBytes = MaxPrototypeBytes, MaxArrayElements = 4096, MaxStringBytes = 4096 };
 
     public static PremadeHeroRead Read(PremadeHeroSources sources, int basicPrototype)
     {
@@ -196,22 +194,8 @@ public static class PremadeHeroReader
         };
     }
 
-    private static PrototypeFileStatus Prototype(PremadeHeroSources sources, int number, out ObjectWireRecord? record)
-    {
-        record = null;
-        var file = sources.Prototype(number);
-        if (file is null || file.Status != PrototypeFileStatus.Found)
-            return file?.Status is { } status && status != PrototypeFileStatus.Found ? status : PrototypeFileStatus.Missing;
-        if (file.Bytes is not { } bytes || bytes.Length > MaxPrototypeBytes) return PrototypeFileStatus.TooLarge;
-        try { record = ObjectWireReader.Read(bytes, Limits, prototype: true, maxRecordBytes: MaxPrototypeBytes); }
-        catch (StaticObjectException) { return PrototypeFileStatus.Unreadable; }
-        if (record.Own.Number != number || record.Length != bytes.Length)
-        {
-            record = null;
-            return PrototypeFileStatus.Unreadable;
-        }
-        return PrototypeFileStatus.Found;
-    }
+    private static PrototypeFileStatus Prototype(PremadeHeroSources sources, int number, out ObjectWireRecord? record) =>
+        PrototypeRecords.Read(sources.Prototype, number, out record);
 
     private static int Int(ObjectWireValue value) => value.Number is { } number ? unchecked((int)number) : 0;
 
