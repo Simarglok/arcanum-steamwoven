@@ -153,6 +153,8 @@ public partial class TerrainViewerApp
         var reportPath = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");
         if (!string.IsNullOrWhiteSpace(reportPath)) System.IO.File.WriteAllText(reportPath, System.Text.Json.JsonSerializer.Serialize(report));
         GD.Print($"ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS samples={samples.Count} terrain={area.Snapshot.Reconciliation.CoreTerrain} bodies={area.Plan.DrawableBodies}");
+        // One cell west of the nine core sectors (chart x -65): outside the admitted whole-core coverage.
+        OriginalPassabilityOverlayCheck("crash-site-area", new(AreaGridSession.MinimumChartCell - 1, 1), blockerReason: "DESTINATION_OBJECT_BLOCKER");
         if (_nativeSmokeScreenshot is not null)
         {
             using var image = GetViewport().GetTexture().GetImage();

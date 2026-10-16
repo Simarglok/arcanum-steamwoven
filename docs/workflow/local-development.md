@@ -8,13 +8,14 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-009 build, else ARC-WORLD-007, else ARC-INPUT-001, else ARC-RENDER-007
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` tries its tasks in the
-fixed order ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
+fixed order ARC-RENDER-008 (adds the [passability overlay](../rendering/passability-overlay.md) on top of the cave build),
+ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
 ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
 Role paths follow the installed game layout used by the area research
@@ -129,7 +130,7 @@ are separate from smoke; require actual Idle/Walk observation and unchanged
 seal/signature outside the sealed app. Registration is still not acceptance,
 review, publication or owner merge.
 
-## Diagnostic palette candidate (ARC-INPUT-001)
+## Diagnostic palette and passability overlay candidates (ARC-INPUT-001, ARC-RENDER-008)
 
 ARC-INPUT-001 uses the same closed terrain endpoint and `world-builds` root with the
 literal task `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001`. It keeps every ARC-RENDER-007
@@ -137,8 +138,8 @@ gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003
 and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
 `crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
-an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007 or ARC-WORLD-009 v2 artifact and
-nothing broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2
+artifact and nothing broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
 
 ## Click-to-move candidate (ARC-WORLD-007)
 
@@ -165,6 +166,16 @@ other. A home configured before this role existed must run `./arcanum setup` (or
 again: launching the ARC-WORLD-009 build otherwise stops with the missing role named,
 and `./arcanum status` lists it for the build `area` would choose. Setup writes nothing
 unless every pinned role, the cave file included, is found with its exact identity.
+
+## Passability overlay candidate (ARC-RENDER-008)
+
+ARC-RENDER-008 uses the same endpoint, root and literal task mechanism
+(`ARCANUM_TERRAIN_EXPORT_TASK=ARC-RENDER-008`) with exactly the ARC-RENDER-007 gate set.
+Its builds contain everything above (palette, click-to-move, cave), so like ARC-WORLD-009
+they take the `caveMobile` role (`launch.TASK_ROLES`) and their area-original gates require
+the cave transition smoke. Its synthetic gates also require the overlay matrix/invalidation
+markers, and every native WORLD/AREA observation must print the `ARC-RENDER-008 original overlay PASS`
+check ([overlay](../rendering/passability-overlay.md)).
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 
