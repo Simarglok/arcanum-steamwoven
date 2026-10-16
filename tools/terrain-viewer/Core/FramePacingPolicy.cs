@@ -32,6 +32,12 @@ public static class FramePacingPolicy
             ? display : Math.Min(IdleFps, display);
     }
 
+    /// <summary>Whether a measured rate meets the target; only such caps are kept for
+    /// the next time the target applies, so a frame-bound episode (cap driven to its
+    /// upper bound) does not leave later light episodes uncapped.</summary>
+    public static bool OnTarget(int target, double measuredFps)
+        => double.IsFinite(measuredFps) && Math.Abs(target - measuredFps) <= ToleranceFps;
+
     /// <summary>The next engine cap for <paramref name="target"/>, given the cap in force
     /// and the frame rate measured under it: raised or lowered by the error, within
     /// [target, <see cref="MaxCapFactor"/> × target]. A frame-bound loop (measured below
@@ -41,7 +47,7 @@ public static class FramePacingPolicy
         if (target < 1) throw new ArgumentOutOfRangeException(nameof(target));
         var max = checked(target * MaxCapFactor);
         cap = Math.Clamp(cap, target, max);
-        if (!double.IsFinite(measuredFps) || measuredFps <= 0 || Math.Abs(target - measuredFps) <= ToleranceFps) return cap;
+        if (!double.IsFinite(measuredFps) || measuredFps <= 0 || OnTarget(target, measuredFps)) return cap;
         return (int)Math.Clamp(Math.Round(cap + (target - measuredFps)), target, max);
     }
 }

@@ -18,8 +18,14 @@ public sealed class TerrainTextureCache : IDisposable
     public long AreaRgbaBytes { get; private set; }
     /// <summary>Frames that left the view stay resident, least recently used evicted first,
     /// while at most this many frames and bytes are retained beyond the visible set.</summary>
-    public int AreaRetainFrames { get; init; } = 512;
-    public long AreaRetainBytes { get; init; } = 32L * 1024 * 1024;
+    public int AreaRetainFrames { get => _areaRetainFrames; init => _areaRetainFrames = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(AreaRetainFrames)); }
+    public long AreaRetainBytes { get => _areaRetainBytes; init => _areaRetainBytes = value >= 0 ? value : throw new ArgumentOutOfRangeException(nameof(AreaRetainBytes)); }
+    private readonly int _areaRetainFrames = 512;
+    private readonly long _areaRetainBytes = 32L * 1024 * 1024;
+    /// <summary>Distinct frames and RGBA bytes of the last visible set; the rest of
+    /// <see cref="AreaCount"/>/<see cref="AreaRgbaBytes"/> is retained.</summary>
+    public int AreaVisibleFrames { get; private set; }
+    public long AreaVisibleBytes { get; private set; }
     private readonly Func<Image, ImageTexture> _createTexture;
     private readonly Action<ImageTexture> _disposeTexture;
 
@@ -77,13 +83,13 @@ public sealed class TerrainTextureCache : IDisposable
     /// fixture) owns its own pixels for equal keys, so every area texture is released.</summary>
     public void UploadAreaVisible(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames, IReadOnlySet<AreaFrameKey> visible)
     {
+        var bytes = visible.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
+        if (visible.Count > AreaRepositoryPolicy.MaxFrames || bytes > AreaRepositoryPolicy.MaxCpuBytes) throw new InvalidOperationException("AREA_GPU_BUDGET");
         if (!ReferenceEquals(_areaRepository, frames))
         {
             foreach (var texture in _areaTextures.Values) DisposeTexture(texture);
-            _areaTextures.Clear(); _areaUse.Clear(); AreaRgbaBytes = 0; _areaRepository = frames;
+            _areaTextures.Clear(); _areaUse.Clear(); AreaRgbaBytes = 0; AreaVisibleFrames = 0; AreaVisibleBytes = 0; _areaRepository = frames;
         }
-        var bytes = visible.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
-        if (visible.Count > AreaRepositoryPolicy.MaxFrames || bytes > AreaRepositoryPolicy.MaxCpuBytes) throw new InvalidOperationException("AREA_GPU_BUDGET");
         _areaSubmission++;
         var retained = _areaTextures.Keys.Where(key => !visible.Contains(key)).OrderBy(key => _areaUse[key].LastUse).ToList();
         var retainedBytes = retained.Sum(key => _areaUse[key].Bytes); var retainedCount = retained.Count;
@@ -106,12 +112,13 @@ public sealed class TerrainTextureCache : IDisposable
                 _areaTextures.Add(key, texture); uploaded.Add(key);
             }
             foreach (var key in visible) _areaUse[key] = (checked((long)frames[key].Width * frames[key].Height * 4), _areaSubmission);
-            AreaRgbaBytes = checked(bytes + retainedBytes);
+            AreaRgbaBytes = checked(bytes + retainedBytes); AreaVisibleFrames = visible.Count; AreaVisibleBytes = bytes;
         }
         catch
         {
             foreach (var key in uploaded) { DisposeTexture(_areaTextures[key]); _areaTextures.Remove(key); _areaUse.Remove(key); }
             AreaRgbaBytes = _areaTextures.Keys.Sum(key => checked((long)frames[key].Width * frames[key].Height * 4));
+            AreaVisibleFrames = 0; AreaVisibleBytes = 0;
             throw;
         }
     }
@@ -224,7 +231,7 @@ public sealed class TerrainTextureCache : IDisposable
         _textures.Clear();
         _staticTextures.Clear();
         _actorTextures.Clear();
-        _areaTextures.Clear(); _areaUse.Clear(); _areaRepository = null; AreaRgbaBytes = 0;
+        _areaTextures.Clear(); _areaUse.Clear(); _areaRepository = null; AreaRgbaBytes = 0; AreaVisibleFrames = 0; AreaVisibleBytes = 0;
     }
 
     public void Dispose() => Clear();

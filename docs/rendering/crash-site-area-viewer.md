@@ -164,7 +164,9 @@ In an interactive run the viewer caps its frame rate (`FramePacingPolicy`): at
 the current display's refresh rate while input is held or recent (0.5 s) or the
 camera moves, and at 60 FPS (or the display rate, if lower) otherwise. The engine
 cap is corrected once per second from the measured rate, within 1–4 times the
-target, because Godot's limiter alone undershoots on macOS. The per-frame WORLD
+target, because Godot's limiter alone undershoots on macOS; only a cap that met
+its target is remembered for the next time that target applies, so a frame-bound
+pan does not leave later light views uncapped. The per-frame WORLD
 status line is rebuilt at most ten times per second; event-driven refreshes stay
 immediate. Self-tests and the native smoke run uncapped with per-frame status.
 These are interactive comfort policies, not frame-time guarantees.
@@ -351,7 +353,8 @@ measures resources on the published area. A zoom-1 sweep tiles the whole
 envelope twice, first with terrain chunks (the default) and then with per-command
 terrain; every one of the 37,363 commands must be submitted at least once per
 sweep while visible GPU residency stays within the 2,444-frame/81,853,096-byte
-admission caps and chunks within their own cap. Both caches must exceed their
+admission caps, frames resident beyond the visible set stay within the retention
+allowance, and chunks within their own cap. Both caches must exceed their
 allowance and evict: chunks in the first sweep, frame textures (reuploaded from
 the unchanged CPU repository) in the second. Two
 overlapped production reloads follow: the cancelled first generation must not

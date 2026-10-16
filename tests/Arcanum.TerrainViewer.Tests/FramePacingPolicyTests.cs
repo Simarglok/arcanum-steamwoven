@@ -34,6 +34,9 @@ public sealed class FramePacingPolicyTests
         Assert.AreEqual(240, FramePacingPolicy.CorrectCap(60, 1000, 60));  // out-of-range cap clamped
         Assert.AreEqual(70, FramePacingPolicy.CorrectCap(60, 70, double.NaN));
         Assert.AreEqual(70, FramePacingPolicy.CorrectCap(60, 70, 0));
+        Assert.IsTrue(FramePacingPolicy.OnTarget(60, 59));
+        Assert.IsFalse(FramePacingPolicy.OnTarget(60, 58.9));
+        Assert.IsFalse(FramePacingPolicy.OnTarget(60, double.NaN));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FramePacingPolicy.CorrectCap(0, 60, 60));
     }
 }
