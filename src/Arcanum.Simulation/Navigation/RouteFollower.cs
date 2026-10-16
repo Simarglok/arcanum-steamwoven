@@ -67,7 +67,9 @@ public sealed class RouteFollower
     /// The next advance toward <paramref name="target"/>. Decisions are made only at a settled cell or at the exact end
     /// of the current step, for the cell the actor will stand on, so no input lands inside a step. Planning happens
     /// here, so <see cref="LastPlan"/>, <see cref="PlannedSegments"/> and a plan failure are recorded even if the host
-    /// does not run the returned advance. The follower clears only an intent it issued itself.
+    /// does not run the returned advance. While following, the goal owns movement; otherwise the follower clears only an
+    /// intent it issued itself. Observation times gate a settled actor only: a goal change made during a step applies at
+    /// that step's end.
     /// </summary>
     public RouteSubAdvance Next(MovementState state, SimulationTime target)
     {
@@ -76,12 +78,15 @@ public sealed class RouteFollower
         if (state.Segment is { } segment)
         {
             if (segment.EndTime.Value > target.Value) return new(target, []);
+            // While following, the click owns movement; afterwards only an intent the follower issued is cleared.
+            var owns = Status == RouteFollowStatus.Following || Owned(state);
             var intent = Desired(state.Phase == MovementPhase.Returning ? segment.From : segment.To);
-            if (intent == state.LatestIntent || (!intent.Active && !Owned(state))) return new(segment.EndTime, []);
+            if (intent == state.LatestIntent || (!intent.Active && !owns)) return new(segment.EndTime, []);
             return new(segment.EndTime, [Issue(state, segment.EndTime, intent)]);
         }
+        var owned = Status == RouteFollowStatus.Following || Owned(state);
         var desired = Desired(state.CommittedCell);
-        if (!desired.Active && !(state.LatestIntent.Active && Owned(state))) return new(target, []);
+        if (!desired.Active && !(state.LatestIntent.Active && owned)) return new(target, []);
         // A settled actor takes the input when the goal was observed, or at the target if that time is already closed.
         var at = target;
         if (_requestedAt is { } requested && Admissible(state, requested))

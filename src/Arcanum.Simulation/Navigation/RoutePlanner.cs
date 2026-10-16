@@ -57,6 +57,7 @@ public static class RoutePlanner
 
         internal RoutePlan Run()
         {
+            if (Unenterable() is { } closed) return Done(RouteOutcome.NoRoute, null, [], closed);
             if (Direct() is { } direct) return Found(RouteMethod.Direct, direct, "ROUTE_DIRECT");
             var (local, reason) = Local();
             return local is null ? Done(RouteOutcome.NoRoute, null, [], reason) : Found(RouteMethod.LocalSearch, local, "ROUTE_LOCAL_SEARCH");
@@ -76,6 +77,23 @@ public static class RoutePlanner
             else if (verdict == RouteStepVerdict.Unknown) _unknown++;
             else if (verdict == RouteStepVerdict.Unsupported) _unsupported++;
             return verdict;
+        }
+
+        // A goal no adjacent step can enter is answered from its eight entries, without a search.
+        private string? Unenterable()
+        {
+            var unknown = false;
+            foreach (var direction in Directions)
+            {
+                var (dx, dy) = MovementGeometry.Delta(direction);
+                if ((long)target.X - dx is < int.MinValue or > int.MaxValue || (long)target.Y - dy is < int.MinValue or > int.MaxValue) continue;
+                var neighbor = new CellCoord(target.X - dx, target.Y - dy);
+                if (!source.Contains(neighbor)) continue;
+                var verdict = Verdict(neighbor, direction);
+                if (verdict == RouteStepVerdict.Open) return null;
+                unknown |= verdict == RouteStepVerdict.Unknown;
+            }
+            return unknown ? "ROUTE_EVIDENCE_INCOMPLETE" : "ROUTE_NOT_FOUND";
         }
 
         // Every straight step must be Open; the first other verdict ends the attempt without a partial route.

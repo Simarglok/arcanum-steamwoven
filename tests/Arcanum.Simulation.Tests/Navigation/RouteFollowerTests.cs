@@ -199,4 +199,28 @@ public sealed class RouteFollowerTests
         Assert.AreEqual((false, "ROUTE_ADVANCE_REJECTED", 1), (drive.Completed, drive.FailureCode, drive.Advances.Count));
         Assert.AreSame(host.State, drive.State);
     }
+
+    [TestMethod]
+    public void ClickGoalStopsAnActorAlreadyWalkingThatWay()
+    {
+        var source = GridSource.Open(16, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        host.Advance(T(0), [Batch(0, Press(0))]); // Another source walks east.
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(3, 0), host.State.Time);
+        host.Frames(follower, 4 * 6);
+        Assert.AreEqual((RouteFollowStatus.Arrived, new CellCoord(3, 0)), (follower.Status, host.State.CommittedCell));
+        CollectionAssert.AreEqual(new CellCoord[] { new(1, 0), new(2, 0), new(3, 0) }, host.Committed(), "No step past the goal.");
+    }
+
+    [TestMethod]
+    public void AdvanceThatNeverReachesTheTargetHitsTheSubAdvanceLimit()
+    {
+        var source = GridSource.Open(8, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(3, 0), T(1)); // Each sub-advance stops at the goal's observation time, which never arrives.
+        var drive = follower.Drive(host.State, T(4), (_, _) => MovementRuntime.AdvanceTo(host.State, new(host.State.Time, [], [])));
+        Assert.AreEqual((false, "ROUTE_SUB_ADVANCE_LIMIT", RouteFollower.SubAdvanceMaximum), (drive.Completed, drive.FailureCode, drive.Advances.Count));
+    }
 }

@@ -96,6 +96,9 @@ public sealed class RoutePlannerTests
         var blocked = RoutePlanner.Plan(walled, new(0, 0), new(3, 2));
         Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_NOT_FOUND", 0), (blocked.Outcome, blocked.ReasonCode, blocked.Steps.Count));
         Assert.IsTrue(blocked.BlockedSteps > 0 && blocked.UnknownSteps == 0);
+        var occupied = RoutePlanner.Plan(walled, new(0, 0), new(1, 1));
+        Assert.AreEqual((RouteOutcome.NoRoute, "ROUTE_NOT_FOUND", 0, 8), (occupied.Outcome, occupied.ReasonCode, occupied.Expansions, occupied.Assessments),
+            "A goal no step can enter is answered from its eight entries.");
         var unknown = new GridSource(
             ".......",
             ".?????.",

@@ -47,14 +47,16 @@ interface IRouteStepSource { bool Contains(CellCoord cell); RouteStepVerdict Ass
    10, +1 when the direction changes, estimate 10 × Chebyshev distance, at most
    `Expansions` (4,096) expanded cells, deterministic tie-break by cell index
    (`ROUTE_LOCAL_SEARCH`). Cells outside the window are never asked about. The search
-   keeps one entry per cell, so the turn cost only shapes which of the shortest routes
-   is chosen; it is not an exact turn-minimal search, and nothing here claims original
-   path quality.
+   is near-shortest: a turn costs a tenth of a step, so a route may be a few steps
+   longer to avoid many turns, and with one entry per cell it is not exact under this
+   cost. Nothing here claims original path quality.
 4. **No route:** `ROUTE_EVIDENCE_INCOMPLETE` when an `Unknown` step was met (a route
    may exist through it), otherwise `ROUTE_WINDOW_EXHAUSTED` when the window edge cut
    the search (a route may exist outside it), otherwise `ROUTE_NOT_FOUND` (only
    Blocked/Unsupported steps closed it); `ROUTE_EXPANSION_LIMIT` when a lowered budget
-   ran out. `ROUTE_COORDINATE_OVERFLOW` refuses cells at the edge of the `int` range.
+   ran out. A goal that none of its eight adjacent steps can enter is answered from
+   those steps alone (`ROUTE_NOT_FOUND`, or `ROUTE_EVIDENCE_INCOMPLETE` if one is
+   Unknown). `ROUTE_COORDINATE_OVERFLOW` is a defensive refusal only.
 
 Only `Open` is traversable; `Blocked`, `Unknown` and `Unsupported` are never promoted.
 Each directed step is asked at most once per plan; the plan reports the counts of
@@ -90,8 +92,11 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
   `ROUTE_STEP_DENIED`, and the next advance clears the intent (possibly in the next
   `Drive` call). A route is never continued through a denial; a new click after it
   starts cleanly.
-- The follower clears only an intent it issued itself, so a host may drive it while
-  another input source owns movement. `Next` plans as it decides, so `LastPlan`,
+- While a goal is followed it owns movement and stops the actor on the goal even if
+  another source set the same direction; otherwise the follower clears only an intent
+  it issued itself, so a host may keep driving it while another input source moves the
+  actor. Observation times gate a settled actor only; a goal change during a step
+  applies at that step's end. `Next` plans as it decides, so `LastPlan`,
   `PlannedSegments` and a plan failure are recorded even if the host drops that advance.
 - `Drive` runs `Next`/`Observe` through the host's advance up to the frame target,
   at most 1,024 sub-advances per call, and returns every `MovementResult` in order for
@@ -118,9 +123,10 @@ runtime receives therefore share one Data verdict.
   `ARC_AREA_ORIGINAL=1` and the
   [area coordinator roles](../rendering/crash-site-area-viewer.md). On the development
   Mac (2026-10-16): spawn (6,1) to (4,1) detours around the scenery at (5,1);
-  occupied goals (5,1) and (3,1) end with no route after about 2,000 expansions
-  in 25–50 ms (`ROUTE_WINDOW_EXHAUSTED`: the search reached the window edge); of eight goals 20 cells from spawn four were found and walked to
-  arrival through the session (plans 0.1–1.2 ms), four had no route inside the window.
+  occupied goals (5,1) and (3,1) end `ROUTE_NOT_FOUND` from their eight entries
+  without a search; of eight goals 20 cells from spawn four were found and walked to
+  arrival through the session (plans 0.1–3.4 ms); the other four are cells no step
+  can enter at T0 and end `ROUTE_NOT_FOUND` from their eight entries.
 
 ## NOT READY
 
