@@ -125,7 +125,7 @@ public partial class TerrainViewerApp
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         Require(after.Managed - baseline.Managed < old.CpuBytes / 2, "MANAGED_RETENTION");
-        var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
+        var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
             MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions,
             ChunksComposed = chunkComposed, ChunkEvictions = chunkEvictions, MaxResidentChunks = maxChunks, MaxResidentChunkBytes = maxChunkBytes, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,
             LoadMilliseconds = new[] { old.ElapsedMilliseconds, reloadMilliseconds },

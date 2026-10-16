@@ -32,7 +32,10 @@ public enum AreaConversationStartStatus
     DialogUnreadable,
 }
 
-public sealed record AreaConversationStart(AreaConversationStartStatus Status, DialogConversation? Conversation, AreaSpeaker? Speaker, string Detail);
+/// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
+/// <see cref="SessionDialogPartyPort.LastRefusal"/> names a refused JO/UW), else null.</param>
+public sealed record AreaConversationStart(AreaConversationStartStatus Status, DialogConversation? Conversation, AreaSpeaker? Speaker, string Detail,
+    SessionDialogPartyPort? Party = null);
 
 /// <summary>
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR entry (ARC-SCRIPT-002 resolver) →
@@ -51,11 +54,15 @@ public sealed class AreaConversationHost
     private readonly NpcDialogMapId _map;
     private readonly NpcDialogPcId _pc;
     private readonly AreaInventoryHost? _inventory;
+    private readonly bool _party;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
+    /// <param name="party">ARC-WORLD-016: a speaker listed by <see cref="AreaCompanionRoster"/> talks with the session party
+    /// port (JO, WA, UW through <see cref="SessionDialogPartyPort"/> with its measured facts), and its "following" is the
+    /// session party standing; other speakers keep the diagnostic follow key.</param>
     public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, GameSessionOwner session,
-        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null)
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
@@ -66,15 +73,20 @@ public sealed class AreaConversationHost
         _map = new NpcDialogMapId(snapshot.RuntimeMap, snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256);
         _pc = new NpcDialogPcId(_world, _map, Guid.NewGuid());
         Speakers = FindSpeakers(snapshot);
+        _party = party;
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
-            Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction);
+            Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
+            party ? Speakers.Where(speaker => AreaCompanionRoster.For(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
     }
+
+    /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
+    public bool PartyWired => _party;
 
     /// <summary>
     /// A host over another session (a quick load replaced the area session): same area, archives and profile.
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile, _inventory);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile, _inventory, _party);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -114,13 +126,17 @@ public sealed class AreaConversationHost
         return null;
     }
 
-    /// <summary>Chebyshev distance from a world cell to the speaker.</summary>
-    public static long Distance(AreaSpeaker speaker, long worldX, long worldY) =>
-        Math.Max(Math.Abs(speaker.WorldX - worldX), Math.Abs(speaker.WorldY - worldY));
+    /// <summary>Chebyshev distance from a world cell to the speaker (at <paramref name="at"/> when given: where a moving
+    /// companion stands now, ARC-WORLD-016; its T0 cell otherwise).</summary>
+    public static long Distance(AreaSpeaker speaker, long worldX, long worldY, Func<AreaSpeaker, (long X, long Y)>? at = null)
+    {
+        var (x, y) = at?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
+        return Math.Max(Math.Abs(x - worldX), Math.Abs(y - worldY));
+    }
 
     /// <summary>The nearest speaker within the profile's Chebyshev reach (a project diagnostic rule, not source range).</summary>
-    public AreaSpeaker? Nearest(long worldX, long worldY) => Speakers
-        .Select(speaker => (speaker, distance: Math.Max(Math.Abs(speaker.WorldX - worldX), Math.Abs(speaker.WorldY - worldY))))
+    public AreaSpeaker? Nearest(long worldX, long worldY, Func<AreaSpeaker, (long X, long Y)>? at = null) => Speakers
+        .Select(speaker => (speaker, distance: Distance(speaker, worldX, worldY, at)))
         .Where(item => item.distance <= Profile.Reach)
         .OrderBy(item => item.distance).ThenBy(item => item.speaker.Index)
         .Select(item => item.speaker).FirstOrDefault();
@@ -181,10 +197,22 @@ public sealed class AreaConversationHost
         }
 
         var participants = new DialogParticipants(new DialogId(speaker.ScriptId), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
+        var party = PartyPort(speaker);
         var conversation = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(entry.DlgNode.Value), participants, new DialogScriptLine(entry.ScrLine.Value), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, _session.Flags, State, Inventory: _inventory?.DialogPort(_session, SpeakerEntity)));
-        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {speaker.ScriptId} SCR line {entry.ScrLine.Value} -> DLG node {entry.DlgNode.Value}");
+            new DialogConversationPorts(State, State, _session.Flags, State, party, _inventory?.DialogPort(_session, SpeakerEntity)));
+        return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {speaker.ScriptId} SCR line {entry.ScrLine.Value} -> DLG node {entry.DlgNode.Value}", party);
+    }
+
+    /// <summary>The session party port for a roster speaker when the party is wired; facts are read at each call.</summary>
+    private SessionDialogPartyPort? PartyPort(AreaSpeaker speaker)
+    {
+        if (!_party || AreaCompanionRoster.For(speaker) is not { } facts) return null;
+        var npc = AreaConversationState.Npc(speaker.Index);
+        var entity = AreaConversationState.EntityId(speaker.Row);
+        return new SessionDialogPartyPort(_session, AreaConversationState.PcParticipant,
+            participant => participant == npc ? entity : null,
+            participant => participant == npc ? AreaCompanionRoster.Facts(facts, State.Alignment, State.Reaction(speaker.Index)) : null);
     }
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
@@ -236,13 +264,18 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     private readonly Guid _stateEpoch = Guid.NewGuid();
     private readonly Guid _attachmentEpoch = Guid.NewGuid();
     private readonly int _initialReaction;
+    private readonly HashSet<int> _party;
 
     /// <param name="speakerEntities">Stable session entity id of each speaker index (see <see cref="EntityId"/>).</param>
-    public AreaConversationState(GameSessionOwner session, SessionMapId map, IReadOnlyList<string> speakerEntities, int initialReaction)
+    /// <param name="partySpeakers">ARC-WORLD-016: speaker indexes whose "following" is the session party standing
+    /// (<see cref="SessionCompanion.LedByPc"/>, true while waiting too) instead of the diagnostic follow key.</param>
+    public AreaConversationState(GameSessionOwner session, SessionMapId map, IReadOnlyList<string> speakerEntities, int initialReaction,
+        IReadOnlySet<int>? partySpeakers = null)
     {
         _session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentNullException.ThrowIfNull(speakerEntities);
         _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
+        _party = partySpeakers?.ToHashSet() ?? [];
         // A restored session may carry any long under these keys; refuse values this port cannot read.
         foreach (var entity in _entities)
         {
@@ -267,7 +300,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public IReadOnlyList<int> Items => _items;
     /// <summary>PC alignment, starting at 0 in this diagnostic profile; not session state.</summary>
     public int Alignment { get; private set; }
-    public bool Follows(int speaker) => Read(speaker, FollowProperty) == 1;
+    public bool Follows(int speaker) => _party.Contains(speaker)
+        ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
     public int Reaction(int speaker) => Read(speaker, ReactionProperty) is { } value ? checked((int)value) : _initialReaction;
 

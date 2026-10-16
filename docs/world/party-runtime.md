@@ -8,11 +8,10 @@ the [conversation runtime](../scripting/dialog-conversation-runtime.md). It cove
 and consent part of [FR-SOCIAL-003](../requirements/story-social-ai.md#fr-social-003) and
 [FR-SOCIAL-005](../requirements/story-social-ai.md#fr-social-005).
 
-**NOT READY:** the AREA viewer is not wired to it. The viewer still answers `JO` with its
-diagnostic `follow.pc` entity key and does not pass a party port, so `WA` and `UW` stay
-unadmitted there and node 385 is still a frontier in `./arcanum area`. There is no follower
-movement, map-change group, orders, loyalty test, wait timer or death handling, and no
-generated refusal line text. Original executable parity is **NOT_VERIFIED**; numbers and
+**NOT READY:** since ARC-WORLD-016 the AREA viewer passes `SessionDialogPartyPort` for Virgil and he
+follows the PC ([companion follow runtime](companion-follow-runtime.md)); other speakers keep the
+diagnostic `follow.pc` key. There is no map-change group, orders, loyalty test, wait timer or death
+handling, and no generated refusal line text. Original executable parity is **NOT_VERIFIED**; numbers and
 order are source claims read in CE at `a7ff41b300ef712f0e7d088183a3d08957110cdd`.
 
 ## Follow check (`Arcanum.Simulation.Party`)
@@ -140,6 +139,5 @@ ARC_AREA_CONVERSATION_GAME_ROOT=<installation> "$DOTNET" test tests/Arcanum.Terr
 
 ## Next
 
-Wire the viewer: replace the `follow.pc` key with the session party (keeping the reaction and
-LF keys), pass `SessionDialogPartyPort` with Virgil's measured inputs, and show the refusal
-reason. Then follower movement (slice 3) and the cross-map group (slice 4).
+The viewer wiring and follower movement (slice 3) are ARC-WORLD-016
+([companion follow runtime](companion-follow-runtime.md)); next is the cross-map group (slice 4, ARC-WORLD-017).

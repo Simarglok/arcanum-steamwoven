@@ -461,6 +461,10 @@ REPOSITORY_FRAMES = 2444
 REPOSITORY_BYTES = 81853096
 
 
+# The core's pickable items a smoke may take before the resource sweep (ARC-UI-004 takes two).
+MAX_SWEEP_TAKEN = 16
+
+
 def resource_summary(raw: object) -> dict:
     """Validate the native S5 observation and keep only safe scalar values."""
     _require(isinstance(raw, dict) and raw.get('Outcome') == 'PASS', 'area resources outcome')
@@ -473,7 +477,11 @@ def resource_summary(raw: object) -> dict:
     scalars = {name: raw.get(name) for name in ('SweepSteps', 'SweepCommands', 'MaxVisible', 'MaxGpuFrames',
                                                   'MaxGpuBytes', 'Reuploads', 'Evictions', 'CpuFrames', 'CpuBytes')}
     _require(all(type(value) is int and value > 0 for value in scalars.values()), 'area resources scalars')
-    _require(scalars['SweepCommands'] == 37363 and scalars['CpuFrames'] <= REPOSITORY_FRAMES
+    # Commands picked up before the sweep (ARC-UI-004 smoke) are hidden, not dropped: swept plus
+    # taken must still account for the whole core. Older receipts carry no SweepTaken (0).
+    taken = raw.get('SweepTaken', 0)
+    _require(type(taken) is int and 0 <= taken <= MAX_SWEEP_TAKEN, 'area resources taken')
+    _require(scalars['SweepCommands'] + taken == 37363 and scalars['CpuFrames'] <= REPOSITORY_FRAMES
              and scalars['CpuBytes'] <= REPOSITORY_BYTES and scalars['MaxGpuFrames'] <= REPOSITORY_FRAMES
              and scalars['MaxGpuBytes'] <= REPOSITORY_BYTES, 'area resources bounds')
     _require(raw.get('CancelledGenerationPublished') is False, 'area resources stale publication')
@@ -481,7 +489,7 @@ def resource_summary(raw: object) -> dict:
     managed, resident, handles = integers('ManagedBytes', 2), integers('ResidentBytes', 2), integers('Handles', 2)
     # Resident size is an observation only; freed pages need not return to the OS.
     _require(handles[1] <= handles[0] and managed[1] - managed[0] < scalars['CpuBytes'] // 2, 'area resources retention')
-    return {**{name[0].lower() + name[1:]: value for name, value in scalars.items()},
+    return {**{name[0].lower() + name[1:]: value for name, value in scalars.items()}, 'sweepTaken': taken,
             'loadMilliseconds': integers('LoadMilliseconds', 2), 'managedBytes': managed,
             'residentBytes': resident, 'handles': handles, 'retiredGenerationCollected': True, 'outcome': 'PASS'}
 
@@ -503,7 +511,9 @@ def validate_report(report: object, head: str, host: str, task: str = 'ARC-RENDE
     _require((report.get('coreTerrain'),report.get('coreBodies'),report.get('notApplicable'),report.get('submitted')) == (36864,499,15,37363), 'area scene counts')
     resources = report.get('resources')
     _require(isinstance(resources, dict) and resources.get('outcome') == 'PASS'
-             and resources.get('sweepCommands') == 37363, 'area resource observation')
+             and type(resources.get('sweepCommands')) is int and type(resources.get('sweepTaken', 0)) is int
+             and 0 <= resources.get('sweepTaken', 0) <= MAX_SWEEP_TAKEN
+             and resources.get('sweepCommands') + resources.get('sweepTaken', 0) == 37363, 'area resource observation')
     # The summary task names the gate schema; the cave receipt binds the export task's own smoke.
     _require(report.get('caveTransition') == ('PASS' if task in CAVE_TASKS else None), 'area cave transition binding')
 

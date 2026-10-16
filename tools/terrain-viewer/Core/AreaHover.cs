@@ -88,6 +88,26 @@ public sealed class AreaHoverIndex
         return null;
     }
 
+    /// <summary>ARC-WORLD-016: the same pick over the bodies as drawn, with <paramref name="moving"/> (companions where
+    /// they stand) in place of their T0 commands, each at the place plan order gives it.</summary>
+    public AreaObjectKey? Pick(Func<AreaDrawCommand, bool> opaqueAt, IReadOnlyList<AreaDrawCommand>? moving)
+    {
+        if (moving is null || moving.Count == 0) return Pick(opaqueAt);
+        ArgumentNullException.ThrowIfNull(opaqueAt);
+        var keys = moving.Select(command => command.Identity).ToHashSet();
+        var bodies = Bodies.Where(body => !keys.Contains(body.Identity)).ToList();
+        foreach (var command in moving)
+        {
+            if (command.Identity is not { } key || !_rows.TryGetValue(key, out var row) || ClickThrough(row)) continue;
+            var at = bodies.FindLastIndex(body => body.Phase < command.Phase
+                || (body.Phase == command.Phase && AreaScenePlan.CompareUpright(body, command) <= 0)) + 1;
+            bodies.Insert(at, command);
+        }
+        for (var index = bodies.Count - 1; index >= 0; index--)
+            if (opaqueAt(bodies[index])) return bodies[index].Identity;
+        return null;
+    }
+
     /// <summary>The text shown for a hovered object, or null when the original shows none (walls, projectiles, an
     /// empty description). Without a catalog the object type is named instead. NPC recognition ("met before") is not
     /// session state yet, so every NPC is shown as not recognized (the new-game state).</summary>

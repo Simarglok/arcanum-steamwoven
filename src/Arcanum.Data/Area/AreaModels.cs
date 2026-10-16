@@ -104,7 +104,10 @@ public sealed class AreaInspection
 }
 
 /// <summary>Explicit owner transfer. All streams must be readable/seekable and distinct.
-/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.</summary>
+/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.
+/// The owner may read a large input's stream from a worker thread during a parallel authentication pass
+/// while it holds its own lock, so a custom stream must be safe to read from another thread and must not
+/// call back into the owner while it is read.</summary>
 public sealed class AreaInput
 {
     public AreaInput(AreaInputKey key, Stream stream, bool leaveOpen = false)
@@ -205,11 +208,15 @@ public sealed class AreaLoaderOptions
     public int MaxPrototypes { get; init; } = 56;
     public int MaxObjects { get; init; } = 524;
     public int MaxVisuals { get; init; } = 2444;
+    /// <summary>Inputs at least this long are hashed in parallel by whole-set authentication passes
+    /// when two or more of them take part (ARC-RENDER-009); 0 parallelizes every such pass.</summary>
+    public long ParallelAuthenticationMinBytes { get; init; } = 1L << 20;
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
             MaxFrameRequests <= 0 || MaxFrameStoredBytes <= 0 || MaxFrameDecodedBytes <= 0 || MaxFrameRgbaBytes <= 0 || MaxFrameEncodedBytes <= 0 ||
-            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0)
+            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0 ||
+            ParallelAuthenticationMinBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(AreaLoaderOptions));
     }
 }
