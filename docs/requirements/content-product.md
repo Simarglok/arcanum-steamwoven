@@ -40,7 +40,7 @@ Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; и�
 
 ### FR-CONTENT-006 — Текстовые ресурсы и encoding не подменяются вручную
 
-**Поведение.** Имена, описания, диалоги, книги и UI-текст загружаются по исходным идентификаторам; профиль encoding и локализации задаётся явно. **CE-source:** [MES load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L101-L138), [numeric/text record parse](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L516-L544). Эти функции не устанавливают универсальный Unicode/локализационный контракт. **Приёмка:** synthetic кириллица/латиница и отсутствующий message ID обрабатываются по объявленному профилю без порчи raw bytes. **Покрытие:** частично — byte-preserving [DLG reader](../formats/dlg-reader.md), ограниченные MES projections для данных; production text decoding/локализация и все потребители отсутствуют.
+**Поведение.** Имена, описания, диалоги, книги и UI-текст загружаются по исходным идентификаторам; профиль encoding и локализации задаётся явно. **CE-source:** [MES load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L101-L138), [numeric/text record parse](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L516-L544). Эти функции не устанавливают универсальный Unicode/локализационный контракт. **Приёмка:** synthetic кириллица/латиница и отсутствующий message ID обрабатываются по объявленному профилю без порчи raw bytes. **Покрытие:** частично — byte-preserving [DLG reader](../formats/dlg-reader.md), ограниченные MES projections для данных и [MES reader ARC-DATA-013](../formats/mes-reader.md) с явными профилями ASCII/Windows-1252/Windows-1251 и typed отсутствием номера; локализация, UI-текст и потребители MES reader отсутствуют.
 
 <a id="fr-content-007"></a>
 
@@ -111,7 +111,7 @@ Normal/depth/occlusion/emissive maps, soft shadows, fog, weather, particles, imp
 | FR-CONTENT-003 | Нет | Нет | Нет | Нет | Campaign bootstrap отсутствует. |
 | FR-CONTENT-004 | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
 | FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
-| FR-CONTENT-006 | Частично | Нет | Нет | Частично | Raw DLG/MES projections; не text/encoding/UI runtime. |
+| FR-CONTENT-006 | Частично | Частично | Нет | Частично | Raw DLG/MES projections; [ARC-DATA-013](../formats/mes-reader.md): byte-preserving MES reader с typed отказами и явными профилями ASCII/Windows-1252/Windows-1251 (synthetic латиница/кириллица, отсутствующий номер); не UI/локализация. |
 | FR-CONTENT-007 | Нет | Нет | Нет | Нет | Gameplay RNG отсутствует. |
 | FR-CONTENT-008 | Нет | Нет | Нет | Нет | Общего mod compatibility profile нет. |
 | FR-PRODUCT-001 | Неприменимо | Частично | Частично | Частично | Display lab; не production game UI/readability. |
