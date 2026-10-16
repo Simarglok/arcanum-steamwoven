@@ -262,7 +262,9 @@ internal static partial class Program
         {
             var text = line.TrimStart(' ', '\t'); var start = text.Length > 0 && text[0] is '-' or '+' ? 1 : 0; var end = start;
             while (end < text.Length && char.IsAsciiDigit(text[end])) end++;
-            return end == start ? 0 : long.TryParse(text[..end], System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : throw new InvalidDataException("WORLD_STARTLOC_NUMBER");
+            if (end == start) return 0;
+            // An out-of-range value clamps the way strtoll does.
+            return long.TryParse(text[..end], System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : text[0] == '-' ? long.MinValue : long.MaxValue;
         }
     }
 
@@ -638,7 +640,7 @@ internal static partial class Program
                     if (!reachesTeleport.Contains(script) && list.Any(c => c.Target is { } t && reachesTeleport.Contains(t))) grew = reachesTeleport.Add(script) || grew;
             }
 
-            var edges = new List<object>(); var scriptEdges = new List<(int From, int To, bool Unconditional, string Trigger, IReadOnlyList<string> Guards)>();
+            var edges = new List<object>(); var scriptEdges = new List<(int From, int To, bool Unconditional, string Trigger, IReadOnlyList<string> Guards, IReadOnlyList<string> Reasons)>();
             // Steps the walk cannot follow, in every script that holds or reaches a teleport: computed
             // or out-of-range gotos and unmatched loop breaks (from line 0), and script edges without a
             // literal target (computed calls and every call-ex).
@@ -676,7 +678,7 @@ internal static partial class Program
                         reach = path.Reach.ToString(), guards = path.Guards, chain = path.Chain, hops = path.Hops, unconditional = reasons.Count == 0, reasons,
                     });
                     var trigger = attachment.Source is "tile" or "sector" ? attachment.Source + "_entry" : "sap_" + attachment.Sap.ToString(System.Globalization.CultureInfo.InvariantCulture);
-                    if (toRuntime is { } to && to != fromRuntime) scriptEdges.Add((fromRuntime, to, reasons.Count == 0, trigger, path.Guards));
+                    if (toRuntime is { } to && to != fromRuntime) scriptEdges.Add((fromRuntime, to, reasons.Count == 0, trigger, path.Guards, reasons));
                 }
             }
             var attachedScripts = attachments.Select(a => a.Script).ToHashSet();
@@ -716,6 +718,7 @@ internal static partial class Program
                         unconditional_triggers = here.Where(e => e.Unconditional).Select(e => e.Trigger).Distinct().Order(StringComparer.Ordinal).ToArray(),
                         conditional_triggers = here.Where(e => !e.Unconditional).Select(e => e.Trigger).Distinct().Order(StringComparer.Ordinal).ToArray(),
                         conditional_guards = here.Where(e => !e.Unconditional).SelectMany(e => e.Guards).Distinct().Order(StringComparer.Ordinal).ToArray(),
+                        conditional_reasons = here.Where(e => !e.Unconditional).SelectMany(e => e.Reasons).Distinct().Order(StringComparer.Ordinal).ToArray(),
                     };
                 }).ToArray(),
             };
@@ -850,7 +853,7 @@ internal static partial class Program
         // Text files: synthetic content only.
         Check(DecodeWorldStartLocation("123\r\n-45 trailing\r\n"u8) == (123, -45), "startloc");
         Rejects(() => DecodeWorldStartLocation("12\n"u8), "WORLD_STARTLOC_FRAMING");
-        Check(DecodeWorldStartLocation("x\n\n"u8) == (0, 0) && DecodeWorldStartLocation(" +7z\n-\n"u8) == (7, 0), "startloc reads like strtoll");
+        Check(DecodeWorldStartLocation("99999999999999999999\n-99999999999999999999\n"u8) == (long.MaxValue, long.MinValue) && DecodeWorldStartLocation("x\n\n"u8) == (0, 0) && DecodeWorldStartLocation(" +7z\n-\n"u8) == (7, 0), "startloc reads like strtoll");
         var info = DecodeWorldMapInfo("lightscheme: 4\r\nSoundScheme: 3, 5\r\nOther: 1\r\n\r\n"u8);
         Check(info.LightSchemes.SequenceEqual([4]) && info.SoundSchemes.SequenceEqual([(3, 5)]) && info.OtherLines == 1, "mapinfo");
         // Catalogue: unbroken run from 5000, tags, a gap ends the run.
