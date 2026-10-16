@@ -85,6 +85,7 @@ was already installed through Homebrew):
 | Model `realesr-animevideov3-x2` | same zip | `.bin` `548a36f9c3f4ab8da56cd3b13badf23968bee207b396dad14d04b830e5f2ab2d`, `.param` `b88ff4f00ebf019a7fdac17fdd45a7fd3665d37509efc5baf2e4da2e24420a04` |
 | Model `realesrgan-x4plus` | same zip | `.bin` `713ee713b0353afaa27976f0563a64a5043bd70b9bd8936c2e26e25ebcdbcddf`, `.param` `35330ececcea33b6c397a72548e788d5d53becee4734c50b7fada36e89f10a86` |
 | Model `realesrgan-x4plus-anime` | same zip | `.bin` `fe01c269cfd10cdef8e018ab66ebe750cf79c7af4d1f9c16c737e1295229bacc`, `.param` `2b8fb6e0ae4d2d85704ca08c119a2f5ea40add4f2ecd512eb7f4cd44b6127ed4` |
+| xBRZ 1.9 (Zenju) | `https://sourceforge.net/projects/xbrz/files/xBRZ/xBRZ_1.9.zip`, built locally with Apple clang 21 (`-std=c++20 -O2`) into a small raw-RGBA 2× CLI around `xbrz::scale(2, …, ColorFormat::argb)`, default `ScalerCfg` | zip `b2dff73b3abd24a18a7cde78d5ff5ed8f0922296dce6ed734dce2264cd0a0fc9`, `xbrz.cpp` `882346f5f6703f286c55d4089af7a8f63140fe13a133318e4be64891689bee0c` |
 
 Machine: Apple M4 Pro (20-core GPU, Metal 4 via MoltenVK inside the binary), 24 GiB
 unified memory, macOS 27.
@@ -135,23 +136,24 @@ Local observation unless stated.
 | eagle2X | Eagle | pixel-art, copies source colours | 2× | same, `eagle2X` |
 | hq2X | hq2x | pixel-art, blends | 2× | same, `hq2X` |
 | xbr2X | xBR (Hyllian), not Zenju's xBRZ | pixel-art, blends | 2× | same, `xbr2X` |
+| xbrz2X | xBRZ 1.9 (Zenju), alpha-aware ARGB mode | pixel-art, blends | 2× | local build of the GPL source (outside the repository) |
 | av3 | Real-ESRGAN `realesr-animevideov3-x2` | AI (small VGG-style net) | 2× | `realesrgan-ncnn-vulkan -s 2` |
 | x4plus | Real-ESRGAN `realesrgan-x4plus` (RRDB) | AI, general images | 4× → Box 2× | `-s 4`, then `magick -filter Box -resize 50%` (an offline pack-build step, not the runtime box filtering the contract excludes) |
 | x4anime | Real-ESRGAN `realesrgan-x4plus-anime` | AI, illustrations | 4× → Box 2× | as x4plus |
 | …+bleed | the AI method on RGB with opaque colours bled 8 px into the transparent area (rest = mean colour), alpha from the same AI upscale of the binary mask, thresholded at 128 | alpha handling variant | | two runs |
 | …+legacymask | as +bleed, but alpha = the nearest 2× Legacy mask (the contract's default HD alpha) | alpha handling variant | | one run |
 
-Not run, and why: **xBRZ** (Zenju, GPL-3.0 C++) and **ScaleFX** (Sp00kyFox, MIT
-libretro shader) have no CLI on this machine; ScaleFX is natively **3×** (its last
+Not run, and why: **ScaleFX** (Sp00kyFox, MIT libretro shader) has no CLI on this
+machine; it is natively **3×** (its last
 pass is `scale5 = 3.0` in `scalefx.slangp`), so a 2× result needs a resample that
-breaks its "colours only from the original" property. Both are pixel-art scalers of
-the same family as xBR/hq2x, and the measurements below show that family adds almost
-no detail to this pre-rendered, dithered art (judgement). `RealESRGAN_x2plus` and
+breaks its "colours only from the original" property. It is an edge-interpolating
+pixel-art scaler like xBR/xBRZ, and the measurements below show that family adds
+almost no detail to this pre-rendered, dithered art (judgement). `RealESRGAN_x2plus` and
 `realesr-general-x4v3` are published officially only as PyTorch weights in the
 Real-ESRGAN model zoo and were not run (no PyTorch here; community ncnn conversions
-were not looked at). **This is a substitution against the task text**, which names
-xBRZ/ScaleFX as the algorithmic examples: the algorithmic side was measured on
-Scale2x, Eagle, hq2x and ImageMagick's xBR.
+were not looked at). xBRZ, the task's other named example, was added after the first merge
+(owner approved the source download): the algorithmic side is Scale2x, Eagle, hq2x,
+ImageMagick's xBR and xBRZ.
 
 ## Results
 
@@ -167,6 +169,7 @@ process per file (start-up dominates the pixel-art rows).
 | eagle2X | 0.0 | 0.975 | 100.0 | 170 | 0.09 | 0.0 | 0.3 |
 | hq2X | 1.12 | 0.996 | 93.5 | 554 | 0.21 | 0.0 | 0.3 |
 | xbr2X | 1.92 | 0.962 | 87.2 | 683 | 1.0 | 0.0 | 0.4 |
+| xbrz2X | 2.81 | 0.967 | 56.0 | 2775 | 2.56 | 0.14 | 2.2 |
 | av3 | 13.8 | 0.999 | 9.3 | 11888 | 9.19 | 7.3 | 4.4 |
 | av3+bleed | 0.0 | 0.972 | 8.8 | 10788 | 6.34 | 0.17 | 12.1 |
 | av3+legacymask | 0.0 | 1.0 | 8.8 | 10776 | 6.3 | 0.15 | 6.7 |
@@ -181,8 +184,13 @@ process per file (start-up dominates the pixel-art rows).
   for flat-colour sprites; Arcanum's sprites are pre-rendered and dithered, with
   ~170 colours per frame, so the detectors find few clean edges. Judgement from the
   local outputs: at 2× they look like the nearest replica with slightly smoothed
-  outlines. They also change silhouettes: xBR the most (IoU 0.96), Scale2x and Eagle
-  0.98, hq2x 0.996.
+  outlines. They also change silhouettes: xBR and xBRZ the most (IoU 0.96–0.97),
+  Scale2x and Eagle 0.98, hq2x 0.996.
+- **xBRZ** blends the most of the family (56 % in palette, ~2,800 colours, MAE 2.6)
+  and is the only one with a visible smoothing of contours and large shapes in the
+  local outputs (judgement), but it adds no texture detail: rock, cloth and foliage
+  stay as blocky as in the nearest replica. Its alpha-aware mode produces soft alpha
+  on 2.8 % of pixels (the most of the family) with almost no dark halo (0.14 %).
 - **AI scalers repaint every pixel** (only ~9–10 % of output pixels keep a source
   colour; ~6,000–12,000 colours per frame) and invent soft alpha on ~14 % of the
   pixels when fed RGBA directly. Because transparent pixels are `(0,0,0,0)`, the
@@ -203,7 +211,7 @@ process per file (start-up dominates the pixel-art rows).
 
 Recolour exact % on the 7 variants with no ambiguous source colours (minimum / mean):
 nearest 100 / 100, eagle2X 99.6 / 99.9, scale2X 98.8 / 99.7, hq2X 90.9 / 92.6,
-xbr2X 79.7 / 83.4. Only the colour-copying scalers come close, and none is exact.
+xbr2X 79.7 / 83.4, xbrz2X 39.8 / 42.8. Only the colour-copying scalers come close, and none is exact.
 For the AI variants the test is degenerate rather than informative: 97.5–99.9 % of
 their output pixels have colours the source map does not contain, so recolouring is
 not even defined; AI output has to be built per slot by construction.
@@ -222,6 +230,7 @@ pixels on this Mac, see Determinism).
 | eagle2X | 0.0 / 0.0 | 0.0 / 0.0 | 0.56, 0.791, 1.1 | 0.13 / 0.16 / 1.06 / 0.99 |
 | hq2X | 0.01 / 0.0 | 0.0 / 0.0 | 0.11, 0.054, 0.07 | 0.16 / 0.2 / 1.33 / 0.99 |
 | xbr2X | 0.12 / 0.0 | 0.0 / 0.0 | 0.95, 0.998, 1.38 | 0.21 / 0.26 / 1.7 / 1.02 |
+| xbrz2X | 0.41 / 0.0 | 0.0 / 0.0 | 0.7, 0.078, 0.06 | 0.39 / 0.48 / 2.83 / 6.85 |
 | av3 | 1.63 / 0.06 | 0.04 / 0.05 | 3.62, 0.909, 0.0 | 0.33 / 0.38 / 1.77 / 14.69 |
 | av3+bleed | 1.63 / 0.06 | 0.04 / 0.05 | 2.15, 0.019, 0.0 | 0.34 / 0.39 / 1.86 / 38.78 |
 | av3+legacymask | 1.63 / 0.06 | 0.04 / 0.05 | 2.11, 0.013, 0.0 | 0.34 / 0.39 / 1.84 / 20.42 |
@@ -267,6 +276,7 @@ allocations the process owns).
 | x4plus | 13.5 s (~67 k px/s), 665 MiB | 24.7 s (~96 k px/s), 1,833 MiB | 32.3 s, 926 MiB |
 | x4anime | 4.0 s (~228 k px/s), 320 MiB | 10.8 s, 1,586 MiB | 13.4 s, 664 MiB |
 | hq2X / xbr2X (ImageMagick) | — | 1.5 s / 2.1 s, 246 MiB | — |
+| xbrz2X (local CLI, one thread, plus raw/PNG conversion) | — | 2.8 s | — |
 
 The x4 models are much slower mostly because of their architecture (a deep RRDB
 network against av3's compact one; inference, not profiled) and need the extra Box
@@ -341,9 +351,11 @@ same settings work on small GPUs; permissive licences for code, binary and weigh
   when fed RGBA) and any AI run on raw RGBA (soft alpha, dark halo).
 - **No-AI fallback:** hq2x, the pixel-art scaler with near-zero holes (0.07 %) and
   dark pixels (0.05 %) in the per-tile test and no sprite halo; expect little visible
-  gain over Legacy. The pixel-art family measured here (Scale2x, Eagle, xBR, hq2x)
-  is a poor match for pre-rendered art; whether xBRZ or ScaleFX do better is not
-  measured (judgement: unlikely, same edge-detection principle).
+  gain over Legacy. xBRZ smooths contours more but invents soft alpha (2.8 %) and
+  keeps only 56 % of source colours, so it is the pick only if smoother outlines
+  are wanted without AI. The pixel-art family measured here (Scale2x, Eagle, hq2x,
+  xBR, xBRZ) is a poor match for pre-rendered art; ScaleFX is not measured
+  (judgement: unlikely to differ, same edge-interpolation principle).
 - **Terrain (ARC-RENDER-016):** upscale composed 512 chunks with at least 32 source
   pixels of neighbour context, as one network tile each, cropped back; never tile by
   tile. The ARC-RENDER-013 contract keeps terrain Legacy until then, and an HD chunk is
@@ -362,7 +374,7 @@ the owner runs them locally. Not legal advice.
 | ncnn (Tencent), statically inside the binary | BSD-3-Clause, third-party parts under their own terms | Through the tool only. |
 | MoltenVK, glslang/SPIRV-Tools, statically inside the macOS binary (LunarG SDK build) | Apache-2.0 (MoltenVK); glslang/SPIRV-Tools permissive (not re-read) | Through the tool only. |
 | Real-ESRGAN code and the three weights above (`xinntao/Real-ESRGAN`) | Repository BSD-3-Clause; the release weights carry no separate licence | Judgement: the repository licence is the only stated grant for the weights. The networks were trained on public research datasets whose own terms are not re-checked here; whether such terms bind a model's outputs is unsettled. Local, non-distributed use only. |
-| xBRZ (Zenju) | GPL-3.0 | May be run as a separate local build tool; never copied or linked into this MIT code. |
+| xBRZ (Zenju) | GPL-3.0, with a linking exception for MAME, FreeFileSync, Snes9x and ePSXe only | Used here as a separate local build tool (source and CLI under the ignored `local/`); never copied or linked into this MIT code. |
 | ScaleFX (libretro `slang-shaders`) | MIT (shader header, © 2016 Sp00kyFox) | Shader; would need a runner. |
 | Upscayl (GUI around the same ncnn binaries) | AGPL-3.0; its extra community models have their own, mixed licences | Not used; check each model's licence before use. |
 | **Pack frames themselves** | Derivative works of the original Arcanum art; no MIT or other licence of this project covers them | Owner's decision: local pack outside git, not distributed. |
@@ -392,8 +404,8 @@ the owner runs them locally. Not legal advice.
   no CPU path). Only same-machine repeatability is shown.
 - Visual quality is a developer's look plus numeric proxies; the numbers measure
   change and artefacts, not "better". Human review is ARC-RENDER-015.
-- xBRZ and ScaleFX (named in the task) were not run: neither has a CLI on this Mac,
-  and running xBRZ means building its GPL source locally. `RealESRGAN_x2plus`,
+- ScaleFX (named in the task) was not run: it is a libretro shader with no CLI here
+  and natively 3×. xBRZ ran only with its default thresholds. `RealESRGAN_x2plus`,
   `realesr-general-x4v3`, waifu2x, Real-CUGAN and community models were not run.
 - Determinism was measured on raw RGBA inputs and at native model scale, not on the
   recommended bled-RGB pipeline (the network part is the same).
