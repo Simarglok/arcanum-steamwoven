@@ -110,6 +110,8 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** Отдельные portal records и state-aware draw pipeline не загружаются; пять ART resource chains относятся к конечному static-scene диагностическому профилю. Паритет двери не заявлен.
 
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): у первого дома одна дверь (ART номер 55, 7 кадров, открыта при кадре ≠ 0) и четыре окна с одним кадром; поля портала, зеркалирование и путь к ART описаны по CE и данным. Реализации нет.
+
 <a id="fr-scene-009"></a>
 
 ### FR-SCENE-009 — Окно отображается в контексте стенового проёма (`later`)
@@ -130,6 +132,8 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** Для выбранной секции зафиксирован только framing roof section и empty discriminator; нет roof data model, ART-resolution chain, roof renderer или synthetic roof piece matrix. [Static scene scope](../rendering/static-scenery-contract.md#scope-and-status), [loader boundary](../world/static-object-loader.md#scope).
 
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): крыша первого дома — 9 из 256 слотов (3×3 блока по 4×4 клетки, ART номер 7, все девять видов кусков прямоугольника), кусок = кадр + флаг зеркала; fill/fade в данных сброшены. Реализации нет.
+
 **Ограничение persistence.** Roof DIF API присутствует, но load/save тела пусты и `is_modified` возвращает false ([CE stubs](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_roof_list.c#L87-L123)). Piece-topology rendering не доказывает поддержку изменённой крыши в DIF/save; исходное поведение остаётся неизвестным.
 
 <a id="fr-scene-011"></a>
@@ -141,6 +145,8 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 **CE и данные.** `roof_is_covered_loc` учитывает tile type, roof piece, fill и fade; `roof_draw` применяет piece-specific alpha, а `object_draw` проверяет roof coverage/fade перед выводом объектов ([coverage](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/roof.c#L658-L709), [объекты и roof checks](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L552-L571)). `wallcheck.c` включает fade при первом входе в tracked roof location и снимает при выходе ([`wallcheck_roof_faded_set/clear`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wallcheck.c#L998-L1015), [clear](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wallcheck.c#L1108-L1124)). Розничное условие и точный зрительный результат не проверялись.
 
 **Steamwoven сейчас.** Нет roof coverage, fade, click-through или связки roof state с actor; существующий renderer рисует только finite diagnostic scene. Ни roof, ни occlusion не тестировались на оригинальном runtime.
+
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): правило покрытия со сдвигом +3 закрывает 36 из 81 внутренней клетки; на любой внутренней клетке крыша скрывается целиком, первый шаг наружу её возвращает; fade привязан к затуханию стен. Это пересказ CE и расчёт по данным, не runtime.
 
 <a id="fr-scene-012"></a>
 
@@ -172,6 +178,8 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **Steamwoven сейчас.** Нет portal records, open/close animation, capability-aware door action или passability integration. Статический `Blocker/NoBlock` компонент явно исключает порталы и не может отвечать на этот шаг. [Static contract](../world/static-obstruction-contract.md#explicit-exclusions).
 
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): закрытая дверь блокирует своё ребро; игрок входит днём, ночью дверь заперта (ключа нет, сложность 25), выход открыт всегда; окна заклинены. Реализации нет.
+
 <a id="fr-scene-015"></a>
 
 ### FR-SCENE-015 — Проход в здание не требует неявного перехода карты (`prealpha-core`)
@@ -181,6 +189,8 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 **CE и данные.** CE связывает portal state с traversal на соседнем направленном шаге ([`object_calc_traversal_cost_func`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3029-L3112), [анимационный step check](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L4737-L4748)). Эта локальная сцепка не доказывает, что конкретный интерьер находится на той же карте; карту и её отдельный переход должны определять map/sector data.
 
 **Steamwoven сейчас.** Нет стен, дверей, внутренней сцены, roof visibility или actor collision integration; текущий WORLD диагностический режим ограничен одним сектором 64×64 и прямым перемещением. Map/jumppoint transitions здесь не покрыты.
+
+**Исследование.** [ARC-RES-029](../research/first-building-evidence.md): интерьер первого дома лежит на той же карте и в том же секторе, jump points и телепортов нет, вход только через ребро двери.
 
 <a id="fr-scene-016"></a>
 
