@@ -1,7 +1,8 @@
 # Original executable check
 
 Status: **Method**, adopted by the owner on 2026-10-17 for every part of the
-game; first used by ARC-COMBAT-001
+game. CE stays the first reading (D1); the executable settles what the original
+does when the two may differ. First used by ARC-COMBAT-001
 ([combat anomalies A1–A10](combat-core-evidence.md#original-executable-check-arc-combat-001)).
 
 CE is a reconstruction. Where its code looks wrong, or where a task must say
@@ -29,25 +30,27 @@ on the original files.
 
 ## Inputs
 
-- The owner's unchanged retail install on the Mac (`$DAT_ROOT`, today
-  `/Applications/Arcanum`, GOG 1.0.7.4). Before reading, record `Version.txt`
+- The owner's unchanged retail install on the Mac (`$DAT_ROOT`, GOG 1.0.7.4). Before reading, record `Version.txt`
   and the SHA-256 of `Arcanum.exe`. The 1.0.7.4 GOG binary has SHA-256
   `9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52`;
-  GOG adds a `ddraw.dll` import section that no checked function branches into.
+  GOG adds an `.IIDKing` section holding a second `ddraw.dll` import, which no
+  checked function branches into.
 - The CE research clone at the pinned commit
   `a7ff41b300ef712f0e7d088183a3d08957110cdd` (path in CLAUDE.md §4).
 - Xcode's `llvm-objdump` (`xcrun -f llvm-objdump`); no other tool is needed.
 
 ## Steps
 
-1. Find the function in CE and its address comment. Note the callees' and
-   globals' addresses too: they name the calls in the listing
-   (for example `obj_field_int32_get` 0x406CA0, `critter_pc_leader_get` 0x45DDA0).
-2. Disassemble only that function, read-only, into a scratch location outside
-   the repository:
+1. Find the function in CE and its address comment; the stop address is the
+   address comment of the next function in the same CE file. The listing shows
+   no names (calls read `<.text+0x5ca0>`), so note the callees' and globals'
+   addresses from their CE comments too (for example `obj_field_int32_get`
+   0x406CA0, `critter_pc_leader_get` 0x45DDA0).
+2. Disassemble only that function, read-only, into the session scratchpad or
+   the ignored `research-private/` folder, never into tracked files:
 
    ```bash
-   "$(xcrun -f llvm-objdump)" -d --x86-asm-syntax=intel --start-address=0x4B7EB0 --stop-address=0x4B7F90 "$DAT_ROOT/Arcanum.exe"
+   "$(xcrun -f llvm-objdump)" -d --x86-asm-syntax=intel --start-address=0x4B7EB0 --stop-address=0x4B8040 "$DAT_ROOT/Arcanum.exe" > "$SCRATCH/sort_combat_list.asm"
    ```
 
 3. Resolve constants from CE's headers: object field indices (`obj.h`), flag
@@ -56,7 +59,8 @@ on the original files.
 4. Compare the instruction flow with the CE branch in question: which values
    are tested, which handle is passed, what is written back, which calls are
    made and in what order.
-5. Check that the function is not patched: its branches stay inside `.text`.
+5. Check that the function is not patched: its branches stay inside `.text`
+   and never reach `.IIDKing`.
 6. Have a fresh agent repeat the reading independently before the verdict is
    used; record disagreements instead of picking one.
 
@@ -64,7 +68,8 @@ on the original files.
 
 In the research or evidence document of the task, one row per question:
 function and address, the behaviour observed in the original (in prose), and
-the verdict, "CE reconstruction slip" or "in the original". Add the decision
+the verdict, "CE reconstruction slip" or "in the original" (a bug of the
+original game). Add the decision
 to the owning decision table (for combat and AI, the
 [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions)). The original
 behaviour of the checked branch is then verified; everything else in the

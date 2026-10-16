@@ -107,7 +107,8 @@ under `docs/research`. Details: `docs/project/status.md`.
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
 3. For how the **original game** behaves, the retail executable outranks CE:
-   CE is a reconstruction and has its own slips. Check a CE branch against
+   CE is read first, but it is a reconstruction with its own slips, and the
+   executable settles any doubt. Check a CE branch against
    the original 1.0.7.4 `Arcanum.exe` at the function address CE gives
    ([original executable check](docs/research/original-executable-check.md)):
    read-only `llvm-objdump`, behaviour in prose, no bytes or listings in git.
