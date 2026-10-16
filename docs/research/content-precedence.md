@@ -42,8 +42,8 @@ Re-adding a mounted path moves it to the top
    order; then the folder `Modules/NAME`
    ([`gamelib_load_module_data`, `gamelib.c` 1838–1902](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1838-L1902),
    from [`gamelib_mod_load`, 662–673](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L662-L673)).
-   Missing `data` and module folders are created; this project never writes and
-   simply omits them.
+   Missing `data` and module folders are created; this project never writes, omits a
+   missing `data` folder and refuses a module with neither `.dat` nor folder.
 
 Search order is therefore, highest priority first:
 module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-named
