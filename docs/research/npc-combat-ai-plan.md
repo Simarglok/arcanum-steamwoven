@@ -225,7 +225,7 @@ Codes are allocated when each task is created (D6).
 
 | Stage | Code | Scope (source units) | Output |
 | --- | --- | --- | --- |
-| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | Load map and data census; first real fight candidates. |
+| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; the census gets its own code on creation | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: data aggregates and first real fight candidates. |
 | A1 | on creation | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
