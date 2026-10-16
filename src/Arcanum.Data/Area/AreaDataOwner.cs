@@ -223,7 +223,7 @@ public sealed partial class AreaDataOwner : IDisposable
         lock (_gate)
         {
             if (_disposed) return;
-            _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null;
+            _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null; EndEntryMemo();
             _budget.Release(_leaseBytes); _leaseBytes = 0;
             foreach (var archive in _archives.Values) archive.Dispose();
             _archives.Clear(); _indexes.Clear(); _entryIdentities.Clear(); _names.Clear(); _streams.Clear(); _published = null;

@@ -207,13 +207,16 @@ persistent encoded/decoded frame cache between operations.
 Inside one authenticated bracket, a strict build (between the I0 and I7 passes) or one
 frame batch (between a source's first authentication and `Complete`), an ART entry is
 read, inflated and payload-hashed once and then shared by every frame selected from it
-(ARC-RENDER-009; Crash Site: 1,975 frames from 335 entries, 218 MB of decoded entry
-bytes instead of 4.7 MB). The bracket's own authentication already covers every read in
+(ARC-RENDER-009; Crash Site: 1,975 frames from 335 entries, 4.7 MB of decoded entry
+bytes instead of 218 MB). The bracket's own authentication already covers every read in
 it, so a second read of the same entry adds no assurance. Each frame still makes its
 own frame-domain admission, ART table inspection, decode and geometry, palette and
 pixel identity checks. This entry memo is owner-private, never escapes, is limited to
-16 MiB, is held in the retained domain only while it is admitted (otherwise the entry
-is simply read again), and is dropped when its bracket ends, faults or is disposed.
+16 MiB, is held in the retained domain only while a quarter of that domain stays free
+for mandatory admissions after the hold (otherwise the entry is simply read again), and
+is dropped when its bracket ends or faults, or when the batch or the owner is disposed.
+A batch serves memoized bytes only after their payload hash matched the publication: a
+mismatch faults the batch and drops the memo.
 Usage counters therefore record fewer reads and inflate allocations than one read per
 frame; the cumulative frame-domain admissions are unchanged.
 

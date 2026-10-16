@@ -13,7 +13,8 @@ public sealed partial class AreaDataOwner
     // between reads that the bracket's authentication does not already cover, so the entry is
     // read, inflated and payload-hashed once per bracket. Every frame keeps its own budget
     // admission, decode and pixel/geometry checks. The memo is owner-private, bounded by
-    // EntryMemoMaxBytes and held in the retained domain until its bracket ends.
+    // EntryMemoMaxBytes, held in the retained domain (only while a quarter of it stays free)
+    // until its bracket ends, faults, or the batch or owner is disposed.
     private void BeginEntryMemo() { EndEntryMemo(); _entryMemo = new(); }
     private void EndEntryMemo()
     {

@@ -393,6 +393,15 @@ public sealed class AreaOwnershipTests
         Assert.AreEqual(afterFirst, afterSecond);
         CollectionAssert.AreEqual(first, second);
         Assert.AreEqual(held, fixture.Owner.Usage.RetainedReserved);
+        // Disposing the owner with an open batch also drops the memo's retained hold.
+        using (var other = Make(new Dictionary<AreaSourceRole, ProbeStream>()))
+        {
+            var published = other.Owner.LoadStrict(); var baseline = other.Owner.Usage.RetainedReserved;
+            var open = other.Owner.BeginFrameBatch(published); open.CopySelectedFrame(published.Visuals[0].Key);
+            Assert.IsTrue(other.Owner.Usage.RetainedReserved > baseline);
+            other.Owner.Dispose();
+            Assert.IsTrue(other.Owner.Usage.RetainedReserved <= baseline);
+        }
         // A lease keeps no memo: each acquisition reads the entry again.
         var leaseReads = source.Reads.Count;
         using (var lease = fixture.Owner.AcquireSelectedFrame(snapshot, key)) CollectionAssert.AreEqual(first, lease.CopyRgba());
