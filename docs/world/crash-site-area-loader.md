@@ -88,6 +88,14 @@ using var lease = owner.AcquireSelectedFrame(snapshot, selected.Key, cancellatio
 byte[] independentRgba = lease.CopyRgba(); // explicitly charged caller-owned copy
 ```
 
+Many frames are copied through one batch instead:
+
+```csharp
+using var batch = owner.BeginFrameBatch(snapshot, cancellationToken);
+var copies = keys.Select(key => batch.CopySelectedFrame(key, cancellationToken)).ToArray();
+batch.Complete(cancellationToken); // discard every copy unless this returns
+```
+
 Build the input set inside an exception-safe scope: `FromFile` opens immediately,
 so the caller must close already-created inputs if constructing later inputs fails
 before `Open`. Once `Open` is called, it honors each `leaveOpen` on both success and
@@ -138,6 +146,22 @@ escapes. An explicit copy survives independently. Disposal is idempotent, revoke
 leases and closes transferred streams. Previously returned metadata remains valid;
 it cannot be used to reacquire frames after replacement or disposal. There is no
 persistent encoded/decoded frame cache between operations.
+
+`BeginFrameBatch` copies many frames of the same current publication under the
+same single slot: a lease, a second batch or a load fails while a batch is open,
+and foreign or superseded snapshots fail. Each source is whole-input authenticated
+inside the admitted frame that first uses it, and `Complete` authenticates every used
+source once more (one more F phase visit). Every frame keeps the entry, payload,
+geometry, palette and pixel identity checks and the lease's frame-domain
+(requests, stored, decoded, RGBA, encoded) and copy charges; authentication scratch
+and reads are charged once per source and side instead of per frame. A source that
+differs from its identity when `Complete` runs is reported there, so a caller must
+discard all copies unless `Complete` returns; a change made and reverted between two
+authentications is seen only if a per-frame check reads it. Any failed copy or
+`Complete`, including cancellation, faults the batch; faulted, completed, disposed or
+revoked batches refuse further use. The batch therefore guarantees what per-frame
+reauthentication did for the batch as a whole, not for each frame separately; for the
+Crash Site profile it reads about 1.2 GB of authentication instead of about 596 GB.
 
 ## Resource contract: bounds, reservations, observations
 
@@ -212,7 +236,7 @@ Independent public synthetic tests exercise production `Open`/`Inspect`/`LoadStr
 and frame access: adjacent edges/keys, FILE masks/defaults/sparse arrays, aggregate
 EOF/identity/correspondence, malformed/overflow/cap+1, source changes/path replacement,
 missing/ambiguous resources, physical selectors, palette/geometry, immutable copies,
-phase cancellation and lease/disposal. Run with the pinned [toolchain](../workflow/toolchain.md):
+phase cancellation and lease/batch/disposal. Run with the pinned [toolchain](../workflow/toolchain.md):
 
 ```sh
 "$DOTNET" test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --no-restore \

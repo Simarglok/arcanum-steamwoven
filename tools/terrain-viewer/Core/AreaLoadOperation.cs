@@ -19,8 +19,8 @@ public static class AreaRepositoryPolicy
     public const long MaxCpuBytes = 81853096;
 }
 
-/// <summary>Finite per-generation CPU repository, acquired through the strict
-/// DATA009 owner. No provider decode is repeated by a camera pan.</summary>
+/// <summary>Finite per-generation CPU repository, copied through one strict DATA009
+/// owner frame batch. No provider decode is repeated by a camera pan.</summary>
 internal static class AreaLoadOperation
 {
     internal const int MaxFrames = AreaRepositoryPolicy.MaxFrames;
@@ -145,7 +145,7 @@ internal static class AreaLoadOperation
         var initial = owner.Usage;
         var limits = new AreaLoaderOptions();
         var predictedBytes = selected.Values.Sum(visual => checked((long)visual.Width * visual.Height * 4));
-        // Pre-admit the cumulative Data domains before any additional leases.
+        // Pre-admit the cumulative Data domains before the frame batch.
         if (selected.Count > maxFrames || predictedBytes > maxCpuBytes ||
             checked(initial.FrameRequests + selected.Count) > limits.MaxFrameRequests ||
             checked(initial.FrameRgba + predictedBytes) > limits.MaxFrameRgbaBytes ||
@@ -154,20 +154,22 @@ internal static class AreaLoadOperation
             checked(initial.FrameEncoded + selected.Values.Sum(v => (long)v.EncodedBytes)) > limits.MaxFrameEncodedBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
         var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); long retained = 0;
+        // One batch: each source is authenticated before its first frame and again at
+        // Complete; nothing is returned unless Complete succeeds.
+        using var batch = owner.BeginFrameBatch(snapshot, token);
         foreach (var pair in selected)
         {
             token.ThrowIfCancellationRequested();
             retained = checked(retained + (long)pair.Value.Width * pair.Value.Height * 4);
             if (retained > maxCpuBytes || frames.Count >= maxFrames) throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
-            using (var lease = owner.AcquireSelectedFrame(snapshot, pair.Value.Key, token))
-            {
-                if (lease.PixelByteCount != checked(pair.Value.Width * pair.Value.Height * 4))
-                    throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame));
-                frames.Add(pair.Key, new(pair.Value.Width, pair.Value.Height, lease.CopyRgba()));
-            }
+            var rgba = batch.CopySelectedFrame(pair.Value.Key, token);
+            if (rgba.Length != checked(pair.Value.Width * pair.Value.Height * 4))
+                throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame));
+            frames.Add(pair.Key, new(pair.Value.Width, pair.Value.Height, rgba));
             copied?.Invoke(frames.Count, retained);
         }
         token.ThrowIfCancellationRequested();
+        batch.Complete(token);
         return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
     }
 

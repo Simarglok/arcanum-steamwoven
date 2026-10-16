@@ -129,6 +129,25 @@ public sealed class AreaOwnerRepositoryTests
     }
 
     [TestMethod]
+    public void SourceMutationAfterTheLastFrameCopyIsCaughtByTheBatchCompletionAndYieldsNoRepository()
+    {
+        using var fixture=new AreaOwnerFixture(); var s=fixture.Owner.LoadStrict(); var p=AreaScenePlan.Create(s);
+        var total=p.Commands.Select(c=>c.Frame).Distinct().Count();
+        var stream=fixture.Streams[new(AreaSourceRole.Resource1)]; var before=fixture.Owner.Usage; IReadOnlyDictionary<AreaFrameKey,DecodedAreaFrame>? frames=null;
+        var error=Assert.ThrowsExactly<AreaException>(()=>frames=AreaLoadOperation.CopyFrames(fixture.Owner,s,p,default,
+            copied:(count,_)=>{ if(count==total) stream.Bytes[0]^=1; }));
+        Assert.AreEqual(AreaErrorCode.InputIdentityMismatch,error.Issue.Code);
+        Assert.IsNull(frames);
+        Assert.AreSame(s,fixture.Owner.PublishedSnapshot);
+        Assert.AreEqual(before.RetainedReserved,fixture.Owner.Usage.RetainedReserved);
+        stream.Bytes[0]^=1;
+        var repository=AreaLoadOperation.CopyFrames(fixture.Owner,s,p,default);
+        Assert.AreEqual(total,repository.Count);
+        using var lease=fixture.Owner.AcquireSelectedFrame(s,s.Visuals[0].Key);
+        Assert.IsTrue(lease.PixelByteCount>0);
+    }
+
+    [TestMethod]
     public void MissingDescriptorAndForeignSnapshotCannotYieldApparentlyCompleteRepository()
     {
         using var fixture=new AreaOwnerFixture(); var s=fixture.Owner.LoadStrict();

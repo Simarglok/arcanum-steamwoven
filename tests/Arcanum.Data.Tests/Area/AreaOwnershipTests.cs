@@ -332,6 +332,199 @@ public sealed class AreaOwnershipTests
         }
     }
 
+    [TestMethod]
+    public void Frame_batch_copies_match_leases_and_authenticate_each_used_source_once_per_side()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict();
+        var keys = snapshot.Visuals.Select(v => v.Key).ToArray();
+        Assert.IsTrue(keys.Length >= 2);
+        var resource = streams[AreaSourceRole.Resource1]; var module = streams[AreaSourceRole.Module];
+        int WholeReads(ProbeStream s) => s.Reads.Count(r => r.Position == 0 && r.Requested == Math.Min(65536, s.Length));
+        var leaseResource = WholeReads(resource); var before = fixture.Owner.Usage;
+        var leased = keys.Select(k => { using var lease = fixture.Owner.AcquireSelectedFrame(snapshot, k); return lease.CopyRgba(); }).ToArray();
+        var leaseUsage = fixture.Owner.Usage;
+        Assert.AreEqual(2 * keys.Length, WholeReads(resource) - leaseResource);
+
+        var batchResource = WholeReads(resource); var batchModule = WholeReads(module);
+        byte[][] copies;
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            copies = keys.Select(k => batch.CopySelectedFrame(k)).ToArray();
+            Assert.AreEqual(1, WholeReads(resource) - batchResource);
+            Assert.IsFalse(batch.IsCompleted);
+            batch.Complete();
+            Assert.IsTrue(batch.IsCompleted);
+        }
+        var after = fixture.Owner.Usage;
+        Assert.AreEqual(2, WholeReads(resource) - batchResource);
+        Assert.AreEqual(0, WholeReads(module) - batchModule);
+        for (var i = 0; i < keys.Length; i++) CollectionAssert.AreEqual(leased[i], copies[i]);
+        // Frame and copy domains are charged exactly as by the per-frame lease path.
+        Assert.AreEqual(leaseUsage.FrameRequests - before.FrameRequests, after.FrameRequests - leaseUsage.FrameRequests);
+        Assert.AreEqual(leaseUsage.FrameStored - before.FrameStored, after.FrameStored - leaseUsage.FrameStored);
+        Assert.AreEqual(leaseUsage.FrameDecoded - before.FrameDecoded, after.FrameDecoded - leaseUsage.FrameDecoded);
+        Assert.AreEqual(leaseUsage.FrameRgba - before.FrameRgba, after.FrameRgba - leaseUsage.FrameRgba);
+        Assert.AreEqual(leaseUsage.FrameEncoded - before.FrameEncoded, after.FrameEncoded - leaseUsage.FrameEncoded);
+        Assert.AreEqual(leaseUsage.ConsumerCopyBytes - before.ConsumerCopyBytes, after.ConsumerCopyBytes - leaseUsage.ConsumerCopyBytes);
+        Assert.AreEqual(before.RetainedReserved, after.RetainedReserved);
+        Assert.IsTrue(after.ReadActual - leaseUsage.ReadActual < leaseUsage.ReadActual - before.ReadActual);
+        using var next = fixture.Owner.AcquireSelectedFrame(snapshot, keys[0]);
+        CollectionAssert.AreEqual(leased[0], next.CopyRgba());
+    }
+
+    [TestMethod]
+    public void Frame_batch_occupies_the_lease_slot_and_detects_mutation_between_frames_at_complete()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict(); var before = fixture.Owner.Usage;
+        var keys = snapshot.Visuals.Select(v => v.Key).ToArray();
+        var resource = streams[AreaSourceRole.Resource1];
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            Assert.AreEqual(AreaErrorCode.LeaseLimit, Throws<AreaException>(() => fixture.Owner.AcquireSelectedFrame(snapshot, keys[0])).Issue.Code);
+            Assert.AreEqual(AreaErrorCode.LeaseLimit, Throws<AreaException>(() => fixture.Owner.BeginFrameBatch(snapshot)).Issue.Code);
+            Assert.AreEqual(AreaErrorCode.LeaseLimit, Throws<AreaException>(() => fixture.Owner.Inspect()).Issue.Code);
+            batch.CopySelectedFrame(keys[0]);
+            resource.Bytes[0] ^= 1; // outside every frame entry: only whole-source authentication sees it
+            foreach (var key in keys.Skip(1)) batch.CopySelectedFrame(key);
+            Assert.AreEqual(AreaErrorCode.InputIdentityMismatch, Throws<AreaException>(() => batch.Complete()).Issue.Code);
+            Assert.IsFalse(batch.IsCompleted); Assert.IsTrue(batch.IsFaulted);
+            resource.Bytes[0] ^= 1; // a reverted change cannot rescue a faulted batch
+            Throws<ObjectDisposedException>(() => batch.Complete());
+            resource.Bytes[0] ^= 1;
+        }
+        Assert.AreEqual(before.RetainedReserved, fixture.Owner.Usage.RetainedReserved);
+        Assert.AreSame(snapshot, fixture.Owner.PublishedSnapshot);
+        Assert.AreEqual(AreaErrorCode.InputIdentityMismatch, Throws<AreaException>(() =>
+        {
+            using var batch = fixture.Owner.BeginFrameBatch(snapshot); batch.CopySelectedFrame(keys[0]);
+        }).Issue.Code);
+        resource.Bytes[0] ^= 1;
+        using var lease = fixture.Owner.AcquireSelectedFrame(snapshot, keys[0]);
+        Assert.IsTrue(lease.PixelByteCount > 0);
+    }
+
+    [TestMethod]
+    public void Frame_batch_rejects_stale_completed_disposed_and_revoked_use()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var old = fixture.Owner.LoadStrict(); var current = fixture.Owner.LoadStrict();
+        var key = current.Visuals[0].Key;
+        Assert.AreEqual(AreaErrorCode.SnapshotMismatch, Throws<AreaException>(() => fixture.Owner.BeginFrameBatch(old)).Issue.Code);
+        var completed = fixture.Owner.BeginFrameBatch(current);
+        completed.CopySelectedFrame(key); completed.Complete();
+        Throws<ObjectDisposedException>(() => completed.CopySelectedFrame(key));
+        Throws<ObjectDisposedException>(() => completed.Complete());
+        completed.Dispose(); completed.Dispose();
+        Throws<ObjectDisposedException>(() => completed.CopySelectedFrame(key));
+        var invalid = new AreaVisualKey(AreaSourceKind.Static, key.Sector, int.MaxValue, "missing");
+        using (var batch = fixture.Owner.BeginFrameBatch(current))
+            Assert.AreEqual(AreaErrorCode.InvalidSelection, Throws<AreaException>(() => batch.CopySelectedFrame(invalid)).Issue.Code);
+        var revoked = fixture.Owner.BeginFrameBatch(current);
+        var copy = revoked.CopySelectedFrame(key);
+        fixture.Owner.Dispose();
+        Throws<ObjectDisposedException>(() => revoked.CopySelectedFrame(key));
+        Throws<ObjectDisposedException>(() => revoked.Complete());
+        revoked.Dispose();
+        CollectionAssert.AreEqual(new byte[] { 1,2,3,255,4,5,6,255 }, copy[..8]);
+    }
+
+    [TestMethod]
+    public void Frame_batch_fault_is_terminal_and_budget_rejection_unwinds_and_frees_the_slot()
+    {
+        long requests; int visuals;
+        using (var probe = Make([])) { var s0 = probe.Owner.LoadStrict(); requests = probe.Owner.Usage.FrameRequests; visuals = s0.Visuals.Count; }
+        Assert.IsTrue(visuals >= 2);
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = new Fixture([(67108865, [Record(Id(0))])], limits: new() { MaxFrameRequests = requests + 1 },
+            streamFactory: (key, bytes) => { var stream = new ProbeStream(bytes, false); streams.Add(key.Role, stream); return stream; });
+        var snapshot = fixture.Owner.LoadStrict(); var before = fixture.Owner.Usage;
+        var keys = snapshot.Visuals.Select(v => v.Key).ToArray();
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            batch.CopySelectedFrame(keys[0]);
+            Assert.AreEqual(AreaErrorCode.BudgetExceeded, Throws<AreaException>(() => batch.CopySelectedFrame(keys[1])).Issue.Code);
+            Assert.IsTrue(batch.IsFaulted);
+            Throws<ObjectDisposedException>(() => batch.CopySelectedFrame(keys[0]));
+            Throws<ObjectDisposedException>(() => batch.Complete());
+            Assert.AreEqual(AreaBudgetDomain.Requests, fixture.Owner.FirstBudgetRejection!.Value.Domain);
+            Assert.IsTrue(fixture.Owner.FirstBudgetRejection!.Value.ComponentActive == false);
+        }
+        Assert.AreEqual(before.RetainedReserved, fixture.Owner.Usage.RetainedReserved);
+        using var next = fixture.Owner.BeginFrameBatch(snapshot); // the slot is free again
+        Assert.IsFalse(next.IsFaulted);
+    }
+
+    [TestMethod]
+    public void Frame_batch_in_entry_change_fails_that_frame_and_foreign_snapshots_are_refused()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict();
+        var first = snapshot.Visuals[0]; var other = snapshot.Visuals.First(v => v.Entry.Offset != first.Entry.Offset);
+        var resource = streams[AreaSourceRole.Resource1];
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            batch.CopySelectedFrame(first.Key);
+            var at = checked((int)other.Entry.Offset + (int)other.Entry.StoredBytes - 1);
+            resource.Bytes[at] ^= 0x55;
+            var error = Throws<AreaException>(() => batch.CopySelectedFrame(other.Key));
+            Assert.IsTrue(error.Issue.Code is AreaErrorCode.InputChangedDuringRead or AreaErrorCode.MalformedRecord, error.Issue.Code.ToString());
+            Assert.IsTrue(batch.IsFaulted);
+            resource.Bytes[at] ^= 0x55;
+            Throws<ObjectDisposedException>(() => batch.Complete());
+        }
+        using var foreign = Make(new Dictionary<AreaSourceRole, ProbeStream>());
+        var foreignSnapshot = foreign.Owner.LoadStrict();
+        Assert.AreEqual(AreaErrorCode.SnapshotMismatch, Throws<AreaException>(() => fixture.Owner.BeginFrameBatch(foreignSnapshot)).Issue.Code);
+        using var lease = fixture.Owner.AcquireSelectedFrame(snapshot, other.Key);
+        Assert.IsTrue(lease.PixelByteCount > 0);
+    }
+
+    [TestMethod]
+    public void Frame_batch_cancellation_during_first_source_authentication_unwinds_and_faults()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict(); var before = fixture.Owner.Usage;
+        var resource = streams[AreaSourceRole.Resource1];
+        using var cancel = new CancellationTokenSource();
+        resource.AfterRead = (position, requested, _) => { if (position == 0 && requested == Math.Min(65536, resource.Length)) cancel.Cancel(); };
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+        {
+            Throws<OperationCanceledException>(() => batch.CopySelectedFrame(snapshot.Visuals[0].Key, cancel.Token));
+            Assert.IsTrue(batch.IsFaulted);
+        }
+        Assert.IsTrue(cancel.IsCancellationRequested);
+        Assert.AreEqual(before.RetainedReserved, fixture.Owner.Usage.RetainedReserved);
+        Assert.AreEqual(before.ConsumerCopyBytes, fixture.Owner.Usage.ConsumerCopyBytes);
+        Assert.AreSame(snapshot, fixture.Owner.PublishedSnapshot);
+        resource.AfterRead = null;
+        using var lease = fixture.Owner.AcquireSelectedFrame(snapshot, snapshot.Visuals[0].Key);
+        Assert.AreEqual((byte)1, lease.ReadPixelByte(0));
+    }
+
+    [TestMethod]
+    public void Frame_batch_cancellation_unwinds_frame_hold_and_keeps_publication()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var snapshot = fixture.Owner.LoadStrict(); var before = fixture.Owner.Usage;
+        using var cancel = new CancellationTokenSource();
+        streams[AreaSourceRole.Resource1].AfterRead = (_, requested, _) => { if (requested == 1186) cancel.Cancel(); };
+        using (var batch = fixture.Owner.BeginFrameBatch(snapshot))
+            Throws<OperationCanceledException>(() => batch.CopySelectedFrame(snapshot.Visuals[0].Key, cancel.Token));
+        Assert.AreEqual(before.RetainedReserved, fixture.Owner.Usage.RetainedReserved);
+        Assert.AreSame(snapshot, fixture.Owner.PublishedSnapshot);
+        streams[AreaSourceRole.Resource1].AfterRead = null;
+        using var lease = fixture.Owner.AcquireSelectedFrame(snapshot, snapshot.Visuals[0].Key);
+        Assert.AreEqual((byte)1, lease.ReadPixelByte(0));
+    }
+
     private static Fixture Make(Dictionary<AreaSourceRole, ProbeStream> streams, bool oneByte = false) =>
         new([(67108865, [Record(Id(0))])], streamFactory: (key, bytes) =>
         {

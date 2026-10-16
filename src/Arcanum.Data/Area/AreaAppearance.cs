@@ -163,12 +163,15 @@ public sealed partial class AreaDataOwner
             decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, decoded.Frame.OffsetX, decoded.Frame.OffsetY, ox, oy, scale,
             descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy);
     }
-    private ArtFrame DecodeDescriptor(AreaVisualRecord descriptor, CancellationToken token)
+    // A lease authenticates the whole source before and after each frame. A frame batch
+    // authenticates each source before its first frame (inside that admitted frame, as a
+    // lease does) and once more at Complete instead.
+    private ArtFrame DecodeDescriptor(AreaVisualRecord descriptor, CancellationToken token, bool authenticateBefore = true, bool authenticateAfter = true)
     {
         _budget.Context = new(AreaBudgetCallsite.Pixels, descriptor.Entry.Source, descriptor.Entry.Ordinal, descriptor.Entry.Offset, descriptor.Key.SourceIndex);
         _budget.StartFrame(descriptor.Entry.StoredBytes, descriptor.Entry.DecodedBytes, descriptor.RgbaBytes, descriptor.EncodedBytes);
         var identity = Identity(descriptor.Entry.Source);
-        Authenticate(identity, token);
+        if (authenticateBefore) Authenticate(identity, token);
         var bytes = ReadEntry(descriptor.Entry);
         if (ObjectWireReader.Hash(bytes) != descriptor.PayloadSha256 || descriptor.ViewLength < 0 || descriptor.ViewLength > bytes.Length)
             throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame);
@@ -182,7 +185,7 @@ public sealed partial class AreaDataOwner
         var frame = DecodeFrame(bytes.AsSpan(0, descriptor.ViewLength), new(descriptor.PhysicalGroup, descriptor.Frame, descriptor.RequestedPalette));
         if (HashPixels(frame) != descriptor.RgbaSha256 || frame.EffectivePaletteSlot != descriptor.EffectivePalette)
             throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Frame);
-        Authenticate(identity, token);
+        if (authenticateAfter) Authenticate(identity, token);
         return frame;
     }
     private static ArtFrame DecodeFrame(ReadOnlySpan<byte> bytes, ArtFrameSelection selection)

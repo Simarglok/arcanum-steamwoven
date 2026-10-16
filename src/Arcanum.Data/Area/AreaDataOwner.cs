@@ -5,7 +5,7 @@ using Arcanum.Data.StaticObjects;
 namespace Arcanum.Data.Area;
 
 /// <summary>Serialized owner of authenticated reads, numeric snapshots and one revocable
-/// selected-frame lease. No DAT, encoded ART or RGBA payload is cached between operations.</summary>
+/// selected-frame lease or frame batch. No DAT, encoded ART or RGBA payload is cached between operations.</summary>
 public sealed partial class AreaDataOwner : IDisposable
 {
     private readonly object _gate = new();
@@ -132,7 +132,7 @@ public sealed partial class AreaDataOwner : IDisposable
         lock (_gate)
         {
             Alive();
-            if (_lease is not null) throw Fail(AreaErrorCode.LeaseLimit, AreaStage.Publication);
+            if (_lease is not null || _batch is not null) throw Fail(AreaErrorCode.LeaseLimit, AreaStage.Publication);
             _budget.BeginPhase(AreaBudgetPhase.I0);
             using var output = new AreaOwnership(_budget);
             try
@@ -178,7 +178,7 @@ public sealed partial class AreaDataOwner : IDisposable
             Alive(); cancellationToken.ThrowIfCancellationRequested();
             if (!ReferenceEquals(snapshot.Owner, _identity) || !ReferenceEquals(snapshot, _published) || snapshot.Generation != _generation)
                 throw Fail(AreaErrorCode.SnapshotMismatch, AreaStage.Frame);
-            if (_lease is not null) throw Fail(AreaErrorCode.LeaseLimit, AreaStage.Frame);
+            if (_lease is not null || _batch is not null) throw Fail(AreaErrorCode.LeaseLimit, AreaStage.Frame);
             var descriptor = snapshot.Visuals.SingleOrDefault(v => v.Key == visual) ?? throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Frame);
             _budget.BeginPhase(AreaBudgetPhase.F);
             try
@@ -221,7 +221,7 @@ public sealed partial class AreaDataOwner : IDisposable
         lock (_gate)
         {
             if (_disposed) return;
-            _disposed = true; _lease?.Revoke(); _lease = null;
+            _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null;
             _budget.Release(_leaseBytes); _leaseBytes = 0;
             foreach (var archive in _archives.Values) archive.Dispose();
             _archives.Clear(); _indexes.Clear(); _entryIdentities.Clear(); _names.Clear(); _streams.Clear(); _published = null;
