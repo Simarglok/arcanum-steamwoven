@@ -101,9 +101,9 @@ flag.
 
 | ID | Observation | Evidence |
 | --- | --- | --- |
-| V1 | Virgil's dialog file (payload SHA-256 `34a49a2c…5e53a`) contains actions `JO:21`, `UW:4`, `WA:2`, `LV:2`, `SC:2`, `SO:2` and conditions `WA:12`, `PA:2`. The JO/UW operands were not tabulated. | Aggregate in [dialog evidence](dialog-evidence.md#bounded-local-structural-result); the hash is the Virgil DLG of [NDE-06](crash-site-npc-dialog-evidence.md). |
+| V1 | Virgil's dialog file (payload SHA-256 `34a49a2c…5e53a`) contains actions `JO:21`, `UW:4`, `WA:2`, `LV:2`, `SC:2`, `SO:2` and conditions `WA:12`, `PA:2`. The JO/UW operands are tabulated in [ARC-RES-026](virgil-follow-consent.md#3-jo-and-uw-in-his-dlg-d) (all first operand 0). | Aggregate in [dialog evidence](dialog-evidence.md#bounded-local-structural-result); the hash is the Virgil DLG of [NDE-06](crash-site-npc-dialog-evidence.md). |
 | V2 | His SAP_DIALOG script 1324 tests "NPC following this PC" in SCR line 0 and jilted in line 2. A follower enters at SCR line 6 → node 385, which the conversation runtime stops at a `WA` condition frontier. Under C18, `FOLLOWING` is also true while he waits, and `WA` then separates waiting from following. | [entry evidence](crash-site-npc-dialog-evidence.md#conditional-caller-and-entry-rule) and its operation ledger, [conversation runtime](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic). |
-| V3 | The first-Direct walk applies one `JO` and continues; the diagnostic PROJECT profile accepts every follow request. Nothing measured his AI-data row, level, alignment or wait field. | [Conversation runtime](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic). |
+| V3 | The first-Direct walk applies one `JO` and continues; the diagnostic PROJECT profile accepts every follow request. His AI-data row, level, alignment and wait field are measured in [ARC-RES-026](virgil-follow-consent.md#2-virgil-at-t0-d). | [Conversation runtime](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic). |
 | V4 | Both cave scripts teleport the triggerer with flags 0, so by C15 a following (not waiting, conscious) Virgil arrives on the PC's arrival cell: (2087,2018) in the cave, (92913,82598) on return. | [Cave transition T2/T4](cave-transition-evidence.md#findings). |
 
 ## Open questions
@@ -144,7 +144,7 @@ of Godot.
 2. **Consent evaluator**: a pure function over explicit inputs (C2–C4) that
    returns OK or one of the seven reasons. Then bind `JO a n` / `UW a n` in
    the conversation world port so a refusal becomes the reason line, not a
-   frontier. Real parameters wait for O1; until then the diagnostic profile
+   frontier. Real parameters for Virgil are in [ARC-RES-026](virgil-follow-consent.md); until the evaluator binds them the diagnostic profile
    stays labelled as such.
 3. **Follow movement** in Simulation for one follower: start beyond 4 (7),
    close to 2 (5), walk within range + 2, run beyond, re-plan every 100 ms

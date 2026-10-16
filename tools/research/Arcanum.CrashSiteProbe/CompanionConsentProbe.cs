@@ -20,9 +20,10 @@ internal static partial class Program
         CcFollowersSlot = 59, CcAutoLevelSlot = 63;
     private const int CcNpcFlagsSlot = 69, CcNpcLeaderSlot = 70, CcAiDataSlot = 71, CcOriginSlot = 80, CcFactionSlot = 81,
         CcReactionBaseSlot = 84, CcSocialClassSlot = 85, CcReactionPcSlot = 86, CcReactionLevelSlot = 87, CcWaitSlot = 89;
-    private const int CcNpcType = 16, CcDialogSap = 9, CcVirgilScript = 1324, CcAiParams = 17, CcMaxDialogBytes = 512 * 1024;
+    private const int CcNpcType = 16, CcDialogSap = 9, CcVirgilScript = 1324, CcAiParamCount = 17, CcMaxEntryBytes = 512 * 1024;
 
-    // Stat indexes and the effect-file stat symbols, in stat order.
+    // Stat indexes and the effect-file stat symbols, in stat order. The symbols are the file-format
+    // vocabulary of rules\effect.mes as the pinned source reads it (effect.c 87-116), lowercased.
     internal static readonly string[] CcStatNames =
     [
         "strength", "dexterity", "constitution", "beauty", "intelligence", "perception", "willpower", "charisma", "carry_weight",
@@ -103,7 +104,8 @@ internal static partial class Program
     // AI parameter rows: loading needs an entry numbered exactly `first`; from there the
     // row index is `first` plus a running count over the entries in number order, up to
     // (not including) `limit`. Each entry gives at most 17 integers, split on space, tab
-    // and newline only, each read with atoi; a short entry leaves its later fields 0.
+    // and newline only, each read with atoi; a short entry leaves its later fields 0 (true for a first
+    // load only: the source does not clear rows when a module is reloaded).
     internal static IReadOnlyList<CcAiRow> CcAiRows(SortedDictionary<int, string> mes, int first, int limit)
     {
         var rows = new List<CcAiRow>();
@@ -112,8 +114,8 @@ internal static partial class Program
         foreach (var (entry, text) in mes.Where(pair => pair.Key >= first))
         {
             if (row >= limit) break;
-            var tokens = text.Split([' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(CcAiParams).ToArray();
-            var values = new int[CcAiParams];
+            var tokens = text.Split([' ', '\t', '\n'], StringSplitOptions.RemoveEmptyEntries).Take(CcAiParamCount).ToArray();
+            var values = new int[CcAiParamCount];
             for (var k = 0; k < tokens.Length; k++) values[k] = CcAtoi(Encoding.Latin1.GetBytes(tokens[k])).Value;
             rows.Add(new(row, entry, tokens.Length, values));
             row++;
@@ -161,7 +163,11 @@ internal static partial class Program
 
         var discovery = ContentMountPlan.Discover(gameRoot);
         if (discovery.Status != ContentMountStatus.Ready) throw new InvalidDataException("CONSENT_MOUNT_" + discovery.Status);
-        var opened = ContentStack.Open(discovery.Plan!, new ContentStackOptions { Dat = new DatReaderOptions { MaxArchiveBytes = checked((uint)CaveArchives.Max(a => a.Bytes)), MaxStoredEntryBytes = CcMaxDialogBytes, MaxDecodedEntryBytes = CcMaxDialogBytes } });
+        // Fail closed unless every base, module and patch archive of the stack is one of the pinned inputs.
+        var pinned = archivePaths.Select(Path.GetFullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (discovery.Plan!.SearchOrder.Any(s => s.Kind == ContentSourceKind.Archive && s.Role != ContentSourceRole.Tig && !pinned.Contains(Path.GetFullPath(s.Path))))
+            throw new InvalidDataException("CONSENT_STACK_UNPINNED_ARCHIVE");
+        var opened = ContentStack.Open(discovery.Plan!, new ContentStackOptions { Dat = new DatReaderOptions { MaxArchiveBytes = checked((uint)CaveArchives.Max(a => a.Bytes)), MaxStoredEntryBytes = CcMaxEntryBytes, MaxDecodedEntryBytes = CcMaxEntryBytes } });
         if (opened.Status != ContentStackStatus.Ready) throw new InvalidDataException("CONSENT_STACK_" + opened.Status);
         using var stack = opened.Stack!;
         var archiveRoles = CaveArchives.Select((a, i) => (Path.GetFullPath(archivePaths[i]), a.Role)).ToDictionary(x => x.Item1, x => x.Role, StringComparer.OrdinalIgnoreCase);
@@ -170,6 +176,8 @@ internal static partial class Program
         (object Report, byte[]? Winner) Resolve(string path)
         {
             var resolution = stack.Resolve(path);
+            // Every candidate, winner or shadowed, must come from a pinned archive (tig.dat and loose folders are not pinned).
+            if (resolution.Candidates.Any(c => !archiveRoles.ContainsKey(Path.GetFullPath(c.Source.Path)))) throw new InvalidDataException("CONSENT_UNPINNED_CANDIDATE");
             var payloads = resolution.Candidates.Select(c => stack.Read(c) is { Status: ContentReadStatus.Read, Bytes: { } b } ? b : throw new InvalidDataException("CONSENT_READ")).ToArray();
             return (new
             {
@@ -190,8 +198,8 @@ internal static partial class Program
         object Shape(int slot) => virgil.EffectiveFields.FirstOrDefault(f => f.Slot == slot) is { } f
             ? new { presence = f.Presence.ToString(), origin = f.Origin.ToString(), elements = f.Elements.Count }
             : new { presence = "Missing", origin = "", elements = 0 };
-        static object Bits(long? value, (string Name, uint Bit)[] names) =>
-            value is { } v ? names.ToDictionary(n => n.Name, n => ((uint)v & n.Bit) != 0) : null!;
+        static object? Bits(long? value, (string Name, uint Bit)[] names) =>
+            value is { } v ? names.ToDictionary(n => n.Name, n => ((uint)v & n.Bit) != 0) : null;
         var statField = virgil.EffectiveFields.FirstOrDefault(f => f.Slot == CcStatBaseSlot) ?? throw new InvalidDataException("CONSENT_STATS_MISSING");
         if (statField.Presence != AreaPresence.Array) throw new InvalidDataException("CONSENT_STATS_MISSING");
         var stats = statField.Elements.ToDictionary(e => e.Key, e => e.Words.Count == 1 ? unchecked((int)e.Words[0]) : throw new InvalidDataException("CONSENT_STAT_WIDTH"));
@@ -203,11 +211,14 @@ internal static partial class Program
         var engineRows = aiParamsBytes is null ? [] : CcAiRows(ClosureMes(aiParamsBytes), 0, 100);
         var moduleRows = gameAiBytes is null ? [] : CcAiRows(ClosureMes(gameAiBytes), 100, 150);
         var aiIndex = Number(CcAiDataSlot) is { } ai ? checked((int)ai) : throw new InvalidDataException("CONSENT_AI_DATA_MISSING");
-        var aiRow = engineRows.Concat(moduleRows).FirstOrDefault(r => r.Row == aiIndex);
+        // The engine tables are required by the source; the module tables are optional.
+        if (aiParamsBytes is null) throw new InvalidDataException("CONSENT_ENGINE_TABLE_MISSING");
+        var aiRow = engineRows.Concat(moduleRows).FirstOrDefault(r => r.Row == aiIndex) ?? throw new InvalidDataException("CONSENT_AI_ROW_MISSING");
 
         // Effects on the critter and which stats each names (engine file 50..399, module file 0..49).
         var (effectReport, effectBytes) = Resolve("rules/effect.mes");
         var (gameEffectReport, gameEffectBytes) = Resolve("rules/gameeffect.mes");
+        if (effectBytes is null) throw new InvalidDataException("CONSENT_ENGINE_TABLE_MISSING");
         var effectMes = effectBytes is null ? new SortedDictionary<int, string>() : ClosureMes(effectBytes);
         var gameEffectMes = gameEffectBytes is null ? new SortedDictionary<int, string>() : ClosureMes(gameEffectBytes);
         var effectField = virgil.EffectiveFields.FirstOrDefault(f => f.Slot == CcEffectsSlot);
@@ -228,7 +239,7 @@ internal static partial class Program
         string? dialogName = null;
         foreach (var path in archivePaths)
         {
-            using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = checked((uint)CaveArchives.Max(a => a.Bytes)), MaxStoredEntryBytes = CcMaxDialogBytes, MaxDecodedEntryBytes = CcMaxDialogBytes });
+            using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = checked((uint)CaveArchives.Max(a => a.Bytes)), MaxStoredEntryBytes = CcMaxEntryBytes, MaxDecodedEntryBytes = CcMaxEntryBytes });
             foreach (var entry in archive.Entries.Where(e => InvDialogKey(e) == CcVirgilScript))
             {
                 var name = ClosureEntryName(entry);
@@ -244,6 +255,7 @@ internal static partial class Program
         foreach (var record in document.Records)
         {
             if (record.Role == DlgRecordRole.Npc) parent = record;
+            var condition = record.Condition.Bytes.ToArray();
             foreach (var (role, field) in new[] { ("condition", record.Condition), ("action", record.Action) })
             {
                 var bytes = field.Bytes.ToArray();
@@ -251,10 +263,11 @@ internal static partial class Program
                 {
                     if (code == "RE" && role == "action")
                     {
-                        // Reaction actions (target or lexically signed delta): only number and sign.
+                        // Reaction actions: the number and the first non-space byte if it is a sign or a
+                        // comparator ('<' / '>' would make atoi read 0, so it must not pass as a target).
                         var j = after; while (j < bytes.Length && CcIsSpace(bytes[j])) j++;
                         reactions.Add(new { record = record.Id, record_role = record.Role.ToString(), value = CcAtoi(bytes.AsSpan(after)).Value,
-                            signed = j < bytes.Length && bytes[j] is (byte)'-' or (byte)'+' });
+                            lead = j < bytes.Length && bytes[j] is (byte)'-' or (byte)'+' or (byte)'<' or (byte)'>' ? ((char)bytes[j]).ToString() : null });
                         continue;
                     }
                     if (code is not ("JO" or "UW")) continue;
@@ -265,11 +278,11 @@ internal static partial class Program
                         code, record = record.Id, record_role = record.Role.ToString(), field = role, ignore_limit_and_force = first.Value, node = node.Value,
                         overflow = first.Overflow || node.Overflow, node_role = target?.Role.ToString(),
                         parent_npc_record = record.Role == DlgRecordRole.Player ? parent?.Id : null,
-                        reply_conditions = record.Role == DlgRecordRole.Player ? CcScanCodes(record.Condition.Bytes.ToArray())
-                            .Select(c => (object)new { code = c.Code, value = CcAtoi(record.Condition.Bytes.ToArray().AsSpan(c.After)).Value }).ToArray() : [],
+                        reply_conditions = record.Role == DlgRecordRole.Player ? CcScanCodes(condition)
+                            .Select(c => (object)new { code = c.Code, value = CcAtoi(condition.AsSpan(c.After)).Value }).ToArray() : [],
                         reply_response = record.Role == DlgRecordRole.Player ? record.ResponseValue : null,
                         reply_response_kind = record.Role == DlgRecordRole.Player ? record.ResponseKind?.ToString() : null,
-                        operand_form_admitted = code == "JO" && role == "action" && record.Role == DlgRecordRole.Player && first.Value == 0 && node.Value > 0,
+                        jo_zero_node_form = code == "JO" && role == "action" && record.Role == DlgRecordRole.Player && first.Value == 0 && node.Value > 0,
                     });
                 }
             }
