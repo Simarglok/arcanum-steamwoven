@@ -56,6 +56,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--area-passability-closure-self-test"])) { AreaPassabilityClosureSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-traversal-research") return ProbeAreaTraversal(args[1..]);
             if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--building-research") return ProbeBuildingResearch(args[1..]);
+            if (args.SequenceEqual(["--building-self-test"])) { BuildingSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--item-inventory") return ProbeItemInventory(args[1..]);
             if (args.SequenceEqual(["--item-inventory-self-test"])) { ItemInventorySelfTest(); return 0; }
             if (args.FirstOrDefault() == "--cave-transition") return ProbeCaveTransition(args[1..]);
