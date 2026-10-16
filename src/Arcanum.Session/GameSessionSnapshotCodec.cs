@@ -17,7 +17,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 1. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 2. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -27,7 +27,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -36,6 +36,10 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] MapFields = ["map", "changes"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
+    private static readonly string[] StoryFields = ["quests", "globalQuests", "rumors"];
+    private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
+    private static readonly string[] GlobalQuestFields = ["quest", "state"];
+    private static readonly string[] RumorFields = ["rumor", "timestampMs"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -113,6 +117,39 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+
+            var story = snapshot.Story;
+            w.WriteStartObject("story");
+            w.WriteStartArray("quests");
+            foreach (var quest in story.Quests)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("quest", quest.Quest);
+                w.WriteString("state", QuestName(quest.State));
+                w.WriteBoolean("botched", quest.Botched);
+                w.WriteNumber("timestampMs", quest.TimestampMs);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("globalQuests");
+            foreach (var quest in story.GlobalQuests)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("quest", quest.Quest);
+                w.WriteString("state", QuestName(quest.State));
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("rumors");
+            foreach (var rumor in story.Rumors)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("rumor", rumor.Rumor);
+                w.WriteNumber("timestampMs", rumor.TimestampMs);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
@@ -149,11 +186,11 @@ public static class GameSessionSnapshotCodec
             !schema.TryGetInt64(out var version) || version != GameSessionSnapshot.CurrentSchemaVersion)
             throw new DecodeException(SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         var f = Fields(root, "$", RootFields);
-        Int(f["schemaVersion"], "$.schemaVersion", 1, 1);
+        Int(f["schemaVersion"], "$.schemaVersion", GameSessionSnapshot.CurrentSchemaVersion, GameSessionSnapshot.CurrentSchemaVersion);
         var identity = new GlobalFlagIdentity(new(Guid(f["world"], "$.world")), new(Guid(f["module"], "$.module")));
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
-            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]));
+            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]));
     }
 
     private static SessionClockState Clock(JsonElement element)
@@ -234,6 +271,56 @@ public static class GameSessionSnapshotCodec
         }
         return maps;
     }
+
+    private static SessionStoryState Story(JsonElement element)
+    {
+        const string p = "$.story";
+        var f = Fields(element, p, StoryFields);
+        var items = Array(f["quests"], p + ".quests", SessionStoryLimits.MaxQuests);
+        var quests = new SessionQuest[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.quests[{i}]";
+            var item = Fields(items[i], path, QuestFields);
+            var quest = Int(item["quest"], path + ".quest", SessionStoryLimits.FirstQuest, SessionStoryLimits.LastQuest);
+            if (i > 0 && quest <= quests[i - 1].Quest) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".quest");
+            var state = QuestState(item["state"], path + ".state");
+            var botched = Bool(item["botched"], path + ".botched");
+            // The stored state is never Botched itself, and an untouched quest is not listed.
+            if (state == SessionQuestState.Botched || (state == SessionQuestState.Unknown && !botched))
+                throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".state");
+            quests[i] = new(quest, state, botched, Long(item["timestampMs"], path + ".timestampMs", 0, long.MaxValue));
+        }
+        items = Array(f["globalQuests"], p + ".globalQuests", SessionStoryLimits.MaxQuests);
+        var globals = new SessionGlobalQuest[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.globalQuests[{i}]";
+            var item = Fields(items[i], path, GlobalQuestFields);
+            var quest = Int(item["quest"], path + ".quest", SessionStoryLimits.FirstQuest, SessionStoryLimits.LastQuest);
+            if (i > 0 && quest <= globals[i - 1].Quest) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".quest");
+            var state = QuestState(item["state"], path + ".state");
+            // Accepted is the default and is not listed; only Completed and Botched leave it.
+            if (state is not (SessionQuestState.Completed or SessionQuestState.Botched))
+                throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".state");
+            globals[i] = new(quest, state);
+        }
+        items = Array(f["rumors"], p + ".rumors", SessionStoryLimits.MaxRumors);
+        var rumors = new SessionRumor[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.rumors[{i}]";
+            var item = Fields(items[i], path, RumorFields);
+            var rumor = Int(item["rumor"], path + ".rumor", SessionStoryLimits.FirstRumor, SessionStoryLimits.LastRumor);
+            if (i > 0 && rumor <= rumors[i - 1].Rumor) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".rumor");
+            rumors[i] = new(rumor, Long(item["timestampMs"], path + ".timestampMs", 0, long.MaxValue));
+        }
+        return new(quests, globals, rumors);
+    }
+
+    private static SessionQuestState QuestState(JsonElement element, string path) =>
+        Enum.GetValues<SessionQuestState>().Where(state => QuestName(state) == String(element, path)).Cast<SessionQuestState?>().FirstOrDefault()
+            ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
 
     private static MapChange Change(JsonElement element, string path)
     {
@@ -335,6 +422,14 @@ public static class GameSessionSnapshotCodec
         PauseReason.None => "None", PauseReason.User => "User", PauseReason.Menu => "Menu",
         PauseReason.TurnBased => "TurnBased",
         _ => throw new ArgumentOutOfRangeException(nameof(reason)),
+    };
+
+    private static string QuestName(SessionQuestState state) => state switch
+    {
+        SessionQuestState.Unknown => "Unknown", SessionQuestState.Mentioned => "Mentioned", SessionQuestState.Accepted => "Accepted",
+        SessionQuestState.Achieved => "Achieved", SessionQuestState.Completed => "Completed",
+        SessionQuestState.OtherCompleted => "OtherCompleted", SessionQuestState.Botched => "Botched",
+        _ => throw new ArgumentOutOfRangeException(nameof(state)),
     };
 
     private static string FacingName(NeighborDirection facing) => facing switch

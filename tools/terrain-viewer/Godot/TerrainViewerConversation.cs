@@ -23,7 +23,9 @@ public partial class TerrainViewerApp
     {
         EndConversation();
         _conversationNotice = null; _talkAfterRoute = null;
-        _conversationHost = arguments.AreaEffectsPath is { } dialogs ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs) : null;
+        // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
+        _conversationHost = arguments.AreaEffectsPath is { } dialogs && _areaSession is { } session
+            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session) : null;
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
@@ -150,10 +152,24 @@ public partial class TerrainViewerApp
     {
         if (_conversationHost is null) return string.Empty;
         if (ConversationOpen) return " | conversation open: click a reply";
+        return ConversationPrompt() + StoryStatus();
+    }
+
+    private string ConversationPrompt()
+    {
         if (_conversationNotice is { } notice) return $" | {notice}";
         if (!TalkMapActive) return " | talk: no dialog NPC on this map";
-        return ActorCell() is { } cell && _conversationHost.Nearest(cell.X, cell.Y) is { } speaker
+        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
-            : $" | talk: left-click a dialog NPC ({_conversationHost.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
+            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
+    }
+
+    // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip).
+    private string StoryStatus()
+    {
+        var state = _conversationHost!.State;
+        var story = state.Story;
+        var followers = Enumerable.Range(0, _conversationHost.Speakers.Count).Count(state.Follows);
+        return $" | session story: quests {story.Quests.Count}, rumors {story.Rumors.Count}, followers {followers}";
     }
 }

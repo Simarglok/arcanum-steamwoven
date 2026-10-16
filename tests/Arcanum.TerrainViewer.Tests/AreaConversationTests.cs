@@ -4,6 +4,7 @@ using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Session;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -22,11 +23,21 @@ public sealed class AreaConversationTests
         "{20}{Together, then.}{}{}{}{}{}" +
         "{21}{e:}{}{1}{}{0}{}";
 
+    // Invented: a second visit whose replies depend on what the first talk left in the session.
+    private const string Revisit =
+        "{30}{Back again.}{}{}{}{}{}" +
+        "{31}{First time here?}{}{1}{gf 7 0}{0}{}" +
+        "{32}{We met before.}{}{1}{gf 7 1, lf 3 1, re 60}{0}{}" +
+        "{40}{A task for you.}{}{}{}{}{qu 1003 2, ru 1001}";
+
+    private const string Speaker0 = "oid:0000000000000000000000000000000000000000000000000000000000000000";
+
     [TestMethod]
     public void Diagnostic_state_owns_typed_effects_and_reaction_gates()
     {
-        var state = new AreaConversationState(50);
-        var conversation = Start(state, Owner());
+        using var session = ConversationSessionFixture.Create();
+        var state = State(session, 50);
+        var conversation = Start(state, session);
 
         CollectionAssert.AreEqual(new[] { "1. Friend." }, conversation.Options.Select(AreaConversationText.Option).ToArray());
         conversation.Select(conversation.Options[0].Token);
@@ -58,18 +69,83 @@ public sealed class AreaConversationTests
     [TestMethod]
     public void Low_reaction_and_other_race_change_the_offered_replies()
     {
-        var hostile = new AreaConversationState(5);
-        CollectionAssert.AreEqual(new[] { "Rude." }, Start(hostile, Owner()).Options.Select(o => o.Text).ToArray());
-        var elf = Start(new AreaConversationState(50), Owner(), race: 2);
+        using var session = ConversationSessionFixture.Create();
+        CollectionAssert.AreEqual(new[] { "Rude." }, Start(State(session, 5), session).Options.Select(o => o.Text).ToArray());
+        var elf = Start(State(session, 50), session, race: 2);
         Assert.AreEqual(DialogOptionTextKind.Fallback, elf.Options.Single().TextKind);
+    }
+
+    [TestMethod]
+    public void Consequences_are_session_state_that_survive_a_map_round_trip_and_a_save()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var state = State(session, 50);
+        var before = Start(state, session, Revisit, 30);
+        CollectionAssert.AreEqual(new[] { "First time here?" }, before.Options.Select(o => o.Text).ToArray());
+        before.Close();
+
+        // The first talk: GF, LF, reaction and the follow consent land in the session, not in the state object.
+        var talk = Start(state, session);
+        talk.Select(talk.Options[0].Token);
+        talk.Select(talk.Options[0].Token);
+        Assert.AreEqual(true, Flag(session, 7));
+        var entity = new SessionMapId(1);
+        CollectionAssert.AreEqual(new[]
+        {
+            new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.LocalFlagsProperty), 8),
+            new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.FollowProperty), 1),
+            new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.ReactionProperty), 70),
+        }, session.QueryMapChanges(entity).ToArray());
+
+        // The cave trip and back, then save and load: a new state over the restored session sees the same NPC.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(79) }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = entity }).Disposition);
+        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
+        var after = State(loaded, 50);
+        Assert.IsTrue(after.Follows(0));
+        Assert.IsTrue(after.LocalFlag(0, 3));
+        Assert.AreEqual(70, after.Reaction(0));
+        Assert.AreEqual(0, after.Alignment, "alignment is not session state yet");
+
+        // The next conversation offers what the first one unlocked.
+        var revisit = Start(after, loaded, Revisit, 30);
+        CollectionAssert.AreEqual(new[] { "We met before." }, revisit.Options.Select(o => o.Text).ToArray());
+    }
+
+    [TestMethod]
+    public void Quests_and_rumors_follow_the_session_rules_and_lift_the_reaction()
+    {
+        using var session = ConversationSessionFixture.Create();
+        var state = State(session, 30);
+        var task = Start(state, session, Revisit, 40);
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, task.Phase, task.Failure?.Kind.ToString());
+        Assert.AreEqual(new SessionQuest(1003, SessionQuestState.Accepted, false, 54_000_000), session.QueryQuest(1003));
+        Assert.AreEqual(54_000_000, session.QueryRumor(1001));
+        Assert.AreEqual(AreaConversationState.AcceptedQuestReaction, state.Reaction(0), "accepting a quest lifts the reaction to 41");
+        CollectionAssert.AreEqual(new[] { "#0 turn 1: QU 1003 -> 2 [Applied]", "#1 turn 1: RU 1001 logged [Applied]" },
+            task.Effects.Select(AreaConversationText.Effect).ToArray());
+
+        // Repeating the same talk changes nothing: the quest is not lowered, the rumor keeps its time.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetQuestState(session.Version, 1003, SessionQuestState.Completed).Disposition);
+        var revision = session.Version.Revision;
+        var again = Start(state, session, Revisit, 40);
+        Assert.AreEqual(DialogConversationPhase.AwaitingSelection, again.Phase);
+        Assert.AreEqual(revision, session.Version.Revision);
+        Assert.AreEqual(SessionQuestState.Completed, session.QueryQuest(1003)!.Value.Effective);
+
+        // A quest number outside the source range is refused by the session and fails the dialog.
+        var invalid = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{qu 7 1}")), Request(),
+            new DialogConversationPorts(state, state, session.Flags, state));
+        Assert.AreEqual(DialogConversationFailureKind.CommandRejected, invalid.Failure!.Kind);
     }
 
     [TestMethod]
     public void Text_formatting_marks_generated_blocked_and_frontier_states()
     {
         var document = DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{}{2}{b:}{}{1}{}{0}{}{3}{k:}{}{1}{}{0}{}{4}{x}{}{1}{}{0}{zz 1}"));
-        var state = new AreaConversationState(50);
-        var conversation = DialogConversation.Start(document, Request(), new DialogConversationPorts(state, state, Owner(), state));
+        using var session = ConversationSessionFixture.Create();
+        var state = State(session, 50);
+        var conversation = DialogConversation.Start(document, Request(), new DialogConversationPorts(state, state, session.Flags, state));
         CollectionAssert.AreEqual(new[]
         {
             "1. [generated 'b:' phrase; generic text not loaded]  (not supported here: UnsupportedInteraction)",
@@ -78,7 +154,7 @@ public sealed class AreaConversationTests
         }, conversation.Options.Select(AreaConversationText.Option).ToArray());
 
         var stopped = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{wa 1}{2}{x}{}{1}{}{0}{}")), Request(),
-            new DialogConversationPorts(state, state, Owner(), state));
+            new DialogConversationPorts(state, state, session.Flags, state));
         Assert.AreEqual("[stopped at a frontier: UnsupportedOperation at node 1, record 1 Action op 0]", AreaConversationText.Outcome(stopped));
     }
 
@@ -94,7 +170,8 @@ public sealed class AreaConversationTests
         Assert.AreEqual("cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499", dialogHash, "pinned dialog archive");
         using var data = AreaOriginalValidator.OpenFiles(P("modules/Arcanum.dat"), P("arcanum1.dat"), P("arcanum2.dat"), P("modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), P("data/proto"));
         var snapshot = data.LoadStrict();
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"));
+        using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
+        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session);
         var plan = AreaScenePlan.Create(snapshot);
         var body = plan.Commands.Last(command => command.Identity == host.Speakers[0].Row.Key && !command.Additive);
         Assert.AreSame(host.Speakers[0], host.SpeakerAt(plan.Commands, body.Destination.X + body.Destination.Width / 2.0, body.Destination.Y + body.Destination.Height / 2.0));
@@ -125,6 +202,19 @@ public sealed class AreaConversationTests
         }, conversation.Effects.Select(e => e.Command.GetType().Name).ToArray());
         Assert.IsTrue(conversation.Effects.All(e => e.Outcome == DialogCommandAttemptOutcome.Applied));
         Assert.IsTrue(host.State.Follows(0));
+        // ARC-SCRIPT-006: every flag, the quest, both rumors and the follow consent are session state.
+        var written = conversation.Effects.Select(e => e.Command).OfType<GlobalFlagWriteCommand>().ToArray();
+        Assert.AreEqual(4, written.Length);
+        var story = session.QueryStory();
+        Assert.AreEqual((1, 2), (story.Quests.Count, story.Rumors.Count));
+
+        // The cave trip and back, then save and load: a fresh host over the restored session.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(79) }).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(snapshot.RuntimeMap) }).Disposition);
+        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
+        foreach (var write in written) Assert.AreEqual(write.Value, Flag(loaded, write.Flag), $"GF {write.Flag}");
+        host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), loaded);
+        Assert.IsTrue(host.State.Follows(0));
 
         // Following now: the SCR picks another entry; that follower dialog needs WA, an explicit frontier.
         var again = host.Begin(host.Speakers[0]);
@@ -134,16 +224,21 @@ public sealed class AreaConversationTests
         Assert.AreEqual(dialogHash, Fingerprint(P("arcanum3.dat")), "input unchanged");
     }
 
-    private static DialogConversation Start(AreaConversationState state, GlobalFlagOwner owner, int race = 0) =>
-        DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(Synthetic)), Request(race), new DialogConversationPorts(state, state, owner, state));
+    private static AreaConversationState State(GameSessionOwner session, int reaction) =>
+        new(session, new SessionMapId(1), [Speaker0], reaction);
 
-    private static DialogConversationRequest Request(int race = 0) => new(new DialogNodeId(1),
+    private static DialogConversation Start(AreaConversationState state, GameSessionOwner session, int race = 0) =>
+        Start(state, session, Synthetic, 1, race);
+
+    private static DialogConversation Start(AreaConversationState state, GameSessionOwner session, string records, int entry, int race = 0) =>
+        DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes(records)), Request(race, entry), new DialogConversationPorts(state, state, session.Flags, state));
+
+    private static bool? Flag(GameSessionOwner session, int flag) =>
+        session.Flags.Read(new(new(Guid.NewGuid()), session.FlagVersion, new FlagId(flag))).Value;
+
+    private static DialogConversationRequest Request(int race = 0, int entry = 1) => new(new DialogNodeId(entry),
         new DialogParticipants(new DialogId(5), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)), new DialogScriptLine(4),
         AreaConversationProfile.Diagnostic.Pc with { Race = race }, AreaConversationProfile.Diagnostic.Names);
-
-    private static GlobalFlagOwner Owner() => GlobalFlagOwner.Create(new GlobalFlagOwnerDescriptor(
-        new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid())), new OwnerEpoch(Guid.NewGuid()), 0,
-        new[] { new FlagId(7) }, new[] { new GlobalFlagBootstrapValue(new FlagId(7), false) })).Owner!;
 
     private static string Fingerprint(string path)
     {

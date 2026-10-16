@@ -126,6 +126,34 @@ public interface IGlobalFlagOwner
     GlobalFlagWriteReceipt Write(GlobalFlagWriteRequest request);
 }
 
+/// <summary>An owner that also reports its current version, the expected value for the next read or write.</summary>
+public interface IVersionedGlobalFlagOwner : IGlobalFlagOwner
+{
+    GlobalFlagVersion Version { get; }
+}
+
+/// <summary>
+/// Original new-game GF state (ARC-SCRIPT-006): the source keeps 100 32-bit words of global flags and zeroes
+/// all of them on init and reset, so flags 0..3199 are admitted and known false at a new game.
+/// </summary>
+public static class OriginalGlobalFlags
+{
+    public const int Words = 100;
+    public const int Count = Words * 32;
+
+    public static GlobalFlagOwnerDescriptor NewGame(GlobalFlagIdentity identity, OwnerEpoch epoch)
+    {
+        var domain = new FlagId[Count];
+        var bootstrap = new GlobalFlagBootstrapValue[Count];
+        for (var flag = 0; flag < Count; flag++)
+        {
+            domain[flag] = new FlagId(flag);
+            bootstrap[flag] = new GlobalFlagBootstrapValue(new FlagId(flag), false);
+        }
+        return new GlobalFlagOwnerDescriptor(identity, epoch, 0, domain, bootstrap);
+    }
+}
+
 internal static class GlobalFlagValidation
 {
     internal static GlobalFlagReason Version(GlobalFlagVersion version)

@@ -135,7 +135,8 @@ attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (
 diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
-closes the dialog. The HUD says whether a dialog NPC is in reach. Rules, state profile and
+closes the dialog. The HUD says whether a dialog NPC is in reach and what the dialogs left in
+the game session (quests, rumors, followers; ARC-SCRIPT-006). Rules, state profile and
 limits are in the [conversation runtime](../scripting/dialog-conversation-runtime.md); the
 self-test covers a synthetic panel, an off-NPC click, keyboard events and polled levels, and the
 palette guard in AREA mode (the positive NPC hit test is an opt-in original-data test).
@@ -393,11 +394,12 @@ and its step evidence with wall edges.
   cell with a fresh authoritative session and input queue, and the camera centres
   on it before the scene is published. Reset in the cave returns the actor to the
   cave arrival cell; the session map stays the cave. The exit leads back to (92913,82598), three cells east of the entrance.
-- **Session.** A `GameSessionOwner` (ARC-WORLD-008) is created per load with the
-  area lighting clock profile, a project module id (the first 16 bytes of the
-  module SHA-256, because the object file's GUID is empty) and a neutral GF domain
-  (one placeholder flag, Unknown, that nothing reads or writes: the owner needs a
-  non-empty domain and no script runs here). Each transfer records the actor's map and
+- **Session.** A `GameSessionOwner` (ARC-WORLD-008) is created per load, with or
+  without the cave, with the area lighting clock profile, a project module id (the
+  first 16 bytes of the module SHA-256, because the object file's GUID is empty) and the
+  original new-game GF domain (0..3199 known false, ARC-SCRIPT-006). Dialogs keep their
+  consequences in it ([conversation runtime](../scripting/dialog-conversation-runtime.md#consequences-in-the-game-session-arc-script-006)),
+  so they hold after the cave trip. Each transfer records the actor's map and
   arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.

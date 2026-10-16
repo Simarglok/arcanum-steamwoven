@@ -4,6 +4,7 @@ using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.NpcDialog;
+using Arcanum.Session;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -12,8 +13,8 @@ public sealed record AreaSpeaker(int Index, AreaObjectRecord Row, int ScriptId, 
 
 /// <summary>
 /// PROJECT diagnostic profile for ARC-SCRIPT-005 conversations in the AREA viewer. None of it is original
-/// new-game state: a male human PC with intelligence 8, an initial NPC→PC reaction of 50, every global flag
-/// known false, placeholder names, and follow requests accepted.
+/// new-game state: a male human PC with intelligence 8, an initial NPC→PC reaction of 50, placeholder names,
+/// and follow requests accepted. Global flags are the session's original new-game flags (ARC-SCRIPT-006).
 /// </summary>
 public sealed record AreaConversationProfile(DialogPcFacts Pc, DialogSpeakerNames Names, int InitialReaction, int Reach)
 {
@@ -35,14 +36,14 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 
 /// <summary>
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR entry (ARC-SCRIPT-002 resolver) →
-/// authenticated DLG member → <see cref="DialogConversation"/>. One diagnostic state persists across talks in a session.
-/// Synchronous, single-threaded; Begin re-authenticates the selected archives every time.
+/// authenticated DLG member → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
+/// <see cref="GameSessionOwner"/> (ARC-SCRIPT-006), so they persist across talks, map changes and snapshots.
+/// The host does not own the session. Synchronous, single-threaded; Begin re-authenticates the selected archives every time.
 /// </summary>
 public sealed class AreaConversationHost
 {
-    public const int GlobalFlagDomain = GlobalFlagLimits.MaxFlags;
-
     private readonly AreaSnapshot _snapshot;
+    private readonly GameSessionOwner _session;
     private readonly string _scriptArchive;
     private readonly string _dialogArchive;
     private (long Length, string Sha256)? _dialogIdentity;
@@ -50,26 +51,25 @@ public sealed class AreaConversationHost
     private readonly NpcDialogMapId _map;
     private readonly NpcDialogPcId _pc;
 
-    public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, AreaConversationProfile? profile = null)
+    public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, GameSessionOwner session,
+        AreaConversationProfile? profile = null)
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
+        _session = session ?? throw new ArgumentNullException(nameof(session));
         _scriptArchive = scriptArchive ?? throw new ArgumentNullException(nameof(scriptArchive));
         _dialogArchive = dialogArchive ?? throw new ArgumentNullException(nameof(dialogArchive));
         Profile = profile ?? AreaConversationProfile.Diagnostic;
         _map = new NpcDialogMapId(snapshot.RuntimeMap, snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256);
         _pc = new NpcDialogPcId(_world, _map, Guid.NewGuid());
         Speakers = FindSpeakers(snapshot);
-        var created = GlobalFlagOwner.Create(new GlobalFlagOwnerDescriptor(
-            new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid())), new OwnerEpoch(Guid.NewGuid()), 0,
-            Enumerable.Range(0, GlobalFlagDomain).Select(flag => new FlagId(flag)).ToArray(),
-            Enumerable.Range(0, GlobalFlagDomain).Select(flag => new GlobalFlagBootstrapValue(new FlagId(flag), false)).ToArray()));
-        GlobalFlags = created.Owner ?? throw new InvalidOperationException("GF_BOOTSTRAP_REJECTED");
-        State = new AreaConversationState(Profile.InitialReaction);
+        State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
+            Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction);
     }
 
     public AreaConversationProfile Profile { get; }
     public IReadOnlyList<AreaSpeaker> Speakers { get; }
-    public GlobalFlagOwner GlobalFlags { get; }
+    /// <summary>The session's global flags: the conversation reads and writes them directly.</summary>
+    public IVersionedGlobalFlagOwner GlobalFlags => _session.Flags;
     public AreaConversationState State { get; }
 
     internal static IReadOnlyList<AreaSpeaker> FindSpeakers(AreaSnapshot snapshot)
@@ -170,7 +170,7 @@ public sealed class AreaConversationHost
         var participants = new DialogParticipants(new DialogId(speaker.ScriptId), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var conversation = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(entry.DlgNode.Value), participants, new DialogScriptLine(entry.ScrLine.Value), Profile.Pc, Profile.Names),
-            new DialogConversationPorts(State, State, GlobalFlags, State));
+            new DialogConversationPorts(State, State, _session.Flags, State));
         return new(AreaConversationStartStatus.Started, conversation, speaker, $"script {speaker.ScriptId} SCR line {entry.ScrLine.Value} -> DLG node {entry.DlgNode.Value}");
     }
 
@@ -193,45 +193,80 @@ public sealed class AreaConversationHost
 }
 
 /// <summary>
-/// In-memory PROJECT diagnostic owner for one viewer session: per-NPC attachment local flags (seeded from the
-/// loaded effective attachment), NPC→PC reaction, PC alignment, quest/rumor/item/area/follower records. It does not simulate
-/// inventory, party AI or the world map; it records the typed commands it accepted.
+/// Dialog state ports over a <see cref="GameSessionOwner"/> (ARC-SCRIPT-006). Session-owned and therefore kept across
+/// talks, map changes and snapshots: global flags (through the conversation's GF port), PC quest states and known
+/// rumors (the session story domain), and, per speaker, the attachment local flags, the NPC→PC reaction and the
+/// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
+/// from the area, the profile's initial reaction, not following). Still PROJECT diagnostic, in memory only and
+/// lost with this object: PC alignment, items given (IN) and areas marked (MM); they wait for their own owners.
 /// </summary>
 public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort
 {
+    public const string LocalFlagsProperty = "dialog.lf";
+    public const string ReactionProperty = "reaction.pc";
+    public const string FollowProperty = "follow.pc";
+    /// <summary>Source floor for the NPC's reaction when the PC accepts its quest, and the bonus on completion.</summary>
+    public const int AcceptedQuestReaction = 41;
+    public const int CompletedQuestReactionBonus = 10;
     public static readonly DialogParticipantId PcParticipant = new(1);
-    private readonly Dictionary<int, uint> _localFlags = [];
-    private readonly Dictionary<int, int> _reaction = [];
-    private readonly HashSet<int> _followers = [];
-    private readonly Dictionary<int, int> _quests = [];
-    private readonly HashSet<int> _rumors = [];
+
+    private readonly GameSessionOwner _session;
+    private readonly SessionMapId _map;
+    private readonly IReadOnlyList<string> _entities;
+    private readonly Dictionary<int, uint> _baseline = [];
     private readonly HashSet<int> _areas = [];
     private readonly List<int> _items = [];
     private readonly Guid _stateEpoch = Guid.NewGuid();
     private readonly Guid _attachmentEpoch = Guid.NewGuid();
-    private ulong _stateRevision;
-    private ulong _attachmentRevision;
     private readonly int _initialReaction;
 
-    public AreaConversationState(int initialReaction) => _initialReaction = initialReaction;
+    /// <param name="speakerEntities">Stable session entity id of each speaker index (see <see cref="EntityId"/>).</param>
+    public AreaConversationState(GameSessionOwner session, SessionMapId map, IReadOnlyList<string> speakerEntities, int initialReaction)
+    {
+        _session = session ?? throw new ArgumentNullException(nameof(session));
+        ArgumentNullException.ThrowIfNull(speakerEntities);
+        _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
+    }
+
+    /// <summary>Session entity id of an area object: its source object-id fingerprint.</summary>
+    public static string EntityId(AreaObjectRecord row) => "oid:" + row.Key.ObjectIdSha256;
 
     public static DialogParticipantId Npc(int speaker) => new(1000 + speaker);
-    public NpcDialogStateVersion StateVersion => new(_stateEpoch, _stateRevision);
-    public NpcDialogAttachmentStateVersion AttachmentVersion => new(_attachmentEpoch, _attachmentRevision);
-    public IReadOnlyDictionary<int, int> Quests => _quests;
-    public IReadOnlySet<int> Rumors => _rumors;
+    // Both versions follow the session revision: any session change makes an earlier entry query stale.
+    public NpcDialogStateVersion StateVersion => new(_stateEpoch, checked((ulong)_session.Version.Revision));
+    public NpcDialogAttachmentStateVersion AttachmentVersion => new(_attachmentEpoch, checked((ulong)_session.Version.Revision));
+    /// <summary>The session's quests and rumors (detached copy).</summary>
+    public SessionStoryState Story => _session.QueryStory();
     public IReadOnlySet<int> Areas => _areas;
     public IReadOnlyList<int> Items => _items;
-    /// <summary>PC alignment, starting at 0 in this diagnostic profile.</summary>
+    /// <summary>PC alignment, starting at 0 in this diagnostic profile; not session state.</summary>
     public int Alignment { get; private set; }
-    public bool Follows(int speaker) => _followers.Contains(speaker);
-    public bool LocalFlag(int speaker, int bit) => _localFlags.TryGetValue(speaker, out var flags) && (flags & (1u << bit)) != 0;
-    public int Reaction(int speaker) => _reaction.TryGetValue(speaker, out var value) ? value : _initialReaction;
+    public bool Follows(int speaker) => Read(speaker, FollowProperty) == 1;
+    public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
+    public int Reaction(int speaker) => Read(speaker, ReactionProperty) is { } value ? checked((int)value) : _initialReaction;
 
-    /// <summary>Seeds the attachment flags once from the loaded effective SAP_DIALOG attachment.</summary>
-    internal void Bind(int speaker, NpcDialogAttachmentId attachment) => _localFlags.TryAdd(speaker, attachment.Flags);
+    /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
+    internal void Bind(int speaker, NpcDialogAttachmentId attachment) => _baseline[speaker] = attachment.Flags;
 
-    private static int Speaker(DialogParticipantId npc) => checked((int)(npc.Value - 1000));
+    private uint LocalFlags(int speaker) => Read(speaker, LocalFlagsProperty) is { } value ? checked((uint)value) : _baseline.GetValueOrDefault(speaker);
+
+    private int Speaker(DialogParticipantId npc)
+    {
+        var speaker = checked((int)(npc.Value - 1000));
+        if (speaker < 0 || speaker >= _entities.Count) throw new ArgumentOutOfRangeException(nameof(npc));
+        return speaker;
+    }
+
+    private MapChangeKey Key(int speaker, string property) => MapChangeKey.ForEntity(_entities[speaker], property);
+    private long? Read(int speaker, string property) => _session.QueryMapChange(_map, Key(speaker, property));
+
+    // A value equal to the loaded baseline clears the key, so an untouched NPC has no session entry.
+    private GameSessionMutationResult Write(int speaker, string property, long value, long baseline) => value == baseline
+        ? _session.ClearMapChange(_session.Version, _map, Key(speaker, property))
+        : _session.SetMapChange(_session.Version, _map, Key(speaker, property), value);
+
+    private static DialogCommandResult Result(GameSessionMutationResult result) =>
+        result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
 
     public LocalFlagReadResult Read(LocalFlagQuery query) =>
         LocalFlagReadResult.Found(LocalFlag(Speaker(query.Npc), query.Index) ? 1 : 0);
@@ -239,42 +274,58 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public DialogCommandResult Execute(LocalFlagWriteCommand command)
     {
         var speaker = Speaker(command.Npc);
-        var flags = _localFlags.GetValueOrDefault(speaker);
-        _localFlags[speaker] = command.Value == 1 ? flags | (1u << command.Index) : flags & ~(1u << command.Index);
-        _attachmentRevision++;
+        var flags = LocalFlags(speaker);
+        flags = command.Value == 1 ? flags | (1u << command.Index) : flags & ~(1u << command.Index);
+        return Result(Write(speaker, LocalFlagsProperty, flags, _baseline.GetValueOrDefault(speaker)));
+    }
+
+    /// <summary>
+    /// QU through the session's quest rules. A quest that became Accepted lifts the NPC's reaction to at least 41 and
+    /// one that became Completed adds 10 (source quest rules); experience and quest alignment need quest data and are not applied.
+    /// </summary>
+    public DialogCommandResult Execute(QuestStateCommand command)
+    {
+        var speaker = Speaker(command.NpcContext);
+        if (!Enum.IsDefined((SessionQuestState)command.State)) return DialogCommandResult.Rejected;
+        var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State);
+        if (result.Disposition != GameSessionDisposition.Changed) return Result(result);
+        var reaction = Reaction(speaker);
+        var target = _session.QueryQuest(command.QuestId)!.Value.Effective switch
+        {
+            SessionQuestState.Accepted when reaction < AcceptedQuestReaction => AcceptedQuestReaction,
+            SessionQuestState.Completed => checked(reaction + CompletedQuestReactionBonus),
+            _ => reaction,
+        };
+        // The quest change is already committed: a refused reaction write is a partial effect, reported as indeterminate.
+        if (Write(speaker, ReactionProperty, target, _initialReaction).Disposition == GameSessionDisposition.Rejected)
+            throw new InvalidOperationException("AREA_SESSION_QUEST_REACTION_REJECTED");
         return DialogCommandResult.Applied;
     }
 
-    public DialogCommandResult Execute(QuestStateCommand command) { _quests[command.QuestId] = command.State; _stateRevision++; return DialogCommandResult.Applied; }
-    public DialogCommandResult Execute(RumorLogCommand command) { _rumors.Add(command.RumorId); _stateRevision++; return DialogCommandResult.Applied; }
+    public DialogCommandResult Execute(RumorLogCommand command) => Result(_session.LearnRumor(_session.Version, command.RumorId));
 
     public DialogReactionReadResult ReadReaction(DialogReactionQuery query) => DialogReactionReadResult.Of(Reaction(Speaker(query.Npc)));
 
     public DialogCommandResult Execute(ReactionCommand command)
     {
         var speaker = Speaker(command.Npc);
-        var current = Reaction(speaker);
-        _reaction[speaker] = command.Mode == DialogReactionMode.Target ? command.Value : checked(current + command.Value);
-        _stateRevision++;
-        return DialogCommandResult.Applied;
+        var value = command.Mode == DialogReactionMode.Target ? command.Value : checked(Reaction(speaker) + command.Value);
+        return Result(Write(speaker, ReactionProperty, value, _initialReaction));
     }
 
-    public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); _stateRevision++; return DialogCommandResult.Applied; }
-    public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); _stateRevision++; return DialogCommandResult.Applied; }
+    public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }
+    public DialogCommandResult Execute(MarkAreaCommand command) { _areas.Add(command.Area); return DialogCommandResult.Applied; }
 
     public DialogCommandResult Execute(AlignmentCommand command)
     {
         Alignment = command.Mode == DialogReactionMode.Target ? command.Value : checked(Alignment + command.Value);
-        _stateRevision++;
         return DialogCommandResult.Applied;
     }
 
-    public DialogJoinResult Execute(JoinCommand command)
-    {
-        _followers.Add(Speaker(command.Npc));
-        _stateRevision++;
-        return DialogJoinResult.Accepted;
-    }
+    /// <summary>Follow requests are accepted (diagnostic profile); the consent is session state of the NPC.</summary>
+    public DialogJoinResult Execute(JoinCommand command) =>
+        Write(Speaker(command.Npc), FollowProperty, 1, 0).Disposition == GameSessionDisposition.Rejected
+            ? DialogJoinResult.Rejected : DialogJoinResult.Accepted;
 }
 
 /// <summary>Display strings for the diagnostic panel. They carry decoded record text and typed identifiers only.</summary>
