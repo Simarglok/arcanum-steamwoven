@@ -206,6 +206,8 @@ public partial class TerrainViewerApp
     {
         if (_areaAmbient is not { } driver || _areaSession is not { } session || _conversationPanel is null) throw new InvalidOperationException("AREA_CLOCK_REQUIRED");
         if (WorldModal) ToggleWorldSettings();
+        // After the quick-load phase the session is a restored one: the driver must be bound to it.
+        if (!ReferenceEquals(driver.Clock.OwnerIdentity, session.QueryClockSnapshot().OwnerIdentity)) throw new InvalidOperationException("AREA_CLOCK_DRIVER_NOT_REBOUND");
         var host = 10_000_000L;
         TickAreaClock(host);
         var start = driver.Clock;
