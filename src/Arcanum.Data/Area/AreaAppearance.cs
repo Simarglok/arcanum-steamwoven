@@ -108,8 +108,9 @@ public sealed partial class AreaDataOwner
             // Door or window (pinned CE a_name.c portal names; docs/research/first-building-evidence.md):
             // number 19..27, frame 14..18, rotation 11..13, type bit 10 (1 door, 0 window: entry
             // number + 1001), busted bit 9 (the name's sixth-from-last letter becomes D), flag bit 0
-            // mirrors. Every portal ART has one group. Other flag bits are not admitted.
-            if ((aid & 0xE) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            // mirrors. Every portal ART has one group (MakeVisual checks it). Flag bits 1-3 and
+            // the unused bits 6-8 are not admitted.
+            if ((aid & 0x1CE) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
             var number = (int)((aid >> 19) & 511); var door = ((aid >> 10) & 1) != 0;
             var name = Mapped(maps, AreaMappingRole.Portal, door ? number : number + 1001);
             var space = name.IndexOf(' '); if (space >= 0) name = name[..space];
@@ -201,9 +202,9 @@ public sealed partial class AreaDataOwner
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
         _budget.StartFrame(entry.StoredBytes, entry.DecodedBytes);
         var (bytes, sha) = ReadFrameEntry(entry); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
-        // A wall is drawn from group 0 only when its ART holds a single rotation; an
-        // eight-rotation wall ART would need the rotation's own group, which is not admitted.
-        if (raw >> 28 == 1 && (bytes.Length < 4 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 0))
+        // A wall or portal is drawn from group 0 only when its ART holds a single rotation; an
+        // eight-rotation ART would need the rotation's own group, which is not admitted.
+        if (raw >> 28 is 1 or 3 && (bytes.Length < 4 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 0))
             throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
         if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior && record is not null)
             (policy, view, physical) = OriginalProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);

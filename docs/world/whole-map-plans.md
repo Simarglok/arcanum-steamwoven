@@ -60,13 +60,17 @@ A whole-map plan also:
 - draws doors and windows (ARC-DATA-020): with the `Portal` mapping
   (`art/portal/portal.mes`) a type-1 object's ART is the entry's first word for
   its number (+1001 for a window), the busted bit turns the name's
-  sixth-from-last letter into `D`, the only group is drawn and flag bit 0
-  mirrors it; other flag bits are refused
+  sixth-from-last letter into `D`, the only group is drawn (the ART must hold
+  a single rotation) and flag bit 0 mirrors it; flag bits 1–3 and the unused
+  bits 6–8 are refused
   ([portal facts](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008));
 - draws scrolls, keys and key rings (types 10–12) like every other item;
-- resolves no body for an object its serialized state hides at T0 (off,
-  destroyed, invisible), so such an object needs no ART; every trap is one.
-  The viewer draws no such body anyway.
+- resolves no body, whatever the object's type, when its serialized state hides
+  it at T0 (destroyed 0x1, off 0x2 or don't-draw 0x100; every installed trap is
+  don't-draw, and about a hundred other objects, mostly NPCs, are hidden too),
+  so such an object needs no ART; the viewer draws no such body anyway. The
+  original still draws a don't-draw object's overlays, so their admission check
+  still applies to it; a destroyed or off object is not checked.
 
 ## Result on the installed original
 

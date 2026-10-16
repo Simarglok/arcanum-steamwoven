@@ -249,39 +249,45 @@ public sealed partial class AreaDataOwner
             disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : (flags & 4096) != 0 ? AreaDisposition.ExteriorSectorInsertionRefusedByInventory :
                 (flags & 0x103) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
-            // A whole map does not resolve a body its serialized state hides (off, destroyed,
-            // invisible at T0: every trap is one); consumers draw no such body and need no visual.
+            // A whole map resolves no body its serialized state hides at T0 (destroyed 0x1, off
+            // 0x2 or don't-draw 0x100; every trap is don't-draw), whatever its type: consumers
+            // draw no such body. The original still draws a don't-draw object's overlays, so
+            // their admission check below still applies unless the object is destroyed or off.
             var hiddenOnWholeMap = _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original && disposition == AreaDisposition.BodySuppressedBySerializedState;
-            if (scope == AreaScope.Core && !hiddenOnWholeMap)
+            if (scope == AreaScope.Core)
             {
-                // Walls (type 0) only where the plan binds both wall-name tables.
-                // A whole map also draws scrolls, keys and key rings (types 10-12): their ground
-                // ART is the same item class as every admitted item type.
-                if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted) &&
-                    !(record.Type is 10 or 11 or 12 && _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original) && !(record.Type == 1 && PortalsAdmitted))
-                    throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
-                var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
-                var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
-                var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
-                AdmitVisual(visuals);
-                var request = ObjectRequest(aid, maps, token);
-                output.Allocate(2048);
-                AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token));
-                foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })
+                if (!hiddenOnWholeMap)
                 {
-                    if (!effective.TryGetValue(slot, out var array)) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
-                    if ((flags & bit) == 0) continue;
-                    for (var index = 0; index < size; index++)
-                    {
-                        var element = array.Elements.SingleOrDefault(e => e.Key == index);
-                        var layerAid = element is null ? 0U : checked((uint)element.Words[0]);
-                        if (layerAid == uint.MaxValue) continue;
-                        // No eye-candy source role has been admitted by this profile.
-                        // Active required references cannot be renderer-Unknown success.
-                        layersReady = false;
-                        throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, offset, ordinal);
-                    }
+                    // Walls (type 0) only where the plan binds both wall-name tables.
+                    // A whole map also draws scrolls, keys and key rings (types 10-12): their ground
+                    // ART is the same item class as every admitted item type.
+                    if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted) &&
+                        !(record.Type is 10 or 11 or 12 && _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original) && !(record.Type == 1 && PortalsAdmitted))
+                        throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
+                    var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
+                    var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);
+                    var vkey = new AreaVisualKey(kind, new(Identity(input).Sha256, _plan.RuntimeMap, visualSector.Packed), ordinal, record.Own.Sha256, Object: key);
+                    AdmitVisual(visuals);
+                    var request = ObjectRequest(aid, maps, token);
+                    output.Allocate(2048);
+                    AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token));
                 }
+                if (!hiddenOnWholeMap || (flags & 0x3) == 0)
+                    foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })
+                    {
+                        if (!effective.TryGetValue(slot, out var array)) throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
+                        if ((flags & bit) == 0) continue;
+                        for (var index = 0; index < size; index++)
+                        {
+                            var element = array.Elements.SingleOrDefault(e => e.Key == index);
+                            var layerAid = element is null ? 0U : checked((uint)element.Words[0]);
+                            if (layerAid == uint.MaxValue) continue;
+                            // No eye-candy source role has been admitted by this profile.
+                            // Active required references cannot be renderer-Unknown success.
+                            layersReady = false;
+                            throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, offset, ordinal);
+                        }
+                    }
             }
         }
         catch (AreaException error) { _budget.EndFrame(); ready = false; issues.Add(error.Issue with { SourceIndex = ordinal }); }

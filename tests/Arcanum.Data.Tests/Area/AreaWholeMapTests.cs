@@ -88,6 +88,43 @@ public sealed class AreaWholeMapTests
     }
 
     [TestMethod]
+    public void A_portal_with_an_unadmitted_flag_bit_is_refused()
+    {
+        var resources = new (string, byte[])[] { ("tile.mes", Tile), ("facade.mes", Facade), ("scenery.mes", Scenery),
+            ("portal.mes", "{55}{door1.art 2028}"u8.ToArray()), ("art/tile/stonebse0a.art", Art()), ("art/portal/door1.art", Art()) };
+        foreach (var bit in new uint[] { 0x2, 0x40, 0x100 })
+        {
+            using var f = new Fixture([(Start, [TypedRecord(1)])], extraPrototype: PortalPrototype((3u << 28) | (55u << 19) | (1u << 10) | bit), resourceEntries: resources,
+                mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.Portal], selection: AreaSectorSelection.AllSectors);
+            Assert.IsTrue(f.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState), bit.ToString("x"));
+        }
+    }
+
+    [TestMethod]
+    public void A_whole_map_draws_a_scroll_like_any_ground_item()
+    {
+        var resources = new (string, byte[])[] { ("tile.mes", Tile), ("facade.mes", Facade), ("scenery.mes", Scenery),
+            ("item_ground.mes", "{0}{scroll.art}"u8.ToArray()), ("art/tile/stonebse0a.art", Art()), ("art/item/scroll.art", Art()) };
+        using var f = new Fixture([(Start, [TypedRecord(10, maskWords: 4)])], extraPrototype: ScrollPrototype(), resourceEntries: resources,
+            mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.ItemGround], selection: AreaSectorSelection.AllSectors);
+        var snapshot = Complete(f);
+        var scroll = snapshot.Objects.Single(o => o.Type == 10);
+        Assert.IsTrue(snapshot.Visuals.Any(v => v.Key.Object == scroll.Key));
+    }
+
+    [TestMethod]
+    public void A_dont_draw_overlay_is_still_refused_but_destroyed_objects_are_not_checked()
+    {
+        // Don't-draw (0x100) plus an active overlay flag (0x8000): the original still draws the overlay.
+        using (var f = new Fixture([(Start, [TypedRecord(17)])], extraPrototype: HiddenTrapPrototype(0x100 | 0x8000), resourceEntries: Resources(),
+            selection: AreaSectorSelection.AllSectors))
+            Assert.IsTrue(f.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState));
+        using var destroyed = new Fixture([(Start, [TypedRecord(17)])], extraPrototype: HiddenTrapPrototype(0x1 | 0x8000), resourceEntries: Resources(),
+            selection: AreaSectorSelection.AllSectors);
+        Assert.IsTrue(destroyed.Owner.Inspect().IsComplete);
+    }
+
+    [TestMethod]
     public void A_hidden_trap_needs_no_visual_on_a_whole_map()
     {
         using var f = new Fixture([(Start, [TypedRecord(17)])], extraPrototype: HiddenTrapPrototype(), resourceEntries: Resources(),
@@ -108,20 +145,23 @@ public sealed class AreaWholeMapTests
     /// <summary>A type-1 prototype: 36 common slots then the portal group (six numbers, two arrays).</summary>
     private static byte[] PortalPrototype(uint aid) => TypedPrototype(1, 44, [1, 5, 6, 7, 15, 16, 17, 30, 31, 34, 35, 42, 43], aid, flags: 0);
     /// <summary>A type-17 trap prototype (36 common slots, short group of three numbers and two
-    /// arrays) whose object flags hide it (OF_OFF).</summary>
-    private static byte[] HiddenTrapPrototype() => TypedPrototype(17, 41, [1, 5, 6, 7, 15, 16, 17, 30, 31, 34, 35, 39, 40], 0xE0000000, flags: 0x1);
+    /// arrays) whose object flags hide it: don't-draw (0x100) by default, as every installed trap.</summary>
+    private static byte[] HiddenTrapPrototype(uint flags = 0x100) => TypedPrototype(17, 41, [1, 5, 6, 7, 15, 16, 17, 30, 31, 34, 35, 39, 40], 0xE0000000, flags);
+    /// <summary>A type-10 scroll prototype: 36 common slots, the item group (23) and the short
+    /// group (5), four mask words. Item ART 0x60000000 is item_ground key 0.</summary>
+    private static byte[] ScrollPrototype() => TypedPrototype(10, 64, [1, 5, 6, 7, 15, 16, 17, 30, 31, 34, 35, 37, 57, 58, 62, 63], 0x60000000, flags: 0, maskWords: 4);
 
     /// <summary>An instance of prototype 7002 that overrides only its location (slot 1).</summary>
-    private static byte[] TypedRecord(int type)
+    private static byte[] TypedRecord(int type, int maskWords = 3)
     {
         using var s = new MemoryStream(); I32(s, 119); s.Write(Id(1, 7002)); s.Write(Id(2, 11)); I32(s, type);
-        s.Write(new byte[] { 1, 0 }); I32(s, 2); I32(s, 0); I32(s, 0); s.WriteByte(1); I64(s, 0); return s.ToArray();
+        s.Write(new byte[] { 1, 0 }); I32(s, 2); for (var word = 1; word < maskWords; word++) I32(s, 0); s.WriteByte(1); I64(s, 0); return s.ToArray();
     }
 
-    private static byte[] TypedPrototype(int type, int fields, int[] optional, uint aid, uint flags)
+    private static byte[] TypedPrototype(int type, int fields, int[] optional, uint aid, uint flags, int maskWords = 3)
     {
         using var s = new MemoryStream(); I32(s, 119); s.Write(Id(-1)); s.Write(Id(1, 7002)); I32(s, type);
-        for (var word = 0; word < 3; word++) I32(s, 0);
+        for (var word = 0; word < maskWords; word++) I32(s, 0);
         for (var field = 0; field < fields; field++)
         {
             if (optional.Contains(field)) s.WriteByte(0);
