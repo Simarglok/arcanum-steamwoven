@@ -39,7 +39,7 @@ no other MES text and no DLG text. Original executable parity remains **NOT_VERI
     flag 2593 for any critter that steps on it, until flag 2547 is set. Then,
     for a triggerer named 6409 and (unless flag 2744 is set) a story state
     above 14, it picks his dialog script: 1842 with flags 2444 and 2547 when
-    the player has quest 1025 in state 4 or his alignment is −699 or lower,
+    the player has quest 1025 completed (state 4) or his alignment is −699 or lower,
     otherwise 2019, which it calls at once. Either way it removes itself from
     the tile that fired; the other seven tiles keep it, and on the 2019 branch
     flag 2547 stays clear, so they can fire again. For a
@@ -120,8 +120,8 @@ its teleport and both standpoints name catalogue map 5023, tile (92, 95).
 - **DLG.** The lenient scan looks for the letters `GF` (any case, not after
   another letter), optional spaces and the flag number anywhere in a DLG file.
   It could miss a signed operand (`GF +2593`) or a GF glued to another code,
-  so as a check the digits 2593 were also searched: they occur in no DLG at
-  all. All 709 files were scanned, 38 of them refused by the strict DLG
+  so the probe also reports how many DLG files contain the number 2593 at
+  all (not inside a longer number): none. All 709 files were scanned, 38 of them refused by the strict DLG
   reader; 0 hits.
 - **Call-ex.** The 20 scripts reached from his six T0 roots hold 15 call-ex
   actions: scripts 1046 (2), 1100, 1324, 1650, 1651, 1712 (2), 1715 (5), 1828
@@ -131,6 +131,36 @@ its teleport and both standpoints name catalogue map 5023, tile (92, 95).
   One literal edge target (1800) is not installed. With the scripts the event
   hands him added as roots (2019, 3092, 2023, 2498), 25 scripts and 17 call-ex
   actions are reached, still all attachment point 9.
+
+## 4. The numbers checked against editor sources (X)
+
+Every number this note and ARC-RES-031/032 read through the CE enums was
+checked against two sources that do not come from CE, both kept in the
+project's local toolkit archive (ignored by git; nothing from them is copied
+here beyond names):
+
+- **ScriptEd 1.50** ([TimoP80/ScriptEd_v1_50](https://github.com/TimoP80/ScriptEd_v1_50),
+  commit `da7e6d2`, GPL), a community script editor whose data files say they
+  are kept in sync with the enums in the original `Script.h`.
+- **Troika's editor documents** in `editdocs.zip` from
+  [Terra-Arcanum](https://terra-arcanum.com/downloads/arcanum/resources/editdocs.zip)
+  (SHA-256 `a237d7f6…b1137b`): the event-script guide and the reference sheet.
+
+| Table | CE entries | ScriptEd entries | Checked indices | Result |
+| --- | ---: | ---: | --- | --- |
+| Actions | 142 | 142 | 3, 5, 7, 10, 12, 33, 40, 42, 44, 68, 81, 99, 100, 101, 137, 139, 140, 141 | all name the same action (goto, remove this script, call script, assign, subtract, store stat, transform to basic prototype, store story state, teleport, destroy, call script attached to object at point, change script at point, set/clear global flag, adjust stat, change autolevel scheme, day/night standpoint on map) |
+| Conditions | 53 (0 = always) | 52 (1..52) | 4, 5, 6, 20 | same: equals, less or equal, PC has quest in state, object is named |
+| Focus objects | 24 | 24 | 0, 1, 10, 21 | same: triggerer, attachee, current looped object, player |
+| Value kinds | 7 | 7 | 2, 3, 4 | same: local variable, number, global flag |
+| Attachment points | 36 | 36 | 9, 10, 12, 13, 19, 27, 31 | same: dialog, first heartbeat, dying, enter combat, heartbeat, new sector, dialog override |
+
+ScriptEd's descriptions also give the operand order this research assumed:
+call script takes script, line, triggerer, attachee; "call script attached
+to" takes object, point, line, triggerer. The Troika reference sheet numbers
+stat 17 as level, 19 as alignment, and quest state 4 as completed, so script
+2498's test is "the player has completed quest 1025". These are community and
+design documents, not the executable, so they raise confidence in the
+numbering without proving runtime behaviour.
 
 ## Proposal (P)
 
@@ -156,8 +186,8 @@ its teleport and both standpoints name catalogue map 5023, tile (92, 95).
 ## Method
 
 The read-only probe `--script-attachments` (self-test
-`--script-attachments-self-test` covers the lenient GF scan and the sector
-key), source reading at the pinned commit for the meaning of numbers, and the
+`--script-attachments-self-test` covers the lenient GF scan, the number search
+and the sector key), the editor sources of section 4, source reading at the pinned commit for the meaning of numbers, and the
 line decoder of [ARC-RES-032](virgil-level-replay.md). No CE code or
 structure was copied.
 

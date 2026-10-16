@@ -51,6 +51,21 @@ internal static partial class Program
         return hits;
     }
 
+    internal static bool SaContainsNumber(ReadOnlySpan<byte> bytes, int number)
+    {
+        var digits = Encoding.ASCII.GetBytes(number.ToString(System.Globalization.CultureInfo.InvariantCulture));
+        for (var at = bytes.IndexOf(digits); at >= 0;)
+        {
+            var end = at + digits.Length;
+            var before = at > 0 && bytes[at - 1] is >= (byte)'0' and <= (byte)'9';
+            var after = end < bytes.Length && bytes[end] is >= (byte)'0' and <= (byte)'9';
+            if (!before && !after) return true;
+            var next = bytes[(at + 1)..].IndexOf(digits);
+            at = next < 0 ? -1 : at + 1 + next;
+        }
+        return false;
+    }
+
     private static int ProbeScriptAttachments(string[] args)
     {
         // --game-root PATH --scripts a,b --flags f,g --roots r,s [--module NAME]
@@ -164,13 +179,15 @@ internal static partial class Program
             if (Read(winner, "template") is { } b) { templates++; Sector("<terrain>", "template", key, b); }
 
         // DLG GF writers, strict and lenient.
-        var dialogs = 0; var refusedDialogs = 0; var flagHits = new List<object>();
+        var dialogs = 0; var refusedDialogs = 0; var flagHits = new List<object>(); var digitFiles = flags.ToDictionary(f => f, _ => 0);
         foreach (var (key, winner) in keys.Where(k => k.Key.StartsWith("dlg/", StringComparison.Ordinal) && k.Key.EndsWith(".dlg", StringComparison.Ordinal)))
         {
             if (Read(winner, "dlg") is not { } bytes) continue;
             dialogs++;
             var strict = true;
             try { _ = DlgReader.Read(bytes); } catch (Exception e) when (e is DlgException or InvalidDataException) { strict = false; refusedDialogs++; }
+            // Cross-check: any occurrence of the flag's digits not inside a longer number.
+            foreach (var f in flags) if (SaContainsNumber(bytes, f)) digitFiles[f]++;
             foreach (var (offset, flag, value) in SaLenientFlagWrites(bytes, flags))
                 flagHits.Add(new { dlg = key, strict_reader_accepts = strict, offset, flag, value });
         }
@@ -208,7 +225,7 @@ internal static partial class Program
             hit_maps = hitMaps, catalogue_entries = catalogue.Count,
             catalogue_lookup = new[] { 5000, 5023, 5078 }.Select(n => new { catalogue = n, map = catalogue.GetValueOrDefault(n) }).ToArray(),
             target_lines = targets.Order().Where(scriptBytes.ContainsKey).Select(n => new { script = n, lines = AlDecode(scriptBytes[n]) }).ToArray(),
-            dialog_flag_writes = flagHits,
+            dialog_flag_writes = flagHits, dialog_files_containing_flag_digits = digitFiles.OrderBy(p => p.Key).Select(p => new { flag = p.Key, files = p.Value }).ToArray(),
             reach = new { reached = reached.ToArray(), unresolved_edges = unresolved, missing = missing.ToArray(), call_ex = callEx },
             refusals = refusals.Snapshot(),
         };
@@ -223,7 +240,8 @@ internal static partial class Program
         var hits = SaLenientFlagWrites(Encoding.ASCII.GetBytes("{1}{x}{ gf 2593 1, GF 7 1, XGF 2593 1, Gf2593 0, gf  x2593}"), flags);
         Check(hits.Count == 2 && hits[0].Flag == 2593 && hits[0].Value == 1 && hits[1].Value == 0, "lenient GF scan");
         Check(SaLenientFlagWrites(Encoding.ASCII.GetBytes("GF 25930 1"), flags).Count == 0, "different flag");
+        Check(SaContainsNumber("x 2593,"u8, 2593) && !SaContainsNumber("25930 12593"u8, 2593) && SaContainsNumber("25930 2593"u8, 2593), "number search");
         Check(SaSector("19797116386.sec") == (1506, 295) && SaSector("x.sec") == (null, null), "sector key");
-        Console.WriteLine("script-attachments self-test: PASS (lenient GF scan, sector key)");
+        Console.WriteLine("script-attachments self-test: PASS (lenient GF scan, number search, sector key)");
     }
 }
