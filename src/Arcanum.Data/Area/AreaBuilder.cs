@@ -249,10 +249,16 @@ public sealed partial class AreaDataOwner
             disposition = scope == AreaScope.Context ? AreaDisposition.ContextOnly : (flags & 4096) != 0 ? AreaDisposition.ExteriorSectorInsertionRefusedByInventory :
                 (flags & 0x103) != 0 ? AreaDisposition.BodySuppressedBySerializedState : AreaDisposition.BodyEligibleConditionally;
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
-            if (scope == AreaScope.Core)
+            // A whole map does not resolve a body its serialized state hides (off, destroyed,
+            // invisible at T0: every trap is one); consumers draw no such body and need no visual.
+            var hiddenOnWholeMap = _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original && disposition == AreaDisposition.BodySuppressedBySerializedState;
+            if (scope == AreaScope.Core && !hiddenOnWholeMap)
             {
                 // Walls (type 0) only where the plan binds both wall-name tables.
-                if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted))
+                // A whole map also draws scrolls, keys and key rings (types 10-12): their ground
+                // ART is the same item class as every admitted item type.
+                if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted) &&
+                    !(record.Type is 10 or 11 or 12 && _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original) && !(record.Type == 1 && PortalsAdmitted))
                     throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                 var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
                 var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);

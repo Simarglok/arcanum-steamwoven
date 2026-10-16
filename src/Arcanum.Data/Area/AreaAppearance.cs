@@ -103,6 +103,24 @@ public sealed partial class AreaDataOwner
             path = NpcPath(cls, population, armor, animation, weapon, shield, maps);
             lookup = aid; // source selector transformations are recorded, never replace raw state
         }
+        else if (cls == 3 && PortalsAdmitted)
+        {
+            // Door or window (pinned CE a_name.c portal names; docs/research/first-building-evidence.md):
+            // number 19..27, frame 14..18, rotation 11..13, type bit 10 (1 door, 0 window: entry
+            // number + 1001), busted bit 9 (the name's sixth-from-last letter becomes D), flag bit 0
+            // mirrors. Every portal ART has one group. Other flag bits are not admitted.
+            if ((aid & 0xE) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            var number = (int)((aid >> 19) & 511); var door = ((aid >> 10) & 1) != 0;
+            var name = Mapped(maps, AreaMappingRole.Portal, door ? number : number + 1001);
+            var space = name.IndexOf(' '); if (space >= 0) name = name[..space];
+            if ((aid & 0x200) != 0)
+            {
+                if (name.Length < 6) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
+                name = string.Concat(name.AsSpan(0, name.Length - 6), "D", name.AsSpan(name.Length - 5));
+            }
+            path = "art/portal/" + Safe(name);
+            nominal = (int)((aid >> 11) & 7); group = 0; mirror = (aid & 1) != 0;
+        }
         else if (cls == 1 && WallsAdmitted)
         {
             // Wall art: one undamaged file chosen by the structure row (interior name for
@@ -285,6 +303,8 @@ public sealed partial class AreaDataOwner
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
     private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror);
+    /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
+    private bool PortalsAdmitted => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
     // Wall piece file codes by piece index: the file naming order specified by the pinned
     // CE a_name.c 1562-1660 (build_wall_file_name), cited in docs/research/cave-transition-evidence.md T7.
