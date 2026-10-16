@@ -1,0 +1,364 @@
+using System.Security.Cryptography;
+using System.Text.Json;
+
+namespace Arcanum.Data.Hd;
+
+/// <summary>One opened, immutable HD pack (docs/formats/hd-pack.md). It is portable: every
+/// path inside is relative, nothing names an OS, GPU or user folder, so the same directory
+/// works wherever it is copied. Frames are bound per device by <see cref="ResolveSprite"/>,
+/// which checks the HD frame against this installation's Legacy frame; nothing is compared
+/// with reference HD hashes. Safe for concurrent use.</summary>
+public sealed class HdPack
+{
+    public const string Kind = "arcanum-steamwoven-hd-pack";
+    public const string ManifestFile = "manifest.json";
+
+    private readonly Dictionary<HdSpriteKey, HdPackEntry> _sprites;
+    // ART name hash -> the ART payload hashes the pack was built from under that name.
+    private readonly Dictionary<string, HashSet<string>> _spriteArts;
+    private readonly HdPackOptions _options;
+
+    private HdPack(string directory, HdPackIdentity identity, HdReviewStatus review, string recipeFile, string recipeSha256, HdRecipe recipe,
+        HdBuildRecord build, IReadOnlyList<HdPackEntry> entries, HdPackOptions options)
+    {
+        Directory = directory; Identity = identity; Review = review; RecipeFile = recipeFile; RecipeSha256 = recipeSha256; Recipe = recipe;
+        Build = build; Entries = entries; _options = options;
+        _sprites = entries.Where(e => e.Kind == HdEntryKind.Sprite).ToDictionary(e => e.Key!.Value);
+        _spriteArts = entries.Where(e => e.Kind == HdEntryKind.Sprite).GroupBy(e => e.NameSha256!, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.Select(e => e.Key!.Value.ArtSha256).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
+    }
+
+    /// <summary>The full local directory the pack was opened from (runtime only; never
+    /// written into a pack).</summary>
+    public string Directory { get; }
+    public HdPackIdentity Identity { get; }
+    public string Id => Identity.Id;
+    public int Scale => Identity.Scale;
+    public HdReviewStatus Review { get; }
+    public string RecipeFile { get; }
+    public string RecipeSha256 { get; }
+    public HdRecipe Recipe { get; }
+    public HdBuildRecord Build { get; }
+    public IReadOnlyList<HdPackEntry> Entries { get; }
+    public int SpriteCount => _sprites.Count;
+    /// <summary>Terrain chunk entries are a reserved kind: parsed and integrity-checked, never
+    /// bound until ARC-RENDER-016 amends the contract.</summary>
+    public int TerrainChunkCount => Entries.Count - _sprites.Count;
+    /// <summary>Decoded HD RGBA bytes of all sprite entries (scale² · w · h · 4 each).</summary>
+    public long SpriteRgbaBytes => _sprites.Values.Sum(e => (long)Scale * Scale * e.Legacy.Width * e.Legacy.Height * 4);
+
+    public static HdPackOpenResult Open(string directory, HdPackOptions? options = null)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(directory);
+        options ??= new(); options.Validate();
+        var full = Path.GetFullPath(directory);
+        if (!System.IO.Directory.Exists(full)) return new(HdPackOpenStatus.NotFound, null, "pack directory");
+        var manifest = ReadFile(full, ManifestFile, options.MaxManifestBytes, out var manifestStatus);
+        if (manifest is null) return new(manifestStatus, null, ManifestFile);
+        try
+        {
+            using var document = JsonDocument.Parse(manifest, HdJson.Options);
+            return Parse(full, manifest, document.RootElement, options);
+        }
+        catch (JsonException) { return new(HdPackOpenStatus.Malformed, null, "manifest is not JSON"); }
+        catch (HdFormatException error)
+        {
+            return new(error.Error switch
+            {
+                HdFormatError.UnsupportedSchema => HdPackOpenStatus.UnsupportedSchema,
+                HdFormatError.InvalidPath => HdPackOpenStatus.InvalidPath,
+                HdFormatError.DuplicateFile => HdPackOpenStatus.DuplicateFile,
+                HdFormatError.DuplicateKey => HdPackOpenStatus.DuplicateKey,
+                HdFormatError.TooManyEntries => HdPackOpenStatus.TooManyEntries,
+                HdFormatError.Malformed => HdPackOpenStatus.Malformed,
+                _ => HdPackOpenStatus.InvalidField,
+            }, null, error.Message);
+        }
+    }
+
+    /// <summary>Lists packs at the given locations, in location order and, inside a
+    /// collection, in ordinal directory-name order. Hidden directories (leading '.', such as
+    /// an import's staging directory) are skipped. A missing location yields nothing; at most
+    /// <see cref="HdPackOptions.MaxPacksPerCollection"/> packs are opened per collection.
+    /// Every listed pack carries its own open result; one broken pack hides nothing else.</summary>
+    public static IReadOnlyList<HdDiscoveredPack> Discover(IReadOnlyList<HdPackLocation> locations, HdPackOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(locations);
+        options ??= new(); options.Validate();
+        var found = new List<HdDiscoveredPack>();
+        foreach (var location in locations)
+        {
+            ArgumentNullException.ThrowIfNull(location);
+            ArgumentException.ThrowIfNullOrEmpty(location.Path);
+            var root = Path.GetFullPath(location.Path);
+            if (location.Kind == HdPackLocationKind.Pack)
+            {
+                if (System.IO.Directory.Exists(root)) found.Add(new(location, root, Open(root, options)));
+                continue;
+            }
+            if (!System.IO.Directory.Exists(root)) continue;
+            string[] children;
+            try { children = System.IO.Directory.GetDirectories(root); }
+            catch (Exception error) when (error is IOException or UnauthorizedAccessException) { continue; }
+            foreach (var child in children.Where(c => !Path.GetFileName(c).StartsWith('.') && File.Exists(Path.Combine(c, ManifestFile)))
+                         .Order(StringComparer.Ordinal).Take(options.MaxPacksPerCollection))
+                found.Add(new(location, child, Open(child, options)));
+        }
+        return found;
+    }
+
+    /// <summary>Binds one frame key to its HD frame on this device, or says why that frame
+    /// draws Legacy. <paramref name="legacyRgba"/> is this installation's decoded Legacy frame
+    /// for the query (exactly w × h × 4 bytes hashing to the query's
+    /// <see cref="HdLegacyFrame.RgbaSha256"/>); its alpha is the reference of the mask check.
+    /// Never throws for pack content; throws only for a query that contradicts its own
+    /// pixels (a caller error).</summary>
+    public HdFrameResult ResolveSprite(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        ArgumentNullException.ThrowIfNull(query.Legacy);
+        if (query.Legacy.Width <= 0 || query.Legacy.Height <= 0 || legacyRgba.Length != (long)query.Legacy.Width * query.Legacy.Height * 4)
+            throw new ArgumentException("Legacy RGBA must be exactly width × height × 4 bytes.", nameof(legacyRgba));
+        if (HdPackPath.Sha256(legacyRgba) != query.Legacy.RgbaSha256)
+            throw new ArgumentException("Legacy RGBA does not hash to the query's RgbaSha256.", nameof(legacyRgba));
+
+        if (Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
+        if (!_sprites.TryGetValue(query.Key, out var entry))
+        {
+            // The pack knows this ART name but was built from other bytes (a mod or another
+            // version): changed. Otherwise, including another frame of a known ART: missing.
+            var changed = _spriteArts.TryGetValue(query.NameSha256, out var arts) && !arts.Contains(query.Key.ArtSha256);
+            return HdFrameResult.Refused(changed ? HdFrameStatus.SourceMismatch : HdFrameStatus.FrameMissing, Scale);
+        }
+        if (entry.Legacy != query.Legacy) return HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale);
+        if (entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
+
+        var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
+        if (hdWidth * hdHeight > _options.MaxHdFramePixels) return Invalid(HdInvalidReason.TooLarge);
+        var bytes = ReadFrameFile(entry, out var fileProblem);
+        if (bytes is null) return Invalid(fileProblem);
+        var header = HdPng.ReadHeader(bytes);
+        if (header.Status != HdPngStatus.Decoded) return Invalid(PngReason(header.Status));
+        if (header.Header!.Width != hdWidth || header.Header.Height != hdHeight) return Invalid(HdInvalidReason.SizeMismatch);
+        var image = HdPng.Decode(bytes, _options.MaxHdFramePixels);
+        if (image.Status != HdPngStatus.Decoded) return Invalid(PngReason(image.Status));
+        if (!AlphaMatches(image.Image!.Rgba, legacyRgba, entry.Legacy.Width, entry.Legacy.Height)) return Invalid(HdInvalidReason.AlphaMismatch);
+        return new(HdFrameStatus.Hd, HdInvalidReason.None, Scale, (int)hdWidth, (int)hdHeight, image.Image.Rgba);
+    }
+
+    /// <summary>Reads every entry file (no Legacy data needed): presence, size, SHA-256 and
+    /// PNG header size. Used by import and by a pack check; the per-frame mask check against
+    /// the installation happens in <see cref="ResolveSprite"/>.</summary>
+    public HdIntegrityReport VerifyIntegrity(CancellationToken token = default)
+    {
+        var counts = new Dictionary<HdInvalidReason, int>();
+        var problems = new List<HdIntegrityProblem>();
+        var valid = 0;
+        foreach (var entry in Entries)
+        {
+            if (token.IsCancellationRequested) return new(Entries.Count, valid, counts, problems, true);
+            var reason = CheckFile(entry);
+            if (reason == HdInvalidReason.None) { valid++; continue; }
+            counts[reason] = counts.GetValueOrDefault(reason) + 1;
+            if (problems.Count < _options.MaxReportedProblems) problems.Add(new(entry.Index, entry.File, reason));
+        }
+        return new(Entries.Count, valid, counts, problems, false);
+    }
+
+    internal HdInvalidReason CheckFile(HdPackEntry entry)
+    {
+        if ((long)Scale * entry.Legacy.Width * Scale * entry.Legacy.Height > _options.MaxHdFramePixels) return HdInvalidReason.TooLarge;
+        var bytes = ReadFrameFile(entry, out var problem);
+        if (bytes is null) return problem;
+        var header = HdPng.ReadHeader(bytes);
+        if (header.Status != HdPngStatus.Decoded) return PngReason(header.Status);
+        return header.Header!.Width == (long)Scale * entry.Legacy.Width && header.Header.Height == (long)Scale * entry.Legacy.Height
+            ? HdInvalidReason.None : HdInvalidReason.SizeMismatch;
+    }
+
+    private HdFrameResult Invalid(HdInvalidReason reason) => HdFrameResult.Refused(HdFrameStatus.Invalid, Scale, reason);
+
+    private static HdInvalidReason PngReason(HdPngStatus status) => status switch
+    {
+        HdPngStatus.Unsupported => HdInvalidReason.PngUnsupported,
+        HdPngStatus.TooLarge => HdInvalidReason.TooLarge,
+        _ => HdInvalidReason.PngMalformed,
+    };
+
+    // Legacy alpha: every HD texel has exactly its parent Legacy texel's alpha (hard edge).
+    // Soft alpha (the default recipe): no HD alpha farther than one Legacy texel from the
+    // Legacy silhouette (parent or one of its 8 neighbours opaque), and the HD mask
+    // (alpha >= 128) and the nearest Legacy mask have IoU >= the recipe's minimum.
+    private bool AlphaMatches(byte[] hd, ReadOnlySpan<byte> legacy, int width, int height)
+    {
+        var n = Scale; var hdWidth = width * n;
+        var soft = Recipe.Alpha.Mode == HdAlphaMode.Soft;
+        long intersection = 0, union = 0;
+        for (var y = 0; y < height * n; y++)
+        for (var x = 0; x < hdWidth; x++)
+        {
+            int px = x / n, py = y / n;
+            var parent = legacy[(py * width + px) * 4 + 3];
+            var alpha = hd[((long)y * hdWidth + x) * 4 + 3];
+            if (!soft)
+            {
+                if (alpha != parent) return false;
+                continue;
+            }
+            if (alpha != 0 && parent < 128 && !NearOpaque(legacy, width, height, px, py)) return false;
+            bool a = alpha >= 128, b = parent >= 128;
+            if (a && b) intersection++;
+            if (a || b) union++;
+        }
+        return !soft || intersection * 1000 >= union * Recipe.Alpha.MinSoftIoUPermille;
+    }
+
+    private static bool NearOpaque(ReadOnlySpan<byte> legacy, int width, int height, int x, int y)
+    {
+        for (var dy = -1; dy <= 1; dy++)
+        for (var dx = -1; dx <= 1; dx++)
+        {
+            int nx = x + dx, ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < width && ny < height && legacy[(ny * width + nx) * 4 + 3] >= 128) return true;
+        }
+        return false;
+    }
+
+    private byte[]? ReadFrameFile(HdPackEntry entry, out HdInvalidReason problem)
+    {
+        var bytes = ReadFile(Directory, entry.File, _options.MaxFrameFileBytes, out var status);
+        if (bytes is null)
+        {
+            problem = status switch
+            {
+                HdPackOpenStatus.NotFound => HdInvalidReason.FileMissing,
+                HdPackOpenStatus.TooLarge => HdInvalidReason.FileSize,
+                _ => HdInvalidReason.FileUnreadable,
+            };
+            return null;
+        }
+        problem = bytes.LongLength != entry.Bytes ? HdInvalidReason.FileSize
+            : HdPackPath.Sha256(bytes) != entry.Sha256 ? HdInvalidReason.HashMismatch : HdInvalidReason.None;
+        return problem == HdInvalidReason.None ? bytes : null;
+    }
+
+    /// <summary>Reads a pack file by its validated relative path. Refuses (as unreadable) a
+    /// file or any directory below the pack root that is a symbolic link or other reparse
+    /// point, so a pack cannot reach outside itself.</summary>
+    internal static byte[]? ReadFile(string root, string relative, long maxBytes, out HdPackOpenStatus status)
+    {
+        var path = HdPackPath.Full(root, relative);
+        try
+        {
+            if (!File.Exists(path)) { status = HdPackOpenStatus.NotFound; return null; }
+            if (HdPackPath.HasReparsePoint(root, relative)) { status = HdPackOpenStatus.Unreadable; return null; }
+            using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (stream.Length > maxBytes) { status = HdPackOpenStatus.TooLarge; return null; }
+            var bytes = new byte[stream.Length];
+            stream.ReadExactly(bytes);
+            if (stream.ReadByte() != -1) { status = HdPackOpenStatus.Unreadable; return null; }
+            status = HdPackOpenStatus.Opened;
+            return bytes;
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            status = HdPackOpenStatus.Unreadable;
+            return null;
+        }
+    }
+
+    private static readonly Dictionary<string, HdReviewStatus> Reviews = new(StringComparer.Ordinal)
+    { ["unreviewed"] = HdReviewStatus.Unreviewed, ["approved"] = HdReviewStatus.Approved, ["rejected"] = HdReviewStatus.Rejected };
+    private static readonly Dictionary<string, HdEntryKind> EntryKinds = new(StringComparer.Ordinal)
+    { ["sprite"] = HdEntryKind.Sprite, ["terrainChunk"] = HdEntryKind.TerrainChunk };
+
+    private static HdPackOpenResult Parse(string directory, byte[] manifestBytes, JsonElement element, HdPackOptions options)
+    {
+        var root = HdJson.Object(element, "pack", ["schema", "kind", "id", "scale", "review", "recipe", "build", "entries"]);
+        HdJson.Schema(root, Kind);
+        var id = HdJson.Matching(root["id"], "pack.id", HdJson.IdPattern());
+        var scale = HdJson.Int(root["scale"], "pack.scale", 2, 16);
+        if (!options.Scales.Contains(scale)) throw HdJson.Invalid("pack.scale", "is not an accepted scale");
+        var review = HdJson.Enum(root["review"], "pack.review", Reviews);
+
+        var r = HdJson.Object(root["recipe"], "pack.recipe", ["file", "sha256"]);
+        var recipeFile = HdPackPath.Validate(HdJson.String(r["file"], "pack.recipe.file"), "pack.recipe.file", ".json");
+        if (recipeFile == ManifestFile) throw new HdFormatException(HdFormatError.InvalidPath, "pack.recipe.file is the manifest");
+        var recipeSha = HdJson.Digest(r["sha256"], "pack.recipe.sha256");
+
+        var b = HdJson.Object(root["build"], "pack.build", ["builder", "builderVersion", "createdUtc", "gpu", "os"]);
+        var build = new HdBuildRecord(HdJson.Label(b["builder"], "pack.build.builder"), HdJson.Label(b["builderVersion"], "pack.build.builderVersion"),
+            HdJson.Utc(b["createdUtc"], "pack.build.createdUtc"), HdJson.Label(b["gpu"], "pack.build.gpu"), HdJson.Label(b["os"], "pack.build.os"));
+
+        if (root["entries"].ValueKind != JsonValueKind.Array) throw HdJson.Invalid("pack.entries", "must be an array");
+        if (root["entries"].GetArrayLength() > options.MaxEntries)
+            throw new HdFormatException(HdFormatError.TooManyEntries, $"{root["entries"].GetArrayLength()} entries");
+
+        // The recipe is read only after the manifest's own shape is valid.
+        var recipeBytes = ReadFile(directory, recipeFile, options.MaxRecipeBytes, out var recipeStatus);
+        if (recipeBytes is null)
+            return new(recipeStatus == HdPackOpenStatus.NotFound ? HdPackOpenStatus.RecipeMissing : recipeStatus, null, recipeFile);
+        if (HdPackPath.Sha256(recipeBytes) != recipeSha) return new(HdPackOpenStatus.RecipeMismatch, null, recipeFile);
+        var recipe = HdRecipeReader.Parse(recipeBytes, options);
+        if (recipe.Status != HdRecipeStatus.Parsed) return new(HdPackOpenStatus.RecipeInvalid, null, recipe.Detail);
+        if (recipe.Recipe!.Scale != scale) return new(HdPackOpenStatus.RecipeInvalid, null, "recipe scale differs from pack scale");
+
+        var slices = recipe.Recipe.Slices.ToDictionary(s => s.Name, StringComparer.Ordinal);
+        var files = new HashSet<string>(StringComparer.Ordinal) { ManifestFile, recipeFile };
+        var keys = new HashSet<HdSpriteKey>();
+        var entries = new List<HdPackEntry>(root["entries"].GetArrayLength());
+        var index = 0;
+        foreach (var item in root["entries"].EnumerateArray())
+        {
+            var entry = ParseEntry(item, index, recipe.Recipe, slices);
+            if (!files.Add(entry.File)) throw new HdFormatException(HdFormatError.DuplicateFile, $"pack.entries[{index}].file");
+            if (entry.Key is { } key && !keys.Add(key)) throw new HdFormatException(HdFormatError.DuplicateKey, $"pack.entries[{index}]");
+            entries.Add(entry);
+            index++;
+        }
+        var identity = new HdPackIdentity(id, scale, HdPackPath.Sha256(manifestBytes));
+        return new(HdPackOpenStatus.Opened, new HdPack(directory, identity, review, recipeFile, recipeSha, recipe.Recipe, build, entries, options));
+    }
+
+    private static HdPackEntry ParseEntry(JsonElement item, int index, HdRecipe recipe, IReadOnlyDictionary<string, HdSlice> slices)
+    {
+        var path = $"pack.entries[{index}]";
+        if (item.ValueKind != JsonValueKind.Object || !item.TryGetProperty("kind", out var kindElement))
+            throw HdJson.Invalid(path + ".kind", "missing");
+        var kind = HdJson.Enum(kindElement, path + ".kind", EntryKinds);
+        string[] common = ["kind", "file", "sha256", "bytes", "slice", "legacy", "review"];
+        var e = kind == HdEntryKind.Sprite
+            ? HdJson.Object(item, path, [.. common, "art", "group", "frame", "palette"])
+            : HdJson.Object(item, path, [.. common, "chunk", "tiles"]);
+        var file = HdPackPath.Validate(HdJson.String(e["file"], path + ".file"), path + ".file", ".png");
+        var sha = HdJson.Digest(e["sha256"], path + ".sha256");
+        var bytes = HdJson.Long(e["bytes"], path + ".bytes", 1, long.MaxValue);
+        var sliceName = HdJson.Matching(e["slice"], path + ".slice", HdJson.IdPattern());
+        if (!slices.TryGetValue(sliceName, out var slice)) throw HdJson.Invalid(path + ".slice", "is not a recipe slice");
+        var review = HdJson.Enum(e["review"], path + ".review", Reviews);
+        var l = HdJson.Object(e["legacy"], path + ".legacy", ["width", "height", "rgbaSha256"]);
+        var legacy = new HdLegacyFrame(HdJson.Int(l["width"], path + ".legacy.width", 1, 65535),
+            HdJson.Int(l["height"], path + ".legacy.height", 1, 65535), HdJson.Digest(l["rgbaSha256"], path + ".legacy.rgbaSha256"));
+
+        if (kind == HdEntryKind.Sprite)
+        {
+            if (slice.Kinds.All(k => k == HdSliceKind.TerrainChunk)) throw HdJson.Invalid(path + ".slice", "selects no sprite kind");
+            var art = HdJson.Object(e["art"], path + ".art", ["sha256", "view", "nameSha256"]);
+            var key = new HdSpriteKey(HdJson.Digest(art["sha256"], path + ".art.sha256"), HdJson.Int(art["view"], path + ".art.view", 132, int.MaxValue),
+                HdJson.Int(e["group"], path + ".group", 0, 7), HdJson.Int(e["frame"], path + ".frame", 0, 4095), HdJson.Int(e["palette"], path + ".palette", 0, 3));
+            return new(index, kind, file, sha, bytes, sliceName, key, HdJson.Digest(art["nameSha256"], path + ".art.nameSha256"), legacy, review);
+        }
+
+        if (!slice.Kinds.Contains(HdSliceKind.TerrainChunk)) throw HdJson.Invalid(path + ".slice", "does not select terrainChunk");
+        var c = HdJson.Object(e["chunk"], path + ".chunk", ["x", "y", "size", "padding"]);
+        const int coordinate = 1 << 20;
+        var x = HdJson.Int(c["x"], path + ".chunk.x", -coordinate, coordinate);
+        var y = HdJson.Int(c["y"], path + ".chunk.y", -coordinate, coordinate);
+        var size = HdJson.Int(c["size"], path + ".chunk.size", 1, 65535);
+        var padding = HdJson.Int(c["padding"], path + ".chunk.padding", 0, 65535);
+        if (size != recipe.Terrain!.ChunkSize || padding != recipe.Terrain.Padding) throw HdJson.Invalid(path + ".chunk", "differs from the recipe's terrain");
+        if (legacy.Width != size || legacy.Height != size) throw HdJson.Invalid(path + ".legacy", "must be the chunk size");
+        var tiles = HdJson.Array(e["tiles"], path + ".tiles", 1, 4096).Select((t, i) => HdJson.Digest(t, $"{path}.tiles[{i}]")).ToArray();
+        return new(index, kind, file, sha, bytes, sliceName, null, null, legacy, review, x, y, padding, tiles);
+    }
+}
