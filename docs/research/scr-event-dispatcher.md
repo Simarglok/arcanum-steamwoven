@@ -353,6 +353,9 @@ these are settled by the slice that implements them.
 | X5 | A missing script file returns *skip default* before running, while the later "file not found" branch would return *run default* ([script.c 308–310][exec-head], [script.c 382–386][exec-loop]). | The second branch is reachable only through the mind-control swap to script 2188 between the two file opens (script.c 335, 347). |
 | X6 | Control codes share the line-number space: a goto whose value is −1, −2, −3 or −4 means next line, skip default, run default and run default ([script.c 1511–1512][sat-return], [script.c 369–378][exec-loop]). | No named action returns −4; it is reachable only through a goto value. A typed implementation should refuse negative goto targets. |
 
+Anomalies X7–X9 (divide, counter write, action 86) are recorded in the
+[S0 census](scr-census.md#anomalies-for-s1-s); the next new ID is X10.
+
 ## Unknowns
 
 - **U1** Whether the original, like CE, fires `SAP_UNLOCK` on every open

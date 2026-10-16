@@ -71,7 +71,7 @@ reached dialog action (a DLG response of 0). Not modelled: DLG responses of −N
 object's own slot), 22 steps the walk cannot follow (13 computed gotos, 7 gotos
 to the end and 2 beyond it), and engine-chosen scripts (end-game slides 997–999,
 the mind-control dialog script 2188). The model also over-counts: 66 scripts
-occur only as prototype defaults, which no placed object may use, and both
+occur only as prototype defaults, which no placed object uses (only objects created at run time could), and both
 branches of every conditional line count as reachable. Live counts are therefore
 an approximation in both directions; "all lines" is an upper bound.
 
@@ -441,7 +441,7 @@ line, the component and the type number.
   auto-removal (in CE running past the last line also gives *skip default* but
   does clear an auto-removing script, the goto does not;
   [script.c 352–376](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L352-L376);
-  none of the 11 such gotos is in an auto-removing script); a negative literal, one beyond the end, and a
+  none of the 11 gotos to or past the end is in an auto-removing script); a negative literal, one beyond the end, and a
   computed goto are refused in S1 (2 and 13 live sites; the 13 computed ones are
   a later slice).
 - **P7 What is checked.** Every line of the script, not only the lines the live
