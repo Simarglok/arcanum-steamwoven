@@ -69,8 +69,12 @@ internal static class AreaLoadOperation
         // terrain resource (Resource2), which is re-verified below with the module.
         using var artResource = DatArchive.Open(arguments.ResourcePath, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
         var local = ReadLocalLighting(artResource, snapshot, AreaChart.Exterior, token);
-        VerifyFile(arguments.ModulePath, moduleIdentity, token); VerifyFile(arguments.ResourcePath, resourceIdentity, token);
-        VerifyFile(arguments.ActorResourcePath!, actorIdentity, token);
+        // The three archives read outside the owner (actor, lighting) are re-verified after those reads,
+        // hashed in parallel. With a cave, its owner's own opening authentication of the same three
+        // paths runs later still and must reproduce these identities (checked below), so it serves as
+        // this check (ARC-RENDER-009).
+        if (arguments.AreaCaveMobilePath is null)
+            VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity), (arguments.ActorResourcePath!, actorIdentity)], token);
         // A genuine terrain plan supplies the legacy result's geometry, not a
         // five-object/one-sector stand-in. Area publication uses Plan below.
         var terrainCommands = plan.Commands.Where(command => command.Identity is null).ToArray();
@@ -93,6 +97,10 @@ internal static class AreaLoadOperation
                 var chart = AreaChart.For(loaded);
                 return chart with { Spawn = chart.ToChart(new(entrance.ArrivalX, entrance.ArrivalY)) };
             });
+            // The cave owner authenticated these paths after the actor and lighting reads (see above).
+            foreach (var identity in new[] { moduleIdentity, resourceIdentity, actorIdentity })
+                if (!caveArea.Snapshot.Inputs.Any(cave => cave.Key == identity.Key && cave.Length == identity.Length && cave.Sha256 == identity.Sha256))
+                    throw new AreaException(new(AreaErrorCode.InputChangedDuringRead, AreaStage.Input));
             var caveChart = caveArea.Plan.Chart;
             var caveSteps = AreaStepInspector.ValidateOriginalData(caveArea.Snapshot, arguments.ModulePath, arguments.ResourcePath,
                 arguments.AreaEffectsPath!, arguments.AreaPatchPath!, caveMobile, generation);
@@ -112,8 +120,8 @@ internal static class AreaLoadOperation
             caveArea = caveArea with { Lighting = new(caveLighting.Source, AreaAmbientPolicy.Channels(caveArea.Snapshot, caveArea.Plan)) { Local = caveLocal } };
             cave = new(caveArea, caveSteps, caveChart);
             Console.WriteLine($"ARC-WORLD-009 load stage=cave visuals={caveArea.Snapshot.Visuals.Count} cells={caveSteps.AdmittedCells} walls={caveSteps.WallEdges}");
-            // The cave lighting reads came after the first verification: verify both archives again.
-            VerifyFile(arguments.ModulePath, moduleIdentity, token); VerifyFile(arguments.ResourcePath, resourceIdentity, token);
+            // The cave lighting reads came after the cave owner's authentication: verify both archives again.
+            VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity)], token);
         }
         var elapsed = Environment.TickCount64 - started;
         area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
@@ -236,6 +244,17 @@ internal static class AreaLoadOperation
 
     private static void VerifyRequested(AreaInputIdentity identity, string? requested)
     { if (requested is not null && requested != identity.Sha256) throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Input)); }
+    private static void VerifyFiles(IReadOnlyList<(string Path, AreaInputIdentity Identity)> files, CancellationToken token)
+    {
+        var failures = new Exception?[files.Count];
+        Parallel.For(0, files.Count, index =>
+        {
+            try { VerifyFile(files[index].Path, files[index].Identity, token); }
+            catch (Exception error) { failures[index] = error; }
+        });
+        foreach (var failure in failures)
+            if (failure is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+    }
     private static void VerifyFile(string path, AreaInputIdentity identity, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();

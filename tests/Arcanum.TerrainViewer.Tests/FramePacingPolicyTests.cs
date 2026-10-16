@@ -39,4 +39,15 @@ public sealed class FramePacingPolicyTests
         Assert.IsFalse(FramePacingPolicy.OnTarget(60, double.NaN));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => FramePacingPolicy.CorrectCap(0, 60, 60));
     }
+
+    [TestMethod]
+    public void IdleMatchesTheTargetSwitch()
+    {
+        Assert.IsFalse(FramePacingPolicy.Idle(0));
+        Assert.IsFalse(FramePacingPolicy.Idle(.49));
+        Assert.IsTrue(FramePacingPolicy.Idle(.5));
+        Assert.IsTrue(FramePacingPolicy.Idle(double.NaN));
+        Assert.IsTrue(FramePacingPolicy.Idle(-1));
+        Assert.IsTrue(FramePacingPolicy.Idle(double.PositiveInfinity));
+    }
 }

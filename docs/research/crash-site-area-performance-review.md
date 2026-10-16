@@ -277,11 +277,52 @@ already authenticated in the same load (L-C, not done).
 - **I-A dropped.** With Godot's low-processor mode switched on while idle, the idle view
   still drew about 60 frames per second at the same CPU: something visible changes every
   frame, so there is nothing to skip until that source is found. Idle CPU measured
-  11–24% in both runs on `f60dd31`, above the 5–9% measured on `cf691aa`; the cause was
-  not investigated (other sessions were loading the machine at the same time).
+  11–24% in both runs on `f60dd31`, above the 5–9% measured on `cf691aa`, while other
+  sessions were loading the machine.
+- **Idle CPU follow-up (`10b661e`).** A temporary per-stage timer in the WORLD frame loop of
+  an ordinary launch, no input: the viewer's own per-frame work is 0.26–0.58 ms (clock tick
+  and WORLD processing; overlay, inventory, hover and pacing together under 0.04 ms), that
+  is 2–3% of a core at 60 FPS; the rest is Godot's own frame (35 draw calls, 107 nodes, no
+  canvas update). Single `ps` samples varied from 4% to 19% with the machine's other load,
+  so the 11–24% above is not evidence of a regression. Switching parts off one at a time
+  showed the status line as the largest optional cost: while idle, the part of the
+  2,310-character WORLD status that changes on every refresh is mainly the grid's
+  simulation time, and the wrapped HUD label was re-laid out ten times per second for it.
+  The status line now refreshes once per second while idle (ten times per second while
+  active, where a moving camera or a walking or turning actor counts as activity, which
+  also raises the frame cap to the display rate; event-driven refreshes stay immediate). Alternating runs of the same build, CPU time over 20 s idle:
+  7.6–8.1% with the 10 Hz refresh, 5.5–6.1% with the idle 1 Hz refresh. Frames are still
+  drawn every frame (engine counters, also with low-processor mode on), so the rest needs an
+  idle cap below the agreed 60 FPS.
 - **M-A dropped.** The first visit of zoom 0.3 needs up to 141 full-resolution chunks
   (141 MiB) at once. A 128 MiB cap would make such views fall back to per-command
   terrain, so the 192 MiB cap stays.
+
+## L-C result: verification passes outside the owner
+
+Counting the whole-input SHA-256 passes in a Release load on `a1e0cf1` found about 8 GB
+hashed per load (4.05 GB for the exterior owner, 4.05 GB for the cave owner, plus the
+viewer's own `VerifyFile` passes), about 3.2 s of the 6–7 s. Each owner hashes every input
+when it opens, again before (I0) and after (I7) its strict build, and the used resources
+before their first frame and at `Complete`; that is the [loader
+contract](../world/crash-site-area-loader.md) and its tests (authentication order, per-input
+budget boundaries, cancellation in each phase) and is unchanged here.
+
+Changed outside the owner: with a cave, the first `VerifyFile` of the three archives is
+replaced by the cave owner's own opening authentication of the same three paths, which
+runs after the actor and lighting reads against the pinned profile identities (the cave
+profile pins the same module and resource identities, and the loader checks that they
+match); the remaining verifications hash their files in parallel. A swapped file now fails
+the load with the owner's input error instead of the viewer's. Same test-host method, two runs each, same commit:
+
+| Configuration | Before | After |
+| --- | ---: | ---: |
+| Release load | 6.0–7.0 s | 5.4–6.6 s |
+| Debug load | 6.9–7.6 s | 6.2–6.9 s |
+
+Removing more of the owner's passes (parallel hashing inside the owner, or skipping I0
+right after opening) would change the tested authentication contract and is left to the
+owner's decision.
 
 ## Recommended order
 
@@ -289,8 +330,8 @@ already authenticated in the same load (L-C, not done).
 2. L-A Release assemblies for daily runs: halves the load (done, release export).
 3. F-C chunk composition (done as parallel composition), then F-B spatial index (done):
    most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
-4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (share
-   authentication, about 1.5–2 s more; not done).
+4. L-B (done as one read per ART entry: Debug load 22 → 7–8 s) and L-C (partly done
+   outside the owner, about 0.5 s; the owner's own passes are an owner decision).
 5. D-A (done), I-A and M-A (dropped, see above).
 6. Later, only if needed: L-D parallel decode, F-D body batching, L-F persistent
    cache.

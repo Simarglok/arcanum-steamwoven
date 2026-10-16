@@ -27,9 +27,12 @@ there, distinct script points 0..35 (`SAP_EXAMINE`..`SAP_CRITICAL_MISS`); at mos
 copied; at most `MaxMaps` seeds are attached (`BudgetExceeded`). Attaching moves no revision, is never saved, and is
 repeated after every restore.
 
-**State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind). An item
-in it is hidden from its seed's ground and holder lists (`QueryMapInventory`); `QueryPcInventory` returns the list. The
-PC's own starting items, the PC object and its attachments are not session state yet.
+**State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind);
+`QueryPcInventory` returns it. Since ARC-WORLD-015 the session also holds the hero's gold (`QueryGold`) and starting kit
+(`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)),
+which precedes the taken items in the PC's inventory and counts toward `MaxPcItems`. A taken item is hidden from its
+seed's ground and holder lists (`QueryMapInventory`). The PC object, its
+attachments, worn slots and gold pickup are not session state yet.
 
 All entity ids follow the session rule (ASCII letters, digits and `. _ : -`, 1..128 characters); the AREA host uses
 `oid:<SHA-256 of the raw 24-byte object ID>`, the id the conversation host already uses.
@@ -84,24 +87,28 @@ the host replaces the owner, like the party port.
 
 ## Snapshot schema 5
 
-`GameSessionSnapshot.Inventory` is encoded between `party` and `lighting`:
+(Schema 6 since ARC-WORLD-015; the inventory part is described here.)
+
+`GameSessionSnapshot.Inventory` is encoded between `hero` and `lighting`. Schema 6 (ARC-WORLD-015) added `gold` and the
+`kit` list:
 
 ```json
-"inventory":{"pc":[{"entity":"ring","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804},
-                   {"entity":"apple","map":79,"type":"Food","prototype":4600,"name":3600,"description":33600}]}
+"inventory":{"gold":0,"kit":[],"pc":[{"entity":"ring","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804},
+                            {"entity":"apple","map":79,"type":"Food","prototype":4600,"name":3600,"description":33600}]}
 ```
 
 (The synthetic test's values; line breaks added.)
 
-Decoding keeps the list order and refuses an entity listed twice (`NotCanonical`), an unknown type name or a map below
+Decoding keeps the list order and refuses an entity listed twice, in either list (`NotCanonical`), an unknown type name or a map below
 1 (`OutOfRange`), missing or unknown fields and more than 512 items (`BudgetExceeded`). `Restore` refuses a type a
 transfer cannot produce (gold, ammunition, key, key ring: `InvalidItem`), a repeated entity (`InvalidSnapshot`) and the
-caller's lower limit (`BudgetExceeded`). After a restore no seed is attached; `AttachMapInventory` then refuses
+caller's lower limit, kit and taken items together (`BudgetExceeded`); gold or a kit item without a hero, and a kit
+item that is not the next `kit:n`, are `InvalidSnapshot`. After a restore no seed is attached; `AttachMapInventory` then refuses
 (`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
 PC took from another map, so a save of other data cannot silently duplicate or lose an item. For the same reason a seed
 may not list an item another attached seed lists (one object lies on one map).
 
-**Migration decision: none.** Schemas 1..4 are `UnsupportedSchema`; a schema-4 quick save loads as "written by an
+**Migration decision: none.** Schemas 1..5 are `UnsupportedSchema` (schema 6: [starting hero](starting-hero-runtime.md#snapshot-schema-6)); a schema-4 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer has no inventory state
 in schema 4 to lose (its `IN` record was in memory only).
 
@@ -121,5 +128,6 @@ in schema 4 to lose (its `IN` record was in memory only).
 
 ## Next steps
 
-The AREA viewer is wired (ARC-UI-004). Next: a character owner for the insert check (the viewer accepts every item), the PC's starting kit ([ARC-RES-027](../research/starting-hero-evidence.md)), and the remaining source
+The AREA viewer is wired (ARC-UI-004). Next: the insert check from the [session hero](starting-hero-runtime.md)'s carry
+weight (the viewer accepts every item and starts no hero yet), and the remaining source
 paths (drop and junk piles, stacks, chests) after their own research.

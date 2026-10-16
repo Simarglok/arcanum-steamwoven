@@ -1,6 +1,6 @@
 # Arcanum.Data
 
-`Arcanum.Data` is an independently written, evidence-bounded reader for the observed R1 `1TAD` DAT container subset and a bounded 8-bpp ART one-frame decoder. The DAT reader parses metadata incrementally and reads one selected payload into memory; it does not extract files, write archives or normalize names. Resource precedence across archives, PATCH files, the module and loose folders lives separately in `Arcanum.Data.Content` ([research and API](research/content-precedence.md)). Any map of any module is read through that stack by `Arcanum.Data.Maps` ([contract](world/map-catalog.md)).
+`Arcanum.Data` is an independently written, evidence-bounded reader for the observed R1 `1TAD` DAT container subset and a bounded 8-bpp ART one-frame decoder. The DAT reader parses metadata incrementally and reads one selected payload into memory; it does not extract files, write archives or normalize names. Resource precedence across archives, PATCH files, the module and loose folders lives separately in `Arcanum.Data.Content` ([research and API](research/content-precedence.md)). Any map of any module is read through that stack by `Arcanum.Data.Maps` ([contract](world/map-catalog.md)). Local HD packs and recipes (portable PNG + JSON, never in git) are read by `Arcanum.Data.Hd` ([format](formats/hd-pack.md)).
 
 ## Components and toolchain
 

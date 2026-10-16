@@ -1,0 +1,24 @@
+{
+  "schema": 1,
+  "kind": "arcanum-steamwoven-hd-recipe",
+  "id": "crash-site-bodies-hq2x",
+  "scale": 2,
+  "slices": [
+    {
+      "name": "crash-site-exterior-bodies",
+      "map": "crash-site-exterior",
+      "kinds": ["player", "critter", "npc", "scenery", "container", "item"]
+    }
+  ],
+  "method": {
+    "kind": "algorithm",
+    "tool": "ImageMagick",
+    "toolVersion": "7.1.2-29 Q16-HDRI",
+    "toolSha256": "c8e0be140fba277cd1667f36a439952f22f0e947de2629ff8033e7d4c22a250b",
+    "licence": "ImageMagick",
+    "nativeScale": 2,
+    "downscale": "none",
+    "parameters": { "magnifyMethod": "hq2X" }
+  },
+  "alpha": { "mode": "legacy" }
+}
