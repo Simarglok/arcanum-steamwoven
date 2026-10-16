@@ -95,6 +95,25 @@ class Render007DevTests(unittest.TestCase):
         self.assertIn("ARC-RENDER-007", cli["parser"]().parse_args(
             ["configure", "select-launch", "--tool", "terrain", "--candidate", "root:ARC-RENDER-007:" + "a" * 40]).candidate)
 
+    def test_cli_crash_site_area_launches_every_exact_area_task(self):
+        # Each AREA-family v2 artifact passes the closed (schema, task) pairing, not only ARC-RENDER-007.
+        for task in retention.AREA_TASKS:
+            with self.subTest(task=task):
+                self.tearDown(); self.setUp()
+                self.authority_fixture(task=task, tool="terrain")
+                conf = config.load_config(); conf["inputs"] = self.roles()
+                conf["launchSelection"] = {"terrain": f"test:{task}:" + "a" * 40}; config.save_config(conf)
+                cli = runpy.run_path(str(Path(__file__).resolve().parents[1] / "arcanum-local"))
+                args = cli["parser"]().parse_args(["launch", "terrain", "--mode", "crash-site-area", "--dry-run"])
+                with patch.object(launch, "start", return_value={"started": False}) as start:
+                    try:
+                        cli["command_launch"](args)
+                        start.assert_called_once()
+                    except ValueError as error:
+                        # Past the pairing, a cave build may still name its own missing role.
+                        self.assertNotIn("crash-site-area requires", str(error))
+                        self.assertIn(task, launch.TASK_ROLES)
+
     def test_area_family_tasks_bind_literally_to_the_area_gate_set(self):
         # ARC-INPUT-001 (diagnostic palette) and ARC-RENDER-008 (passability overlay) ship on the whole-core
         # AREA build with every ARC-RENDER-007 gate; nothing broader than the literal tasks is admitted.
@@ -121,6 +140,7 @@ class Render007DevTests(unittest.TestCase):
             self.assertNotIn(other, manifests.SUPPORTED_TOOLS["terrain"])
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
+
     def test_world007_binds_literally_to_the_area_gate_set(self):
         # ARC-WORLD-007 (LMB click-to-move) ships on the same whole-core AREA build; its route
         # matrix runs inside the area-grid probe, so the gate set is exactly ARC-RENDER-007's.

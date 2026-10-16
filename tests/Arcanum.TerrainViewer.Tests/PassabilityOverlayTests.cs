@@ -263,4 +263,22 @@ public sealed class PassabilityOverlayTests
         unknown.Fill([open], 10); unknown.TryGet(open, out var u);
         Assert.AreEqual(OverlayCellKind.Unknown, u.Kind);
     }
+
+    [TestMethod]
+    public void AreaAuthorityFollowsTheSessionChart()
+    {
+        using var source = new AreaOwnerFixture(motionBodies: true);
+        var steps = AreaOwnerFixture.Steps(source.Owner.LoadStrict(), source.Streams[new(AreaSourceRole.Module)].Bytes, 7);
+        // Chart origin at the second core sector (1453,1290); the fixture admits sectors 1452..1453 x 1290..1291.
+        var chart = new AreaChart(1453 * 64, 1290 * 64, new(-58, 1), "TEST_SECOND_SECTOR_CHART");
+        var session = new AreaGridSession(steps, SimulationTime.At(0), StepDuration.Of(8), chart: chart);
+        var authority = new AreaPassabilityAuthority(session);
+        Assert.AreEqual((-64, 0, 63, 127), authority.Chart);
+        Assert.AreEqual((-128, -64, 127, 191), authority.Envelope);
+        Assert.IsTrue(authority.Identity.EndsWith("|TEST_SECOND_SECTOR_CHART", StringComparison.Ordinal));
+        // The blocker at exterior (5,1) is chart (-59,1): the same assessment through the chart's world cells.
+        var direct = steps.Assess(steps.Request(chart.ToWorld(new(-58, 1)), chart.ToWorld(new(-59, 1)), Arcanum.Data.Traversal.CardinalTraversalDirection.XMinus));
+        Assert.AreEqual(new OverlayStep(OverlayStepVerdict.Blocked, direct.ReasonCode), authority.Assess(new(-58, 1), new(-59, 1), NeighborDirection.XMinus));
+        Assert.AreEqual("DESTINATION_OBJECT_BLOCKER", direct.ReasonCode);
+    }
 }

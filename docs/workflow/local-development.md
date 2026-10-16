@@ -15,7 +15,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
 `area` and `world` select the build named by that task's `current.json` pointer
 (never timestamps or directory order) and launch it; `area` tries its tasks in the
 fixed order ARC-RENDER-008 (adds the [passability overlay](../rendering/passability-overlay.md) on top of the cave build),
-fixed order ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
+ARC-WORLD-009 (cave and return), ARC-WORLD-007 (the same AREA build plus [LMB click-to-move](../world/click-route-runtime.md)),
 ARC-INPUT-001 (plus the [diagnostic palette](../input/diagnostic-palette.md)), then ARC-RENDER-007; a real run leaves the terrain
 launch selection on that build, a `--dry-run` restores the previous selection.
 Role paths follow the installed game layout used by the area research
@@ -174,7 +174,7 @@ ARC-RENDER-008 uses the same endpoint, root and literal task mechanism
 Its builds contain everything above (palette, click-to-move, cave), so like ARC-WORLD-009
 they take the `caveMobile` role (`launch.TASK_ROLES`) and their area-original gates require
 the cave transition smoke. Its synthetic gates also require the overlay matrix/invalidation
-markers, and every native WORLD/AREA observation the `ARC-RENDER-008 original overlay PASS`
+markers, and every native WORLD/AREA observation must print the `ARC-RENDER-008 original overlay PASS`
 check ([overlay](../rendering/passability-overlay.md)).
 
 ## Bounded original grid candidate (ARC-WORLD-003)
