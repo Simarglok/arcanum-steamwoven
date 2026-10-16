@@ -247,7 +247,7 @@ cave transition, DIF/PATCH или original-runtime parity. Таблица ниж
 | FR-WORLD-010 | Нет — нет actor transfer payload | Нет — нет переносимых игровых сущностей | Нет — нет cross-map serializer | Нет |
 | FR-WORLD-011 | Частично — Area origins и bounded actor/camera anchors | Частично — local settled cell/anchor; не map arrival | Нет — нет destination-map load/prefetch/rebind | Частично — bounded center-arrival tests; cross-map arrival не проверен |
 | FR-WORLD-012 | Нет — нет обратных endpoints | Нет — нет возврата к authored point | Нет | Нет |
-| FR-WORLD-013 | Нет — нет игрового map state | Нет — нет world persistence | Нет — нет save/load состояния карты | Нет |
+| FR-WORLD-013 | Частично — map-local overlay в [состоянии сессии](../world/game-session-runtime.md) | Частично — переживает уход/возврат и snapshot/restore | Нет — нет загрузки карт и переходов | Частично — синтетические тесты |
 | FR-WORLD-014 | Частично — один каталог карт/свойств | Нет — нет world-map/area/travel правил | Нет — нет overland runtime | Нет |
 | FR-WORLD-015 | Нет — нет флагов эффектов перехода | Нет — нет времени/эффектов перехода | Нет — нет переходного coordinator | Нет |
 | FR-WORLD-016 | Частично — Area failure и bounded movement refusal | Частично — failed load не заменяет snapshot, denied step не меняет cell | Частично — Data owner и diagnostic session; не transfer rollback | Частично — malformed/cancellation/admission tests; map-transfer rollback отсутствует |

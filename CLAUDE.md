@@ -46,8 +46,9 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
   owner), `Arcanum.Simulation` (exact grid `Movement`; `Clock` on origin/main),
   `Arcanum.Scripting` (`Dialog` transition; `NpcDialog`, `GlobalFlags` on
   origin/main), `Arcanum.Presentation` (animation timeline), `Arcanum.Input`
-  (+ `Arcanum.Input.Godot` adapter source), `Arcanum.Godot` (ART viewer).
-  Data/Simulation/Scripting must stay Godot-independent.
+  (+ `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
+  owner: clock, GF, actor placement, map changes, snapshot schema), `Arcanum.Godot`
+  (ART viewer). Data/Simulation/Scripting/Session must stay Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; the integrated "WORLD"
   diagnostic), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
