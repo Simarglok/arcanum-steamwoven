@@ -47,6 +47,15 @@ public sealed class AreaTransitionOriginalTests
         var use = transitions.RequestUse(trigger.Key, exterior.Chart.ToWorld(near));
         Assert.AreEqual(AreaUseOutcome.Accepted, use.Outcome, use.Reason);
         Assert.AreEqual(AreaUseOutcome.TransitionPending, transitions.RequestUse(trigger.Key, exterior.Chart.ToWorld(near)).Outcome, "A second request while pending is refused.");
+        // A reset/reload drops the queued transfer unapplied; the use can be made again.
+        var dropped = transitions.Cancel() ?? throw new AssertFailedException("Nothing was pending.");
+        Assert.AreEqual((1, 79, 1, 0L), (dropped.FromMap, dropped.ToMap, transitions.CurrentMap, session.Version.Revision));
+        Assert.AreEqual(AreaUseOutcome.Accepted, transitions.RequestUse(trigger.Key, exterior.Chart.ToWorld(near)).Outcome);
+        // Without the destination map loaded the endpoint is unavailable and nothing is queued.
+        var alone = new AreaTransitionCoordinator([exterior], 1);
+        var unavailable = alone.RequestUse(trigger.Key, exterior.Chart.ToWorld(near));
+        Assert.AreEqual((AreaUseOutcome.DestinationUnavailable, "DESTINATION_MAP_NOT_LOADED"), (unavailable.Outcome, unavailable.Reason));
+        Assert.IsNull(alone.Pending);
         var inbound = transitions.Process()!;
         Assert.IsNull(transitions.Process(), "The transfer is applied exactly once.");
         Assert.AreEqual((1, 79, new AreaStepCell(2087, 2018), new CellCoord(39, 34)), (inbound.FromMap, inbound.ToMap, inbound.Arrival, inbound.ArrivalChartCell));

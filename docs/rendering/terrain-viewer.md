@@ -371,12 +371,13 @@ and its step evidence with wall edges.
   object; otherwise the HUD says why. A click from farther away sets the
   click-to-move route (ARC-WORLD-007) to the nearest standable cell within range,
   as the source's use goal walks near first, and requests the same use once the
-  route has arrived and the actor is settled. A ground click, a stick step or a
-  quarantine cancels that walk-to-use. Other clicks keep their routing.
+  route has arrived and the actor is settled. A ground click or a stick step
+  cancels that walk-to-use at once; a quarantine (palette, focus loss) stops its
+  route, and the use is dropped when the actor settles. Other clicks keep their routing.
 - **Transfer.** An accepted use stops any click route and is queued; it is applied
   once, when the actor is settled (a started step ends at its cell centre). While
   it is pending the stick starts no step, ground clicks are ignored and a second
-  use is refused. A reset or reload drops it. The destination must be loaded and
+  use is refused. It waits while the palette is open; a reset or reload drops it. The destination must be loaded and
   the arrival admitted, or the use is refused as unavailable. The whole area scene,
   step evidence and chart are swapped, the actor starts on the authored arrival
   cell with a fresh authoritative session and input queue, and the camera centres
@@ -401,7 +402,8 @@ HUD through `_UnhandledInput` (simulated focus and test time, as the route matri
 lets a frame apply the transfer and checks the arrival cell and the
 session, then clicks the entrance from the return cell three cells away, checks that a
 ground click cancels that walk-to-use, clicks again and lets the route walk there
-before the use; it prints `ARC-WORLD-009 native-smoke transition PASS`.
+before the use, then in the cave accepts a use and resets before the next frame,
+checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher does not pass the cave input yet:

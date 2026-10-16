@@ -165,7 +165,10 @@ public partial class TerrainViewerApp
             && ReferenceEquals(_worldRouteSession, walking) && _worldRoute is { } route && route.Status != RouteFollowStatus.Following)
         {
             _areaUseAfterRoute = null;
-            if (route.Status == RouteFollowStatus.Arrived)
+            // The arrival use honours the click guards: under the palette, UI focus or lost focus it is dropped.
+            if (route.Status == RouteFollowStatus.Arrived && (!_worldFocused || WorldModal || WorldUiFocus))
+                _areaUseStatus = "walk to use dropped: input quarantined/modal";
+            else if (route.Status == RouteFollowStatus.Arrived)
             {
                 var result = _areaTransitions.RequestUse(key, walking.Chart.ToWorld(walking.State.CommittedCell));
                 _areaUseStatus = result.Outcome == AreaUseOutcome.Accepted ? "use accepted after walking" : $"use refused after walking: {result.Outcome} {result.Reason}";
@@ -174,7 +177,8 @@ public partial class TerrainViewerApp
             else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
             RefreshAreaStatus();
         }
-        if (_areaTransitions.Pending is null || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
+        // A queued transfer waits while the palette is open.
+        if (_areaTransitions.Pending is null || WorldModal || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
         var transition = _areaTransitions.Process(session.State.Facing)!;
         var target = _areaTransitions.Current;
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
@@ -215,7 +219,7 @@ public partial class TerrainViewerApp
     private int _areaSmokeTime;
     private async Task RunAreaTransitionSmokeAsync()
     {
-        var simulatedFocus = _worldFocusSimulationForSelfTest;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused; var testTime = _worldTestTime;
         _worldFocusSimulationForSelfTest = true;
         try
         {
@@ -224,11 +228,35 @@ public partial class TerrainViewerApp
             report.Add(await UseNextToTriggerAsync(79));
             report.Add(await UseNextToTriggerAsync(1));
             report.Add(await RunAreaWalkToUseSmokeAsync());
+            report.Add(await RunAreaResetDropsTransferSmokeAsync());
             // Leave the exterior published for the later resource stages.
             report.Add(await UseNextToTriggerAsync(1));
             GD.Print("ARC-WORLD-009 native-smoke transition PASS " + System.Text.Json.JsonSerializer.Serialize(report));
         }
-        finally { ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus; }
+        finally
+        {
+            ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
+            _worldFocused = focused; _worldTestTime = testTime;
+        }
+    }
+
+    // In the cave: an accepted use, then a reset before the next frame. The reset drops the queued transfer, the
+    // map stays the cave and the session is unchanged; the actor is back on the cave arrival cell.
+    private async Task<object> RunAreaResetDropsTransferSmokeAsync()
+    {
+        var (_, trigger) = _areaTransitions!.Triggers().Single();
+        var map = _areaTransitions.Current;
+        var revision = _areaSession!.Version.Revision;
+        AreaSmokePlace(map, UseCell(map, new(trigger.WorldX!.Value, trigger.WorldY!.Value)));
+        var command = _readyArea!.Plan.Commands.Single(c => c.Identity == trigger.Key);
+        AreaSmokeClick(await AreaSmokeTriggerPointAsync(command));
+        if (_areaTransitions.Pending is null) throw new InvalidOperationException("AREA_RESET_CASE_USE_NOT_ACCEPTED " + _areaUseStatus);
+        ResetWorldScene();
+        for (var i = 0; i < 4 && (_worldResetPending || _worldLifecycleSession is not null); i++) AreaSmokeFrame();
+        if (_areaTransitions.Pending is not null || _areaTransitions.CurrentMap != map.RuntimeMap || _areaSession.Version.Revision != revision
+            || _worldResetPending || ((AreaGridSession)_worldActor.Session!).State.CommittedCell != map.Chart.Spawn)
+            throw new InvalidOperationException("AREA_RESET_DID_NOT_DROP_TRANSFER " + _areaUseStatus);
+        return new { ResetDropsTransfer = true, Map = map.RuntimeMap, Session = revision };
     }
 
     private void AreaSmokeFrame()

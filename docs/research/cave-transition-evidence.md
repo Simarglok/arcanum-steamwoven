@@ -215,8 +215,10 @@ and chart instead of unloading the source and opening the destination, so the
 flush/open order of T4 is not reproduced. An endpoint whose destination map is
 not loaded, or whose arrival cell is outside that map's admitted area or chart,
 is refused as unavailable at the use (`DESTINATION_MAP_NOT_LOADED`,
-`ARRIVAL_NOT_ADMITTED`, `ARRIVAL_OUTSIDE_CHART`); nothing is queued and the
-actor stays where it is. A viewer reset or reload drops a queued transfer.
+`ARRIVAL_NOT_ADMITTED`, `ARRIVAL_OUTSIDE_CHART`) once the actor is within use
+range (a farther click walks there first); nothing is queued. Without the
+reverse record the exit object is not a trigger at all, and its click is an
+ordinary ground click. A viewer reset or reload drops a queued transfer.
 
 ## Reproduction
 

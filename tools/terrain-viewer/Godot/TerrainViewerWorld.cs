@@ -428,7 +428,7 @@ public partial class TerrainViewerApp
         var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
-        if (direction is not null) StopWorldRoute("ROUTE_STOPPED_BY_STICK");
+        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
