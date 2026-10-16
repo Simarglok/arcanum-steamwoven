@@ -23,6 +23,12 @@ public enum AreaHoverAction
     WalkToTalk,
     Use,
     WalkToUse,
+    /// <summary>ARC-UI-004: an item on the ground within reach goes to the PC.</summary>
+    PickUp,
+    WalkToPickUp,
+    /// <summary>ARC-UI-004: a dead NPC within reach opens as a container in the inventory window.</summary>
+    Loot,
+    WalkToLoot,
 }
 
 public enum AreaNamesStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, CatalogFailed }
@@ -88,23 +94,26 @@ public sealed class AreaHoverIndex
     public string? Name(AreaObjectKey key)
     {
         if (_names.TryGetValue(key, out var cached)) return cached;
-        var row = _rows[key];
-        string? text;
-        if (row.Type is WallType or ProjectileType) text = null;
-        else if (Catalog is null) text = $"[{TypeName(row.Type)}: name unavailable]";
-        else
-        {
-            var resolution = ObjectDisplayName.Resolve(row, Catalog, CritterRecognition.NotRecognized);
-            text = resolution.Status switch
-            {
-                ObjectNameStatus.Resolved => MesText.Decode(resolution.Message!, TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } decoded }
-                    ? decoded.Length == 0 ? null : decoded : $"[{TypeName(row.Type)}: name not decodable]",
-                ObjectNameStatus.NoText => null,
-                _ => $"[{TypeName(row.Type)}: {resolution.Status}]",
-            };
-        }
+        var text = Text(_rows[key], Catalog);
         _names.Add(key, text);
         return text;
+    }
+
+    /// <summary>The shown text of one object row (see <see cref="Name"/>), uncached; the inventory window (ARC-UI-004)
+    /// names items by the same rule.</summary>
+    public static string? Text(AreaObjectRecord row, ObjectDescriptionCatalog? catalog)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        if (row.Type is WallType or ProjectileType) return null;
+        if (catalog is null) return $"[{TypeName(row.Type)}: name unavailable]";
+        var resolution = ObjectDisplayName.Resolve(row, catalog, CritterRecognition.NotRecognized);
+        return resolution.Status switch
+        {
+            ObjectNameStatus.Resolved => MesText.Decode(resolution.Message!, TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { } decoded }
+                ? decoded.Length == 0 ? null : decoded : $"[{TypeName(row.Type)}: name not decodable]",
+            ObjectNameStatus.NoText => null,
+            _ => $"[{TypeName(row.Type)}: {resolution.Status}]",
+        };
     }
 
     public static string TypeName(int type) => type switch
@@ -156,6 +165,10 @@ public static class AreaHover
         AreaHoverAction.WalkToTalk => "walk to talk",
         AreaHoverAction.Use => "use",
         AreaHoverAction.WalkToUse => "walk to use",
+        AreaHoverAction.PickUp => "pick up",
+        AreaHoverAction.WalkToPickUp => "walk to pick up",
+        AreaHoverAction.Loot => "loot",
+        AreaHoverAction.WalkToLoot => "walk to loot",
         _ => "none",
     };
 

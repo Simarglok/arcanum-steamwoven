@@ -87,7 +87,9 @@ WORLD host (`TerrainViewerWorld.cs`).
    A reserved key has no debug action and is not redirected; the HUD names the last
    one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key
-   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)).
+   release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
+   and while its session inventory exists I toggles the inventory window on key down
+   ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)).
    Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
