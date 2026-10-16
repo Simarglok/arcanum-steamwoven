@@ -37,9 +37,9 @@ public enum LifeTraits
     Stoned = 1 << 3,
     /// <summary>Paralysed: not active.</summary>
     Paralyzed = 1 << 4,
-    /// <summary>The object's invulnerable flag: no damage at all, and a kill only sets the pinned damage.</summary>
+    /// <summary>The object's invulnerable flag: a damage step changes nothing, and a kill only sets the pinned damage.</summary>
     Invulnerable = 1 << 5,
-    /// <summary>Only an "uber" weapon damages it; a poison tick never does.</summary>
+    /// <summary>Only an "uber" weapon damages it (the attack resolver checks the weapon); a poison tick never does.</summary>
     NighInvulnerable = 1 << 6,
     /// <summary>Refuses reanimation.</summary>
     Unrevivifiable = 1 << 7,
@@ -91,8 +91,8 @@ public readonly record struct LifeState(int HitPointDamage, int FatigueDamage, i
 /// The facts the life formulas read about one critter, every stat already effective (effects, background and the
 /// critter's crippled legs resolved by the caller). <see cref="Strength"/> is the effective strength without the poison
 /// penalty; <see cref="PoisonedStrength"/> holds the effective strength under poison penalty 1, 2 and 3 (poison level
-/// 100.., 200.., 300..) when effects make it differ from <c>max(1, Strength − penalty)</c>, and is empty otherwise. The
-/// session fills both for its hero from the character owner. <see cref="NormalResistance"/> is the effective normal
+/// 100.., 200.., 300..) and may be left empty when it equals <c>max(1, Strength − penalty)</c> (no effects push strength
+/// against its range). The session fills all three for its hero from the character owner. <see cref="NormalResistance"/> is the effective normal
 /// resistance a poison tick meets (attacks get theirs from the attack resolver).
 /// </summary>
 public sealed record LifeFacts

@@ -12,24 +12,31 @@ namespace Arcanum.Session;
 /// </summary>
 public sealed class SessionLifeTarget
 {
-    private SessionLifeTarget(string? entity, LifeFacts? facts, LifeState loaded)
+    private SessionLifeTarget(bool hero, string? entity, LifeFacts? facts, LifeState loaded)
     {
+        IsHero = hero;
         Entity = entity;
         Facts = facts;
         Loaded = loaded;
     }
 
     /// <summary>The session's player character.</summary>
-    public static SessionLifeTarget Hero { get; } = new(null, null, LifeState.Unharmed);
+    public static SessionLifeTarget Hero { get; } = new(true, null, null, LifeState.Unharmed);
 
-    /// <summary>An NPC (or another critter) by its stable entity id.</summary>
-    public static SessionLifeTarget Critter(string entity, LifeFacts facts, LifeState loaded) => new(entity, facts, loaded);
+    /// <summary>An NPC (or another critter) by its stable entity id; a null id or facts throw, so an unresolved id can never
+    /// reach the hero.</summary>
+    public static SessionLifeTarget Critter(string entity, LifeFacts facts, LifeState loaded)
+    {
+        ArgumentNullException.ThrowIfNull(entity);
+        ArgumentNullException.ThrowIfNull(facts);
+        return new(false, entity, facts, loaded);
+    }
 
     /// <summary>The entity id, or null for the hero.</summary>
     public string? Entity { get; }
     public LifeFacts? Facts { get; }
     public LifeState Loaded { get; }
-    public bool IsHero => Entity is null;
+    public bool IsHero { get; }
 }
 
 /// <summary>

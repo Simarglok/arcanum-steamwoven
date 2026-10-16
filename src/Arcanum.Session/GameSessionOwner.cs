@@ -709,8 +709,7 @@ public sealed class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         ArgumentNullException.ThrowIfNull(damage);
-        var valid = Math.Abs((long)damage.HitPoints) <= LifeLimits.MaxAmount && Math.Abs((long)damage.Fatigue) <= LifeLimits.MaxAmount &&
-            Math.Abs((long)damage.Poison) <= LifeLimits.MaxAmount && Enum.IsDefined(damage.Location);
+        var valid = LifeRules.IsValid(damage);
         return Life(expected, target, valid, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls));
     }
 
@@ -975,8 +974,9 @@ public sealed class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    // Every life call: target and input checks, then the version, budget and revision capacity, all before the step draws
-    // anything. The step rolls on a trial copy of the generator, adopted only on commit, so a refusal draws nothing.
+    // Every life call: target, input and version checks, then the step on a trial copy of the generator, then NoChange (the
+    // trial's draws are adopted, as the source spends them), then the record budget and revision capacity. A refusal never
+    // adopts the trial copy, so it draws nothing.
     private SessionLifeResult Life(GameSessionVersion expected, SessionLifeTarget target, bool validInput,
         Func<LifeState, LifeFacts, ICombatRollSource, LifeOutcome> step)
     {
@@ -985,18 +985,23 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return RejectLife(failure);
         if (!validInput) return RejectLife(GameSessionFailure.InvalidLifeAmount);
         if (!IsCurrent(expected)) return RejectLife(GameSessionFailure.StaleVersion);
-        if (!target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectLife(GameSessionFailure.BudgetExceeded);
-        if (_revision == long.MaxValue) return RejectLife(GameSessionFailure.RevisionExhausted);
 
         var rolls = new TrialCombatRolls(new SeededRandom(_random.Seed, _random.Draws));
         LifeOutcome outcome;
         try { outcome = step(record.State, facts!, rolls); }
         catch (TrialCombatRolls.ExhaustedException) { return RejectLife(GameSessionFailure.RandomExhausted); }
-        _random = rolls.Trial;
         var next = new SessionLifeRecord(outcome.After,
             outcome.Events.HasFlag(LifeEvents.Died) ? _clock.QueryClockSnapshot().GameTimestampMs : record.DeathTimeMs);
         if (next == record)
+        {
+            _random = rolls.Trial;
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision));
+        }
+        if (!target.IsHero && !recorded && _life.Critters.Count >= _limits.MaxLifeRecords) return RejectLife(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectLife(GameSessionFailure.RevisionExhausted);
+
+        // All refusals precede the commit.
+        _random = rolls.Trial;
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         _revision++;

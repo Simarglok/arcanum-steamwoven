@@ -299,6 +299,36 @@ public sealed class LifeRulesTests
     }
 
     [TestMethod]
+    public void AnInvulnerableCritterTakesNothingFromAnyPacket()
+    {
+        var invulnerable = Plain with { Traits = LifeTraits.Invulnerable };
+        var outcome = Damage(Hurt(), new LifeDamage { HitPoints = 50, Poison = 9, Effects = CriticalHitEffects.Knockout | CriticalHitEffects.Blind }, invulnerable);
+        Assert.AreEqual((Hurt(), LifeEvents.None, false), (outcome.After, outcome.Events, outcome.Changed));
+    }
+
+    [TestMethod]
+    public void AKillWhosePoisonResetLiftsStrengthSkipsTheDeathStep()
+    {
+        // Poison 300 costs 3 strength (maximum 24); the kill takes those 24, then the extraordinary-constitution reset lifts
+        // the maximum back to 30, so the critter is not dead at the death check: no death step, but the pin still follows.
+        var hardy = Plain with { Constitution = 20 };
+        var kill = LifeRules.Kill(Hurt(poison: 300), hardy);
+        Assert.AreEqual((Hurt(LifeLimits.DeathHitPointDamage), LifeEvents.None, DeathAnimation.None), (kill.After, kill.Events, kill.Death));
+        Assert.IsTrue(LifeRules.Evaluate(kill.After, hardy).IsDead);
+    }
+
+    [TestMethod]
+    public void ACorpseNeitherFallsUnconsciousNorGetsUp()
+    {
+        var knockedOut = Hurt(LifeLimits.DeathHitPointDamage, 45);
+        var resurrected = LifeRules.Heal(knockedOut, Plain, new LifeHeal { Resurrect = true });
+        Assert.AreEqual((10, LifeEvents.Resurrected), (resurrected.After.FatigueDamage, resurrected.Events));
+        var killedAwake = Damage(Hurt(10), new LifeDamage { HitPoints = 40, Fatigue = 40 });
+        Assert.AreEqual(LifeEvents.Died, killedAwake.Events);
+        Assert.AreEqual(LifeLimits.MaxRestHours, LifeRules.RestingHours(0, long.MaxValue / 2));
+    }
+
+    [TestMethod]
     public void OutOfRangeInputsThrow()
     {
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(-1), Plain));
@@ -310,6 +340,7 @@ public sealed class LifeRulesTests
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { PoisonedStrength = [7, 6] }));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { Traits = (LifeTraits)512 }));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.ApplyDamage(Hurt(), Plain, new LifeDamage { HitPoints = LifeLimits.MaxAmount + 1 }, None));
+        Assert.ThrowsExactly<ArgumentException>(() => LifeRules.ApplyDamage(Hurt(), Plain, new LifeDamage { Effects = (CriticalHitEffects)(1 << 11) }, None));
         Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Heal(Hurt(), Plain, new LifeHeal { HitPoints = -1 }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LifeRules.RestHeal(Hurt(), Plain, LifeLimits.MaxRestHours + 1));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LifeRules.RecoverFatigue(Hurt(), Plain, 0));

@@ -13,6 +13,7 @@ public static class LifeRules
     private const LifeConditions Crippled = LifeConditions.CrippledArmOne | LifeConditions.CrippledArmsBoth | LifeConditions.CrippledLegsBoth;
     private const LifeConditions AllConditions = LifeConditions.Stunned | LifeConditions.Blinded | Crippled;
     private const LifeTraits AllTraits = (LifeTraits)((1 << 9) - 1);
+    private const CriticalHitEffects AllEffects = (CriticalHitEffects)((1 << 11) - 1);
 
     /// <summary>Strength lost to poison: <c>min(3, poison / 100)</c>.</summary>
     public static int PoisonPenalty(int poisonLevel) => Math.Clamp(poisonLevel / 100, 0, 3);
@@ -58,17 +59,16 @@ public static class LifeRules
     /// blinding, an arm (the first, else the second on <see cref="CombatRollPurpose.CrippleBothArms"/> d100 ≤ 50), legs,
     /// hit-point damage (never below 0), fatigue damage (positive, not fatigue-immune), the poison level (0..1000, and 0
     /// whenever the effective constitution is extraordinary), and death: a critter now dead gets the pinned
-    /// <see cref="LifeLimits.DeathHitPointDamage"/> and a dying animation. Invulnerability is the packet builder's
-    /// (<see cref="LifeDamage.FromAttack"/>, <see cref="PoisonDamage"/>). The dying script is not run (no SCR runtime).
+    /// <see cref="LifeLimits.DeathHitPointDamage"/> and a dying animation. An invulnerable critter takes nothing at all;
+    /// nigh-invulnerability depends on the weapon, so it is the packet builder's (<see cref="LifeDamage.FromAttack"/>,
+    /// <see cref="PoisonDamage"/>). The dying script is not run (no SCR runtime).
     /// </summary>
     public static LifeOutcome ApplyDamage(LifeState state, LifeFacts facts, LifeDamage damage, ICombatRollSource rolls)
     {
         ArgumentNullException.ThrowIfNull(damage);
         ArgumentNullException.ThrowIfNull(rolls);
         Check(state, facts);
-        if (Math.Abs((long)damage.HitPoints) > LifeLimits.MaxAmount || Math.Abs((long)damage.Fatigue) > LifeLimits.MaxAmount ||
-            Math.Abs((long)damage.Poison) > LifeLimits.MaxAmount || !Enum.IsDefined(damage.Location))
-            throw new ArgumentException("Damage out of range.", nameof(damage));
+        if (!IsValid(damage)) throw new ArgumentException("Damage out of range.", nameof(damage));
         return Damage(state, facts, damage, rolls);
     }
 
@@ -76,7 +76,9 @@ public static class LifeRules
     /// A kill (the source's <c>critter_kill</c>): the damage step with the death flag, so a living critter takes its current
     /// hit points and dies with the plain fall, then hit-point damage is pinned at <see cref="LifeLimits.DeathHitPointDamage"/>.
     /// An invulnerable or nigh-invulnerable critter skips the death step but is pinned all the same, as in the source, so
-    /// it reads as dead without <see cref="LifeEvents.Died"/>.
+    /// it reads as dead without <see cref="LifeEvents.Died"/>. The step's poison write applies too: when the
+    /// extraordinary-constitution reset lifts strength, the critter is not dead at the death check and the death step
+    /// does not run either, though the pin follows.
     /// </summary>
     public static LifeOutcome Kill(LifeState state, LifeFacts facts)
     {
@@ -84,14 +86,19 @@ public static class LifeRules
         var events = LifeEvents.None;
         var death = DeathAnimation.None;
         var current = 0;
+        var s = state;
         if (IsDead(state, facts)) events |= LifeEvents.AlreadyDead;
         else if ((facts.Traits & (LifeTraits.Invulnerable | LifeTraits.NighInvulnerable)) == 0)
         {
             current = MaxHitPoints(facts, state.PoisonLevel) - state.HitPointDamage;
-            events |= LifeEvents.Died;
-            death = DeathAnimation.Plain;
+            s = s with { HitPointDamage = AddDamage(s.HitPointDamage, current), PoisonLevel = PoisonLevel(s.PoisonLevel, facts) };
+            if (IsDead(s, facts))
+            {
+                events |= LifeEvents.Died;
+                death = DeathAnimation.Plain;
+            }
         }
-        var after = state with { HitPointDamage = LifeLimits.DeathHitPointDamage };
+        var after = s with { HitPointDamage = LifeLimits.DeathHitPointDamage };
         return new(state, after, events | Consciousness(state, after, facts), current, death);
     }
 
@@ -151,7 +158,8 @@ public static class LifeRules
     public static int FatigueRecoverySteps(long scheduledAtGameMs, long nowGameMs) => Steps(scheduledAtGameMs, nowGameMs, 80);
 
     /// <summary>Hours of a resting event: <c>max(1, (now s − scheduled s) / 3600)</c> (CE <c>critter_resting_timeevent_process</c>).</summary>
-    public static int RestingHours(long scheduledAtGameMs, long nowGameMs) => Steps(scheduledAtGameMs, nowGameMs, 3600);
+    public static int RestingHours(long scheduledAtGameMs, long nowGameMs) =>
+        Math.Min(Steps(scheduledAtGameMs, nowGameMs, 3600), LifeLimits.MaxRestHours);
 
     /// <summary>
     /// Fatigue recovery: a living critter with fatigue damage loses <c>steps × HealRate</c> of it (never below 0). The 80-second
@@ -215,6 +223,12 @@ public static class LifeRules
         return new(state, state with { Conditions = state.Conditions & ~LifeConditions.Stunned }, LifeEvents.StunEnded, 0, DeathAnimation.None);
     }
 
+    /// <summary>True when every amount is within <see cref="LifeLimits.MaxAmount"/> and the effects and location are defined.</summary>
+    public static bool IsValid(LifeDamage? damage) =>
+        damage is not null && Math.Abs((long)damage.HitPoints) <= LifeLimits.MaxAmount &&
+        Math.Abs((long)damage.Fatigue) <= LifeLimits.MaxAmount && Math.Abs((long)damage.Poison) <= LifeLimits.MaxAmount &&
+        (damage.Effects & ~AllEffects) == 0 && Enum.IsDefined(damage.Location);
+
     /// <summary>True when every field is within <see cref="LifeLimits"/> and the conditions are defined.</summary>
     public static bool IsValid(LifeState state) =>
         state.HitPointDamage is >= 0 and <= LifeLimits.MaxDamage && state.FatigueDamage is >= 0 and <= LifeLimits.MaxDamage &&
@@ -258,6 +272,8 @@ public static class LifeRules
         long hitPoints = damage.HitPoints, fatigue = damage.Fatigue, poison = damage.Poison;
         if ((facts.Traits & (LifeTraits.Undead | LifeTraits.Mechanical)) != 0) poison = 0;
         else if (facts.Traits.HasFlag(LifeTraits.Stoned)) hitPoints = fatigue = poison = 0;
+        // The source checks the invulnerable flag before the dead check.
+        if (facts.Traits.HasFlag(LifeTraits.Invulnerable)) return new(state, state, LifeEvents.None, 0, DeathAnimation.None);
         if (IsDead(state, facts)) return new(state, state, LifeEvents.AlreadyDead, 0, DeathAnimation.None);
 
         var s = state;
@@ -333,8 +349,10 @@ public static class LifeRules
         return new(state, s, events | Consciousness(state, s, facts), (int)hitPoints, death);
     }
 
+    // A corpse neither falls unconscious nor gets up.
     private static LifeEvents Consciousness(LifeState before, LifeState after, LifeFacts facts)
     {
+        if (IsDead(after, facts)) return LifeEvents.None;
         var was = IsUnconscious(before, facts);
         var now = IsUnconscious(after, facts);
         return was == now ? LifeEvents.None : now ? LifeEvents.LostConsciousness : LifeEvents.RegainedConsciousness;

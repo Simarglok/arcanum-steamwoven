@@ -259,6 +259,52 @@ public sealed class LifeStateTests
     }
 
     [TestMethod]
+    public void AStepThatRollsButChangesNothingStillSpendsItsDraw()
+    {
+        // One crippled arm already; the second-arm d100 of this seed is 66, above 50.
+        using var owner = Seeded();
+        Assert.AreEqual(66, FirstRoll(1, 100));
+        var arm = owner.ApplyDamage(owner.Version, Npc(loaded: new LifeState(0, 0, 0, LifeConditions.CrippledArmOne, 0)),
+            new LifeDamage { Effects = CriticalHitEffects.CrippleArm });
+        Assert.AreEqual((GameSessionDisposition.NoChange, LifeEvents.ArmHitDropsItems), (arm.Disposition, arm.Outcome!.Events));
+        Assert.AreEqual((new SessionRandomState(Seed, 1), 0L), (owner.QueryRandom(), owner.Version.Revision));
+        Assert.IsNull(owner.QueryLifeRecord("oid:wolf"));
+    }
+
+    [TestMethod]
+    public void AFullBudgetStillReportsAStepThatChangesNothing()
+    {
+        using var owner = Seeded(limits: new GameSessionLimits(maxLifeRecords: 1));
+        Changed(owner.ApplyDamage(owner.Version, Npc("oid:a"), new LifeDamage { HitPoints = 1 }), owner, 1);
+        var knockdown = owner.ApplyDamage(owner.Version, Npc("oid:b"), new LifeDamage { Effects = CriticalHitEffects.Knockdown });
+        Assert.AreEqual((GameSessionDisposition.NoChange, LifeEvents.KnockedDown), (knockdown.Disposition, knockdown.Outcome!.Events));
+        // A knockout would change the new NPC: refused, and its roll is not spent.
+        Refused(owner.ApplyDamage(owner.Version, Npc("oid:b"), new LifeDamage { Effects = CriticalHitEffects.Knockout }), owner,
+            GameSessionFailure.BudgetExceeded);
+        Assert.AreEqual(new SessionRandomState(Seed, 0), owner.QueryRandom());
+    }
+
+    [TestMethod]
+    public void AnUnresolvedEntityNeverReachesTheHero()
+    {
+        Assert.ThrowsExactly<ArgumentNullException>(() => SessionLifeTarget.Critter(null!, Wolf, LifeState.Unharmed));
+        Assert.ThrowsExactly<ArgumentNullException>(() => SessionLifeTarget.Critter("oid:wolf", null!, LifeState.Unharmed));
+        Assert.IsTrue(SessionLifeTarget.Hero.IsHero);
+        Assert.IsFalse(Npc().IsHero);
+    }
+
+    [TestMethod]
+    public void AnUnresurrectableCorpseStaysDead()
+    {
+        using var owner = Seeded();
+        var facts = Wolf with { Traits = LifeTraits.Unresurrectable };
+        Changed(owner.Kill(owner.Version, Npc(facts: facts)), owner, 1);
+        var refused = owner.Heal(owner.Version, Npc(facts: facts), new LifeHeal { Resurrect = true, Full = true });
+        Assert.AreEqual((GameSessionDisposition.NoChange, LifeEvents.ResurrectionRefused), (refused.Disposition, refused.Outcome!.Events));
+        Assert.IsTrue(owner.QueryLife(Npc(facts: facts)).View!.Status.IsDead);
+    }
+
+    [TestMethod]
     public void AnExhaustedGeneratorRefusesARollingStepWithNoDraw()
     {
         using var fresh = Seeded();
@@ -277,6 +323,9 @@ public sealed class LifeStateTests
         var text = GoldenJson.Replace("\"revision\":2,\"clock\"", "\"revision\":9223372036854775807,\"clock\"", StringComparison.Ordinal);
         using var owner = Restore(Decode(text));
         Refused(owner.ApplyDamage(owner.Version, Npc(), new LifeDamage { HitPoints = 1 }), owner, GameSessionFailure.RevisionExhausted);
+        // A step that changes nothing is still NoChange.
+        Assert.AreEqual(GameSessionDisposition.NoChange,
+            owner.ApplyDamage(owner.Version, Npc(), new LifeDamage { Effects = CriticalHitEffects.Knockdown }).Disposition);
     }
 
     [TestMethod]
