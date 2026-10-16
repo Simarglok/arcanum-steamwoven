@@ -75,6 +75,9 @@ to the owning decision table (for combat and AI, the
 behaviour of the checked branch is then verified; everything else in the
 document keeps its own evidence level (usually NOT_VERIFIED).
 
+The cross-domain results of the first systematic pass (ARC-RES-048) are in the
+[verification ledger](original-verification-ledger.md).
+
 ## Rules
 
 - Read only. Never run, patch or copy the executable, and keep the install

@@ -459,6 +459,8 @@ line, the component and the type number.
 
 ## Anomalies for S1 (S)
 
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#scripts-event-queue-and-randomness-arc-res-042-arc-res-045-arc-script-007-arc-res-046-arc-world-019) supersede the CE readings below where they differ.
+
 Recorded, not adopted; the slice that implements the action decides (owner
 decision D2 of ARC-RES-042: fix confirmed slips, keep the source behind a switch).
 

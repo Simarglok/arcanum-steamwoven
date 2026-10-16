@@ -355,6 +355,8 @@ missing (anomaly A5). No retail sector needs any of these.
 
 ## Anomalies
 
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable; the verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+
 | Id | Where | Observation | Consequence |
 | --- | --- | --- | --- |
 | A1 | CE `sector_light_list_load` | Adds unshifted sector x/y to a local tile index | Literal reading misplaces all 128 template lights; use the object rule (policy above) |

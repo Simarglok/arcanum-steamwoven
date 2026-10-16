@@ -346,6 +346,8 @@ Each slice needs its own synthetic fixtures; none may reuse real record bytes.
 
 ## Unknowns
 
+**Original check (ARC-RES-048):** U4 is answered: the original swaps the portal and far tiles (no self-assignment), so the door-admission rule below that a walker from across never counts as leaving holds only for CE; the house door's result does not change. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+
 - **U1** Whether the house lies on or near the route a new player takes towards the
   town; next check: a route survey from the start point to townmap 3.
 - **U2** The arrival hour at the house: the start hour is 15, but travel time is not

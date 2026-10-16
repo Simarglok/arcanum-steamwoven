@@ -112,6 +112,8 @@ the AREA viewer passes it for Virgil and he follows the PC (slices 2 and 3 below
 
 ## Open questions
 
+**Original check (ARC-RES-048):** O3 is answered: the original schedules the wait timeout when the leader's charisma is **not** extraordinary and passes the NPC to the event, so CE's condition and missing parameter are reconstruction slips. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
+
 - **O1** *Answered by [ARC-RES-026](virgil-follow-consent.md):* AI row 5
   (dislike ≤ −1000, alignment gaps 2001, level gate 30), level 1, alignment 1,
   wait index 6, reaction base 60, no forced/aloof bit. A real PC can be refused

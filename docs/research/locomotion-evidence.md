@@ -111,6 +111,8 @@ ART animation letter.
 
 ## Anomalies
 
+**Original check (ARC-RES-048):** LA1–LA3 are confirmed, but **LA4's "Original and CE agree" is wrong for the leaving test**: the original swaps the portal and far tiles where CE copies one into both, so a walker from across can count as leaving, and the D3 census needs recomputing. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+
 - **LA1** CE returns the ART's own rate at Speed 8; the original returns the middle
   value (O `0x437A5C`). For the viewer's human both are equal (17 and 20 fps), so
   only other bodies would differ. Proposal: follow the original.

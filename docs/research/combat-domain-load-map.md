@@ -454,6 +454,8 @@ loader does not look for one:
 
 ## 8. CE anomalies found by this reading
 
+**Original check (ARC-RES-048):** these rows were checked in the retail 1.0.7.4 executable (magic, skills and AI sections of the ledger); the verdicts in the [verification ledger](original-verification-ledger.md#magic-arc-res-043-load-map-arc-res-040) supersede the CE readings below where they differ.
+
 Recorded, not adopted. "Inference" marks a reading of intent.
 
 | ID | Where | Source behaviour | Likely intent (inference) |
@@ -490,7 +492,7 @@ in the plan's [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions).
 1. **One content snapshot with two layers.** The universal loader (whole-world
    plan) builds a base layer once and a module layer per module, and each
    combat table records which layer it came from. To match CE (D1), the
-   Default profile reads init-phase files from the base only; letting a module
+   Steamwoven setting (D8) reads init-phase files from the base only; letting a module
    or an external pack override them is a phase 2 option (plan M2).
 2. **Typed refusals instead of exit.** Every reader of section 3 returns a
    typed result naming the file, entry and token. In the strict reader mode an
@@ -500,7 +502,8 @@ in the plan's [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions).
    the process.
 3. **AI rows by number, with the CE layout reachable.** Under D2 the default
    reader keys AI rows by entry number and refuses out-of-range rows (LM3);
-   the Source switch reproduces positional filling. The census must show
+   the Original setting (D8) reproduces positional filling, which ARC-RES-048
+   confirmed in the original. The census must show
    whether the shipped files have gaps; if they have none the two agree.
 4. **No AI timer in the save.** Like CE, the session resumes AI from object
    fields and schedules an immediate pass per NPC on load or sector entry;
