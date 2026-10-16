@@ -7,9 +7,11 @@ namespace Arcanum.CrashSiteProbe;
 // attachment points carry scripts anywhere in the module, and which condition, action,
 // value and focus types the installed scripts use, over every line and over the lines a
 // run can reach. It decodes, it never executes. Operand signatures (which operand slots
-// take a number and which an object) are facts of the SCR format read from the pinned CE
-// interpreter and cross-checked against the ScriptEd 1.50 editor data; the census itself
-// reports any slot the data uses outside them. No CE code or structure is reused.
+// take a number and which an object) are format facts taken from the order of number and
+// object placeholders in the ScriptEd 1.50 editor data (TimoP80/ScriptEd_v1_50 da7e6d2,
+// GPL-2.0; no text) and agree with the pinned CE interpreter for 194 of the 195 types (CE
+// reads the object of action 86 from slot 1, marked FIXME there). No CE code or structure
+// is reused.
 // Only numbers leave the probe: no script, map or object names and no text.
 internal static partial class Program
 {
@@ -66,27 +68,27 @@ internal static partial class Program
     /// <summary>Entries of a script that a run can start at, found from its roots: line 0 for an
     /// attachment, the literal line of a call, the line after a reached dialog action (a DLG
     /// response of 0). Responses of −N resume at a line the DLG names and are not modelled.</summary>
-    internal sealed record CsLive(Dictionary<int, SortedSet<int>> Entries, Dictionary<int, (bool[] True, bool[] False)> Reach, int CallEx, int Computed, int MissingTargets);
+    internal sealed record CsLive(Dictionary<int, SortedSet<int>> Entries, Dictionary<int, (bool[] True, bool[] False)> Reach, int CallEx, int Computed, int MissingRoots, int MissingTargets);
 
     internal static CsLive CsLiveSet(IReadOnlyDictionary<int, WorldScript> scripts, IEnumerable<int> roots)
     {
         var entries = new Dictionary<int, SortedSet<int>>(); var reach = new Dictionary<int, (bool[] True, bool[] False)>();
-        var work = new Queue<(int Script, int Line)>(); var missing = new HashSet<int>();
-        void Add(int script, int line)
+        var work = new Queue<(int Script, int Line)>(); var missingRoots = new HashSet<int>(); var missing = new HashSet<int>();
+        void Add(int script, int line, bool root = false)
         {
-            if (!scripts.TryGetValue(script, out var s)) { missing.Add(script); return; }
+            if (!scripts.TryGetValue(script, out var s)) { (root ? missingRoots : missing).Add(script); return; }
             if (line < 0 || line >= s.Lines.Count) return;
             if (!entries.TryGetValue(script, out var set)) entries[script] = set = new SortedSet<int>();
             if (set.Add(line)) work.Enqueue((script, line));
         }
-        foreach (var root in roots) Add(root, 0);
-        var callEx = 0; var computed = 0; var counted = new HashSet<(int, int, bool)>();
+        foreach (var root in roots) Add(root, 0, root: true);
+        var callEx = 0; var computed = 0; var countedSteps = new HashSet<(int, int)>(); var countedCallEx = new HashSet<(int, int, bool)>();
         while (work.TryDequeue(out var next))
         {
             var script = scripts[next.Script];
             var flow = AnalyseWorldFlow(script, next.Line);
             if (!reach.TryGetValue(next.Script, out var r)) reach[next.Script] = r = (new bool[script.Lines.Count], new bool[script.Lines.Count]);
-            foreach (var u in flow.UnresolvedLines) if (counted.Add((next.Script, u, true))) computed++;
+            foreach (var u in flow.UnresolvedLines) if (countedSteps.Add((next.Script, u))) computed++;
             for (var line = 0; line < script.Lines.Count; line++)
                 foreach (var (branch, reached) in new[] { (true, flow.True[line]), (false, flow.False[line]) })
                 {
@@ -94,12 +96,12 @@ internal static partial class Program
                     (branch ? r.True : r.False)[line] = true;
                     var clause = branch ? script.Lines[line].True : script.Lines[line].False;
                     if (clause.Type == SatDialog) Add(next.Script, line + 1);
-                    if (clause.Type == SatCallEx && counted.Add((next.Script, line, branch))) callEx++;
+                    if (clause.Type == SatCallEx && countedCallEx.Add((next.Script, line, branch))) callEx++;
                 }
             foreach (var call in WorldCalls(script))
                 if (call.Target is { } target && (call.Branch ? r.True : r.False)[call.Line]) Add(target, call.EntryLine ?? 0);
         }
-        return new(entries, reach, callEx, computed, missing.Count);
+        return new(entries, reach, callEx, computed, missingRoots.Count, missing.Count);
     }
 
     private static int ProbeScriptCensus(string[] args)
@@ -288,7 +290,7 @@ internal static partial class Program
             {
                 scripts = live.Entries.Count, entries = live.Entries.Values.Sum(e => e.Count), entries_other_than_line_0 = live.Entries.Values.Sum(e => e.Count(l => l != 0)),
                 lines = live.Reach.Values.Sum(r => r.True.Zip(r.False).Count(p => p.First || p.Second)),
-                unreached_decoded_scripts = scripts.Count - live.Reach.Count, call_ex_sites = live.CallEx, computed_or_unresolved_steps = live.Computed, missing_call_targets = live.MissingTargets,
+                unreached_decoded_scripts = scripts.Count - live.Reach.Count, call_ex_sites = live.CallEx, computed_or_unresolved_steps = live.Computed, missing_roots = live.MissingRoots, missing_call_targets = live.MissingTargets,
             },
             conditions = new { types = Types(CsConditionTypes, true, conditions, conditionScripts), unknown_all = conditions["all|unknown"], unknown_live = conditions["live|unknown"],
                 unused_types = Enumerable.Range(0, CsConditionTypes).Where(t => conditions[$"all|{t}"] == 0).ToArray() },
@@ -335,7 +337,7 @@ internal static partial class Program
         var callee = DecodeWorldScript(Script((0, [], SatReturnRun, [], 0, []), (43, [5], SatReturnSkip, [], SatReturnRun, [])));
         var set = new Dictionary<int, WorldScript> { [1] = root, [9] = callee };
         var live = CsLiveSet(set, [1, 4]);
-        Check(live.Entries[1].SequenceEqual([0, 1]) && live.MissingTargets == 1, "entries: root line 0, line after the dialog action; a missing root counted");
+        Check(live.Entries[1].SequenceEqual([0, 1]) && live.MissingRoots == 1 && live.MissingTargets == 0, "entries: root line 0, line after the dialog action; a missing root counted");
         Check(live.Reach[1].True[0] && live.Reach[1].False[0] && live.Reach[1].True[1] && !live.Reach[1].True[2] && live.Reach[1].True[3], "reach: goto skips line 2; dialog resume reaches line 1");
         Check(!live.Entries.ContainsKey(9), "a call on an unreached line adds no entry");
         var called = CsLiveSet(new Dictionary<int, WorldScript> { [1] = DecodeWorldScript(Script((0, [], SatCall, [9, 1], 0, []))), [9] = callee }, [1]);

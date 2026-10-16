@@ -30,13 +30,20 @@ ARC-RES-042.
   and how each operand is read ([script.c 3217–3274](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3217-L3274)).
   No CE code or structure is reused.
 - **Operand signatures** (which operand slots of a type take a number, which an
-  object) are format facts. The probe's table was written from the ScriptEd 1.50
-  editor data (`data/condition.mes`, `data/action.mes`, the local toolkit
-  archive, GPL; only the order of number and object operands was taken, no text)
-  and agrees with every operand position the earlier probes read from CE
-  (teleport, fade-and-teleport, call, call-ex). The census checks it against the
-  data: no number slot holds a kind outside the 7 value types and no object slot
-  a kind outside the 24 focus types.
+  object) are format facts. The probe's table was taken from the order of number
+  and object placeholders in the ScriptEd 1.50 editor data (`data/condition.mes`,
+  `data/action.mes` of [TimoP80/ScriptEd_v1_50](https://github.com/TimoP80/ScriptEd_v1_50)
+  at `da7e6d2`, GPL-2.0, read from the local toolkit archive; no text was taken).
+  It agrees with how the pinned CE interpreter reads its operands for 194 of the
+  195 types. The exception is action 86 (float newspaper headline): CE reads its
+  object from slot 1, one past the editor's one-slot signature, and marks the
+  line FIXME ([script.c 2272–2275](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2272-L2275));
+  CE's set reaction (30) reads slot 2's kind with slot 1's value
+  ([script.c 1726–1731](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1726-L1731)).
+  The census checks the table against the data: no number slot holds a kind
+  outside the 7 value types and no object slot a kind outside the 24 focus types.
+  Taking factual operand order from GPL editor data is recorded here for the
+  owner to confirm.
 - **Project policy (P)**: proposals for S1, open until S1 fixes them.
 - Original-executable parity is **NOT_VERIFIED**.
 
@@ -49,27 +56,31 @@ ARC-RES-042.
 ```
 
 The run takes about two seconds and is deterministic: the report on the owner's
-installation has SHA-256 `37b7fb26a66e6c8baad36f6feee9547559300066d27297b1074bbf651d82f4d3`
+installation has SHA-256 `3ed1d7f9059c6b8a66fcdc5d31414b5d4f31da158d204e9c8d83712b9ed67572`
 (two runs, same digest). It scanned 81 maps, 1,680 sector files, 12,723 mobile
 files, 81 aggregates, 413 terrain template sectors and 1,423 prototypes, with no
 refusal and no unresolved prototype.
 
 **Live** below means reached by a run: from line 0 of every interpreted
-attachment (all object slots except `SAP_DIALOG_OVERRIDE`, which names a DLG,
-plus tile and sector scripts; trap-flagged scripts are run by trap code, not
-interpreted), then from the literal entry line of every reached call, call-in,
+attachment (all object slots and the prototype default slots objects inherit,
+except `SAP_DIALOG_OVERRIDE`, which names a DLG, plus tile and sector scripts;
+trap-flagged scripts are run by trap code, not interpreted), then from the literal entry line of every reached call, call-in,
 call-at, change-this-script and change-script, and from the line after every
 reached dialog action (a DLG response of 0). Not modelled: DLG responses of −N
 (resume at a line the DLG names), the 114 reached call-ex sites (they run an
-object's own slot), 13 computed or unresolved steps, and engine-chosen scripts
-(end-game slides 997–999, the mind-control dialog script 2188). Live counts are
-therefore a lower bound and "all lines" an upper bound.
+object's own slot), 22 steps the walk cannot follow (13 computed gotos, 7 gotos
+to the end and 2 beyond it), and engine-chosen scripts (end-game slides 997–999,
+the mind-control dialog script 2188). The model also over-counts: 66 scripts
+occur only as prototype defaults, which no placed object may use, and both
+branches of every conditional line count as reachable. Live counts are therefore
+an approximation in both directions; "all lines" is an upper bound.
 
 ## Answer
 
 - **Scripts (D).** 2,399 script files, one name per number, all framed: 23,872
   lines, at most 221 in one script, 32 empty. Seven are trap-flagged
-  (file flag bits 0 or 1), all on use slots. File flag bits in use: 0 (6
+  (file flag bits 0 or 1), all on use slots (one of them also on a sector
+  object's dialog slot). File flag bits in use: 0 (6
   scripts), 1 (1), 2 auto-removing (7), 3 death speech (31), 4 surrender speech
   (3), 8 teleport trigger (26).
 - **Every opcode is known (D).** No condition type outside 0..52 and no action
@@ -78,18 +89,22 @@ therefore a lower bound and "all lines" an upper bound.
   (ARC-RES-042 section 7) refuses no installed script.
 - **Unused operand slots carry editor bytes (D).** 22,400 of 23,872 condition
   clauses and 29,297 of 29,395 action clauses hold a nonzero kind or value in a
-  slot their type never reads (92,452 and 97,349 nonzero kind bytes). The
-  interpreter never reads those slots, so admission must ignore them; a
+  slot their type never reads (92,452 and 97,349 nonzero kind bytes). CE never
+  reads those slots (apart from the action 86 slip above, one clause in the
+  data), so admission must ignore them; a
   "slots past the signature are zero" rule would refuse almost every script (P1).
 - **Events (D).** 30 of the 36 attachment points carry a script somewhere; 4
-  (`DROP`), 5 (`THROW`), 6 (`HIT`), 16 (`END_COMBAT`), 17 (`BUY_OBJECT`) and 29
+  (`GET`), 5 (`DROP`), 6 (`THROW`), 16 (`END_COMBAT`), 17 (`BUY_OBJECT`) and 29
   (`LEADER_SLEEPING`) carry none. The most used are use (3,352 object slots, 389
   scripts), dialog (821, 416), heartbeat (422, 206), dying (595, 201) and the
   wield pair (309/299). Tile scripts: 3,012 tiles with 171 scripts; sector
   scripts: 20 map sectors and 20 terrain template sectors with 5 scripts.
-- **Reach (D).** 1,838 distinct scripts are attached; the live set is 1,940
-  scripts (calls add 102), 13,358 of the 23,872 lines and 2,957 entries (1,019
-  of them not line 0). 459 decoded scripts are never reached by this model.
+- **Reach (D).** 1,838 script numbers are attached (20 of them dialog-override
+  DLG numbers, 7 trap scripts, 2 with no file); 1,808 interpreted roots run, and
+  calls add 132, so the live set is 1,940 scripts, 13,358 of the 23,872 lines and
+  2,957 entries (1,019 of them not line 0). One literal call names a script with
+  no file. 459 decoded scripts are never reached by this model (the 32 empty and
+  the 7 trap scripts among them).
 - **Opcode use (D).** 49 of 53 condition types and 136 of 142 action types occur.
   Unused conditions: 24 `obj_can_open_container`, 32 `obj_is_at_location`, 42
   `obj_is_busted`, 44 `can_open_portal`. Unused actions: 48 `cast_spell`, 67
@@ -113,9 +128,11 @@ therefore a lower bound and "all lines" an upper bound.
   value kinds counter, local variable, number and global flag. Checked on the
   live lines it admits 96 of the 1,940 live scripts (11 of the 176 placed tile
   and sector scripts); checked on every line, as S1 will (rule P7), it admits
-  144 of the 2,399 scripts, 93 of them live (the 32 empty scripts among them).
+  144 of the 2,399 scripts (32 of them empty), 93 of them live.
   The first live refusal elsewhere is teleport (249 scripts), dialog (213), PC
-  quest state (107), get stat (97), loop (85), "is named" (80) and print line (72). It
+  quest state (107), get object type (97), loop (85), "is named" (80) and print
+  line (72). The census's admission omits rules P4 and P5 (no installed script
+  breaks them, so the counts are the same). It
   is a correctness core, not a coverage target: each later slice widens it.
 
 ## Attachment points (D)
@@ -124,8 +141,10 @@ Object slots count sector objects and editor mobiles once each. The map
 aggregates are the normal-game form of the same mobiles
 ([ARC-RES-036](data-census.md)): for every point their scripts equal the
 mobiles' scripts exactly, so they are not added. Prototype defaults are the slots
-those objects inherit and are listed apart. "S1" is how many of the point's
-scripts the S1 candidate set admits on their live lines.
+those objects inherit and are listed apart; the "Scripts" and "S1" columns
+include prototype-default scripts (so a point can have more scripts than slots).
+"S1" is how many of the point's scripts the S1 candidate set admits on their
+live lines.
 
 | SAP | Point | Object slots | Sector objects | Mobiles | Prototype defaults | Scripts | S1 |
 | ---: | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -162,7 +181,7 @@ scripts the S1 candidate set admits on their live lines.
 
 One dialog slot and one enter-combat slot name a script number that has no
 file (the interpreter returns *skip default* for them, E4 of ARC-RES-042). One
-trap-flagged script sits on a dialog slot.
+of the seven trap-flagged use scripts is also on a sector object's dialog slot.
 
 ## Operand kinds (D)
 
@@ -418,8 +437,11 @@ line, the component and the type number.
 - **P5 Writes need a writable target.** An arithmetic or get-story-state action
   whose operand 0 is a number literal is refused (none occurs).
 - **P6 Jumps.** A literal goto inside the script is admitted; a goto to exactly
-  the line count is admitted as "end of script" (*skip default*, the same result
-  as running past the last line); a negative literal, one beyond the end, and a
+  the line count is admitted as "end of script": *skip default* without
+  auto-removal (in CE running past the last line also gives *skip default* but
+  does clear an auto-removing script, the goto does not;
+  [script.c 352–376](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L352-L376);
+  none of the 11 such gotos is in an auto-removing script); a negative literal, one beyond the end, and a
   computed goto are refused in S1 (2 and 13 live sites; the 13 computed ones are
   a later slice).
 - **P7 What is checked.** Every line of the script, not only the lines the live
@@ -433,4 +455,15 @@ line, the component and the type number.
 - **U2** The 459 scripts this model never reaches may be reached through call-ex,
   DLG resumption or engine-chosen numbers; not checked.
 - **U3** Whether the original interpreter reads the slots past a signature is
-  **NOT_VERIFIED**; CE does not.
+  **NOT_VERIFIED**; CE does not, except action 86 (one clause in the data).
+
+## Anomalies for S1 (S)
+
+Recorded, not adopted; the slice that implements the action decides (owner
+decision D2 of ARC-RES-042: fix confirmed slips, keep the source behind a switch).
+
+| ID | Source behaviour | Note |
+| --- | --- | --- |
+| X7 | Divide stores the **sum** of its operands when the divisor is not 0, and stores nothing when it is ([script.c 1585–1594](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L1585-L1594)). | Likely a CE slip; 14 divide clauses, 10 live. S1 admits the type; the interpreter slice (S2) chooses quotient or source sum. |
+| X8 | A counter write shifts the value into its byte without masking it ([script.c 3249–3251](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3249-L3251)), so a value above 255 or negative spills into the higher counters. | S2 decides masking. |
+| X9 | Float newspaper headline (86) reads its object from slot 1, outside the editor signature ([script.c 2272–2275](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L2272-L2275)). | Not admitted in S1; the one installed clause has kind 1 in slot 0 and 0 (triggerer) in slot 1. |
