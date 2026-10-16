@@ -48,19 +48,23 @@ public sealed class GameSessionLimits
     public const int PolicyMaxMaps = 64;
     public const int PolicyMaxChangesPerMap = 4096;
     public const int PolicyMaxTotalChanges = 16384;
+    /// <summary>Party records (followers, waiting NPCs and free NPCs with a flag).</summary>
+    public const int PolicyMaxCompanions = 64;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
-        int maxTotalChanges = PolicyMaxTotalChanges)
+        int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
         if (maxTotalChanges is < 1 or > PolicyMaxTotalChanges) throw new ArgumentOutOfRangeException(nameof(maxTotalChanges));
-        MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges;
+        if (maxCompanions is < 1 or > PolicyMaxCompanions) throw new ArgumentOutOfRangeException(nameof(maxCompanions));
+        MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
     }
 
     public int MaxMaps { get; }
     public int MaxChangesPerMap { get; }
     public int MaxTotalChanges { get; }
+    public int MaxCompanions { get; }
 }
 
 /// <summary>Explicit new-game inputs. The flag descriptor's identity becomes the session's world/module.</summary>
@@ -79,6 +83,8 @@ public enum GameSessionFailure
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
     IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidLighting,
+    // Party domain (ARC-WORLD-013).
+    InvalidCompanion, InvalidConsentFacts, ConsentRefused, LeaveRefused, NotInParty, NotWaiting,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -176,16 +182,16 @@ public sealed class SessionMapState
 /// </summary>
 public sealed class GameSessionSnapshot
 {
-    /// <summary>Schema 3 carries <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010),
-    /// which landed together; schemas 1 and 2 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 3;
+    /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
+    /// adds <see cref="Party"/> (ARC-WORLD-013). Schemas 1..3 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 4;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionLightingState? lighting)
+        SessionPartyState party, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
-        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Lighting = lighting;
+        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -196,6 +202,7 @@ public sealed class GameSessionSnapshot
     public ActorPlacement Actor { get; }
     public IReadOnlyList<SessionMapState> Maps { get; }
     public SessionStoryState Story { get; }
+    public SessionPartyState Party { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
 }
@@ -206,6 +213,8 @@ internal static class SessionValidation
     internal const int MaxPropertyCharacters = 64;
 
     internal static bool Map(SessionMapId map) => map.RuntimeMap >= 1;
+
+    internal static bool Entity(string? entity) => Code(entity, MaxEntityCharacters);
 
     internal static bool Lighting(SessionLightingState lighting) => lighting.SchemeId >= 1 && lighting.Hour is >= 0 and <= 23;
 

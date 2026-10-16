@@ -15,6 +15,8 @@ internal sealed record ConversationGiveItem(DialogOperationSource Source, int It
 internal sealed record ConversationMarkArea(DialogOperationSource Source, int Area) : ConversationOperation(Source);
 internal sealed record ConversationJoin(DialogOperationSource Source, int Node) : ConversationOperation(Source);
 internal sealed record ConversationFinalLine(DialogOperationSource Source, int Node) : ConversationOperation(Source);
+internal sealed record ConversationWaiting(DialogOperationSource Source, bool Value) : ConversationOperation(Source);
+internal sealed record ConversationUnwait(DialogOperationSource Source, int Node) : ConversationOperation(Source);
 
 internal enum ConversationField
 {
@@ -26,17 +28,21 @@ internal enum ConversationField
 /// <summary>
 /// conversation-grammar-v1: the bounded DLG operation subset of ARC-SCRIPT-005.
 /// <list type="bullet">
-/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector).</item>
+/// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector);
+/// with a party port also WA 0/1 (the NPC is not / is waiting for the PC).</item>
 /// <item>Actions: LF, GF, QU, RU, RE and AL (unsigned target or lexically signed delta), negative IN (NPC gives
-/// an item), MM; a Player action may end with one JO 0 node or FL node.</item>
+/// an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with one UW 0 node.</item>
 /// </list>
+/// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
+/// ARC-WORLD-013.
 /// Operations are separated by SP, HTAB, ',', ';', ':', '(' or ')'; inside one operation only SP/HTAB may
 /// precede an operand. A field holding only separators is empty. This is project admission policy, not CE's
 /// permissive scanner.
 /// </summary>
 internal static class DialogConversationGrammar
 {
-    internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options)
+    internal static IReadOnlyList<ConversationOperation> Parse(DlgRecord record, DlgField field, ConversationField role, DialogConversationOptions options,
+        bool party)
     {
         if (field.Length > options.MaxOperationFieldBytes)
         {
@@ -59,16 +65,16 @@ internal static class DialogConversationGrammar
             var opcode = new string([(char)ToUpper(bytes[index]), (char)ToUpper(bytes[index + 1])]);
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
-                ? opcode is "LF" or "GF" or "RE" or "RA"
+                ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA"
                 : opcode is "LF" or "GF" or "QU" or "RU" or "RE" or "AL" or "IN" or "MM"
-                    || role == ConversationField.PlayerAction && opcode is "JO" or "FL";
+                    || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW");
             if (!admitted)
             {
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
-            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationFinalLine)
+            if (operations.Count > 0 && operations[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine)
             {
-                // The source keeps reading operations after JO/FL, but JO enters its node mid-field;
+                // The source keeps reading operations after JO/UW/FL, but JO/UW enter their node mid-field;
                 // operations after them are outside this conservative subset.
                 throw Failure(DialogFailureKind.UnsupportedOperation, record, field, start, 2, operations.Count);
             }
@@ -80,7 +86,7 @@ internal static class DialogConversationGrammar
             }
             var (first, sign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
             var second = 0;
-            if (opcode is "LF" or "GF" or "QU" or "JO")
+            if (opcode is "LF" or "GF" or "QU" or "JO" or "UW")
             {
                 SkipOperandSpace(bytes, ref index, record, field, start, operations.Count, required: true);
                 (second, var secondSign) = ParseInteger(bytes, ref index, record, field, start, operations.Count);
@@ -116,6 +122,9 @@ internal static class DialogConversationGrammar
                 "MM" when first >= 0 => new ConversationMarkArea(source, first),
                 "JO" when first == 0 && second > 0 => new ConversationJoin(source, second),
                 "JO" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                "UW" when first == 0 && second > 0 => new ConversationUnwait(source, second),
+                "UW" when second > 0 => throw new DialogOperationParseException(DialogFailureKind.UnsupportedOperation, source),
+                "WA" when first is 0 or 1 => new ConversationWaiting(source, first == 1),
                 "FL" when first > 0 => new ConversationFinalLine(source, first),
                 _ => throw new DialogOperationParseException(DialogFailureKind.InvalidOperation, source),
             };

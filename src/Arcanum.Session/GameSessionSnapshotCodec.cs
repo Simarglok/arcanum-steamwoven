@@ -17,7 +17,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 3. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 4. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -27,7 +27,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -41,6 +41,9 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] QuestFields = ["quest", "state", "botched", "timestampMs"];
     private static readonly string[] GlobalQuestFields = ["quest", "state"];
     private static readonly string[] RumorFields = ["rumor", "timestampMs"];
+    private static readonly string[] PartyFields = ["followers", "others"];
+    private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
+    private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -152,6 +155,30 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("party");
+            w.WriteStartArray("followers");
+            foreach (var follower in snapshot.Party.Followers)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", follower.Entity);
+                w.WriteBoolean("forced", follower.Forced);
+                w.WriteBoolean("spreadOut", follower.SpreadOut);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("others");
+            foreach (var other in snapshot.Party.Others)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", other.Entity);
+                w.WriteString("standing", StandingName(other.Standing));
+                w.WriteBoolean("spreadOut", other.SpreadOut);
+                w.WriteBoolean("jilted", other.Jilted);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -200,7 +227,7 @@ public static class GameSessionSnapshotCodec
         var identity = new GlobalFlagIdentity(new(Guid(f["world"], "$.world")), new(Guid(f["module"], "$.module")));
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
-            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]),
+            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
             Lighting(f["lighting"]));
     }
 
@@ -337,6 +364,57 @@ public static class GameSessionSnapshotCodec
         return new(quests, globals, rumors);
     }
 
+    private static SessionPartyState Party(JsonElement element)
+    {
+        const string p = "$.party";
+        var f = Fields(element, p, PartyFields);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var items = Array(f["followers"], p + ".followers", GameSessionLimits.PolicyMaxCompanions);
+        var followers = new SessionCompanion[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.followers[{i}]";
+            var item = Fields(items[i], path, FollowerFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            // The array order is meaningful, so it is kept; an entity may appear once in the whole party.
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            followers[i] = new(entity, CompanionStanding.Following, Bool(item["forced"], path + ".forced"),
+                Bool(item["spreadOut"], path + ".spreadOut"), false);
+        }
+        items = Array(f["others"], p + ".others", GameSessionLimits.PolicyMaxCompanions);
+        if (followers.Length + items.Length > GameSessionLimits.PolicyMaxCompanions)
+            throw new DecodeException(SnapshotDecodeFailure.BudgetExceeded, p + ".others");
+        var others = new SessionCompanion[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.others[{i}]";
+            var item = Fields(items[i], path, OtherFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (!seen.Add(entity) || (i > 0 && string.CompareOrdinal(others[i - 1].Entity, entity) >= 0))
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            var standing = String(item["standing"], path + ".standing") switch
+            {
+                "Waiting" => CompanionStanding.Waiting,
+                "Free" => CompanionStanding.Free,
+                _ => throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".standing"),
+            };
+            var record = new SessionCompanion(entity, standing, false, Bool(item["spreadOut"], path + ".spreadOut"),
+                Bool(item["jilted"], path + ".jilted"));
+            // Jilted only while free, and a free NPC without a flag is not listed.
+            if ((standing == CompanionStanding.Waiting && record.Jilted) || record.IsBaseline)
+                throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".jilted");
+            others[i] = record;
+        }
+        return new(followers, others);
+    }
+
+    private static string Entity(JsonElement element, string path)
+    {
+        var entity = String(element, path);
+        if (!SessionValidation.Entity(entity)) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+        return entity;
+    }
+
     private static SessionQuestState QuestState(JsonElement element, string path) =>
         Enum.GetValues<SessionQuestState>().Where(state => QuestName(state) == String(element, path)).Cast<SessionQuestState?>().FirstOrDefault()
             ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
@@ -449,6 +527,12 @@ public static class GameSessionSnapshotCodec
         SessionQuestState.Achieved => "Achieved", SessionQuestState.Completed => "Completed",
         SessionQuestState.OtherCompleted => "OtherCompleted", SessionQuestState.Botched => "Botched",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
+
+    private static string StandingName(CompanionStanding standing) => standing switch
+    {
+        CompanionStanding.Waiting => "Waiting", CompanionStanding.Free => "Free",
+        _ => throw new ArgumentOutOfRangeException(nameof(standing)),
     };
 
     private static string FacingName(NeighborDirection facing) => facing switch

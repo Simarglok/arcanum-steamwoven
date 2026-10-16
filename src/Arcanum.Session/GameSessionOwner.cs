@@ -1,11 +1,12 @@
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Party;
 
 namespace Arcanum.Session;
 
 /// <summary>
 /// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
-/// story domain (PC quests, shared quest states, known rumors).
+/// story domain (PC quests, shared quest states, known rumors) and the PC's party (followers, waiting NPCs).
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -17,6 +18,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly GameSessionLimits _limits;
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
     private readonly Story _story;
+    private readonly PartyDomain _party;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
@@ -26,10 +28,10 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        SessionLightingState? lighting)
+        PartyDomain party, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _lighting = lighting;
+        _story = story; _party = party; _lighting = lighting;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
@@ -47,7 +49,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), null),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -72,6 +74,8 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportStory(snapshot.Story, snapshot.Clock.GameTimestampMs, out var story);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportParty(snapshot.Party, limits, out var party);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
@@ -92,7 +96,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, snapshot.Lighting),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -286,6 +290,127 @@ public sealed class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>The NPC's party record; an NPC never recorded is free with no flags. An invalid entity id throws.</summary>
+    public SessionCompanion QueryCompanion(string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) throw new ArgumentException("Invalid entity id.", nameof(entity));
+        return _party.Get(entity);
+    }
+
+    /// <summary>Detached copy of the party: the follower array in order, then waiting and flagged free NPCs.</summary>
+    public SessionPartyState QueryParty() { ThrowIfDisposed(); return _party.Capture(); }
+
+    /// <summary>
+    /// Dialog <c>JO force node</c> (ARC-RES-024 C1, C5): runs the follow check with the charisma limit ignored when
+    /// <paramref name="force"/>, then joins: the NPC leaves any current standing and is appended at the end of the
+    /// follower array (never duplicated), forced when <paramref name="force"/>, jilted cleared, spread out kept. As read
+    /// in the source, an NPC already in the array counts toward the limit itself. A refusal is
+    /// <see cref="GameSessionFailure.ConsentRefused"/> with the reason in <see cref="PartyMutationResult.Consent"/>.
+    /// Facts naming another leader for an NPC the PC already leads (following or waiting) contradict the session and
+    /// are <see cref="GameSessionFailure.InvalidConsentFacts"/>.
+    /// </summary>
+    public PartyMutationResult JoinParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
+        if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
+        if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.LedByPc && facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        var consent = Consent(facts, current.Forced, force);
+        if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
+        return Append(current, force, consent);
+    }
+
+    /// <summary>
+    /// A join without a check, always forced: script follow, mind control and the follow spell component (C17). It also
+    /// brings a waiting NPC back.
+    /// </summary>
+    public PartyMutationResult ForceJoinParty(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
+        if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
+        return Append(_party.Get(entity), true, null);
+    }
+
+    /// <summary>
+    /// Dialog <c>UW force node</c> (C11): only a waiting NPC; runs the follow check (charisma limit ignored when
+    /// <paramref name="force"/>; waiting NPCs are never forced and are outside the array). A refusal keeps it waiting.
+    /// Success re-appends it at the end of the array, forced when <paramref name="force"/>.
+    /// </summary>
+    public PartyMutationResult UnwaitParty(GameSessionVersion expected, string entity, PartyConsentFacts facts, bool force)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(facts);
+        if (!SessionValidation.Entity(entity)) return RejectParty(GameSessionFailure.InvalidCompanion);
+        if (!ValidFacts(facts)) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        if (!IsCurrent(expected)) return RejectParty(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.Standing != CompanionStanding.Waiting) return RejectParty(GameSessionFailure.NotWaiting);
+        // The PC leads a waiting NPC, so facts naming another leader contradict the session.
+        if (facts.OtherLeaderCharisma is not null) return RejectParty(GameSessionFailure.InvalidConsentFacts);
+        var consent = Consent(facts, false, force);
+        if (consent != FollowConsent.Accepted) return RejectParty(GameSessionFailure.ConsentRefused, consent);
+        return Append(current, force, consent);
+    }
+
+    /// <summary>
+    /// Wait (C11; the source's dialog WA action, not admitted by the conversation runtime yet, the wait order and the
+    /// script wait): a follower leaves the array (forced cleared) and keeps the PC as leader. Already waiting is NoChange; a free NPC is <see cref="GameSessionFailure.NotInParty"/>.
+    /// </summary>
+    public GameSessionMutationResult WaitParty(GameSessionVersion expected, string entity)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.Standing == CompanionStanding.Free) return Reject(GameSessionFailure.NotInParty);
+        if (current.Standing == CompanionStanding.Waiting) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _party.Put(current with { Standing = CompanionStanding.Waiting, Forced = false }, false);
+        return Changed();
+    }
+
+    /// <summary>
+    /// Leave (C6): a follower or waiting NPC becomes free, forced and waiting cleared, spread out kept; jilted when
+    /// <see cref="PartyLeave.Jilt"/>. An unforced leave is <see cref="GameSessionFailure.LeaveRefused"/> under an
+    /// extraordinary-charisma leader or mind control. A free NPC is NoChange.
+    /// </summary>
+    public GameSessionMutationResult LeaveParty(GameSessionVersion expected, string entity, PartyLeave leave)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(leave);
+        if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.Standing == CompanionStanding.Free) return NoChange();
+        if (!leave.Force && !FollowConsentRules.MayLeaveUnforced(leave.LeaderCharisma, leave.MindControlled))
+            return Reject(GameSessionFailure.LeaveRefused);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        // The NPC already has a record, so a flagged free record needs no new budget.
+        _party.Put(current with { Standing = CompanionStanding.Free, Forced = false, Jilted = leave.Jilt }, false);
+        return Changed();
+    }
+
+    /// <summary>Dialog SO / SC (C1): sets or clears the NPC's spread-out flag in any standing.</summary>
+    public GameSessionMutationResult SetSpreadOut(GameSessionVersion expected, string entity, bool spreadOut)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Entity(entity)) return Reject(GameSessionFailure.InvalidCompanion);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var current = _party.Get(entity);
+        if (current.SpreadOut == spreadOut) return NoChange();
+        var next = current with { SpreadOut = spreadOut };
+        if (!next.IsBaseline && !_party.Records.ContainsKey(entity) && _party.Records.Count >= _limits.MaxCompanions)
+            return Reject(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _party.Put(next, false);
+        return Changed();
+    }
+
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
     public GameSessionSnapshot Capture()
     {
@@ -296,7 +421,7 @@ public sealed class GameSessionOwner : IDisposable
             .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
-            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _lighting);
+            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -368,6 +493,58 @@ public sealed class GameSessionOwner : IDisposable
                 _ => SessionQuestState.Accepted,
             };
             if (story.GlobalQuests.GetValueOrDefault(quest.Quest, SessionQuestState.Accepted) != shared) return GameSessionFailure.InvalidQuestState;
+        }
+        return GameSessionFailure.None;
+    }
+
+    private FollowConsent Consent(PartyConsentFacts facts, bool forcedFollower, bool ignoreLimit) =>
+        FollowConsentRules.Evaluate(new(facts.MindControlledByPc, facts.PcPersuasion, facts.PcCharisma, facts.PcAlignment,
+            facts.PcLevel, facts.OtherLeaderCharisma, forcedFollower, facts.Reaction, facts.Thresholds, facts.NpcAlignment,
+            facts.NpcLevel, facts.MaxFollowers, _party.NonForcedFollowers, ignoreLimit));
+
+    private static bool ValidFacts(PartyConsentFacts facts) => Enum.IsDefined(facts.PcPersuasion);
+
+    // Join and unwait share the commit: leave any standing, append at the end of the array.
+    private PartyMutationResult Append(SessionCompanion current, bool forced, FollowConsent? consent)
+    {
+        var next = current with { Standing = CompanionStanding.Following, Forced = forced, Jilted = false };
+        var order = _party.Order;
+        if (next == current && order.Count > 0 && order[^1] == current.Entity)
+            return new(GameSessionDisposition.NoChange, GameSessionFailure.None, consent, new(_identity, _revision));
+        if (!_party.Records.ContainsKey(current.Entity) && _party.Records.Count >= _limits.MaxCompanions)
+            return RejectParty(GameSessionFailure.BudgetExceeded, consent);
+        if (_revision == long.MaxValue) return RejectParty(GameSessionFailure.RevisionExhausted, consent);
+        _party.Put(next, true);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, consent, new(_identity, _revision));
+    }
+
+    private PartyMutationResult RejectParty(GameSessionFailure failure, FollowConsent? consent = null) =>
+        new(GameSessionDisposition.Rejected, failure, consent, new(_identity, _revision));
+
+    // Followers keep their saved array order; the others are waiting NPCs or free NPCs with a flag, in ordinal order.
+    // Every record must be one the transitions can produce, and the total stays within the caller's limit.
+    private static GameSessionFailure ImportParty(SessionPartyState saved, GameSessionLimits limits, out PartyDomain party)
+    {
+        party = new();
+        if (saved.Followers.Count + saved.Others.Count > limits.MaxCompanions) return GameSessionFailure.BudgetExceeded;
+        foreach (var record in saved.Followers)
+        {
+            if (!SessionValidation.Entity(record.Entity) || record.Standing != CompanionStanding.Following || record.Jilted)
+                return GameSessionFailure.InvalidCompanion;
+            if (party.Records.ContainsKey(record.Entity)) return GameSessionFailure.InvalidSnapshot;
+            party.Put(record, true);
+        }
+        string? previous = null;
+        foreach (var record in saved.Others)
+        {
+            if (!SessionValidation.Entity(record.Entity) || record.Forced || record.IsBaseline ||
+                record.Standing is not (CompanionStanding.Waiting or CompanionStanding.Free) ||
+                (record.Standing == CompanionStanding.Waiting && record.Jilted)) return GameSessionFailure.InvalidCompanion;
+            if (party.Records.ContainsKey(record.Entity) ||
+                (previous is not null && string.CompareOrdinal(previous, record.Entity) >= 0)) return GameSessionFailure.InvalidSnapshot;
+            previous = record.Entity;
+            party.Put(record, false);
         }
         return GameSessionFailure.None;
     }
