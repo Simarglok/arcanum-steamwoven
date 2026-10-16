@@ -19,7 +19,7 @@ public enum GameDifficulty { Normal, Easy, Hard }
 public enum AttackTargetKind { Critter, Portal, Container, Wall, OtherObject }
 
 /// <summary>Object material; a portal or container subtracts its material reduction from hit-point damage.</summary>
-public enum ObjectMaterial { Stone, Brick, Wood, Plant, Flesh, Metal, Glass, Cloth, Liquid, Paper, Gas, Force }
+public enum ObjectMaterial { Stone, Brick, Wood, Plant, Flesh, Metal, Glass, Cloth, Liquid, Paper, Gas, Force, Fire, Powder }
 
 /// <summary>
 /// What the attacker strikes with: bare hands or a monster's natural attack (<see cref="Unarmed"/>), a weapon item, or a
@@ -185,8 +185,8 @@ public sealed record Combatant
 /// <summary>
 /// What the attacker strikes with, its values effective for this wielder: the four <c>Magic…</c> values and
 /// <see cref="MagicDamageAdjustment"/> are the item's magic adjustments after the source's aptitude scaling; they are
-/// dropped when the weapon's magic is cancelled. <see cref="Range"/> is the weapon range, or the throwing distance of a
-/// thrown item. <see cref="Hp"/> and <see cref="MaxHp"/> are the item's condition (0/0 for none). The two charts are
+/// dropped when the weapon's magic is cancelled. <see cref="Range"/> is the weapon range, or the throwing distance for
+/// any throwing attack (thrown weapons included). <see cref="Hp"/> and <see cref="MaxHp"/> are the item's condition (0/0 for none). The two charts are
 /// read only for <see cref="WeaponKind.Weapon"/>.
 /// </summary>
 public sealed record CombatWeapon

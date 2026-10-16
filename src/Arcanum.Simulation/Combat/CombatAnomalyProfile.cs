@@ -3,7 +3,7 @@ namespace Arcanum.Simulation.Combat;
 /// <summary>
 /// Switches between the fixed default and the source (CE) behaviour of each confirmed CE slip the attack resolver
 /// touches (owner decision D2, recorded in docs/research/npc-combat-ai-plan.md#anomaly-decisions). <see cref="Default"/>
-/// is the source with the fixes; <see cref="Source"/> keeps every CE slip so seeded runs can be compared with CE.
+/// is the source with the fixes; <see cref="Source"/> keeps every CE slip, for comparison with CE behaviour.
 /// The profile holds no state, so it may change between attacks. Anomaly A8 has no source variant: CE reads an
 /// unassigned value there, which no rule can reproduce, so both profiles use 0.
 /// </summary>

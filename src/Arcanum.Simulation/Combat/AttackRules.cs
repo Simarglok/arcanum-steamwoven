@@ -197,8 +197,9 @@ public static class AttackRules
     }
 
     /// <summary>
-    /// The damage range of one type: the base range, melee <c>DamageBonus</c> on normal and fatigue (a non-positive
-    /// bound that the bonus would leave non-positive becomes 1), the weapon's magic adjustment unless cancelled, then each
+    /// The damage range of one type: the base range, melee <c>DamageBonus</c> on normal and fatigue (a positive bound that
+    /// the bonus would bring to 0 or below becomes 1; a non-positive bound just takes the bonus), the weapon's magic
+    /// adjustment unless cancelled, then each
     /// bound clamped to <c>0 .. 3 × base max</c> (<c>2 ×</c> for an unarmed melee attack).
     /// </summary>
     public static DamageRange WeaponDamageRange(CombatWeapon weapon, int damageBonus, CombatSkill skill, DamageType type, bool magicCancelled)
@@ -227,7 +228,8 @@ public static class AttackRules
         ObjectMaterial.Stone or ObjectMaterial.Brick or ObjectMaterial.Metal or ObjectMaterial.Force => 10,
         ObjectMaterial.Wood => 5,
         ObjectMaterial.Plant or ObjectMaterial.Flesh or ObjectMaterial.Glass or ObjectMaterial.Cloth
-            or ObjectMaterial.Liquid or ObjectMaterial.Paper or ObjectMaterial.Gas => 0,
+            or ObjectMaterial.Liquid or ObjectMaterial.Paper or ObjectMaterial.Gas or ObjectMaterial.Fire
+            or ObjectMaterial.Powder => 0,
         _ => throw new ArgumentOutOfRangeException(nameof(material)),
     };
 

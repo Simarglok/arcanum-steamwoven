@@ -4,8 +4,10 @@ namespace Arcanum.Simulation.Combat;
 /// Resolves one attack (ARC-RES-030 FR-COMBAT-004/005/008) as a pure function of an explicit request, an injected roll
 /// source, the critical-effect tables and the anomaly profile: hit location, technology failure, magick cancellation,
 /// the attack roll, dodge, fate, the critical miss that turns the attack on the attacker, and the typed damage packet
-/// with immunities and resistances. Rolls are made at the same points and in the same order as in the source (CE at
-/// <see cref="AttackRules.SourceRevision"/>), except where a recorded D2 fix removes one. Ammunition, approach and
+/// with immunities and resistances. The combat rolls are made at the same points and in the same order as in the
+/// source (CE at <see cref="AttackRules.SourceRevision"/>), except where a recorded D2 fix removes one; CE also draws
+/// from the same generator outside combat (AI reaction, sounds, the effect tables' stat checks), so a seeded run matches
+/// a CE run only once those draws are modelled too. Ammunition, approach and
 /// line of fire, projectile flight, scripts and applying the damage to vital state stay with the caller.
 /// </summary>
 public static class AttackResolver
@@ -143,13 +145,13 @@ public static class AttackResolver
                 magicCancelled, crit, criticalEffects, rolls, profile);
             return new AttackResolution(AttackRefusal.None, critical ? AttackOutcome.CriticalHit : AttackOutcome.Hit,
                 AttackMissCause.None, location, aimed, magicCancelled, difficulty, attackCheck, dodgeCheck, fate,
-                CriticalSelfHit: false, damage, rolls.Rolls);
+                CriticalSelfHit: false, damage, rolls.Rolls.ToArray());
         }
 
         if (!critical)
         {
             return new AttackResolution(AttackRefusal.None, AttackOutcome.Miss, missCause, location, aimed, magicCancelled,
-                difficulty, attackCheck, dodgeCheck, fate, CriticalSelfHit: false, Damage: null, rolls.Rolls);
+                difficulty, attackCheck, dodgeCheck, fate, CriticalSelfHit: false, Damage: null, rolls.Rolls.ToArray());
         }
 
         // Critical miss: the attack turns on the attacker, which always hits itself, not aimed; half of the time critically.
@@ -170,12 +172,12 @@ public static class AttackResolver
         var selfDamage = Damage(request, DamageRecipient.Attacker, attacker, AttackTargetKind.Critter, selfCritical, location,
             aimed: false, magicCancelled, accumulator, criticalEffects, rolls, profile);
         return new AttackResolution(AttackRefusal.None, AttackOutcome.CriticalMiss, missCause, location, Aimed: false,
-            magicCancelled, difficulty, attackCheck, dodgeCheck, fate, selfCritical, selfDamage, rolls.Rolls);
+            magicCancelled, difficulty, attackCheck, dodgeCheck, fate, selfCritical, selfDamage, rolls.Rolls.ToArray());
     }
 
     private static AttackResolution Refused(AttackRefusal refusal, CombatRollLog rolls) =>
         new(refusal, AttackOutcome.Refused, AttackMissCause.None, HitLocation.Torso, false, false, null, null, null,
-            FateUse.None, false, null, rolls.Rolls);
+            FateUse.None, false, null, rolls.Rolls.ToArray());
 
     private static AttackDifficulty AttackDifficultyOf(
         AttackRequest request, int effectiveness, bool magicCancelled, CombatAnomalyProfile profile)

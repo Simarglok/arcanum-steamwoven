@@ -413,6 +413,30 @@ public sealed class AttackResolverTests
     }
 
     [TestMethod]
+    public void CriticalMissAndSelfHitThresholds()
+    {
+        // Critical miss chance (100 − 75) / 7 = 3: a roll of 3 is critical, 4 is not.
+        var critical = Run(Melee(), Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 3), (CriticalSelfHit, 50), (Normal, 5) },
+            NoMultiplier()));
+        Assert.AreEqual(AttackOutcome.CriticalMiss, critical.Outcome);
+        Assert.IsTrue(critical.CriticalSelfHit, "50 is still a critical self-hit");
+        Assert.AreEqual(7, critical.Damage!.HitPointDamage);
+
+        var plain = Run(Melee(), Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 4) }));
+        Assert.AreEqual(AttackOutcome.Miss, plain.Outcome);
+    }
+
+    [TestMethod]
+    public void MagneticInversionHampersFirearmsOnly()
+    {
+        var target = Npc() with { Conditions = CombatantConditions.MagneticInversion };
+        var gun = Melee() with { Target = target, Skill = CombatSkill.Firearms, Weapon = Sword() with { Range = 10 } };
+        var rolls = Concat(Opening(), new[] { (AttackCheck, 100), (AttackCritical, 100) });
+        Assert.AreEqual(55, Run(gun, rolls).AttackCheck!.Effectiveness);
+        Assert.AreEqual(75, Run(gun with { Skill = CombatSkill.Bow }, rolls).AttackCheck!.Effectiveness);
+    }
+
+    [TestMethod]
     public void MeleeMasterNeverFailsCritically()
     {
         var request = Melee() with { Training = SkillTraining.Master };

@@ -66,9 +66,12 @@ location table.
 
 ## Resolution order
 
-Rolls are made at the same points and in the same order as in the source,
-except where a D2 fix removes one; a damage range with equal bounds draws
-nothing, like the source's `random_between`.
+The combat rolls are made at the same points and in the same order as in the
+source, except where a D2 fix removes one; a damage range with equal bounds
+draws nothing, like the source's `random_between`. CE draws from the same
+generator outside these rolls (the AI's reaction to the attack, weapon sounds,
+the effect tables' stat checks), so a seeded run matches a CE run only once
+those draws are modelled as well.
 
 1. **Refusal** without rolls: an inactive attacker (dead, unconscious,
    paralysed, stunned, stoned) or a dead target critter.
@@ -107,7 +110,7 @@ nothing, like the source's `random_between`.
     out); then resistance (fatigue against ¾ of normal) unless the weapon
     ignores it; hit points `normal + electrical + fire`, ×1.5 / ×0.75 for a PC
     attacker on easy / hard, times the multiplier; a portal or container
-    subtracts its material (stone, brick, metal, force 10; wood 5).
+    subtracts its material (stone, brick, metal, force 10; wood 5; others 0).
 
 `AttackDamage` is a packet: hit-point, fatigue and poison damage, the rolled
 and final values per type, multiplier, critical effects, armour wear and why
@@ -119,7 +122,7 @@ item wear or busting is the vital-state and item owners' job.
 Owner decision D2 fixes confirmed CE slips in the default and keeps the CE
 behaviour behind a switch; the full decision table is in the
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#anomaly-decisions).
-This slice implements the four that touch the attack:
+This slice settles the five that touch the attack (A8 has no switch):
 
 | Anomaly | Default (fixed) | `Source` switch |
 | --- | --- | --- |
