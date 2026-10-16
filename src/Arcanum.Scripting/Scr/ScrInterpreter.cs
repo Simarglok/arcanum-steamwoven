@@ -76,7 +76,7 @@ internal sealed class ScrInterpreter
         var outcome = stop == ScrStop.ReturnRunDefault ? ScrOutcome.RunDefault : ScrOutcome.SkipDefault;
         var flags = _flags.Where(p => p.Value != _host.GlobalFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
-        var result = new ScrRunResult(outcome, stop, _number, stopLine, null, _trace.ToArray(), ScrEffects.None);
+        var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
         return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story);
     }
 
@@ -100,10 +100,9 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.RemoveThisScript: _changedNumber = 0; return (Step.Next, 0);
             case ScrCatalogue.Action.ChangeThisScript:
             {
-                // A computed number outside 0..99999 is a project bound; −1 is the original's "no change" value.
-                var value = Get(a, 0);
-                if (value != -1 && value is < 0 or > ScrCatalogue.MaxScriptNumber) throw new IndexStop(line);
-                _changedNumber = value;
+                // The original stores any value; −1 is its "no change" sentinel (admission refuses a literal outside
+                // 0..99999 as project strictness).
+                _changedNumber = Get(a, 0);
                 return (Step.Next, 0);
             }
             case ScrCatalogue.Action.SetLocalFlag: _localFlags |= 1u << LocalFlag(Get(a, 0), line); return (Step.Next, 0);
@@ -177,6 +176,7 @@ internal sealed class ScrInterpreter
 
     private int Story() { _storyBefore ??= _host.StoryState(); return _story ??= _storyBefore.Value; }
 
-    private static int LocalFlag(int index, int line) => index is >= 0 and < ScrCatalogue.LocalFlags ? index : throw new IndexStop(line);
+    // The original shifts by the number with x86 shl (0x4473C2, 0x4473F5), which uses its low five bits.
+    private static int LocalFlag(int index, int line) => index & (ScrCatalogue.LocalFlags - 1);
     private static int GlobalFlag(int index, int line) => index is >= 0 and < ScrCatalogue.GlobalFlags ? index : throw new IndexStop(line);
 }

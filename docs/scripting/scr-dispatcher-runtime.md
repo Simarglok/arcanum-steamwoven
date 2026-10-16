@@ -53,19 +53,26 @@ original applies them as it goes; a refused script has none.
 Each step returns at once when it applies (CE `object.c` 3866–3908 and
 `script.c` 278–401; original `script_execute` 0x4449B0):
 
-1. Point outside 0..35, the dialog-override slot (31, it names a DLG) or a
-   negative line: `SkipDefault`, `InvalidEvent`.
+1. Point outside 0..35, the dialog-override slot (31, it names a DLG), a
+   negative line or a default (empty) object reference: `SkipDefault`,
+   `InvalidEvent`.
 2. No slot, or script 0: `RunDefault`, `NoScript` (E2).
 3. A use event with a triggerer: the host's trap spot; `Spotted` gives
    `SkipDefault`, `TrapSpotted` (E2).
 4. Missing or unreadable script: `SkipDefault` (E4).
-5. A trap-flagged script (file flags 0x1 or 0x2): `SkipDefault`, `TrapScript`;
-   the trap domain runs it (E4).
+5. A trap script, number 30000..30007 with a trap file flag (0x1 or 0x2), as
+   the original's `trap_script_execute` 0x4BCB70 tests: `SkipDefault`,
+   `TrapScript`. The trap domain runs it and must reproduce what the original does
+   afterwards: the seven installed trap scripts carry the auto-removing flag, so
+   the slot clears and a trap object is destroyed through E3 (E4). A trap flag on
+   any other number is an ordinary script.
 6. A monster generator attachee: `RunDefault` (E5).
-7. Dialog point only (E6): dead without the death-speech flag, or surrendered
-   without the surrender-speech flag: `RunDefault`; mind-controlled: script 2188
-   runs on the NPC's slot instead, its own number is kept afterwards, and a
-   missing 2188 gives `RunDefault` (X5).
+7. Dialog point only (E6). The host reports any combination of dead,
+   surrendered and mind-controlled, and the gates test them in the original's
+   order (0x444A95–0x444B17): dead without the death-speech flag, then
+   surrendered without the surrender-speech flag: `RunDefault`; then
+   mind-controlled: script 2188 runs on the NPC's slot instead, its own number is
+   kept afterwards, and a missing 2188 gives `RunDefault` (X5).
 8. Admission for the set; a refusal is `Refused` with the `ScrRefusal`.
 9. The run, then the writeback (E3).
 
@@ -83,13 +90,17 @@ action. Read in the original at 0x444B8E–0x444C4D:
 | the last line continues | `FellOffEnd` | skip | yes |
 | a line outside the script: a goto to exactly the line count, a start line outside it, an empty script | `LineOutOfRange` | skip | no |
 | 1,000 executed lines (or the option's lower budget) | `Budget` | skip | no |
-| a computed flag number outside 0..31 (local) or 0..3199 (global), or a computed script number outside 0..99999 (−1 excepted) | `IndexOutOfRange` | skip | no |
+| a computed global flag number outside 0..3199 | `IndexOutOfRange` | skip | no |
 
 Auto-removal (file flag 0x4 of the attachment's own script) sets the number to 0.
 Remove this script (5) and change this script (6) take effect after the run and
-win over auto-removal; a change to −1 is the original's "no change" (E10). The
-`IndexOutOfRange` stop is a project bound in both modes: the original would read
-or write outside its flag store or store a nonsense number.
+win over auto-removal; a computed change to −1 is the original's "no change",
+and any other computed value is stored as the original does (E10). Admission
+refuses a literal change outside 0..99999, −1 included (project strictness, no
+installed script has one). A computed local flag number uses its low five bits,
+as the original's `shl` does (0x4473C2, 0x4473F5): 32 is flag 0 and −1 flag 31.
+The `IndexOutOfRange` stop is a fix in both modes: the original would read or
+write outside its global flag store.
 
 Values: a counter reads and writes its byte; a local variable its slot; a number
 is itself; a global flag reads 0 or 1. Add, subtract and multiply wrap as 32-bit
@@ -107,6 +118,7 @@ raises it (original 0x4450A0).
 | X3 tile writeback | the unmodified tile record is stored back | changes persist, as for objects and sectors (D2 fix) | `TileScriptChangesDiscarded` |
 | X3 sector writeback | number, flags and counters persist (CE drops the number: CE slip) | as the original | as the original |
 | X6 negative goto | −1..−4 are control codes | refused by admission (project strictness; no installed script uses one) | refused |
+| global flag number outside 0..3199 | reads or writes outside the flag store | `IndexOutOfRange` stop (both fixed: out of bounds) | the same stop |
 
 Set and clear global flag (100, 101) write 1 and 0 and never spill. The D2 fixes
 above are recorded by this slice; `ScrRuleProfile` is part of
@@ -123,15 +135,19 @@ above are recorded by this slice; `ScrRuleProfile` is part of
 - `tests/Arcanum.Session.Tests/RuleModeTests.cs`: `GameRules.Scripts` per mode.
 - Opt-in, `DAT_ROOT` = the game folder, `ScrDispatcherRealDataTests`: every
   installed script dispatched on a synthetic NPC slot from line 0 in both
-  modes. S2 admits 148 of 2,399 (the 144 of S1 and four that remove or change
-  themselves); 116 end on a return, 25 empty scripts on an unreadable line 0,
-  seven trap scripts go to trap code, 2,251 are refused before running.
+  modes, with the file's own number. S2 admits 148 of 2,399 (the 144 of S1 and
+  four that remove or change themselves); 116 end on a return, 25 empty scripts
+  on an unreadable line 0, the seven trap scripts (30000..30006) go to trap code
+  without running, 2,251 are refused before running; both modes end every run
+  the same way.
 
 ## Not ready
 
 - No session binding: the session has no script slot store, story-state number
   or global variables, so nothing applies `ScrEffects` yet; that needs a snapshot
   schema change (a later slice, coordinated with other schema work).
+- Tile and sector writebacks name no location; the caller applies them to the
+  tile or sector it dispatched.
 - No engine event calls the dispatcher yet; dialogue through it is slice S3, use,
   tile and sector events S4, deferred calls S5, heartbeat S6, combat S7, items S8.
 - Not in the admitted set yet: object operands and focus groups, loops, calls

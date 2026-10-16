@@ -14,6 +14,10 @@ public static class ScrDispatcher
     /// <summary>The script a mind-controlled NPC's dialog event runs instead of its own (E6).</summary>
     public const int MindControlScript = 2188;
 
+    /// <summary>The trap scripts the trap code runs instead of the interpreter: these numbers with a trap file flag
+    /// (original <c>trap_script_execute</c> 0x4BCB70).</summary>
+    public const int FirstTrapScript = 30000, LastTrapScript = 30007;
+
     /// <summary>
     /// An event on an object's slot (E2, E3, E4–E6): no slot or script 0 runs default; a use event first gives the
     /// triggerer a trap spot; then the script runs and a changed slot is written back, or a trap object whose script
@@ -25,7 +29,8 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(host);
         options ??= new();
         options.Validate();
-        if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
+        if (e.Point is < 0 or >= ScrPoint.Count || e.Point == ScrPoint.DialogOverride || e.Line < 0 || e.Attachee.Code is null || e.Triggerer is { Code: null } || e.Extra is { Code: null })
+            return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         var slot = host.Slot(e.Attachee, e.Point);
         if (slot is not { Script: not 0 } own) return Ended(ScrOutcome.RunDefault, ScrStop.NoScript);
         if (e.Point == ScrPoint.Use && e.Triggerer is { } user && host.CheckTrapBeforeUse(user, e.Attachee) == ScrTrapCheck.Spotted)
@@ -34,7 +39,7 @@ public static class ScrDispatcher
         var lookup = host.Script(own.Script);
         if (Unavailable(lookup) is { } missing) return Ended(ScrOutcome.SkipDefault, missing);
         var program = lookup.Program!;
-        if ((program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
+        if (IsTrapScript(own.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
         if (host.IsMonsterGenerator(e.Attachee)) return Ended(ScrOutcome.RunDefault, ScrStop.MonsterGenerator);
 
         var number = own.Script;
@@ -42,19 +47,18 @@ public static class ScrDispatcher
         var ownFlags = program.FileFlags;
         if (e.Point == ScrPoint.Dialog)
         {
-            switch (host.DialogState(e.Attachee))
+            var state = host.DialogState(e.Attachee);
+            if ((state & ScrDialogState.Dead) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0)
+                return Ended(ScrOutcome.RunDefault, ScrStop.DeadWithoutSpeech);
+            if ((state & ScrDialogState.Surrendered) != 0 && (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0)
+                return Ended(ScrOutcome.RunDefault, ScrStop.SurrenderedWithoutSpeech);
+            if ((state & ScrDialogState.MindControlled) != 0)
             {
-                case ScrDialogState.Dead when (program.FileFlags & ScrCatalogue.FileFlag.DeathSpeech) == 0:
-                    return Ended(ScrOutcome.RunDefault, ScrStop.DeadWithoutSpeech);
-                case ScrDialogState.Surrendered when (program.FileFlags & ScrCatalogue.FileFlag.SurrenderSpeech) == 0:
-                    return Ended(ScrOutcome.RunDefault, ScrStop.SurrenderedWithoutSpeech);
-                case ScrDialogState.MindControlled:
-                    number = MindControlScript;
-                    var swapped = host.Script(number);
-                    // The original checks the NPC's own file first, then opens the swapped one; a missing swap runs default (X5).
-                    if (Unavailable(swapped) is { } absent) return Ended(ScrOutcome.RunDefault, absent);
-                    program = swapped.Program!;
-                    break;
+                number = MindControlScript;
+                var swapped = host.Script(number);
+                // The original checks the NPC's own file first, then opens the swapped one; a missing swap runs default (X5).
+                if (Unavailable(swapped) is { } absent) return Ended(ScrOutcome.RunDefault, absent);
+                program = swapped.Program!;
             }
         }
 
@@ -79,6 +83,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
         options.Validate();
+        if (e.Triggerer.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Tile, e.Slot, host, options, discard: options.Rules.TileScriptChangesDiscarded);
     }
 
@@ -89,6 +94,7 @@ public static class ScrDispatcher
         ArgumentNullException.ThrowIfNull(e);
         options ??= new();
         options.Validate();
+        if (e.Player.Code is null) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
         return RunPlaced(ScrSource.Sector, e.Slot, host, options, discard: false);
     }
 
@@ -99,11 +105,14 @@ public static class ScrDispatcher
         var lookup = host.Script(slot.Script);
         if (Unavailable(lookup) is { } missing) return Ended(ScrOutcome.SkipDefault, missing);
         var program = lookup.Program!;
-        if ((program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
+        if (IsTrapScript(slot.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
         var run = Execute(program, slot.Script, slot, 0, program.FileFlags, host, options);
         if (run.Refusal is not null) return run.Result;
         return run.With(!discard && run.Slot != slot ? new ScrWriteback(source, null, ScrPoint.Use, run.Slot) : null, null);
     }
+
+    private static bool IsTrapScript(int number, ScrProgram program) => number is >= FirstTrapScript and <= LastTrapScript &&
+        (program.FileFlags & (ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap)) != 0;
 
     private static ScrStop? Unavailable(ScrScriptLookup lookup) => lookup?.Status switch
     {
@@ -127,6 +136,6 @@ public static class ScrDispatcher
     internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
-            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null ? ScrEffects.None : new ScrEffects(writeback, destroy, Flags ?? Array.Empty<ScrFlagWrite>(), Story));
+            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null ? ScrEffects.None : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story));
     }
 }

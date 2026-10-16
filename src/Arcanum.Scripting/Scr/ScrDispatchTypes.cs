@@ -54,8 +54,10 @@ public sealed record ScrScriptLookup(ScrScriptStatus Status, ScrProgram? Program
     public static ScrScriptLookup Of(ScrProgram program) => new(ScrScriptStatus.Found, program ?? throw new ArgumentNullException(nameof(program)));
 }
 
-/// <summary>What the dialog gates of an NPC attachee see (ARC-RES-042 E6).</summary>
-public enum ScrDialogState { Normal, Dead, Surrendered, MindControlled }
+/// <summary>What the dialog gates of an NPC attachee see (ARC-RES-042 E6); any combination. The original tests dead,
+/// then surrendered, then mind-controlled, each on its own.</summary>
+[Flags]
+public enum ScrDialogState { Normal = 0, Dead = 1, Surrendered = 2, MindControlled = 4 }
 
 /// <summary>The trap spot attempt before a use event (E2): no unspotted trap on the attachee, the trap stayed hidden,
 /// or the triggerer spotted it (the use is cancelled).</summary>
@@ -76,7 +78,8 @@ public interface IScrHost
     int StoryState();
     /// <summary>An NPC that is a monster generator (its slots never run, E5).</summary>
     bool IsMonsterGenerator(ScrObjectRef attachee);
-    /// <summary>Asked only for a dialog event; <see cref="ScrDialogState.Normal"/> for anything that is not an NPC.</summary>
+    /// <summary>Asked only for a dialog event; <see cref="ScrDialogState.Normal"/> for anything that is not an NPC; a
+    /// combination of the three states otherwise.</summary>
     ScrDialogState DialogState(ScrObjectRef attachee);
     /// <summary>Asked only for a use event with a triggerer, before the script; the host owns the roll.</summary>
     ScrTrapCheck CheckTrapBeforeUse(ScrObjectRef triggerer, ScrObjectRef attachee);
@@ -95,7 +98,8 @@ public enum ScrStop
     NoScript,
     /// <summary>The triggerer spotted a trap on the attachee before a use (skip default, E2).</summary>
     TrapSpotted,
-    /// <summary>The script is a trap script, run by trap code, not interpreted (skip default, E4).</summary>
+    /// <summary>The script is a trap script (number 30000..30007 with a trap file flag), run by trap code, not
+    /// interpreted (skip default, E4).</summary>
     TrapScript,
     /// <summary>The script file is missing (skip default, E4; run default for the mind-control script, X5).</summary>
     MissingScript,
@@ -118,7 +122,8 @@ public enum ScrStop
     LineOutOfRange,
     /// <summary>The executed-line budget ran out (skip default, no auto-removal, E9).</summary>
     Budget,
-    /// <summary>A computed flag number outside its store; a project bound (both modes), the run stops with skip default.</summary>
+    /// <summary>A computed global flag number outside 0..3199, which the original would access outside its flag store
+    /// (both fixed); the run stops with skip default.</summary>
     IndexOutOfRange,
     /// <summary>The script is outside the admitted set; nothing ran.</summary>
     Refused,

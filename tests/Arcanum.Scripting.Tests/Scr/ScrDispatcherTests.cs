@@ -64,13 +64,16 @@ public sealed class ScrDispatcherTests
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.MissingScript), (RunNpc(host).Outcome, RunNpc(host).Stop));
         host.Scripts[100] = ScrScriptLookup.Unreadable;
         Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.UnreadableScript), (RunNpc(host).Outcome, RunNpc(host).Stop));
-        foreach (var trap in new[] { ScrCatalogue.FileFlag.NonmagicalTrap, ScrCatalogue.FileFlag.MagicalTrap })
+        foreach (var (trap, number) in new[] { (ScrCatalogue.FileFlag.NonmagicalTrap, 30000), (ScrCatalogue.FileFlag.MagicalTrap, 30007) })
         {
-            var trapped = With(Program(trap, Do(C(100, N(5)))));
+            var trapped = With(Program(trap, Do(C(100, N(5)))), script: number);
             var r = RunNpc(trapped);
             Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.TrapScript), (r.Outcome, r.Stop));
             Assert.IsTrue(r.Effects.IsEmpty);
         }
+        // A trap is both: the number range and a trap file flag (original 0x4BCB70); either alone is an ordinary script.
+        foreach (var (flags, number) in new[] { (ScrCatalogue.FileFlag.MagicalTrap, 100), (ScrCatalogue.FileFlag.MagicalTrap, 30008), (0u, 30000) })
+            Assert.AreEqual(ScrStop.ReturnSkipDefault, RunNpc(With(Program(flags, Do(C(100, N(5))), Do(C(1))), script: number)).Stop, $"{flags} {number}");
     }
 
     [TestMethod]
@@ -101,6 +104,16 @@ public sealed class ScrDispatcherTests
             Assert.AreEqual(ScrStop.ReturnSkipDefault, r.Stop);
             Assert.AreEqual(5, r.Effects.GlobalFlags.Single().Index);
         }
+        // The original tests each state on its own, dead first, then surrendered, then mind control.
+        var both = With(Program(ScrCatalogue.FileFlag.SurrenderSpeech, Do(C(100, N(5))), Do(C(1))), Dialog);
+        both.Scripts[ScrDispatcher.MindControlScript] = ScrScriptLookup.Of(Program(Do(C(100, N(6))), Do(C(1))));
+        both.Dialog = ScrDialogState.Surrendered | ScrDialogState.MindControlled;
+        var swapped = RunNpc(both, Dialog);
+        Assert.AreEqual((ScrDispatcher.MindControlScript, 6), (swapped.Script!.Value, swapped.Effects.GlobalFlags.Single().Index));
+        both.Dialog = ScrDialogState.Dead | ScrDialogState.MindControlled;
+        Assert.AreEqual(ScrStop.DeadWithoutSpeech, RunNpc(both, Dialog).Stop);
+        both.Dialog = ScrDialogState.Dead | ScrDialogState.Surrendered;
+        Assert.AreEqual(ScrStop.DeadWithoutSpeech, RunNpc(both, Dialog).Stop);
         // The gates belong to the dialog point only.
         var heartbeat = With(plain); heartbeat.Dialog = ScrDialogState.Dead;
         Assert.AreEqual(ScrStop.ReturnSkipDefault, RunNpc(heartbeat).Stop);
@@ -181,12 +194,12 @@ public sealed class ScrDispatcherTests
         Assert.AreEqual(9, removed.Effects.GlobalFlags.Single().Index);
         var changed = RunNpc(With(Program(ScrCatalogue.FileFlag.AutoRemoving, Do(C(6, N(321))), Do(C(1)))));
         Assert.AreEqual(321, changed.Effects.Writeback!.Slot.Script, "the change wins over auto-removal");
-        // Computed −1 is the original's "no change"; another value outside 0..99999 stops the run.
+        // Computed −1 is the original's "no change"; any other computed value is stored as the original does.
         var none = RunNpc(With(Program(Do(C(12, (Local, 0), N(0), N(1))), Do(C(6, (Local, 0))), Do(C(1)))));
         Assert.AreEqual(ScrStop.ReturnSkipDefault, none.Stop);
         Assert.IsNull(none.Effects.Writeback);
-        var bad = RunNpc(With(Program(Do(C(10, (Local, 0), N(100000))), Do(C(6, (Local, 0))), Do(C(1)))));
-        Assert.AreEqual((ScrOutcome.SkipDefault, ScrStop.IndexOutOfRange, 1), (bad.Outcome, bad.Stop, bad.StopLine));
+        var odd = RunNpc(With(Program(Do(C(10, (Local, 0), N(100000))), Do(C(6, (Local, 0))), Do(C(1)))));
+        Assert.AreEqual((ScrStop.ReturnSkipDefault, 100000), (odd.Stop, odd.Effects.Writeback!.Slot.Script));
     }
 
     [TestMethod]
@@ -300,13 +313,17 @@ public sealed class ScrDispatcherTests
     }
 
     [TestMethod]
-    public void A_computed_flag_number_outside_its_store_stops_the_run()
+    public void A_computed_local_flag_number_wraps_and_a_global_one_outside_its_store_stops_the_run()
     {
+        // Local flags: the original's shl uses the number's low five bits (0x4473C2), so 32 is flag 0 and −1 flag 31.
+        var wrapped = RunNpc(With(Program(Do(C(10, (Local, 0), N(32))), Do(C(8, (Local, 0))), Do(C(10, (Local, 0), N(-1))), Do(C(8, (Local, 0))), Do(C(1)))));
+        Assert.AreEqual(0x80000001u, wrapped.Effects.Writeback!.Slot.LocalFlags);
+        var tested = RunNpc(With(Program(Do(C(10, (Local, 0), N(33))), L(C(3, (Local, 0)), C(2), C(1))), localFlags: 2));
+        Assert.AreEqual(ScrOutcome.RunDefault, tested.Outcome);
         foreach (var (program, line) in new[]
         {
-            (Program(Do(C(10, (Local, 0), N(32))), Do(C(8, (Local, 0))), Do(C(2))), 1),
-            (Program(Do(C(10, (Local, 0), N(-1))), L(C(3, (Local, 0)), C(2), C(2))), 1),
             (Program(Do(C(100, N(1))), Do(C(10, (Local, 0), N(3200))), Do(C(100, (Local, 0))), Do(C(2))), 2),
+            (Program(Do(C(10, (Local, 0), N(-1))), L(C(43, (Local, 0)), C(2), C(2))), 1),
             (Program(Do(C(10, (Local, 0), N(5000))), L(C(43, (Local, 0)), C(2), C(2))), 1),
         })
         {
@@ -343,8 +360,8 @@ public sealed class ScrDispatcherTests
             var r = ScrDispatcher.RunSector(new(new(77, 0, 0), Pc), host, options);
             Assert.AreEqual((ScrOutcome.RunDefault, new ScrWriteback(ScrSource.Sector, null, Use, new(0, 4, 0))), (r.Outcome, r.Effects.Writeback));
         }
-        host.Scripts[78] = ScrScriptLookup.Of(Program(ScrCatalogue.FileFlag.MagicalTrap, Do(C(2))));
-        Assert.AreEqual(ScrStop.TrapScript, ScrDispatcher.RunSector(new(new(78, 0, 0), Pc), host).Stop);
+        host.Scripts[30001] = ScrScriptLookup.Of(Program(ScrCatalogue.FileFlag.MagicalTrap, Do(C(2))));
+        Assert.AreEqual(ScrStop.TrapScript, ScrDispatcher.RunSector(new(new(30001, 0, 0), Pc), host).Stop);
         Assert.AreEqual(ScrStop.MissingScript, ScrDispatcher.RunSector(new(new(79, 0, 0), Pc), host).Stop);
     }
 
@@ -372,6 +389,11 @@ public sealed class ScrDispatcherTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RunNpc(host, options: new() { MaxExecutedLines = 1001 }));
         var wider = new ScrAdmissionSet("wider", [0, 18], [1, 2], [], [ScrFocusKind.Player]);
         Assert.ThrowsExactly<ArgumentException>(() => RunNpc(host, options: new() { Admission = wider }));
+        // A default object reference is not a valid role.
+        foreach (var e in new ScrObjectEvent[] { new(Heartbeat, default, Pc, null), new(Heartbeat, Npc, default(ScrObjectRef), null), new(Heartbeat, Npc, Pc, default(ScrObjectRef)) })
+            Assert.AreEqual(ScrStop.InvalidEvent, ScrDispatcher.RunObject(e, host).Stop);
+        Assert.AreEqual(ScrStop.InvalidEvent, ScrDispatcher.RunTile(new(new(5, 0, 0), default), host).Stop);
+        Assert.AreEqual(ScrStop.InvalidEvent, ScrDispatcher.RunSector(new(new(5, 0, 0), default), host).Stop);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new ScrObjectRef(0, "x"));
         Assert.ThrowsExactly<ArgumentException>(() => new ScrObjectRef(1, "a b"));
         Assert.ThrowsExactly<ArgumentException>(() => new ScrObjectRef(1, new string('a', 129)));

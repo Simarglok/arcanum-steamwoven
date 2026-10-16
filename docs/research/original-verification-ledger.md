@@ -225,7 +225,8 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    the original, which reads −1..−4 as control codes; whether the Original setting admits them is
    open (the census decides whether any data uses them).
 6. **Tile script 2498 self-removal** ([Virgil script attachments](virgil-script-attachments.md),
-   ARC-RES-037): holds only in CE; in the original the removal does not persist.
+   ARC-RES-037): holds only in CE; in the original the removal does not persist. ARC-SCRIPT-008: it persists in
+   Steamwoven (D2 fix) and not in the Original setting (`TileScriptChangesDiscarded`).
 7. **Starting hero `*n` / `/n`** ([starting hero](starting-hero-evidence.md), SH-07 and the runtime's
    refusal): the original parses the factor, so backgrounds 5 and 11 double their reaction adjustment.
 8. **Magic slices** ([magic core](magic-core-evidence.md)): MG1, MG2 (mastery `ceil(cost / 2)` at run
