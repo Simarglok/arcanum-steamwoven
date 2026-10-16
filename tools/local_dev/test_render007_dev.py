@@ -106,7 +106,7 @@ class Render007DevTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
         tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
-        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
         writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
         self.assertEqual("world-builds", writer["TASKS"]["ARC-INPUT-001"])
         self.assertIn("ARC-INPUT-001", writer["AREA_TASKS"])
@@ -121,18 +121,37 @@ class Render007DevTests(unittest.TestCase):
         self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for("ARC-WORLD-007"))
         self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES["ARC-WORLD-007"])
         self.assertIn("ARC-WORLD-007", retention.AREA_TASKS)
-        for other in ("ARC-WORLD-008", "ARC-WORLD-009", "ARC-WORLD"):
+        for other in ("ARC-WORLD-008", "ARC-WORLD-010", "ARC-WORLD"):
             self.assertNotIn(other, manifests.SUPPORTED_TOOLS["terrain"])
             with self.assertRaises(ValueError):
                 grid_export_gates.gates_for(other)
         tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
-        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
+        self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) area_task=1; regression_task=ARC-WORLD-003", (tools / "validate-macos.sh").read_text())
         writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
         self.assertEqual("world-builds", writer["TASKS"]["ARC-WORLD-007"])
         self.assertIn("ARC-WORLD-007", writer["AREA_TASKS"])
         with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
             with self.assertRaises(ValueError):
                 grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-WORLD-007")
+
+    def test_world009_binds_literally_to_the_area_gate_set_with_the_cave(self):
+        # ARC-WORLD-009 (cave and return) ships on the same whole-core AREA build; area_validate.py adds the
+        # cave input and requires the transition smoke inside the area-original gate.
+        self.assertIn("ARC-WORLD-009", manifests.SUPPORTED_TOOLS["terrain"])
+        self.assertEqual(grid_export_gates.gates_for("ARC-RENDER-007"), grid_export_gates.gates_for("ARC-WORLD-009"))
+        self.assertEqual(retention.REQUIRED_TASK_SUCCESS_GATES["ARC-RENDER-007"], retention.REQUIRED_TASK_SUCCESS_GATES["ARC-WORLD-009"])
+        self.assertIn("ARC-WORLD-009", retention.AREA_TASKS)
+        tools = Path(__file__).resolve().parents[1] / "terrain-viewer/Godot/tools"
+        script = (tools / "validate-macos.sh").read_text()
+        # Both hosts' area-original gates pass the literal task, so the cave input reaches them.
+        self.assertEqual(1, script.count('area_validate.py" --candidate-root "$candidate_root" --task "$task"'))
+        self.assertEqual(1, script.count('area_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task"'))
+        writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
+        self.assertEqual("world-builds", writer["TASKS"]["ARC-WORLD-009"])
+        self.assertIn("ARC-WORLD-009", writer["AREA_TASKS"])
+        with tempfile.TemporaryDirectory(dir=str(self.root)) as evidence:
+            with self.assertRaises(ValueError):
+                grid_export_gates.validate_reports(Path(evidence), "a" * 40, "ARC-WORLD-009")
 
 
 if __name__ == "__main__":

@@ -48,6 +48,9 @@ the synthetic source/exported gates additionally require its palette markers
 ([contract](../input/diagnostic-palette.md)). ARC-WORLD-007 (LMB click-to-move) uses
 literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-007` with the same gate set; its route
 matrix runs in the `area-grid` probes ([contract](../world/click-route-runtime.md)).
+ARC-WORLD-009 (cave and return) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-009`
+with the same gate set; its area-original gates load the cave input and require the
+transition smoke ([viewer](../rendering/terrain-viewer.md#crash-site-cave-and-return-arc-world-009)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original

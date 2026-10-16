@@ -8,7 +8,7 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-007 build, else ARC-INPUT-001, else ARC-RENDER-007
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-009 build, else ARC-WORLD-007, else ARC-INPUT-001, else ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum status                                      # which modes have every input configured
 
@@ -137,8 +137,8 @@ gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003
 and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
 `crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
-an exact ARC-RENDER-007, ARC-INPUT-001 or ARC-WORLD-007 v2 artifact and nothing
-broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007 or ARC-WORLD-009 v2 artifact and
+nothing broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
 
 ## Click-to-move candidate (ARC-WORLD-007)
 
@@ -147,6 +147,20 @@ ARC-WORLD-007 uses the same endpoint, root and literal task mechanism
 set. Its route matrix runs inside the source and exported `area-grid` probes
 (`ARC-WORLD-007 AREA route synthetic PASS`, a failure exits non-zero), and its
 grid-original reports must carry the keyboard route like ARC-INPUT-001's.
+
+## Cave and return candidate (ARC-WORLD-009)
+
+ARC-WORLD-009 uses the same endpoint, root and literal task mechanism
+(`ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-009`) with exactly the ARC-RENDER-007 gate
+set. Its builds take one more input role, `caveMobile` (the cave's object file
+`modules/Arcanum/maps/rknp rivh uhngp`, 6,698 bytes, pinned like the other roles),
+which `./arcanum setup` discovers. The launcher passes `--area-cave-mobile` only when
+the launched manifest's task is ARC-WORLD-009 (`launch.TASK_ROLES`); older AREA
+builds reject that flag and never receive it. In the export, `area_validate.py --task
+ARC-WORLD-009` adds the cave input to both area-original native smokes and requires
+`ARC-WORLD-009 native-smoke transition PASS`. A home configured before this role
+existed must run `./arcanum setup` (or `configure discover --write-inputs`) again;
+`./arcanum status` lists the missing role.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 
