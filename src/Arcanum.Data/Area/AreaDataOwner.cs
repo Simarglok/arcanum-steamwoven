@@ -20,6 +20,9 @@ public sealed partial class AreaDataOwner : IDisposable
     private readonly Dictionary<DatEntry, string> _names = [];
     private readonly object _identity = new();
     private bool _disposed;
+    // Set when Open has just authenticated every input; the first Inspect uses that as its
+    // opening (I0) authentication instead of hashing every input again (ARC-RENDER-009).
+    private bool _openAuthenticated;
     private int _generation;
     private AreaFrameLease? _lease;
     private AreaSnapshot? _published;
@@ -85,6 +88,7 @@ public sealed partial class AreaDataOwner : IDisposable
                 }
             }
             if (!owner._archives.ContainsKey(new(AreaSourceRole.Module))) throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+            owner._openAuthenticated = true;
             return owner;
         }
         catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException or OverflowException)
@@ -125,6 +129,8 @@ public sealed partial class AreaDataOwner : IDisposable
     public AreaBudgetUsage Usage { get { lock (_gate) { return _budget.Usage; } } }
     public AreaBudgetRejection? FirstBudgetRejection { get { lock (_gate) { return _budget.FirstRejection; } } }
     public IReadOnlyList<AreaBudgetPhaseUsage> PhaseHistory { get { lock (_gate) { return _budget.History; } } }
+    // Unsynchronized, for stream callbacks in tests that run on parallel authentication workers.
+    internal AreaBudgetPhase CurrentPhase => _budget.PhaseId;
     public AreaSnapshot? PublishedSnapshot { get { lock (_gate) { return _published; } } }
 
     public AreaInspection Inspect(CancellationToken cancellationToken = default)
@@ -138,7 +144,10 @@ public sealed partial class AreaDataOwner : IDisposable
             try
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                AuthenticateAll(cancellationToken);
+                // Right after Open the whole-input hashes are fresh: I0 then keeps only the cheap
+                // path binding and length checks; I7 still hashes every input after the build.
+                if (_openAuthenticated) { _openAuthenticated = false; CheckBindings(); }
+                else AuthenticateAll(cancellationToken);
                 BeginEntryMemo();
                 var inspection = Build(cancellationToken, output);
                 EndEntryMemo();
@@ -238,8 +247,80 @@ public sealed partial class AreaDataOwner : IDisposable
     private AreaInputIdentity Identity(AreaInputKey key) => _plan.Identities.SingleOrDefault(i => i.Key == key) ?? throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
     private DatArchive Archive(AreaInputKey key) => _archives.TryGetValue(key, out var archive) ? archive : throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
 
-    private void AuthenticateAll(CancellationToken token)
-    { foreach (var identity in _plan.Identities) Authenticate(identity, token); }
+    private void AuthenticateAll(CancellationToken token) => AuthenticateMany(_plan.Identities, token);
+
+    // Whole-input authentication of several held streams (I7, a batch's Complete, a later Inspect's I0).
+    // Inputs under AreaLoaderOptions.ParallelAuthenticationMinBytes are authenticated one by one,
+    // in order. Large ones (ARC-RENDER-009) are admitted, path- and length-checked in order, then read
+    // and hashed in parallel (only the thread-safe read counters change meanwhile), and their verdicts,
+    // position resets and closing path checks follow in the same order, so the first failing input in
+    // plan order is reported. Parallel reads call no owner member: a stream callback that re-enters the
+    // owner's gate from a worker would wait for the operation holding it.
+    private void AuthenticateMany(IReadOnlyList<AreaInputIdentity> identities, CancellationToken token)
+    {
+        var large = identities.Where(identity => identity.Length >= _limits.ParallelAuthenticationMinBytes).ToArray();
+        if (large.Length < 2) { foreach (var identity in identities) Authenticate(identity, token); return; }
+        foreach (var identity in identities) if (identity.Length < _limits.ParallelAuthenticationMinBytes) Authenticate(identity, token);
+        var scratches = new List<AreaOwnership>();
+        try
+        {
+            var jobs = new (AreaInputIdentity Identity, AreaInput Input, BudgetStream Stream)[large.Length];
+            for (var index = 0; index < large.Length; index++)
+            {
+                var identity = large[index];
+                _budget.Context = new(AreaBudgetCallsite.Authentication, identity.Key);
+                var scratch = new AreaOwnership(_budget); scratches.Add(scratch);
+                scratch.Allocate(65536 + 4096);
+                var input = _inputs.Inputs.Single(i => i.Key == identity.Key);
+                if (input.Stream is AreaPathStream pathStream) pathStream.Check();
+                var stream = _streams[identity.Key];
+                if (stream.Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+                jobs[index] = (identity, input, stream);
+            }
+            // Workers share one context: a read rejection during the parallel reads names the pass, not an input.
+            _budget.Context = new(AreaBudgetCallsite.Authentication);
+            var hashes = new string?[jobs.Length]; var failures = new Exception?[jobs.Length];
+            Parallel.For(0, jobs.Length, new ParallelOptions { MaxDegreeOfParallelism = Math.Min(jobs.Length, Environment.ProcessorCount) }, index =>
+            {
+                try { hashes[index] = HashInput(jobs[index].Stream, jobs[index].Identity.Length, token); }
+                catch (Exception error) { failures[index] = error; }
+            });
+            for (var index = 0; index < jobs.Length; index++)
+            {
+                if (failures[index] is { } failure) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(failure).Throw();
+                var (identity, input, stream) = jobs[index];
+                if (stream.Length != identity.Length || hashes[index] != identity.Sha256)
+                    throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+                stream.Position = 0;
+                if (input.Stream is AreaPathStream checkedPath) checkedPath.Check();
+            }
+        }
+        finally { foreach (var scratch in scratches) scratch.Dispose(); }
+    }
+    private void CheckBindings()
+    {
+        foreach (var identity in _plan.Identities)
+        {
+            _budget.Context = new(AreaBudgetCallsite.Authentication, identity.Key);
+            // Admitted like Authenticate's scratch, which also precedes its path checks.
+            using var scratch = new AreaOwnership(_budget); scratch.Allocate(4096);
+            if (_inputs.Inputs.Single(i => i.Key == identity.Key).Stream is AreaPathStream pathStream) pathStream.Check();
+            if (_streams[identity.Key].Length != identity.Length) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+        }
+    }
+    private static string HashInput(Stream stream, long length, CancellationToken token)
+    {
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[65536]; stream.Position = 0; long read = 0;
+        while (read < length)
+        {
+            token.ThrowIfCancellationRequested();
+            var size = stream.Read(buffer, 0, (int)Math.Min(buffer.Length, length - read));
+            if (size == 0) throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Input);
+            read = checked(read + size); hash.AppendData(buffer, 0, size);
+        }
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
     private void Authenticate(AreaInputIdentity identity, CancellationToken token)
     {
         _budget.Context = new(AreaBudgetCallsite.Authentication, identity.Key);

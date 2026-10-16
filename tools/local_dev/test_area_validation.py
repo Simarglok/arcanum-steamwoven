@@ -163,6 +163,12 @@ class AreaValidationTests(unittest.TestCase):
             originalAppearanceCoverage='PASS',drawCoverage='PASS',coreTerrain=36864,coreBodies=499,notApplicable=15,submitted=37363,
             resources=area.resource_summary(RESOURCES))
         area.validate_report(good,head,'source')
+        # Items picked up before the sweep keep the receipt valid only inside the bound.
+        area.validate_report(good|{'resources':good['resources']|{'sweepCommands':37361,'sweepTaken':2}},head,'source')
+        for taken in ({'sweepCommands':37364,'sweepTaken':-1},{'sweepCommands':37363-17,'sweepTaken':17},
+                      {'sweepCommands':37361,'sweepTaken':True},{'sweepCommands':37361,'sweepTaken':'2'},{'sweepCommands':37361,'sweepTaken':1}):
+            with self.subTest(taken=taken),self.assertRaises(ValueError):
+                area.validate_report(good|{'resources':good['resources']|taken},head,'source')
         for change in ({'task':'ARC-WORLD-003'},{'candidateCommit':'b'*40},{'host':'exported'}, {'graphical':False},
                        {'exitCode':1},{'drawCoverage':'NOT_VERIFIED'},{'submitted':37362},{'resources':None}):
             with self.subTest(change=change),self.assertRaises(ValueError):area.validate_report(good|change,head,'source')
@@ -174,11 +180,15 @@ class AreaValidationTests(unittest.TestCase):
 
     def test_resource_observation_is_bounded_and_reduced_to_safe_scalars(self):
         summary=area.resource_summary(RESOURCES)
-        self.assertEqual(('PASS',37363,[9,9]),(summary['outcome'],summary['sweepCommands'],summary['handles']))
+        self.assertEqual(('PASS',37363,0,[9,9]),(summary['outcome'],summary['sweepCommands'],summary['sweepTaken'],summary['handles']))
+        # Items picked up before the sweep stay accounted for.
+        taken=area.resource_summary(RESOURCES|{'SweepCommands':37361,'SweepTaken':2})
+        self.assertEqual((37361,2),(taken['sweepCommands'],taken['sweepTaken']))
         for change in ({'Outcome':'FAIL'},{'SweepCommands':37362},{'MaxGpuFrames':2445},{'MaxGpuBytes':81853097},
                        {'CpuFrames':2445},{'CancelledGenerationPublished':True},{'Handles':[9,10]},
                        {'ManagedBytes':[0,40500000]},{'RetiredGenerationCollected':False},{'ResidentBytes':[0]},{'LoadMilliseconds':[1]},
-                       {'Reuploads':0},{'SweepSteps':'120'}):
+                       {'Reuploads':0},{'SweepSteps':'120'},{'SweepTaken':1},{'SweepTaken':-1},
+                       {'SweepCommands':37363-17,'SweepTaken':17},{'SweepTaken':'2'}):
             with self.subTest(change=change),self.assertRaises(ValueError):area.resource_summary(RESOURCES|change)
 
     def test_original_oracle_is_pinned_before_report_is_read(self):

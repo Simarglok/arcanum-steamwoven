@@ -104,7 +104,10 @@ public sealed class AreaInspection
 }
 
 /// <summary>Explicit owner transfer. All streams must be readable/seekable and distinct.
-/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.</summary>
+/// leaveOpen is honored on success AND failed Open. Streams may not be used externally while leased to an owner.
+/// The owner may read a large input's stream from a worker thread during a parallel authentication pass
+/// while it holds its own lock, so a custom stream must be safe to read from another thread and must not
+/// call back into the owner while it is read.</summary>
 public sealed class AreaInput
 {
     public AreaInput(AreaInputKey key, Stream stream, bool leaveOpen = false)
@@ -160,8 +163,19 @@ public sealed class AreaSourcePlan
     {
         OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
         OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
+        _ when Selection == AreaSectorSelection.AllSectors && AllowArtTrailingBytes => "arc-data-019-whole-map-original-rules-v1",
+        _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-v1",
         _ => "structural-file-effective-v1",
     };
+    /// <summary>How core sectors are chosen: the start sector's four-neighbour component with the
+    /// plan's townmap (the exterior rule), or every sector file under the prefix (a whole map,
+    /// ARC-DATA-019).</summary>
+    public AreaSectorSelection Selection { get; init; } = AreaSectorSelection.TownmapComponent;
+    /// <summary>Read ART as the original does: accept bytes after the last frame
+    /// (<see cref="ArtDecoderOptions.AllowTrailingBytes"/>) and draw a single-rotation ART from
+    /// its only group whatever the requested rotation. Pinned profiles keep their exact
+    /// per-object exceptions instead and ignore this flag.</summary>
+    public bool AllowArtTrailingBytes { get; init; }
     /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans.</summary>
     internal OriginalAreaMap OriginalMap { get; init; }
     internal bool Original => OriginalMap != OriginalAreaMap.None;
@@ -169,6 +183,7 @@ public sealed class AreaSourcePlan
 }
 
 internal enum OriginalAreaMap { None, CrashSiteExterior, CrashSiteCave }
+public enum AreaSectorSelection { TownmapComponent, AllSectors }
 
 public sealed class AreaLoaderOptions
 {
@@ -193,11 +208,15 @@ public sealed class AreaLoaderOptions
     public int MaxPrototypes { get; init; } = 56;
     public int MaxObjects { get; init; } = 524;
     public int MaxVisuals { get; init; } = 2444;
+    /// <summary>Inputs at least this long are hashed in parallel by whole-set authentication passes
+    /// when two or more of them take part (ARC-RENDER-009); 0 parallelizes every such pass.</summary>
+    public long ParallelAuthenticationMinBytes { get; init; } = 1L << 20;
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
             MaxFrameRequests <= 0 || MaxFrameStoredBytes <= 0 || MaxFrameDecodedBytes <= 0 || MaxFrameRgbaBytes <= 0 || MaxFrameEncodedBytes <= 0 ||
-            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0)
+            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0 ||
+            ParallelAuthenticationMinBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(AreaLoaderOptions));
     }
 }

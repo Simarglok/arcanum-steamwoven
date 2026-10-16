@@ -3,11 +3,13 @@
 Status: **Research plan**, work item ARC-RES-039 (2026-10-16). This document
 maps how the pinned source organizes NPC behaviour in and around combat and
 breaks the owner's goal into ordered work: **phase 1** rebuilds the original
-system stage by stage with source parity as the default, **phase 2** adds
+system stage by stage with the source plus the recorded D2 fixes as the
+default, **phase 2** adds
 optional patches (mods) that change the play experience without replacing the
 phase 1 behaviour. It records no final rule, changes no production API,
 viewer, session schema or dialog port, and every stage, code and policy below
-is a **proposal** until the owner accepts it.
+is a **proposal** until the owner accepts it; the owner decisions D1–D7 were
+accepted on 2026-10-16.
 
 Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002)
 (threat detection and hand-off to combat) is the main target;
@@ -30,10 +32,13 @@ its subturn early") is what this plan answers.
 - **First-pass finding**: what one reading of a function shows. Each is
   re-read and either confirmed or corrected by the stage research that owns
   it; nothing here is a contract.
-- **CE anomaly**: a branch that looks inconsistent. Phase 1 records it and
-  keeps the source behaviour behind an explicit switch; phase 2 may fix it.
+- **CE anomaly**: a branch that looks inconsistent. Under decision D2 phase 1
+  fixes a confirmed slip and records it in the [anomaly
+  decisions](#anomaly-decisions); as project policy (supporting D1 parity
+  runs) the source behaviour stays reachable behind a named switch.
 - **Project policy**: a choice this project makes where the source leaves one
-  open. Every policy below is a proposal.
+  open. Every policy below is a proposal unless the [owner
+  decisions](#owner-decisions-2026-10-16) settle it.
 
 No original file, probe or game data was read for this work item. Original
 executable parity is **NOT_VERIFIED**.
@@ -200,6 +205,7 @@ in `src/game/ai.c` unless named.
 ## Phase 1: faithful reconstruction
 
 Goal: an NPC fight in the AREA viewer behaves as the source specifies, with
+the recorded D2 fixes, with
 every random roll injected and seedable and every decision explainable by a
 reason code. Order follows dependencies; each item is one PR.
 
@@ -215,27 +221,30 @@ need only the first two.
 
 ### Research stages (source reading, one document each)
 
-| Stage | Proposed code | Scope (source units) | Output |
-| --- | --- | --- | --- |
-| A1 | ARC-RES-040 | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
-| A2 | ARC-RES-041 | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
-| A3 | ARC-RES-042 | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
-| A4 | ARC-RES-043 | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled. |
-| A5 | ARC-RES-044 | Support and magic: S16–S18. | Heal ladder, ten action lists, eligibility codes, item search (P1, P4, P7). |
-| A6 | ARC-RES-045 | Execution: S19 and the `anim.c` attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
-| A7 | ARC-RES-046 | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup. |
-| A8 | ARC-RES-047 | Script and dialog surface: S21. | Every SAP event and SCR action that reads or writes AI state. |
-| A9 | ARC-RES-048 (Mac) | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight. |
+Codes are allocated when each task is created (D6).
 
-A1 comes first; A2–A5 can run in parallel after it, with A5 reusing the
+| Stage | Code | Scope (source units) | Output |
+| --- | --- | --- | --- |
+| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | Load map and data census; first real fight candidates. |
+| A1 | on creation | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
+| A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
+| A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
+| A4 | on creation | Morale: S14–S15. | Flee/surrender/back-off rules, P2 and P6 settled. |
+| A5 | on creation | Support and magic: S16–S18. | Heal ladder, ten action lists, eligibility codes, item search (P1, P4, P7). |
+| A6 | on creation | Execution: S19 and the `anim.c` attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
+| A7 | on creation | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup. |
+| A8 | on creation | Script and dialog surface: S21. | Every SAP event and SCR action that reads or writes AI state. |
+| A9 | in A0 | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight. |
+
+A0 comes first (D7), then A1; A2–A5 can run in parallel after it, with A5 reusing the
 line-of-fire and protect definitions of A2 and A3; A6–A8 after A3.
-A9 can run any time on the Mac.
+A9 is part of A0.
 
 ### Implementation slices (proposals, after the matching research)
 
 | Slice | Needs | Result |
 | --- | --- | --- |
-| I1 AI parameters | A1, A9 | Data reader for both files and a typed 17-field record with names from A1. |
+| I1 AI parameters | A1, A0 | Data reader for both files and a typed 17-field record with names from A1. |
 | I2 Awareness | A2, I1 | Pure see/hear/line-of-fire functions over explicit inputs; synthetic matrix (FR-AI-002 acceptance). |
 | I3 Danger state | A1, I1 | Session-owned per-NPC state, flags, focus, enemy list, snapshot schema version, script hook points as typed events. |
 | I4 Hostility and targets | A3, I2, I3 | KOS/protect/upset with reason codes, scan and choice with injected rolls. |
@@ -244,7 +253,7 @@ A9 can run any time on the Mac.
 | I7 Melee and ranged executor | A6, combat slices, I4 | Intent to route planner and attack resolver; real-time and turn-based. |
 | I8 Support and magic | A5, magic domain | Heal ladder, lists, eligibility, items, grenades. |
 | I9 Followers in combat | A7, companion follow slices | Join/complain rules, orders, cleanup. |
-| I10 First fight | I1–I7, A9 | One Crash Site fight in the AREA viewer with an AI overlay (state, target, last reason). |
+| I10 First fight | I1–I7, A0 | One Crash Site fight in the AREA viewer with an AI overlay (state, target, last reason). |
 | I11 Parity check | I10 | Scripted scenarios observed in the original game on the Mac compared with seeded runs; NOT_VERIFIED becomes per-rule evidence. |
 
 ### Design rules for phase 1 that phase 2 needs
@@ -252,9 +261,10 @@ A9 can run any time on the Mac.
 1. **Every decision is a named, pure policy.** Target choice, KOS, flee,
    action choice and heal thresholds are functions over explicit records;
    the source behaviour is the default policy, not inline code.
-2. **Every CE anomaly is a switch.** P1..P7 (and those A1–A8 find) are
-   implemented as the source does them behind a named flag, so a patch can
-   flip one without forking the rule.
+2. **Every CE anomaly is a recorded decision.** A confirmed slip (P1..P7 and
+   those A1–A8 find) is fixed in phase 1 (D2), with an entry naming the source
+   behaviour, the chosen behaviour and the reason; the source variant stays
+   behind a named switch so seeded runs can still be compared with CE.
 3. **Randomness is injected and logged.** Each roll has a purpose label, so
    a seeded run replays exactly and a trace shows which roll decided what.
 4. **Decisions return reason codes.** The overlay, tests and mods read the
@@ -262,44 +272,70 @@ A9 can run any time on the Mac.
    `CAST_REFUSED_FAIL_CHANCE`).
 5. **Parameters are data.** Rows load from game files and may be
    overridden from outside the repository; no number lives only in code.
-6. **The source profile is frozen.** A change to default behaviour needs a
-   source reading or an original-runtime observation, never a balance idea.
+6. **The default follows the source plus recorded fixes.** A change to
+   default behaviour needs a source reading, an original-runtime observation
+   or a recorded D2 fix, never a balance idea.
+7. **State does not depend on the profile.** Danger state, focus, enemy list
+   and timers have one schema for every profile, so a profile can change
+   mid-game and any save loads under any profile (D4).
+8. **The decision layer is replaceable as a whole.** Everything that decides
+   sits behind one interface over that state, so a later combat AI or a new
+   combat system (D3) can wrap or replace it, aiming at no save format
+   change.
 
 ## Phase 2: patches and mods
 
 Goal: optional changes on top of the phase 1 rules, chosen per profile,
-never altering the "Original" profile. Nothing here starts before the
-matching phase 1 slice exists.
+never altering the "Default" profile (the source plus the recorded D2 fixes).
+The "Source" variant set (CE behaviour for every D2 fix) exists from phase 1
+(design rule 2); phase 2 only exposes it as a profile. Nothing here starts
+before the matching phase 1 slice exists.
 
-| Step | Proposed code | Content |
+| Step | When | Content |
 | --- | --- | --- |
-| M0 Profiles and policy seams | ARC-RES-049 (plan), then implementation | "Original", "Fixed" and custom profiles; per-policy override points; save files record the profile; the decision trace is the debugging tool. |
-| M1 Bug-fix profile | after A1–A8 | Each confirmed anomaly gets a "fixed" variant (for example P1 nearest item, P2 real party level, the ARC-RES-030 A9 double subturn); the profile is "Original + fixes", nothing else. |
+| M0 Profiles and policy seams | with the first slice that needs a second policy | "Default", "Source" and named alternative profiles; per-policy override points; the active profile is a setting that may change mid-game, saves hold only profile-independent state (D4); the decision trace is the debugging tool. |
+| M1 Source profile | with M0 | The "Source" variants of every D2 fix as a player-selectable profile (for example P1 farthest item, P2 leader level per follower, the combat-core anomaly A9 double subturn), for players who want the original quirks; I11 parity runs use the same variants. |
 | M2 Data overrides | after I1 | External pack (outside the repo, like the HD pack) overriding parameter rows, per-NPC row choice and spell AI priorities; validated, versioned. |
 | M3 Tactical improvements | after I7/I8 | Candidates to test one at a time: threat-based target score (damage, HP, range) instead of the 50/50 rule, focus fire, leftover-AP use in turn-based mode, keeping range and cover for ranged NPCs, friendly-fire checks for area spells (the source checks only grenades), healers prioritising the weakest ally, fleeing toward allies, group cohesion. |
 | M4 Companion control | after I9 | Stances (passive, defensive, aggressive), "don't use consumables", "no area spells", extended orders. |
 | M5 Difficulty and accessibility | after M0 | Aggression and morale scales, "NPC fighting" as a player option instead of a cheat. |
 | M6 AI sandbox | after I10 | Viewer arena: place combatants, run with a seed under two profiles, compare traces and outcomes (win rate, length of fight) for balancing. |
-| M7 Mod interface | owner decision | Data-only mods first; whether code mods (C# plugins or a script language) are allowed is decision D3. |
+| M7 Mod interface | before M8 | Data-only mods first; proposal: code mods (C# or Lua) are chosen when M8 starts (D3). |
+| M8 New combat AI | after M6 | A qualitative rework: revised NPC logic and group interaction patterns among allies and against enemies, as a new decision layer over the phase 1 state (design rule 8), or a full replacement built on Godot (a separate architecture decision, since Data, Simulation, Scripting and Session stay Godot-independent). |
 
-## Owner decisions
+## Anomaly decisions
 
-- **D1 Parity target.** CE reading as the reference until original-runtime
-  observations (I11) exist, or wait for observations before each slice?
-- **D2 Anomalies.** Keep the source behaviour in "Original" and fix only in
-  "Fixed" (proposed), or fix obvious slips already in phase 1? The same
-  decision should cover the combat-core anomalies A1–A9 of ARC-RES-030, whose
-  slice 2 leaves them to an owner decision, so the two tracks share one
-  policy.
-- **D3 Mod format.** Data-only overrides, or also code plugins; where mod
-  files live and how they are validated.
-- **D4 Saves.** May a profile change mid-game, and do patched saves load in
-  "Original"?
-- **D5 Task type.** The naming registry has no `AI` or `COMBAT` type; the
-  implementation slices would go under `WORLD` (session/simulation) unless
-  the owner adds a type to the [naming policy](../workflow/task-naming.md).
-- **D6 Codes.** ARC-RES-040..049 above are proposed and not yet allocated on
-  the board.
+Each confirmed anomaly gets a row here when its stage research settles it:
+source behaviour, chosen behaviour, reason and the switch name. Until then
+P1..P7 above are open, and the combat-core anomalies A1–A9 of
+[ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
+the same rule when combat slice 2 settles them.
+
+| Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
+| --- | --- | --- | --- | --- |
+| — | none settled yet | | | |
+
+## Owner decisions (2026-10-16)
+
+- **D1 Parity target: CE first.** The CE reading is the reference; original
+  runtime observations (I11) are added later as checks.
+- **D2 Anomalies: fix in phase 1 and document.** A confirmed slip is fixed in
+  the default behaviour and recorded under [anomaly
+  decisions](#anomaly-decisions); this also covers the combat-core anomalies.
+- **D3 Mod format: open.** For now the base is fixing the original logic and
+  CE errors (phase 1, D2). A later qualitative AI rework (NPC logic, group patterns with
+  allies and enemies) may need C# or Lua, as a new combat system over the old
+  one or as a full replacement based on Godot; design rules 7 and 8 keep both
+  open.
+- **D4 Profiles: switchable mid-game.** Any save loads under any profile.
+- **D5 Task types: new types.** `AI`, `COMBAT`, `SKILLS`, `MAGIC` and
+  `TECHNOLOGY` are added to the [naming policy](../workflow/task-naming.md);
+  proposed convention (to confirm): combat AI slices use `AI`, combat rules
+  `COMBAT`, magic slices such as I8's spell half `MAGIC`, and research stays
+  `RES`.
+- **D6 Codes: allocated on task creation**, not reserved in advance.
+- **D7 Next step:** first a detailed study of what the original and CE load
+  and run (stage A0), before stage A1.
 
 ## Method
 

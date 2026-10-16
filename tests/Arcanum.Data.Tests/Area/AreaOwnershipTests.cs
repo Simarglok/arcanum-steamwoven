@@ -311,10 +311,11 @@ public sealed class AreaOwnershipTests
                 streamFactory: (_, bytes) => { var s = new ProbeStream(bytes, false); streams.Add(s); return s; });
             var old = fixture.Owner.LoadStrict(); var retained = fixture.Owner.Usage.RetainedReserved;
             using var cancel = new CancellationTokenSource(); var reached = false;
+            // The phase is read without the owner's gate: large inputs are hashed on parallel workers
+            // while the operation holds it.
             foreach (var stream in streams) stream.BeforeRead = (_, _) =>
             {
-                var current = fixture.Owner.PhaseHistory.Last(p => p.Visits > 1).Phase;
-                if (current == phase) { reached = true; cancel.Cancel(); }
+                if (fixture.Owner.CurrentPhase == phase) { reached = true; cancel.Cancel(); }
             };
             // Before this attempt only O and one visit of I0..I7 exist.
             var allocated = GC.GetTotalAllocatedBytes(precise: true);
@@ -372,6 +373,60 @@ public sealed class AreaOwnershipTests
         Assert.IsTrue(after.ReadActual - leaseUsage.ReadActual < leaseUsage.ReadActual - before.ReadActual);
         using var next = fixture.Owner.AcquireSelectedFrame(snapshot, keys[0]);
         CollectionAssert.AreEqual(leased[0], next.CopyRgba());
+    }
+
+    [TestMethod]
+    public void First_strict_load_after_open_uses_the_open_authentication_and_later_loads_hash_twice()
+    {
+        var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+        using var fixture = Make(streams);
+        var module = streams[AreaSourceRole.Module];
+        int WholeReads() => module.Reads.Count(r => r.Position == 0 && r.Requested == Math.Min(65536, module.Length));
+        var opened = WholeReads();
+        Assert.AreEqual(1, opened, "Open authenticates the module once");
+        fixture.Owner.LoadStrict();
+        Assert.AreEqual(1, WholeReads() - opened, "the first build hashes only at I7");
+        var first = WholeReads();
+        fixture.Owner.LoadStrict();
+        Assert.AreEqual(2, WholeReads() - first, "a later build hashes at I0 and I7");
+    }
+
+    [TestMethod]
+    public void Parallel_authentication_detects_changes_balances_ownership_and_honours_cancellation()
+    {
+        foreach (var phase in new[] { AreaBudgetPhase.I0, AreaBudgetPhase.I7 })
+        {
+            var streams = new Dictionary<AreaSourceRole, ProbeStream>();
+            using var fixture = new Fixture([(67108865, [Record(Id(0))])], limits: new() { ParallelAuthenticationMinBytes = 0 },
+                streamFactory: (key, bytes) => { var stream = new ProbeStream(bytes, false); streams.Add(key.Role, stream); return stream; });
+            var old = fixture.Owner.LoadStrict(); var again = fixture.Owner.LoadStrict();
+            Assert.AreEqual(old.Terrain.Count, again.Terrain.Count);
+            var retained = fixture.Owner.Usage.RetainedReserved;
+            // Cancellation from a stream callback on a parallel worker (no owner gate taken).
+            using (var cancel = new CancellationTokenSource())
+            {
+                var reached = false;
+                foreach (var stream in streams.Values) stream.BeforeRead = (_, _) => { if (fixture.Owner.CurrentPhase == phase) { reached = true; cancel.Cancel(); } };
+                Throws<OperationCanceledException>(() => fixture.Owner.Inspect(cancel.Token));
+                Assert.IsTrue(reached, $"phase {phase} reached");
+                foreach (var stream in streams.Values) stream.BeforeRead = null;
+            }
+            Assert.AreSame(again, fixture.Owner.PublishedSnapshot);
+            Assert.AreEqual(retained, fixture.Owner.Usage.RetainedReserved);
+            // A changed input fails the pass and publishes nothing new; reverting restores a clean load.
+            var resource = streams[AreaSourceRole.Resource1];
+            resource.Bytes[0] ^= 1;
+            var report = fixture.Owner.Inspect();
+            Assert.IsFalse(report.IsComplete);
+            Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch), string.Join(',', report.Issues));
+            Assert.AreSame(again, fixture.Owner.PublishedSnapshot);
+            Assert.AreEqual(retained, fixture.Owner.Usage.RetainedReserved);
+            resource.Bytes[0] ^= 1;
+            Assert.AreEqual(old.Terrain.Count, fixture.Owner.LoadStrict().Terrain.Count);
+            var usage = fixture.Owner.Usage;
+            Assert.IsTrue(usage.ReadActual <= usage.ReadReserved);
+        }
+        Throws<ArgumentOutOfRangeException>(() => new Fixture([(67108865, [Record(Id(0))])], limits: new() { ParallelAuthenticationMinBytes = -1 }));
     }
 
     [TestMethod]
