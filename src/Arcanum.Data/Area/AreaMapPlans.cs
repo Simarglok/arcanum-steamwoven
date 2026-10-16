@@ -22,7 +22,8 @@ public sealed class AreaMapPlan
     public WorldLocation? StartTile { get; }
     public AreaSourcePlan Plan { get; }
     public AreaLoaderOptions Limits { get; }
-    internal IReadOnlyList<(AreaInputKey Key, string Path)> Files { get; }
+    /// <summary>The local file of every input the plan authenticates.</summary>
+    public IReadOnlyList<(AreaInputKey Key, string Path)> Files { get; }
 
     /// <summary>Opens the inputs read-only and the owner over them; every stream closes if
     /// opening fails. The owner re-authenticates every input against <see cref="Plan"/>.</summary>

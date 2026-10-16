@@ -36,6 +36,8 @@ public partial class TerrainViewerApp : Node
     private AnimationTimeline? _actorTimeline;
     private TerrainViewerMode _readyMode;
     private AreaLoadResult? _readyArea;
+    /// <summary>ARC-RENDER-017: the interior shown by <c>--area-map</c>; null for the Crash Site exterior.</summary>
+    private string? _readyMapName;
     private static bool IsWorldMode(TerrainViewerMode mode) => mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea;
     private long _readyElapsedMilliseconds;
 
@@ -111,7 +113,8 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        await RunAreaSmokeAsync(result);
+                        if (_readyMapName is not null) await RunAreaMapSmokeAsync(result);
+                        else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
                         result = null;
@@ -924,7 +927,7 @@ public partial class TerrainViewerApp : Node
         // The conversation host borrows the area session, so it is unbound before the session is disposed.
         UnbindAreaConversations(); UnbindAreaHover();
         StopAreaAmbient(); StopAreaTransitions(); StopAreaWalls();
-        _readyArea = null;
+        _readyArea = null; _readyMapName = null;
         _readySourceId = null;
         _readyDecodedCount = 0;
         _readyStaticDecodedCount = 0;

@@ -17,6 +17,10 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
     public AreaLightingPlan? Lighting { get; init; }
     /// <summary>ARC-RENDER-011 wall check inputs, validated at load (empty when the area has no walls).</summary>
     public IReadOnlyList<AreaWallPiece> Walls { get; init; } = Array.Empty<AreaWallPiece>();
+    /// <summary>ARC-RENDER-017: why a whole map is drawn unlit (its lighting sources were not admitted); null otherwise.</summary>
+    public LightingFailure? UnlitReason { get; init; }
+    /// <summary>ARC-RENDER-017: why a lit whole map has no stationary lights; null otherwise.</summary>
+    public LightingFailure? UnlitLightsReason { get; init; }
 }
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
@@ -24,6 +28,10 @@ public static class AreaRepositoryPolicy
 {
     public const int MaxFrames = 2444;
     public const long MaxCpuBytes = 81853096;
+    /// <summary>ARC-RENDER-017: a whole interior map's CPU repository (every distinct frame it draws);
+    /// GPU residency stays within <see cref="MaxFrames"/>/<see cref="MaxCpuBytes"/> of visible frames.</summary>
+    public const int MaxMapFrames = 16384;
+    public const long MaxMapCpuBytes = 160L * 1024 * 1024;
 }
 
 /// <summary>Finite per-generation CPU repository, copied through one strict DATA009
@@ -34,6 +42,7 @@ internal static class AreaLoadOperation
     internal const long MaxCpuBytes = AreaRepositoryPolicy.MaxCpuBytes;
     internal static TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken token)
     {
+        if (arguments.AreaMapName is not null) return AreaMapLoadOperation.Execute(generation, arguments, token);
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
         using var owner = AreaOriginalValidator.OpenFiles(arguments.ModulePath, arguments.ActorResourcePath!, arguments.ResourcePath,
@@ -181,6 +190,16 @@ internal static class AreaLoadOperation
     // actor/traversal authentication stays in Execute, never in this test seam.
     // chartFor (ARC-WORLD-009) charts a map other than the exterior from its own strict snapshot.
     internal static AreaLoadResult ReadArea(long generation, AreaDataOwner owner, CancellationToken token, Func<AreaSnapshot, AreaChart>? chartFor = null)
+        => Read(generation, owner, token, chartFor, null);
+
+    /// <summary>ARC-RENDER-017: <see cref="ReadArea"/> for a whole interior, with the map plan's limits and the map
+    /// repository caps (<see cref="AreaRepositoryPolicy.MaxMapFrames"/>/<see cref="AreaRepositoryPolicy.MaxMapCpuBytes"/>).</summary>
+    internal static AreaLoadResult ReadWholeMap(long generation, AreaDataOwner owner, CancellationToken token, Func<AreaSnapshot, AreaChart> chartFor,
+        AreaLoaderOptions limits) => Read(generation, owner, token, chartFor, limits ?? throw new ArgumentNullException(nameof(limits)));
+
+    // Self-tests reach ReadArea and CopyFrames by reflection with their exact parameter lists; keep those unchanged.
+    private static AreaLoadResult Read(long generation, AreaDataOwner owner, CancellationToken token, Func<AreaSnapshot, AreaChart>? chartFor,
+        AreaLoaderOptions? mapLimits)
     {
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
@@ -190,7 +209,9 @@ internal static class AreaLoadOperation
         Console.WriteLine($"ARC-RENDER-007 load stage=scene-planned commands={plan.Commands.Count}");
         var walls = AreaWallCheck.Pieces(snapshot, plan);
         var initial = owner.Usage;
-        var frames = CopyFrames(owner, snapshot, plan, token);
+        var frames = mapLimits is not null
+            ? Copy(owner, snapshot, plan, token, AreaRepositoryPolicy.MaxMapFrames, AreaRepositoryPolicy.MaxMapCpuBytes, null, mapLimits)
+            : CopyFrames(owner, snapshot, plan, token);
         var retained = frames.Values.Sum(frame => (long)frame.Rgba.Length);
         Console.WriteLine($"ARC-RENDER-007 load stage=frames-retained frames={frames.Count} bytes={retained}");
         token.ThrowIfCancellationRequested();
@@ -205,8 +226,15 @@ internal static class AreaLoadOperation
     internal static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> CopyFrames(AreaDataOwner owner,
         AreaSnapshot snapshot, AreaScenePlan plan, CancellationToken token, int maxFrames = MaxFrames,
         long maxCpuBytes = MaxCpuBytes, Action<int, long>? copied = null)
+        => Copy(owner, snapshot, plan, token, maxFrames, maxCpuBytes, copied, null);
+
+    private static IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Copy(AreaDataOwner owner, AreaSnapshot snapshot, AreaScenePlan plan,
+        CancellationToken token, int maxFrames, long maxCpuBytes, Action<int, long>? copied, AreaLoaderOptions? limits)
     {
-        if (maxFrames is < 0 or > MaxFrames || maxCpuBytes is < 0 or > MaxCpuBytes)
+        // A whole map (ARC-RENDER-017) passes its own plan limits and the larger map repository caps.
+        var mapCaps = limits is not null;
+        if (maxFrames < 0 || maxFrames > (mapCaps ? AreaRepositoryPolicy.MaxMapFrames : MaxFrames) ||
+            maxCpuBytes < 0 || maxCpuBytes > (mapCaps ? AreaRepositoryPolicy.MaxMapCpuBytes : MaxCpuBytes))
             throw new ArgumentOutOfRangeException(nameof(maxFrames));
         token.ThrowIfCancellationRequested();
         var needed = plan.Commands.Select(command => command.Frame).Distinct().ToHashSet();
@@ -214,7 +242,7 @@ internal static class AreaLoadOperation
             .ToDictionary(group => group.Key, group => group.First());
         if (!needed.SetEquals(selected.Keys)) throw new InvalidOperationException("AREA_FRAME_DESCRIPTOR_REQUIRED");
         var initial = owner.Usage;
-        var limits = new AreaLoaderOptions();
+        limits ??= new AreaLoaderOptions();
         var predictedBytes = selected.Values.Sum(visual => checked((long)visual.Width * visual.Height * 4));
         // Pre-admit the cumulative Data domains before the frame batch.
         if (selected.Count > maxFrames || predictedBytes > maxCpuBytes ||
@@ -244,9 +272,9 @@ internal static class AreaLoadOperation
         return new ReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>(frames);
     }
 
-    private static void VerifyRequested(AreaInputIdentity identity, string? requested)
+    internal static void VerifyRequested(AreaInputIdentity identity, string? requested)
     { if (requested is not null && requested != identity.Sha256) throw new AreaException(new(AreaErrorCode.InputIdentityMismatch, AreaStage.Input)); }
-    private static void VerifyFiles(IReadOnlyList<(string Path, AreaInputIdentity Identity)> files, CancellationToken token)
+    internal static void VerifyFiles(IReadOnlyList<(string Path, AreaInputIdentity Identity)> files, CancellationToken token)
     {
         var failures = new Exception?[files.Count];
         Parallel.For(0, files.Count, index =>

@@ -25,6 +25,9 @@ ROOT_ID = "world"
 # ARC-WORLD-007 (LMB click-to-move), which supersedes ARC-INPUT-001 (diagnostic palette),
 # which supersedes ARC-RENDER-007, on the same whole-core AREA mode when its build exists.
 MODES = {"area": ("crash-site-area", ("ARC-RENDER-008", "ARC-WORLD-009", "ARC-WORLD-007", "ARC-INPUT-001", "ARC-RENDER-007")), "world": ("world-diagnostic", ("ARC-WORLD-003",))}
+# ARC-RENDER-017: `map NAME` shows one whole interior in crash-site-area map mode; only an ARC-RENDER-008 build
+# exported with map mode understands it (an older one refuses the arguments).
+MAP_MODE = ("crash-site-area", ("ARC-RENDER-008",))
 
 
 def main_checkout() -> Path:
@@ -54,7 +57,8 @@ def setup(args: argparse.Namespace) -> int:
 
 
 def run(args: argparse.Namespace) -> int:
-    mode, tasks = MODES[args.mode]
+    mode, tasks = MAP_MODE if args.mode == "map" else MODES[args.mode]
+    extra = ("--area-map", args.name) if args.mode == "map" else ()
     roots = config.load_config().get("artifactRoots", {})
     if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
         print("Run ./arcanum setup first.", file=sys.stderr)
@@ -77,7 +81,7 @@ def run(args: argparse.Namespace) -> int:
     if code != 0:
         return code
     try:
-        return local("launch", "terrain", "--mode", mode, *(["--dry-run"] if args.dry_run else []))
+        return local("launch", "terrain", "--mode", mode, *extra, *(["--dry-run"] if args.dry_run else []))
     finally:
         if args.dry_run and previous != candidate:
             conf = config.load_config()
@@ -108,6 +112,8 @@ def status(_: argparse.Namespace) -> int:
         missing = [role for role in launch.MODE_ROLES[mode] + extra + ("sourceId",) if role not in inputs]
         build = f" ({chosen} build)" if chosen else ""
         print(f"{name}{build}: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'}")
+    missing = [role for role in launch.MAP_ROLES + ("sourceId",) if role not in inputs]
+    print(f"map: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} (needs an ARC-RENDER-008 build with map mode)")
     print("selection:", conf.get("launchSelection", {}).get("terrain", "none"))
     return 0
 
@@ -122,6 +128,10 @@ def parser() -> argparse.ArgumentParser:
         command = commands.add_parser(name, help=f"launch --mode {mode} from the current {' or '.join(tasks)} build")
         command.add_argument("--dry-run", action="store_true")
         command.set_defaults(func=run, mode=name)
+    command = commands.add_parser("map", help="launch one whole interior (a maps/ folder name) from the current ARC-RENDER-008 build")
+    command.add_argument("name", help='the map folder name, e.g. "crash site cave"')
+    command.add_argument("--dry-run", action="store_true")
+    command.set_defaults(func=run, mode="map")
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
     return result
 

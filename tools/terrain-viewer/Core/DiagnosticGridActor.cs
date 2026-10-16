@@ -74,8 +74,8 @@ public sealed class DiagnosticGridActor
         + (Session is AreaGridSession ? new Vec2(AreaGridSession.LocationOriginX, 20) : new Vec2(0, 20));
     // The area profile places the actor anywhere in the admitted core chart, from the chart's location origin;
     // WORLD keeps one sector and its retained origin.
-    private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession
-        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, AreaGridSession.MinimumChartCell, AreaGridSession.MaximumChartCell)
+    private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession area
+        ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, area.Chart.MinimumCell, area.Chart.MaximumCell)
             with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
         : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;

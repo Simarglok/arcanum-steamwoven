@@ -21,6 +21,29 @@ public sealed class CorePolicyTests
     }
 
     [TestMethod]
+    public void A_whole_map_takes_the_game_folder_and_one_folder_name_and_refuses_the_crash_site_inputs()
+    {
+        string[] map = ["--mode", "crash-site-area", "--module", "m", "--resource", "r", "--actor-resource", "a", "--source-id", "fixture",
+            "--game-root", "g", "--area-map", "elven ruins"];
+        var parsed = TerrainViewerArguments.Parse(map);
+        Assert.AreEqual(("g", "elven ruins", (string?)null), (parsed.GameRoot, parsed.AreaMapName, parsed.PrototypePath));
+        Assert.IsNotNull(parsed.ActorInput);
+        foreach (var extra in new[] { new[] { "--prototypes", "p" }, ["--area-mobile", "o"], ["--area-effects", "e"], ["--area-patch", "x"],
+            ["--area-cave-mobile", "c"], ["--actor-map-x", "1"], ["--area-map", "other"], ["--game-root", "h"] })
+            AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map, .. extra]));
+        Assert.AreEqual(new string('x', 128), TerrainViewerArguments.Parse([.. map[..^1], new string('x', 128)]).AreaMapName);
+        foreach (var name in new[] { "", " ", "maps/x", "a\\b", "line\nbreak", new string('x', 129) })
+            AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse([.. map[..^1], name]));
+        // Map mode needs the game folder and the actor archive, and only crash-site-area has it.
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(map.Where((_, i) => i is not (10 or 11)).ToArray()));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(map.Where((_, i) => i is not (6 or 7)).ToArray()));
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "world-diagnostic", .. map[2..]]));
+        // The game folder alone is not a mode.
+        AssertThrows<ArgumentException>(() => TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "m", "--resource", "r",
+            "--actor-resource", "a", "--prototypes", "p", "--area-mobile", "o", "--area-effects", "e", "--area-patch", "x", "--source-id", "fixture", "--game-root", "g"]));
+    }
+
+    [TestMethod]
     public void Arguments_require_explicit_non_path_source_id_and_normalize_hashes()
     {
         var result = TerrainViewerArguments.Parse(["--module", "m", "--resource", "r", "--source-id", "fixture", "--expect-module-sha256", new string('A', 64)]);

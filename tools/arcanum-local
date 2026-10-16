@@ -117,10 +117,16 @@ def command_launch(args: argparse.Namespace) -> None:
         raise ValueError("crash-site-area requires an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2 artifact")
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
+    # ARC-RENDER-017: one whole interior; only the newest AREA builds (ARC-RENDER-008 exports) carry map mode.
+    if args.area_map is not None and (tool != "terrain" or args.mode != "crash-site-area"
+                                   or (manifest.get("schema"), manifest.get("task")) != ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
+        raise ValueError("--area-map requires terrain --mode crash-site-area from an ARC-RENDER-008 build exported with map mode")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
-        argv = [*argv[:separator + 1], *launch.terrain_arguments(conf.get("inputs", {}), args.mode or "terrain-only", preview, task=manifest.get("task"))]
+        inputs = conf.get("inputs", {})
+        argv = [*argv[:separator + 1], *(launch.map_arguments(inputs, args.area_map) if args.area_map is not None
+                else launch.terrain_arguments(inputs, args.mode or "terrain-only", preview, task=manifest.get("task")))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
                       dry_run=args.dry_run, show_paths=args.show_paths))
 
@@ -184,6 +190,7 @@ def parser() -> argparse.ArgumentParser:
     selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)
     launcher = top.add_parser("launch"); launcher.add_argument("launch", choices=manifests.SUPPORTED_TOOLS); launcher.add_argument("--mode", choices=("terrain-only", "combined", "actor-diagnostic", "world-diagnostic", "crash-site-area")); launcher.add_argument("--allow-duplicate", action="store_true"); launcher.add_argument("--dry-run", action="store_true"); launcher.add_argument("--show-paths", action="store_true")
+    launcher.add_argument("--area-map")
     for option in launch.ACTOR_DEFAULTS:
         launcher.add_argument("--" + option.replace("_", "-"))
     launcher.set_defaults(func=command_launch)

@@ -365,6 +365,12 @@ Native automated readback is software evidence, not a physical Xbox comfort
 measurement or ordinary-launch observation. A source pass is not an exported
 artifact, independent review, publication or merge claim.
 
+### Whole interior map (ARC-RENDER-017)
+
+`crash-site-area` with `--game-root GAME --area-map NAME` (no `--prototypes` or Crash
+Site inputs) shows one whole interior of the game folder's module content stack
+instead of the pinned exterior; see [map mode](area-map-mode.md).
+
 ### Crash Site cave and return (ARC-WORLD-009)
 
 `crash-site-area` takes an optional `--area-cave-mobile PATH`, the cave's

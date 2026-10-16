@@ -38,20 +38,32 @@ public partial class TerrainViewerApp
         StopAreaTransitions();
         _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
         if (result.Area is not { } area) return;
+        // ARC-RENDER-017: a whole interior (--area-map) has its own chart and none of the Crash Site roster.
+        var mapMode = arguments.AreaMapName is not null;
         // ARC-WORLD-017: the roster companions are exterior NPCs; their T0 bodies can stand on any loaded map.
-        _companionTemplates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
+        _companionTemplates = mapMode ? [] : AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
             AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
-        if (clock is not { } profile) { _areaUseStatus = "cave: not loaded (no session clock)"; return; }
+        if (clock is not { } profile)
+        {
+            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock" : "cave: not loaded (no session clock)";
+            return;
+        }
         // The game-generated object file carries an empty module GUID here, so the session's module id is
         // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
         var header = Convert.FromHexString(moduleSha)[..16];
-        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), AreaGridSession.Cell(AreaGridSession.Spawn), area.Snapshot.RuntimeMap);
+        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap);
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         BindAreaInventory(result);
+        if (mapMode)
+        {
+            _areaUseStatus = $"map {arguments.AreaMapName}: transitions not wired (ARC-RES-035 / M3)"
+                + (area.UnlitLightsReason is { } lights ? $"; stationary lights not drawn ({lights})" : "");
+            return;
+        }
         if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
         // The cave draws a visiting companion from its own frame repository: the companions' T0 frames are added once.
         _caveLoad = _companionTemplates.Count == 0 ? cave
@@ -133,7 +145,7 @@ public partial class TerrainViewerApp
         foreach (var cell in candidates.OrderBy(c => Math.Max(Math.Abs(c.X - center.X), Math.Abs(c.Y - center.Y)))
             .ThenBy(c => Math.Max(Math.Abs(c.X - actor.X), Math.Abs(c.Y - actor.Y))))
         {
-            if (cell.X is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell || cell.Y is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell) continue;
+            if (!chart.Contains(cell)) continue;
             var world = chart.ToWorld(cell);
             if (!steps.IsAdmitted(world)) continue;
             foreach (var direction in Enum.GetValues<Arcanum.Data.Traversal.CardinalTraversalDirection>())
@@ -239,7 +251,10 @@ public partial class TerrainViewerApp
 
     private string AreaTransitionStatus()
     {
-        if (_areaTransitions is null) return " | " + _areaUseStatus;
+        if (_areaTransitions is null)
+            return _areaSession?.QueryActor() is { } actor && _readyMapName is not null
+                ? $" | session actor map {actor.Map.RuntimeMap} cell ({actor.Cell.X},{actor.Cell.Y}) rev {_areaSession.Version.Revision} | {_areaUseStatus}"
+                : " | " + _areaUseStatus;
         var placed = _areaSession!.QueryActor();
         return $" | map {(InCave ? "Crash Site cave (5078/79)" : "Crash Site exterior (5000/1)")} | session actor map {placed.Map.RuntimeMap} cell ({placed.Cell.X},{placed.Cell.Y}) rev {_areaSession.Version.Revision} | {_areaUseStatus}";
     }
