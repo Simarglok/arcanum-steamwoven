@@ -107,6 +107,49 @@ independently authored and does not copy or execute that source or the research
 probe. The [minimal dialog contract](../scripting/dialog-minimal-contract.md)
 is a separate proposal, not part of this physical reader.
 
+## Original read mode (ARC-DATA-017)
+
+`DlgReaderOptions.Mode = DlgReadMode.Original` reads a file the way the pinned CE
+`dialog_load_internal` → `dialog_parse_entry` → `dialog_parse_field` does; the
+default `Strict` mode above is unchanged and remains the contract of the
+conversation runtime.
+
+- Fields flow: each field is found by skipping to the next `{`, whatever lies
+  between (white space, line breaks, stray text); a `//` pair outside a field
+  starts a comment to the end of its line. As in the original, line breaks and a
+  stray `}` do not reset the pair detection, so `/`, line break, `/` is a comment
+  too. Non-white-space bytes skipped this way, other than comments, are counted
+  in `DlgDocument.SkippedBytes`.
+- A field runs to the next `}`; an inner `{` is part of its text. Field bytes are
+  kept as stored: the original reads in text mode and sees CR LF as LF, so a
+  consumer that shows text must do the same (2 installed fields contain CR LF).
+- Seven fields make a record regardless of line breaks. Id, IQ and response
+  are read like C `atoi` (leading digits, else 0; out-of-range values saturate).
+- Reading stops, keeping the records before, where the original stops:
+  input ending inside a record (`IncompleteRecord`, that record dropped), a
+  non-empty IQ that reads as 0 (`ZeroIq`), or a response starting with `#`
+  (`HashResponse`). `DlgDocument.StopReason` reports it; a clean end is
+  `EndOfInput`. An empty file reads as zero records.
+- Repeated ids are kept and counted in `DuplicateIds`; `TryGetRecord` returns
+  the first (the original's sorted lookup may find either).
+- IQ is checked as soon as its field is read and the response as soon as its
+  field is read, so a stop is reported even if the input ends right after.
+- NUL bytes and the input, field and record limits still refuse. Two known
+  divergences: the original cuts a field at 999 characters while this reader
+  keeps up to `MaxFieldBytes` (4 KiB) and refuses longer ones (the longest
+  installed field is 448 bytes), and the original drops the rest of a line after
+  a NUL while this reader refuses it.
+
+Installed original (opt-in `DlgOriginalModeTests`, `DAT_ROOT`): all 709 DLG
+files read. The 671 the strict mode accepts read identically; of the 38 it
+refuses, 4 hold a single record that lacks its last field, so the original
+loads nothing from them either (they read as `IncompleteRecord` with zero
+records); the test asserts these counts, one file with skipped bytes and no
+repeated ids. A manual breakdown of the other 34 (not asserted): 31 have white
+space between fields, 1 has stray text between records, and 2 have a number
+field that is not a plain number (an IQ of `5, -17`, a response starting with
+text).
+
 ## Explicit exclusions
 
 This reader does not implement a dialogue interpreter/runtime, writer, text

@@ -62,6 +62,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--building-self-test"])) { BuildingSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--companion-consent") return ProbeCompanionConsent(args[1..]);
             if (args.SequenceEqual(["--companion-consent-self-test"])) { CompanionConsentSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--script-attachments") return ProbeScriptAttachments(args[1..]);
+            if (args.SequenceEqual(["--script-attachments-self-test"])) { ScriptAttachmentSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--virgil-auto-level") return ProbeVirgilAutoLevel(args[1..]);
             if (args.SequenceEqual(["--virgil-auto-level-self-test"])) { VirgilAutoLevelSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--item-inventory") return ProbeItemInventory(args[1..]);
@@ -103,6 +105,8 @@ internal static partial class Program
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("WORLD_", StringComparison.Ordinal) && exception.Message.All(c => c is '_' || char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c)) || exception.Message.StartsWith("world self-test failed: ", StringComparison.Ordinal) ? exception.Message : "WORLD_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--companion-consent", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("CONSENT_", StringComparison.Ordinal) || exception.Message.StartsWith("consent self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CONSENT_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--script-attachments", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("ATTACH_", StringComparison.Ordinal) || exception.Message.StartsWith("attach self-test failed: ", StringComparison.Ordinal) ? exception.Message : "ATTACH_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--virgil-auto-level", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("AUTOLEVEL_", StringComparison.Ordinal) || exception.Message.StartsWith("autolevel self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AUTOLEVEL_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--item-inventory", StringComparison.Ordinal))

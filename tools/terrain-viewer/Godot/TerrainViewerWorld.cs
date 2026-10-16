@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
     private bool PaletteOpen => _worldPanel?.IsOpen == true;
-    private bool WorldModal => PaletteOpen || ConversationOpen;
+    private bool WorldModal => PaletteOpen || ConversationOpen || InventoryOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => _worldActor.FootAnchor;
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -164,7 +164,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -306,6 +306,7 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
         if (ConversationOpen) { HandleConversationPulse(intent); return; }
+        if (InventoryOpen) { HandleInventoryPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -432,13 +433,14 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         if (ProcessAreaTransition()) return;
         ProcessTalkAfterRoute();
+        ProcessInventoryAfterRoute();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
         var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null || WorldModal ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
-        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); }
+        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
@@ -572,9 +574,11 @@ public partial class TerrainViewerApp
         if (TryAreaTalk(screen)) return;
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) return;
+        // ARC-UI-004: a press on an item on the ground picks it up, on a dead NPC loots it (walking within reach first).
+        if (TryAreaInventoryClick(screen)) return;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
-        CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it");
+        CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it"); CancelInventoryApproach("a ground click replaced it");
         var accepted = route.SetTarget(cell, WorldTime);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
@@ -590,6 +594,13 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // ARC-UI-004: the open inventory window owns every key (I and Escape close it).
+        if (InventoryOpen && input is InputEventKey inventoryKey)
+        {
+            HandleInventoryKey(inventoryKey);
             GetViewport().SetInputAsHandled();
             return;
         }
@@ -611,7 +622,7 @@ public partial class TerrainViewerApp
                 return;
             }
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
         }
         var raw = _worldAdapter.Map(input, _worldFocused);

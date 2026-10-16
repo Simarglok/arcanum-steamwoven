@@ -25,7 +25,7 @@ public partial class TerrainViewerApp
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         _conversationHost = arguments.AreaEffectsPath is { } dialogs && _areaSession is { } session
-            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session) : null;
+            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session, inventory: _inventoryHost) : null;
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
@@ -60,7 +60,7 @@ public partial class TerrainViewerApp
     private bool TryAreaTalk(Vector2 screen)
     {
         if (ConversationOpen || ActorCell() is not { } cell || SpeakerAtScreen(screen) is not { } speaker) return false;
-        CancelTalkApproach("another NPC click replaced it"); CancelAreaUseApproach("a talk click replaced it");
+        CancelTalkApproach("another NPC click replaced it"); CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
         var distance = AreaConversationHost.Distance(speaker, cell.X, cell.Y);
         if (distance <= _conversationHost!.Profile.Reach)
         {

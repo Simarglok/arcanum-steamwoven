@@ -167,11 +167,17 @@ matters only for the game UI.
 - **U1 Generated sectors:** template choice, transition tables, relocation of
   template objects and lights, and whether absent interior sectors inside a
   larger TDF grid are generated or void. Next: ARC-RES-034.
-- **U2 ART trailing bytes:** exact trailing sizes of the 437 files and which of
-  the 92 world ART files are referenced by placed objects. Next: ARC-DATA-015
-  measures both before choosing the policy.
-- **U3 DLG refusals:** whether the 38 files are valid for the original reader.
-  Next: when a world conversation needs one of them.
+- **U2 ART trailing bytes (closed by ARC-DATA-016):** every frame of the 437
+  files decodes exactly; the tail is 1 byte in 44 files, 2–64 in 134 and more
+  in 259, and the original reader never looks at it. The decoder now accepts it
+  on request ([ART format](../formats/art.md#trailing-bytes-after-the-last-frame-arc-data-016));
+  the counts in this census are for the strict default.
+  Which world ART files placed objects reference stays open.
+- **U3 DLG refusals (closed by ARC-DATA-017):** the original reader skips
+  anything between fields and reads numbers like `atoi`, so all 38 files load
+  in the game; 4 of them hold one record missing its last field and load empty.
+  An opt-in original read mode now matches this
+  ([DLG reader](../formats/dlg-reader.md#original-read-mode-arc-data-017)).
 - **U4 Map transitions:** jump points and scripted teleports. Next: ARC-RES-035.
 - **U5 Modifications:** no mod was examined. A mod can add object or sector
   variants this installation does not contain; the record-level refusal above is

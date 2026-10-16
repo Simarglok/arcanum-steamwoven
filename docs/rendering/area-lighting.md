@@ -77,7 +77,7 @@ live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on origina
 game keys. In `crash-site-area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
 line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
-(`time flows 8x`) or is paused (`PAUSED (dialog/palette open)`), the scheme id and
+(`time flows 8x`) or is paused (`PAUSED (dialog/palette/inventory open)`), the scheme id and
 whether it came from the map default. Without loaded lighting (other WORLD modes)
 both actions report "unavailable". No launch argument or key binding was added.
 

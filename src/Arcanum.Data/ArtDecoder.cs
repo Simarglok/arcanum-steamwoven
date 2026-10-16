@@ -16,7 +16,7 @@ public static class ArtDecoder
         {
             frames[index] = layout.Frames[index].ToMetadata(artBytes);
         }
-        return new ArtMetadata(layout.Header, frames);
+        return new ArtMetadata(layout.Header, frames, layout.TrailingBytes);
     }
 
     public static ArtFrame Decode(ReadOnlySpan<byte> artBytes, ArtFrameSelection selection, ArtDecoderOptions? options = null)
@@ -95,12 +95,13 @@ public static class ArtDecoder
             EnsureRange(artBytes, payloadStart, payloadOffset - payloadStart, "ART frame payload is truncated.");
         }
 
-        if (payloadOffset != artBytes.Length)
+        // Every payload is already inside the input, so a difference is a tail after the last frame.
+        if (payloadOffset != artBytes.Length && !options.AllowTrailingBytes)
         {
             throw new ArtFormatException("ART frame payloads do not consume the input exactly.");
         }
 
-        return new ParsedArt(header, palettes, frames);
+        return new ParsedArt(header, palettes, frames, artBytes.Length - payloadOffset);
     }
 
     private static ArtHeader ParseHeader(ReadOnlySpan<byte> bytes, ArtDecoderOptions options, out int totalFrames)
@@ -264,7 +265,7 @@ public static class ArtDecoder
         if (offset < 0 || length < 0 || offset > bytes.Length - length) throw new ArtFormatException(message);
     }
 
-    private sealed record ParsedArt(ArtHeader Header, ArtPalette?[] Palettes, ParsedFrame[] Frames);
+    private sealed record ParsedArt(ArtHeader Header, ArtPalette?[] Palettes, ParsedFrame[] Frames, int TrailingBytes);
     private readonly record struct ParsedFrame(int HeaderOffset, int PayloadOffset, int Width, int Height, int EncodedPayloadLength,
         int PixelCount, int RgbaBytes, int HotX, int HotY, int OffsetX, int OffsetY)
     {
