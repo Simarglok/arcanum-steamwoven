@@ -13,7 +13,8 @@ namespace Arcanum.Session;
 /// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs), the player
 /// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
 /// loot, negative dialog IN) over host-attached T0 map inventories, the seeded gameplay randomness (labelled rolls) and the
-/// life of the hero and the NPCs (hit points, fatigue, poison, injuries, knockout, death).
+/// life of the hero and the NPCs (hit points, fatigue, poison, injuries, knockout, death), and the active rule mode
+/// (Steamwoven or Original, ARC-WORLD-023), which is a setting and not saved.
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -35,6 +36,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
+    private GameRules _rules = GameRules.Steamwoven;
     private long _revision;
     private int _totalChanges;
     private bool _disposed;
@@ -57,7 +59,7 @@ public sealed class GameSessionOwner : IDisposable
     /// </summary>
     public static GameSessionCreationResult Create(GameSessionDescriptor? descriptor)
     {
-        if (descriptor?.Flags is null) return Rejected(GameSessionFailure.InvalidDescriptor);
+        if (descriptor?.Flags is null || !Enum.IsDefined(descriptor.Rules)) return Rejected(GameSessionFailure.InvalidDescriptor);
         if (!SessionValidation.Actor(descriptor.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         var limits = descriptor.Limits ?? new GameSessionLimits();
         HeroDomain? hero = null;
@@ -86,9 +88,9 @@ public sealed class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-                new(descriptor.RandomSeed), life, null),
-            GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
+        var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
+            new(descriptor.RandomSeed), life, null) { _rules = GameRules.For(descriptor.Rules) };
+        return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
     /// <summary>
@@ -98,7 +100,7 @@ public sealed class GameSessionOwner : IDisposable
     /// </summary>
     public static GameSessionCreationResult Restore(GameSessionSnapshot? snapshot, GameSessionRestoreOptions? options)
     {
-        if (options is null) return Rejected(GameSessionFailure.InvalidDescriptor);
+        if (options is null || !Enum.IsDefined(options.Rules)) return Rejected(GameSessionFailure.InvalidDescriptor);
         if (snapshot is null) return Rejected(GameSessionFailure.InvalidSnapshot);
         if (snapshot.SchemaVersion != GameSessionSnapshot.CurrentSchemaVersion) return Rejected(GameSessionFailure.UnsupportedSchema);
         if (snapshot.Identity.World != options.ExpectedIdentity.World) return Rejected(GameSessionFailure.WrongWorld);
@@ -140,9 +142,10 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, hero, inventory,
-                new(snapshot.Random.Seed, snapshot.Random.Draws), life, snapshot.Lighting),
-            GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
+        var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
+            hero, inventory, new(snapshot.Random.Seed, snapshot.Random.Draws), life, snapshot.Lighting)
+        { _rules = GameRules.For(options.Rules) };
+        return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
     public GameSessionOwnerIdentity Identity { get { ThrowIfDisposed(); return _identity; } }
@@ -771,6 +774,27 @@ public sealed class GameSessionOwner : IDisposable
     {
         ThrowIfDisposed();
         return Life(expected, target, true, (state, facts, _) => LifeRules.ClearStun(state, facts));
+    }
+
+    /// <summary>
+    /// The active rules (owner decision D8, contract docs/world/rule-modes.md): the profile each domain reads at the moment
+    /// it decides. Starts from the descriptor's or restore options' mode.
+    /// </summary>
+    public GameRules Rules { get { ThrowIfDisposed(); return _rules; } }
+
+    /// <summary>
+    /// Switches the rule mode at once, between any two calls, without a restart: the next decision of every domain
+    /// follows the new mode. Domain state never depends on the mode, so nothing is converted, the revision does not move
+    /// and the snapshot does not record it (D4). The same mode is <see cref="GameSessionDisposition.NoChange"/>; an
+    /// undefined value is <see cref="GameSessionDisposition.Rejected"/> and keeps the active mode.
+    /// </summary>
+    public GameSessionDisposition SelectRules(RuleMode mode)
+    {
+        ThrowIfDisposed();
+        if (!Enum.IsDefined(mode)) return GameSessionDisposition.Rejected;
+        if (mode == _rules.Mode) return GameSessionDisposition.NoChange;
+        _rules = GameRules.For(mode);
+        return GameSessionDisposition.Changed;
     }
 
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>

@@ -208,7 +208,7 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    no switch.
 2. **Dodge 5 × level** ([attack resolver](../world/attack-resolver-runtime.md), ARC-COMBAT-001,
    `AttackRules.DodgeEffectiveness`): implemented from CE; the original uses 2 × level. Under D8 both
-   settings follow the original.
+   settings follow the original; ARC-WORLD-023 changed the resolver to 2 × level.
 3. **Skills §9.5** ([skills study](skills-evidence.md#9-consequences-for-steamwoven-project-policy-proposals)):
    SK1, SK2, SK4 and SK5 are CE slips, so the Original setting reproduces none of them; SK2's "one point
    per click" becomes a design choice, not a fix. SK8 stays a switch candidate; SK7 is the original's

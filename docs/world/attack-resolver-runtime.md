@@ -96,7 +96,9 @@ those draws are modelled as well.
    for firearms experts), armour (`effectiveness × (AC/2)/100`, skipped by a
    trained true backstab), range (out of range or blocked = +1 000 000,
    5 per cell beyond PE/2 unless master), cover, light, injury.
-7. **Dodge** of a hit critter: `5 × level` capped at 95, difficulty from
+7. **Dodge** of a hit critter: `2 × level` capped at 95 (the original's
+   formula; CE's `5 × level` is a reconstruction slip, see the
+   [verification ledger](../research/original-verification-ledger.md)), difficulty from
    blindness and crippled legs, auto-fail when it cannot move; a critical
    dodge becomes a critical miss with 0/10/50/100 % by dodge training.
 8. **Fate**: a PC attacker's critical-hit fate forces a critical hit; else a

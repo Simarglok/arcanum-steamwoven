@@ -61,17 +61,18 @@ public sealed class AttackResolverTests
     [TestMethod]
     public void DodgeTurnsAHitIntoAMissAndACriticalDodgeIntoACriticalMiss()
     {
-        var target = Npc() with { DodgeLevel = 10, DodgeTraining = SkillTraining.Expert };
+        // Dodge 20: effectiveness 2 × 20 = 40 (the original's 2L), critical chance 40 / 20 = 2.
+        var target = Npc() with { DodgeLevel = 20, DodgeTraining = SkillTraining.Expert };
         var dodged = Run(Melee() with { Target = target }, Concat(Opening(),
-            new[] { (AttackCheck, 10), (AttackCritical, 1), (DodgeCheck, 50), (DodgeCritical, 3) }));
+            new[] { (AttackCheck, 10), (AttackCritical, 1), (DodgeCheck, 40), (DodgeCritical, 3) }));
         Assert.AreEqual(AttackOutcome.Miss, dodged.Outcome);
         Assert.AreEqual(AttackMissCause.Dodged, dodged.MissCause);
         Assert.IsTrue(dodged.AttackCheck!.Critical, "the dodge also removes the critical hit");
-        Assert.AreEqual(new SkillCheck(50, 0, 50, true, 2, 3, false), dodged.DodgeCheck);
+        Assert.AreEqual(new SkillCheck(40, 0, 40, true, 2, 3, false), dodged.DodgeCheck);
 
         var critical = Run(Melee() with { Target = target }, Concat(Opening(), new[]
         {
-            (AttackCheck, 10), (AttackCritical, 100), (DodgeCheck, 50), (DodgeCritical, 2), (DodgeCriticalMiss, 50),
+            (AttackCheck, 10), (AttackCritical, 100), (DodgeCheck, 40), (DodgeCritical, 2), (DodgeCriticalMiss, 50),
             (CriticalSelfHit, 51), (Normal, 6),
         }));
         Assert.AreEqual(AttackOutcome.CriticalMiss, critical.Outcome);
@@ -83,7 +84,7 @@ public sealed class AttackResolverTests
         // Expert: 50 % chance, so 51 keeps a plain dodge.
         var plain = Run(Melee() with { Target = target }, Concat(Opening(), new[]
         {
-            (AttackCheck, 10), (AttackCritical, 100), (DodgeCheck, 50), (DodgeCritical, 2), (DodgeCriticalMiss, 51),
+            (AttackCheck, 10), (AttackCritical, 100), (DodgeCheck, 40), (DodgeCritical, 2), (DodgeCriticalMiss, 51),
         }));
         Assert.AreEqual(AttackOutcome.Miss, plain.Outcome);
     }
