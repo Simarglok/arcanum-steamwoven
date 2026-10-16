@@ -216,7 +216,8 @@ Combat core slices 1–4 of [ARC-RES-030](combat-core-evidence.md#proposed-imple
 mode), the [reaction owner](npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
 (slices 1–2), the [companion follow slices](companion-follow-evidence.md) of
 ARC-RES-024 (no code allocated yet) and, for slice I8, the magic/tech domain
-(FR-MAGIC-001..006). The research stages need none of these; slices I1–I7
+(FR-MAGIC-001..006; what I8 needs from the magic core is listed in
+[ARC-RES-043](magic-core-evidence.md#what-ai-slice-i8-needs-from-this-domain)). The research stages need none of these; slices I1–I7
 need only the first two.
 
 ### Research stages (source reading, one document each)
@@ -310,11 +311,23 @@ source behaviour, chosen behaviour, reason and the switch name. Until then
 P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-ce-anomalies-found-by-this-reading)
 are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
-the same rule when combat slice 2 settles them.
+the same rule when combat slice 2 settles them, as do the magic-core anomalies
+MG1..MG20 of [ARC-RES-043](magic-core-evidence.md#ce-anomalies-recorded-not-adopted)
+when the magic slices settle them.
 
 | Anomaly | Source behaviour | Chosen behaviour | Reason | Switch |
 | --- | --- | --- | --- | --- |
-| — | none settled yet | | | |
+| A1 (ARC-RES-030) | `sort_combat_list` moves only PCs to the round's tail; PC followers keep their scan position. | **Proposed, owner to confirm:** PCs and the PCs' followers move to the tail; scan order kept within each group. | Re-read by ARC-COMBAT-001: the second "not a PC" test can only be a slip for "the leader is not a PC". Lands with the turn-based round slice. | `PcFollowersKeepScanOrder` (reserved) |
+| A2 (ARC-RES-030) | The bed's −30 invocation modifier is counted twice (−60). | Counted once (−30). | The run adds the modifier to a difficulty that already starts from it. ARC-COMBAT-001. | `InvocationModifierCountedTwice` |
+| A3 (ARC-RES-030) | Getting up in a round is refused on the critter's own subturn and free on any other; the 5 AP charge is unreachable. | **Proposed, owner to confirm:** Allowed on the critter's own subturn for 5 AP, refused on others. | The turn test is inverted. Lands with the turn-based round slice. | `GetUpFreeOffTurn` (reserved) |
+| A4 (ARC-RES-030) | The every-fifth-run-step fatigue charge in combat mode writes back the unchanged fatigue damage: running costs no fatigue, and a critter without fatigue damage fails the step without paying AP. | **Proposed, owner to confirm:** Each charge adds 1 fatigue damage (every 5th run step, 20th fatigue-limiting, every step fatigue-draining). | Writing the read value back unchanged is a slip; +1 is a reading of intent. Lands with the movement/real-time slice. | `RunFatigueNotCharged` (reserved) |
+| A5 (ARC-RES-030) | A crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. | **Proposed, owner to confirm:** Drops the shield; clears crippled legs. | Wrong handle and wrong flag. Lands with the critical-effect (FR-COMBAT-009) and healing slices. | `CrippledArmDropsWeaponForShield`, `LegHealClearsBlindness` (reserved) |
+| A6 (ARC-RES-030) | `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` |
+| A7 (ARC-RES-030) | A critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` |
+| A8 (ARC-RES-030) | The critical effect chance is never assigned when the weapon's magic was cancelled. | 0, as the critical-miss path does. | An unassigned value. ARC-COMBAT-001. | none: CE's value is undefined and cannot be reproduced |
+| A9 (ARC-RES-030) | When the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | **Proposed, owner to confirm:** Started once. | `combat_turn_based_begin_turn` already starts it. Lands with the turn-based round slice. | `FirstSubturnStartedTwice` (reserved) |
+| A10 (ARC-COMBAT-001) | `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001 and confirmed by its independent review; fixed under D2. | `BackstabDamageOnSelfHit` |
+| LM14 (ARC-RES-040) | The melee damage scaling helper always returns 100, so it changes nothing. | Kept: no scaling. | The intended factor is unknown, so there is no confirmed slip to fix. ARC-COMBAT-001. | none |
 
 ## Owner decisions (2026-10-16)
 

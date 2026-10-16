@@ -140,8 +140,15 @@ public sealed class AreaStepAssessment
     public AreaObjectKey? WallBlocker { get; }
 }
 
-/// <summary>One wall on one tile edge (odd direction 1, 3, 5, 7). Opening pieces have their own rules and stay Unknown.</summary>
-internal sealed record AreaStepWallEdge(AreaObjectKey Key, AreaStepCell Cell, int Edge, bool Opening);
+/// <summary>How an edge decides a step. <see cref="Legacy"/> is the pinned-profile rule: an opening
+/// piece is Unknown, every other wall blocks. Whole-map evidence (ARC-WORLD-018) states its rule;
+/// <see cref="WindowJump"/> blocks a diagonal leg and is Unknown on a cardinal step, where the
+/// original's walker jumps the window (not modelled).</summary>
+internal enum AreaStepEdgeRule { Legacy, Block, Pass, Unknown, WindowJump }
+
+/// <summary>One wall or portal on one tile edge (odd direction 1, 3, 5, 7).</summary>
+internal sealed record AreaStepWallEdge(AreaObjectKey Key, AreaStepCell Cell, int Edge, bool Opening,
+    AreaStepEdgeRule Rule = AreaStepEdgeRule.Legacy, string? Reason = null);
 
 internal sealed record AreaStepObjectEvaluation(AreaObjectKey Key, AreaStepCell Cell, int ObjectType, CardinalTraversalCoverage Coverage,
     CardinalTraversalApplicability Applicability, CardinalTraversalDisposition? Disposition, string Reason, long? HpMinimum = null, long? HpMaximum = null);
