@@ -110,8 +110,8 @@ a tile. "Magic" means a spell record without the technology flag.
    that indexes the spell table by run number (MG1), three disagreeing cost
    formulas (MG2), a double maintenance charge (MG3), two dead aptitude
    branches (MG5, MG6), a dead interrupt component (MG7) and a summon faction
-   switch read from the wrong field (MG8) and an unresistable flag that also
-   means "END pending", so unresistable runs never last (MG19), and a refused cast that still
+   switch read from the wrong field (MG8), an unresistable flag that also
+   means "END pending", so unresistable runs never last (MG19) and a refused cast that still
    drains worn mana stores (MG20).
 
 ## State model (source facts)
