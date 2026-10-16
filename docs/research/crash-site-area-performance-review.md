@@ -294,9 +294,11 @@ contract](../world/crash-site-area-loader.md) and its tests (authentication orde
 budget boundaries, cancellation in each phase) and is unchanged here.
 
 Changed outside the owner: with a cave, the first `VerifyFile` of the three archives is
-replaced by checking that the cave owner, which authenticates the same paths after the
-actor and lighting reads, published the same identities; the remaining verifications hash
-their files in parallel. Same test-host method, two runs each, same commit:
+replaced by the cave owner's own opening authentication of the same three paths, which
+runs after the actor and lighting reads against the pinned profile identities (the cave
+profile pins the same module and resource identities, and the loader checks that they
+match); the remaining verifications hash their files in parallel. A swapped file now fails
+the load with the owner's input error instead of the viewer's. Same test-host method, two runs each, same commit:
 
 | Configuration | Before | After |
 | --- | ---: | ---: |
