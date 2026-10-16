@@ -225,7 +225,7 @@ Codes are allocated when each task is created (D6).
 
 | Stage | Code | Scope (source units) | Output |
 | --- | --- | --- | --- |
-| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | Load map and data census; first real fight candidates. |
+| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; the census gets its own code on creation | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: data aggregates and first real fight candidates. |
 | A1 | on creation | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
@@ -261,8 +261,8 @@ A9 is part of A0.
 1. **Every decision is a named, pure policy.** Target choice, KOS, flee,
    action choice and heal thresholds are functions over explicit records;
    the source behaviour is the default policy, not inline code.
-2. **Every CE anomaly is a recorded decision.** A confirmed slip (P1..P7 and
-   those A1–A8 find) is fixed in phase 1 (D2), with an entry naming the source
+2. **Every CE anomaly is a recorded decision.** A confirmed slip (P1..P7, the
+   load-map anomalies LM1..LM20 of ARC-RES-040 and those A1–A8 find) is fixed in phase 1 (D2), with an entry naming the source
    behaviour, the chosen behaviour and the reason; the source variant stays
    behind a named switch so seeded runs can still be compared with CE.
 3. **Randomness is injected and logged.** Each roll has a purpose label, so
@@ -307,7 +307,8 @@ before the matching phase 1 slice exists.
 
 Each confirmed anomaly gets a row here when its stage research settles it:
 source behaviour, chosen behaviour, reason and the switch name. Until then
-P1..P7 above are open, and the combat-core anomalies A1–A9 of
+P1..P7 above and LM1..LM20 of the [load map](combat-domain-load-map.md#8-ce-anomalies-found-by-this-reading)
+are open, and the combat-core anomalies A1–A9 of
 [ARC-RES-030](combat-core-evidence.md#ce-anomalies-recorded-not-adopted) follow
 the same rule when combat slice 2 settles them.
 

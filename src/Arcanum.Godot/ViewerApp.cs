@@ -38,12 +38,14 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         if (arguments.Contains("--write-synthetic-dat")) { WriteSyntheticDat(arguments); return; }
         if (arguments.Contains("--self-test")) { RunSelfTest(); return; }
         BuildUi();
+        ApplyStartupArguments(arguments);
     }
 
     public override void _ExitTree()
     {
         _closing = true;
         _session.Close();
+        ClearHdTextures();
         if (_canvas is not null)
         {
             _publication.Clear(_canvas);
@@ -55,6 +57,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         if (_closing || _group is null || _palette is null) return;
         _session.Advance(delta, (int)_group.Value, (int)_palette.Value);
         _session.DrainCompletions(this);
+        ProcessHdReview(delta);
         SyncTimelineUi();
     }
 
@@ -81,7 +84,9 @@ public partial class ViewerApp : Control, IViewerPublicationSink
 
     private void BuildUi()
     {
-        var root = new VBoxContainer { AnchorsPreset = (int)LayoutPreset.FullRect, OffsetLeft = 12, OffsetTop = 12, OffsetRight = -12, OffsetBottom = -12 };
+        // Explicit anchors: setting AnchorsPreset alone left the root at its minimum size, so
+        // it never filled the window (visible once the presentation view hides the rows).
+        var root = new VBoxContainer { AnchorRight = 1, AnchorBottom = 1, OffsetLeft = 12, OffsetTop = 12, OffsetRight = -12, OffsetBottom = -12 };
         AddChild(root);
         var toolbar = new HBoxContainer();
         _openButton = new Button { Text = "Open DAT…" };
@@ -90,8 +95,10 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         root.AddChild(toolbar);
         _filter = new LineEdit { PlaceholderText = "Filter ART name or decimal ordinal" };
         root.AddChild(_filter);
-        _items = new ItemList { CustomMinimumSize = new Vector2(0, 150), SizeFlagsVertical = SizeFlags.ExpandFill };
-        root.AddChild(_items);
+        _items = new ItemList { CustomMinimumSize = new Vector2(0, 150), SizeFlagsHorizontal = SizeFlags.ExpandFill };
+        var lists = new HSplitContainer { SizeFlagsVertical = SizeFlags.ExpandFill };
+        lists.AddChild(_items);
+        root.AddChild(lists);
 
         var selectors = new HBoxContainer();
         _group = AddSelector(selectors, "Physical group");
@@ -132,6 +139,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         var fullscreen = new Button { Text = "Fullscreen (F11)" };
         foreach (var control in new Control[] { oneToOne, zoomOut, zoomIn, fit, centered, marker, fullscreen }) display.AddChild(control);
         root.AddChild(display);
+        BuildHdReviewUi(root, lists);
         _canvas = new FrameCanvas { SizeFlagsVertical = SizeFlags.ExpandFill, SizeFlagsHorizontal = SizeFlags.ExpandFill };
         root.AddChild(_canvas);
         _status = new Label { Text = "Open one DAT file to inspect its .art entries.", AutowrapMode = TextServer.AutowrapMode.WordSmart };
@@ -176,7 +184,10 @@ public partial class ViewerApp : Control, IViewerPublicationSink
 
     private void OpenArchive(string path)
     {
+        _navigation = null;
+        _entriesByName = new(StringComparer.Ordinal);
         ClearSelection(clearEntries: true);
+        RebuildPackList();
         SetBusy("Opening DAT index…");
         _session.OpenArchive(path, this);
     }
@@ -186,6 +197,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         if (visibleIndex < 0 || visibleIndex >= _items.ItemCount) return;
         var sourceIndex = _items.GetItemMetadata((int)visibleIndex).AsInt64();
         if (sourceIndex < 0 || sourceIndex >= _entries.Count) return;
+        _navigation = null;
         ClearSelection(clearEntries: false);
         SetBusy("Reading selected ART metadata…");
         _session.SelectEntry(_entries[(int)sourceIndex].Entry, this);
@@ -209,6 +221,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         _entries = entries;
         RebuildList();
         SetStatus($"Indexed {_entries.Count} ART entries. Select one entry to inspect metadata and frames.");
+        OnHdArchiveOpened();
     }
 
     void IViewerPublicationSink.EntryCommitted(SelectedArtSnapshot snapshot)
@@ -219,6 +232,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         _selectionUi.Commit(snapshot, Timeline);
         _updatingSelectors = false;
         SetStatus("Selected ART metadata loaded; decoding frame 0.");
+        OnHdEntryCommitted(snapshot);
     }
 
     void IViewerPublicationSink.PublishFrame(SelectedArtSnapshot snapshot, FrameTarget target, ArtFrame decoded)
@@ -226,6 +240,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         ViewerFramePublication.Commit(_canvas, _publication, snapshot, target, decoded);
         _selectionUi.PublishFrame(decoded);
         SetStatus("Frame decoded. Raw hotspot alignment is a diagnostic projection; physical groups are not directions.");
+        OnHdFramePublished(snapshot, target, decoded);
     }
 
     // Shared by the production sink and deterministic resource/canvas self-test.
@@ -252,6 +267,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
     {
         SyncTimelineUi();
         SetStatus(MapError(exception));
+        OnHdFailure();
     }
 
     internal static FrameCanvasGroupLayout GroupLayout(ArtMetadata metadata, int group) => new(metadata.Frames.Skip(group * metadata.Header.FramesPerGroup).Take(metadata.Header.FramesPerGroup)
@@ -295,6 +311,7 @@ public partial class ViewerApp : Control, IViewerPublicationSink
         _updatingSelectors = true;
         _selectionUi.Clear(Timeline);
         _updatingSelectors = false;
+        ResetHdFrame();
     }
 
     private void ToggleFullscreen() => DisplayServer.WindowSetMode(DisplayServer.WindowGetMode() == DisplayServer.WindowMode.Fullscreen ? DisplayServer.WindowMode.Windowed : DisplayServer.WindowMode.Fullscreen);

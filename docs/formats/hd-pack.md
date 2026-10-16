@@ -84,7 +84,7 @@ later incompatible format raises it.
 | --- | --- |
 | `id` | `[a-z0-9][a-z0-9_-]{0,63}`; the import directory name |
 | `scale` | integer N; accepted by default: 2 and 4 (`HdPackOptions.Scales`); must equal the recipe's |
-| `review` | `unreviewed` / `approved` / `rejected` (pack); per entry the same (ARC-RENDER-015 writes them) |
+| `review` | `unreviewed` / `approved` / `rejected` (pack); per entry the same (written by the ARC-RENDER-015 review, below) |
 | `recipe` | relative path and SHA-256 of the recipe file, which must parse |
 | `build` | printable ASCII labels, 1..128 characters, no `/` or `\` (so no local path can hide in them); `createdUtc` exactly `yyyy-MM-ddTHH:mm:ssZ`; `gpu` is recorded because outputs depend on it (ARC-RES-033) |
 | `entries` | 0..400,000 (option); each `file` used once; each sprite key once; each terrain chunk (slice, x, y) once |
@@ -182,6 +182,31 @@ the original art):
 There is **no comparison with reference HD hashes**: cross-GPU bit-exactness of the
 upscalers is not established (ARC-RES-033), so packs are checked for integrity and
 against the installation, not for reproducing someone else's pixels.
+
+## Review marks (ARC-RENDER-015)
+
+`HdPackReview.Save(pack, marks, packReview)` writes approve/reject marks into
+`manifest.json`; the [ART viewer](../Arcanum.Godot.md#hd-beforeafter-review-arc-render-015)
+calls it for each mark. Only the `review` values change: every other property, value
+and order is copied (compact JSON, non-ASCII and HTML-like characters unescaped). The
+rewritten manifest is parsed as a pack and compared with the opened one (everything but
+the marks equal) before it is written to a hidden `.manifest-review-<guid>.tmp` in the
+pack directory and renamed over `manifest.json`. Nothing is written when the marks equal
+the current ones (`Unchanged`), when `manifest.json` is no longer the bytes the pack was
+opened from, checked before writing and again just before the rename (`Changed`), when it
+is missing, unreadable or a link (`ManifestUnreadable`), when the rewritten manifest would
+not open as the same pack (`Invalid`), or when the file system refuses (`WriteFailed`, the
+old manifest stays). The new manifest takes the directory's default file permissions. A marked pack is a new identity; frame files are
+never touched.
+
+For review, `HdReviewComparison.Compare` decodes the Legacy frame from the entry's own
+view, physical group, frame and palette of the given ART bytes and binds the HD frame as
+`ResolveSprite` does, except that review marks do not refuse it and a failed alpha check
+still returns the pixels (`AlphaMatches` false) so the reviewer sees what the game would
+refuse. It reports `ArtMismatch`, `ViewOutOfRange`, `LegacyUndecodable`, `PaletteMismatch`
+(the slot falls back) or `Refused` with the pack's reason. `HdReviewIndex` finds a pack
+frame for a shown frame (the full view first, otherwise the same group/frame/palette under
+another view of the same bytes), counts marks and steps in manifest order.
 
 ## Import of a pack built elsewhere
 
@@ -296,8 +321,9 @@ handheld (Steam Deck class) that also wants room for the game.
 ## Not ready / out of scope
 
 - No HD draw, texture cache, HUD counter, setting, toggle or diagnostic key
-  (ARC-RENDER-014, ARC-UI-006); no build or import command (ARC-DEV-003); no before/after
-  review tool (ARC-RENDER-015). Terrain chunk entries are never bound (ARC-RENDER-016).
+  (ARC-RENDER-014, ARC-UI-006); no build or import command (ARC-DEV-003). The before/after
+  review (ARC-RENDER-015) reviews sprite entries only; terrain chunk entries are never
+  bound or reviewed (ARC-RENDER-016).
 - One active pack; layering several packs is not defined. A whole-game manifest near the
   limits needs about its own size in memory to open; an index split is a later change.
 - Archive import, pack signing and any distribution mechanism are out of scope (the pack

@@ -17,6 +17,8 @@ public partial class TerrainViewerApp
     private AreaConversationPanel? _conversationPanel;
     private string? _conversationNotice;
     private AreaSpeaker? _talkAfterRoute;
+    // ARC-WORLD-016: the session party port of the open conversation, for a refused JO/UW's reason.
+    private Arcanum.Session.SessionDialogPartyPort? _conversationParty;
     private bool ConversationOpen => _conversationPanel?.IsOpen == true;
 
     private void BindAreaConversations(TerrainViewerArguments arguments, AreaLoadResult area)
@@ -24,8 +26,9 @@ public partial class TerrainViewerApp
         EndConversation();
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
+        // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
         _conversationHost = arguments.AreaEffectsPath is { } dialogs && _areaSession is { } session
-            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session, inventory: _inventoryHost) : null;
+            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session, inventory: _inventoryHost, party: true) : null;
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
@@ -36,6 +39,7 @@ public partial class TerrainViewerApp
     private void UnbindAreaConversations()
     {
         EndConversation();
+        UnbindAreaCompanions();
         _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null;
     }
 
@@ -61,15 +65,16 @@ public partial class TerrainViewerApp
     {
         if (ConversationOpen || ActorCell() is not { } cell || SpeakerAtScreen(screen) is not { } speaker) return false;
         CancelTalkApproach("another NPC click replaced it"); CancelAreaUseApproach("a talk click replaced it"); CancelInventoryApproach("a talk click replaced it");
-        var distance = AreaConversationHost.Distance(speaker, cell.X, cell.Y);
+        var distance = AreaConversationHost.Distance(speaker, cell.X, cell.Y, SpeakerCell);
         if (distance <= _conversationHost!.Profile.Reach)
         {
             StopWorldRoute("ROUTE_REPLACED_BY_TALK");
             BeginConversation(speaker);
             return true;
         }
+        var (speakerX, speakerY) = SpeakerCell?.Invoke(speaker) ?? (speaker.WorldX, speaker.WorldY);
         if (_worldActor.Session is AreaGridSession session && WorldRoute(session) is { } route
-            && ApproachCell(session, speaker.WorldX, speaker.WorldY, _conversationHost.Profile.Reach) is { } goal)
+            && ApproachCell(session, speakerX, speakerY, _conversationHost.Profile.Reach) is { } goal)
         {
             StopWorldRoute("ROUTE_REPLACED_BY_TALK");
             route.SetTarget(goal, WorldTime); _talkAfterRoute = speaker;
@@ -98,7 +103,7 @@ public partial class TerrainViewerApp
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
         else if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Arrived) _conversationNotice = "walk to talk stopped: " + (route.StopReason ?? route.Status.ToString());
         else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive) _conversationNotice = "walk to talk dropped: input quarantined/modal";
-        else if (AreaConversationHost.Distance(speaker, cell.X, cell.Y) > _conversationHost!.Profile.Reach) _conversationNotice = "walk to talk ended out of reach";
+        else if (AreaConversationHost.Distance(speaker, cell.X, cell.Y, SpeakerCell) > _conversationHost!.Profile.Reach) _conversationNotice = "walk to talk ended out of reach";
         else { BeginConversation(speaker); return; }
         RefreshReadyStatus();
     }
@@ -114,6 +119,7 @@ public partial class TerrainViewerApp
         {
             start = new(AreaConversationStartStatus.EntryError, null, speaker, exception.GetType().Name);
         }
+        _conversationParty = start.Party;
         var title = $"Dialog NPC (script {speaker.ScriptId}, prototype {speaker.Row.PrototypeNumber})";
         _conversationPanel.Open(title, start.Conversation, start.Status == AreaConversationStartStatus.Started ? null : $"[{start.Status}: {start.Detail}]");
         GD.Print($"ARC-SCRIPT-005 conversation status={start.Status} detail={start.Detail} phase={start.Conversation?.Phase}");
@@ -126,6 +132,10 @@ public partial class TerrainViewerApp
         var conversation = _conversationPanel.Conversation;
         GD.Print($"ARC-SCRIPT-005 conversation closed phase={conversation?.Phase} end={conversation?.End?.Kind} turns={conversation?.Turn} effects={conversation?.Effects.Count}");
         _conversationPanel.CloseView();
+        // ARC-WORLD-016: a refused follow names its reason (the generated refusal line text is not loaded).
+        if (_conversationParty?.LastRefusal is { } refused) _conversationNotice = $"follow refused: {refused}";
+        _conversationParty = null;
+        if (_areaSession is { } party) _areaCompanions?.Refresh(party);
         QuarantineWorld(); RefreshReadyStatus();
     }
 
@@ -150,7 +160,7 @@ public partial class TerrainViewerApp
     {
         if (_conversationNotice is { } notice) return $" | {notice}";
         if (!TalkMapActive) return " | talk: no dialog NPC on this map";
-        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y) is { } speaker
+        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
             : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
     }

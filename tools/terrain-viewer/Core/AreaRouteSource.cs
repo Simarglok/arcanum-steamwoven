@@ -7,9 +7,10 @@ namespace Arcanum.TerrainViewer.Core;
 /// <summary>
 /// Route evidence over the whole-core T0 step snapshot, in <see cref="AreaGridSession"/> chart cells. It asks the same
 /// <see cref="AreaStepSnapshot.Assess"/> the session admits steps with, so a planned Open step is the step the runtime
-/// receives. Only Supported Open is Open; Unknown and Unsupported (core edge) stay distinct from Blocked.
+/// receives. Only Supported Open is Open; Unknown and Unsupported (core edge) stay distinct from Blocked. With an
+/// <paramref name="occupancy"/> provider (ARC-WORLD-016) every step gets the same live overlay the session admits it with.
 /// </summary>
-public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null) : IRouteStepSource
+public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart = null, Func<AreaOccupancy?>? occupancy = null) : IRouteStepSource
 {
     public AreaStepSnapshot Snapshot { get; } = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
     public AreaChart Chart { get; } = chart ?? AreaChart.Exterior;
@@ -20,12 +21,6 @@ public sealed class AreaRouteSource(AreaStepSnapshot snapshot, AreaChart? chart 
     {
         var to = RoutePlanner.Neighbor(from, direction);
         var assessment = Snapshot.Assess(Snapshot.Request(Chart.ToWorld(from), Chart.ToWorld(to), GridReplay.MapDirection(direction)));
-        return assessment.Coverage switch
-        {
-            CardinalTraversalCoverage.Supported => assessment.Disposition == CardinalTraversalDisposition.Open ? RouteStepVerdict.Open : RouteStepVerdict.Blocked,
-            CardinalTraversalCoverage.Unknown => RouteStepVerdict.Unknown,
-            CardinalTraversalCoverage.Unsupported => RouteStepVerdict.Unsupported,
-            _ => throw new InvalidOperationException("ROUTE_COVERAGE_INVALID")
-        };
+        return AreaOccupancyRules.Route(AreaOccupancyRules.Apply(assessment, from, direction, occupancy?.Invoke()));
     }
 }
