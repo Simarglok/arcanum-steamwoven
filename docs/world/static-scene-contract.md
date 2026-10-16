@@ -184,7 +184,7 @@ tie key only when its policy says so; that is a reproducibility requirement,
 not an evidence-backed occlusion rule. Any ordering example before a selected,
 validated pair is synthetic and must not be reported as original scene parity.
 
-## Follow-on outlines (not Kanban authorization)
+## Follow-on outlines (not task authorization)
 
 ### Bounded C# loader research
 

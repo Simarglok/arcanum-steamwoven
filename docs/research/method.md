@@ -21,4 +21,4 @@ Known research entry points (not endorsements or proof of format claims):
 - [ArcNET](https://github.com/Bia10/ArcNET) — README identifies CE-derived research routes; assess lineage.
 - [High Resolution Patch](https://terra-arcanum.com/drog/highres.html)
 
-Detailed discovery notes remain in the project's Obsidian vault. Carry necessary evidence into reviewed repository documents as work progresses; do not treat those notes as Kanban cards or automatically accepted specifications.
+Detailed discovery notes remain in the project's Obsidian vault. Carry necessary evidence into reviewed repository documents as work progresses; do not treat those notes as tasks or automatically accepted specifications.

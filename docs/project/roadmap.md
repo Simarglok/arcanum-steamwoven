@@ -1,6 +1,6 @@
 # High-level dependency roadmap
 
-This is a product dependency map, not a task queue or authorization to implement a milestone. Active cards, assignments, accepted scope and dependency edges live on Hermes board `arcanum-steamwoven`. The [status catalogue](status.md) and [requirements register](../requirements/README.md) share the 2026-10-09 audit baseline through PR #54. The [vision](vision.md) records accepted product direction. Later stages below are proposed dependencies, not dates or approval of the full catalogue.
+This is a product dependency map, not a task queue or authorization to implement a milestone. Active work items, accepted scope and dependencies come from the owner's explicit requests ([task workflow](../workflow/tasks.md)). The [status catalogue](status.md) and [requirements register](../requirements/README.md) share the 2026-10-09 audit baseline through PR #54. The [vision](vision.md) records accepted product direction. Later stages below are proposed dependencies, not dates or approval of the full catalogue.
 
 | Stage | Current delivered scope | Next dependency / observable gate |
 | --- | --- | --- |
@@ -18,4 +18,4 @@ This is a product dependency map, not a task queue or authorization to implement
 
 Independent headless/Data/research work can proceed while graphical validation is unavailable where its accepted contract permits. GUI/export/device gates remain required for scopes that need them; a locked Mac is not proof of failure or completion and does not justify substituting unrelated green checks.
 
-Planning starts from the FR/domain coverage, actual merged code/history and current board, not the number of Done cards. Each new task should identify supported requirements and update their implemented scope as an output. Task creation, prioritization and project delivery/merge authority remain in the user request and current project workflow; this document adds no extra restriction.
+Planning starts from the FR/domain coverage, actual merged code/history and open PRs, not the number of finished tasks. Each new task should identify supported requirements and update their implemented scope as an output. Task creation, prioritization and project delivery/merge authority remain in the user request and current project workflow; this document adds no extra restriction.
