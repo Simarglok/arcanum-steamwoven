@@ -148,7 +148,7 @@ public partial class PassabilityOverlayLayer : Node2D
 
     /// <summary>The boundary shared with the source neighbour: an edge for map-cardinal steps, a corner
     /// for map-diagonal steps; an inward arrow marks the direction (from -> to), never both directions.</summary>
-    private static void Edge(CellCoord cell, OverlayIncoming incoming, Color color, List<Vector2> line, List<Vector2> arrows, List<Color> arrowColors)
+    private void Edge(CellCoord cell, OverlayIncoming incoming, Color color, List<Vector2> line, List<Vector2> arrows, List<Color> arrowColors)
     {
         var origin = _overlay!.OriginX;
         var to = Center(cell, origin); var from = Center(incoming.From, origin);
