@@ -30,9 +30,15 @@ and GF owners. There are no locks, events, callbacks, timers, files or Godot typ
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
 | `QueryClockSnapshot` / `AdvanceGameTime` / `SetPaused` | Forwarded to the session's clock with the clock's own token contract. Clock changes do not move the session revision. |
-| `Flags` / `FlagVersion` | The session's GF owner as `IGlobalFlagOwner` (for reads, writes and `GlobalFlagAdapter`) and its current version. GF changes do not move the session revision. |
+| `Flags` / `FlagVersion` | A forwarding `IGlobalFlagOwner` view of the session's GF owner (reads, writes, `GlobalFlagAdapter`; no Dispose or MarkFailed) and its current version. GF changes do not move the session revision. |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
 | `Dispose()` | Idempotent; disposes the clock and GF owner. Every later call except `Dispose` throws `ObjectDisposedException`. |
+
+A map transition is several separately guarded calls (for example `PlaceActor`,
+`SetMapChange`, `AdvanceGameTime`); the caller sequences them, and a refusal partway
+leaves the earlier calls applied. The session revision counts actor and map changes
+only, so a caller that needs one coherent point captures after the whole sequence.
+There is no transactional multi-component transition operation yet.
 
 Owner identity is a fresh process-local reference per create/restore. A restored
 owner continues the saved revisions, but versions, clock tokens and GF epochs of any
@@ -99,7 +105,10 @@ another `format` (`WrongFormat`) or `schemaVersion` (`UnsupportedSchema`); unkno
 duplicate or missing fields; wrong JSON types; fractions, exponents and out-of-range
 integers; non-canonical GUIDs, enum names or identifiers (`OutOfRange`); unsorted or
 repeated flags, maps or change keys (`NotCanonical`); and counts above the policy
-maxima (`BudgetExceeded`). Whitespace is the only accepted variation.
+maxima (`BudgetExceeded`), plus `-0` and strings with a lone UTF-16 surrogate escape
+(`MalformedJson`). Format and version are read before the field set, so a newer schema
+reports `UnsupportedSchema` rather than a field error. Decoding accepts whitespace,
+object field order and JSON string escapes; only `Encode` output is canonical.
 
 Decoding checks structure; `Restore` checks meaning. Restore refuses a snapshot from
 another world or module, with a clock profile not equal to the expected one (schema,
@@ -121,7 +130,8 @@ and a literal, independently written canonical JSON text:
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
-  failures with paths, and a restore at the per-map policy maximum.
+  failures with paths (including lone surrogates and a newer schema), a restore at the
+  per-map policy maximum, revision capacity, and the lifetime-safe flag view.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Session.Tests/Arcanum.Session.Tests.csproj --no-build

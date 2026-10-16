@@ -157,6 +157,16 @@ public sealed class SnapshotRestoreTests
                 "{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":2}"),
             SnapshotDecodeFailure.NotCanonical, "$.maps[0].changes[1]");
         Fails(With("\"value\":12}", "\"value\":12,\"x\":[[[[[[[[1]]]]]]]]}"), SnapshotDecodeFailure.MalformedJson, "$");
+        Fails(With("\"revision\":2,", "\"revision\":-0,"), SnapshotDecodeFailure.OutOfRange, "$.revision");
+        Fails(With("steamwoven-normalized-clock-v1", "\\ud800"), SnapshotDecodeFailure.MalformedJson, "$.clock.policyId");
+        Fails(With("arcanum-steamwoven-session", "\\udc00x"), SnapshotDecodeFailure.MalformedJson, "$.format");
+        Fails(With("\"entity\":\"npc-1\"", "\"entity\":\"\\ud800\\ud800\""), SnapshotDecodeFailure.MalformedJson, "$.maps[0].changes[1].entity");
+        Fails(With("\"format\":\"arcanum-steamwoven-session\",", ""), SnapshotDecodeFailure.WrongFormat, "$.format");
+
+        // A newer schema with different fields is reported as unsupported, not as damage.
+        Fails(With("\"schemaVersion\":1,\"world\"", "\"schemaVersion\":2,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":1,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));
@@ -180,5 +190,30 @@ public sealed class SnapshotRestoreTests
         Rejected(restored.SetMapChange(restored.Version, Exterior, MapChangeKey.ForSector(4096, "p"), 1), restored,
             GameSessionFailure.BudgetExceeded, 2);
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
+    }
+
+    [TestMethod]
+    public void RevisionCapacityRefusesChangesButKeepsNoChangesAndState()
+    {
+        using var owner = Restore(Decode(GoldenJson.Replace("\"revision\":2,", "\"revision\":9223372036854775807,")));
+        var key = MapChangeKey.ForSector(5, "door.open");
+        Assert.AreEqual(long.MaxValue, owner.Version.Revision);
+        Rejected(owner.PlaceActor(owner.Version, Start with { Map = Cave }), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Rejected(owner.SetMapChange(owner.Version, Exterior, key, 2), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Rejected(owner.ClearMapChange(owner.Version, Exterior, key), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetMapChange(owner.Version, Exterior, key, 1).Disposition);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.PlaceActor(owner.Version, Start).Disposition);
+        Assert.AreEqual(Start, owner.QueryActor());
+        Assert.AreEqual(1, owner.QueryMapChange(Exterior, key));
+    }
+
+    [TestMethod]
+    public void FlagsViewDoesNotExposeTheOwnerLifetime()
+    {
+        using var owner = Create();
+        Assert.IsNotInstanceOfType<GlobalFlagOwner>(owner.Flags);
+        Assert.IsNotInstanceOfType<IDisposable>(owner.Flags);
+        Assert.AreEqual(GlobalFlagWriteDisposition.Applied, WriteFlag(owner, 9, false).Disposition);
+        Assert.AreEqual(false, ReadFlag(owner, 9));
     }
 }

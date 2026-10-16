@@ -12,6 +12,7 @@ public sealed class GameSessionOwner : IDisposable
 {
     private readonly GameClockOwner _clock;
     private readonly GlobalFlagOwner _flags;
+    private readonly SessionFlags _flagView;
     private readonly GameSessionLimits _limits;
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
     private readonly GameSessionOwnerIdentity _identity = new();
@@ -23,7 +24,7 @@ public sealed class GameSessionOwner : IDisposable
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps)
     {
-        _clock = clock; _flags = flags; _limits = limits; _actor = actor; _revision = revision; _maps = maps;
+        _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
@@ -86,7 +87,7 @@ public sealed class GameSessionOwner : IDisposable
     public GameSessionLimits Limits { get { ThrowIfDisposed(); return _limits; } }
 
     /// <summary>The session's flag owner for reads, writes and adapters. Its lifetime belongs to the session.</summary>
-    public IGlobalFlagOwner Flags { get { ThrowIfDisposed(); return _flags; } }
+    public IGlobalFlagOwner Flags { get { ThrowIfDisposed(); return _flagView; } }
 
     /// <summary>Current GF version, the expected value for the next flag read or write.</summary>
     public GlobalFlagVersion FlagVersion { get { ThrowIfDisposed(); return _flags.Version; } }
@@ -240,4 +241,12 @@ public sealed class GameSessionOwner : IDisposable
     private static GameSessionCreationResult Rejected(GameSessionFailure failure,
         ClockFailure clockFailure = ClockFailure.None, GlobalFlagReason flagReason = GlobalFlagReason.None) =>
         new(null, failure, clockFailure, flagReason);
+}
+
+/// <summary>Forwarding view, so callers cannot reach the owner's Dispose or MarkFailed.</summary>
+internal sealed class SessionFlags(GlobalFlagOwner owner) : IGlobalFlagOwner
+{
+    public GlobalFlagBinding Binding => owner.Binding;
+    public GlobalFlagReadResult Read(GlobalFlagReadRequest request) => owner.Read(request);
+    public GlobalFlagWriteReceipt Write(GlobalFlagWriteRequest request) => owner.Write(request);
 }

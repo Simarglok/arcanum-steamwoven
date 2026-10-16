@@ -17,8 +17,9 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// Canonical JSON for <see cref="GameSessionSnapshot"/> schema 1. Encoding is deterministic; decoding is
-/// strict (exact field sets, canonical order, bounded size and counts) and never builds an owner.
+/// JSON for <see cref="GameSessionSnapshot"/> schema 1. Encoding is canonical and deterministic; decoding is
+/// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
+/// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
 /// </summary>
 public static class GameSessionSnapshotCodec
@@ -140,10 +141,15 @@ public static class GameSessionSnapshotCodec
 
     private static GameSessionSnapshot Root(JsonElement root)
     {
-        var f = Fields(root, "$", RootFields);
-        if (String(f["format"], "$.format") != Format) throw new DecodeException(SnapshotDecodeFailure.WrongFormat, "$.format");
-        if (Int(f["schemaVersion"], "$.schemaVersion", int.MinValue, int.MaxValue) != GameSessionSnapshot.CurrentSchemaVersion)
+        // Format and version first, so a newer schema with other fields reads as UnsupportedSchema, not corruption.
+        if (root.ValueKind != JsonValueKind.Object) throw new DecodeException(SnapshotDecodeFailure.WrongType, "$");
+        if (!root.TryGetProperty("format", out var format) || format.ValueKind != JsonValueKind.String ||
+            String(format, "$.format") != Format) throw new DecodeException(SnapshotDecodeFailure.WrongFormat, "$.format");
+        if (!root.TryGetProperty("schemaVersion", out var schema) || schema.ValueKind != JsonValueKind.Number ||
+            !schema.TryGetInt64(out var version) || version != GameSessionSnapshot.CurrentSchemaVersion)
             throw new DecodeException(SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        var f = Fields(root, "$", RootFields);
+        Int(f["schemaVersion"], "$.schemaVersion", 1, 1);
         var identity = new GlobalFlagIdentity(new(Guid(f["world"], "$.world")), new(Guid(f["module"], "$.module")));
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
@@ -281,8 +287,13 @@ public static class GameSessionSnapshotCodec
         return element.EnumerateArray().ToArray();
     }
 
-    private static string String(JsonElement element, string path) => element.ValueKind == JsonValueKind.String
-        ? element.GetString()! : throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
+    private static string String(JsonElement element, string path)
+    {
+        if (element.ValueKind != JsonValueKind.String) throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
+        // Valid JSON may still escape a lone UTF-16 surrogate, which has no string value.
+        try { return element.GetString()!; }
+        catch (InvalidOperationException) { throw new DecodeException(SnapshotDecodeFailure.MalformedJson, path); }
+    }
 
     private static bool Bool(JsonElement element, string path) => element.ValueKind switch
     {
@@ -295,7 +306,8 @@ public static class GameSessionSnapshotCodec
     {
         if (element.ValueKind != JsonValueKind.Number) throw new DecodeException(SnapshotDecodeFailure.WrongType, path);
         // Integer literals only: fractions and exponents fail TryGetInt64 even when integral.
-        if (!element.TryGetInt64(out var value) || !IsIntegerLiteral(element.GetRawText()))
+        var raw = element.GetRawText();
+        if (!element.TryGetInt64(out var value) || !IsIntegerLiteral(raw) || raw == "-0")
             throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
         if (value < min || value > max) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
         return value;
