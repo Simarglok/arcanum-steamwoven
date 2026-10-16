@@ -68,8 +68,10 @@ For every sector the game loads (source: [`sector_load_game`, `sector.c` 1453–
    random variation per tile, no lights, roofs, scripts, blocks or objects, and no
    `.dif` lookup.
 
-A demo-limits branch skips step 1 for sectors outside configured bounds; the limits
-are not set in the retail game.
+A demo-limits branch skips step 1 for sectors outside configured bounds. The limits
+come from a special `134217730001.sec` in the map folder
+([`sector_load_demo_limits`, `sector.c` 2158+](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L2158)); the main
+map has no such file (report: `own_files_outside_grid` is 0), so it does not apply.
 
 `sector_exists` (the "hand-made?" test used elsewhere, [`sector.c` 836–841](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c#L836-L841)) checks step 1 only.
 
@@ -314,7 +316,7 @@ or mod that names a missing type or slot would.
 
 Source: [`terrain_is_blocked` 629–647](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c#L629-L647),
 [world-map path `path.c` 781–842, 953](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/path.c#L781-L842),
-[encounter terrain `wmap_rnd.c` 163–183, 708–726](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c#L708-L726).
+encounter terrain [`wmap_rnd.c` 163–183](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c#L163-L183) and [708–726](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c#L708-L726).
 
 A sector is terrain-blocked when its word is `0xFFFF` (outside the map) or its base
 or second type carries `/b`. The only caller is world-map travel routing
@@ -383,8 +385,8 @@ missing (anomaly A5). No retail sector needs any of these.
 - The v119 record walker met only object types 0 and 3 on real data; other types
   are covered by the synthetic self-test only.
 - The probe models the mounts of the measured installation (`patch0`,
-  `arcanum1..4`, folders, `tig.dat`) and refuses others; loose-file ambiguity is not
-  handled beyond first match.
+  `arcanum1..4`, folders, `tig.dat`) and refuses others; an ambiguous loose name is
+  treated as absent.
 - Script 30285 (sector plant generator) in 20 plain templates may change vegetation
   at run time; what it does is not researched here.
 - `.dif` files for generated sectors (save state) are not examined.
