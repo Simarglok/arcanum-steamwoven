@@ -173,7 +173,7 @@ public partial class TerrainViewerApp
     {
         if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen || InventoryOpen) return;
         QuarantineWorld();
-        if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
+        if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); _visualKeyNotice = null; }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
         _worldAdapter.PaletteOpen = _worldPanel.IsOpen;
         RefreshReadyStatus();

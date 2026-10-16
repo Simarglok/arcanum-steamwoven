@@ -784,7 +784,7 @@ it is not part of a snapshot or quick save.
 - **Toggle.** `H` (no modifier; Cmd+H stays the system's) or the palette action **Visual Legacy/HD
   (H)** requests the other profile. `H` acts on a fresh press while the world owns input; under the
   palette or UI focus it is ignored and the HUD says so, and an open dialog or inventory window owns
-  every key (the switch itself is safe then too: the self-test and smoke request it during a dialog).
+  every key (the switch itself is safe then too: the native smoke requests it during a dialog).
   A request during a pending switch toggles back to the active profile, which cancels the switch.
 - **Timed commit.** The active profile keeps drawing while the requested one is prepared for the
   visible set (decodes off the main thread, at most 64 uploads per submission). The switch commits
@@ -793,8 +793,9 @@ it is not part of a snapshot or quick save.
   first bind of the whole Crash Site view from a 4× pack took about 0.1 s), when frames still decoding
   draw Legacy as `Pending` and switch one by one. A switch to Legacy commits in the next submission and
   keeps HD textures within the retain limits, so switching back is cheap. A map change during a
-  pending switch keeps the request; it commits on the new view. With nothing published the request
-  commits at once.
+  pending switch keeps the request; it commits on the new view. With nothing published (also while a
+  reload or failure has cleared the scene) a pending request commits at once, and the next view's
+  frames then load like any frame that becomes visible (`Pending`, then HD one by one).
 - **Persistence.** The request is saved at once to `user://visual_profile_v1.json`
   (`{"schema":1,"profile":"Legacy"|"Hd"}`, codec `VisualProfileCodec`): a missing, unreadable or unknown
   value loads as Legacy; a failed save is shown in the HUD and does not block the switch. Startup applies
@@ -802,8 +803,10 @@ it is not part of a snapshot or quick save.
   not saved). `VISUAL_PROFILE_TEST_PATH` isolates tests; an automated run (self-test, native smoke)
   without it neither reads nor writes the file and starts Legacy.
 - **Active pack.** `ARC_HD_PACK` when set; otherwise the first pack that opened and is not rejected in
-  the pack folder `user://hd-packs/<id>/` and, in a source run, the checkout's ignored
-  `local/hd-packs/<id>/` (locations in that order, packs in ordinal folder order; a rejected pack is
+  the pack folder `user://hd-packs/<id>/` (on macOS
+  `~/Library/Application Support/Godot/app_userdata/Arcanum Terrain Viewer/hd-packs/<id>/`, for a source
+  run and the exported app alike; an exported app such as `./arcanum area` looks only there) and, in a
+  source run, the checkout's ignored `local/hd-packs/<id>/` (locations in that order, packs in ordinal folder order; a rejected pack is
   used only when it is the only one, every frame `PackRejected`). Automated runs do not look at these
   folders. Without a pack, HD draws every frame Legacy as `NoPack`.
 - **HUD and palette.** The status line adds `H visual Legacy/HD: <active>[, switching to <profile>];
@@ -821,7 +824,10 @@ with every frame pending; a map change keeps the request; NoPack and an unpublis
 once) and `ARC-UI-006 self-test app PASS` (the production app over the synthetic area owner: H, Ctrl+H,
 H under the palette, the palette action, cancel by a second H, the saved request, and two walks replayed
 from one quick save under Legacy twice, HD and with switches before and in the middle of each step:
-byte-identical Session snapshots and drawn destinations), and the native smoke on the installed original
+byte-identical Session snapshots and drawn destinations; a drawn item's destination is its plan
+command's, which HD never changes, and ARC-RENDER-014's pixel identity shows the HD draw covers exactly
+it), `ARC-UI-006 self-test WORLD toggle PASS` (the same protocol on the WORLD canvas, whose submissions
+are its draws, with a pack recoloured per parent texel), and the native smoke on the installed original
 `ARC-UI-006 native-smoke Session invariance PASS` (a nearest 4× pack of every character and object frame
 of the exterior and the cave in a temporary directory; from one quick save next to Virgil: talk to him
 through his replies, walk, wait one game hour, enter the cave; under Legacy twice, HD and with switches

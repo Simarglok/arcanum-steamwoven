@@ -242,7 +242,8 @@ public partial class TerrainViewerApp
             ToggleWorldSettings();
             Require(WorldModal, "palette opened");
             QuickKey(Key.H);
-            Require(_canvas.VisualGeneration == generation + 1 && _visualNotice?.StartsWith("H ignored", StringComparison.Ordinal) == true, "H under the palette was not ignored");
+            Require(_canvas.VisualGeneration == generation + 1 && _visualKeyNotice?.StartsWith("H ignored", StringComparison.Ordinal) == true
+                && ((Label)_worldPanel!.FindChild("PaletteVisual", true, false)!).Text.Contains("H ignored", StringComparison.Ordinal), "H under the palette was not ignored");
             var visual = (Label)_worldPanel!.FindChild("PaletteVisual", true, false)!;
             var action = _worldPanel.FindChildren("*", "Button", true, false).OfType<Button>().Single(b => b.Text == "Visual Legacy/HD (H)");
             action.EmitSignal(BaseButton.SignalName.Pressed);
@@ -256,10 +257,17 @@ public partial class TerrainViewerApp
             {
                 _canvas.SetVisualProfile(VisualProfile.Legacy, pendingSource, HdDeviceBudget.Ceiling(4));
                 AreaSmokePlace(map, ((AreaGridSession)_worldActor.Session!).State.CommittedCell);
-                QuickKey(Key.H);
-                var pending = _canvas.PendingVisualProfile == VisualProfile.Hd;
-                QuickKey(Key.H);
-                Require(!pending || (_canvas.PendingVisualProfile is null && _canvas.VisualProfile == VisualProfile.Legacy), "the second H cancelled the pending switch");
+                // The clock stands still, so the first H stays pending (its decodes have only just started).
+                var clock = _canvas.VisualClock; var now = clock(); _canvas.VisualClock = () => now;
+                try
+                {
+                    QuickKey(Key.H);
+                    Require(_canvas.PendingVisualProfile == VisualProfile.Hd, "the first H left a pending switch");
+                    QuickKey(Key.H);
+                    Require(_canvas.PendingVisualProfile is null && _canvas.VisualProfile == VisualProfile.Legacy && pendingSource.PendingCount == 0,
+                        "the second H cancelled the pending switch and dropped its decodes");
+                }
+                finally { _canvas.VisualClock = clock; }
             }
             finally { _canvas.SetVisualProfile(VisualProfile.Legacy, source, HdDeviceBudget.Ceiling(4)); pendingSource.Dispose(); }
 

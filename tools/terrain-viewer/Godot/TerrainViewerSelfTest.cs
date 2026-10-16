@@ -113,6 +113,7 @@ public static partial class TerrainViewerSelfTest
             await AssertWorldHdPresentationAsync(host);
             AssertVisualProfileStore();
             await AssertHdToggleAsync(host);
+            await AssertWorldHdToggleAsync(host);
             await AssertConversationPanelAsync(host);
             await AssertConversationRoutingAsync(host);
             await AssertAreaHoverAsync(host);

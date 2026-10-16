@@ -43,6 +43,9 @@ its Close button. Contents:
   works while the open palette pauses time) or switch the ambient multiplier off/on; a
   status line shows time, DAY/NIGHT, whether time flows or is paused, and the scheme.
   Elsewhere they report "unavailable". See [area lighting](../rendering/area-lighting.md).
+- **Visual Legacy/HD (H)** (ARC-UI-006): requests the other visual profile, like `H`; the line
+  under it shows the active profile, a pending switch, the pack and the save outcome
+  ([viewer](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)).
 - **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
   checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
   without one it reads "unavailable" and is not navigable. The host binds it through

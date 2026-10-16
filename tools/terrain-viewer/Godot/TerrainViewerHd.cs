@@ -30,8 +30,10 @@ public partial class TerrainViewerApp
     private VisualProfileSettingsStore? _visualStore;
     // What decided the startup profile, the active pack line and the last request's save outcome.
     private string _visualOrigin = "default";
-    private string _visualPack = "none";
+    private string _visualPack = "not chosen at startup";
+    // The last request's save outcome, and an ignored H (cleared by the next request or palette close).
     private string? _visualNotice;
+    private string? _visualKeyNotice;
 
     private bool AutomatedVisualRun => _automatedHost || _nativeSmoke || SelfTestBootstrap;
 
@@ -54,7 +56,7 @@ public partial class TerrainViewerApp
         else
         {
             profile = _visualStore.Load();
-            _visualOrigin = _visualStore.Persistent ? "saved setting" : "default (automated run)";
+            _visualOrigin = !_visualStore.Persistent ? "default (automated run)" : _visualStore.HasSaved ? "saved setting" : "default (nothing saved yet)";
         }
         HdPack? pack = null; var open = "none"; var found = 0;
         if (!string.IsNullOrWhiteSpace(packPath))
@@ -102,6 +104,7 @@ public partial class TerrainViewerApp
         var target = _canvas.ToggledVisualProfile;
         var outcome = _canvas.RequestVisualProfile(target);
         // Persisted at request time; a failure is reported and never blocks the switch.
+        _visualKeyNotice = null;
         if (outcome != VisualRequestOutcome.NoOp && _visualStore is { } store)
             _visualNotice = !store.Persistent ? "not saved (automated run)" : store.Save(target) ? null : "save FAILED, this run only";
         GD.Print($"ARC-UI-006 visual request via={via} target={target} outcome={outcome} generation={_canvas.VisualGeneration} active={_canvas.VisualProfile} saved={_visualNotice ?? "yes"}");
@@ -116,7 +119,12 @@ public partial class TerrainViewerApp
     {
         if (decision.Key != WorldKey.H || modifiers != WorldKeyModifiers.None) return false;
         if (!decision.Pressed || decision.Echo) return true;
-        if (!_worldFocused || WorldModal || WorldUiFocus) { _visualNotice = "H ignored: palette, dialog or UI focus owns input"; return true; }
+        if (!_worldFocused || WorldModal || WorldUiFocus)
+        {
+            _visualKeyNotice = "H ignored: palette or UI focus owns input";
+            BindVisualPalette(); RefreshReadyStatus();
+            return true;
+        }
         RequestVisualToggle("key");
         return true;
     }
@@ -136,7 +144,8 @@ public partial class TerrainViewerApp
         var active = _canvas.VisualProfile == VisualProfile.Hd ? "HD" : "Legacy";
         var pending = _canvas.PendingVisualProfile is { } p ? $", switching to {(p == VisualProfile.Hd ? "HD" : "Legacy")}" : "";
         var pack = _canvas.HdSource?.Pack is { } loaded ? $"pack {loaded.Id} {loaded.Scale}x ({_visualPack})" : $"no HD pack ({_visualPack})";
-        return $"{active}{pending}; {pack}; startup from {_visualOrigin}" + (_visualNotice is null ? "" : "; " + _visualNotice);
+        return $"{active}{pending}; {pack}; startup from {_visualOrigin}" + (_visualNotice is null ? "" : "; " + _visualNotice)
+            + (_visualKeyNotice is null ? "" : "; " + _visualKeyNotice);
     }
 
     private string VisualHudStatus() => $"H visual Legacy/HD: {VisualSummary()}";
@@ -161,6 +170,8 @@ public sealed class VisualProfileSettingsStore
 
     /// <summary>False for an automated run without a test path: nothing is read or written.</summary>
     public bool Persistent => _path is not null;
+    /// <summary>A saved file exists (startup reports "saved setting" only then).</summary>
+    public bool HasSaved => _path is not null && global::Godot.FileAccess.FileExists(_path);
 
     public VisualProfile Load()
     {

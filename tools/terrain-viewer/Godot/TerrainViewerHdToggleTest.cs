@@ -178,6 +178,114 @@ public static partial class TerrainViewerSelfTest
             + (native ? "" : "; pixels NOT_VERIFIED headless"));
     }
 
+    // ARC-UI-006 on the WORLD canvas, whose submissions are its _Draw calls: preparing draws are
+    // Legacy only and the commit draw binds the statics and the actor HD together; Legacy commits in
+    // the next draw and keeps HD retained; the bounded wait commits with every frame pending; a
+    // cancel never commits. A pack recoloured per parent texel makes HD visible at any zoom.
+    private static async Task AssertWorldHdToggleAsync(Node host)
+    {
+        var native = DisplayServer.GetName() != "headless";
+        var root = System.IO.Directory.CreateTempSubdirectory("arc-ui-006-world-").FullName;
+        var fixture = WorldFixture();
+        using var cache = new TerrainTextureCache();
+        cache.Upload(fixture.Result.Textures); cache.UploadStatic(fixture.Result.StaticTextures); cache.UploadActor(fixture.Result.ActorTextures);
+        var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
+        var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);
+        var sources = new List<HdFrameSource>();
+        var clock = 0L; canvas.VisualClock = () => clock;
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-006 WORLD toggle self-test: " + why); }
+        const int candidates = 6; // the statics and the actor of the fixture (ARC-RENDER-014 WORLD self-test)
+        try
+        {
+            var actor = fixture.Result.ActorPlan!.Current.Destination;
+            viewport.CanvasTransform = new Transform2D(0, new Vector2(2, 2), 0, new Vector2(240 - 2 * actor.X, 200 - 2 * actor.Y));
+            var frames = fixture.Result.StaticTextures.Values.Select(t => new HdNearestPack.Frame(t.HdQuery!, t.Rgba))
+                .Concat(fixture.Result.ActorTextures.Values.Select(t => new HdNearestPack.Frame(t.HdQuery!, t.Rgba))).ToArray();
+            HdFrameSource Recoloured(string id)
+            {
+                var open = HdPack.Open(HdNearestPack.Write(System.IO.Path.Combine(root, id), id, 4, frames, parentTint: (x, y) => (byte)(x * 37 + y * 11 + 64)));
+                var source = new HdFrameSource(open.Pack ?? throw new InvalidOperationException("ARC-UI-006 WORLD pack " + open.Status)); sources.Add(source); return source;
+            }
+            async Task<byte[]> Frame()
+            {
+                await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
+                if (!native) return Array.Empty<byte>();
+                await host.ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
+                using var image = viewport.GetTexture().GetImage();
+                return image.GetData();
+            }
+            async Task Drain(string label)
+            {
+                for (var wait = 0; canvas.PendingVisualProfile is not null || canvas.WorldHdStats[HdFallbackReason.Pending] > 0 || (canvas.HdSource?.PendingCount ?? 0) > 0; wait++)
+                {
+                    Require(wait < 600, "pending forever: " + label);
+                    await Frame();
+                }
+                await Frame(); await Frame();
+            }
+            canvas.Publish(fixture.Result.DiagnosticPlan!, cache);
+            var source = Recoloured("recoloured");
+            canvas.SetVisualProfile(VisualProfile.Legacy, source, HdDeviceBudget.Ceiling(4));
+            await Frame(); var legacy = await Frame();
+
+            // Legacy → HD: Legacy draws until the commit draw binds all six together.
+            Require(canvas.RequestVisualProfile(VisualProfile.Hd) == VisualRequestOutcome.Started, "the request starts");
+            var rasters = new List<byte[]>();
+            for (var wait = 0; canvas.VisualProfile == VisualProfile.Legacy; wait++)
+            {
+                Require(wait < 600, "the WORLD switch to HD never committed");
+                rasters.Add(await Frame());
+                if (canvas.VisualProfile == VisualProfile.Legacy) Require(canvas.WorldHdStats.Hd + canvas.WorldHdStats.Fallback == 0, "a preparing draw drew HD");
+            }
+            Require(canvas.LastVisualCommit is { Profile: VisualProfile.Hd, TimedOut: false, PendingFrames: 0 } && canvas.WorldHdStats.Hd == candidates,
+                "a settled WORLD commit binds all six: " + canvas.WorldHdStats.Format());
+            rasters.Add(await Frame()); rasters.Add(await Frame());
+            if (native)
+            {
+                var hd = rasters[^1];
+                Require(!hd.AsSpan().SequenceEqual(legacy), "the committed WORLD view shows the HD textures");
+                Require(rasters.All(raster => raster.AsSpan().SequenceEqual(legacy) || raster.AsSpan().SequenceEqual(hd)), "a WORLD frame mixed Legacy and HD");
+            }
+
+            // HD → Legacy: commits in the next draw, HD textures retained.
+            Require(canvas.RequestVisualProfile(VisualProfile.Legacy) == VisualRequestOutcome.Started, "the request back starts");
+            await Frame();
+            Require(canvas.VisualProfile == VisualProfile.Legacy && canvas.PendingVisualProfile is null && canvas.WorldHdStats.Hd == 0, "Legacy committed in the next draw");
+            Require(canvas.HdResidentCount == candidates, "HD textures retained: " + canvas.HdResidentCount);
+            if (native) { await Frame(); Require((await Frame()).AsSpan().SequenceEqual(legacy), "Legacy again"); }
+
+            // Cancel: never commits, decodes dropped.
+            var cancel = Recoloured("cancel");
+            canvas.SetVisualProfile(VisualProfile.Legacy, cancel, HdDeviceBudget.Ceiling(4));
+            await Frame();
+            // WORLD submits only in its draw, so the request is pending until the next one; cancel it there.
+            var commits = canvas.VisualCommits;
+            Require(canvas.RequestVisualProfile(VisualProfile.Hd) == VisualRequestOutcome.Started && canvas.PendingVisualProfile == VisualProfile.Hd, "pending until the next draw");
+            Require(canvas.RequestVisualProfile(VisualProfile.Legacy) == VisualRequestOutcome.Cancelled && cancel.PendingCount == 0, "cancelled");
+            for (var i = 0; i < 6; i++) { await Frame(); Require(canvas.VisualProfile == VisualProfile.Legacy && canvas.WorldHdStats.Hd == 0 && cancel.PendingCount == 0, "a cancelled WORLD switch drew or decoded HD"); }
+            Require(canvas.VisualCommits == commits, "a cancelled WORLD switch committed");
+
+            // The bounded wait: the first draw after the request is already past 500 ms.
+            var slow = Recoloured("slow");
+            canvas.SetVisualProfile(VisualProfile.Legacy, slow, HdDeviceBudget.Ceiling(4));
+            await Frame();
+            canvas.RequestVisualProfile(VisualProfile.Hd);
+            clock += VisualProfileSwitch.DefaultCommitWaitMilliseconds;
+            await Frame();
+            Require(canvas.VisualProfile == VisualProfile.Hd && canvas.LastVisualCommit is { TimedOut: true, PendingFrames: > 0 }, "the WORLD bounded wait committed with frames pending: " + canvas.LastVisualCommit);
+            await Drain("world-timed-out");
+            Require(canvas.WorldHdStats.Hd == candidates, "pending WORLD frames switched individually: " + canvas.WorldHdStats.Format());
+        }
+        finally
+        {
+            canvas.ClearScene(); viewport.QueueFree();
+            foreach (var source in sources) source.Dispose();
+            System.IO.Directory.Delete(root, true);
+        }
+        GD.Print("ARC-UI-006 self-test WORLD toggle PASS Legacy-only preparing draws then one all-HD commit draw, Legacy commit keeps HD retained, cancel, bounded wait with frames pending"
+            + (native ? "" : "; pixels NOT_VERIFIED headless"));
+    }
+
     // ARC-UI-006 in the production app over the strict synthetic AREA owner: the H key route, the
     // palette action, the request saved at once, cancel by a second H, and Session invariance of two
     // walks under Legacy, HD and with switches (dialog, light and map change: native smoke).

@@ -269,7 +269,8 @@ settle what they leave open, without changing a rule:
 - A switch to `Legacy` has nothing to prepare (the Legacy visible set stays resident), so it
   commits in the next submission. A request when nothing is published commits at once.
 - A map change during a pending switch drops its decodes (step 6) and keeps the request, which
-  commits on the new map's view.
+  commits on the new map's view. While a reload or failure has cleared the scene nothing is
+  visible, so a pending request commits at once; the next view's frames load lazily.
 - Step 2's store is `VisualProfileSettingsStore` with the test override
   `VISUAL_PROFILE_TEST_PATH`; an automated run (self-test, native smoke) without it neither reads
   nor writes the file and starts `Legacy`. The ARC-RENDER-014 environment selection
@@ -327,9 +328,9 @@ and the native smoke `ARC-RENDER-014 native-smoke AREA HD identity PASS` / `WORL
 identity PASS` on the installed original with a nearest 4× pack in a temporary directory.
 ARC-UI-006 added the toggle checks ([viewer](terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)):
 `VisualProfileSwitchTests` (codec, generations, settled or timed commit, cancel, pack choice), the
-self-tests `ARC-UI-006 self-test toggle PASS` (preparing frames wholly Legacy, one commit frame
-wholly HD, Legacy commit, cancel, bounded wait with frames pending, map change, `NoPack`) and
-`ARC-UI-006 self-test app PASS`, and the native smoke `ARC-UI-006 native-smoke Session invariance
+self-tests `ARC-UI-006 self-test toggle PASS` (AREA: preparing frames wholly Legacy, one commit frame
+wholly HD, Legacy commit, cancel, bounded wait with frames pending, map change, `NoPack`),
+`ARC-UI-006 self-test WORLD toggle PASS` and `ARC-UI-006 self-test app PASS`, and the native smoke `ARC-UI-006 native-smoke Session invariance
 PASS`, which proves the acceptance above on the installed original: dialog, walk, one game hour and
 the cave entry from one quick save give byte-identical Session snapshots and drawn destinations
 under `Legacy`, under `Hd` and with switches before and during every step. Human review of real HD

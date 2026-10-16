@@ -32,7 +32,8 @@ public static class VisualProfileCodec
                 _ => VisualProfile.Legacy,
             };
         }
-        catch (JsonException) { return VisualProfile.Legacy; }
+        // ArgumentException: text that is not valid UTF-16 (a lone surrogate) is unreadable too.
+        catch (Exception error) when (error is JsonException or ArgumentException) { return VisualProfile.Legacy; }
     }
 
     public static string Serialize(VisualProfile profile) => profile switch

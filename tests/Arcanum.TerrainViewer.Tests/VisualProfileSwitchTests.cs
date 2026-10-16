@@ -25,6 +25,7 @@ public sealed class VisualProfileSwitchTests
                      "{\"schema\":1,\"profile\":\"hd\"}", "{\"schema\":1,\"profile\":\"HD\"}", "{\"schema\":1,\"profile\":1}",
                      "{\"schema\":1,\"profile\":\"Hd\",\"pack\":\"x\"}", "{\"schema\":1,\"profile\":\"Hd\",\"profile\":\"Hd\"}",
                      "{\"schema\":1,\"profile\":\"Hd\"", "{\"schema\":1,\"profile\":null}",
+                     "{\"schema\":1,\"profile\":\"Hd\uD800\"}", "{\"schema\":1,\"profile\":\"Hd\"}\uD800",
                  })
             Assert.AreEqual(VisualProfile.Legacy, VisualProfileCodec.DeserializeOrLegacy(text), text ?? "null");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => VisualProfileCodec.Serialize((VisualProfile)7));
