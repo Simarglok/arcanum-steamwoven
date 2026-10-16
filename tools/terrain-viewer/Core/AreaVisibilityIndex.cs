@@ -6,8 +6,9 @@ namespace Arcanum.TerrainViewer.Core;
 /// rectangle, a superset of the commands whose destination meets it, in ascending command
 /// order. Callers keep their own exact intersection test, so drawing order and the
 /// visible set are unchanged; the index only avoids scanning every command when the view
-/// covers a small part of the area. A view over more than <see cref="ScanFraction"/> of
-/// the occupied cells returns every command, which is then cheaper than merging cells.</summary>
+/// covers a small part of the area. A view spanning more grid cells (empty ones included)
+/// than <see cref="ScanFraction"/> of the occupied cells returns every command, which is
+/// then cheaper than merging cells.</summary>
 public sealed class AreaVisibilityIndex
 {
     public const int CellSize = 512;
@@ -24,8 +25,9 @@ public sealed class AreaVisibilityIndex
         for (var index = 0; index < destinations.Count; index++)
         {
             var d = destinations[index];
-            // Inclusive of the far edge: the index may over-report, never under-report.
-            var (x0, x1) = (FloorDiv(d.X), FloorDiv((long)d.X + d.Width)); var (y0, y1) = (FloorDiv(d.Y), FloorDiv((long)d.Y + d.Height));
+            // Inclusive of the far edge plus one cell: the index may over-report, never under-report,
+            // even where a float view rectangle rounds a far coordinate past the exact integer end.
+            var (x0, x1) = (FloorDiv(d.X), FloorDiv((long)d.X + d.Width) + 1); var (y0, y1) = (FloorDiv(d.Y), FloorDiv((long)d.Y + d.Height) + 1);
             for (var y = y0; y <= y1; y++)
             for (var x = x0; x <= x1; x++)
             {

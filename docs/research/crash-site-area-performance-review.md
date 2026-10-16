@@ -244,7 +244,7 @@ on `0a7d1ab` plus the change (before = the frame table above, overlay phases aft
 Steady pan frames at zoom 1–2 fall to about a third. The first visit of the
 full-resolution zoom 0.3 still costs up to 81–92 ms: about 110–140 new 512 px chunks
 are uploaded on the main thread after composition (not timed separately). When the
-view covers more than half of the occupied grid cells (the lowest zooms), the index
+view spans more grid cells than half the occupied cells (the lowest zooms), the index
 scans every command as before; at low zoom most of the remaining canvas update is the
 per-item work, which grows with the visible count.
 

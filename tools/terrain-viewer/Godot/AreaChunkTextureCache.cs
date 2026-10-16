@@ -44,8 +44,17 @@ internal sealed class AreaChunkTextureCache : IDisposable
         {
             var batch = missing.Skip(start).Take(ComposeBatch).ToArray(); var composed = new byte[batch.Length][];
             if (batch.Length == 1) composed[0] = terrain.Compose(batch[0], level);
-            else Parallel.For(0, batch.Length, new ParallelOptions { MaxDegreeOfParallelism = System.Environment.ProcessorCount },
-                index => composed[index] = terrain.Compose(batch[index], level));
+            else
+            {
+                try
+                {
+                    Parallel.For(0, batch.Length, new ParallelOptions { MaxDegreeOfParallelism = System.Environment.ProcessorCount },
+                        index => composed[index] = terrain.Compose(batch[index], level));
+                }
+                // Keep the failure category of a sequential compose for the caller's handlers.
+                catch (AggregateException error) when (error.InnerExceptions.Count == 1)
+                { System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(error.InnerExceptions[0]).Throw(); }
+            }
             for (var index = 0; index < batch.Length; index++) Add(batch[index], level, composed[index]);
         }
     }
