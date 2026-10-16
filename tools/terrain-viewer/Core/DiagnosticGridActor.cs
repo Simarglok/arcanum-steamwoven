@@ -59,9 +59,15 @@ public sealed class DiagnosticGridActor
         return result;
     }
     public ActorDiagnosticPlacementInput Placement() => Placement(Session!, Session!.State, CurrentFrame);
-    // The area profile places the actor anywhere in the admitted core chart; WORLD keeps one sector.
+    /// <summary>The continuous foot point the camera follows: the projected position plus the drawn anchor offset,
+    /// <c>(40,20)</c> on the AREA chart (the diamond centre, ARC-RENDER-011) and <c>(0,20)</c> in WORLD.</summary>
+    public Vec2 FootAnchor => DiagnosticActorMotion.Project(State.Position)
+        + (Session is AreaGridSession ? new Vec2(AreaGridSession.LocationOriginX, 20) : new Vec2(0, 20));
+    // The area profile places the actor anywhere in the admitted core chart, from the chart's location origin;
+    // WORLD keeps one sector and its retained origin.
     private static ActorDiagnosticPlacementInput Placement(IGridSession session, MovementState state, int frame) => session is AreaGridSession
         ? DiagnosticActorMotion.ToPlacement(RenderState(state), frame, AreaGridSession.MinimumChartCell, AreaGridSession.MaximumChartCell)
+            with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
         : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
     public static DiagnosticActorState RenderState(MovementState state) => new(

@@ -174,7 +174,7 @@ public partial class TerrainViewerApp
 
         GD.Print("ARC-WORLD-007 AREA route synthetic PASS cases=" + string.Join(",", names));
         return new { Schema = "arcanum-area-route-synthetic-v1", Task = "ARC-WORLD-007", Outcome = "PASS", Cases = cases,
-            Picking = "chart diamond centre (40(y-x)+40, 20(y+x)+20); actor foot projection 40 px left, retained",
+            Picking = "chart diamond centre (40(y-x)+40, 20(y+x)+20); the actor stands on the same centre (ARC-RENDER-011)",
             OriginalPathParity = "NOT_VERIFIED", Physical = "NOT_VERIFIED" };
     }
 }

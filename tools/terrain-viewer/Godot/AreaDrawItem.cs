@@ -17,6 +17,10 @@ public partial class AreaDrawItem : Node2D
         uniform ivec2 screen_size;
         uniform float body_alpha = 1.0;
         uniform vec3 ambient = vec3(1.0);
+        // ARC-RENDER-011 wall fade: alpha at the left and right drawn edges, linear across the frame width.
+        uniform vec2 fade = vec2(1.0);
+        uniform int fade_width = 1;
+        uniform bool fade_flip = false;
         void fragment() {
             ivec2 p = ivec2(FRAGCOORD.xy) - screen_start;
             if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, screen_size))) discard;
@@ -25,7 +29,9 @@ public partial class AreaDrawItem : Node2D
             int sx = x.x + x.y * 256 - 1;
             int sy = y.x + y.y * 256 - 1;
             if (sx < 0 || sy < 0) discard;
-            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(ambient, body_alpha);
+            int column = fade_flip ? fade_width - 1 - sx : sx;
+            float wall = fade.x + float(column) * (fade.y - fade.x) / float(fade_width);
+            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(ambient, body_alpha * wall);
         }
         """;
     // Two immutable shader programs for process lifetime, not per-object copies.
@@ -34,6 +40,7 @@ public partial class AreaDrawItem : Node2D
     private ShaderMaterial? _material;
     private (bool Additive, int Alpha)? _materialState;
     private Color? _ambientState;
+    private (AreaWallFade Fade, int Width, bool Flip)? _fadeState;
     private ImageTexture? _mapping;
     private AreaMappingKey? _key;
     private (Transform2D Transform, Rect2I Envelope, TerrainRect Source, TerrainRect Destination, bool X, bool Y)? _keyed;
@@ -46,6 +53,8 @@ public partial class AreaDrawItem : Node2D
     public ActorDiagnosticDrawCommand? Actor { get; set; }
     /// <summary>ARC-RENDER-010 ambient multiplier of this item's channel; white leaves source pixels unchanged.</summary>
     public Color Ambient { get; set; } = Colors.White;
+    /// <summary>ARC-RENDER-011 wall check fade of this item; None draws it opaque.</summary>
+    public AreaWallFade WallFade { get; set; }
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
@@ -103,12 +112,21 @@ public partial class AreaDrawItem : Node2D
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
             _materialState = (command.Additive, command.Alpha);
-            _ambientState = null; // re-send the ambient uniform with every shader swap
+            _ambientState = null; _fadeState = null; // re-send the per-item uniforms with every shader swap
         }
         if (_ambientState != Ambient)
         {
             _material.SetShaderParameter("ambient", new Vector3(Ambient.R, Ambient.G, Ambient.B));
             _ambientState = Ambient;
+        }
+        var fadeState = (WallFade, source.Width, command.FlipX);
+        if (_fadeState != fadeState)
+        {
+            var (left, right) = FadeAlphas(WallFade);
+            _material.SetShaderParameter("fade", new Vector2(left / 255f, right / 255f));
+            _material.SetShaderParameter("fade_width", source.Width);
+            _material.SetShaderParameter("fade_flip", command.FlipX);
+            _fadeState = fadeState;
         }
         if (_state == state)
         {
@@ -151,6 +169,17 @@ public partial class AreaDrawItem : Node2D
         _primitive = new(a, b - a); _state = state;
     }
 
+    /// <summary>Alpha at the left and right drawn edges: the source's 64 for a whole wall, 128 on the faded side of a
+    /// corner (<c>OWAF_TRANS_LEFT</c> fades the left side).</summary>
+    internal static (int Left, int Right) FadeAlphas(AreaWallFade fade) => fade switch
+    {
+        AreaWallFade.None => (255, 255),
+        AreaWallFade.Both => (AreaWallCheck.FadedAlpha, AreaWallCheck.FadedAlpha),
+        AreaWallFade.Left => (AreaWallCheck.EdgeAlpha, 255),
+        AreaWallFade.Right => (255, AreaWallCheck.EdgeAlpha),
+        _ => throw new ArgumentOutOfRangeException(nameof(fade)),
+    };
+
     // Both origins integral (always the case with pixel snapping) and below 2^24, so
     // they and their difference are exact integers; otherwise the key is recomputed.
     private static Vector2I? IntegerShift(Vector2 from, Vector2 to)
@@ -186,7 +215,7 @@ public partial class AreaDrawItem : Node2D
 
     public override void _ExitTree()
     {
-        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null;
+        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null; _fadeState = null;
         _ownMappings?.Dispose(); _ownMappings = null;
     }
 }

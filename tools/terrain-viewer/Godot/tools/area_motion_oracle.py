@@ -15,8 +15,8 @@ import math
 from pathlib import Path
 
 # Canopy: local cell (6,1) of the chart-origin sector, object offsets, ART
-# 128x160 with hotspot (20,80); transparent border, columns 1..63 palette 1.
-CANOPY = dict(cell=(6, 1), offsets=(-74, 40), size=(128, 160), hotspot=(20, 80))
+# 128x160 with hotspot (-20,80); transparent border, columns 1..63 palette 1.
+CANOPY = dict(cell=(6, 1), offsets=(-74, 40), size=(128, 160), hotspot=(-20, 80))
 CANOPY_RED = (231, 37, 19, 255)
 # HumanFixed actor frames: 9x7, hotspot (4,3), opaque (1,1) left and (7,1) right.
 ACTOR = dict(size=(9, 7), hotspot=(4, 3))
@@ -70,14 +70,16 @@ def actor(view):
     mx, my = math.floor(x), math.floor(y)
     rx, ry = project(x - mx, y - my)
     offset = (round_even(rx), round_even(ry))
-    # Retained WORLD foot projection: anchor = P(map) + residual + (0,20).
+    # AREA foot projection (ARC-RENDER-011): CE location_xy from the chart's
+    # location origin (+40,0), plus the object (+40,+20): anchor = P(map) +
+    # residual + (40,20), the drawn diamond centre like every body.
     px, py = project(mx, my)
     w, h = ACTOR['size']
     hx, hy = ACTOR['hotspot']
     column = 1 if view['pixel'] == 'left' else 7
     if view['mirrored']:
         hx, column = w - hx - 1, w - 1 - column
-    left, top = px + offset[0] - hx, py + offset[1] + 20 - hy
+    left, top = px + offset[0] + 40 - hx, py + offset[1] + 20 - hy
     first, second = ranks(*offset)
     return dict(rect=(left, top, w, h), map=(mx, my), offsets=offset, first=first, second=second,
                 witness=(left + column, top + 1), color=ACTOR_COLORS[(view['action'], view['pixel'])])
@@ -102,7 +104,7 @@ def oracle():
     assert [v['inFront'] for v in views] == [False, False, True, True, False]
     return dict(schema='independent-area-motion-overlap-v1', canopyRect=list(body['rect']),
                 canopyRanks=[body['first'], body['second']], zooms=list(ZOOMS), views=views,
-                oracle='project 40(y-x),20(x+y); body P+offset+(40,20)-hotspot; actor P(floor)+half-even residual+(0,20)-hotspot; '
+                oracle='project 40(y-x),20(x+y); body P+offset+(40,20)-hotspot; actor P(floor)+half-even residual+(40,20)-hotspot; '
                        'ranks (v-h,h+v) with h=trunc((ox-40)/2), v=2*trunc(oy/2); order mapY,mapX,second,first')
 
 
@@ -111,7 +113,7 @@ def main():
     parser.add_argument('--output', type=Path)
     args = parser.parse_args()
     data = (json.dumps(oracle(), indent=2, sort_keys=True) + '\n').encode()
-    if hashlib.sha256(data).hexdigest() != 'd40cdf7a0fe4d84e9593fd9b260c161890f84f2bb8a90c05e5035d14ff5c9d7a':
+    if hashlib.sha256(data).hexdigest() != 'f5b26e1784a392e4ed6b299090912e6c7b800a16ad005880c5b95fe018b40f9e':
         raise ValueError('frozen motion oracle changed; update the native probe literals and digest together')
     if args.output:
         with args.output.open('xb') as output:

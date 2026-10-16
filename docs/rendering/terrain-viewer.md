@@ -401,10 +401,9 @@ and its step evidence with wall edges.
   arrival cell (`PlaceActor`); the HUD shows it. Both maps stay loaded, so the
   exterior is exactly as it was on return. The session clock does not drive the
   day/night clock yet.
-- **Cave view.** The cave is drawn unlit; walls are drawn with the wall hotspot rule.
-  The original fades walls that hide the player (the source's wall check); that is
-  not implemented, so walls and the exit facade can cover the actor in the corridor
-  near the arrival.
+- **Cave view.** The cave is drawn unlit; walls are drawn with the wall hotspot rule
+  and fade in front of the actor by the original wall check
+  ([ARC-RENDER-011](#actor-anchor-and-wall-fade-arc-render-011)).
 
 The native smoke (`--native-smoke` with the cave input) adds a transition phase: it
 stands the actor next to each trigger, clicks an opaque trigger pixel outside the
@@ -419,6 +418,71 @@ checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smok
 checks the same transfers. The ordinary launcher passes the cave input only to an
 ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
 it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
+
+### Actor anchor and wall fade (ARC-RENDER-011)
+
+**Actor anchor.** CE places a map location at `location_xy = 40(y-x-1), 20(y+x)` and
+draws an object at that point plus its offset plus `(40,20)`, so every object, the
+player included, stands on the centre of its tile diamond. The AREA plan projects
+terrain and bodies from `40(y-x)`, 40 px to the right of `location_xy`, while the
+actor placement restates `location_xy` itself; before this change the actor was
+therefore drawn 40 px left of its cell, on the diamond's left vertex. In
+`crash-site-area` the placement now takes the chart's location origin `(40,0)`
+(`AreaGridSession.LocationOriginX`), so the actor anchor and the followed foot point
+are the diamond centre `(40(y-x)+40, 20(y+x)+20)`, the point `AreaCellPicking` picks
+and AREA scenery uses. Depth order is unchanged: the same-cell ranks come from the
+offsets, not from the drawn point. `world-diagnostic` keeps its retained origin and
+its human/grid references. The synthetic moving-overlap oracle moved with it (actor
+rectangles +40; the fixture canopy's hotspot is now `(-20,80)` so its opaque half still
+covers the witnesses; ranks unchanged).
+
+**Wall check.** The original fades walls in front of the player (CE `wallcheck.c`,
+the wall branch of `object.c` and the blit alpha rules of `tig/art.c` at the pinned
+research revision). `AreaWallCheck` (viewer Core) restates it:
+
+- Walls stand on a lattice of corners every four tiles. The player's committed tile
+  is resolved to the 4×4 block with corner `(x - (x-2) mod 4, y - (y-2) mod 4)`; on
+  the block's low-X line a wall on the player's tile with rotation 4/5 moves the player
+  to the previous block along X (rotation 2/3 along Y), and on the low-Y line a
+  rotation 2/3 wall moves it along Y. The block's four diagonal triangles are its
+  regions; a tile on a diagonal is in two.
+- 34 lattice edges around the block (the three tiles between two corners), in a fixed
+  order, are checked: 22 can hide others when complete (a wall on all three tiles),
+  four of them only test; 30 fade. A hidden edge hides nothing. Some hides apply only
+  while the player is in a given region. An edge that is not hidden makes the first
+  wall of each of its tiles see-through (alpha 64) and marks its corners: a corner
+  wall fades on the side towards the edge (alpha 128 there, 255 on the other side,
+  linear across the drawn width). Walls with `OWAF_TRANS_DISALLOW` stay opaque.
+- While the player stays in the same block and shares a region with the position of
+  the last calculation, the previous set is kept. A map change starts empty.
+
+The edge list is the original's data (decoded from CE's table) re-expressed as
+lattice geometry; no CE code or structure is copied. A literal research port of the
+CE function gave the same fades as `AreaWallCheck` for every tile of the cave sector
+and a 4,000-step random walk (stateful); the port is not part of the repository.
+The viewer recalculates when the actor's committed cell changes and draws each faded
+wall through the same shader with the alpha at its left and right edges. The HUD
+shows the faded count and block.
+
+Evidence: synthetic `AreaWallCheckTests` (regions, front edge and corners, X-edge
+corners by rotation, a complete back edge hiding, region-only hides, the same-block
+rule, the block shift, disallowed walls, shared tiles); real-data
+`AreaTransitionOriginalTests` (125 walls; at the arrival (2087,2018) block
+(2086,2018), region LowY, 11 faded: the corridor's front row y 2022 x 2087..2092 and
+the row y 2026 x 2078..2082 with fading corners; no admitted cave tile probes a fade
+tile holding two walls); the native cave smoke prints
+`ARC-RENDER-011 native-smoke wall fade PASS` after comparing the arrival view drawn
+with the fade set and with opaque walls (pixels differ, only on opaque texels of faded
+walls).
+
+NOT VERIFIED: original pixel parity (per-pixel alpha rounding, the `>>8` blend, the
+lerp of a mirrored wall, stippled blending when the original's translucency setting
+is not constant alpha), the original's head-of-list order for a tile holding two
+walls (the area's same-tile order is used; it does not occur in the cave), walls of
+the exterior (there are none in the admitted core), roofs (the original also hides a
+faded wall under a faded roof; the cave has no roofs), click-through of faded walls,
+and whether the original recalculates on the committed tile or at another point of a
+step.
 
 ## Verification and evidence status
 

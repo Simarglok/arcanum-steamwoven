@@ -304,9 +304,10 @@ to (6,-1) lies in an absent fixture sector. Showing the area grants no cell.
 Moving overlap witnesses come from the independent standard-library
 `tools/area_motion_oracle.py`, which restates the projection, body center,
 floor/half-even actor residual, rank and order rules on its own. The fixture
-canopy at cell 6,1 has object offsets (-74,40) so that its opaque left half
-covers the actor in cells 6 and 7: destination (-254,120,128,160), ranks
-(97,-17). The actor is behind it while its floor map cell is 6 (idle, outbound
+canopy at cell 6,1 has object offsets (-74,40) and ART hotspot (-20,80) so that
+its opaque left half covers the actor in cells 6 and 7: destination
+(-214,120,128,160), ranks (97,-17). The actor anchor is the diamond centre
+(projection plus residual plus `(40,20)`, ARC-RENDER-011). The actor is behind it while its floor map cell is 6 (idle, outbound
 6.25 and mirrored return 6.75) and ahead in cell 7 (idle and outbound 7.25).
 Each of the five views is read back at zoom 1, 2 and 3 with actor-only and
 canopy-only negative controls; actual rectangles are logged before asserting.
