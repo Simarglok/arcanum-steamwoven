@@ -11,7 +11,8 @@ a budget or a regression gate. Numbers are single observations on one machine.
 actor-framed first publication and cached upright order, and F4 partly by the
 cached N/A count (see [F1/F4/F5 result](#f1f4f5-result-pool-startup-hud-order));
 F2 by the shared translation-invariant index-row cache (see
-[F2 result](#f2-result-shared-index-rows)); L2 mostly by a faster inflate
+[F2 result](#f2-result-shared-index-rows)); F3 by pre-composed terrain chunks (see
+[F3 result](#f3-result-terrain-chunks)); L2 mostly by a faster inflate
 projection (see [L2 result](#l2-result-inflate-projection)). The other causes are
 unchanged.
 
@@ -275,6 +276,30 @@ SharpZipLib's own inflate (about 1.5 s per phase in both configurations) and the
 projection remain the largest load steps; each entry is still read, projected and
 inflated twice because there is no persistent frame cache.
 
+## F3 result: terrain chunks
+
+Terrain is drawn as pre-composed 512 px chunks
+([draw-call research](crash-site-area-draw-calls.md)). Same method, isolated
+preferences, at `origin/main` `beaf47e` plus the change (before = the F2 result,
+and the research note for zoom 0.25 and Fit):
+
+| Phase | Before | After | Terrain chunks (level) | Draw calls |
+| --- | ---: | ---: | ---: | ---: |
+| Idle, WORLD follow, zoom 2 | 2.0 ms | 2.3 ms | 6 (full) | 28 |
+| Pan, zoom 2 | 5.4 ms | 2.8 ms | 3 (full) | 8 |
+| Pan, zoom 1 | 11.0 ms | 4.4 ms | 10 (full) | 43 |
+| Pan, zoom 0.5 | 19.6 ms | 4.9 ms | 30 (1/2) | 110 |
+| Pan, zoom 0.3 (non-dyadic) | not measured | 6.8 ms | 63 (full) | 208 |
+| Pan, zoom 0.25 | about 95 ms | 5.7 ms | 77 (1/4) | 241 |
+| Idle, zoom 0.25 | 33.2 ms | 3.6 ms | 77 (1/4) | 580 |
+| Idle, Fit (zoom 0.125) | about 100 ms (extrapolated) | 4.2 ms | 215 (1/8) | 725 |
+| Pan, zoom 0.125 | not measured | 7.9 ms | 199 (1/8) | 711 |
+
+Draw calls are averaged over all frames of a phase. The first frames at a new
+zoom compose the chunks they need (worst observed frame 133 ms when entering zoom
+0.3 at full resolution, about 40–65 ms elsewhere); later pans reuse them from the
+192 MiB chunk cache. Bodies stay per-item draws.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
@@ -300,7 +325,7 @@ contracts that the code currently enforces.
    batched or atlased submission, or pre-composited terrain chunks for the
    immutable terrain layer (36,864 of 37,363 commands are terrain). Researched in
    [draw calls](crash-site-area-draw-calls.md): pre-composited terrain chunks are
-   exact for this profile and recommended next.
+   exact for this profile. Done (F3 result above).
 4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy. Mostly done
    (L2 result above: the cost was the inflate projection, not pixel hashing).**
    The rest is SharpZipLib inflate and the projection, each paid twice per entry.

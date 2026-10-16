@@ -111,6 +111,18 @@ Missing resident visible textures fail; culled records do not become missing.
 [Exact nearest sampling](area-nearest-sampling.md) is a project-defined pixel
 rule, not a claim that every proprietary renderer implements the same rule.
 
+Terrain is drawn as pre-composed 512 px world chunks when the plan admits it:
+every terrain command 1:1, alpha 255, not additive, not Y-reflected, in phase 0/1
+before every body, and sampling only fully transparent or opaque source texels.
+A chunk texel is the last terrain command in plan order whose source texel there is
+opaque, mirrored within its crop, so under the nearest rule a chunk shows exactly
+the pixels of its per-command terrain draws. At zoom 1/2, 1/4 and 1/8 with an integer
+raster origin a decimated chunk keeps only the texels that zoom samples. If the
+plan does not admit chunks, or the visible chunks would exceed 192 MiB or 1,024
+textures, terrain is drawn per command as before. Visibility, culling counts,
+coverage and pixel observation still use the per-command list. The
+[draw-call research](../research/crash-site-area-draw-calls.md) has the proof.
+
 ## Resource ownership and reports
 
 Each load has one DATA owner, one strict snapshot load and one frame batch that
@@ -125,8 +137,11 @@ retains its separate closed catalogue. Keys include source entry/payload, view,
 policy, physical selection, effective palette and output identity. Occurrences
 remain separate commands even when their frame is shared. Camera pan can evict
 and reupload GPU textures from retained CPU copies without another DATA decode.
-Integer sampling metadata has a separate 16 MiB cap. These are admission policies,
-not measured process/GPU memory or load-speed guarantees.
+Integer sampling metadata has a separate 16 MiB cap. Terrain chunk textures have
+their own 192 MiB / 1,024-texture cap, with chunks of the current view never evicted
+and older chunks evicted least recently used; terrain frames are uploaded only when
+terrain is drawn per command. These are admission policies, not measured
+process/GPU memory or load-speed guarantees.
 
 The HUD separates core/context, terrain/statics/core mobiles, body submissions,
 N/A, visible/culled, CPU/GPU counts and byte estimates, measured load duration,

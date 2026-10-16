@@ -32,6 +32,8 @@ public partial class TerrainViewerApp
         var old = CaptureAreaResourceBaseline();
         var bounds = old.Bounds; var viewport = WorldViewport;
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
+        var chunkCreated = _canvas!.AreaChunkCreatedCount; var chunkDisposed = _canvas.AreaChunkDisposedCount;
+        var maxChunks = 0; long maxChunkBytes = 0;
         HashSet<AreaDrawCommand>? seen = new(ReferenceEqualityComparer.Instance);
         var steps = 0; var maxLive = 0; var maxVisible = 0; long maxBytes = 0;
         // Zoom 1 tiles the envelope with viewport-sized steps; the camera clamp
@@ -47,6 +49,9 @@ public partial class TerrainViewerApp
             maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
             // GPU residency is a subset of the retained repository, never more.
             Require(_cache.AreaCount <= old.CpuFrames && _cache.AreaRgbaBytes <= old.CpuBytes, "GPU_BUDGET");
+            // Terrain chunk textures are a separate bounded LRU, never beyond its caps.
+            maxChunks = Math.Max(maxChunks, _canvas.AreaChunkResidentCount); maxChunkBytes = Math.Max(maxChunkBytes, _canvas.AreaChunkResidentBytes);
+            Require(_canvas.AreaChunkResidentCount <= AreaChunkTextureCache.MaxChunks && _canvas.AreaChunkResidentBytes <= AreaChunkTextureCache.MaxBytes, "CHUNK_BUDGET");
         }
         var sweptCommands = seen.Count; seen = null;
         Require(sweptCommands == old.Commands, "SWEEP_COVERAGE");
@@ -54,7 +59,12 @@ public partial class TerrainViewerApp
             && _readyArea.CpuRgbaBytes == old.CpuBytes, "CPU_REPOSITORY");
         var reuploads = _cache.CreatedCount - created; var evictions = _cache.DisposedCount - disposed;
         Require(reuploads > 0 && evictions > 0 && _cache.CreatedCount - _cache.DisposedCount == _cache.Count, "GPU_OWNERSHIP");
-        GD.Print($"ARC-RENDER-007 resources sweep steps={steps} commands={sweptCommands} maxVisible={maxVisible} maxGpu={maxLive}/{maxBytes} reuploads={reuploads} evictions={evictions} cpu={old.CpuFrames}/{old.CpuBytes}");
+        // The whole-envelope sweep needs more chunks than the chunk cap, so the chunk
+        // LRU must have evicted, and its own create/dispose accounting must balance.
+        var chunkComposed = _canvas.AreaChunkCreatedCount - chunkCreated; var chunkEvictions = _canvas.AreaChunkDisposedCount - chunkDisposed;
+        Require(_canvas.AreaTerrainChunked && chunkComposed > 0 && chunkEvictions > 0
+            && _canvas.AreaChunkCreatedCount - _canvas.AreaChunkDisposedCount == _canvas.AreaChunkResidentCount, "CHUNK_OWNERSHIP");
+        GD.Print($"ARC-RENDER-007 resources sweep steps={steps} commands={sweptCommands} maxVisible={maxVisible} maxGpu={maxLive}/{maxBytes} reuploads={reuploads} evictions={evictions} cpu={old.CpuFrames}/{old.CpuBytes} chunks={chunkComposed}/{chunkEvictions} maxChunks={maxChunks}/{maxChunkBytes}");
 
         static long Managed() { GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect(); return GC.GetTotalMemory(true); }
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }
@@ -87,7 +97,8 @@ public partial class TerrainViewerApp
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         Require(after.Managed - baseline.Managed < old.CpuBytes / 2, "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
-            MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,
+            MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions,
+            ChunksComposed = chunkComposed, ChunkEvictions = chunkEvictions, MaxResidentChunks = maxChunks, MaxResidentChunkBytes = maxChunkBytes, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,
             LoadMilliseconds = new[] { old.ElapsedMilliseconds, reloadMilliseconds },
             ManagedBytes = new[] { baseline.Managed, after.Managed },
             ResidentBytes = new[] { baseline.Resident, after.Resident },
