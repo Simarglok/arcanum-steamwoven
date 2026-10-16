@@ -204,6 +204,22 @@ leases and closes transferred streams. Previously returned metadata remains vali
 it cannot be used to reacquire frames after replacement or disposal. There is no
 persistent encoded/decoded frame cache between operations.
 
+Inside one authenticated bracket, a strict build (between the I0 and I7 passes) or one
+frame batch (between a source's first authentication and `Complete`), an ART entry is
+read, inflated and payload-hashed once and then shared by every frame selected from it
+(ARC-RENDER-009; Crash Site: 1,975 frames from 335 entries, 4.7 MB of decoded entry
+bytes instead of 218 MB). The bracket's own authentication already covers every read in
+it, so a second read of the same entry adds no assurance. Each frame still makes its
+own frame-domain admission, ART table inspection, decode and geometry, palette and
+pixel identity checks. This entry memo is owner-private, never escapes, is limited to
+16 MiB, is held in the retained domain only while a quarter of that domain stays free
+for mandatory admissions after the hold (otherwise the entry is simply read again), and
+is dropped when its bracket ends or faults, or when the batch or the owner is disposed.
+A batch serves memoized bytes only after their payload hash matched the publication: a
+mismatch faults the batch and drops the memo.
+Usage counters therefore record fewer reads and inflate allocations than one read per
+frame; the cumulative frame-domain admissions are unchanged.
+
 `BeginFrameBatch` copies many frames of the same current publication under the
 same single slot: a lease, a second batch or a load fails while a batch is open,
 and foreign or superseded snapshots fail. Each source is whole-input authenticated
@@ -214,7 +230,8 @@ geometry, palette and pixel identity checks and the lease's frame-domain
 and reads are charged once per source and side instead of per frame. A source that
 differs from its identity when `Complete` runs is reported there, so a caller must
 discard all copies unless `Complete` returns; a change made and reverted between two
-authentications is seen only if a per-frame check reads it. Any failed copy or
+authentications is seen only if a per-frame check reads it (with the entry memo, only
+the first frame of an entry reads it). Any failed copy or
 `Complete`, including cancellation, faults the batch; faulted, completed, disposed or
 revoked batches refuse further use. The batch therefore guarantees what per-frame
 reauthentication did for the batch as a whole, not for each frame separately; for the

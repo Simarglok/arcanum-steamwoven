@@ -70,6 +70,14 @@ internal sealed class AreaBudget : IDatEntryAdmission
     }
     // For a previously admitted graph whose allocation is already charged.
     internal void Hold(long bytes) => _retained = Admit(AreaBudgetDomain.Retained, _retained, bytes, _limits.MaxRetainedBytes);
+    // Optional ownership (a bounded memo): holds only while a quarter of the retained domain
+    // stays free for mandatory admissions after it, and never records a rejection.
+    internal bool TryHold(long bytes)
+    {
+        var reserve = _limits.MaxRetainedBytes / 4;
+        if (bytes < 0 || _retained < 0 || _retained > _limits.MaxRetainedBytes || bytes > _limits.MaxRetainedBytes - reserve - _retained) return false;
+        _retained += bytes; return true;
+    }
     internal void Release(long bytes)
     {
         if (bytes < 0 || bytes > _retained) throw new InvalidOperationException("Invalid retained ownership release.");

@@ -139,7 +139,9 @@ public sealed partial class AreaDataOwner : IDisposable
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 AuthenticateAll(cancellationToken);
+                BeginEntryMemo();
                 var inspection = Build(cancellationToken, output);
+                EndEntryMemo();
                 _budget.BeginPhase(AreaBudgetPhase.I7);
                 AuthenticateAll(cancellationToken);
                 cancellationToken.ThrowIfCancellationRequested();
@@ -160,7 +162,7 @@ public sealed partial class AreaDataOwner : IDisposable
             { output.Dispose(); return new(null, [new(error.Code == StaticObjectErrorCode.UnsupportedVersion ? AreaErrorCode.UnsupportedVersionOrSchema : error.Code == StaticObjectErrorCode.LimitExceeded ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Aggregate, error.Offset, error.SourceIndex)], _budget.Usage); }
             catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException or OverflowException or ArgumentOutOfRangeException)
             { output.Dispose(); return new(null, [new(AreaErrorCode.MalformedRecord, AreaStage.Input)], _budget.Usage); }
-            finally { _budget.EndFrame(); }
+            finally { EndEntryMemo(); _budget.EndFrame(); }
         }
     }
     public AreaSnapshot LoadStrict(CancellationToken cancellationToken = default)
@@ -221,7 +223,7 @@ public sealed partial class AreaDataOwner : IDisposable
         lock (_gate)
         {
             if (_disposed) return;
-            _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null;
+            _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null; EndEntryMemo();
             _budget.Release(_leaseBytes); _leaseBytes = 0;
             foreach (var archive in _archives.Values) archive.Dispose();
             _archives.Clear(); _indexes.Clear(); _entryIdentities.Clear(); _names.Clear(); _streams.Clear(); _published = null;
