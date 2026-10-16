@@ -105,7 +105,8 @@ if test "$area_task" = 1; then
   area_probe source-area-seams.log ARC_AREA_OWNER_SEAM_PROBE ARC_AREA_SEAM_ORACLE "$oracles/seams.json" "$GODOT" --path "$project_root"
   area_probe source-area-nearest.log ARC_AREA_NEAREST_PROBE ARC_AREA_NEAREST_ORACLE "$oracles/nearest.json" "$GODOT" --path "$project_root"
 fi
-run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export-debug 'macOS debug' "$build_root/ArcanumTerrainViewer.app"
+# Release export (ARC-RENDER-009): optimized assemblies halve the original-data load; every gate below runs on it.
+run_log export.log "$GODOT" --verbose --headless --path "$project_root" --export-release 'macOS' "$build_root/ArcanumTerrainViewer.app"
 /usr/bin/grep -F "$DOTNET" "$build_root/evidence/export.log" >/dev/null
 /usr/bin/grep -F '8.0.425' "$build_root/evidence/export.log" >/dev/null
 app="$build_root/ArcanumTerrainViewer.app/Contents/MacOS/Arcanum Terrain Viewer"
