@@ -38,7 +38,7 @@ same teleport onto the start map:
 | Path | Prototype | Stats | Starting inventory and gold | Screens after the pick |
 | --- | --- | --- | --- | --- |
 | Pre-made hero | one of 8 (or 12, see below), prototypes 16067..16078 | reset to level-1 defaults, then the prototype's auto-level scheme spends the points | the prototype's **inventory source** (can include gold); no background money | none: the game starts at once |
-| New character | generic PC prototype 16066 | level-1 defaults: every primary stat 8, 5 unspent points | the chosen **background**: its money (400 for the default background 0) and item list, plus clothes if the background gave no armor | character editor, then the shop |
+| New character | generic PC prototype 16066 | level-1 defaults: every primary stat 8, 5 unspent points | the chosen **background**: its money (400 for the default background 0) and item list, plus clothes when nothing is in the armor slot (in practice always), lockpicks and bandages when the editor gave those skills | character editor, then the shop |
 
 Before either path the game already has a placeholder PC on the **shop map**;
 the start map and its location come from the module map list. In this
@@ -56,7 +56,7 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
    [player.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/player.c#L118-L155),
    [type→default prototype](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L106),
    [map types in the map list](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c#L2003-L2060)).
-2. **Single player → New game** opens a two-button screen: pre-made or new
+2. **Single player → New game** opens a screen with pre-made, new and a third button (target −2, presumably back)
    ([buttons](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L889-L892),
    [screen](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L3647-L3653)).
 3. **Every new PC** is made by `player_obj_create_player`: the old PC is
@@ -71,7 +71,7 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
    level bonus points (none at level 1), and runs the object's auto-level
    scheme (none for the generic PC)
    ([level.c](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c#L708-L763),
-   [defaults: primary stats 8, level 1, 5 unspent points, age 20](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L115-L144)).
+   [defaults: primary stats 8, level 1, 5 unspent points](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L115-L144)).
    Whatever stats a prototype stores are therefore not the hero's stats; the
    scheme and the editor are.
 5. **Start.** Leaving the last screen calls `sub_5412E0`: if the new-character
@@ -88,7 +88,8 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
   ([browse](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L4242-L4323),
   [count](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L185-L188),
   [ids](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/descriptions.h#L924-L936)).
-- At menu init `sub_549A80` checks whether prototype 16075 exists and its ART
+- `main.c` clears the gender-lock flag (initially set) before menu init, and
+  then at menu init `sub_549A80` checks whether prototype 16075 exists and its ART
   exists. If so, `count` becomes 13 (twelve heroes, the last four female) **and
   the new-character window gets 10 buttons instead of 8**, which are the two
   gender buttons; otherwise gender cannot be changed at all. This answers the
@@ -108,7 +109,8 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
   description 1039..1050, and auto-level scheme 76..87
   ([built-in PC prototypes](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L15715-L15876),
   [missing protos are created and saved](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L373-L414),
-  [save path](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L481-L500)).
+  [create and save](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L481-L500),
+  [file name format](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L300)).
 
 | Prototype | Race, gender | Portrait | Inventory source | Background | Scheme |
 | --- | --- | --- | --- | --- | --- |
@@ -126,8 +128,9 @@ installation that is record 5000 `Arcanum1-024-fixed`, location
 | 16077 | half-orc, female | 1031 | 26 | 49 | 86 |
 | 16078 | half-elf, female | 1029 | 26 | 50 | 87 |
 
-The hero's displayed name is the scheme's name (`auto_level_scheme_name`), so
-names live in the level-scheme data, not in this document.
+The hero's displayed name is the scheme's name (`auto_level_scheme_name`, read
+from `mes\gamelevelname.mes`), so names stay in the game data, not in this
+document.
 
 ### New character
 
@@ -148,18 +151,29 @@ names live in the level-scheme data, not in this document.
   and adds the background's effect). Re-selection therefore never stacks
   effects
   ([set/clear](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.c#L279-L308)).
+  `background_set` runs only from the background buttons
+  ([calls](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L3941-L3956)). A player who never
+  presses them, or changes race or gender afterwards, keeps background 0 with
+  description field 0, and block 0's effect is **never added**; block 0's
+  money is still given, because the shop reads the field, which is 0.
 - Accept: an empty buffer or the untouched placeholder text shows message
   506 and refuses; otherwise the name is stored in `OBJ_F_PC_PLAYER_NAME` and
   auto-equip on start is requested
   ([execute](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L4212-L4239)).
-- Then the window index simply advances: character editor in creation mode
-  (spending the 5 points), then the shop
+- Accepting the new character opens the character editor explicitly
+  ([accept](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L3903-L3911)); creation mode
+  spends the 5 points. The editor's accept advances the window index by one,
+  to the shop
   ([window order](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1240-L1258),
-  [advance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L5609-L5630)).
+  [editor button](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L4376-L4382),
+  [advance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L5609-L5634)).
 - **Shop.** Opening it calls `item_generate_inventory(pc)`: it destroys the
   PC's whole inventory, applies the background's money and items, and if no
   item sits in the armor slot it creates clothes by gender and armor size
-  (falling back to a jacket if they cannot be worn). Then, if the map list has
+  (falling back to a jacket if they cannot be worn). Background items go to
+  free pack slots, so the armor slot is in practice always empty here and
+  clothes are always made (inferred). It then adds crude lockpicks if the PC
+  has pick-locks points and bandages if it has heal points. Then, if the map list has
   a `SHOPPING_MAP`, it flags the new game and opens barter with the first NPC
   found on the current map (with no NPC it starts at once)
   ([shop](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L4438-L4486),
@@ -196,8 +210,8 @@ only in multiplayer
 | CC-05 | Blocks 39..50 (the pre-made heroes' backgrounds) each have condition `NPC`, so the new-character screen never offers them to a PC. Their money (400 each) and the one item list among them are not applied on the pre-made path (CE step above). |
 | CC-06 | Backgrounds offered per race/gender (`arcanum4`, counting block 0): human 49 M / 52 F, dwarf 34, elf 36 / 38, half-elf 39 / 41, gnome 43, halfling 44, half-orc 44 / 46, half-ogre 38. With `arcanum3` each count is one lower (block 2). |
 | CC-07 | `mes\MainMenu.mes` exists in `arcanum3.dat` (`ed7307cc4a6978eb5a4a17929da0a5e135a464b5d02d8f7ee41335b9057f1192`) and `arcanum4.dat` (`ffa80260c7a0f22321def8bbf8ae9b5dc251628a55ef92af19e44d9ff4c6a72a`). In both, messages 551..562 are global-flag numbers **2350..2361** in order, and 500 and 506 exist. So each of the twelve pre-made heroes has its own flag; 551..558 cover the base eight. |
-| CC-08 | The level-scheme file `rules\gamelevel.mes` (both copies) contains records 76..87; `rules\InvenSource.mes` (both copies) contains sets 20, 22..26 and 108; `portrait\gameport.mes` (`arcanum3.dat`) contains the twelve portrait ids in the table. Only presence was checked, not contents. |
-| CC-09 | The loose `data/proto` folder holds 13 `PC` prototype files, `016086`..`016098`, i.e. descriptions 16066..16078 (file number = description + 20, [mapping](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L481-L484)), all with the same timestamp as the rest of the folder, which matches the engine writing its built-in prototypes on first start. The files were **not** decoded: that their fields equal CE's table is expected, not verified. No PC prototype was found inside the DAT archives. |
+| CC-08 | The level-scheme file `rules\gamelevel.mes` (both copies) and the name file `mes\gamelevelname.mes` (`arcanum3.dat`) contain records 76..87; `rules\InvenSource.mes` (both copies) contains sets 20, 22..26 and 108; `portrait\gameport.mes` (`arcanum3.dat`) contains the twelve portrait ids in the table. Only presence was checked, not contents. |
+| CC-09 | The loose `data/proto` folder holds 13 `PC` prototype files, `016086`..`016098`, i.e. descriptions 16066..16078 (file number = description + 20, [mapping](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L481-L484)), all with the same timestamp as the other 1,410 files of the folder. That is consistent with the engine writing its built-in prototypes on first start, but does not prove it (an installer copy would look the same). The files were **not** decoded: that their fields equal CE's table is expected, not verified. No PC prototype was found inside the DAT archives. |
 | CC-10 | Whether prototype 16075's ART exists here (and so whether this installation shows eight or twelve heroes and gender buttons) was **not** checked. |
 
 ## What Steamwoven has today
@@ -220,13 +234,14 @@ Proposal only; each line needs its own task and owner decision.
    "hero at T0": prototype id, race, gender, portrait id, background id and
    description id, name, level 1, base stats, unspent points, gold and item
    prototype ids. Two factories: *default new character* (prototype 16066,
-   background 0, 400 gold from block 0, clothes rule) and *pre-made hero*
-   (prototype 16067..16078). This is where ARC-WORLD-012 (stats) gets real
-   defaults instead of the diagnostic ones.
+   background 0 without its effect, 400 gold from block 0, clothes rule) and
+   *pre-made hero* (prototype 16067..16078). This is where the planned stats
+   task ARC-WORLD-012 gets real defaults instead of the diagnostic ones.
 2. **Data readers.** `backgrnd.mes` blocks with the legality rule, the
    pre-made global flags from `MainMenu.mes` 551.., and map-list typed records
    (`START_MAP`, `SHOPPING_MAP`). DAT precedence for duplicate rules files
-   should come from ARC-DATA-011 rather than a local guess.
+   should come from the planned resource-precedence task ARC-DATA-011
+   rather than a local guess.
 3. **Pre-made heroes need two more systems.** Auto-level schemes
    (`gamelevel.mes`) for stats/skills and inventory sources
    (`InvenSource.mes`) for items and gold; without them a pre-made hero is only
