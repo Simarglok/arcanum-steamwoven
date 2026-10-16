@@ -53,7 +53,7 @@ public sealed class GameEventQueueTests
             if (firing.Event.Payload.Values[0] == 1)
             {
                 // A periodic kind reschedules from now; an immediate and a past absolute deadline are also new.
-                Added(q.ScheduleAfter(Global, Values(2), 0, Game(firing.NowMs)));
+                Added(q.ScheduleAfter(Global, Values(2), 0, firing.Clocks));
                 Added(q.ScheduleAt(Global, Values(3), 0));
             }
             return GameEventHandlerOutcome.Completed;
@@ -64,7 +64,6 @@ public sealed class GameEventQueueTests
         var first = Run(queue, Pass(Game(1_000)));
         CollectionAssert.AreEqual(new long[] { 1, 4 }, recorder.FirstValues);
         Assert.AreEqual(2, first.Fired);
-        Assert.IsFalse(first.BudgetExhausted, "events created in the pass are not counted as left over");
 
         recorder.Fired.Clear();
         Run(queue, Pass(Game(1_000)));
@@ -72,6 +71,39 @@ public sealed class GameEventQueueTests
         CollectionAssert.AreEqual(new long[] { 3 }, recorder.FirstValues);
         Run(queue, Pass(Game(1_001)));
         CollectionAssert.AreEqual(new long[] { 3, 2 }, recorder.FirstValues);
+    }
+
+    [TestMethod]
+    public void HandlerEventsDueNowAheadOfThePassPositionWaitForTheNextPass()
+    {
+        var recorder = new Recorder();
+        var queue = Queue(recorder);
+        recorder.OnFire = (firing, q) =>
+        {
+            if (firing.Event.Payload.Values[0] == 1)
+            {
+                // Same domain, deadline after the pass position and at or before now.
+                Added(q.ScheduleAt(Global, Values(5), 500));
+                // A real-time handler scheduling a game event that is already due.
+                Added(q.ScheduleAfter(Global, Values(6), 0, firing.Clocks with { GameMs = 0 }));
+                // An animation event due now.
+                Added(q.ScheduleAt(Anim, Values(7), 1_000));
+            }
+            return GameEventHandlerOutcome.Completed;
+        };
+        Added(queue.ScheduleAt(Ui, Values(1), 10));
+        Added(queue.ScheduleAt(Global, Values(2), 10));
+        Added(queue.ScheduleAt(Global, Values(3), 900));
+
+        // The budget equals the events due before the pass: nothing created in it is fired or counted as left over.
+        var first = Run(queue, Pass(new GameEventClocks(1_000, 1_000, 1_000), budget: 3));
+        CollectionAssert.AreEqual(new long[] { 1, 2, 3 }, recorder.FirstValues);
+        Assert.IsFalse(first.BudgetExhausted);
+        Assert.AreEqual(3, queue.Count);
+
+        var second = Run(queue, Pass(new GameEventClocks(1_000, 1_000, 1_000), budget: 3));
+        CollectionAssert.AreEqual(new long[] { 1, 2, 3, 6, 5, 7 }, recorder.FirstValues);
+        Assert.IsFalse(second.BudgetExhausted);
     }
 
     [TestMethod]
@@ -132,7 +164,7 @@ public sealed class GameEventQueueTests
         recorder.OnFire = (firing, q) =>
         {
             if (firing.Event.Kind == Fatigue)
-                Added(q.ScheduleAfter(Fatigue, With(Npc("pc"), 0, firing.NowMs), 80_000, Game(firing.NowMs)));
+                Added(q.ScheduleAfter(Fatigue, With(Npc("pc"), 0, firing.NowMs), 80_000, firing.Clocks));
             return GameEventHandlerOutcome.Completed;
         };
         Added(queue.ScheduleAt(Fatigue, With(Npc("pc"), 0, 0), 80_000));
@@ -159,7 +191,8 @@ public sealed class GameEventQueueTests
         Assert.AreEqual(2, cave.ScopeMap);
         Assert.AreEqual(1, tick.ScopeMap);
 
-        var first = Run(queue, Pass(Game(10), activeMap: 1));
+        // The due event of map 2 is not left over: a budget of exactly the eligible events is not exhausted.
+        var first = Run(queue, Pass(Game(10), activeMap: 1, budget: 3));
         // The recharge kind is global although its item is on map 2.
         CollectionAssert.AreEqual(new[] { Tick, Recharge, Global }, first.Outcomes.Select(o => o.Event.Kind).ToArray());
         Assert.IsFalse(first.BudgetExhausted);
@@ -232,19 +265,32 @@ public sealed class GameEventQueueTests
     }
 
     [TestMethod]
-    public void AMergeThatChangesTheKeyOrScopeIsRefused()
+    public void AMergeThatChangesTheKeyOrTheMapIsRefused()
     {
         var recorder = new Recorder();
-        var registry = new GameEventRegistry(1,
+        GameEventQueue MergeQueue(GameEventMerge merge) => new(new GameEventRegistry(1,
         [
-            new("test.bad-merge", GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Merge,
-                GameEventScopeRule.EntityMap, 1, 1, 0, 1, recorder,
-                Merge: (pending, incoming) => incoming with { Values = [pending.Values[0] + 1] }),
-        ]);
-        var queue = new GameEventQueue(registry);
-        var pending = Added(queue.ScheduleAt("test.bad-merge", With(Npc("a"), 1), 5));
-        Refused(GameEventFailure.InvalidMerge, queue.ScheduleAt("test.bad-merge", With(Npc("a", 2), 1), 5));
-        Assert.AreEqual(pending, queue.QueryPending().Single(), "a refused merge changes nothing");
+            // Key: the first value only; the entity (and so the map) is not part of it.
+            new("test.merge", GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Merge,
+                GameEventScopeRule.EntityMap, 1, 2, 0, 1, recorder, Merge: merge),
+        ]));
+
+        // Changes only the key value, on the same map.
+        var keyChange = MergeQueue((pending, _) => pending with { Values = [pending.Values[0] + 1, pending.Values[1]] });
+        var pending = Added(keyChange.ScheduleAt("test.merge", With(Npc("a"), 1, 0), 5));
+        Refused(GameEventFailure.InvalidMerge, keyChange.ScheduleAt("test.merge", With(Npc("a"), 1, 0), 5));
+        Assert.AreEqual(pending, keyChange.QueryPending().Single(), "a refused merge changes nothing");
+        Assert.AreEqual(GameEventScheduleDisposition.Added, keyChange.ScheduleAt("test.merge", With(Npc("a"), 2, 0), 5).Disposition,
+            "the key index still holds the pending event's own key");
+
+        // Changes only the entity's map, keeping the key.
+        var mapChange = MergeQueue((pending, incoming) => pending with { Entities = incoming.Entities });
+        pending = Added(mapChange.ScheduleAt("test.merge", With(Npc("a", 1), 1, 0), 5));
+        Refused(GameEventFailure.InvalidMerge, mapChange.ScheduleAt("test.merge", With(Npc("a", 2), 1, 0), 5));
+        Assert.AreEqual(pending, mapChange.QueryPending().Single());
+        var sameMap = mapChange.ScheduleAt("test.merge", With(Npc("b", 1), 1, 0), 5);
+        Assert.AreEqual(GameEventScheduleDisposition.Merged, sameMap.Disposition, "a merge within the map is accepted");
+        Assert.AreEqual("b", sameMap.Event!.Payload.Entities[0].Code);
     }
 
     [TestMethod]
@@ -349,6 +395,7 @@ public sealed class GameEventQueueTests
             GameEventMerge? merge = null, GameEventDomain d = GameEventDomain.Game) =>
             new(name, d, GameEventPersistence.Saved, u, s, entities, values, keyE, keyV, h, merge);
 
+        Assert.AreEqual(new GameEventQueueLimits(16_384, 500, 4, 8), GameEventQueueLimits.Default);
         Assert.AreEqual(1, new GameEventRegistry(3, [Kind()]).Kinds.Length);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new GameEventRegistry(0, [Kind()]));
         Assert.ThrowsExactly<ArgumentException>(() => new GameEventRegistry(1, []));

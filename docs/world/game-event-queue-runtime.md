@@ -5,7 +5,7 @@ Status: **Implemented bounded component**, ARC-WORLD-022, slice E1 of the
 session-free queue in `Arcanum.Simulation.Events`: kinds, ordering, scheduling, cancellation, the due pass and a
 detached snapshot with strict restore. **Not wired**: the game session does not own a queue, no snapshot schema carries
 it, no host calls a pass and no gameplay kind exists yet. Those are slices E2 (session owner and snapshot section,
-after ARC-COMBAT-002 in the schema lane), E3 (host pump) and E4 (the consumers' kinds).
+after top-20 item 2, life state, ARC-COMBAT-002, in the schema lane), E3 (host pump) and E4 (the consumers' kinds).
 
 Requirements served in part: [FR-SCRIPT-003](../requirements/story-social-ai.md#fr-script-003) (deferred calls that
 survive a save: the queue and its snapshot, not yet saved with the session) and
@@ -54,8 +54,23 @@ Entity references are `GameEventEntity(Map, Code)`: the runtime map number and t
 never a live handle. Payloads carry entities and signed 64-bit values in the kind's fixed slot counts; a consumer slice
 wraps them in its own typed record. Whether an entity still exists is the caller's answer at pass time.
 
-Calls are caller-serialized like every owner in the project. A handler gets the event and its domain's time
-(`GameEventFiring`) and the queue; it may not start a pass or take a snapshot.
+Calls are caller-serialized like every owner in the project. A handler gets the event, its domain's time and the
+pass's three clocks (`GameEventFiring`, so it can reschedule in any domain) and the queue; it may schedule and cancel,
+but not start a pass or take a snapshot. Merge functions, value checks and match predicates must not call the queue;
+the queries copy the pending events before running a predicate.
+
+Programming errors throw instead of returning a typed failure: an invalid registry or limits, a query on an
+unregistered kind, a snapshot taken from a handler. Everything that depends on data or timing (scheduling, passes,
+restore of saved data) returns a typed result.
+
+Deliberate differences from the shared rules of research section 8, for E2 to revisit:
+
+- `ProcessDue` takes no expected version and the queue has no revision token; the session owner of E2 gives the pass
+  its version check.
+- An event leaves the queue before its handler runs, rather than in one commit with the handler's session changes;
+  E2 makes the handler's changes and the removal one session step.
+- Cancellation and queries go by kind and a predicate over the payload; a uniqueness key is a predicate on its slots.
+  There is no keyed lookup method.
 
 ## Tests
 

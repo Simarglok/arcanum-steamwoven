@@ -77,8 +77,8 @@ public sealed class GameEventQueue
     /// pending.</summary>
     public bool Any(string kind, Func<GameEvent, bool>? match = null)
     {
-        foreach (var order in KindSet(kind))
-            if (match is null || match(_events[order.Sequence])) return true;
+        foreach (var e in PendingOf(kind))
+            if (match is null || match(e)) return true;
         return false;
     }
 
@@ -87,12 +87,7 @@ public sealed class GameEventQueue
     public GameEvent? RemoveFirst(string kind, Func<GameEvent, bool> match)
     {
         ArgumentNullException.ThrowIfNull(match);
-        GameEvent? found = null;
-        foreach (var order in KindSet(kind))
-        {
-            var candidate = _events[order.Sequence];
-            if (match(candidate)) { found = candidate; break; }
-        }
+        var found = PendingOf(kind).FirstOrDefault(match);
         if (found is not null) Remove(found);
         return found;
     }
@@ -101,7 +96,7 @@ public sealed class GameEventQueue
     public ImmutableArray<GameEvent> RemoveAll(string kind, Func<GameEvent, bool> match)
     {
         ArgumentNullException.ThrowIfNull(match);
-        var removed = KindSet(kind).Select(o => _events[o.Sequence]).Where(match).ToImmutableArray();
+        var removed = PendingOf(kind).Where(match).ToImmutableArray();
         foreach (var e in removed) Remove(e);
         return removed;
     }
@@ -118,7 +113,8 @@ public sealed class GameEventQueue
     /// leaves the queue; if one of its entities no longer exists it is dropped, otherwise its handler runs. The pass
     /// stops at the budget; the queue consumes no randomness. A pass started from a handler is refused
     /// (<see cref="GameEventFailure.PassInProgress"/>); an invalid request is <see cref="GameEventFailure.InvalidPass"/>.
-    /// A handler exception propagates; its event has already left the queue.
+    /// A handler exception (or one from <see cref="GameEventPassRequest.EntityExists"/>) propagates: its event has
+    /// already left the queue, and the outcomes of the events before it in the pass are not returned.
     /// </summary>
     public GameEventPassResult ProcessDue(GameEventPassRequest request)
     {
@@ -155,7 +151,7 @@ public sealed class GameEventQueue
                         outcomes.Add(new(due, GameEventOutcomeKind.EntityMissing, now));
                         continue;
                     }
-                    var handled = Kind(due.Kind).Handler.Handle(new GameEventFiring(due, now), this);
+                    var handled = Kind(due.Kind).Handler.Handle(new GameEventFiring(due, now, request.Clocks), this);
                     outcomes.Add(new(due, handled == GameEventHandlerOutcome.Completed
                         ? GameEventOutcomeKind.Fired : GameEventOutcomeKind.HandlerRefused, now));
                 }
@@ -244,7 +240,8 @@ public sealed class GameEventQueue
                     return new(GameEventScheduleDisposition.KeptExisting, GameEventFailure.None, pending, null);
                 case GameEventUniqueness.Merge:
                     var merged = kind.Merge!(pending.Payload, payload);
-                    if (CheckPayload(kind, merged, out var mergedMap) != GameEventFailure.None || mergedMap != pending.ScopeMap ||
+                    if (!_events.TryGetValue(pending.Sequence, out var current) || !ReferenceEquals(current, pending) ||
+                        CheckPayload(kind, merged, out var mergedMap) != GameEventFailure.None || mergedMap != pending.ScopeMap ||
                         !string.Equals(Key(kind, merged), Key(kind, pending.Payload), StringComparison.Ordinal))
                         return Refuse(GameEventFailure.InvalidMerge);
                     var updated = pending with { Payload = merged };
@@ -315,6 +312,9 @@ public sealed class GameEventQueue
 
     private GameEventKindDefinition Kind(string name) => Registry.TryGet(name, out var kind)
         ? kind : throw new InvalidOperationException($"Event kind '{name}' is not registered.");
+
+    // Copied before any caller predicate runs, so a predicate cannot invalidate an enumeration.
+    private GameEvent[] PendingOf(string kind) => KindSet(kind).Select(o => _events[o.Sequence]).ToArray();
 
     private SortedSet<Order> KindSet(string kind) => kind is not null && _byKind.TryGetValue(kind, out var set)
         ? set : throw new ArgumentException($"Event kind '{kind}' is not registered.", nameof(kind));

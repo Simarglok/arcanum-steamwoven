@@ -95,13 +95,16 @@ public readonly record struct GameEventClocks(long RealMs, long GameMs, long Ani
 /// <summary>What a handler reports. A refusal is recorded in the pass result; the event is consumed either way.</summary>
 public enum GameEventHandlerOutcome { Completed = 1, Refused = 2 }
 
-/// <summary>A due event handed to its kind's handler, with the current time of its domain.</summary>
-public readonly record struct GameEventFiring(GameEvent Event, long NowMs);
+/// <summary>A due event handed to its kind's handler: <see cref="NowMs"/> is the current time of its domain,
+/// <see cref="Clocks"/> the pass's three clocks, for scheduling in any domain with
+/// <see cref="GameEventQueue.ScheduleAfter"/>.</summary>
+public readonly record struct GameEventFiring(GameEvent Event, long NowMs, GameEventClocks Clocks);
 
 /// <summary>
 /// A kind's handler. It runs after the event has left the queue and may schedule or cancel events of the same queue
 /// (a periodic kind reschedules itself from <see cref="GameEventFiring.NowMs"/>); it may not start another pass or take
-/// a snapshot. Events it schedules never fire in the pass that runs it.
+/// a snapshot. Events it schedules never fire in the pass that runs it. Merge functions, value checks and match
+/// predicates, unlike handlers, must not call the queue.
 /// </summary>
 public interface IGameEventHandler
 {
