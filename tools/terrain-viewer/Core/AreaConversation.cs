@@ -66,6 +66,12 @@ public sealed class AreaConversationHost
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction);
     }
 
+    /// <summary>
+    /// A host over another session (a quick load replaced the area session): same area, archives and profile.
+    /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
+    /// </summary>
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile);
+
     public AreaConversationProfile Profile { get; }
     public IReadOnlyList<AreaSpeaker> Speakers { get; }
     /// <summary>The session's global flags: the conversation reads and writes them directly.</summary>

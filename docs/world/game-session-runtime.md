@@ -9,8 +9,9 @@ The AREA viewer keeps every [dialog consequence](../scripting/dialog-conversatio
 it can store here. It covers the state boundary of
 [FR-WORLD-013](../requirements/world.md#fr-world-013) and
 [FR-LIFECYCLE-003](../requirements/ui-media-lifecycle.md#fr-lifecycle-003).
-It is **not** a save system: there is no save/load screen, save store or file I/O,
-no module list, no autosave and no original `.gsi`/sector-diff format.
+The owner itself does no file I/O. One [save slot](#save-slot-arc-world-011)
+(ARC-WORLD-011) writes and reads a snapshot file atomically; there is still no
+save/load screen or save list, no autosave and no original `.gsi`/sector-diff format.
 
 ## Why a separate assembly
 
@@ -160,10 +161,28 @@ state the component owners refuse, or that exceeds the caller's limits. A refuse
 restore returns no owner and leaves the caller's current session as it was.
 
 **Migration decision (ARC-SCRIPT-006): none.** Schema 2 is the only accepted version;
-schema 1 text is `UnsupportedSchema`. No save store existed for schema 1, and the only
+schema 1 text is `UnsupportedSchema`, and a schema-1 quick-save file (ARC-WORLD-011)
+loads as "written by an incompatible version" with the running session kept. The only
 schema-1 host (the AREA viewer) had a one-flag placeholder GF domain, so a migrated
 session could not run any dialog. Adding another domain (inventory, party) needs
 schema 3 with its own explicit migration decision.
+
+## Save slot (ARC-WORLD-011)
+
+`GameSessionSaveSlot` (same assembly, Godot-free) is one file that holds exactly the
+`GameSessionSnapshotCodec.Encode` text of a snapshot. It knows nothing about the
+snapshot's sections, so a domain added to the snapshot and its codec (live clock,
+dialog state, a schema bump) is saved and loaded by the slot without changing it.
+
+| Entry | Contract |
+| --- | --- |
+| `new GameSessionSaveSlot(path)` / `QuickSave(directory)` | An absolute file path; `QuickSave` is `<directory>/quicksave.json`. Invalid paths throw (programming error). |
+| `Write(snapshot)` | Encodes, decodes the text back in memory (a save this build cannot load is never written), writes `<path>.tmp`, flushes it to disk, reads it back and compares, then moves it over the slot. Creates the directory. Returns `SaveSlotWriteResult` (`None`, `TooLarge`, `WriteFailed`, `VerifyFailed`); on any failure the temporary file is removed and the previous save is untouched. A stale temporary file from an interrupted save is overwritten. |
+| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory; a directory or unreadable entry at the path is `ReadFailed`), `TooLarge` (over 8 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
+
+The slot does not restore: the caller passes the snapshot to `Restore` with its own
+expectations. Durability: file data is flushed before the rename; the directory entry
+is not separately synced. One process per slot; there is no cross-process lock.
 
 ## Tests
 
@@ -176,7 +195,12 @@ and a literal, independently written canonical JSON text:
 - `StoryStateTests`: quest rises, shared completion and terminal states, botched over a
   kept state, shared states that convert a request, rumor times, invalid and stale
   requests, survival across a map round trip and the snapshot, story decode failures,
-  and the original new-game GF domain.
+  restore consistency checks, and the original new-game GF domain.
+- `SaveSlotTests`: the file is exactly the codec text and restores the same session;
+  missing file or directory, a directory at the slot path; overwrite; a failure before the replace keeps the previous
+  save and removes the temporary file; an unwritable slot; a stale temporary file;
+  truncated, empty, BOM, invalid UTF-8, newer-schema, foreign-format and out-of-range
+  files as typed failures; the byte limit; path validation.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
@@ -189,7 +213,8 @@ and a literal, independently written canonical JSON text:
 
 ## Not implemented / remaining work
 
-- Save/load UI, save slots, files, atomic writes, backups, autosave, thumbnails.
+- Save/load UI, a save list, more than one slot, backups, autosave, thumbnails (the
+  one quick-save slot is ARC-WORLD-011).
 - Clock integration with lighting or the viewer's own time; script (SCR) state and timers.
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original
