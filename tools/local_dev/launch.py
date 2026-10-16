@@ -34,9 +34,9 @@ MODE_ROLES: dict[str, tuple[str, ...]] = {
     "crash-site-area": ("module", "terrainResource", "prototypes", "actorResource", "areaMobile", "areaEffects", "areaPatch"),
 }
 # Roles only builds of one exact task understand: older AREA builds reject the cave flag, so it is passed only to
-# an ARC-WORLD-009 build (the task named by the launched manifest), never to the mode as a whole.
-TASK_ROLES: dict[str, tuple[str, ...]] = {"ARC-WORLD-009": ("caveMobile",)}
-TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area"}
+# an ARC-WORLD-009 or later ARC-RENDER-008 build (the task named by the launched manifest), never to the mode as a whole.
+TASK_ROLES: dict[str, tuple[str, ...]] = {"ARC-WORLD-009": ("caveMobile",), "ARC-RENDER-008": ("caveMobile",)}
+TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-008": "crash-site-area"}
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 

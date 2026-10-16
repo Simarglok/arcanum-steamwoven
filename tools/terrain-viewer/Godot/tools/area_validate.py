@@ -32,8 +32,8 @@ def main() -> int:
     parser.add_argument('--candidate-root', type=Path, required=True)
     parser.add_argument('--app', type=Path)
     parser.add_argument('--timeout', type=int, default=900)
-    # The literal export task: ARC-WORLD-009 builds also load the cave and must pass its transition smoke.
-    parser.add_argument('--task', choices=('ARC-RENDER-007', 'ARC-INPUT-001', 'ARC-WORLD-007', 'ARC-WORLD-009'), default='ARC-RENDER-007')
+    # The literal export task: ARC-WORLD-009 and ARC-RENDER-008 builds also load the cave and must pass its transition smoke.
+    parser.add_argument('--task', choices=('ARC-RENDER-007', 'ARC-INPUT-001', 'ARC-WORLD-007', 'ARC-WORLD-009', 'ARC-RENDER-008'), default='ARC-RENDER-007')
     args = parser.parse_args()
     host = 'exported' if args.app else 'source'
     summary: dict = dict(schema='arcanum-area-validation-v1', task='ARC-RENDER-007',
@@ -73,7 +73,9 @@ def main() -> int:
         code, output = run_child(argv, env, args.timeout)
         summary['exitCode'] = code
         (evidence / 'native.log').write_text(output, encoding='utf-8')
-        if code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output or 'ERROR:' in output:
+        # ARC-RENDER-008: the whole-core original overlay check runs in the same native observation.
+        if (code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output
+                or 'ARC-RENDER-008 original overlay PASS ' not in output or 'ERROR:' in output):
             raise ValueError('native outcome')
         if args.task in area_validation.CAVE_TASKS:
             if 'ARC-WORLD-009 native-smoke transition PASS ' not in output:

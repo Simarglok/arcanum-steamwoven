@@ -20,7 +20,7 @@ TRACES = {
 
 
 # Tasks whose grid evidence must come from the original WORLD keyboard route (ARC-INPUT-001+).
-KEYBOARD_ROUTE_TASKS = ('ARC-INPUT-001', 'ARC-WORLD-007', 'ARC-WORLD-009')
+KEYBOARD_ROUTE_TASKS = ('ARC-INPUT-001', 'ARC-WORLD-007', 'ARC-WORLD-009', 'ARC-RENDER-008')
 
 
 def validate_report(report: object, head: str, host: str, require_keyboard_route: bool = False) -> None:

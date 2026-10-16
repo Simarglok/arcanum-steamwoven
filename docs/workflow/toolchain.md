@@ -51,6 +51,10 @@ matrix runs in the `area-grid` probes ([contract](../world/click-route-runtime.m
 ARC-WORLD-009 (cave and return) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-009`
 with the same gate set; its area-original gates load the cave input and require the
 transition smoke ([viewer](../rendering/terrain-viewer.md#crash-site-cave-and-return-arc-world-009)).
+ARC-RENDER-008 (passability overlay) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-RENDER-008`
+with the same gate set and, like ARC-WORLD-009, the cave input; its synthetic gates require the
+overlay markers and the native WORLD/AREA observations must print the original overlay check
+([contract](../rendering/passability-overlay.md)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original
