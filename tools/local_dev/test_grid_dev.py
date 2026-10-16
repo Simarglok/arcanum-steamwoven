@@ -197,6 +197,9 @@ class GridEndpointOrderTests(unittest.TestCase):
             for name in (*names, 'Unrelated'):
                 self.assertEqual('public synthetic sidecar\n', (root / (name + '.cs.uid')).read_text(), name)
             self.assertIn('src/Arcanum.Simulation/packages.lock.json', (root / 'git-args').read_text().splitlines())
+            # The viewer Core references Arcanum.Session (ARC-WORLD-009), so the export's RID restore touches it and Scripting.
+            for lock in ('src/Arcanum.Scripting/packages.lock.json', 'src/Arcanum.Session/packages.lock.json'):
+                self.assertIn(lock, (root / 'git-args').read_text().splitlines())
 
     root: Path
     setUp=fixtures.LocalDevTests.setUp

@@ -49,7 +49,8 @@ if test ! -x "$DOTNET" || test ! -x "$GODOT"; then printf '%s\n' 'Canonical SDK 
 mkdir -p "$build_root/evidence"
 cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
-    src/Arcanum.Simulation/packages.lock.json tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
+    src/Arcanum.Simulation/packages.lock.json src/Arcanum.Scripting/packages.lock.json src/Arcanum.Session/packages.lock.json \
+    tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
   # Godot .uid files are tracked; the export must leave them unchanged.
 }
 trap cleanup_candidate EXIT HUP INT TERM
