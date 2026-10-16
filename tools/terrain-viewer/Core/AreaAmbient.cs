@@ -58,7 +58,7 @@ public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictio
 /// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
 /// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
 /// while paused. After every clock change the Data hourly selection for the active sector is re-applied
-/// and recorded in the session, so a capture carries the time and the scheme shown for it. The session is
+/// and recorded in the session, so a capture carries the time and the scheme selected for it. The session is
 /// owned by the caller and outlives this driver. Caller-serialized like the session.
 /// </summary>
 public sealed class AreaAmbientDriver

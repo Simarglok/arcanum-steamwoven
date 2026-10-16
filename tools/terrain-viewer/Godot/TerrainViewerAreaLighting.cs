@@ -37,7 +37,7 @@ public partial class TerrainViewerApp
 
     private long ActiveAreaSector()
     {
-        // The lighting source is the exterior's; in the cave the exterior sector last selected stays.
+        // The actor's sector; in the cave this is the exterior spawn's (AmbientSector keeps the last selected one there).
         var cell = InCave ? AreaGridSession.Cell(AreaGridSession.Spawn) : AreaGridSession.Cell(_worldActor.Session?.State.CommittedCell ?? AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
