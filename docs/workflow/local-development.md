@@ -10,6 +10,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
     ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
+    ./arcanum map NAME [--dry-run]                        # one whole interior (a maps/ folder name) in crash-site-area map mode, ARC-RENDER-008 build only
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
@@ -21,7 +22,16 @@ launch selection on that build, a `--dry-run` restores the previous selection.
 Role paths follow the installed game layout used by the area research
 (`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
 normal-game mobile file `modules/Arcanum/maps/qrmvs-420-1zjcnpgn` (the game's
-obfuscated mobile-file name), `prototypes` is `data/proto`. **Rule:** a change that adds
+obfuscated mobile-file name), `prototypes` is `data/proto`, `gameRoot` is the game
+folder itself (map mode reads its module content stack).
+`map` ([map mode](../rendering/area-map-mode.md), ARC-RENDER-017) passes
+`launch.map_arguments` (module, `arcanum2.dat`, `arcanum1.dat`, `--game-root` and
+`--area-map NAME`, no prototype folder or Crash Site inputs) through
+`tools/arcanum-local launch terrain --mode crash-site-area --area-map NAME`, which
+accepts it only for an ARC-RENDER-008 build; a build exported before map mode
+refuses the arguments, so `map` needs an ARC-RENDER-008 export made after this
+change. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
+again. **Rule:** a change that adds
 or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
 `MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
 adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when

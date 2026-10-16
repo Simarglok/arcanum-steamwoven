@@ -456,6 +456,5 @@ public sealed class AreaCompanionGroup
     private static CellCoord Chart(AreaChart chart, long worldX, long worldY) => chart.ToChart(new AreaStepCell(worldX, worldY));
 
     private static bool Admitted(AreaStepSnapshot steps, AreaChart chart, CellCoord cell) =>
-        cell.X is >= AreaGridSession.MinimumChartCell and <= AreaGridSession.MaximumChartCell &&
-        cell.Y is >= AreaGridSession.MinimumChartCell and <= AreaGridSession.MaximumChartCell && steps.IsAdmitted(chart.ToWorld(cell));
+        chart.Contains(cell) && steps.IsAdmitted(chart.ToWorld(cell));
 }

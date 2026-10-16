@@ -16,7 +16,8 @@ namespace Arcanum.Data.Lighting;
 /// </summary>
 public static class AreaLightingReader
 {
-    public const int MaxSectors = 64;
+    /// <summary>Core sectors read: a whole interior (ARC-RENDER-017) has up to <see cref="Area.AreaMapPlans.MaxSectorFiles"/>.</summary>
+    public const int MaxSectors = 256;
     public const int MaxSchemes = 32;
 
     public static AreaLightingReadResult Read(DatArchive module, AreaSnapshot snapshot, CancellationToken token = default)

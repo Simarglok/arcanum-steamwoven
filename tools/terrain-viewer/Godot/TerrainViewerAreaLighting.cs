@@ -54,7 +54,8 @@ public partial class TerrainViewerApp
     // before the first session exists).
     private long ActiveAreaSector()
     {
-        var cell = _worldActor.Session is AreaGridSession session ? session.Chart.ToWorld(session.State.CommittedCell) : AreaGridSession.Cell(AreaGridSession.Spawn);
+        var cell = _worldActor.Session is AreaGridSession session ? session.Chart.ToWorld(session.State.CommittedCell)
+            : _readyArea is { } area ? area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn) : AreaGridSession.Cell(AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
 

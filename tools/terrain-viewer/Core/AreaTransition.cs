@@ -98,8 +98,7 @@ public sealed class AreaTransitionCoordinator
         if (destination.Snapshot.CatalogueMap != endpoint.CatalogueDestination || !destination.Steps.IsAdmitted(arrival))
             return new(AreaUseOutcome.DestinationUnavailable, endpoint, distance, "ARRIVAL_NOT_ADMITTED");
         var chartCell = destination.Chart.ToChart(arrival);
-        if (chartCell.X is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell ||
-            chartCell.Y is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell)
+        if (!destination.Chart.Contains(chartCell))
             return new(AreaUseOutcome.DestinationUnavailable, endpoint, distance, "ARRIVAL_OUTSIDE_CHART");
         Pending = new(endpoint, CurrentMap, endpoint.RuntimeDestination, arrival, chartCell);
         return new(AreaUseOutcome.Accepted, endpoint, distance, "QUEUED");

@@ -21,11 +21,13 @@ GAME_ROLES: dict[str, tuple[str, int | None, str | None]] = {
     "areaMobile": ("modules/Arcanum/maps/qrmvs-420-1zjcnpgn", 1823280, "a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5"),
     "caveMobile": ("modules/Arcanum/maps/rknp rivh uhngp", 6698, "aa29827de32c5cb6bf7aa03ea049f9f01d7698b003097172cd26ab80c9658318"),
     "prototypes": ("data/proto", None, None),
+    # ARC-RENDER-017: the installed game folder itself; map mode reads its module content stack.
+    "gameRoot": ("", None, None),
 }
 # Viewer flag of each role, and the roles each terrain mode requires (sourceId is always required too).
 ROLE_FLAGS = {"module": "--module", "terrainResource": "--resource", "prototypes": "--prototypes", "actorResource": "--actor-resource",
               "areaMobile": "--area-mobile", "areaEffects": "--area-effects", "areaPatch": "--area-patch",
-              "caveMobile": "--area-cave-mobile"}
+              "caveMobile": "--area-cave-mobile", "gameRoot": "--game-root"}
 MODE_ROLES: dict[str, tuple[str, ...]] = {
     "terrain-only": ("module", "terrainResource"),
     "combined": ("module", "terrainResource", "prototypes"),
@@ -37,6 +39,10 @@ MODE_ROLES: dict[str, tuple[str, ...]] = {
 # an ARC-WORLD-009 or later ARC-RENDER-008 build (the task named by the launched manifest), never to the mode as a whole.
 TASK_ROLES: dict[str, tuple[str, ...]] = {"ARC-WORLD-009": ("caveMobile",), "ARC-RENDER-008": ("caveMobile",)}
 TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-008": "crash-site-area"}
+# ARC-RENDER-017: `crash-site-area --area-map NAME` shows one whole interior; its inputs come from the game folder's
+# content stack, so it takes these roles (no prototype folder, Crash Site mobile, effects, patch or cave).
+MAP_ROLES: tuple[str, ...] = ("module", "terrainResource", "actorResource", "gameRoot")
+MAX_MAP_NAME = 128
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
@@ -93,6 +99,38 @@ def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
     return values
 
 
+def map_arguments(inputs: dict[str, Any], name: str) -> list[str]:
+    """ARC-RENDER-017: the explicit argument set for one interior in crash-site-area map mode."""
+    if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
+            character in "/\\" or not character.isprintable() for character in name):
+        raise ValueError("map name must be one maps/ folder name")
+    if not isinstance(inputs, dict):
+        raise ValueError("configure explicit terrain input roles before launch")
+    missing = [key for key in MAP_ROLES + ("sourceId",) if not isinstance(inputs.get(key), str)]
+    if missing:
+        raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
+                         + "; run ./arcanum setup again)")
+    arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
+                 "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
+                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name]
+    assert_ordinary(arguments)
+    return arguments
+
+
+def _source_id(inputs: dict[str, Any]) -> str:
+    source_id = inputs["sourceId"]
+    if not source_id or len(source_id) > 80 or any(character in source_id for character in "/\\\n\r\t"):
+        raise ValueError("configured source-id is unsafe")
+    return source_id
+
+
+def _local(inputs: dict[str, Any], role: str, *, directory: bool = False) -> str:
+    path = Path(inputs[role]).expanduser().absolute()
+    if not (path.is_dir() if directory else path.is_file()) or path.is_symlink() or config._has_symlink_component(path):
+        raise ValueError("configured terrain input is unavailable or unsafe")
+    return str(path.resolve(strict=True))
+
+
 def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
@@ -114,14 +152,9 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
                          + "; run ./arcanum setup again)")
 
     def local_file(role: str, *, directory: bool = False) -> str:
-        path = Path(inputs[role]).expanduser().absolute()
-        if not (path.is_dir() if directory else path.is_file()) or path.is_symlink() or config._has_symlink_component(path):
-            raise ValueError("configured terrain input is unavailable or unsafe")
-        return str(path.resolve(strict=True))
+        return _local(inputs, role, directory=directory)
 
-    source_id = inputs["sourceId"]
-    if not source_id or len(source_id) > 80 or any(character in source_id for character in "/\\\n\r\t"):
-        raise ValueError("configured source-id is unsafe")
+    source_id = _source_id(inputs)
     arguments = ["--mode", mode, "--module", local_file("module"), "--resource", local_file("terrainResource"), "--source-id", source_id]
     if mode in {"combined", "actor-diagnostic", "world-diagnostic", "crash-site-area"}:
         arguments.extend(("--prototypes", local_file("prototypes", directory=True)))
@@ -159,7 +192,9 @@ def discover_inputs(game_root: Path) -> tuple[dict[str, str], list[str]]:
         candidate = (root / relative).absolute()
         if candidate.is_symlink() or config._has_symlink_component(candidate):
             missing.append(role); continue
-        if size is None:
+        if role == "gameRoot":
+            ok = candidate.is_dir() and (candidate / "modules").is_dir()
+        elif size is None:
             ok = candidate.is_dir() and any(candidate.glob("*.pro"))
         else:
             ok = candidate.is_file() and candidate.stat().st_size == size and manifests.sha256(candidate) == sha256

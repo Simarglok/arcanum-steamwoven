@@ -101,13 +101,13 @@ public sealed class AreaScenePlan
         return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart);
     }
 
-    /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009): rotations 0, 1, 6 and 7 move it
-    /// 40 left and 20 down, then the flip bit mirrors it as width − x − 2 (research T7 and the pinned
-    /// tig art.c 1235–1253). The source applies the same shift to portal art, which no admitted core
-    /// draws; every other body uses its frame hotspot unchanged.</summary>
+    /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009) and portals (class 3, doors and windows of
+    /// whole maps, ARC-RENDER-017): rotations 0, 1, 6 and 7 move it 40 left and 20 down, then the flip bit mirrors
+    /// it as width − x − 2 (research T7 and the pinned tig art.c 1235–1253). The pinned Crash Site profiles draw no
+    /// portal; every other body uses its frame hotspot unchanged.</summary>
     public static (int X, int Y) Hotspot(AreaVisualRecord visual)
     {
-        if (visual.RawArt >> 28 != 1) return (visual.HotX, visual.HotY);
+        if (visual.RawArt >> 28 is not (1 or 3)) return (visual.HotX, visual.HotY);
         var rotation = (int)((visual.RawArt >> 11) & 7);
         var (x, y) = rotation is < 2 or > 5 ? (checked(visual.HotX - 40), checked(visual.HotY + 20)) : (visual.HotX, visual.HotY);
         return (visual.RawArt & 1) != 0 ? (checked(visual.Width - x - 2), y) : (x, y);

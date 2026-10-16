@@ -53,6 +53,9 @@ class LauncherSyncTests(unittest.TestCase):
             passed |= {token for token in argv if token.startswith("--")}
             for role in roles:
                 self.assertIn(launch.ROLE_FLAGS[role], argv, f"{task} must pass {role}")
+        argv = launch.map_arguments(self.inputs(), "crash site cave")
+        passed |= {token for token in argv if token.startswith("--")}
+        self.assertTrue({launch.ROLE_FLAGS[role] for role in launch.MAP_ROLES} <= set(argv))
         self.assertEqual(viewer, passed | NON_LAUNCHER_FLAGS,
                          "a viewer flag was added or removed: update GAME_ROLES/MODE_ROLES/ROLE_FLAGS and terrain_arguments")
         self.assertTrue(set(launch.ROLE_FLAGS.values()) <= viewer)
@@ -72,6 +75,20 @@ class LauncherSyncTests(unittest.TestCase):
         launch.terrain_arguments(without, "crash-site-area", task="ARC-WORLD-007")
         with self.assertRaises(ValueError):
             launch.terrain_arguments(without, "crash-site-area", task="ARC-WORLD-009")
+
+    def test_map_mode_passes_the_game_folder_and_one_safe_map_name(self):
+        inputs = self.inputs()
+        argv = launch.map_arguments(inputs, "caladon-castle main floor")
+        self.assertEqual(argv[:2], ["--mode", "crash-site-area"])
+        self.assertEqual(argv[-2:], ["--area-map", "caladon-castle main floor"])
+        # The map's inputs come from the content stack: no prototype folder or Crash Site inputs.
+        for flag in ("--prototypes", "--area-mobile", "--area-effects", "--area-patch", "--area-cave-mobile"):
+            self.assertNotIn(flag, argv)
+        for name in ("", " ", "maps/x", "a\\b", "line\nbreak", "x" * (launch.MAX_MAP_NAME + 1)):
+            with self.assertRaises(ValueError, msg=repr(name)):
+                launch.map_arguments(inputs, name)
+        with self.assertRaises(ValueError):
+            launch.map_arguments({role: path for role, path in inputs.items() if role != "gameRoot"}, "void")
 
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
@@ -95,7 +112,10 @@ class LauncherSyncTests(unittest.TestCase):
         self.assertIn(f"| {size:,} | `{sha256}` |", dat)
 
     def test_project_launcher_modes_bind_known_modes_and_tasks(self):
-        modes = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")["MODES"]
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        modes = project["MODES"]
+        # Map mode (ARC-RENDER-017) exists only in AREA builds exported from it: the newest AREA task.
+        self.assertEqual(project["MAP_MODE"], ("crash-site-area", ("ARC-RENDER-008",)))
         # Same pairing arcanum-local enforces at launch: crash-site-area only from
         # ARC-RENDER-007, ARC-INPUT-001 (diagnostic palette), ARC-WORLD-007 (LMB click-to-move) ARC-WORLD-009 (cave) or ARC-RENDER-008 (passability overlay).
         allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008"},
@@ -111,12 +131,16 @@ class LauncherSyncTests(unittest.TestCase):
         fixture = {"module": b"module", "areaMobile": b"mobile"}
         roles = {role: (f"files/{role}.bin", len(data), hashlib.sha256(data).hexdigest()) for role, data in fixture.items()}
         roles["prototypes"] = ("proto", None, None)
+        roles["gameRoot"] = ("", None, None)
         for role, data in fixture.items():
             (game / "files").mkdir(parents=True, exist_ok=True); (game / roles[role][0]).write_bytes(data)
         (game / "proto").mkdir(); (game / "proto" / "a.pro").write_bytes(b"x")
         with patch.object(launch, "GAME_ROLES", roles):
             found, missing = launch.discover_inputs(game)
-            self.assertEqual((sorted(found), missing), (["areaMobile", "module", "prototypes"], []))
+            (game / "modules").mkdir()
+            self.assertEqual((sorted(found := launch.discover_inputs(game)[0]), launch.discover_inputs(game)[1]),
+                             (["areaMobile", "gameRoot", "module", "prototypes"], []))
+            self.assertEqual(found["gameRoot"], str(game.resolve()))
             (game / roles["module"][0]).write_bytes(b"changed")
             self.assertEqual(launch.discover_inputs(game)[1], ["module"])
             (game / roles["module"][0]).unlink(); (game / roles["module"][0]).symlink_to(game / roles["areaMobile"][0])

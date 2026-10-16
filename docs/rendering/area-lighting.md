@@ -61,7 +61,7 @@ Namespace `Arcanum.Data.Lighting` (Godot-free):
 
 - `AmbientColor`, `AmbientPair(Outdoor, Indoor)`, `LightSchemeTable` (24 detached read-only hours, explicit-hour flags, payload digest).
 - `LightSchemeParser.TryParse(id, payload, out table)` → `LightingFailure`.
-- `AreaLightingReader.Read(module, snapshot)` → `AreaLightingReadResult(Failure, Source)`. Only a strictly published snapshot is accepted, and every core sector entry must live under the map directory whose `mapinfo.txt` supplies the default. Caps: 1 MiB per rule payload, 8,192 MES records, 64 core sectors, 32 schemes. The caller passes the module archive the snapshot was built from and re-verifies the module file afterwards (the viewer does).
+- `AreaLightingReader.Read(module, snapshot)` → `AreaLightingReadResult(Failure, Source)`. Only a strictly published snapshot is accepted, and every core sector entry must live under the map directory whose `mapinfo.txt` supplies the default. Caps: 1 MiB per rule payload, 8,192 MES records, 256 core sectors (a whole interior map, ARC-RENDER-017; was 64), 32 schemes. The caller passes the module archive the snapshot was built from and re-verifies the module file afterwards (the viewer does).
 - `AreaLightingSource`: module digest, map default, raw core sector words, referenced schemes, startup declaration; validating public constructor for synthetic inputs; `TryResolveScheme(sector)`.
 - `AmbientLightingState.Apply(hour, sector, out changed)`.
 

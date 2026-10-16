@@ -14,11 +14,18 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// <summary>Optional: the Crash Site cave's game-generated object file (ARC-WORLD-009). Absent, the cave and
     /// its transition are unavailable and the area runs as before.</summary>
     public string? AreaCaveMobilePath { get; init; }
+    /// <summary>ARC-RENDER-017: the game folder whose module content stack holds <see cref="AreaMapName"/>.</summary>
+    public string? GameRoot { get; init; }
+    /// <summary>ARC-RENDER-017: load this interior (a <c>maps/</c> folder name) under a whole-map plan
+    /// instead of the pinned Crash Site exterior; prototypes come from the content stack, and the area mobile,
+    /// effects, patch, cave and prototype folder arguments are refused.</summary>
+    public string? AreaMapName { get; init; }
     public static TerrainViewerArguments Parse(IReadOnlyList<string> args)
     {
         ArgumentNullException.ThrowIfNull(args);
         string? module = null, resource = null, sourceId = null, prototypes = null, moduleHash = null, resourceHash = null,
-            actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null, areaCaveMobile = null;
+            actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null, areaCaveMobile = null,
+            gameRoot = null, areaMap = null;
         long? actorMapX = null, actorMapY = null, actorOriginX = null, actorOriginY = null;
         int? actorOffsetX = null, actorOffsetY = null, actorScale = null, actorFacing = null, actorFrame = null;
         ActorDiagnosticRenderBranch? actorBranch = null;
@@ -48,6 +55,8 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--area-effects": areaEffects = Unique(areaEffects, value); break;
                 case "--area-patch": areaPatch = Unique(areaPatch, value); break;
                 case "--area-cave-mobile": areaCaveMobile = Unique(areaCaveMobile, value); break;
+                case "--game-root": gameRoot = Unique(gameRoot, value); break;
+                case "--area-map": areaMap = Unique(areaMap, value); break;
                 case "--expect-actor-resource-sha256": actorResourceHash = Unique(actorResourceHash, ValidateHash(value)); break;
                 case "--actor-map-x": actorMapX = Unique(actorMapX, ParseInt64(value)); break;
                 case "--actor-map-y": actorMapY = Unique(actorMapY, ParseInt64(value)); break;
@@ -72,8 +81,13 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             || (mode == TerrainViewerMode.CombinedStaticDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || actorSpecified || actorArchiveSpecified))
             || (mode == TerrainViewerMode.ActorDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || !actorSpecified))
             || (mode == TerrainViewerMode.WorldDiagnostic && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || actorSpecified))
-            || (mode == TerrainViewerMode.CrashSiteArea && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
-                || string.IsNullOrWhiteSpace(areaEffects) || string.IsNullOrWhiteSpace(areaPatch) || actorSpecified))
+            || (mode == TerrainViewerMode.CrashSiteArea && areaMap is null && (string.IsNullOrWhiteSpace(prototypes) || string.IsNullOrWhiteSpace(actorResource) || string.IsNullOrWhiteSpace(areaMobile)
+                || string.IsNullOrWhiteSpace(areaEffects) || string.IsNullOrWhiteSpace(areaPatch) || actorSpecified || gameRoot is not null))
+            // A whole interior map: its inputs come from the game folder's content stack.
+            || (areaMap is not null && (mode != TerrainViewerMode.CrashSiteArea || string.IsNullOrWhiteSpace(areaMap) || areaMap.Any(char.IsControl) ||
+                areaMap.Contains('/') || areaMap.Contains('\\') || string.IsNullOrWhiteSpace(gameRoot) || prototypes is not null ||
+                string.IsNullOrWhiteSpace(actorResource) || areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null || actorSpecified))
+            || (areaMap is null && gameRoot is not null)
             || (mode == TerrainViewerMode.CrashSiteArea && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
             || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
             throw new ArgumentException("Usage");
@@ -88,7 +102,8 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         if (mode is TerrainViewerMode.WorldDiagnostic or TerrainViewerMode.CrashSiteArea)
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
-        return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile };
+        return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile,
+            GameRoot = gameRoot, AreaMapName = areaMap };
     }
 
     private static string ValidateHash(string value) => value.Length == 64 && value.All(Uri.IsHexDigit)

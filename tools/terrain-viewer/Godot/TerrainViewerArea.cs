@@ -27,11 +27,12 @@ public partial class TerrainViewerApp
         _cache.UploadActor(result.ActorTextures);
         // Counted once per publication; the status line is rebuilt every frame.
         _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed);
-        _readyArea = area; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
+        _readyArea = area; _readyMapName = arguments.AreaMapName; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
-        _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
+        // The plan's chart: the exterior chart for the Crash Site, the whole-map chart for --area-map (ARC-RENDER-017).
+        _worldActor.Configure(result.AreaStepSnapshot, WorldTime, chart: area.Plan.Chart);
         StartAreaTransitions(arguments, result);
         BindAreaConversations(arguments, area);
         BindAreaCompanions();
@@ -65,8 +66,10 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")} | cave transfer by use, no gameplay | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{CompanionStatus()}{AreaInventoryStatus()}{AreaHoverStatus()}{WorldStatus()}");
+        ShowStatus($"{(_readyMapName is { } map ? $"Map '{map}' ({area.Snapshot.CatalogueMap}/{area.Snapshot.RuntimeMap})" : "Crash Site area")} | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(_readyMapName is not null ? AreaMapMovementStatus() : InCave ? $"movement: cave sector at new-game T0, walls block tile edges | {AreaWallStatus()}; roofs/portals/active composites absent | cave lit by its own scheme and stationary lights" : "movement: whole core (9 sectors) at new-game T0, core edge refused | roofs/walls/portals/active composites absent, not general support")}{(_readyMapName is null ? " | cave transfer by use, no gameplay" : "")} | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaTransitionStatus()}{QuickSaveStatus()}{AreaAmbientStatus()}{ConversationStatus()}{CompanionStatus()}{AreaInventoryStatus()}{AreaHoverStatus()}{WorldStatus()}");
     }
+    private string AreaMapMovementStatus() => "movement: whole map at new-game T0 from the map-list arrival, walls/doors/windows by whole-map step rules | "
+        + AreaWallStatus().Replace("cave walls", "walls") + "; roofs/active composites absent | no transitions, NPC dialogs, companions or quick save in map mode";
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {
         var area = result.Area!;

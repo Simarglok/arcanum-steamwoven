@@ -88,6 +88,11 @@ public sealed class DiagnosticGridSession : IGridSession
 public sealed record AreaChart(long OriginX, long OriginY, CellCoord Spawn, string BindingName)
 {
     public static AreaChart Exterior { get; } = new(AreaScenePlan.CameraOriginX, AreaScenePlan.CameraOriginY, new(6, 1), "CRASH_SITE_CORE_BASE_CHART_CENTERS");
+    /// <summary>The chart cells (both axes) the actor may stand on: the nine core sectors around the base sector
+    /// by default; a whole map (ARC-RENDER-017) charts all of its sectors from 0.</summary>
+    public int MinimumCell { get; init; } = AreaGridSession.MinimumChartCell;
+    public int MaximumCell { get; init; } = AreaGridSession.MaximumChartCell;
+    public bool Contains(CellCoord cell) => cell.X >= MinimumCell && cell.X <= MaximumCell && cell.Y >= MinimumCell && cell.Y <= MaximumCell;
     public const string ExteriorProfile = "arc-data-009-complete-file-effective-source-v1";
 
     /// <summary>The exterior chart for the exterior profile; otherwise the first core sector's origin with the given start.</summary>
@@ -113,7 +118,7 @@ public sealed class AreaGridSession : IGridSession
     /// and bodies from <c>40(y-x)</c>, 40 px to the right. The actor placement, which restates <c>location_xy</c>,
     /// takes this origin so the actor stands on the same diamond centre as every AREA body.</summary>
     public const long LocationOriginX = 40, LocationOriginY = 0;
-    /// <summary>Chart-relative cell range of the nine core sectors around the base sector.</summary>
+    /// <summary>Chart-relative cell range of the nine core sectors around the base sector (the default <see cref="AreaChart"/> range).</summary>
     public const int MinimumChartCell = -64, MaximumChartCell = 127;
     public static CellCoord Spawn => new(6, 1);
     public AreaStepSnapshot Snapshot { get; }
@@ -135,7 +140,7 @@ public sealed class AreaGridSession : IGridSession
         Duration = duration ?? DiagnosticGridSession.LiveDuration;
         if (!Duration.IsValid) throw new ArgumentException("GRID_DURATION_INVALID");
         var origin = start ?? Chart.Spawn;
-        if (origin.X is < MinimumChartCell or > MaximumChartCell || origin.Y is < MinimumChartCell or > MaximumChartCell || !snapshot.IsAdmitted(Chart.ToWorld(origin)))
+        if (!Chart.Contains(origin) || !snapshot.IsAdmitted(Chart.ToWorld(origin)))
             throw new ArgumentException("GRID_SPAWN_NOT_ADMITTED");
         // The context fingerprint is the declared context, the same for every request of this snapshot.
         var probe = new CellCoord(origin.X + 1, origin.Y);

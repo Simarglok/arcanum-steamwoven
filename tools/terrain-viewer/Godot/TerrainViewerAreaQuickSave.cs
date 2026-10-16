@@ -33,7 +33,8 @@ public partial class TerrainViewerApp
     private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest
         ?? (_quickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(QuickSaveDirectory)));
 
-    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
+    // Map mode (ARC-RENDER-017) never touches the player's Crash Site quick save slot.
+    private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea && _readyMapName is null;
 
     /// <summary>Routes F7/F8 while quick save/load is available (<see cref="QuickKeyGate"/>). Returns true when the
     /// key belongs to it, so it is not reported as a reserved, unimplemented original key. An open dialog takes every
@@ -132,8 +133,7 @@ public partial class TerrainViewerApp
         var world = new AreaStepCell(placement.Cell.X, placement.Cell.Y);
         if (!map.Steps.IsAdmitted(world)) return "the cell is not admitted for movement";
         var chart = map.Chart.ToChart(world);
-        if (chart.X is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell ||
-            chart.Y is < AreaGridSession.MinimumChartCell or > AreaGridSession.MaximumChartCell) return "the cell is outside the map chart";
+        if (!map.Chart.Contains(chart)) return "the cell is outside the map chart";
         return null;
     }
 

@@ -71,12 +71,15 @@ public partial class TerrainViewerApp
             return (steps, seen.Count, maxVisible, maxLive, maxBytes, maxChunks, maxChunkBytes);
         }
         var chunkCreated = _canvas!.AreaChunkCreatedCount; var chunkDisposed = _canvas.AreaChunkDisposedCount;
+        // The exterior is sized to overflow every cache; a smaller whole interior (ARC-RENDER-017) may fit in them, so
+        // there eviction is not required, while every per-view budget and the ownership balance still are.
+        var mustEvict = _readyMapName is null;
         var chunkedSweep = await Sweep(true);
         Require(chunkedSweep.Swept + taken == old.Commands, "SWEEP_COVERAGE");
         // The envelope needs more chunks than the chunk cap, so the chunk LRU must have
         // evicted, and its own create/dispose accounting must balance.
         var chunkComposed = _canvas.AreaChunkCreatedCount - chunkCreated; var chunkEvictions = _canvas.AreaChunkDisposedCount - chunkDisposed;
-        Require(chunkComposed > 0 && chunkEvictions > 0
+        Require(chunkComposed > 0 && (chunkEvictions > 0 || !mustEvict)
             && _canvas.AreaChunkCreatedCount - _canvas.AreaChunkDisposedCount == _canvas.AreaChunkResidentCount, "CHUNK_OWNERSHIP");
         var created = _cache.CreatedCount; var disposed = _cache.DisposedCount;
         var commandSweep = await Sweep(false);
@@ -87,8 +90,8 @@ public partial class TerrainViewerApp
         // Per-command terrain needs more frames than visible + retained, so the frame
         // LRU must have evicted; textures come only from the retained CPU repository.
         var reuploads = _cache.CreatedCount - created; var evictions = _cache.DisposedCount - disposed;
-        Require(reuploads > 0 && evictions > 0 && _cache.CreatedCount - _cache.DisposedCount == _cache.Count, "GPU_OWNERSHIP");
-        Require(maxRetained > 0, "GPU_RETENTION");
+        Require(((reuploads > 0 && evictions > 0) || !mustEvict) && _cache.CreatedCount - _cache.DisposedCount == _cache.Count, "GPU_OWNERSHIP");
+        Require(maxRetained > 0 || !mustEvict, "GPU_RETENTION");
         var steps = chunkedSweep.Steps + commandSweep.Steps; var sweptCommands = commandSweep.Swept;
         var maxVisible = Math.Max(chunkedSweep.MaxVisible, commandSweep.MaxVisible);
         var maxLive = Math.Max(chunkedSweep.MaxLive, commandSweep.MaxLive); var maxBytes = Math.Max(chunkedSweep.MaxBytes, commandSweep.MaxBytes);

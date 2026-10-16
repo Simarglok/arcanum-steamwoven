@@ -106,7 +106,7 @@ public sealed class AreaCompositionTests
     }
 
     [TestMethod]
-    public void WallHotspotsShiftForRotationsZeroOneSixSevenAndMirrorWithTheFlipBit()
+    public void WallAndPortalHotspotsShiftForRotationsZeroOneSixSevenAndMirrorWithTheFlipBit()
     {
         var body = Body(0);
         AreaVisualRecord Wall(uint raw) => Visual(body,100,60,30,50) with { RawArt = raw, Mirrored = (raw & 1) != 0 };
@@ -116,6 +116,10 @@ public sealed class AreaCompositionTests
         Assert.AreEqual((100-30-2,50), AreaScenePlan.Hotspot(Wall(Raw(3,true))));
         Assert.AreEqual((100-(-10)-2,70), AreaScenePlan.Hotspot(Wall(Raw(7,true))), "Shift first, then mirror.");
         Assert.AreEqual((30,50), AreaScenePlan.Hotspot(Visual(body,100,60,30,50)), "Non-wall bodies keep their frame hotspot.");
+        // Portals (art class 3) take the same rule (ARC-RENDER-017); critters (class 2) do not.
+        Assert.AreEqual((100-(-10)-2,70), AreaScenePlan.Hotspot(Wall(Raw(7,true) & 0x0FFFFFFFu | 0x30000000u)));
+        Assert.AreEqual((30,50), AreaScenePlan.Hotspot(Wall(Raw(4,false) & 0x0FFFFFFFu | 0x30000000u)));
+        Assert.AreEqual((30,50), AreaScenePlan.Hotspot(Wall(Raw(7,false) & 0x0FFFFFFFu | 0x20000000u)));
         // The plan places a wall from that hotspot and draws it flipped.
         var wall = Wall(Raw(7,true));
         var command = AreaScenePlan.Create([], [body], [wall]).Commands.Single();

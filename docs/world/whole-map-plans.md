@@ -105,9 +105,10 @@ draw.
 
 ## Limits
 
-The viewer still places a door or window with the hot spot of an ordinary body;
-the wall rule (mirror and rotation shift, see the portal facts) applies to
-portals too and lands with the viewer map mode (ARC-RENDER-017).
+The viewer's [map mode](../rendering/area-map-mode.md) (ARC-RENDER-017) draws these
+maps and places a door or window on the wall hot-spot rule (mirror and rotation
+shift, see the portal facts); five complete maps still stop at blend states the
+scene plan does not draw yet.
 
 Resources resolve only in `arcanum1.dat` and `arcanum2.dat` (their overrides in
 `arcanum3/4.dat`, patches and loose folders are not seen), and the aggregate and
