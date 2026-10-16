@@ -133,7 +133,9 @@ cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard 
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
 closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) re-authenticates the
-selected archives on every talk (`arcanum2.dat` as Script, `arcanum3.dat` as Dialog), resolves
+selected archives on every talk (`arcanum2.dat` as Script, `arcanum3.dat` as Dialog; the original
+game opens Virgil's script from `Arcanum4.dat`, which shadows this copy, see
+[content precedence](../research/content-precedence.md#crash-site-impact)), resolves
 the entry through the SCR resolver (Following from the session, Jilted false, LF from the
 session's attachment flags seeded from the loaded attachment), reads the resolved DLG member
 by ordinal and checks its payload SHA-256 before parsing.

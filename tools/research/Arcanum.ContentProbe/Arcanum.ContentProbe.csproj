@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Arcanum.ContentProbe</AssemblyName>
+    <RootNamespace>Arcanum.ContentProbe</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../src/Arcanum.Data/Arcanum.Data.csproj" />
+  </ItemGroup>
+</Project>
