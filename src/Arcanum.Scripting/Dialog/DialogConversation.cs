@@ -475,7 +475,7 @@ public sealed class DialogConversation
                     QuestStateCommand quest => _ports.Commands.Execute(quest),
                     RumorLogCommand rumor => _ports.Commands.Execute(rumor),
                     ReactionCommand reaction => _ports.World!.Execute(reaction),
-                    GiveItemCommand item => _ports.World!.Execute(item),
+                    GiveItemCommand item => _ports.Inventory is { } inventory ? inventory.Execute(item) : _ports.World!.Execute(item),
                     MarkAreaCommand area => _ports.World!.Execute(area),
                     AlignmentCommand alignment => _ports.World!.Execute(alignment),
                     _ => throw new InvalidOperationException("Unadmitted command."),
@@ -774,7 +774,8 @@ public sealed class DialogConversation
     private DialogOperationSource? MissingCapability(IReadOnlyList<ConversationOperation> operations) => operations.FirstOrDefault(operation => operation switch
     {
         ConversationGlobalFlag => _ports.GlobalFlags is null,
-        ConversationReactionGate or ConversationReaction or ConversationGiveItem or ConversationMarkArea or ConversationAlignment => _ports.World is null,
+        ConversationReactionGate or ConversationReaction or ConversationMarkArea or ConversationAlignment => _ports.World is null,
+        ConversationGiveItem => _ports.World is null && _ports.Inventory is null,
         ConversationJoin => _ports.World is null && _ports.Party is null,
         ConversationWaiting or ConversationUnwait => _ports.Party is null,
         _ => false,

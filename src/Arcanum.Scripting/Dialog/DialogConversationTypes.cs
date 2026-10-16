@@ -32,13 +32,15 @@ public sealed record DialogConversationRequest(
 /// are a production versioned owner (a <see cref="GlobalFlagOwner"/> or a session's flag view). <paramref name="World"/> owns reaction, inventory, map and party
 /// effects. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
 /// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
+/// <paramref name="Inventory"/> (ARC-WORLD-014), when present, takes negative IN instead of <paramref name="World"/>.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
     IDialogCommandPort Commands,
     IVersionedGlobalFlagOwner? GlobalFlags,
     IDialogWorldPort? World = null,
-    IDialogPartyPort? Party = null);
+    IDialogPartyPort? Party = null,
+    IDialogInventoryPort? Inventory = null);
 
 public enum DialogReactionMode
 {
@@ -108,6 +110,16 @@ public interface IDialogPartyPort
     bool IsWaiting(DialogPartyQuery query);
     DialogJoinResult Execute(JoinCommand command);
     DialogJoinResult Execute(UnwaitCommand command);
+}
+
+/// <summary>
+/// Inventory seam (ARC-WORLD-014): negative IN. Calls are synchronous and serialized by the host. Applied covers the
+/// source's no-effect case (no item with that name); Rejected means the command had no effect and the owner refused it; a
+/// thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogInventoryPort
+{
+    DialogCommandResult Execute(GiveItemCommand command);
 }
 
 public sealed class DialogConversationOptions

@@ -48,7 +48,9 @@ NPC action or reply condition that needs it a static `CapabilityUnavailable` fro
 blocks (`UnsupportedOperation`) a reply whose own action needs it. The optional
 `IDialogPartyPort` (ARC-WORLD-013, [party runtime](../world/party-runtime.md#dialog-seam))
 answers `WA`, `JO` and `UW`; when present it admits `WA`/`UW` and takes `JO` instead of the
-world port, and without it the grammar is unchanged.
+world port, and without it the grammar is unchanged. The optional `IDialogInventoryPort`
+(ARC-WORLD-014, [inventory runtime](../world/inventory-runtime.md#dialog-seam)), when present, takes negative `IN`
+instead of the world port; `IN` then needs only one of the two.
 
 ## Flow and source semantics
 

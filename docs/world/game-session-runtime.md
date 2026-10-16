@@ -1,10 +1,12 @@
 # Game session state runtime
 
-Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013.
+Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
+inventory ARC-WORLD-014.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
-quest states, known rumors), the PC's [party](party-runtime.md) (followers, waiting NPCs), plus a
+quest states, known rumors), the PC's [party](party-runtime.md) (followers, waiting NPCs), the items the PC
+took from the world ([inventory](inventory-runtime.md): pickup, loot, negative dialog `IN`), plus a
 versioned snapshot schema with a strict JSON codec.
 The AREA viewer keeps every [dialog consequence](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic)
 it can store here. It covers the state boundary of
@@ -39,6 +41,7 @@ and GF owners. There are no locks, events, callbacks, timers, files or Godot typ
 | `SetQuestState` / `LearnRumor` | Story mutations with the same expected-version guard and refusal order (input, version, NoChange, revision capacity). One revision per change. See [Story domain](#story-domain). |
 | `QueryQuest` / `QueryGlobalQuest` / `QueryRumor` / `QueryStory` | PC quest record or `null` (never changed); shared state (`Accepted` by default); rumor time or `null`; a detached ascending copy of the whole domain. A number outside the source range throws `ArgumentOutOfRangeException`. |
 | `QueryCompanion` / `QueryParty` / `JoinParty` / `ForceJoinParty` / `UnwaitParty` / `WaitParty` / `LeaveParty` / `SetSpreadOut` | Party domain (ARC-WORLD-013) with the same guard and one revision per change; join and unwait run the follow check and return its reason. See [party runtime](party-runtime.md). |
+| `AttachMapInventory` / `QueryMapInventory` / `QueryPcInventory` / `PickUpItem` / `LootItem` / `GiveItemToPc` | Inventory domain (ARC-WORLD-014): a host-attached T0 seed per map (not state, no revision) and the PC's taken items; transfers take the expected version, refuse before any effect and add one revision each. See [inventory runtime](inventory-runtime.md). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
 | `Dispose()` | Idempotent; disposes the clock and GF owner. Every later call except `Dispose` throws `ObjectDisposedException`. |
 
@@ -114,7 +117,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 4
+## Snapshot schema 5
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -122,13 +125,14 @@ pause, revision; no owner identity), `Flags` (revision and every admitted flag i
 ascending order, `null` = Unknown), `Actor`, `Maps` (ascending map, each with
 changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 (PC quests, shared quests that left `Accepted`, known rumors; each ascending), `Party`
-(the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4))
+(the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4)),
+`Inventory` (the PC's taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":4,
+{"format":"arcanum-steamwoven-session","schemaVersion":5,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -142,6 +146,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
           "globalQuests":[{"quest":1002,"state":"Completed"}],
           "rumors":[{"rumor":1200,"timestampMs":54000000}]},
  "party":{"followers":[{"entity":"oid:…","forced":false,"spreadOut":false}],"others":[]},
+ "inventory":{"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
 
@@ -171,16 +176,17 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 4 is the only accepted version. ARC-WORLD-013 added the
-required `party` domain; schema 3 is refused like the earlier ones (see
+**Migration decision: none.** Schema 5 is the only accepted version. ARC-WORLD-014 added the
+required `inventory` domain; schema 4 is refused like the earlier ones (see
+[inventory runtime](inventory-runtime.md#snapshot-schema-5)). ARC-WORLD-013 had added the
+required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of schema 1, 2 or 3 (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of schema 1..4 (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
-dialog. Adding another domain (inventory) needs schema 5 with its own explicit
-migration decision.
+dialog. Adding another domain needs schema 6 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -238,6 +244,7 @@ and a literal, independently written canonical JSON text:
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original
   sector-diff and mobile-object formats.
-- Movement mid-step persistence, follower movement and the cross-map group, inventory, PC alignment and stats, the quest
-  logbook, experience and quest data, RNG and other domains.
+- Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's taken items
+  (starting kit, stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), PC alignment and stats,
+  the quest logbook, experience and quest data, RNG and other domains.
 - Schema migration and compatibility with original saves.
