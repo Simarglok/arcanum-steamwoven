@@ -198,16 +198,19 @@ public sealed class SessionScriptCallTests
         Schedule(owner, new(1, 0, Pcr, Virgil), 10);
         Schedule(owner, new(2, 0, Virgil, Wolf), 10);
         Schedule(owner, new(3, 0, null, Wolf), 10);
+        // A follower role stored on a third map is not on the map being left, so it stays there.
+        Schedule(owner, new(4, 0, null, Virgil with { Map = new(5) }), 10);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.PlaceActor(owner.Version, new(Cave, new(5, 5), Start.Facing)).Disposition);
         CollectionAssert.AreEqual(new[]
         {
             new SessionScriptCall(1, 0, Pcr with { Map = Cave }, Virgil with { Map = Cave }),
             new SessionScriptCall(2, 0, Virgil with { Map = Cave }, Wolf),
             new SessionScriptCall(3, 0, null, Wolf),
+            new SessionScriptCall(4, 0, null, Virgil with { Map = new(5) }),
         }, owner.QueryScriptCalls().Select(c => c.Call).ToArray());
         // Remove matches the attachee by entity id, whatever map either stores.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveScriptCall(owner.Version, 1, new(exterior, "virgil")).Disposition);
-        CollectionAssert.AreEqual(new[] { 2, 3 }, owner.QueryScriptCalls().Select(c => c.Call.Script).ToArray());
+        CollectionAssert.AreEqual(new[] { 2, 3, 4 }, owner.QueryScriptCalls().Select(c => c.Call.Script).ToArray());
     }
 
     [TestMethod]

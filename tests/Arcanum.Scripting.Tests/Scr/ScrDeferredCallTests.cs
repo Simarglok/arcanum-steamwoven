@@ -112,6 +112,8 @@ public sealed class ScrDeferredCallTests
         host.Slots.Clear();
         Assert.AreEqual(new ScrSlot(0, 8, 0), ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host).Effects.Writeback!.Slot);
         Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Npc, Npc), host).Effects.Writeback);
+        host.Slots[(Npc, ScrPoint.Use)] = new(4242, 8, 0x22);
+        Assert.AreEqual(new ScrSlot(4242, 8, 0), ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host).Effects.Writeback!.Slot, "counters alone differ");
         host.Slots[(Npc, ScrPoint.Use)] = new(4242, 8, 0);
         Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Pc, Npc), host).Effects.Writeback);
         Assert.IsNull(ScrDispatcher.RunCall(new(1699, 0, Pc, null), host).Effects.Writeback, "no attachee, no slot");
