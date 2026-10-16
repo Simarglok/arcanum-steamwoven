@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+
 namespace Arcanum.Data;
 
 // Admission is internal and per call; finite public DAT callers cannot supply a
@@ -9,13 +11,15 @@ internal interface IDatEntryAdmission
 
 /// <summary>RFC1950/1951 token traversal without an output/window allocation.
 /// Projects cumulative SharpZipLib 1.4.2 table construction, not decoded bytes.
-/// Fixed workspace is stack-only (< 4 KiB), reused across every block.</summary>
+/// Fixed workspace is stack-only (< 4 KiB, including the 1.5 KiB short-code
+/// lookup tables), reused across every block.</summary>
 internal static class DatInflateProjection
 {
     // Includes the 32768-byte window/header, Inflater/Adler/input/window objects,
     // probe, cold fixed trees/static arrays, and bounded exception wrappers.
     // The output array and each dynamic header/tree are charged separately.
     internal const long BaseEnvelope = 49152;
+    private const int LiteralFastBits = 9, DistanceFastBits = 8;
 
     internal static long Measure(ReadOnlySpan<byte> stored, int declaredSize, CancellationToken token)
     {
@@ -31,10 +35,17 @@ internal static class DatInflateProjection
         Span<int> metaSymbols = stackalloc int[19];
         Span<int> litCounts = stackalloc int[16];
         Span<int> distCounts = stackalloc int[16];
+        // Short-code lookups only accelerate the canonical decode; Symbol falls back
+        // to it for longer or absent codes, so every decoded symbol is unchanged.
+        Span<ushort> litFast = stackalloc ushort[1 << LiteralFastBits];
+        Span<ushort> distFast = stackalloc ushort[1 << DistanceFastBits];
         Span<int> metaCounts = stackalloc int[16];
         ReadOnlySpan<byte> order = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
         long envelope = checked(BaseEnvelope + declaredSize + 32L);
         long produced = 0;
+        // The lookups currently hold the fixed (type 1) code, so consecutive fixed
+        // blocks do not rebuild them; a dynamic block overwrites them.
+        var fixedTables = false;
         bool final;
         do
         {
@@ -90,8 +101,10 @@ internal static class DatInflateProjection
             }
             else throw Invalid();
 
-            var literals = new Codes(lengths[..literalCount], litCounts, litSymbols);
-            var distances = new Codes(lengths.Slice(literalCount, distanceCount), distCounts, distSymbols);
+            var reuse = type == 1 && fixedTables;
+            var literals = new Codes(lengths[..literalCount], litCounts, litSymbols, litFast, LiteralFastBits, !reuse);
+            var distances = new Codes(lengths.Slice(literalCount, distanceCount), distCounts, distSymbols, distFast, DistanceFastBits, !reuse);
+            fixedTables = type == 1;
             if (type == 2) envelope = checked(envelope + literals.Allocation + distances.Allocation);
             while (true)
             {
@@ -104,12 +117,12 @@ internal static class DatInflateProjection
                     var n = symbol - 257;
                     var extra = n < 8 || n == 28 ? 0 : (n - 4) / 4;
                     var length = n < 8 ? n + 3 : n == 28 ? 258 : ((4 + ((n - 8) % 4)) << extra) + 3;
-                    length += bits.Read(extra);
+                    if (extra != 0) length += bits.Read(extra);
                     var distanceSymbol = Codes.Symbol(distances, ref bits);
                     if (distanceSymbol > 29) throw Invalid();
                     var distanceExtra = distanceSymbol < 4 ? 0 : distanceSymbol / 2 - 1;
                     var distance = distanceSymbol < 4 ? distanceSymbol + 1 : ((2 + (distanceSymbol & 1)) << distanceExtra) + 1;
-                    distance += bits.Read(distanceExtra);
+                    if (distanceExtra != 0) distance += bits.Read(distanceExtra);
                     if (distance > produced || distance > 32768) throw Invalid();
                     produced = checked(produced + length);
                 }
@@ -131,14 +144,33 @@ internal static class DatInflateProjection
         private readonly ReadOnlySpan<byte> _input = input;
         private readonly CancellationToken _token = token;
         private long _position;
+        internal readonly long Available => (long)_input.Length * 8 - _position;
+        internal readonly void ThrowIfCancellationRequested() => _token.ThrowIfCancellationRequested();
+        // The next 24 bits, least significant first (deflate bit order), reading as
+        // zero past the input end. Callers check Available before consuming any.
+        internal readonly int Peek24()
+        {
+            var at = (int)(_position >> 3); uint value;
+            if (at + 4 <= _input.Length) value = BinaryPrimitives.ReadUInt32LittleEndian(_input[at..]);
+            else
+            {
+                value = 0;
+                for (var i = 0; at + i < _input.Length; i++) value |= (uint)_input[at + i] << (8 * i);
+            }
+            return (int)((value >> (int)(_position & 7)) & 0xFFFFFF);
+        }
         internal int Read(int count)
         {
             _token.ThrowIfCancellationRequested();
-            if (count < 0 || count > 16 || _position + count > (long)_input.Length * 8) throw Invalid();
-            var value = 0;
-            for (var i = 0; i < count; i++, _position++)
-                value |= ((_input[(int)(_position >> 3)] >> (int)(_position & 7)) & 1) << i;
+            if (count < 0 || count > 16 || count > Available) throw Invalid();
+            var value = count == 0 ? 0 : Peek24() & ((1 << count) - 1);
+            _position += count;
             return value;
+        }
+        internal void Consume(int count)
+        {
+            if (count < 0 || count > Available) throw Invalid();
+            _position += count;
         }
         internal void Align() => _position = (_position + 7) & ~7L;
         internal void SkipBytes(int count)
@@ -154,10 +186,13 @@ internal static class DatInflateProjection
     {
         private readonly Span<int> _counts;
         private readonly Span<int> _symbols;
+        private readonly Span<ushort> _fast;
+        private readonly int _fastBits;
         internal long Allocation { get; }
-        internal Codes(ReadOnlySpan<byte> lengths, Span<int> counts, Span<int> symbols)
+        internal Codes(ReadOnlySpan<byte> lengths, Span<int> counts, Span<int> symbols, Span<ushort> fast = default, int fastBits = 0, bool buildFast = true)
         {
-            _counts = counts; _symbols = symbols;
+            if (fastBits is < 0 or > 9 || fast.Length < (fastBits == 0 ? 0 : 1 << fastBits)) throw new ArgumentOutOfRangeException(nameof(fastBits));
+            _counts = counts; _symbols = symbols; _fast = fast; _fastBits = fastBits;
             counts.Clear();
             foreach (var length in lengths)
             {
@@ -190,15 +225,46 @@ internal static class DatInflateProjection
             // Two int[16] arrays (176), tree object (24), short[] header +
             // alignment (32); 24 extra bytes conservatively cover wrappers.
             Allocation = checked(256 + tableSlots * 2);
+            if (fastBits == 0 || !buildFast) return;
+            // Entry = symbol | length << 9 for every canonical code of length <=
+            // fastBits, at all indexes whose low bits are that code bit-reversed
+            // (deflate stores code bits most significant first). Zero = no entry.
+            fast.Clear();
+            int code = 0, index = 0;
+            for (var length = 1; length <= fastBits; length++)
+            {
+                for (var j = 0; j < counts[length]; j++, code++)
+                {
+                    var reversed = 0;
+                    for (var bit = 0; bit < length; bit++) reversed |= ((code >> bit) & 1) << (length - 1 - bit);
+                    var entry = (ushort)(symbols[index + j] | length << 9);
+                    for (var slot = reversed; slot < 1 << fastBits; slot += 1 << length) fast[slot] = entry;
+                }
+                index += counts[length]; code <<= 1;
+            }
         }
+        // Canonical decode one code bit at a time, as before, but from one peeked word:
+        // a bit past the input end fails exactly where reading it one by one did. A
+        // short code found in the lookup is the same symbol the canonical decode
+        // returns, because codes are prefix-free.
         internal static int Symbol(scoped Codes tree, scoped ref Bits bits)
         {
+            bits.ThrowIfCancellationRequested();
+            var peek = bits.Peek24(); var available = bits.Available;
+            if (tree._fastBits != 0 && tree._fast[peek & ((1 << tree._fastBits) - 1)] is var hit && hit != 0)
+            {
+                var hitLength = hit >> 9;
+                if (hitLength > available) throw Invalid();
+                bits.Consume(hitLength);
+                return hit & 511;
+            }
             var code = 0; var first = 0; var index = 0;
             for (var length = 1; length <= 15; length++)
             {
-                code = (code << 1) | bits.Read(1);
+                if (length > available) throw Invalid();
+                code = (code << 1) | ((peek >> (length - 1)) & 1);
                 var count = tree._counts[length];
-                if (code >= first && code - first < count) return tree._symbols[index + code - first];
+                if (code >= first && code - first < count) { bits.Consume(length); return tree._symbols[index + code - first]; }
                 index += count; first = (first + count) << 1;
             }
             throw Invalid();
