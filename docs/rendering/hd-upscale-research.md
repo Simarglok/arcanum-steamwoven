@@ -115,7 +115,7 @@ Local observation unless stated.
    a name; this is a counting order, not the [resource precedence](../research/content-precedence.md)):
    13,556 ART, 337,513 frames, **1.31 G source pixels with one palette per ART, 4.16 G
    with every present palette** (437 ARTs refused by the strict decoder are not
-   counted; no other read failure occurred). Critters, unique NPCs and monsters are 81 % of the pixels; tiles 0.3 %,
+   counted; no other read failure occurred). Critters, unique NPCs and monsters are 80 % of the pixels; tiles 0.3 %,
    facades 7.8 %. At 2× the output is 4× that: ~21 GB of raw RGBA for one palette per
    ART before PNG compression.
 5. **Crash Site at 2×.** The first pack's scope (characters and objects; the
@@ -234,7 +234,7 @@ pixels on this Mac, see Determinism).
   and facades are 78×40 diamonds with transparent corners; upscaled one by one, the
   diamond edges get dark seams (AI: 0.4–0.9 % of the chunk, the alpha variants remove
   most of it) and Scale2x, Eagle and xBR erode the diamond edges so that 1.0–1.4 %
-  of the chunk is left uncovered (hq2x 0.07 %) (holes the Legacy terrain does not have). Per-tile is
+  of the chunk is left uncovered (holes the Legacy terrain does not have; hq2x 0.07 %). Per-tile is
   also the slowest (one process per frame).
 - **A 512 chunk alone gets an edge band.** AI output differs from the neighbourhood
   bake mainly in the outer 16 pixels (band MAE 1.6–3.4 vs interior 0.06–1.3), i.e. a
