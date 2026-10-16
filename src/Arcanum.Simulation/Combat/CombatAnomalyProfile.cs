@@ -9,7 +9,10 @@ namespace Arcanum.Simulation.Combat;
 /// </summary>
 public sealed record CombatAnomalyProfile
 {
-    /// <summary>Stable setting name: <c>steamwoven</c> or <c>original</c>.</summary>
+    /// <summary>
+    /// Stable setting name, <c>steamwoven</c> or <c>original</c>. It identifies only the two built-in settings; a
+    /// profile changed with <c>with</c> is a custom mix and should get its own name.
+    /// </summary>
     public required string Name { get; init; }
 
     /// <summary>A2: the bed's −30 invocation modifier is counted twice (−60).</summary>

@@ -9,7 +9,7 @@ optional patches (mods) that change the play experience without replacing the
 phase 1 behaviour. It records no final rule, changes no production API,
 viewer, session schema or dialog port, and every stage, code and policy below
 is a **proposal** until the owner accepts it; the owner decisions D1–D7 were
-accepted on 2026-10-16.
+accepted on 2026-10-16 and D8 on 2026-10-17.
 
 Requirements: [FR-AI-002](../requirements/story-social-ai.md#fr-ai-002)
 (threat detection and hand-off to combat) is the main target;
@@ -34,8 +34,9 @@ its subturn early") is what this plan answers.
   it; nothing here is a contract.
 - **CE anomaly**: a branch that looks inconsistent. Under decision D2 phase 1
   fixes a confirmed slip and records it in the [anomaly
-  decisions](#anomaly-decisions); as project policy (supporting D1 parity
-  runs) the source behaviour stays reachable behind a named switch.
+  decisions](#anomaly-decisions); a bug the retail game really has stays
+  reachable behind a named switch of the "Original" setting (D8), while a CE
+  reconstruction slip the original does not have gets no switch.
 - **Project policy**: a choice this project makes where the source leaves one
   open. Every policy below is a proposal unless the [owner
   decisions](#owner-decisions-2026-10-16) settle it.
@@ -264,8 +265,9 @@ A9 is part of A0.
    the source behaviour is the default policy, not inline code.
 2. **Every CE anomaly is a recorded decision.** A confirmed slip (P1..P7, the
    load-map anomalies LM1..LM20 of ARC-RES-040 and those A1–A8 find) is fixed in phase 1 (D2), with an entry naming the source
-   behaviour, the chosen behaviour and the reason; the source variant stays
-   behind a named switch so seeded runs can still be compared with CE.
+   behaviour, the chosen behaviour and the reason; a retail bug stays behind a
+   named switch of the "Original" setting (D8) so runs can still be compared
+   with the original game, and a CE-only slip gets none.
 3. **Randomness is injected and logged.** Each roll has a purpose label, so
    a seeded run replays exactly and a trace shows which roll decided what.
 4. **Decisions return reason codes.** The overlay, tests and mods read the
@@ -332,14 +334,15 @@ game really has.
 | A5 (ARC-RES-030) | CE only: a crippled-arm critical drops the weapon when only the shield qualifies; partial healing of crippled legs clears blindness. The original drops the shield and clears crippled legs ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | Drop the shield; clear crippled legs, as in the original. | CE reconstruction slips; owner confirmed 2026-10-16. Land with the critical-effect (FR-COMBAT-009) and healing slices. | none: both settings follow the original |
 | A6 (ARC-RES-030) | CE and original 1.0.7.4: `object_get_ac` applies AC-adjustment effects to the whole AC and adds the effective AcAdjustment stat, which already carries them. | Effects once, through the effective AcAdjustment stat (`AttackRules.ArmorClass`). | Double count. ARC-COMBAT-001. | `ArmorClassEffectsCountedTwice` (Original setting) |
 | A7 (ARC-RES-030) | CE and original 1.0.7.4: a critical self-hit rolls the critical-hit procedure twice (critical-miss branch and damage step); the flags add up. | Rolled once, at the damage step. | Double processing. ARC-COMBAT-001. | `CriticalSelfHitRolledTwice` (Original setting) |
-| A8 (ARC-RES-030) | CE only: the critical effect chance is never assigned when the weapon's magic was cancelled. The original sets it to 0 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | 0, as in the original. | CE reconstruction slip. ARC-COMBAT-001. | none: the original and the default agree, and CE's value is undefined |
+| A8 (ARC-RES-030) | CE only: the critical effect chance is never assigned when the weapon's magic was cancelled. The original sets it to 0 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). | 0, as in the original. | CE reconstruction slip. ARC-COMBAT-001. | none: both settings follow the original (CE's value is undefined) |
 | A9 (ARC-RES-030) | CE and original 1.0.7.4: when the skip loop of `combat_turn_based_next_subturn` runs past the last entry, the new round's first subturn starts twice (heartbeat and AI twice). | Started once. | `combat_turn_based_begin_turn` already starts it; owner confirmed 2026-10-16. Lands with the turn-based round slice. | `FirstSubturnStartedTwice` (reserved, Original setting) |
 | A10 (ARC-COMBAT-001) | CE and original 1.0.7.4: `combat_calc_dmg` keeps the backstab flags after a critical miss retargets the attack to the attacker, so the self-hit gets the backstab damage bonus. | No backstab bonus on a self-hit. | The self-hit is not a backstab. Found by ARC-COMBAT-001; fixed under D2. | `BackstabDamageOnSelfHit` (Original setting) |
 | LM14 (ARC-RES-040) | The melee damage scaling helper always returns 100, so it changes nothing. | Kept: no scaling. | The intended factor is unknown, so there is no confirmed slip to fix. ARC-COMBAT-001. | none |
 
 ## Owner decisions (2026-10-16)
 
-- **D1 Parity target: CE first.** The CE reading is the reference; original
+- **D1 Parity target: CE first.** (Since D8 the "Original" setting follows the
+  retail executable where the two differ.) The CE reading is the reference; original
   runtime observations (I11) are added later as checks.
 - **D2 Anomalies: fix in phase 1 and document.** A confirmed slip is fixed in
   the default behaviour and recorded under [anomaly
