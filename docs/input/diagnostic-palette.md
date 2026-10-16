@@ -46,6 +46,9 @@ its Close button. Contents:
 - **Visual Legacy/HD (H)** (ARC-UI-006): requests the other visual profile, like `H`; the line
   under it shows the active profile, a pending switch, the pack and the save outcome
   ([viewer](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)).
+- **Always Run on/off** (ARC-WORLD-020): the original's Always Run option, saved; the line under
+  it shows the option, the Num Lock state, what the next ground click does and the current gait
+  ([walking and running](../world/gait-runtime.md)).
 - **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
   checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
   without one it reads "unavailable" and is not navigable. The host binds it through
@@ -95,7 +98,8 @@ WORLD host (`TerrainViewerWorld.cs`).
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
-   the palette holds the same action. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and
+   Ctrl+LMB on the ground runs once ([ARC-WORLD-020](../world/gait-runtime.md)). Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.

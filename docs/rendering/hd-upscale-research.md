@@ -10,6 +10,10 @@ directory on the owner's Mac. Visual quality is judged here only by the numeric
 checks below plus one developer look at local outputs; the human before/after review
 is ARC-RENDER-015 and is never a merge gate.
 
+Follow-up (2026-10-16): the owner rejected these 2× outputs on sight (staircase
+edges, no added detail) and moved to a provisional soft-edge 4× base plus generative
+re-detailing; see [hd-generative-redetail.md](hd-generative-redetail.md) (ARC-RES-038).
+
 Owner decisions this note works under (2026-10-16, [decisions](../architecture/decisions.md),
 HD pack): scale 2× only; the owner builds the pack on their own machine; the pack is
 a separate local directory outside the repository and is not distributed. The same

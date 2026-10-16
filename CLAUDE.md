@@ -19,20 +19,20 @@ summarizes the project and points to them.
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
   data runs on the owner's Mac (a Remote Control session in the owner's
-  checkout). Following the owner's project instructions, a docs-only task
-  (Markdown only) may run in a cloud clone, which has no .NET or Godot: run
-  `python3 -B tools/research/dat_probe.py --self-test` and state in the PR that
-  the .NET root checks were not run because no code changed.
+  checkout). A docs-only task (only Markdown documentation changes) may run in
+  a cloud clone, which has no .NET or Godot, and runs **no checks**: no root
+  checks, no task checks; the PR says "docs-only, no checks run". The
+  independent review still applies (`docs/workflow/tasks.md`).
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
   `hermes`.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
-  subagent on the exact diff first. Once the acceptance criteria, task checks and
-  root checks pass and the review is addressed, merge the PR yourself and report
-  it, unless the owner explicitly asked to review it; then leave it open for the
-  owner (`docs/workflow/tasks.md`).
+  subagent on the exact diff first. Once the acceptance criteria, task checks
+  and root checks pass (none for docs-only) and the review is addressed, merge
+  the PR yourself and report it, unless the owner explicitly asked to review it;
+  then leave it open for the owner (`docs/workflow/tasks.md`).
 - **Stop and ask** when something you need is missing, a fix would change the
   task's contract, or the same failure repeats twice; offer options. Do not guess,
   mock or loop.
@@ -106,7 +106,16 @@ under `docs/research`. Details: `docs/project/status.md`.
    task), `docs/requirements/coverage.md`, contracts under `docs/world`,
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
-3. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
+3. For how the **original game** behaves, the retail executable outranks CE:
+   CE is read first, but it is a reconstruction with its own slips, and the
+   executable settles any doubt. Check a CE branch against
+   the original 1.0.7.4 `Arcanum.exe` at the function address CE gives
+   ([original executable check](docs/research/original-executable-check.md)):
+   read-only `llvm-objdump`, behaviour in prose, no bytes or listings in git.
+   Use it in every part of the game whenever a task needs original behaviour
+   or an anomaly must be classified (CE-only slip vs bug of the game, which
+   decides the D8 "Original"/"Steamwoven" settings).
+4. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
    2026-09-19..21. **Stale**: it predates all code. Use for intent/decisions
    (DEC-001..020, provenance policy), never for implementation status.
 
@@ -138,4 +147,6 @@ under `docs/research`. Details: `docs/project/status.md`.
   lab and export commands.
 - `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
-  platforms); `docs/research/method.md` — research method and provenance.
+  platforms); `docs/research/method.md` — research method and provenance;
+  `docs/research/original-executable-check.md` — checking behaviour in the
+  original executable.

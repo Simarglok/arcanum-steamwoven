@@ -26,7 +26,7 @@ public static partial class TerrainViewerSelfTest
         var steps = AreaOwnerFixture.Steps(area.Snapshot, module, 7);
         var unknown = AreaOwnerFixture.Steps(area.Snapshot, module, 7, tileNamesResolved: false);
         source.Owner.Dispose();
-        var human = SyntheticActorFixture.Create(human: true);
+        var human = SyntheticActorFixture.Create(human: true, run: true);
         var result = human.Result with { Generation = 7, Area = area, AreaStepSnapshot = steps };
         var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "synthetic-module",
             "--resource", "synthetic-terrain", "--actor-resource", "synthetic-actor", "--prototypes", "synthetic-prototypes",

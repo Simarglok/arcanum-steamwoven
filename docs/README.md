@@ -15,6 +15,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
+- [Original executable check](research/original-executable-check.md): how to tell a CE reconstruction slip from a bug of the original game
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 
@@ -47,6 +48,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [ARC-RENDER-008 passability overlay](rendering/passability-overlay.md)
 - [HD presentation contract: scaled crop, Legacy anchors, per-frame fallback, toggle (ARC-RENDER-013) — no HD runtime yet](rendering/hd-presentation-contract.md)
 - [HD upscale methods at 2×: AI vs pixel-art scalers, alpha, palette slots, terrain seams, licences (ARC-RES-033) — research only](rendering/hd-upscale-research.md)
+- [Generative HD re-detailing at 4×: SDXL + ControlNet Tile, local style LoRA, shading lock, walk flicker, licences (ARC-RES-038) — research only](rendering/hd-generative-redetail.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)

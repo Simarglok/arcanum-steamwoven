@@ -68,7 +68,7 @@ public static partial class TerrainViewerSelfTest
         var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, source.Streams[new(AreaSourceRole.Module)].Bytes, 7);
         source.Owner.Dispose();
-        var result = SyntheticActorFixture.Create(human: true).Result with { Generation = 7, Area = area, AreaStepSnapshot = steps };
+        var result = SyntheticActorFixture.Create(human: true, run: true).Result with { Generation = 7, Area = area, AreaStepSnapshot = steps };
         var arguments = TerrainViewerArguments.Parse(["--mode", "crash-site-area", "--module", "synthetic-module",
             "--resource", "synthetic-terrain", "--actor-resource", "synthetic-actor", "--prototypes", "synthetic-prototypes",
             "--area-mobile", "synthetic-mobile", "--area-effects", "synthetic-effects", "--area-patch", "synthetic-patch", "--source-id", "synthetic"]);
