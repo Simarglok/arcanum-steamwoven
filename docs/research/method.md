@@ -4,6 +4,8 @@ Research starts from community knowledge, then verifies claims on the user's unc
 
 Each technical claim records its source and lineage, conditions/version, evidence, confidence and unknowns. Suggested states: reported, corroborated, experimentally verified, disputed, unknown. Two projects sharing one decoder are not independent confirmation.
 
+Code behaviour that CE reconstructs is checked against the original game with the [original executable check](original-executable-check.md): the retail binary is read at the function address CE gives, so a CE reconstruction slip can be told apart from a bug of the original game.
+
 ## Historical R1 direction — not an executable task
 
 The initial research sequence below is preserved as the R1 scope record. Bounded DAT/ART implementations and diagnostic viewers now exist; consult the [current component catalogue](../project/status.md). Future-tense statements below describe the initial plan, not current implementation status.

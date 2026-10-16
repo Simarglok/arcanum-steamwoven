@@ -106,7 +106,15 @@ under `docs/research`. Details: `docs/project/status.md`.
    task), `docs/requirements/coverage.md`, contracts under `docs/world`,
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
-3. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
+3. For how the **original game** behaves, the retail executable outranks CE:
+   CE is a reconstruction and has its own slips. Check a CE branch against
+   the original 1.0.7.4 `Arcanum.exe` at the function address CE gives
+   ([original executable check](docs/research/original-executable-check.md)):
+   read-only `llvm-objdump`, behaviour in prose, no bytes or listings in git.
+   Use it in every part of the game whenever a task needs original behaviour
+   or an anomaly must be classified (CE-only slip vs bug of the game, which
+   decides the D8 "Original"/"Steamwoven" settings).
+4. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
    2026-09-19..21. **Stale**: it predates all code. Use for intent/decisions
    (DEC-001..020, provenance policy), never for implementation status.
 
@@ -138,4 +146,6 @@ under `docs/research`. Details: `docs/project/status.md`.
   lab and export commands.
 - `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
 - `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
-  platforms); `docs/research/method.md` — research method and provenance.
+  platforms); `docs/research/method.md` — research method and provenance;
+  `docs/research/original-executable-check.md` — checking behaviour in the
+  original executable.

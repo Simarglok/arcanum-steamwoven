@@ -15,6 +15,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
+- [Original executable check](research/original-executable-check.md): how to tell a CE reconstruction slip from a bug of the original game
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 
