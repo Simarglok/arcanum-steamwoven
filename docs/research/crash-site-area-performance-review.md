@@ -188,6 +188,19 @@ takes 10.0 of the Data project's 12.6 s.
 | --- | --- | --- | --- |
 | D-A Shrink the differential corpus of that test (or keep the full corpus in an opt-in category) | −9 s per root test run | small | Keep the edge-code and truncation cases. |
 
+## F-A result: overlay redraw and batching
+
+Implemented as described in the [overlay contract](../rendering/passability-overlay.md).
+Same probe and machine, two runs each (before = the table above):
+
+| Phase (uncapped) | Before | After | Draw calls before / after | Redraws per frame after |
+| --- | ---: | ---: | ---: | ---: |
+| Pan, zoom 1, overlay on | 10.0–13.3 ms | 5.1–7.8 ms | 458–573 / 43–119 | 0.05–0.11 |
+| Pan, zoom 0.5, overlay on | 29.6–33.2 ms | 8.4–8.7 ms | 1,633–2,508 / 100–167 | about 0.2 |
+| Idle, zoom 1, overlay on | 3.6–5.6 ms | 2.2–3.5 ms | 339–1,122 / 43–104 | 0 |
+
+The remaining redraws during a pan come from newly assessed cells entering the view.
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only.
