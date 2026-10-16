@@ -176,23 +176,29 @@ for several PCs (R3).
 ## What this means for the current port
 
 - The conversation runtime's `reaction.pc` is a single stored value seeded with
-  the diagnostic 50. Per R1 it is the **stored** value only. For the
-  diagnostic profile (human PC and, presumably, human Virgil, no beauty, no
-  reputations, no effects) stored and effective coincide, so today's results
-  stand; they diverge as soon as race, beauty, reputation or effects exist.
+  the diagnostic 50. Per R1 it is the **stored** value only. The
+  [Virgil consent research](virgil-follow-consent.md) (ARC-RES-026) measured
+  his real instance: reaction base **60**, human, origin 0, faction 0, not
+  aloof, no reaction memory. So the seed differs from his data by 10, and for
+  a real PC his effective reaction adds the human-row race term, the PC's
+  beauty modifier and only the reputation effects scoped to any origin and
+  any faction (under P1 no signed effect reaches him). With the diagnostic
+  profile (human PC, no beauty, no reputations, no effects) stored and
+  effective still coincide.
 - Unsigned `RE v` and the quest rule "at least 41" are deltas against the
   effective value (R2), so a later owner must apply them as deltas, not by
   writing *v*.
 - `ME` needs the conversation start/end of R5 and R6; it cannot be derived
   from "a value is stored".
-- The follow consent (companion C2) needs Virgil's AI-data row (parameter 5)
-  and his effective reaction; both stay open (O1).
+- The follow consent (companion C2) compares that effective reaction with
+  Virgil's AI row 5, whose dislike threshold ARC-RES-026 measured as −1000,
+  so reaction cannot refuse him in practice; his parameter 9 is 0, so the A2
+  sign question does not affect him either.
 
 ## Open questions
 
-- **O1** Virgil's reaction base, race, origin, faction, aloof/monstrous flags
-  and AI-data row: they need a bounded read-only probe of his instance and
-  prototype (shared with companion O1).
+- **O1** Answered for Virgil by ARC-RES-026 (see above). Other Crash Site
+  NPCs' bases, races, origins and factions were not surveyed.
 - **O2** P1 against the original executable: does a signed effect keep its
   origin and faction there?
 - **O3** A2 (follower hit sign), A6 (script operand), A7 (gift test), A8 (RE
