@@ -65,6 +65,7 @@ no ground item.
 
 ## NOT READY
 
-Life state (it needs the effect rules of `AreaStepInspector`), display text, chest
-generation, transfers, pickup, loot, the dialog `IN` command and any save state belong to later tasks.
+Life state (it needs the effect rules of `AreaStepInspector`), display text and chest
+generation belong to later tasks. Transfers (pickup, loot, the dialog `IN` command) and their save state live in the
+[session inventory runtime](inventory-runtime.md) (ARC-WORLD-014), which takes this view as its T0 seed.
 The view describes serialized T0 only; nothing here mutates or tracks item location.

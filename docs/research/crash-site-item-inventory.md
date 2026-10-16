@@ -263,14 +263,17 @@ carry/room check against the ring.
    inventory location, flags and the name/description fields, and the
    reconciliation above as a fail-closed check. No new reader is needed; the Area
    effective fields already carry everything.
-2. **Inventory owner (Simulation/Session).** One owner of item location
+2. **Inventory owner (Simulation/Session).** Delivered by ARC-WORLD-014 as the
+   [session inventory runtime](../world/inventory-runtime.md) (the PC's taken items over a
+   host-attached T0 seed; 2527 refused as proposed). One owner of item location
    (ground cell, owner list and slot), with typed results for pickup, loot
    transfer and the negative-`IN` give, and refusal before effects when an
    unadmitted attachment, a stack/key type or an insert check is involved. Admit
    first only what the Crash Site needs: unscripted ground pickup, loot from the
    four dead NPCs (excluding 2527 until its insert script is resolved) and the
    one negative `IN` for the ring.
-3. **Conversation binding.** ARC-SCRIPT-005 already records `IN` as a typed
+3. **Conversation binding.** Delivered by ARC-WORLD-014 (`IDialogInventoryPort`, viewer not wired yet).
+   ARC-SCRIPT-005 already records `IN` as a typed
    command; the owner consumes that command instead of the dialog changing items.
 4. Keep chest generation, barter, theft, NPC respawn and positive `IN` out until
    their own research. The PC's insert check needs the stats, background and

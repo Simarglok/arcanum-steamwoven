@@ -17,7 +17,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 4. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 5. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -27,7 +27,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "inventory", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -44,6 +44,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] PartyFields = ["followers", "others"];
     private static readonly string[] FollowerFields = ["entity", "forced", "spreadOut"];
     private static readonly string[] OtherFields = ["entity", "standing", "spreadOut", "jilted"];
+    private static readonly string[] InventoryFields = ["pc"];
+    private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -179,6 +181,22 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("inventory");
+            w.WriteStartArray("pc");
+            foreach (var item in snapshot.Inventory.Pc)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", item.Entity);
+                w.WriteNumber("map", item.Origin.RuntimeMap);
+                w.WriteString("type", ItemTypeName(item.Kind.Type));
+                w.WriteNumber("prototype", item.Kind.Prototype);
+                w.WriteNumber("name", item.Kind.Name);
+                w.WriteNumber("description", item.Kind.Description);
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -228,7 +246,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Lighting(f["lighting"]));
+            Inventory(f["inventory"]), Lighting(f["lighting"]));
     }
 
     private static SessionLightingState? Lighting(JsonElement element)
@@ -408,6 +426,29 @@ public static class GameSessionSnapshotCodec
         return new(followers, others);
     }
 
+    private static SessionInventoryState Inventory(JsonElement element)
+    {
+        const string p = "$.inventory";
+        var f = Fields(element, p, InventoryFields);
+        var items = Array(f["pc"], p + ".pc", GameSessionLimits.PolicyMaxPcItems);
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        var pc = new SessionPcItem[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.pc[{i}]";
+            var item = Fields(items[i], path, PcItemFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            // The list order is meaningful, so it is kept; an item may appear once.
+            if (!seen.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            var type = Enum.GetValues<SessionItemType>().Where(t => ItemTypeName(t) == String(item["type"], path + ".type"))
+                .Cast<SessionItemType?>().FirstOrDefault() ?? throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path + ".type");
+            pc[i] = new(entity, new(Int(item["map"], path + ".map", 1, int.MaxValue)), new(type,
+                Int(item["prototype"], path + ".prototype", int.MinValue, int.MaxValue), Int(item["name"], path + ".name", int.MinValue, int.MaxValue),
+                Int(item["description"], path + ".description", int.MinValue, int.MaxValue)));
+        }
+        return new(pc);
+    }
+
     private static string Entity(JsonElement element, string path)
     {
         var entity = String(element, path);
@@ -527,6 +568,15 @@ public static class GameSessionSnapshotCodec
         SessionQuestState.Achieved => "Achieved", SessionQuestState.Completed => "Completed",
         SessionQuestState.OtherCompleted => "OtherCompleted", SessionQuestState.Botched => "Botched",
         _ => throw new ArgumentOutOfRangeException(nameof(state)),
+    };
+
+    private static string ItemTypeName(SessionItemType type) => type switch
+    {
+        SessionItemType.Weapon => "Weapon", SessionItemType.Ammo => "Ammo", SessionItemType.Armor => "Armor",
+        SessionItemType.Gold => "Gold", SessionItemType.Food => "Food", SessionItemType.Scroll => "Scroll",
+        SessionItemType.Key => "Key", SessionItemType.KeyRing => "KeyRing", SessionItemType.Written => "Written",
+        SessionItemType.Generic => "Generic",
+        _ => throw new ArgumentOutOfRangeException(nameof(type)),
     };
 
     private static string StandingName(CompanionStanding standing) => standing switch

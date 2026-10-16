@@ -6,7 +6,8 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
-/// story domain (PC quests, shared quest states, known rumors) and the PC's party (followers, waiting NPCs).
+/// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs) and the items
+/// the PC took from the world (pickup, loot, negative dialog IN) over host-attached T0 map inventories.
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -19,6 +20,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
     private readonly Story _story;
     private readonly PartyDomain _party;
+    private readonly InventoryDomain _inventory;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
@@ -28,10 +30,10 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, SessionLightingState? lighting)
+        PartyDomain party, InventoryDomain inventory, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _lighting = lighting;
+        _story = story; _party = party; _inventory = inventory; _lighting = lighting;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
@@ -49,7 +51,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), null),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), new(), null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -76,6 +78,8 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportParty(snapshot.Party, limits, out var party);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportInventory(snapshot.Inventory, limits, out var inventory);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
@@ -96,7 +100,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, snapshot.Lighting),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, inventory, snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -411,6 +415,106 @@ public sealed class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>
+    /// Attaches (or replaces) the T0 inventory of one map, the baseline the inventory rules read. The seed is checked and
+    /// copied (<see cref="GameSessionFailure.InvalidInventorySeed"/>). Every item the PC took from this map must be in it
+    /// with its saved kind, and no item the PC took from another map or another attached seed lists may be in it, else
+    /// <see cref="GameSessionFailure.InventoryMismatch"/> (a save of other data, or one object on two maps). A seed is not session state: like recorded
+    /// lighting it moves no revision, it is never saved and the host attaches it again after a restore.
+    /// </summary>
+    public GameSessionMutationResult AttachMapInventory(SessionMapId map, SessionMapInventorySeed seed)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Map(map)) return Reject(GameSessionFailure.InvalidMap);
+        if (InventoryDomain.Validate(seed) is not { } admitted) return Reject(GameSessionFailure.InvalidInventorySeed);
+        foreach (var item in _inventory.Pc)
+        {
+            var listed = admitted.Items.TryGetValue(item.Entity, out var row);
+            if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
+        }
+        // An object lies on one map: an item another attached map lists would be hidden there too once taken.
+        foreach (var (other, attached) in _inventory.Seeds)
+            if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
+        if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
+        _inventory.Seeds[map] = admitted;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
+    }
+
+    /// <summary>The current inventory of an attached map (its seed without the items the PC took), or null when no seed
+    /// is attached.</summary>
+    public SessionMapInventory? QueryMapInventory(SessionMapId map)
+    {
+        ThrowIfDisposed();
+        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed) : null;
+    }
+
+    /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The PC's own
+    /// starting items are not session state yet.</summary>
+    public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
+
+    /// <summary>
+    /// Ground pickup (CE <c>AG_PICKUP_ITEM</c> → <c>item_transfer</c>): an item lying on the actor's map goes to the end of
+    /// the PC's list. Reach, the walk to the item and the combat action-point cost belong to the host. Refused before any
+    /// effect: an item with an item <c>SAP_GET</c> or <c>SAP_INSERT_ITEM</c> script (not run here), a stack or key type
+    /// (stack merge and key rings are not modelled), and a refusal of <paramref name="insertCheck"/>, which runs last.
+    /// </summary>
+    public InventoryMutationResult PickUpItem(GameSessionVersion expected, string item, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
+        if (!seed.Items.TryGetValue(item, out var row) || row.Cell is null || _inventory.Taken.Contains(item))
+            return RejectItem(GameSessionFailure.ItemNotAvailable);
+        return Take(seed, new(item, row.Facts), false, insertCheck);
+    }
+
+    /// <summary>
+    /// Loot (a click on a dead critter opens it as a container; the moved item runs <c>item_transfer</c> to the PC): an item
+    /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead
+    /// is lootable here: chests (generated on first open) are not. Refused before any effect, beyond the item rules of
+    /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
+    /// <c>SAP_REMOVE_ITEM</c> script. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled (the session has no PC
+    /// object).
+    /// </summary>
+    public InventoryMutationResult LootItem(GameSessionVersion expected, string holder, string item, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(holder) || !SessionValidation.Entity(item)) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
+        if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (row.Kind != SessionHolderKind.Npc || !row.Dead) return RejectItem(GameSessionFailure.HolderNotLootable);
+        if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
+        if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
+            return RejectItem(GameSessionFailure.ItemNotAvailable);
+        return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck);
+    }
+
+    /// <summary>
+    /// Negative dialog <c>IN -name</c> (CE <c>DIALOG_ACTION_IN</c>, ARC-RES-021): the first item in the NPC's current list
+    /// whose name class is <paramref name="name"/> goes to the end of the PC's list, under the item rules of
+    /// <see cref="LootItem"/>. No such item and no substitute inventory changes nothing, as in the source; an NPC with a
+    /// substitute inventory then is <see cref="GameSessionFailure.SubstituteInventoryUnsupported"/>. The source drops an item
+    /// the PC cannot take at the PC's location (into a junk pile when items lie there); that fallback is not modelled, so a
+    /// refusal of <paramref name="insertCheck"/> is <see cref="GameSessionFailure.InsertRefused"/> with no effect.
+    /// </summary>
+    public InventoryMutationResult GiveItemToPc(GameSessionVersion expected, string npc, int name, SessionInsertCheck insertCheck)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(insertCheck);
+        if (!SessionValidation.Entity(npc) || name < 1) return RejectItem(GameSessionFailure.InvalidItem);
+        if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
+        if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
+        if (!seed.Holders.TryGetValue(npc, out var row) || row.Kind != SessionHolderKind.Npc) return RejectItem(GameSessionFailure.UnknownHolder);
+        if (_inventory.Current(seed, row).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
+            return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
+                : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
+        return Take(seed, found, true, insertCheck);
+    }
+
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
     public GameSessionSnapshot Capture()
     {
@@ -421,7 +525,7 @@ public sealed class GameSessionOwner : IDisposable
             .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
-            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _lighting);
+            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _inventory.Capture(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -545,6 +649,48 @@ public sealed class GameSessionOwner : IDisposable
                 (previous is not null && string.CompareOrdinal(previous, record.Entity) >= 0)) return GameSessionFailure.InvalidSnapshot;
             previous = record.Entity;
             party.Put(record, false);
+        }
+        return GameSessionFailure.None;
+    }
+
+    // Pickup, loot and IN share the item rules and the commit: every refusal precedes the insert check, which runs last.
+    // The check is the owner's only host callback, so a call back into the owner from it (a transfer, a placement, a new
+    // seed) makes this transfer stale instead of committing over the changed state.
+    private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck)
+    {
+        var facts = item.Facts;
+        if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
+        if (parented && facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
+        if (facts.HasScript(SessionScriptPoint.InsertItem) ||
+            facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
+        if (_inventory.Pc.Count >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var (revision, map) = (_revision, _actor.Map);
+        var verdict = insertCheck(item);
+        ThrowIfDisposed();
+        if (_revision != revision || _actor.Map != map || !_inventory.Seeds.TryGetValue(map, out var current) || !ReferenceEquals(current, seed) ||
+            _inventory.Taken.Contains(item.Entity)) return RejectItem(GameSessionFailure.StaleVersion, verdict);
+        // Any answer but Accepted refuses, an undefined one included.
+        if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
+        _inventory.Add(new(item.Entity, _actor.Map, facts.Kind));
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision));
+    }
+
+    private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
+        new(GameSessionDisposition.Rejected, failure, null, verdict, new(_identity, _revision));
+
+    // The PC's items keep their saved order; each must be one a transfer can produce (an admitted type from a valid map).
+    private static GameSessionFailure ImportInventory(SessionInventoryState saved, GameSessionLimits limits, out InventoryDomain inventory)
+    {
+        inventory = new();
+        if (saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        foreach (var item in saved.Pc)
+        {
+            if (!SessionValidation.Entity(item.Entity) || !SessionValidation.Map(item.Origin) || !Enum.IsDefined(item.Kind.Type) ||
+                !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            if (inventory.Taken.Contains(item.Entity)) return GameSessionFailure.InvalidSnapshot;
+            inventory.Add(item);
         }
         return GameSessionFailure.None;
     }
