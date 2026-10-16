@@ -227,11 +227,14 @@ the model where they agree.
 
 - **U6** Which map object attaches script 2023, and who runs scripts 2498 and
   2648 (flag 2593); next check: a script census of all map mobiles and
-  prototypes.
+  prototypes. Answered by [ARC-RES-037](virgil-script-attachments.md): 2023 and 2498 are tile scripts on the world
+  map, 2648 is the dying script of another NPC sharing his generic prototype.
 - **U7** The 38 DLGs the DLG reader refuses were not searched for flag 2593.
+  Answered by [ARC-RES-037](virgil-script-attachments.md): a lenient scan of all 709 DLGs finds no write of it.
 - **U8** Multi-level jumps and level-ups while he waits off screen were not
   replayed.
-- **U9** The 15 call-ex edges from his scripts are unresolved.
+- **U9** The 15 call-ex edges from his scripts are unresolved. Answered by
+  [ARC-RES-037](virgil-script-attachments.md): all 15 run a dialog script (attachment point 9).
 
 ## Method
 
