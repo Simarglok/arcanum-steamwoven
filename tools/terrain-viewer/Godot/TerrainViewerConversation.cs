@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 // diagnostic reach the dialog opens at once; farther away the click-to-move route walks within reach first and
 // the talk starts on arrival, like a walk-to-use. The panel is modal: the actor gate stays closed, replies are
 // chosen by mouse (as in the source) or controller menu, and keyboard keys are not redirected to dialog actions
-// (the WORLD keyboard route reserves them). Speakers come from the exterior map; the cave has none.
+// (the WORLD keyboard route reserves them). Speakers come from the exterior map; in the cave only a companion that
+// stands there (ARC-WORLD-017) can be talked to, and on the exterior a companion away in the cave cannot.
 public partial class TerrainViewerApp
 {
     private AreaConversationHost? _conversationHost;
@@ -43,7 +44,7 @@ public partial class TerrainViewerApp
         _conversationHost = null; _conversationNotice = null; _talkAfterRoute = null;
     }
 
-    private bool TalkMapActive => _conversationHost is not null && !InCave;
+    private bool TalkMapActive => _conversationHost is not null && (!InCave || _areaCompanions is { Companions.Count: > 0 });
 
     private (long X, long Y)? ActorCell()
     {
@@ -57,7 +58,7 @@ public partial class TerrainViewerApp
     private AreaSpeaker? SpeakerAtScreen(Vector2 screen)
     {
         if (!TalkMapActive || AreaObjectAtScreen(screen) is not { } identity) return null;
-        return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity);
+        return _conversationHost!.Speakers.FirstOrDefault(candidate => candidate.Row.Key == identity && SpeakerPresent(candidate));
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>): true when it hit a dialog NPC.</summary>
@@ -102,7 +103,7 @@ public partial class TerrainViewerApp
         var cell = ActorCell()!.Value;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) _conversationNotice = "walk to talk cancelled: reset/reload";
         else if (route.Status != Arcanum.Simulation.Navigation.RouteFollowStatus.Arrived) _conversationNotice = "walk to talk stopped: " + (route.StopReason ?? route.Status.ToString());
-        else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive) _conversationNotice = "walk to talk dropped: input quarantined/modal";
+        else if (!_worldFocused || WorldModal || WorldUiFocus || !TalkMapActive || !SpeakerPresent(speaker)) _conversationNotice = "walk to talk dropped: input quarantined/modal";
         else if (AreaConversationHost.Distance(speaker, cell.X, cell.Y, SpeakerCell) > _conversationHost!.Profile.Reach) _conversationNotice = "walk to talk ended out of reach";
         else { BeginConversation(speaker); return; }
         RefreshReadyStatus();
@@ -160,9 +161,9 @@ public partial class TerrainViewerApp
     {
         if (_conversationNotice is { } notice) return $" | {notice}";
         if (!TalkMapActive) return " | talk: no dialog NPC on this map";
-        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell) is { } speaker
+        return ActorCell() is { } cell && _conversationHost!.Nearest(cell.X, cell.Y, SpeakerCell, SpeakerPresent) is { } speaker
             ? $" | dialog NPC script {speaker.ScriptId} in reach: left-click it to talk"
-            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
+            : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count(SpeakerPresent)} on this map; walks within {_conversationHost.Profile.Reach} tiles first)";
     }
 
     // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt

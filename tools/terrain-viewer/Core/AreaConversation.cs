@@ -97,7 +97,8 @@ public sealed class AreaConversationHost
     public IVersionedGlobalFlagOwner GlobalFlags => _session.Flags;
     public AreaConversationState State { get; }
 
-    internal static IReadOnlyList<AreaSpeaker> FindSpeakers(AreaSnapshot snapshot)
+    /// <summary>The map's dialog NPCs in object order (the host's <see cref="Speakers"/>).</summary>
+    public static IReadOnlyList<AreaSpeaker> FindSpeakers(AreaSnapshot snapshot)
     {
         var speakers = new List<AreaSpeaker>();
         foreach (var row in snapshot.Objects)
@@ -134,8 +135,10 @@ public sealed class AreaConversationHost
         return Math.Max(Math.Abs(x - worldX), Math.Abs(y - worldY));
     }
 
-    /// <summary>The nearest speaker within the profile's Chebyshev reach (a project diagnostic rule, not source range).</summary>
-    public AreaSpeaker? Nearest(long worldX, long worldY, Func<AreaSpeaker, (long X, long Y)>? at = null) => Speakers
+    /// <summary>The nearest speaker within the profile's Chebyshev reach (a project diagnostic rule, not source range),
+    /// among those <paramref name="present"/> admits (ARC-WORLD-017: a companion standing on another map is not here).</summary>
+    public AreaSpeaker? Nearest(long worldX, long worldY, Func<AreaSpeaker, (long X, long Y)>? at = null, Func<AreaSpeaker, bool>? present = null) => Speakers
+        .Where(speaker => present?.Invoke(speaker) ?? true)
         .Select(speaker => (speaker, distance: Distance(speaker, worldX, worldY, at)))
         .Where(item => item.distance <= Profile.Reach)
         .OrderBy(item => item.distance).ThenBy(item => item.speaker.Index)

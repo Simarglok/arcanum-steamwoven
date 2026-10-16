@@ -34,6 +34,10 @@ public readonly record struct MapChangeKey(MapChangeScope Scope, long Sector, st
 
 public readonly record struct MapChange(MapChangeKey Key, long Value);
 
+/// <summary>One map change of an atomic <see cref="GameSessionOwner.ApplyChanges"/> step: set the key to
+/// <see cref="Value"/>, or return it to the loaded baseline when <see cref="Value"/> is null (ARC-WORLD-017).</summary>
+public readonly record struct MapChangeEdit(SessionMapId Map, MapChangeKey Key, long? Value);
+
 /// <summary>
 /// Applied ambient lighting (FR-LIGHT-012): the resolved scheme id (positive; the map-default sentinel 0 is
 /// never applied) and the game hour it was selected for. The host records it after it applies a selection;

@@ -14,6 +14,7 @@ namespace Arcanum.TerrainViewer;
 // guards; it is accepted within Chebyshev distance 2, queued, and applied once when the actor is settled.
 // A reset or reload takes precedence over a queued transfer. The area scene, its step evidence and chart are
 // swapped as a whole; the session records the actor on the destination map at the authored arrival.
+// ARC-WORLD-017: the companions that follow the PC go with it onto the arrival cell in the same session step.
 // Every other click is left to its existing handling.
 public partial class TerrainViewerApp
 {
@@ -37,6 +38,9 @@ public partial class TerrainViewerApp
         StopAreaTransitions();
         _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
         if (result.Area is not { } area) return;
+        // ARC-WORLD-017: the roster companions are exterior NPCs; their T0 bodies can stand on any loaded map.
+        _companionTemplates = AreaCompanionTemplate.From(AreaConversationHost.FindSpeakers(area.Snapshot), area.Plan, area.Snapshot.Visuals,
+            AreaChart.Exterior, new(area.Snapshot.RuntimeMap));
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
@@ -49,8 +53,10 @@ public partial class TerrainViewerApp
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         BindAreaInventory(result);
         if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
-        _caveLoad = cave;
-        _areaTransitions = new([new(result.Area.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(cave.Area.Snapshot, cave.Steps, cave.Chart)],
+        // The cave draws a visiting companion from its own frame repository: the companions' T0 frames are added once.
+        _caveLoad = _companionTemplates.Count == 0 ? cave
+            : cave with { Area = cave.Area with { Frames = AreaCompanionTemplate.Frames(cave.Area.Frames, _companionTemplates, area.Frames) } };
+        _areaTransitions = new([new(result.Area.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(_caveLoad.Area.Snapshot, cave.Steps, cave.Chart)],
             area.Snapshot.RuntimeMap, _areaSession);
         _areaUseStatus = "cave: click the entrance within 2 cells";
         GD.Print("ARC-WORLD-009 transition-ready " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -62,7 +68,7 @@ public partial class TerrainViewerApp
         UnbindAreaInventory();
         UnbindAreaCompanions();
         _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
-        _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded";
+        _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: one use request.
@@ -188,9 +194,22 @@ public partial class TerrainViewerApp
         }
         // A queued transfer waits while the palette is open.
         if (_areaTransitions.Pending is null || WorldModal || _worldActor.Session is not AreaGridSession session || session.State.Phase != MovementPhase.Settled) return false;
-        // ARC-WORLD-016: the companions stay on the map the PC leaves, where they stand (not carried yet).
-        RecordAreaCompanions("leaving map " + _areaTransitions.CurrentMap);
-        var transition = _areaTransitions.Process(session.State.Facing)!;
+        // ARC-WORLD-017 (research C15, V4): every following companion goes with the PC onto the arrival cell, every other
+        // one stays where it stands; one atomic session step with the PC's placement.
+        var pending = _areaTransitions.Pending!;
+        var carry = _areaCompanions?.Carry(_areaSession!, new(pending.ToMap), new(checked((int)pending.Arrival.X), checked((int)pending.Arrival.Y)));
+        if (_areaTransitions.Process(session.State.Facing, carry?.Changes) is not { } transition)
+        {
+            // The session refused the step (nothing applied): the PC stays on this map and may use the endpoint again.
+            _areaUseStatus = $"transfer to map {pending.ToMap} refused by the session ({_areaTransitions.LastRefusal})";
+            GD.Print("ARC-WORLD-017 transfer refused " + _areaTransitions.LastRefusal);
+            RefreshAreaStatus();
+            return false;
+        }
+        if (carry is { } carried)
+            GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
+                transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Carried.Select(c => c.Speaker.ScriptId).ToArray(),
+                Stayed = _areaCompanions!.Companions.Except(carried.Carried).Select(c => c.Speaker.ScriptId).ToArray() }));
         var target = _areaTransitions.Current;
         var area = transition.ToMap == _caveLoad!.Area.Snapshot.RuntimeMap ? _caveLoad.Area : _exteriorArea!;
         _readyArea = area;

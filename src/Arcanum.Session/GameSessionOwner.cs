@@ -244,6 +244,65 @@ public sealed class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>
+    /// ARC-WORLD-017: one guarded atomic step over the actor and several map changes, such as a map transfer that
+    /// carries the PC's followers. Every input is validated (the actor when given, each map and key, no key listed
+    /// twice), then the version, then the whole result: NoChange when nothing would differ, the budget against the state
+    /// after every edit (an update of an existing key never needs room), revision capacity. A refusal applies nothing;
+    /// otherwise every edit applies and the revision moves by exactly one.
+    /// </summary>
+    public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(changes);
+        if (actor is { } placement && !SessionValidation.Actor(placement)) return Reject(GameSessionFailure.InvalidActor);
+        var seen = new HashSet<(SessionMapId, MapChangeKey)>();
+        foreach (var change in changes)
+        {
+            if (!SessionValidation.Map(change.Map)) return Reject(GameSessionFailure.InvalidMap);
+            if (!SessionValidation.Key(change.Key) || !seen.Add((change.Map, change.Key))) return Reject(GameSessionFailure.InvalidChangeKey);
+        }
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var actorChanged = actor is { } next && next != _actor;
+        var effective = changes.Where(change =>
+        {
+            var current = _maps.TryGetValue(change.Map, out var map) && map.TryGetValue(change.Key, out var value) ? value : (long?)null;
+            return current != change.Value;
+        }).ToArray();
+        if (!actorChanged && effective.Length == 0) return NoChange();
+        // The budget is checked on the state after the whole step.
+        var counts = _maps.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
+        var total = _totalChanges;
+        foreach (var change in effective)
+        {
+            var exists = _maps.TryGetValue(change.Map, out var map) && map.ContainsKey(change.Key);
+            var delta = change.Value is null ? (exists ? -1 : 0) : (exists ? 0 : 1);
+            counts[change.Map] = counts.GetValueOrDefault(change.Map) + delta; total += delta;
+        }
+        if (counts.Count(pair => pair.Value > 0) > _limits.MaxMaps || counts.Values.Any(count => count > _limits.MaxChangesPerMap) || total > _limits.MaxTotalChanges)
+            return Reject(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+
+        // All refusals precede the commit.
+        if (actorChanged) _actor = actor!.Value;
+        foreach (var change in effective)
+        {
+            if (change.Value is { } value)
+            {
+                if (!_maps.TryGetValue(change.Map, out var map)) _maps.Add(change.Map, map = []);
+                if (map.TryAdd(change.Key, value)) _totalChanges++;
+                else map[change.Key] = value;
+            }
+            else
+            {
+                var map = _maps[change.Map];
+                map.Remove(change.Key); _totalChanges--;
+                if (map.Count == 0) _maps.Remove(change.Map);
+            }
+        }
+        return Changed();
+    }
+
     /// <summary>The PC's record of a quest, or null while it was never changed (state Unknown).</summary>
     public SessionQuest? QueryQuest(int quest)
     {
