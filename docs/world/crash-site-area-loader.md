@@ -129,6 +129,19 @@ executed by Data.
 - `LoadStrict(token)` uses the same path and throws `AreaIncompleteException`
   with the report unless complete. `PublishedSnapshot` changes only after a complete
   build and the final authentication pass.
+- Authentication passes (ARC-RENDER-009). The first `Inspect` after `Open` uses the
+  open-time authentication as its opening one: I0 then re-checks only every input's
+  path binding and length, and I7 hashes every input after the build as before, so
+  that build is bracketed by the `Open` and I7 hashes. Later builds hash at I0 and I7.
+  A whole-set pass (I0, I7, a frame batch's `Complete`) hashes the inputs of at least
+  `AreaLoaderOptions.ParallelAuthenticationMinBytes` (default 1 MiB; 0 parallelizes every
+  pass) in parallel when two or more take part; smaller inputs keep the sequential pass.
+  Scratch admission and path/length checks precede the reads in plan order, and the
+  verdicts, position resets and closing path checks follow in plan order, so the first
+  failing input in plan order is reported; the reads themselves are no longer ordered.
+  Only the read counters change during parallel reads (they are synchronized); a stream
+  passed to the owner may be read from worker threads and must not call back into the
+  owner while it is read (`CurrentPhase` is an unsynchronized internal phase for tests).
 - `AreaOriginalValidator.Validate(inputs, token)` is metadata-only convenience:
   its owner is disposed before returning. Use `Open` when frame access is needed.
 

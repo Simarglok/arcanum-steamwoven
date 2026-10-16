@@ -75,8 +75,7 @@ public sealed partial class AreaDataOwner
                 token.ThrowIfCancellationRequested();
                 RequirePublished(batch.Snapshot);
                 _budget.BeginPhase(AreaBudgetPhase.F);
-                foreach (var identity in _plan.Identities)
-                    if (_batchAuthenticated.Contains(identity.Key)) Authenticate(identity, token);
+                AuthenticateMany(_plan.Identities.Where(identity => _batchAuthenticated.Contains(identity.Key)).ToArray(), token);
                 EndEntryMemo();
                 batch.MarkCompleted();
             }

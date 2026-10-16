@@ -205,11 +205,15 @@ public sealed class AreaLoaderOptions
     public int MaxPrototypes { get; init; } = 56;
     public int MaxObjects { get; init; } = 524;
     public int MaxVisuals { get; init; } = 2444;
+    /// <summary>Inputs at least this long are hashed in parallel by whole-set authentication passes
+    /// when two or more of them take part (ARC-RENDER-009); 0 parallelizes every such pass.</summary>
+    public long ParallelAuthenticationMinBytes { get; init; } = 1L << 20;
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
             MaxFrameRequests <= 0 || MaxFrameStoredBytes <= 0 || MaxFrameDecodedBytes <= 0 || MaxFrameRgbaBytes <= 0 || MaxFrameEncodedBytes <= 0 ||
-            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0)
+            MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0 ||
+            ParallelAuthenticationMinBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(AreaLoaderOptions));
     }
 }
