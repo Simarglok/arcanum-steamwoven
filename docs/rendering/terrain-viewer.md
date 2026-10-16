@@ -593,7 +593,9 @@ left click would do there (FR-UI-005). Nothing is clicked or changed by hovering
   ground goal: *no route* when the route planner refuses it without a search (the cell or
   the actor outside the area, the goal more than 32 cells from the actor on an axis, or no
   neighbour step entering the cell), else *walk here*. The bounded search itself is not run
-  on hover, so a *walk here* goal can still end without a route. System cursor shapes: cross for walk,
+  on hover, so a *walk here* goal can still end without a route; the reach is measured from
+  the committed cell, while during a step the route plans from the step's target cell, so a
+  goal exactly at the 32-cell edge can differ by one. System cursor shapes: cross for walk,
   forbidden for no route, help (question arrow) for talk, pointing hand for use, arrow
   otherwise. A use or talk that is then refused (blocked step, no standable cell) is
   reported by the click as before; the cursor shows the intent.
@@ -608,7 +610,8 @@ Windows-1252, the planner refusals and goal pre-check, game-folder rules), the o
 self-test `ARC-UI-005 self-test PASS` over the synthetic owner (tooltip, both ground
 outcomes, the left click on the hovered body sets that cell as goal, GUI under the pointer,
 modal, closed gate, focus and window guards, injected names) and, with the cave input, the native smoke
-`ARC-UI-005 native-smoke hover PASS` (Virgil walk to talk with his unknown description, the
+`ARC-UI-005 native-smoke hover PASS` and, in the cave, `ARC-UI-005 native-smoke faded-wall
+pick PASS` (a faded wall is never picked, the same wall drawn opaque is) (Virgil walk to talk with his unknown description, the
 entrance walk to use, click-through sprites passed through to the body behind, the press
 does what the cursor showed). Not
 verified: original cursor or message-window parity, hover art (the animated underlay), a

@@ -96,7 +96,7 @@ public partial class TerrainViewerApp
         var transform = AreaDrawItem.RasterTransform(GetViewport());
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
         return index.Pick(command => AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
-            && (command.Additive || _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None));
+            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None);
     }
 
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>

@@ -279,7 +279,7 @@ public partial class TerrainViewerApp
                 }
                 if (hits > 0) passed++;
             }
-            Require(passed > 0, "no click-through sprite was observed");
+            Require(passed > 0 && behind > 0, $"click-through sprites observed {passed}, picks behind them {behind}");
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-005 native-smoke hover PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Names = _hoverNames.Status.ToString(), Pickable = index.Bodies.Count, Virgil = talk.ToString(), Entrance = use.ToString(),
