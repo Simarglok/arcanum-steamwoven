@@ -62,7 +62,8 @@ public static class AreaOccupancyRules
             return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, ShoulderActor);
         if (assessment.Gaps.Any(gap => gap.Object is not { } key || !occupancy.Moved.Contains(key)))
             return Verdict(CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE");
-        return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE");
+        return Verdict(CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open,
+            assessment.WindowJump is not null ? "WINDOW_JUMP" : "COMPLETE_NONBLOCKING_EVIDENCE");
     }
 
     /// <summary>The route verdict of an overlaid step: only Supported Open is Open.</summary>

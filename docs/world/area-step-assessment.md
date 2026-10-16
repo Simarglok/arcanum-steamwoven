@@ -127,7 +127,7 @@ role.
 
 Assessment codes: `DESTINATION_TERRAIN_BLOCKED`, `WALL_EDGE_BLOCKED`, `DESTINATION_OBJECT_BLOCKER`,
 `SHOULDER_OBJECT_BLOCKER`, `REQUIRED_EVIDENCE_UNAVAILABLE`,
-`COMPLETE_NONBLOCKING_EVIDENCE`, `PATH_BRANCH_UNAVAILABLE`, and the unsupported
+`COMPLETE_NONBLOCKING_EVIDENCE`, `WINDOW_JUMP` (an Open cardinal step across a window, whole maps only, ARC-WORLD-021), `PATH_BRANCH_UNAVAILABLE`, and the unsupported
 codes `PROFILE_UNSUPPORTED`, `EVIDENCE_IDENTITY_MISMATCH`, `EPOCH_MISMATCH`,
 `DIRECTION_UNSUPPORTED`, `SAME_CELL_UNSUPPORTED`, `NONADJACENT_UNSUPPORTED`,
 `DIRECTION_MISMATCH`, `CONTEXT_UNSUPPORTED`, `SOURCE_OUTSIDE_ADMITTED_AREA`,
@@ -183,8 +183,12 @@ digest; the rules are appended to the digest only when present):
 
 - a doorway wall piece (22, 25, 26, 29–32) never blocks: the portal on its edge
   decides; a window piece (10, 13, 14, 17–19) blocks a diagonal step, and a
-  cardinal step across it is a window jump for the original's critter walker,
-  which is not modelled (Unknown); every other piece blocks;
+  cardinal step across it is a window jump for the original's critter walker
+  (since ARC-WORLD-021: Open with reason `WINDOW_JUMP` and the window in
+  `AreaStepAssessment.WindowJump` when nothing else decides it; before it, an
+  Unknown `WINDOW_JUMP_UNMODELLED` step; `WindowJump` names the window on every
+  result but a blocking wall, so a host overlay that opens the step keeps it a jump);
+  every other piece blocks;
 - a portal sits on edge `rotation | 1` like a wall and decides for the player
   at T0 as the original's open attempt does (pinned CE `ai_attempt_open_portal`,
   `object_locked_get`;
@@ -198,6 +202,9 @@ digest; the rules are appended to the digest only when present):
   Doors and windows follow the same attempt; a window's wall piece then makes
   the step a jump. Mobile portals targeted by `map.patch` are Unknown, as other
   mobiles are.
+
+The evidence digest identifies the inputs and stored edge rules, not how `Assess` reads them: ARC-WORLD-021 changed
+the cardinal window step from Unknown to Open without changing the digest (no step result is persisted).
 
 `AreaMapPlan.StartTile` is the map-list arrival tile. On the installed original
 (opt-in `AreaWholeMapStepTests`) every one of the 54 complete interiors builds

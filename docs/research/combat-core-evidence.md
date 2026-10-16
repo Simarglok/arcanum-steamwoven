@@ -62,7 +62,8 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   Difficulty adds the target's armour class as a share of effectiveness, aimed
   location penalties, range, light, blindness and crippled arms, and subtracts
   weapon to-hit and helpless-target bonuses. A hit can still be dodged
-  (`5 × dodge level`, capped at 95). Critical hit and miss come from a second
+  (`5 × dodge level` in CE, capped at 95; the original uses `2 × dodge level`,
+  [ARC-RES-048](original-verification-ledger.md)). Critical hit and miss come from a second
   d100 against `effectiveness/20` and `(100 − effectiveness)/7` (minimum 2).
 - **Damage.** Each of five damage types (normal, poison, electrical, fire,
   fatigue) is rolled uniformly in the weapon's range; melee adds the damage
@@ -269,7 +270,8 @@ Order of resolution in [`sub_4B3170`][resolve]:
    (head 10, arm or leg 6) + weapon magic + backstab terms + effects; on failure
    critical when `roll ≤ (100 − effectiveness)/7` + item wear + weapon magic +
    effects, at least 2. A melee master never fails critically.
-8. **Dodge.** A hit critter rolls Dodge (`5L`, capped 95, auto-fail when
+8. **Dodge.** A hit critter rolls Dodge (`5L` in CE, `2L` in the original
+   per [ARC-RES-048](original-verification-ledger.md); capped 95, auto-fail when
    unconscious, stoned, paralysed or stunned; difficulty from blindness and
    crippled legs only). A successful dodge turns the hit into a miss; a critical
    dodge makes it a critical miss with chance 0/10/50/100 % by dodge training

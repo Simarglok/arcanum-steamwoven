@@ -84,7 +84,8 @@ Native smoke (`--native-smoke`, macOS, Godot 4.7.2 .NET, 1280×800): the map
 draws, a left click through the production ground-click seam sets a route goal
 up to 8 open steps away, frames walk the actor there on the map's chart, and the
 resource sweep and overlapped reload pass (`ARC-RENDER-017 native-smoke map
-PASS`, `ARC-RENDER-007 resources reload PASS`). Observed on `elven ruins`
+PASS`, `ARC-RENDER-007 resources reload PASS`). Since ARC-WORLD-021 a map with a reachable window also
+steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Observed on `elven ruins`
 (9 sectors), `bates mansion lev 1` (9), `crash site cave` (1) and
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). A small map may fit every GPU cache, so map mode does not

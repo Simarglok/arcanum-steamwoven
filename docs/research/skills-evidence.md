@@ -109,7 +109,7 @@ the game reaches it. "Opposed" uses the table of
 | Skill | Key stat | Effectiveness | ≤ 95 | Reached by |
 | --- | --- | --- | --- | --- |
 | Bow | DX | 5L + 25 | no | attack with an arrow weapon |
-| Dodge | DX | 5L | yes | defender roll after every hit |
+| Dodge | DX | 5L in CE; **2L** in the original ([ARC-RES-048](original-verification-ledger.md)) | yes | defender roll after every hit |
 | Melee | DX | 5L + 25 | no | attack with a melee weapon or bare hands |
 | Throwing | DX | 7L + 25 | no | attack with a non-weapon item or a boomerang |
 | Backstab | DX | none (0) | yes | modifies a melee attack, never rolled |

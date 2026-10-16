@@ -86,17 +86,21 @@ public sealed class GameSessionLimits
 /// (ARC-WORLD-015) is the player character the module starts with; a session without one keeps no character and its host
 /// supplies PC facts itself. <paramref name="RandomSeed"/> (ARC-WORLD-019) seeds the session's gameplay randomness; the
 /// owner never reads a clock or OS entropy, so a host that wants a new sequence per game passes a new seed, and the
-/// default 0 gives every such session the same rolls.
+/// default 0 gives every such session the same rolls. <paramref name="Rules"/> (ARC-WORLD-023) is the starting rule mode,
+/// normally the player's saved setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>.
 /// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
-    ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0);
+    ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0,
+    RuleMode Rules = RuleMode.Steamwoven);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
-/// new process-local GF epoch; saved epochs are not persisted.
+/// new process-local GF epoch; saved epochs are not persisted. <paramref name="Rules"/> (ARC-WORLD-023) is the rule
+/// mode to continue under: a snapshot never records one, so any save loads under either mode (D4).
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
-    ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null);
+    ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
+    RuleMode Rules = RuleMode.Steamwoven);
 
 public enum GameSessionFailure
 {

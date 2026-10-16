@@ -54,11 +54,15 @@ public static class AttackRules
         return FinishEffectiveness(value, extraordinaryIntelligence, isPc, difficulty, clampAt95: false);
     }
 
-    /// <summary>Dodge effectiveness: <c>5L</c>, +10 for extraordinary intelligence, a PC's difficulty scaling, capped at 95.</summary>
+    /// <summary>
+    /// Dodge effectiveness: <c>2L</c>, +10 for extraordinary intelligence, a PC's difficulty scaling, capped at 95. The
+    /// retail 1.0.7.4 executable computes <c>2L</c>; CE's <c>5L</c> is a reconstruction slip, so both rule settings
+    /// follow the original (ARC-RES-048, docs/research/original-verification-ledger.md).
+    /// </summary>
     public static int DodgeEffectiveness(int level, bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty)
     {
         CheckLevel(level, nameof(level));
-        return FinishEffectiveness(5 * level, extraordinaryIntelligence, isPc, difficulty, clampAt95: true);
+        return FinishEffectiveness(2 * level, extraordinaryIntelligence, isPc, difficulty, clampAt95: true);
     }
 
     /// <summary>
@@ -161,8 +165,9 @@ public static class AttackRules
 
     /// <summary>
     /// Armour class: <c>base + worn adjustments + effective AcAdjustment</c>, clamped 0..95, where the effective
-    /// AcAdjustment stat (DX − 10) already carries its effects. Under the A6 source switch the AC-adjustment effects are
-    /// also applied to <c>base + worn</c> through <paramref name="acAdjustmentEffects"/> before the stat is added.
+    /// AcAdjustment stat (DX − 10) already carries its effects. Under the A6 switch of the Original setting the
+    /// AC-adjustment effects are also applied to <c>base + worn</c> through <paramref name="acAdjustmentEffects"/> before
+    /// the stat is added.
     /// </summary>
     public static int ArmorClass(
         int baseAc, int wornAdjustment, int effectiveAcAdjustment, Func<int, int> acAdjustmentEffects,

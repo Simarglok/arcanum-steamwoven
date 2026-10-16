@@ -200,7 +200,7 @@ readiness; source-frame decoding не объявляет FR-SCENE-001..009 ре�
 
 **CE и данные.** CE проверяет ограниченный набор wall p-pieces и выставляет `is_window`; traversal flags/actor capability меняют исход ([окно в wall ветви](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3041-L3093), [caller flags](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L4750-L4764)). Это не задаёт визуальное alpha-правило, разрушаемость или точную retail-политику.
 
-**Steamwoven сейчас.** Window/wall records и этот traversal branch отсутствуют; включать их в ordinary-static passability запрещает граница текущего компонента. Поддержка и семантика остаются открытыми до более полного оригинального наблюдения.
+**Steamwoven сейчас.** ARC-WORLD-021: на whole-map evidence кардинальный шаг через оконную часть стены открыт как `WINDOW_JUMP`, если оконный портал и остальное не решают иначе; диагональ блокируется; маршрут платит +50; viewer даёт шагу время и анимацию прыжка (vault). Только для актёра-человека (ПК), способность прыгать других актёров не проверяется; виден в режиме карт (два интерьера с окнами). [Gait runtime](../world/gait-runtime.md#window-jump-arc-world-021).
 
 ## Ключевые разрывы покрытия
 

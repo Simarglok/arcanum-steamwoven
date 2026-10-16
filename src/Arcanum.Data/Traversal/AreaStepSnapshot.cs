@@ -81,7 +81,7 @@ public sealed class AreaStepSnapshot
 
         // Wall legs: a cardinal step crosses one edge; a diagonal step checks both L-shaped paths
         // around it (counter-clockwise then clockwise, and clockwise then counter-clockwise), four legs.
-        AreaObjectKey? wallBlocker = null;
+        AreaObjectKey? wallBlocker = null, windowJump = null;
         // The source tile's walls and portals take part in leaving it: an Unknown one there is a gap.
         foreach (var evaluation in _objects.GetValueOrDefault(request.From, []))
             if (evaluation.ObjectType is 0 or 1 && evaluation.Coverage != CardinalTraversalCoverage.Supported)
@@ -97,7 +97,9 @@ public sealed class AreaStepSnapshot
                     case AreaStepEdgeRule.Legacy or AreaStepEdgeRule.Block: wallBlocker ??= wall.Key; break;
                     case AreaStepEdgeRule.Unknown: gaps.Add(new(wall.Reason ?? "EDGE_RULE_UNKNOWN", wall.Cell, wall.Key)); break;
                     case AreaStepEdgeRule.WindowJump when diagonal: wallBlocker ??= wall.Key; break;
-                    case AreaStepEdgeRule.WindowJump: gaps.Add(new("WINDOW_JUMP_UNMODELLED", wall.Cell, wall.Key)); break;
+                    // ARC-WORLD-021: a critter walker jumps a window on a cardinal step (research ARC-RES-047 W1–W3);
+                    // a window portal on the same edge still decides through its own rule.
+                    case AreaStepEdgeRule.WindowJump: windowJump ??= wall.Key; break;
                 }
             }
         }
@@ -110,20 +112,24 @@ public sealed class AreaStepSnapshot
         }
 
         if (terrain.Disposition == CardinalTraversalDisposition.Blocked)
-            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED", terrain, objects, gaps);
+            return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "DESTINATION_TERRAIN_BLOCKED", terrain, objects, gaps, windowJump: windowJump);
         if (wallBlocker is not null)
             return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked, "WALL_EDGE_BLOCKED", terrain, objects, gaps, wallBlocker);
         if (objects.Any(o => o.Disposition == CardinalTraversalDisposition.Blocked))
             return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Blocked,
                 objects.First(o => o.Disposition == CardinalTraversalDisposition.Blocked).Role == AreaStepObjectRole.Destination
-                    ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER", terrain, objects, gaps);
-        if (gaps.Count != 0) return Result(request, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", terrain, objects, gaps);
-        return Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE", terrain, objects, gaps);
+                    ? "DESTINATION_OBJECT_BLOCKER" : "SHOULDER_OBJECT_BLOCKER", terrain, objects, gaps, windowJump: windowJump);
+        // The window stays named on a step a host overlay may still open (ARC-WORLD-021).
+        if (gaps.Count != 0) return Result(request, CardinalTraversalCoverage.Unknown, null, "REQUIRED_EVIDENCE_UNAVAILABLE", terrain, objects, gaps, windowJump: windowJump);
+        return windowJump is not null
+            ? Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "WINDOW_JUMP", terrain, objects, gaps, windowJump: windowJump)
+            : Result(request, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, "COMPLETE_NONBLOCKING_EVIDENCE", terrain, objects, gaps);
     }
 
     private AreaStepAssessment Result(AreaStepRequest request, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition,
-        string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wall = null) =>
-        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall);
+        string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wall = null,
+        AreaObjectKey? windowJump = null) =>
+        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall, windowJump);
 
     private static AreaStepCell Neighbor(AreaStepCell cell, int direction) => new(cell.X + Deltas[direction].Dx, cell.Y + Deltas[direction].Dy);
 

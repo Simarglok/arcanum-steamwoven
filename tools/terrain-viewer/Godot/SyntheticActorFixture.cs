@@ -21,8 +21,11 @@ internal static class SyntheticActorFixture
     internal static readonly (byte R, byte G, byte B) RunLeftPixel = (201, 143, 22);
     internal static readonly (byte R, byte G, byte B) RunRightPixel = (52, 109, 233);
 
-    /// <param name="run">ARC-WORLD-020: the human also carries run frames (the AREA game view's profile).</param>
-    internal static SyntheticActorLoad Create(bool human = false, bool run = false)
+    internal static readonly (byte R, byte G, byte B) VaultLeftPixel = (128, 64, 199);
+    internal static readonly (byte R, byte G, byte B) VaultRightPixel = (77, 211, 120);
+
+    /// <param name="area">ARC-WORLD-020/021: the human also carries run and vault frames (the AREA game view's profile).</param>
+    internal static SyntheticActorLoad Create(bool human = false, bool area = false)
     {
         var input = new ActorDiagnosticPlacementInput(0, 0, 100, 40, 0, 0,
             ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Idle, 0, 0,
@@ -33,10 +36,13 @@ internal static class SyntheticActorFixture
             human ? 1 : 15, human ? 6 : 8, IdleLeftPixel, IdleRightPixel, frames, textures, human);
         AddAction(ActorDiagnosticAction.Walk, human ? 2668 : 4754, human ? 0x20000040u : 0xc9001850u,
             human ? 10 : 8, human ? 17 : 15, WalkLeftPixel, WalkRightPixel, frames, textures, human);
-        if (human && run)
+        if (human && area)
+        {
             AddAction(ActorDiagnosticAction.Run, 2671, 0x20000180u, 10, 20, RunLeftPixel, RunRightPixel, frames, textures, human);
+            AddAction(ActorDiagnosticAction.Vault, 2677, 0x20000340u, 9, 8, VaultLeftPixel, VaultRightPixel, frames, textures, human);
+        }
         var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, frames, !human ? ActorDiagnosticProfile.MonsterRegression
-            : run ? ActorDiagnosticProfile.HumanFixedRun : ActorDiagnosticProfile.HumanFixed);
+            : area ? ActorDiagnosticProfile.HumanFixedArea : ActorDiagnosticProfile.HumanFixed);
         var terrainKey = new TerrainTextureKey("synthetic", 1, 0, 1, "terrain", 0, 0, 0);
         var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(0, 0, 200, 100),
         [

@@ -90,7 +90,7 @@ Source: [skills](skills-evidence.md#8-ce-anomalies-found-by-this-reading),
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| Dodge (new, SKX1) | `basic_skill_effectiveness` (0x4C62E0) | Dodge effectiveness is **2 × level**; CE and the project use 5 × level. The other basic and tech formulas match CE. | CE slip |
+| Dodge (new, SKX1) | `basic_skill_effectiveness` (0x4C62E0) | Dodge effectiveness is **2 × level**; CE uses 5 × level (the project did until ARC-WORLD-023). The other basic and tech formulas match CE. | CE slip |
 | SK1 | `script_execute_action` (0x447220), get-skill case | Returns after storing the level; no fall-through into "cast spell". | CE slip |
 | SK2 | `skill_ui_dec_skill` (0x57AEB0) | The loop re-reads the points each pass: one click removes points until the level changes and refunds each; no hang. | CE slip |
 | SK3 | `skill_ui_set_training` (0x57AC90) | Routes basic and tech correctly, except that skill 12 (repair) goes to the basic setter, which refuses it. `ui_set_skill_training` is called only from the multiplayer handler. | CE slip (labels); off-by-one is an original bug, multiplayer only |
@@ -208,7 +208,7 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    no switch.
 2. **Dodge 5 × level** ([attack resolver](../world/attack-resolver-runtime.md), ARC-COMBAT-001,
    `AttackRules.DodgeEffectiveness`): implemented from CE; the original uses 2 × level. Under D8 both
-   settings follow the original.
+   settings follow the original; ARC-WORLD-023 changed the resolver to 2 × level.
 3. **Skills §9.5** ([skills study](skills-evidence.md#9-consequences-for-steamwoven-project-policy-proposals)):
    SK1, SK2, SK4 and SK5 are CE slips, so the Original setting reproduces none of them; SK2's "one point
    per click" becomes a design choice, not a fix. SK8 stays a switch candidate; SK7 is the original's

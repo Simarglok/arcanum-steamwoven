@@ -2,6 +2,7 @@ using Arcanum.Data;
 using Arcanum.Data.Area;
 using Arcanum.Data.Traversal;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -46,6 +47,10 @@ public sealed class ActorGaitTests
         Assert.AreEqual(StepDuration.Of(58, 75), timing.For(MovementGait.Walk, NeighborDirection.XPlusYPlus));
         Assert.AreEqual(StepDuration.Of(25, 149), timing.For(MovementGait.Run, NeighborDirection.YMinus));
         Assert.AreEqual(StepDuration.Of(4, 17), timing.For(MovementGait.Run, NeighborDirection.XMinusYPlus));
+        // ARC-WORLD-021: the vault is 9 frames at 125 ms (8 fps, no Speed scaling).
+        Assert.AreEqual(StepDuration.Of(9, 8), timing.Vault);
+        Assert.IsNull(new GaitTiming(timing.Walk, timing.Run, 8).Vault);
+        Assert.Throws<ArgumentException>(() => new GaitTiming(timing.Walk, timing.Run, 8, 9, 0));
         foreach (var direction in Enum.GetValues<NeighborDirection>())
             Assert.IsTrue(timing.For(MovementGait.Run, direction).Value < timing.For(MovementGait.Walk, direction).Value);
         // Faster frames at a higher Speed shorten every step; the stride stays the ART's.
@@ -59,12 +64,15 @@ public sealed class ActorGaitTests
     {
         Assert.IsNull(ActorDiagnosticProfile.HumanFixed.Run);
         Assert.AreEqual(55, ActorDiagnosticProfile.HumanFixed.DistinctKeys);
-        var run = ActorDiagnosticProfile.HumanFixedRun;
+        var run = ActorDiagnosticProfile.HumanFixedArea;
         Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, run.Id);
         Assert.AreEqual((0x20000180u, 2671, 10, 20), (run.Run!.Selector, run.Run.Ordinal, run.Run.FramesPerGroup, run.Run.RawFramesPerSecond));
         Assert.AreEqual(ActorDiagnosticAction.Run, run.ActionFor(0x20000180));
-        Assert.AreEqual((105, 889656L), (run.DistinctKeys, run.OriginalRgbaBytes!.Value));
-        CollectionAssert.AreEqual(new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run }, run.Actions.ToArray());
+        Assert.AreEqual((150, 1259440L), (run.DistinctKeys, run.OriginalRgbaBytes!.Value));
+        Assert.AreEqual((0x20000340u, 2677, 9, 8), (run.Vault!.Selector, run.Vault.Ordinal, run.Vault.FramesPerGroup, run.Vault.RawFramesPerSecond));
+        Assert.AreEqual(ActorDiagnosticAction.Vault, run.ActionFor(0x20000340));
+        Assert.IsNull(ActorDiagnosticProfile.HumanFixed.Vault);
+        CollectionAssert.AreEqual(new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault }, run.Actions.ToArray());
         Assert.Throws<TerrainViewerException>(() => ActorDiagnosticProfile.MonsterRegression.Resource(ActorDiagnosticAction.Run));
     }
 
@@ -107,7 +115,7 @@ public sealed class ActorGaitTests
         if (Environment.GetEnvironmentVariable("ARC_AREA_ORIGINAL") != "1") { Assert.Inconclusive("ARC_AREA_ORIGINAL=1 runs the original stride check."); return; }
         var path = Environment.GetEnvironmentVariable("ARC_AREA_RESOURCE1") ?? throw new AssertFailedException("ARC_AREA_RESOURCE1 is required");
         using var archive = DatArchive.Open(path, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
-        var profile = ActorDiagnosticProfile.HumanFixedRun;
+        var profile = ActorDiagnosticProfile.HumanFixedArea;
         foreach (var resource in new[] { profile.Walk, profile.Run! })
         {
             var metadata = ArtDecoder.Inspect(archive.ReadEntry(archive.Entries.Single(e => e.Ordinal == resource.Ordinal)), new ArtDecoderOptions { MaxInputBytes = 1048576 });
@@ -118,6 +126,89 @@ public sealed class ActorGaitTests
             Assert.AreEqual((stride.AxisDx, -stride.AxisDy), Sum(1), $"axis stride of {resource.Ordinal}");
             Assert.AreEqual((stride.DiagonalPixels, 0), Sum(2), $"diagonal stride of {resource.Ordinal}");
         }
+    }
+
+    // A whole-map snapshot over sector (0,0) with window wall pieces on the +X edge of the given cells (default (10,10)),
+    // and optionally an Unknown object record on (11,10).
+    private static readonly AreaObjectKey Window = new("s", 1, AreaSourceKind.Static, 0, 0, 0, "window", 1);
+    private static readonly AreaObjectKey Unread = new("s", 1, AreaSourceKind.Mobile, 0, 0, 1, "npc", 1);
+    private static AreaStepSnapshot WindowSteps(bool unknownRecord = false, params (int X, int Y)[] windows)
+    {
+        var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+        for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
+            terrain[new(x, y)] = new(new(x, y), 0, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
+        var walls = (windows.Length == 0 ? [(10, 10)] : windows).ToDictionary(w => new AreaStepCell(w.X, w.Y),
+            w => new[] { new AreaStepWallEdge(Window, new(w.X, w.Y), 5, true, AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP") });
+        var objects = new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>();
+        if (unknownRecord) objects[new(11, 10)] = [new(Unread, new(11, 10), 15, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, "TEST_UNREAD")];
+        return new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain, objects, walls);
+    }
+
+    [TestMethod]
+    public void TheCompanionOverlayKeepsTheWindowJump()
+    {
+        var chart = new AreaChart(0, 0, new(10, 10), "TEST_WINDOW_CHART");
+        // An occupied map (a moved companion record elsewhere) keeps the reason of an Open window step.
+        var steps = WindowSteps();
+        var occupied = new AreaOccupancy([Unread], [new CellCoord(30, 30)]);
+        var window = steps.Assess(steps.Request(new(10, 10), new(11, 10), CardinalTraversalDirection.XPlus));
+        var live = AreaOccupancyRules.Apply(window, new(10, 10), NeighborDirection.XPlus, occupied);
+        Assert.AreEqual(("WINDOW_JUMP", false), (live.ReasonCode, live.Overlaid));
+        // A window step whose only gap is a moved record opens through the overlay and stays a jump: vault cost, no straight line.
+        var gapped = WindowSteps(unknownRecord: true);
+        var raw = gapped.Assess(gapped.Request(new(10, 10), new(11, 10), CardinalTraversalDirection.XPlus));
+        Assert.AreEqual((CardinalTraversalCoverage.Unknown, (AreaObjectKey?)Window), (raw.Coverage, raw.WindowJump));
+        Assert.AreEqual("WINDOW_JUMP", AreaOccupancyRules.Apply(raw, new(10, 10), NeighborDirection.XPlus, occupied).ReasonCode);
+        var routes = new AreaRouteSource(gapped, chart, () => occupied);
+        Assert.AreEqual((RouteStepVerdict.Open, AreaRouteSource.WindowJumpCost), (routes.Assess(new(10, 10), NeighborDirection.XPlus), routes.ExtraCost(new(10, 10), NeighborDirection.XPlus)));
+        Assert.AreEqual(RouteMethod.LocalSearch, RoutePlanner.Plan(routes, new(8, 10), new(13, 10)).Method);
+        var session = new AreaGridSession(gapped, SimulationTime.At(0), chart: chart) { Occupancy = () => occupied, Timing = GaitTiming.HumanFixed };
+        var advance = session.Advance(SimulationTime.At(1), [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        Assert.AreEqual(StepDuration.Of(9, 8), advance.Movement.Events.Single(e => e.Kind == MovementEventKind.StepStarted).Assessment!.Duration);
+    }
+
+    [TestMethod]
+    public void AVaultRightAfterAVaultPlaysFromItsFirstFrame()
+    {
+        var actor = new DiagnosticGridActor { AreaGaitTiming = GaitTiming.HumanFixed, AreaGait = () => MovementGait.Walk };
+        actor.Configure(WindowSteps(false, (10, 10), (11, 10)), SimulationTime.At(0), chart: new AreaChart(0, 0, new(10, 10), "TEST_WINDOW_CHART"));
+        actor.Advance(new SimulationTime(ExactScalar.Create(9, 16)), [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        Assert.AreEqual(ActorDiagnosticAction.Vault, actor.State.Action);
+        // A quarter into the second vault: the clip restarted (frame 2 of 9 at 8 fps), not frozen on its last frame.
+        actor.Advance(new SimulationTime(ExactScalar.Create(9, 8) + ExactScalar.Create(9, 32)), []);
+        Assert.AreEqual((ActorDiagnosticAction.Vault, 2, true), (actor.State.Action, actor.CurrentFrame, actor.IsPlaying));
+    }
+
+    [TestMethod]
+    public void AWindowStepIsAVaultWithItsOwnTimeArtAndRouteCost()
+    {
+        var steps = WindowSteps();
+        var chart = new AreaChart(0, 0, new(10, 10), "TEST_WINDOW_CHART");
+        var gait = MovementGait.Run;
+        var actor = new DiagnosticGridActor { AreaGaitTiming = GaitTiming.HumanFixed, AreaGait = () => gait };
+        actor.Configure(steps, SimulationTime.At(0), chart: chart);
+        // The jump east: Open, the vault time and code whatever the gait, drawn with the vault ART.
+        var half = new SimulationTime(ExactScalar.Create(9, 16));
+        var advance = actor.Advance(half, [new InputBatch(SimulationTime.At(0), [MovementInput.Set(0, ActorIntent.Toward(NeighborDirection.XPlus))])]);
+        var evidence = advance.AreaEvidence.Single();
+        Assert.AreEqual(("WINDOW_JUMP", true), (evidence.Assessment.ReasonCode, evidence.Assessment.WindowJump is not null));
+        var permit = advance.Movement.Events.Single(e => e.Kind == MovementEventKind.StepStarted).Assessment!;
+        Assert.AreEqual(StepDuration.Of(9, 8), permit.Duration);
+        CollectionAssert.Contains(permit.Provenance.ToArray(), GaitTiming.VaultProvenance);
+        Assert.AreEqual(ActorDiagnosticAction.Vault, actor.State.Action);
+        // The next ordinary step runs again, then the actor settles on the far side.
+        var next = new SimulationTime(ExactScalar.Create(9, 8) + GaitTiming.HumanFixed.For(MovementGait.Run, NeighborDirection.XPlus).Value / ExactScalar.Integer(2));
+        actor.Advance(next, []);
+        Assert.AreEqual(ActorDiagnosticAction.Run, actor.State.Action);
+        var release = new SimulationTime(next.Value + ExactScalar.Create(1, 1000));
+        actor.Advance(new SimulationTime(next.Value + ExactScalar.Integer(1)), [new InputBatch(release, [MovementInput.Set(1, ActorIntent.Neutral)])]);
+        Assert.AreEqual((ActorDiagnosticAction.Idle, new CellCoord(12, 10)), (actor.State.Action, actor.Session!.State.CommittedCell));
+        // Route evidence: the window step is Open with extra cost 50; the plain step beside it costs nothing extra.
+        var routes = new AreaRouteSource(steps, chart);
+        Assert.AreEqual((RouteStepVerdict.Open, AreaRouteSource.WindowJumpCost), (routes.Assess(new(10, 10), NeighborDirection.XPlus), routes.ExtraCost(new(10, 10), NeighborDirection.XPlus)));
+        Assert.AreEqual(AreaRouteSource.WindowJumpCost, routes.ExtraCost(new(11, 10), NeighborDirection.XMinus));
+        Assert.AreEqual(0, routes.ExtraCost(new(10, 11), NeighborDirection.XPlus));
+        Assert.AreEqual(RouteStepVerdict.Blocked, routes.Assess(new(10, 10), NeighborDirection.XPlusYPlus), "a diagonal step across a window is blocked");
     }
 
     [TestMethod]

@@ -32,6 +32,26 @@ public sealed class RoutePlannerTests
     }
 
     [TestMethod]
+    public void AWindowStepEndsTheStraightAttemptAndCostsFiftyInTheSearch()
+    {
+        // ARC-WORLD-021: the step from (3,y) east is a window jump, Open with extra cost 50.
+        static Func<CellCoord, NeighborDirection, int> Window(int y) => (c, d) => c == new CellCoord(3, y) && d == XPlus ? 50 : 0;
+        // A one-row corridor: the window is the only way, so the search takes it.
+        var corridor = new GridSource("........") { Extra = Window(0) };
+        var through = RoutePlanner.Plan(corridor, new(0, 0), new(7, 0));
+        Assert.AreEqual((RouteOutcome.Found, (RouteMethod?)RouteMethod.LocalSearch, 7), (through.Outcome, through.Method, through.Steps.Count));
+        // Open rows around it: a step around the window is far cheaper than +50, so the route avoids the jump.
+        var open = new GridSource("........", "........", "........") { Extra = Window(1) };
+        var around = RoutePlanner.Plan(open, new(0, 1), new(7, 1));
+        Assert.AreEqual(RouteMethod.LocalSearch, around.Method);
+        var cells = new[] { around.From }.Concat(around.Cells).ToArray();
+        Assert.IsFalse(cells.Zip(cells.Skip(1)).Any(p => p.First == new CellCoord(3, 1) && p.Second == new CellCoord(4, 1)), "the window step is avoided");
+        AllOpen(open, around);
+        Assert.AreEqual(RouteMethod.Direct, RoutePlanner.Plan(GridSource.Open(8, 3), new(0, 1), new(7, 1)).Method);
+        Assert.ThrowsExactly<InvalidOperationException>(() => RoutePlanner.Plan(new GridSource("....") { Extra = (_, _) => -1 }, new(0, 0), new(3, 0)));
+    }
+
+    [TestMethod]
     public void SegmentCapIsNotTheGoalLimit()
     {
         var plan = RoutePlanner.Plan(GridSource.Open(32, 1), new(0, 0), new(20, 0));

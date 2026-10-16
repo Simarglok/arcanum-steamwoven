@@ -14,6 +14,11 @@ public interface IRouteStepSource
     /// <summary>Whether the cell belongs to the admitted chart. Outside cells are refused, not searched.</summary>
     bool Contains(CellCoord cell);
     RouteStepVerdict Assess(CellCoord from, NeighborDirection direction);
+    /// <summary>Extra search cost of an Open step on top of the plain step's 10 (for example a window jump, +50 as the
+    /// source's path search, ARC-WORLD-021), 0..1000. Asked only for Open steps, at most once per step and plan, and
+    /// must be deterministic within one plan. A step with extra cost also ends the straight attempt. Default none: a
+    /// wrapping source must forward it.</summary>
+    int ExtraCost(CellCoord from, NeighborDirection direction) => 0;
 }
 
 public enum RouteOutcome { Found, AlreadyAtTarget, Refused, NoRoute }

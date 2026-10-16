@@ -49,14 +49,17 @@ public sealed class AttackRulesTests
     }
 
     [TestMethod]
-    public void DodgeEffectivenessIsCappedAt95()
+    public void DodgeEffectivenessIsTwiceTheLevelAsInTheOriginal()
     {
+        // The retail 1.0.7.4 executable computes 2L (ARC-RES-048); CE's 5L is a reconstruction slip.
         Assert.AreEqual(0, AttackRules.DodgeEffectiveness(0, false, false, GameDifficulty.Normal));
-        Assert.AreEqual(50, AttackRules.DodgeEffectiveness(10, false, false, GameDifficulty.Normal));
-        Assert.AreEqual(95, AttackRules.DodgeEffectiveness(19, false, false, GameDifficulty.Normal));
-        Assert.AreEqual(95, AttackRules.DodgeEffectiveness(20, false, false, GameDifficulty.Normal));
-        Assert.AreEqual(60, AttackRules.DodgeEffectiveness(10, true, false, GameDifficulty.Normal));
-        Assert.AreEqual(75, AttackRules.DodgeEffectiveness(10, false, true, GameDifficulty.Easy));
+        Assert.AreEqual(20, AttackRules.DodgeEffectiveness(10, false, false, GameDifficulty.Normal));
+        Assert.AreEqual(40, AttackRules.DodgeEffectiveness(20, false, false, GameDifficulty.Normal));
+        Assert.AreEqual(30, AttackRules.DodgeEffectiveness(10, true, false, GameDifficulty.Normal));
+        Assert.AreEqual(30, AttackRules.DodgeEffectiveness(10, false, true, GameDifficulty.Easy));
+        Assert.AreEqual(30, AttackRules.DodgeEffectiveness(20, false, true, GameDifficulty.Hard));
+        // The highest reachable value stays below the 95 cap.
+        Assert.AreEqual(75, AttackRules.DodgeEffectiveness(20, true, true, GameDifficulty.Easy));
     }
 
     [TestMethod]

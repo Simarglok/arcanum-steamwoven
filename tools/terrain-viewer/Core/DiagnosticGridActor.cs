@@ -13,7 +13,7 @@ public sealed class DiagnosticGridActor
     /// <summary>The bounded single-sector WORLD session, when that profile is configured.</summary>
     public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
     // ARC-WORLD-020: the human with its run resource (the WORLD diagnostic never selects Run; facing tables are shared).
-    public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixedRun;
+    public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixedArea;
     public int CurrentFrame => _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
     public DiagnosticActorState State => Session is { } session ? RenderState(session.State)
@@ -47,17 +47,18 @@ public sealed class DiagnosticGridActor
         {
             var cursor = previous.Time;
             var moving = previous.Action;
-            var run = IsRun(previous.Segment);
-            var action = Action(moving, run);
+            var stepping = StepAction(previous.Segment?.Assessment);
+            var action = Action(moving, stepping);
             foreach (var item in movement.Events)
             {
                 trial.Advance(Seconds(item.Time.Value - cursor.Value));
                 cursor = item.Time;
                 if (item.Kind == MovementEventKind.ActionChanged) moving = item.NewAction!.Value;
                 // ARC-WORLD-020: each step's permit names its gait; a run step draws the run ART.
-                if (item.Kind == MovementEventKind.StepStarted) run = item.Assessment?.Provenance.Contains(GaitTiming.RunProvenance) == true;
-                var next = Action(moving, run);
-                if (next != action) { action = next; trial = Timeline(action); }
+                if (item.Kind == MovementEventKind.StepStarted) stepping = StepAction(item.Assessment);
+                var next = Action(moving, stepping);
+                // A vault plays once per window step, so a vault right after a vault restarts it too.
+                if (next != action || (item.Kind == MovementEventKind.StepStarted && next == ActorDiagnosticAction.Vault)) { action = next; trial = Timeline(action); }
                 // Facing changes select another physical row at the same frame.
                 // The action clock stays continuous for Walk->Walk, Run->Run and turns.
             }
@@ -80,12 +81,15 @@ public sealed class DiagnosticGridActor
         : Placement(state, frame);
     public static double Seconds(ExactScalar value) => (double)value.Numerator / (double)value.Denominator;
     public static DiagnosticActorState RenderState(MovementState state) => new(
-        new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action, IsRun(state.Segment)));
-    private static bool IsRun(ActiveSegment? segment) => segment?.Assessment.Provenance.Contains(GaitTiming.RunProvenance) == true;
-    private static ActorDiagnosticAction Action(MovementAction action, bool run) => action switch
+        new(Seconds(state.Anchor.U), Seconds(state.Anchor.V)), Octant(state.Facing), Action(state.Action, StepAction(state.Segment?.Assessment)));
+    // The drawn action of a moving step from its permit's gait code (ARC-WORLD-020 run, ARC-WORLD-021 vault).
+    private static ActorDiagnosticAction StepAction(StepAssessmentTiming? permit) =>
+        permit?.Provenance.Contains(GaitTiming.VaultProvenance) == true ? ActorDiagnosticAction.Vault
+        : permit?.Provenance.Contains(GaitTiming.RunProvenance) == true ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk;
+    private static ActorDiagnosticAction Action(MovementAction action, ActorDiagnosticAction stepping) => action switch
     {
         MovementAction.Idle => ActorDiagnosticAction.Idle,
-        MovementAction.Walk => run ? ActorDiagnosticAction.Run : ActorDiagnosticAction.Walk,
+        MovementAction.Walk => stepping,
         _ => throw new ArgumentOutOfRangeException(nameof(action))
     };
     public static int Octant(NeighborDirection facing) => facing switch
@@ -100,10 +104,11 @@ public sealed class DiagnosticGridActor
         DiagnosticActorMotion.ToPlacement(RenderState(state), frame); // pure geometry ONLY
     private static AnimationTimeline Timeline(ActorDiagnosticAction action)
     {
-        var resource = ActorDiagnosticProfile.HumanFixedRun.Resource(action);
+        var resource = ActorDiagnosticProfile.HumanFixedArea.Resource(action);
         var timeline = new AnimationTimeline(resource.FramesPerGroup, resource.RawFramesPerSecond);
-        timeline.SetMode(PlaybackMode.Loop);
-        if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run) timeline.Play();
+        // The vault plays once over its step (it stops on the last frame); walk and run cycles loop.
+        timeline.SetMode(action == ActorDiagnosticAction.Vault ? PlaybackMode.Once : PlaybackMode.Loop);
+        if (action is ActorDiagnosticAction.Walk or ActorDiagnosticAction.Run or ActorDiagnosticAction.Vault) timeline.Play();
         return timeline;
     }
 
