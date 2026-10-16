@@ -10,10 +10,22 @@ summarizes the project and points to them.
   `AGENTS.md` (task authority, task readiness, implementation and evidence,
   GitHub identity, delivery), `docs/workflow/tasks.md` and
   `docs/workflow/toolchain.md`. Name threads, branches, PRs and commits by the
-  task code ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)).
-- **The retired Hermes setup is off limits.** The project no longer uses the
-  Hermes task board; do not touch `~/.hermes` on the owner's Mac (old board,
-  profiles, logs with secrets) and do not run `hermes`.
+  task code ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)):
+  `ARC-TYPE-NNN` first, a Russian result in thread titles. Types: `RES`, `DATA`,
+  `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`, `SCRIPT`, `DEV`, `AI`, `COMBAT`,
+  `SKILLS`, `MAGIC`, `TECHNOLOGY`. Check the number is unused (git history,
+  open/merged PRs, branches, other threads) before taking it.
+- **Language.** Talk to the owner in Russian; repository text (docs, code,
+  commits, PR titles and bodies) stays in English.
+- **Where work runs.** Work that builds, tests or runs code, Godot or original
+  data runs on the owner's Mac (a Remote Control session in the owner's
+  checkout). A docs-only task may run in a cloud clone, which has no .NET or Godot: run
+  `python3 -B tools/research/dat_probe.py --self-test` and report the .NET root
+  checks as not run.
+- **The retired Hermes setup is off limits.** The Hermes task board and the
+  Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
+  on the owner's Mac (old board, profiles, logs with secrets) and do not run
+  `hermes`.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
   subagent on the exact diff first. Once the acceptance criteria, task checks and
@@ -30,33 +42,55 @@ summarizes the project and points to them.
 
 Arcanum Steamwoven: independent MIT C#/Godot 4 reimplementation of *Arcanum: Of
 Steamworks and Magick Obscura* that reads the player's original data.
-Research-first, every component deliberately **bounded** (fixed Crash Site
-sector/area profiles, diagnostic viewers). Not a playable game yet.
+Research-first, every component deliberately **bounded**. Not a playable game
+yet. On `origin/main` (2026-10-16, through PR #157): the AREA viewer walks the
+whole Crash Site exterior and cave (click-to-move, hover, inventory and loot,
+NPC conversation, Virgil follows, day/night, quick save, diagnostic palette,
+optional local HD pack); the data layer catalogues all 81 maps and opens every
+interior through the area owner (52 of 80 complete; no viewer mode yet); headless
+rules cover the game session, character stats, starting hero and one attack
+resolution. Combat, magic, skills, NPC AI and the SCR dispatcher are researched
+under `docs/research`. Details: `docs/project/status.md`.
 
 - Toolchain: .NET SDK 8.0.425 (`global.json`, no roll-forward), net8.0,
   `TreatWarningsAsErrors`, central package versions + lock files
   (`restore --locked-mode`), MSTest. Godot **4.7.2 .NET**, `godot_canonical`
   wrapper and paths in `docs/workflow/toolchain.md`.
 - Root checks: `dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"` and `python3 -B tools/research/dat_probe.py --self-test`.
-  Root sln excludes terrain viewer, research probes and labs (own commands).
-  Real-data tests are opt-in via env vars (`DAT_ROOT`, `ARCANUM_TERRAIN_*`, `ARC_AREA_*`) and categories `RealData`, `DlgRealData`, `DlgRuntimeRealData`, `NpcDialogEntryRealData`.
-- Assemblies (`src/`): `Arcanum.Data` (DAT `1TAD` reader, ART decoder, DLG,
-  terrain, static objects, cardinal traversal, complete Crash Site `Area`
-  owner), `Arcanum.Simulation` (exact grid `Movement`; `Clock` on origin/main),
-  `Arcanum.Scripting` (`Dialog` transition; `NpcDialog`, `GlobalFlags` on
-  origin/main), `Arcanum.Presentation` (animation timeline), `Arcanum.Input`
-  (+ `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
-  owner: clock, GF, actor placement, map changes, snapshot schema), `Arcanum.Godot`
-  (ART viewer). Data/Simulation/Scripting/Session must stay Godot-independent.
-- Tools: `tools/terrain-viewer` (Core + Godot; the integrated "WORLD"
-  diagnostic), `tools/terrain-inspect`, `tools/research/*` probes,
+  Root sln excludes the terrain viewer and its tests, `Arcanum.Input*`, research
+  probes and labs (own commands in `docs/workflow/toolchain.md`).
+  Real-data tests are opt-in via env vars (`DAT_ROOT`, `ARCANUM_*`, `ARC_AREA_*`,
+  `ARC_CAVE_*`, `ARC_NPC_*`) and categories `RealData`, `DlgRealData`,
+  `DlgRuntimeRealData`, `NpcDialogEntryRealData`.
+- Assemblies (`src/`): `Arcanum.Data` (DAT `1TAD` reader, resource precedence
+  `Content`, MES `Messages`, ART, DLG `Dialogue`, terrain, static objects,
+  universal map catalogue `Maps`, `Area` owner with Crash Site and whole-map
+  plans, step evidence `Traversal`, T0 `Inventory`, `Lighting`, pre-made hero
+  `Characters`, item/critter `Combat` fields, `Hd` pack/recipe reader), `Arcanum.Simulation`
+  (exact grid `Movement`, click-to-move `Navigation`, `Clock`, `Character`
+  stats, `Party`, `Combat` attack resolver), `Arcanum.Scripting` (`Dialog`
+  transition and conversation, `NpcDialog` entry, `GlobalFlags`),
+  `Arcanum.Presentation` (animation timeline), `Arcanum.Input` (+
+  `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
+  owner: clock, GF, actor placement, map changes, story, party, inventory,
+  starting hero, snapshot schema 6), `Arcanum.Godot` (ART viewer and HD
+  before/after review). Data/Simulation/Scripting/Session must stay
+  Godot-independent.
+- Tools: `tools/terrain-viewer` (Core + Godot; modes `crash-site-area` (AREA)
+  and `world-diagnostic` (WORLD)), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
 - Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
   viewer mode gains or changes an argument or input, update `tools/local_dev/launch.py`
   (`GAME_ROLES`/`MODE_ROLES`/`ROLE_FLAGS`), `./arcanum` and the launcher docs in the
   same PR; `test_launcher_sync.py` catches drift.
-- Hard rules: no original/extracted game content, toolkit archives, secrets or
+- HD: a pack (PNG + JSON, `docs/formats/hd-pack.md`) is local, built from the
+  player's own installation or imported from another of the player's devices,
+  and never distributed; the AREA/WORLD viewers draw characters and objects from it with
+  per-frame Legacy fallback. Build/import tooling is ARC-DEV-003, terrain HD
+  ARC-RENDER-016 (both not merged yet).
+- Hard rules: no original/extracted game content, nothing derived from it (HD
+  packs and frames, screenshots, model weights), toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
   are ignored); synthetic fixtures only; no mechanical copying/translation from CE;
   record provenance; GitHub account `Simarglok` only; agent merges unless the owner explicitly asked to review.
@@ -67,18 +101,20 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
 ## 3. Truth hierarchy
 
 1. **Code and git history** (prefer `origin/main` — see §4).
-2. Repo docs: `docs/project/status.md` (component catalogue, audited), contracts
-   under `docs/world`, `docs/scripting`, `docs/rendering`, `docs/formats`.
+2. Repo docs: `docs/project/status.md` (component catalogue, updated by each
+   task), `docs/requirements/coverage.md`, contracts under `docs/world`,
+   `docs/scripting`, `docs/rendering`, `docs/formats`, research under
+   `docs/research`, owner decisions in `docs/architecture/decisions.md`.
 3. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
    2026-09-19..21. **Stale**: it predates all code. Use for intent/decisions
    (DEC-001..020, provenance policy), never for implementation status.
 
 ## 4. Repositories and git state
 
-- Remote `https://github.com/Simarglok/arcanum-steamwoven`. The owner's local
-  checkout may lag `origin/main` (on 2026-10-13 it sat at `11e8099`/PR #46 vs
-  `1f3c036`/PR #58). For current code use a fresh cloud clone, or
-  `git show origin/main:<path>` locally (only as fresh as the last fetch).
+- Remote `https://github.com/Simarglok/arcanum-steamwoven`. Many tasks merge a
+  day, so the owner's local checkout often lags `origin/main`: fetch first and
+  branch from `origin/main`, or read `git show origin/main:<path>` (only as
+  fresh as the last fetch).
 - `.worktrees/` (~70 task worktrees, ignored via `.gitignore`) and many
   `arcanum-steamwoven/t_<id>-arc-*` branches are left from the retired task board.
   Don't modify or delete them; they are evidence — except the one worktree your
@@ -99,3 +135,5 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
 - `docs/workflow/toolchain.md` — exact SDK/Godot versions, `godot_canonical`,
   lab and export commands.
 - `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
+- `docs/architecture/decisions.md` — owner decisions (graphics, HD pack, controls,
+  platforms); `docs/research/method.md` — research method and provenance.
