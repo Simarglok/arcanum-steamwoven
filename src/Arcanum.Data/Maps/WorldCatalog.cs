@@ -39,6 +39,9 @@ public sealed class WorldCatalog
 
     public WorldMap? Find(string name) => _byName.GetValueOrDefault(ContentMountPlan.AsciiLower(name));
 
+    /// <summary>The virtual path of a prototype by number, or null when the stack has none.</summary>
+    public string? PrototypePath(int number) => _prototypePaths.GetValueOrDefault(number);
+
     /// <summary>Lists every map folder of the stack and reads its small files (properties,
     /// terrain header, start location, map info, jump points). The stack stays owned by the caller
     /// and must outlive the catalogue.</summary>

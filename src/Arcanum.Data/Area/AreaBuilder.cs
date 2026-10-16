@@ -39,6 +39,7 @@ public sealed partial class AreaDataOwner
             if (!survey.TryAdd(packed, new(coordinate, entry, townmap))) throw Fail(AreaErrorCode.DuplicateIdentity, AreaStage.Selection);
         }
         var core = new HashSet<long>(); var queue = new Queue<AreaSectorCoordinate>(); queue.Enqueue(_plan.Start);
+        if (_plan.Selection == AreaSectorSelection.AllSectors) { core.UnionWith(survey.Keys); queue.Clear(); }
         while (queue.TryDequeue(out var coordinate))
         {
             token.ThrowIfCancellationRequested();
@@ -47,7 +48,9 @@ public sealed partial class AreaDataOwner
             foreach (var next in Neighbors(coordinate, diagonal: false)) queue.Enqueue(next);
         }
         if (core.Count == 0) throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Selection);
-        var ring = core.SelectMany(id => Neighbors(AreaSectorCoordinate.Unpack(id), diagonal: true)).Select(c => c.Packed).Where(id => !core.Contains(id)).ToHashSet();
+        // A whole map has no context ring: its sectors without files are the map's own edge.
+        var ring = _plan.Selection == AreaSectorSelection.AllSectors ? new HashSet<long>()
+            : core.SelectMany(id => Neighbors(AreaSectorCoordinate.Unpack(id), diagonal: true)).Select(c => c.Packed).Where(id => !core.Contains(id)).ToHashSet();
         if (core.Count + ring.Count > checked(_limits.MaxPresentSectors + 16)) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
         var present = core.Concat(ring).Where(survey.ContainsKey).Order().ToArray();
         if (present.Length > _limits.MaxPresentSectors) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Selection);
@@ -60,7 +63,7 @@ public sealed partial class AreaDataOwner
         TerrainLoader.TileNames tiles; TerrainLoader.FacadeNames facades;
         try
         {
-            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile]);
+            tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original);
             facades = TerrainLoader.FacadeNames.Parse(mappings[AreaMappingRole.Facade]);
         }
         catch (TerrainException) { throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); }
@@ -90,7 +93,10 @@ public sealed partial class AreaDataOwner
             }
             sectors.Add(new(sectorKey, coordinate, scope, true, row.Entry.Ordinal, row.Townmap, framing.LightCount, framing.RoofDiscriminator, framing.Placeholder,
                 framing.ObjectWindow.TerminalObjectCount, Array.AsReadOnly(framing.Ranges.OrderBy(p => p.Key).Select(p => new AreaByteRange(p.Value.Offset, p.Value.Length)).ToArray()), lights.AsReadOnly(), EntryIdentity(moduleKey, row.Entry), ObjectWireReader.Hash(bytes)));
-            if (framing.RoofDiscriminator == 0) issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Sector, framing[TerrainSection.Roof].Offset));
+            // Roofs are not drawn yet. A pinned profile treats a roof list as unsupported; a whole
+            // map keeps it in the sector record (RoofDiscriminator) for a later roof renderer.
+            if (framing.RoofDiscriminator == 0 && _plan.Selection != AreaSectorSelection.AllSectors)
+                issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Sector, framing[TerrainSection.Roof].Offset));
             for (var ordinal = 0; ordinal < 4096; ordinal++)
             {
                 var raw = parsed.Words[ordinal]; var lookup = raw >> 28 == 0 ? raw & ~63U : raw;
@@ -109,7 +115,7 @@ public sealed partial class AreaDataOwner
                         var role = raw >> 28 == 0 ? AreaMappingRole.Tile : AreaMappingRole.Facade;
                         construction.Allocate(checked(4096 + mappings[role].Values.Max(v => v.Length) * 16L));
                         var path = raw >> 28 == 0 ? TerrainLoader.TilePath(tiles, lookup).Path : "art/facade/" + Safe(facades.Name(TerrainLoader.FacadeNumber(raw))) + ".art";
-                        entry = Unique(raw >> 28 == 0 ? tileSource : facadeSource, path);
+                        entry = Resolve(raw >> 28 == 0 ? tileSource : facadeSource, path);
                         terrainEntries.Add(lookup, entry);
                     }
                     var tuple = (entry, group, frame, palette);

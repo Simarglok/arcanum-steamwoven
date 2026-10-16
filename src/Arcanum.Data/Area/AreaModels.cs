@@ -160,8 +160,19 @@ public sealed class AreaSourcePlan
     {
         OriginalAreaMap.CrashSiteExterior => "arc-data-009-complete-file-effective-source-v1",
         OriginalAreaMap.CrashSiteCave => "arc-world-009-cave-file-effective-source-v1",
+        _ when Selection == AreaSectorSelection.AllSectors && AllowArtTrailingBytes => "arc-data-019-whole-map-original-rules-v1",
+        _ when Selection == AreaSectorSelection.AllSectors => "arc-data-019-whole-map-v1",
         _ => "structural-file-effective-v1",
     };
+    /// <summary>How core sectors are chosen: the start sector's four-neighbour component with the
+    /// plan's townmap (the exterior rule), or every sector file under the prefix (a whole map,
+    /// ARC-DATA-019).</summary>
+    public AreaSectorSelection Selection { get; init; } = AreaSectorSelection.TownmapComponent;
+    /// <summary>Read ART as the original does: accept bytes after the last frame
+    /// (<see cref="ArtDecoderOptions.AllowTrailingBytes"/>) and draw a single-rotation ART from
+    /// its only group whatever the requested rotation. Pinned profiles keep their exact
+    /// per-object exceptions instead and ignore this flag.</summary>
+    public bool AllowArtTrailingBytes { get; init; }
     /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans.</summary>
     internal OriginalAreaMap OriginalMap { get; init; }
     internal bool Original => OriginalMap != OriginalAreaMap.None;
@@ -169,6 +180,7 @@ public sealed class AreaSourcePlan
 }
 
 internal enum OriginalAreaMap { None, CrashSiteExterior, CrashSiteCave }
+public enum AreaSectorSelection { TownmapComponent, AllSectors }
 
 public sealed class AreaLoaderOptions
 {

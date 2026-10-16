@@ -331,11 +331,23 @@ public static class TerrainLoader
     private sealed record MetadataResult(ArtMetadata? Metadata, Exception? Error);
     internal sealed class TileNames(string[] outdoorFlip, string[] outdoorFixed, string[] indoorFlip, string[] indoorFixed)
     {
-        public static TileNames Parse(SortedDictionary<int, string> entries)
-        { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99), Read(entries, 100, 199), Read(entries, 200, 299), Read(entries, 300, 399)); }
+        /// <summary><paramref name="originalNames"/> applies the original's rule for a value
+        /// without '/' (the name is its first three characters); off, the whole value is the name,
+        /// as the bounded profiles and their fixtures expect.</summary>
+        public static TileNames Parse(SortedDictionary<int, string> entries, bool originalNames = false)
+        { foreach (var key in new[] { 0, 100, 200, 300, 400 }) if (!entries.ContainsKey(key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"Tile MES requires exact key {key}."); return new(Read(entries, 0, 99, originalNames), Read(entries, 100, 199, originalNames), Read(entries, 200, 299, originalNames), Read(entries, 300, 399, originalNames)); }
         public string Name(int number, bool flip, bool outdoor) { var values = (outdoor, flip) switch { (true, true) => outdoorFlip, (true, false) => outdoorFixed, (false, true) => indoorFlip, _ => indoorFixed }; return number >= 0 && number < values.Length ? values[number] : throw new TerrainSelectionException(TerrainErrorCode.InvalidFraming, "Tile selector exceeds initialized MES range."); }
         public int OutdoorIndex(string value) { var index = Array.FindIndex(outdoorFlip, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); if (index >= 0) return index; index = Array.FindIndex(outdoorFixed, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); return index < 0 ? -1 : outdoorFlip.Length + index; }
-        private static string[] Read(SortedDictionary<int, string> entries, int first, int last) => entries.Where(x => x.Key >= first && x.Key <= last).Select(x => MesPathToken(x.Value)).ToArray();
+        private static string[] Read(SortedDictionary<int, string> entries, int first, int last, bool originalNames) =>
+            entries.Where(x => x.Key >= first && x.Key <= last).Select(x => originalNames ? TileToken(x.Value) : MesPathToken(x.Value)).ToArray();
+        // Pinned CE a_name.c load_tile_names: a name ends at '/' (flags follow); without one the
+        // name is the first three characters and the rest is a sound number ("Dn1 3").
+        private static string TileToken(string value)
+        {
+            if (value.Contains('/')) return MesPathToken(value);
+            if (value.Length < 3) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "Tile MES name is shorter than three characters.");
+            return MesPathToken(value[..3]);
+        }
     }
     internal sealed class FacadeNames(string[] values)
     {
