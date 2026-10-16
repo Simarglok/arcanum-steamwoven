@@ -54,17 +54,31 @@ class LauncherSyncTests(unittest.TestCase):
         self.assertEqual(set(launch.ROLE_FLAGS), set(launch.GAME_ROLES))
         self.assertTrue(all(set(roles) <= set(launch.GAME_ROLES) for roles in launch.MODE_ROLES.values()))
 
-    def test_role_identities_match_the_data_layer_pins(self):
+    def test_viewer_modes_match_the_launcher_modes(self):
+        source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
+        modes = set(re.findall(r'"([a-z-]+)" => TerrainViewerMode\.', source))
+        self.assertEqual(modes, set(launch.MODE_ROLES), "a viewer mode was added or removed: update MODE_ROLES")
+
+    def test_role_identities_match_the_data_layer_and_evidence_pins(self):
         profile = (REPO / "src/Arcanum.Data/Area/OriginalProfile.cs").read_text()
         for role in ("module", "actorResource", "terrainResource", "areaMobile"):
             _, size, sha256 = launch.GAME_ROLES[role]
             self.assertIn(f"{size}, \"{sha256}\"", profile, role)
+        inventory = (REPO / "docs/research/crash-site-area-inventory.md").read_text()
+        _, size, sha256 = launch.GAME_ROLES["areaEffects"]
+        self.assertIn(f"| {size} | `{sha256}` |", inventory)
+        dat = (REPO / "docs/research/dat-evidence.md").read_text()
+        _, size, sha256 = launch.GAME_ROLES["areaPatch"]
+        self.assertIn(f"| {size:,} | `{sha256}` |", dat)
 
     def test_project_launcher_modes_bind_known_modes_and_tasks(self):
         modes = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")["MODES"]
+        # Same pairing arcanum-local enforces at launch: crash-site-area only from ARC-RENDER-007.
+        allowed = {"crash-site-area": {"ARC-RENDER-007"},
+                   "world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
         for mode, task in modes.values():
             self.assertIn(mode, launch.MODE_ROLES)
-            self.assertIn(task, ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"))
+            self.assertIn(task, allowed[mode], mode)
 
     def test_discovery_verifies_identity_and_rejects_links(self):
         game = self.root / "game"

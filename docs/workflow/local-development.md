@@ -13,7 +13,12 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
-(never timestamps or directory order), then launch. **Rule:** a change that adds
+(never timestamps or directory order) and launch it; a real run leaves the terrain
+launch selection on that build, a `--dry-run` restores the previous selection.
+Role paths follow the installed game layout used by the area research
+(`docs/research/area-passability-closure.md`): `areaMobile` is the Crash Site map's
+normal-game mobile file `modules/Arcanum/maps/qrmvs-420-1zjcnpgn` (the game's
+obfuscated mobile-file name), `prototypes` is `data/proto`. **Rule:** a change that adds
 or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
 `MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
 adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when

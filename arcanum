@@ -24,7 +24,11 @@ MODES = {"area": ("crash-site-area", "ARC-RENDER-007"), "world": ("world-diagnos
 
 
 def main_checkout() -> Path:
-    common = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"], text=True).strip()
+    try:
+        common = subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "--path-format=absolute", "--git-common-dir"],
+                                         text=True, stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError) as error:
+        raise ValueError("run ./arcanum from a git checkout of the project") from error
     return Path(common).parent
 
 
@@ -48,16 +52,30 @@ def setup(args: argparse.Namespace) -> int:
 def run(args: argparse.Namespace) -> int:
     mode, task = MODES[args.mode]
     roots = config.load_config().get("artifactRoots", {})
-    if not isinstance(roots, dict) or ROOT_ID not in roots:
+    if not isinstance(roots, dict) or not isinstance(roots.get(ROOT_ID), str):
         print("Run ./arcanum setup first.", file=sys.stderr)
         return 2
     # The task's own current pointer names the build; never timestamps or directory order.
     manifest_path, _, _ = manifests.resolve_current(Path(roots[ROOT_ID]), "terrain", root_id=ROOT_ID, selected_task=task)
     candidate = f"{ROOT_ID}:{task}:{manifest_path.parent.name}"
+    # A real run leaves the terrain launch selection on this build (as `tools/arcanum-local configure
+    # select-launch` would); a dry run restores the previous selection afterwards.
+    selection = config.load_config().get("launchSelection", {})
+    previous = selection.get("terrain") if isinstance(selection, dict) else None
     code = local("configure", "select-launch", "--tool", "terrain", "--candidate", candidate)
     if code != 0:
         return code
-    return local("launch", "terrain", "--mode", mode, *(["--dry-run"] if args.dry_run else []))
+    try:
+        return local("launch", "terrain", "--mode", mode, *(["--dry-run"] if args.dry_run else []))
+    finally:
+        if args.dry_run and previous != candidate:
+            conf = config.load_config()
+            restored = conf.setdefault("launchSelection", {})
+            if previous is None:
+                restored.pop("terrain", None)
+            else:
+                restored["terrain"] = previous
+            config.save_config(conf)
 
 
 def status(_: argparse.Namespace) -> int:
