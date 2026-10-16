@@ -10,7 +10,8 @@ namespace Arcanum.TerrainViewer;
 // ARC-WORLD-011: quick save and quick load on the original F7 and F8 (docs/requirements/original-keyboard-mouse.md:
 // both act on key release), one slot, no save list. They act only while an AREA game session exists; elsewhere the
 // keys stay reserved. A key acts on its release when its fresh press and its release both came under the world
-// guards (focused window, no palette or dialog, no UI focus); otherwise it is ignored and the HUD says so. A save
+// guards (focused window, no palette, no UI focus); otherwise it is ignored and the HUD says so (an open dialog takes
+// every key first, so there F7/F8 do nothing). A save
 // records the actor's committed cell and facing in the session, captures the whole session and writes it atomically
 // (GameSessionSaveSlot); the in-flight step, click route and walk-to-use/talk are host state and are not saved. A
 // load reads, decodes and restores a new session before anything here changes; a refused load keeps the running
@@ -23,49 +24,57 @@ public partial class TerrainViewerApp
     private GameSessionSaveSlot? _quickSaveSlot;
     // The native smoke writes to its own temporary slot, never to the player's quick save.
     private GameSessionSaveSlot? _quickSaveSlotForSelfTest;
-    private WorldKey? _quickKeyArmed;
+    private readonly QuickKeyGate _quickKeys = new();
     private string? _quickSaveStatus;
+
+    private enum QuickBusy { None, NoActor, Lifecycle, TransferPending }
 
     private GameSessionSaveSlot QuickSaveSlot => _quickSaveSlotForSelfTest
         ?? (_quickSaveSlot ??= GameSessionSaveSlot.QuickSave(ProjectSettings.GlobalizePath(QuickSaveDirectory)));
 
     private bool QuickKeysActive => _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea;
 
-    /// <summary>Routes F7/F8 while quick save/load is available. Returns true when the key belongs to it, so it is
-    /// not reported as a reserved, unimplemented original key.</summary>
+    /// <summary>Routes F7/F8 while quick save/load is available (<see cref="QuickKeyGate"/>). Returns true when the
+    /// key belongs to it, so it is not reported as a reserved, unimplemented original key. An open dialog takes every
+    /// key before this route, so F7/F8 do nothing while a conversation is open.</summary>
     private bool RouteQuickKey(WorldKeyDecision decision)
     {
-        if (decision.Key is not (WorldKey.F7 or WorldKey.F8) || !QuickKeysActive) return false;
-        if (decision.Echo) return true;
-        var name = decision.Key == WorldKey.F7 ? "F7 quick save" : "F8 quick load";
-        var allowed = _worldFocused && !WorldModal && !WorldUiFocus;
-        if (decision.Pressed)
+        if (!QuickKeysActive) return false;
+        var action = _quickKeys.Route(decision.Key, decision.Pressed, decision.Echo, _worldFocused && !WorldModal && !WorldUiFocus);
+        switch (action)
         {
-            _quickKeyArmed = allowed ? decision.Key : null;
-            if (!allowed) SetQuickStatus(name + " ignored: palette, dialog or UI focus owns input");
-            return true;
+            case QuickKeyAction.NotQuickKey: return false;
+            case QuickKeyAction.Ignored:
+                SetQuickStatus((decision.Key == WorldKey.F7 ? "F7 quick save" : "F8 quick load") + " ignored: palette, dialog or UI focus owns input");
+                break;
+            case QuickKeyAction.Save: QuickSave(); break;
+            case QuickKeyAction.Load: QuickLoad(); break;
         }
-        var armed = _quickKeyArmed == decision.Key;
-        _quickKeyArmed = null;
-        if (!armed) return true;
-        if (!allowed) { SetQuickStatus(name + " ignored: palette, dialog or UI focus owns input"); return true; }
-        if (decision.Key == WorldKey.F7) QuickSave(); else QuickLoad();
         return true;
     }
 
-    private string? QuickBusyReason()
+    private QuickBusy QuickBusyReason()
     {
-        if (_worldActor.Session is not AreaGridSession || _readyArea is null) return "no area actor";
-        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return "reset/reload in progress";
-        if (_areaTransitions?.Pending is not null) return "map transfer pending";
-        return null;
+        if (_worldActor.Session is not AreaGridSession || _readyArea is null) return QuickBusy.NoActor;
+        if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return QuickBusy.Lifecycle;
+        if (_areaTransitions?.Pending is not null) return QuickBusy.TransferPending;
+        return QuickBusy.None;
     }
+
+    private static string Describe(QuickBusy busy) => busy switch
+    {
+        QuickBusy.NoActor => "no area actor",
+        QuickBusy.Lifecycle => "reset/reload in progress",
+        QuickBusy.TransferPending => "map transfer pending",
+        _ => "ready",
+    };
 
     private int CurrentAreaMap => _areaTransitions?.CurrentMap ?? _readyArea!.Snapshot.RuntimeMap;
 
     private void QuickSave()
     {
-        if (QuickBusyReason() is { } busy) { SetQuickStatus("F7 quick save refused: " + busy); return; }
+        var busy = QuickBusyReason();
+        if (busy != QuickBusy.None) { SetQuickStatus("F7 quick save refused: " + Describe(busy)); return; }
         var grid = (AreaGridSession)_worldActor.Session!;
         var cell = grid.Chart.ToWorld(grid.State.CommittedCell);
         var placement = new ActorPlacement(new(CurrentAreaMap), new(checked((int)cell.X), checked((int)cell.Y)), grid.State.Facing);
@@ -78,7 +87,9 @@ public partial class TerrainViewerApp
 
     private void QuickLoad()
     {
-        if (QuickBusyReason() is { } busy && busy != "map transfer pending") { SetQuickStatus("F8 quick load refused: " + busy); return; }
+        // A load supersedes a queued transfer; it waits only for a reset/reload.
+        var busy = QuickBusyReason();
+        if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle) { SetQuickStatus("F8 quick load refused: " + Describe(busy)); return; }
         var maps = AreaRuntimes();
         var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, placement => PlacementRefusal(maps, placement));
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
@@ -110,11 +121,8 @@ public partial class TerrainViewerApp
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
-        var previous = _areaSession;
         var actor = loaded.QueryActor();
-        _areaSession = loaded;
-        if (_areaTransitions is not null) _areaTransitions = new(maps.Values, actor.Map.RuntimeMap, loaded);
-        previous?.Dispose();
+        ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap);
         var runtime = maps[actor.Map.RuntimeMap];
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
@@ -126,6 +134,17 @@ public partial class TerrainViewerApp
             _areaUseStatus = InCave ? "in the cave: click the exit within 2 cells to return" : "cave: click the entrance within 2 cells";
         GD.Print("ARC-WORLD-011 quick-load adopted " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = actor.Map.RuntimeMap, actor.Cell, Facing = actor.Facing.ToString(), Revision = loaded.Version.Revision }));
+    }
+
+    /// <summary>The one place a running area session is replaced by another (today: quick load). Everything that
+    /// uses the session reads <c>_areaSession</c> when it needs it and must not keep the owner, its clock or its flags
+    /// across calls: the previous owner is disposed here. A component that mirrors session state rebinds here.</summary>
+    private void ReplaceAreaSession(GameSessionOwner session, IReadOnlyDictionary<int, AreaMapRuntime> maps, int currentMap)
+    {
+        var previous = _areaSession;
+        _areaSession = session;
+        if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
+        previous?.Dispose();
     }
 
     private void SetQuickStatus(string status)
@@ -203,7 +222,7 @@ public partial class TerrainViewerApp
         finally
         {
             if (WorldModal) ToggleWorldSettings();
-            _quickSaveSlotForSelfTest = null; _quickKeyArmed = null;
+            _quickSaveSlotForSelfTest = null; _quickKeys.Reset();
             ReleaseSimulatedPadForSelfTest(); _worldFocusSimulationForSelfTest = simulatedFocus;
             _worldFocused = focused; _worldTestTime = testTime;
             System.IO.Directory.Delete(directory, recursive: true);

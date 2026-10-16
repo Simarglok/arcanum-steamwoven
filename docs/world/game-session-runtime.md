@@ -131,7 +131,7 @@ dialog state, a schema bump) is saved and loaded by the slot without changing it
 | --- | --- |
 | `new GameSessionSaveSlot(path)` / `QuickSave(directory)` | An absolute file path; `QuickSave` is `<directory>/quicksave.json`. Invalid paths throw (programming error). |
 | `Write(snapshot)` | Encodes, decodes the text back in memory (a save this build cannot load is never written), writes `<path>.tmp`, flushes it to disk, reads it back and compares, then moves it over the slot. Creates the directory. Returns `SaveSlotWriteResult` (`None`, `TooLarge`, `WriteFailed`, `VerifyFailed`); on any failure the temporary file is removed and the previous save is untouched. A stale temporary file from an interrupted save is overwritten. |
-| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory), `TooLarge` (over 8 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
+| `Read()` | `SaveSlotReadResult` with the decoded snapshot or a typed failure: `NoSave` (no file or directory; a directory or unreadable entry at the path is `ReadFailed`), `TooLarge` (over 8 MiB; the codec writes ASCII, so its character limit is the byte limit, also enforced while reading), `ReadFailed`, `NotUtf8` (strict UTF-8), `Corrupt` with the codec's `SnapshotDecodeFailure` and JSON path (truncated, wrong format, unsupported schema, any field error). Never throws on content. |
 
 The slot does not restore: the caller passes the snapshot to `Restore` with its own
 expectations. Durability: file data is flushed before the rename; the directory entry
@@ -146,7 +146,7 @@ and a literal, independently written canonical JSON text:
   untouched neighbour sector, version guards and revision counting, key validation,
   budgets, detached capture, clock forwarding, disposal.
 - `SaveSlotTests`: the file is exactly the codec text and restores the same session;
-  missing file or directory; overwrite; a failure before the replace keeps the previous
+  missing file or directory, a directory at the slot path; overwrite; a failure before the replace keeps the previous
   save and removes the temporary file; an unwritable slot; a stale temporary file;
   truncated, empty, BOM, invalid UTF-8, newer-schema, foreign-format and out-of-range
   files as typed failures; the byte limit; path validation.

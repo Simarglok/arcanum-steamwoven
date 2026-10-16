@@ -72,11 +72,11 @@ public sealed class GameSessionSaveSlot
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         var text = GameSessionSnapshotCodec.Encode(snapshot);
-        // A save that this build cannot load again is never written.
-        var check = GameSessionSnapshotCodec.TryDecode(text);
-        if (check.Snapshot is null) return new(SaveSlotFailure.VerifyFailed, 0, $"ENCODED_TEXT_DOES_NOT_DECODE {check.Failure} {check.Path}");
         var bytes = Strict.GetBytes(text);
         if (bytes.Length > MaxBytes) return new(SaveSlotFailure.TooLarge, bytes.Length, "ENCODED_SNAPSHOT_TOO_LARGE");
+        // A save that this build cannot load again is never written.
+        var check = GameSessionSnapshotCodec.TryDecode(text);
+        if (check.Snapshot is null) return new(SaveSlotFailure.VerifyFailed, bytes.Length, $"ENCODED_TEXT_DOES_NOT_DECODE {check.Failure} {check.Path}");
         var temporary = TemporaryPath;
         try
         {
@@ -107,7 +107,7 @@ public sealed class GameSessionSaveSlot
         byte[] bytes;
         try
         {
-            if (!File.Exists(Path)) return Failed(SaveSlotFailure.NoSave, "NO_SAVE_FILE");
+            // Opened directly: a directory or an unreadable entry at the path is ReadFailed, not NoSave.
             using var stream = new FileStream(Path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > MaxBytes) return Failed(SaveSlotFailure.TooLarge, $"FILE_BYTES {stream.Length}");
             // Bounded even if the file grows while it is read.

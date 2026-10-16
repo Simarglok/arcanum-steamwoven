@@ -50,6 +50,8 @@ public sealed class SaveSlotTests
         var missing = Slot().Read();
         Assert.AreEqual((SaveSlotFailure.NoSave, (GameSessionSnapshot?)null), (missing.Failure, missing.Snapshot));
         Assert.AreEqual(SaveSlotFailure.NoSave, Slot(Path.Combine(_directory, "absent")).Read().Failure);
+        Directory.CreateDirectory(Slot().Path);
+        Assert.AreEqual(SaveSlotFailure.ReadFailed, Slot().Read().Failure, "A directory at the slot path is not an absent save.");
     }
 
     [TestMethod]

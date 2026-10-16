@@ -1,4 +1,5 @@
 using Arcanum.Data.Traversal;
+using Arcanum.Input;
 using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Movement;
@@ -97,5 +98,40 @@ public sealed class AreaQuickSaveTests
         Assert.AreEqual(SaveSlotFailure.Corrupt, damaged.Read!.Failure);
         Assert.AreEqual("quick load FAILED: the save file is damaged (MalformedJson at $)", damaged.Status);
         Assert.AreEqual(0, current.Version.Revision, "No failed load touched the running session.");
+    }
+
+    [TestMethod]
+    public void TheKeyGateActsOnAReleaseWhosePressAndReleaseWereBothAllowed()
+    {
+        var gate = new QuickKeyGate();
+        QuickKeyAction Press(WorldKey key, bool allowed = true, bool echo = false) => gate.Route(key, true, echo, allowed);
+        QuickKeyAction Release(WorldKey key, bool allowed = true) => gate.Route(key, false, false, allowed);
+
+        Assert.AreEqual(QuickKeyAction.NotQuickKey, Press(WorldKey.F9));
+        Assert.AreEqual(QuickKeyAction.NotQuickKey, Release(WorldKey.A));
+
+        Assert.AreEqual(QuickKeyAction.None, Press(WorldKey.F7));
+        Assert.AreEqual(QuickKeyAction.None, Press(WorldKey.F7, echo: true), "Echo does nothing and keeps the key armed.");
+        Assert.AreEqual(QuickKeyAction.Save, Release(WorldKey.F7));
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F7), "One action per press.");
+
+        Assert.AreEqual(QuickKeyAction.None, Press(WorldKey.F8));
+        Assert.AreEqual(QuickKeyAction.Load, Release(WorldKey.F8));
+
+        // Press allowed, release under the palette: ignored, and the next release does nothing.
+        Press(WorldKey.F7);
+        Assert.AreEqual(QuickKeyAction.Ignored, Release(WorldKey.F7, allowed: false));
+        Assert.IsNull(gate.Armed);
+        // Press under the palette, release allowed: the press was ignored and the release does nothing.
+        Assert.AreEqual(QuickKeyAction.Ignored, Press(WorldKey.F8, allowed: false));
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F8));
+        // Interleaved: the later press re-arms for its key; the earlier key's release does nothing.
+        Press(WorldKey.F7); Press(WorldKey.F8);
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F7));
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F8), "The F7 release disarmed the gate.");
+        // A release without a press (focus came back mid-hold) does nothing; Reset forgets an armed key.
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F8));
+        Press(WorldKey.F8); gate.Reset();
+        Assert.AreEqual(QuickKeyAction.None, Release(WorldKey.F8));
     }
 }

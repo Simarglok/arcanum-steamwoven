@@ -1,3 +1,4 @@
+using Arcanum.Input;
 using Arcanum.Session;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -13,7 +14,8 @@ public sealed record AreaQuickLoadResult(GameSessionOwner? Owner, SaveSlotReadRe
 /// ARC-WORLD-011 quick save and quick load (the original F7 and F8, one slot, no save list). A save records the
 /// actor's committed cell and facing in the session (<see cref="GameSessionOwner.PlaceActor"/>), captures the whole
 /// session and writes it atomically to the slot; the in-flight step, a click route and other host state are not
-/// saved. A load reads and decodes the slot, lets the host refuse a placement it cannot stand the actor on, then
+/// saved. The placement stays recorded when the write then fails: it only mirrors where the actor already stands,
+/// and the previous save file is kept. A load reads and decodes the slot, lets the host refuse a placement it cannot stand the actor on, then
 /// restores a new owner. The load continues the saved playthrough: it takes the save's world id, while the module
 /// id and the exact clock profile must equal the running session's, so a save from another module or other source
 /// data is refused before anything changes. The slot and the codec carry every snapshot section, so a domain added
@@ -79,4 +81,46 @@ public static class AreaQuickSave
         GameSessionFailure.BudgetExceeded => "the save exceeds this session's limits (BudgetExceeded)",
         _ => "the save state was not accepted (" + failure + ")",
     };
+}
+
+public enum QuickKeyAction
+{
+    /// <summary>Not F7/F8: the key keeps its other routing.</summary>
+    NotQuickKey,
+    /// <summary>F7/F8 with nothing to do now (echo, a press that armed, a release that was not armed).</summary>
+    None,
+    /// <summary>F7/F8 under the palette, a dialog or UI focus: the HUD says it was ignored.</summary>
+    Ignored,
+    Save,
+    Load,
+}
+
+/// <summary>
+/// ARC-WORLD-011 F7/F8 key gate. The original acts on key release; here a key acts on its release only when its
+/// fresh press and its release both came while world input was allowed (focused window, no palette, dialog or UI
+/// focus). Echo repeats do nothing. A press of the other quick key re-arms the gate for that key. Modifiers are
+/// not checked (the source's handling of modified F7/F8 is not verified). Caller-serialized; no Godot.
+/// </summary>
+public sealed class QuickKeyGate
+{
+    public WorldKey? Armed { get; private set; }
+
+    public QuickKeyAction Route(WorldKey key, bool pressed, bool echo, bool allowed)
+    {
+        if (key is not (WorldKey.F7 or WorldKey.F8)) return QuickKeyAction.NotQuickKey;
+        if (echo) return QuickKeyAction.None;
+        if (pressed)
+        {
+            Armed = allowed ? key : null;
+            return allowed ? QuickKeyAction.None : QuickKeyAction.Ignored;
+        }
+        var armed = Armed == key;
+        Armed = null;
+        if (!armed) return QuickKeyAction.None;
+        if (!allowed) return QuickKeyAction.Ignored;
+        return key == WorldKey.F7 ? QuickKeyAction.Save : QuickKeyAction.Load;
+    }
+
+    /// <summary>Forget an armed key at a lifecycle boundary.</summary>
+    public void Reset() => Armed = null;
 }
