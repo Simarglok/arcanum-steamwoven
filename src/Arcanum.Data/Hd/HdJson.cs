@@ -16,7 +16,7 @@ internal static partial class HdJson
     public static partial Regex IdPattern();
     [GeneratedRegex("^[0-9a-f]{64}$", RegexOptions.CultureInvariant)]
     public static partial Regex DigestPattern();
-    [GeneratedRegex("^-?(0|[1-9][0-9]*)$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(0|-?[1-9][0-9]*)$", RegexOptions.CultureInvariant)]
     private static partial Regex IntegerPattern();
     [GeneratedRegex("^[a-z][A-Za-z0-9]{0,31}$", RegexOptions.CultureInvariant)]
     public static partial Regex ParameterPattern();
@@ -27,11 +27,11 @@ internal static partial class HdJson
     {
         if (element.ValueKind != JsonValueKind.Object) throw Invalid(path, "must be an object");
         var properties = new Dictionary<string, JsonElement>(StringComparer.Ordinal);
-        foreach (var property in element.EnumerateObject())
+        foreach (var (name, value) in Properties(element, path))
         {
-            if (!required.Contains(property.Name, StringComparer.Ordinal) && !optional.Contains(property.Name, StringComparer.Ordinal))
-                throw Invalid(path + "." + property.Name, "unknown property");
-            if (!properties.TryAdd(property.Name, property.Value)) throw Invalid(path + "." + property.Name, "duplicate property");
+            if (!required.Contains(name, StringComparer.Ordinal) && !optional.Contains(name, StringComparer.Ordinal))
+                throw Invalid(path + "." + name, "unknown property");
+            if (!properties.TryAdd(name, value)) throw Invalid(path + "." + name, "duplicate property");
         }
         foreach (var name in required)
             if (!properties.ContainsKey(name)) throw Invalid(path + "." + name, "missing");
@@ -58,7 +58,19 @@ internal static partial class HdJson
     public static string String(JsonElement element, string path)
     {
         if (element.ValueKind != JsonValueKind.String) throw Invalid(path, "must be a string");
-        return element.GetString()!;
+        // Invalid UTF-8 or an escaped lone surrogate make GetString throw.
+        try { return element.GetString()!; }
+        catch (InvalidOperationException) { throw new HdFormatException(HdFormatError.Malformed, path + " is not valid UTF-16 text"); }
+    }
+
+    /// <summary>The properties of an object, in order; a name that is not valid text is
+    /// <see cref="HdFormatError.Malformed"/>.</summary>
+    public static List<(string Name, JsonElement Value)> Properties(JsonElement element, string path)
+    {
+        var list = new List<(string, JsonElement)>();
+        try { foreach (var property in element.EnumerateObject()) list.Add((property.Name, property.Value)); }
+        catch (InvalidOperationException) { throw new HdFormatException(HdFormatError.Malformed, path + " has a property name that is not valid text"); }
+        return list;
     }
 
     public static string Matching(JsonElement element, string path, Regex pattern)
@@ -81,16 +93,13 @@ internal static partial class HdJson
     }
 
     /// <summary>Free text (a prompt) of 1..<paramref name="max"/> characters: any Unicode
-    /// except control characters and unpaired surrogates.</summary>
+    /// (unpaired surrogates are refused by <see cref="String"/>) except control characters
+    /// other than line feed and tab.</summary>
     public static string Text(JsonElement element, string path, int max)
     {
         var value = String(element, path);
-        if (value.Length == 0 || value.Length > max || value.Any(char.IsControl)) throw Invalid(path, $"must be 1..{max} characters without control characters");
-        for (var i = 0; i < value.Length; i++)
-        {
-            if (char.IsHighSurrogate(value[i]) && i + 1 < value.Length && char.IsLowSurrogate(value[i + 1])) { i++; continue; }
-            if (char.IsSurrogate(value[i])) throw Invalid(path, "has an unpaired surrogate");
-        }
+        if (value.Length == 0 || value.Length > max || value.Any(c => char.IsControl(c) && c is not ('\n' or '\t')))
+            throw Invalid(path, $"must be 1..{max} characters without control characters other than line feed and tab");
         return value;
     }
 
@@ -119,7 +128,7 @@ internal static partial class HdJson
 
     public static void Schema(Dictionary<string, JsonElement> root, string kind)
     {
-        if (root["kind"].ValueKind != JsonValueKind.String || root["kind"].GetString() != kind)
+        if (root["kind"].ValueKind != JsonValueKind.String || String(root["kind"], "kind") != kind)
             throw new HdFormatException(HdFormatError.UnsupportedSchema, "kind must be " + kind);
         if (root["schema"].ValueKind != JsonValueKind.Number || root["schema"].GetRawText() != "1")
             throw new HdFormatException(HdFormatError.UnsupportedSchema, "schema must be 1");

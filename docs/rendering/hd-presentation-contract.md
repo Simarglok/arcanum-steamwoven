@@ -145,10 +145,11 @@ screen envelope, not on the texture.
   upscaled with the colour instead of copied from the nearest Legacy mask, so the
   silhouette loses its steps. It must pass the [soft mask check](../formats/hd-pack.md#binding-a-frame-on-this-device):
   alpha only within one Legacy texel of the Legacy silhouette, and mask IoU at least the
-  recipe's minimum (≥ 0.9). With it, only pixels inside the unchanged destination may
-  change coverage, and consequence 4 holds for colour but not for coverage. The Legacy
-  hard edge (every HD texel takes its parent's alpha) remains a recipe option; with it the
-  per-pixel coverage of HD equals Legacy (consequences 2 and 4). No game rule reads
+  recipe's minimum (≥ 0.9). Consequences 1 to 3 still hold (they concern the destination
+  and the selected texel); per-pixel alpha coverage may differ from Legacy, inside the
+  unchanged destination and within one Legacy texel of the edge. The Legacy hard edge
+  (every HD texel takes its parent's alpha) remains a recipe option; with it the per-pixel
+  coverage of HD equals Legacy, and the consequence-4 identity oracle applies to it. No game rule reads
   sprite alpha; any future sprite-pixel hit test reads the Legacy frame.
 
 ## WORLD path

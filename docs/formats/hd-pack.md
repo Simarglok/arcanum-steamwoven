@@ -39,7 +39,10 @@ joined by `/`, 1..8 segments, each at most 64 and the whole at most 200 characte
 `.`/`..`, no leading or trailing dot, no backslash, drive or absolute form, no Windows
 device name (`con`, `prn`, `aux`, `nul`, `com0-9`, `lpt0-9`); entries end in `.png`,
 the recipe in `.json`. A file or any directory below the pack root that is a symbolic
-link or reparse point is refused when read, so a pack cannot reach outside itself.
+link (or a Windows junction), dangling or not, is refused when read, so a pack cannot
+reach outside itself; other reparse points such as cloud-sync placeholders are ordinary
+files. JSON files are UTF-8 without a byte-order mark; text that is not valid UTF-8 or
+holds an unpaired surrogate makes the file malformed.
 
 Where packs live (discovery, `HdPack.Discover`): a **collection** is a folder whose
 subdirectories are packs (the game's own pack folder, e.g. `user://hd-packs/`, or
@@ -83,7 +86,7 @@ later incompatible format raises it.
 | `review` | `unreviewed` / `approved` / `rejected` (pack); per entry the same (ARC-RENDER-015 writes them) |
 | `recipe` | relative path and SHA-256 of the recipe file, which must parse |
 | `build` | printable ASCII labels, 1..128 characters, no `/` or `\` (so no local path can hide in them); `createdUtc` exactly `yyyy-MM-ddTHH:mm:ssZ`; `gpu` is recorded because outputs depend on it (ARC-RES-033) |
-| `entries` | 0..400,000 (option); each `file` used once; each sprite key once |
+| `entries` | 0..400,000 (option); each `file` used once; each sprite key once; each terrain chunk (slice, x, y) once |
 
 **Identity.** `HdPackIdentity` = (`id`, `scale`, SHA-256 of the `manifest.json` bytes).
 The manifest pins every file by hash, so the identity covers the whole pack. A rebuild,
@@ -136,20 +139,20 @@ ARC-RENDER-016 amendment.
 
 One PNG per entry in exactly one profile (`HdPng`): 8-bit RGBA (colour type 6), deflate,
 filter method 0 with any of the five row filters, no interlace, IDAT chunks consecutive,
-IEND last with nothing after it, every CRC correct. Ancillary chunks are skipped; any
-other critical chunk, PLTE included, is unsupported. The decoder refuses an image above
+IEND last with nothing after it, every CRC correct, the zlib header and Adler-32 correct.
+Ancillary chunks are skipped; any other critical chunk, PLTE included, is unsupported. The decoder refuses an image above
 the pixel limit before inflating it and requires the inflated data to be exactly
 `h·(1 + 4w)` bytes. `HdPng.EncodeRgba` writes this profile deterministically.
 
-PNG and not raw RGBA, because the whole game at 2× is ~21 GB raw for one palette per ART
-(ARC-RES-033), 16× the source at 4×; packs can be partial and per slice, so early packs
+PNG and not raw RGBA, because the whole game is ~21 GB raw at 2× and ~84 GB at 4× for one
+palette per ART (ARC-RES-033 census); packs can be partial and per slice, so early packs
 hold only the frame keys a map uses.
 
 ## Binding a frame on this device
 
 `HdPack.ResolveSprite(query, legacyRgba)` takes the portable key, the ART name hash and
 this installation's decoded Legacy frame (its pixels must hash to the query; a
-contradiction is a caller error and throws). It returns `Hd` with exactly
+contradiction or a null field is a caller error and throws). It returns `Hd` with exactly
 `N·w × N·h × 4` bytes or a per-frame refusal; it never throws for pack content and one
 refusal changes no other frame. In order:
 
@@ -188,9 +191,15 @@ against the installation, not for reproducing someone else's pixels.
 2. Only `manifest.json`, the recipe and the entry files are copied (other files in the
    source are ignored), each re-hashed while copying, into a hidden
    `<collection>/.import-<guid>/`, which is opened again and must have the same identity.
-3. The staging directory is renamed to `<collection>/<id>`. An existing pack of that id
-   is kept (`AlreadyExists`) unless `replace` is set; then it is moved aside, replaced and
-   deleted, and restored if the rename fails. A pack cannot replace itself.
+3. The staging directory is renamed to `<collection>/<id>`. An installed pack with the
+   same identity is never replaced (`AlreadyExists`; this also stops a pack reached
+   through a link from replacing itself). Another pack of that id is kept
+   (`AlreadyExists`) unless `replace` is set; then it is moved aside to a hidden
+   `.replaced-<guid>`, replaced and deleted, and moved back if the rename fails. If even
+   that fails, the result names the hidden directory that still holds it; such a
+   directory is never removed automatically. A copy that is in place but does not open
+   there is `InstalledButUnreadable`. Staging directories older than a day, left by an
+   interrupted import, are removed at the next import.
 
 The source is never modified. The installation is not consulted at import: frames are
 checked against it when bound, so a pack imported onto a device with a modded or other
@@ -227,7 +236,7 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
 | Kind | Required | Optional |
 | --- | --- | --- |
 | `network` | `tool`, `toolVersion`, `toolSha256`, `model`, `licence`, `modelFiles` (1..8 `{name, sha256}`), `nativeScale`, `downscale`, `tileSize` (1..4096, explicit), `tta` (must be `false`) | `parameters` |
-| `generative` | `tool`, `toolVersion`, `model`, `licence`, `modelFiles` (base model, control models), `nativeScale`, `downscale` | `toolSha256`, `tileSize`, `adapters` (1..16 `{name, sha256, weight}`: LoRA and similar), `seed` (0..2⁶³−1), `prompt`, `negativePrompt` (1..4,000 characters, any language, no control characters), `parameters` |
+| `generative` | `tool`, `toolVersion`, `model`, `licence`, `modelFiles` (base model, control models), `nativeScale`, `downscale` | `toolSha256`, `tileSize`, `adapters` (1..16 `{name, sha256, weight}`: LoRA and similar), `seed` (0..2⁶³−1), `prompt`, `negativePrompt` (1..4,000 characters, any language, line feeds and tabs allowed, no other control characters), `parameters` |
 | `algorithm` | `tool`, `toolVersion`, `toolSha256`, `nativeScale`, `downscale` | `licence`, `parameters` |
 | `external` | `tool`, `toolVersion`, `nativeScale`, `downscale` | `toolSha256`, `licence`, `parameters` |
 
@@ -236,7 +245,8 @@ ARC-RES-033 measured or the format must hold, **not** defaults or recommendation
   pack; never a runtime filter).
 - Network tiles are explicit because automatic tiling depends on GPU memory and changes
   the output; the build refuses an input side larger than the tile (one tile per input),
-  and TTA is off (ARC-RES-033).
+  and TTA is off (ARC-RES-033). With a terrain section the tile must hold a padded chunk
+  (`chunkSize + 2·padding`, at least 576).
 - `parameters` are up to 32 `name: "value"` labels (`[a-z][A-Za-z0-9]{0,31}`, values
   printable ASCII without `/` or `\`) for anything else a method needs (sampler, steps,
   denoise, control strength, magnify method).

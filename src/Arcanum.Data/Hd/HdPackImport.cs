@@ -2,7 +2,9 @@ using System.Security.Cryptography;
 
 namespace Arcanum.Data.Hd;
 
-public enum HdImportStatus { Imported, SourceInvalid, IntegrityFailed, AlreadyExists, CopyFailed, Cancelled }
+/// <summary><see cref="InstalledButUnreadable"/>: the copy was renamed into place (and a
+/// replaced pack deleted) but opening it there failed; the detail says why.</summary>
+public enum HdImportStatus { Imported, SourceInvalid, IntegrityFailed, AlreadyExists, CopyFailed, Cancelled, InstalledButUnreadable }
 /// <param name="Pack">The pack as opened from its new place (same identity as the source).</param>
 public sealed record HdImportResult(HdImportStatus Status, HdPack? Pack, HdIntegrityReport? Report, string? Detail = null);
 
@@ -32,9 +34,17 @@ public static class HdPackImport
         var target = Path.Combine(root, source.Id);
         if (PathsEqual(Path.TrimEndingDirectorySeparator(source.Directory), target))
             return new(HdImportStatus.AlreadyExists, null, report, "source is the target");
-        if (Directory.Exists(target) && !replace) return new(HdImportStatus.AlreadyExists, null, report, source.Id);
+        if (Directory.Exists(target))
+        {
+            // The same pack (possibly the source itself reached through a link) is never
+            // replaced by a copy of itself.
+            var installed = HdPack.Open(target, options);
+            if (installed.Pack?.Identity == source.Identity) return new(HdImportStatus.AlreadyExists, null, report, "identical pack installed");
+            if (!replace) return new(HdImportStatus.AlreadyExists, null, report, source.Id);
+        }
 
-        var staging = Path.Combine(root, ".import-" + Guid.NewGuid().ToString("N"));
+        SweepStaging(root);
+        var staging = Path.Combine(root, StagingPrefix + Guid.NewGuid().ToString("N"));
         try
         {
             Directory.CreateDirectory(staging);
@@ -52,35 +62,62 @@ public static class HdPackImport
             var copied = HdPack.Open(staging, options);
             if (copied.Status != HdPackOpenStatus.Opened || copied.Pack!.Identity != source.Identity)
             { Delete(staging); return new(HdImportStatus.CopyFailed, null, report, HdPack.ManifestFile); }
-
-            string? previous = null;
-            if (Directory.Exists(target))
-            {
-                previous = Path.Combine(root, ".replaced-" + Guid.NewGuid().ToString("N"));
-                Directory.Move(target, previous);
-            }
-            try { Directory.Move(staging, target); }
-            catch (Exception error) when (previous is not null && error is IOException or UnauthorizedAccessException)
-            {
-                Directory.Move(previous, target); // put the replaced pack back
-                throw;
-            }
-            if (previous is not null) Delete(previous);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             Delete(staging);
             return new(HdImportStatus.CopyFailed, null, report, error.GetType().Name);
         }
+
+        string? previous = null;
+        try
+        {
+            if (Directory.Exists(target))
+            {
+                previous = Path.Combine(root, ReplacedPrefix + Guid.NewGuid().ToString("N"));
+                Directory.Move(target, previous);
+            }
+            Directory.Move(staging, target);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
+        {
+            Delete(staging);
+            if (previous is null) return new(HdImportStatus.CopyFailed, null, report, error.GetType().Name);
+            try { Directory.Move(previous, target); } // put the replaced pack back
+            catch (Exception restore) when (restore is IOException or UnauthorizedAccessException)
+            {
+                return new(HdImportStatus.CopyFailed, null, report,
+                    $"{error.GetType().Name}; the replaced pack could not be restored and is kept as {Path.GetFileName(previous)} in the collection");
+            }
+            return new(HdImportStatus.CopyFailed, null, report, error.GetType().Name);
+        }
+        if (previous is not null) Delete(previous);
         var final = HdPack.Open(target, options);
         return final.Status == HdPackOpenStatus.Opened
             ? new(HdImportStatus.Imported, final.Pack, report)
-            : new(HdImportStatus.CopyFailed, null, report, final.Status.ToString());
+            : new(HdImportStatus.InstalledButUnreadable, null, report, $"{final.Status}: {final.Detail}");
+    }
+
+    private const string StagingPrefix = ".import-";
+    private const string ReplacedPrefix = ".replaced-";
+
+    /// <summary>Removes staging directories an interrupted import left behind more than a
+    /// day ago. A <c>.replaced-*</c> directory may hold the only copy of a pack after a
+    /// failed restore and is never removed automatically.</summary>
+    private static void SweepStaging(string root)
+    {
+        if (!Directory.Exists(root)) return;
+        try
+        {
+            foreach (var stale in Directory.GetDirectories(root, StagingPrefix + "*"))
+                if (Directory.GetLastWriteTimeUtc(stale) < DateTime.UtcNow.AddDays(-1)) Delete(stale);
+        }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { }
     }
 
     private static bool Copy(string sourceRoot, string targetRoot, string relative, string sha256, long expectedBytes)
     {
-        if (HdPackPath.HasReparsePoint(sourceRoot, relative)) return false;
+        if (HdPackPath.HasLink(sourceRoot, relative)) return false;
         var to = HdPackPath.Full(targetRoot, relative);
         Directory.CreateDirectory(Path.GetDirectoryName(to)!);
         using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);

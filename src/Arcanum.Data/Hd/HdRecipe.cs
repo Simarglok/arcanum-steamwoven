@@ -169,6 +169,8 @@ public static class HdRecipeReader
         }
         var wantsTerrain = slices.Any(s => s.Kinds.Contains(HdSliceKind.TerrainChunk));
         if (wantsTerrain != terrain is not null) throw HdJson.Invalid("recipe.terrain", "must be present exactly when a slice selects terrainChunk");
+        if (terrain is not null && method.TileSize is { } tileSize && tileSize < terrain.ChunkSize + 2 * terrain.Padding)
+            throw HdJson.Invalid("recipe.method.tileSize", "must hold a padded terrain chunk as one tile");
         return new(id, scale, slices, method, colour, alpha, terrain);
     }
 
@@ -219,11 +221,11 @@ public static class HdRecipeReader
         if (m.TryGetValue("parameters", out var p))
         {
             if (p.ValueKind != JsonValueKind.Object) throw HdJson.Invalid(path + ".parameters", "must be an object");
-            foreach (var property in p.EnumerateObject())
+            foreach (var (name, value) in HdJson.Properties(p, path + ".parameters"))
             {
-                var at = path + ".parameters." + property.Name;
-                if (!HdJson.ParameterPattern().IsMatch(property.Name)) throw HdJson.Invalid(at, "has an invalid name");
-                if (!parameters.TryAdd(property.Name, HdJson.Label(property.Value, at))) throw HdJson.Invalid(at, "duplicate property");
+                var at = path + ".parameters." + name;
+                if (!HdJson.ParameterPattern().IsMatch(name)) throw HdJson.Invalid(at, "has an invalid name");
+                if (!parameters.TryAdd(name, HdJson.Label(value, at))) throw HdJson.Invalid(at, "duplicate property");
                 if (parameters.Count > MaxParameters) throw HdJson.Invalid(path + ".parameters", $"must have at most {MaxParameters} entries");
             }
         }

@@ -59,7 +59,12 @@ public sealed class HdRecipeTests
         HdRecipeStatus With(string extra) => Parse(head + extra + "}}").Status;
         Assert.AreEqual(HdRecipeStatus.Parsed, With(""), "seed, prompt and adapters are optional");
         Assert.AreEqual(HdRecipeStatus.Parsed, With(""","prompt":"Стиль Arcanum, рисованный спрайт 🎨","seed":0"""), "any language in a prompt");
-        Assert.AreEqual(HdRecipeStatus.InvalidField, With(",\"prompt\":\"line\\nbreak\""), "control character");
+        Assert.AreEqual(HdRecipeStatus.Parsed, With(",\"prompt\":\"line\\nbreak\\tand tab\""), "multi-line prompt");
+        Assert.AreEqual(HdRecipeStatus.InvalidField, With(",\"prompt\":\"bell\\u0007\""), "control character");
+        Assert.AreEqual(HdRecipeStatus.Malformed, With(",\"prompt\":\"lone \\ud800 surrogate\""), "escaped lone surrogate");
+        Assert.AreEqual(HdRecipeStatus.Malformed, HdRecipeReader.Parse([.. Encoding.UTF8.GetBytes(head + ",\"prompt\":\"bad "), 0xFF, .. Encoding.UTF8.GetBytes("\"}}")]).Status,
+            "invalid UTF-8");
+        Assert.AreEqual(HdRecipeStatus.Malformed, With(",\"parameters\":{\"\\udc00\":\"1\"}"), "lone surrogate in a parameter name");
         Assert.AreEqual(HdRecipeStatus.InvalidField, With(",\"prompt\":\"\""), "empty prompt");
         Assert.AreEqual(HdRecipeStatus.InvalidField, With(",\"prompt\":\"" + new string('a', 4001) + "\""), "prompt too long");
         Assert.AreEqual(HdRecipeStatus.InvalidField, With(""","seed":-1"""), "negative seed");
@@ -127,6 +132,7 @@ public sealed class HdRecipeTests
             ("\"id\":\"synthetic-av3\"", "\"id\":\"synthetic-av3\",\"extra\":1", "unknown property"),
             ("\"id\":\"synthetic-av3\"", "\"id\":\"synthetic-av3\",\"id\":\"other\"", "duplicate property"),
             ("\"tileSize\":512", "\"tileSize\":512.0", "non-integer"),
+            ("\"tileSize\":512", "\"tileSize\":-0", "negative zero"),
             ("\"scale\":2", "\"scale\":3", "scale not accepted"),
         })
         {
@@ -147,12 +153,14 @@ public sealed class HdRecipeTests
         Assert.AreEqual(HdRecipeStatus.Parsed, soft.Status, soft.Detail);
         Assert.AreEqual(new HdAlphaPolicy(HdAlphaMode.Soft, 950), soft.Recipe!.Alpha);
 
-        var withTerrain = SyntheticHdPack.Recipe.Replace("\"kinds\":[\"critter\",\"scenery\"]", "\"kinds\":[\"terrainChunk\"]")
+        var withTerrain = SyntheticHdPack.Recipe.Replace("\"kinds\":[\"critter\",\"scenery\"]", "\"kinds\":[\"terrainChunk\"]").Replace("\"tileSize\":512", "\"tileSize\":600")
             .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\"},\"terrain\":{\"chunkSize\":512,\"padding\":32}");
         var terrain = Parse(withTerrain);
         Assert.AreEqual(HdRecipeStatus.Parsed, terrain.Status, terrain.Detail);
         Assert.AreEqual(new HdTerrainRecipe(512, 32), terrain.Recipe!.Terrain);
         Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(withTerrain.Replace("\"padding\":32", "\"padding\":16")).Status, "padding below 32");
+        Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(withTerrain.Replace("\"tileSize\":600", "\"tileSize\":575")).Status, "tile smaller than a padded chunk");
+        Assert.AreEqual(HdRecipeStatus.Parsed, Parse(withTerrain.Replace("\"tileSize\":600", "\"tileSize\":576")).Status);
         Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(withTerrain.Replace("\"chunkSize\":512", "\"chunkSize\":256")).Status, "chunk not 512");
         Assert.AreEqual(HdRecipeStatus.InvalidField, Parse(withTerrain.Replace("\"kinds\":[\"terrainChunk\"]", "\"kinds\":[\"critter\"]")).Status,
             "terrain section without a terrain slice");

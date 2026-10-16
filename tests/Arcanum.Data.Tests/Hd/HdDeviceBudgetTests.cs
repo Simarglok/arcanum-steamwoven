@@ -26,7 +26,8 @@ public sealed class HdDeviceBudgetTests
         Assert.AreEqual(ceiling, HdDeviceBudgetCodec.DeserializeOrCeiling("", 4));
         Assert.AreEqual(ceiling, HdDeviceBudgetCodec.DeserializeOrCeiling("{\"schema\":1}", 4));
         foreach (var bad in new[] { "{", "[]", "{\"schema\":2}", "{\"schema\":1,\"worldBytes\":-1}", "{\"schema\":1,\"worldBytes\":1.5}",
-                     "{\"schema\":1,\"unknown\":1}", "{\"schema\":1,\"worldBytes\":1,\"worldBytes\":2}", "{\"worldBytes\":1}" })
+                     "{\"schema\":1,\"unknown\":1}", "{\"schema\":1,\"worldBytes\":1,\"worldBytes\":2}", "{\"worldBytes\":1}",
+                     "{\"schema\":1,\"\\ud800\":1}", "{\"schema\":1,\"" + '\ud800' + "\":1}", "{\"schema\":-0}" })
             Assert.AreEqual(ceiling, HdDeviceBudgetCodec.DeserializeOrCeiling(bad, 4), bad);
 
         // A 16 GB shared-memory handheld keeping 48 terrain chunks and no WORLD HD.

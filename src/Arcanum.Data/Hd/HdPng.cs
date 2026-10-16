@@ -15,7 +15,9 @@ public sealed record HdPngHeaderResult(HdPngStatus Status, HdPngHeader? Header, 
 /// filter method 0, no interlace, IDAT chunks consecutive, IEND last with nothing after it.
 /// Every CRC is checked; ancillary chunks are skipped; any other critical chunk (PLTE
 /// included) is refused. This is a strict reader for pack files written by
-/// <see cref="EncodeRgba"/> or an ordinary RGBA encoder, not a general PNG decoder.</summary>
+/// <see cref="EncodeRgba"/> or an ordinary RGBA encoder, not a general PNG decoder. The
+/// zlib header and Adler-32 are checked. The output buffer (h·(1 + 4w)
+/// bytes) is allocated once the header passes the caller's pixel limit.</summary>
 public static class HdPng
 {
     private static readonly byte[] Signature = [0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
@@ -78,21 +80,27 @@ public static class HdPng
         }
         if (idatState == 0) return new(HdPngStatus.Malformed, null, "no IDAT");
 
+        // zlib (RFC 1950) checked by hand: the header, one deflate stream giving exactly the
+        // image data, and the trailing Adler-32 of that data.
+        var z = compressed.GetBuffer().AsSpan(0, (int)compressed.Length);
+        if (z.Length < 6 || (z[0] & 0x0F) != 8 || z[0] >> 4 > 7 || (z[0] << 8 | z[1]) % 31 != 0 || (z[1] & 0x20) != 0)
+            return new(HdPngStatus.Malformed, null, "zlib header");
         var raw = new byte[(int)filtered];
         try
         {
-            compressed.Position = 0;
-            using var zlib = new ZLibStream(compressed, CompressionMode.Decompress);
+            using var body = new MemoryStream(compressed.GetBuffer(), 2, z.Length - 6, writable: false);
+            using var deflate = new DeflateStream(body, CompressionMode.Decompress);
             var read = 0;
             while (read < raw.Length)
             {
-                var n = zlib.Read(raw, read, raw.Length - read);
+                var n = deflate.Read(raw, read, raw.Length - read);
                 if (n == 0) return new(HdPngStatus.Malformed, null, "image data too short");
                 read += n;
             }
-            if (zlib.ReadByte() != -1) return new(HdPngStatus.Malformed, null, "image data too long");
+            if (deflate.ReadByte() != -1) return new(HdPngStatus.Malformed, null, "image data too long");
         }
         catch (InvalidDataException) { return new(HdPngStatus.Malformed, null, "deflate stream"); }
+        if (BinaryPrimitives.ReadUInt32BigEndian(z[^4..]) != Adler32(raw)) return new(HdPngStatus.Malformed, null, "zlib checksum");
 
         var rgba = new byte[(int)(stride * height)];
         var s = (int)stride;
@@ -166,6 +174,19 @@ public static class HdPng
         type = string.Create(4, name.ToArray(), static (span, bytes) => { for (var i = 0; i < 4; i++) span[i] = (char)bytes[i]; });
         next = at + 12 + (int)length;
         return null;
+    }
+
+    private static uint Adler32(ReadOnlySpan<byte> data)
+    {
+        uint a = 1, b = 0;
+        while (data.Length > 0)
+        {
+            var block = data[..Math.Min(data.Length, 5552)];
+            foreach (var x in block) { a += x; b += a; }
+            a %= 65521; b %= 65521;
+            data = data[block.Length..];
+        }
+        return b << 16 | a;
     }
 
     private static int Paeth(int a, int b, int c)

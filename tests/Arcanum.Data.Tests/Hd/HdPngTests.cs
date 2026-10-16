@@ -61,6 +61,9 @@ public sealed class HdPngTests
         Assert.AreEqual(HdPngStatus.Malformed, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), splitIdat: true, ancillaryBetweenIdat: true), 100).Status,
             "IDAT not consecutive");
         Assert.AreEqual(HdPngStatus.Malformed, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), idat: false), 100).Status, "no IDAT");
+        Assert.AreEqual(HdPngStatus.Malformed, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), zlib: z => z[..^4]), 100).Status, "Adler-32 cut off");
+        Assert.AreEqual(HdPngStatus.Malformed, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), zlib: z => { z[^1] ^= 1; return z; }), 100).Status, "Adler-32 wrong");
+        Assert.AreEqual(HdPngStatus.Malformed, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), zlib: z => { z[1] ^= 1; return z; }), 100).Status, "zlib header check");
 
         Assert.AreEqual(HdPngStatus.Unsupported, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), interlace: 1), 100).Status);
         Assert.AreEqual(HdPngStatus.Unsupported, HdPng.Decode(Build(4, 3, Filtered(rgba, 4, 3, 0), colourType: 2), 100).Status);
@@ -89,11 +92,11 @@ public sealed class HdPngTests
     }
 
     private static byte[] Build(int w, int h, byte[] filtered, bool splitIdat = false, bool ancillary = false, bool ancillaryBetweenIdat = false,
-        bool idat = true, int interlace = 0, int colourType = 6, bool plte = false)
+        bool idat = true, int interlace = 0, int colourType = 6, bool plte = false, Func<byte[], byte[]>? zlib = null)
     {
         using var deflated = new MemoryStream();
         using (var z = new ZLibStream(deflated, CompressionLevel.Fastest, leaveOpen: true)) z.Write(filtered);
-        var data = deflated.ToArray();
+        var data = (zlib ?? (b => b))(deflated.ToArray());
         using var output = new MemoryStream();
         output.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
         var ihdr = new byte[13];

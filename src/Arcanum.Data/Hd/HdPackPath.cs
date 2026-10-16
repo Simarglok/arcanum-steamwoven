@@ -34,14 +34,17 @@ internal static partial class HdPackPath
     public static string Full(string root, string relative) => Path.Combine([root, .. relative.Split('/')]);
 
     /// <summary>True when the file or any directory between the pack root and it is a
-    /// symbolic link or other reparse point.</summary>
-    public static bool HasReparsePoint(string root, string relative)
+    /// symbolic link (or a Windows junction). Other reparse points, such as cloud-sync
+    /// placeholders, are ordinary files here. Missing path parts are not links.</summary>
+    public static bool HasLink(string root, string relative)
     {
         var current = root;
         foreach (var segment in relative.Split('/'))
         {
             current = Path.Combine(current, segment);
-            if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) return true;
+            FileSystemInfo info = Directory.Exists(current) ? new DirectoryInfo(current) : new FileInfo(current);
+            if (info.LinkTarget is not null) return true;
+            if (!info.Exists) return false;
         }
         return false;
     }

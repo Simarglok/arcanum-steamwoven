@@ -243,15 +243,17 @@ public sealed class HdPack
     }
 
     /// <summary>Reads a pack file by its validated relative path. Refuses (as unreadable) a
-    /// file or any directory below the pack root that is a symbolic link or other reparse
-    /// point, so a pack cannot reach outside itself.</summary>
+    /// file or any directory below the pack root that is a symbolic link or junction, so a
+    /// pack cannot reach outside itself.</summary>
     internal static byte[]? ReadFile(string root, string relative, long maxBytes, out HdPackOpenStatus status)
     {
         var path = HdPackPath.Full(root, relative);
         try
         {
+            // The link check comes first: File.Exists follows links, so a dangling link is
+            // a link (unreadable), not a missing file.
+            if (HdPackPath.HasLink(root, relative)) { status = HdPackOpenStatus.Unreadable; return null; }
             if (!File.Exists(path)) { status = HdPackOpenStatus.NotFound; return null; }
-            if (HdPackPath.HasReparsePoint(root, relative)) { status = HdPackOpenStatus.Unreadable; return null; }
             using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
             if (stream.Length > maxBytes) { status = HdPackOpenStatus.TooLarge; return null; }
             var bytes = new byte[stream.Length];
@@ -306,6 +308,7 @@ public sealed class HdPack
         var slices = recipe.Recipe.Slices.ToDictionary(s => s.Name, StringComparer.Ordinal);
         var files = new HashSet<string>(StringComparer.Ordinal) { ManifestFile, recipeFile };
         var keys = new HashSet<HdSpriteKey>();
+        var chunks = new HashSet<(string, int, int)>();
         var entries = new List<HdPackEntry>(root["entries"].GetArrayLength());
         var index = 0;
         foreach (var item in root["entries"].EnumerateArray())
@@ -313,6 +316,8 @@ public sealed class HdPack
             var entry = ParseEntry(item, index, recipe.Recipe, slices);
             if (!files.Add(entry.File)) throw new HdFormatException(HdFormatError.DuplicateFile, $"pack.entries[{index}].file");
             if (entry.Key is { } key && !keys.Add(key)) throw new HdFormatException(HdFormatError.DuplicateKey, $"pack.entries[{index}]");
+            if (entry.Kind == HdEntryKind.TerrainChunk && !chunks.Add((entry.Slice, entry.ChunkX!.Value, entry.ChunkY!.Value)))
+                throw new HdFormatException(HdFormatError.DuplicateKey, $"pack.entries[{index}] repeats a chunk of its slice");
             entries.Add(entry);
             index++;
         }

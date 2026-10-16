@@ -262,6 +262,19 @@ public sealed class HdPackTests
         Directory.Move(Path.Combine(linkedDir.Directory, "frames"), Path.Combine(outside, "frames"));
         Directory.CreateSymbolicLink(Path.Combine(linkedDir.Directory, "frames"), Path.Combine(outside, "frames"));
         Assert.AreEqual(HdInvalidReason.FileUnreadable, Opened(linkedDir.Write()).ResolveSprite(frame.Query, frame.Rgba).Invalid);
+
+        var dangling = NewPack("dangling");
+        dangling.Add(frame, file: "frames/0000.png");
+        File.Delete(Path.Combine(dangling.Directory, "frames", "0000.png"));
+        File.CreateSymbolicLink(Path.Combine(dangling.Directory, "frames", "0000.png"), Path.Combine(outside, "absent.png"));
+        Assert.AreEqual(HdInvalidReason.FileUnreadable, Opened(dangling.Write()).ResolveSprite(frame.Query, frame.Rgba).Invalid, "a dangling link is a link");
+
+        var linkedManifest = NewPack("linked-manifest");
+        linkedManifest.Add(frame);
+        linkedManifest.Write();
+        File.Move(Path.Combine(linkedManifest.Directory, "manifest.json"), Path.Combine(outside, "manifest.json"));
+        File.CreateSymbolicLink(Path.Combine(linkedManifest.Directory, "manifest.json"), Path.Combine(outside, "manifest.json"));
+        Assert.AreEqual(HdPackOpenStatus.Unreadable, HdPack.Open(linkedManifest.Directory).Status);
     }
 
     [TestMethod]
@@ -301,10 +314,37 @@ public sealed class HdPackTests
         Assert.AreEqual(HdPackOpenStatus.RecipeMissing, Status(p => p.Manifest["recipe"]!["file"] = "missing.json"));
         Assert.AreEqual(HdPackOpenStatus.RecipeInvalid, Status(p => p.RecipeText = p.RecipeText.Replace("\"tta\":false", "\"tta\":true")));
         Assert.AreEqual(HdPackOpenStatus.Opened, Status(p => p.Manifest["entries"] = new JsonArray()), "an empty pack is valid");
+        Assert.AreEqual(HdPackOpenStatus.InvalidField, Status(p => p.Entries[0]!["group"] = JsonNode.Parse("-0")), "negative zero");
+        foreach (var (name, bytes) in BadText())
+        {
+            var pack = NewPack("text-" + name);
+            pack.Add(frame);
+            pack.Write();
+            File.WriteAllBytes(Path.Combine(pack.Directory, "manifest.json"), bytes(File.ReadAllBytes(Path.Combine(pack.Directory, "manifest.json"))));
+            var opened = HdPack.Open(pack.Directory);
+            Assert.AreEqual(HdPackOpenStatus.Malformed, opened.Status, name + ": " + opened.Detail);
+        }
         var broken = NewPack("broken");
         broken.Write();
         File.WriteAllText(Path.Combine(broken.Directory, "manifest.json"), "{\"schema\":1,");
         Assert.AreEqual(HdPackOpenStatus.Malformed, HdPack.Open(broken.Directory).Status);
+    }
+
+    /// <summary>Manifest text that is not valid UTF-8 or holds an unpaired surrogate.</summary>
+    internal static IEnumerable<(string Name, Func<byte[], byte[]> Change)> BadText()
+    {
+        static byte[] Replace(byte[] bytes, string from, byte[] to)
+        {
+            var text = Encoding.UTF8.GetBytes(from);
+            var at = bytes.AsSpan().IndexOf(text);
+            Assert.IsTrue(at >= 0);
+            return [.. bytes.AsSpan(0, at), .. to, .. bytes.AsSpan(at + text.Length)];
+        }
+        yield return ("utf8-value", b => Replace(b, "\"gpu\":\"none\"", [.. "\"gpu\":\"n"u8, 0xFF, .. "ne\""u8]));
+        yield return ("utf8-name", b => Replace(b, "\"gpu\":", [.. "\"g"u8, 0xFF, .. "u\":"u8]));
+        yield return ("surrogate-value", b => Replace(b, "\"gpu\":\"none\"", "\"gpu\":\"n\\ud800\""u8.ToArray()));
+        yield return ("surrogate-kind", b => Replace(b, "\"kind\":\"arcanum-steamwoven-hd-pack\"", "\"kind\":\"\\udfff\""u8.ToArray()));
+        yield return ("bom", b => [0xEF, 0xBB, 0xBF, .. b]);
     }
 
     [TestMethod]
@@ -331,14 +371,15 @@ public sealed class HdPackTests
     public void Terrain_chunk_entries_are_a_reserved_kind_that_is_checked_but_never_bound()
     {
         var recipe = SyntheticHdPack.Recipe.Replace("\"kinds\":[\"critter\",\"scenery\"]}", "\"kinds\":[\"critter\",\"scenery\"]},{\"name\":\"ground\",\"map\":\"synthetic-map\",\"kinds\":[\"terrainChunk\"]}")
-            .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\"},\"terrain\":{\"chunkSize\":512,\"padding\":32}");
-        JsonObject Chunk(SyntheticHdPack pack, int padding = 32, string slice = "ground")
+            .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\"},\"terrain\":{\"chunkSize\":512,\"padding\":32}")
+            .Replace("\"tileSize\":512", "\"tileSize\":600");
+        JsonObject Chunk(SyntheticHdPack pack, int padding = 32, string slice = "ground", string file = "chunks/4_1.png")
         {
             var png = HdPng.EncodeRgba(1024, 1024, new byte[1024 * 1024 * 4]);
-            pack.WriteFile("chunks/4_1.png", png);
+            pack.WriteFile(file, png);
             var entry = new JsonObject
             {
-                ["kind"] = "terrainChunk", ["file"] = "chunks/4_1.png", ["sha256"] = SyntheticHdPack.Sha(png), ["bytes"] = png.Length, ["slice"] = slice,
+                ["kind"] = "terrainChunk", ["file"] = file, ["sha256"] = SyntheticHdPack.Sha(png), ["bytes"] = png.Length, ["slice"] = slice,
                 ["chunk"] = new JsonObject { ["x"] = 4, ["y"] = 1, ["size"] = 512, ["padding"] = padding },
                 ["tiles"] = new JsonArray(SyntheticHdPack.Sha("tile:a"), SyntheticHdPack.Sha("tile:b")),
                 ["legacy"] = new JsonObject { ["width"] = 512, ["height"] = 512, ["rgbaSha256"] = SyntheticHdPack.Sha("chunk") },
@@ -364,6 +405,10 @@ public sealed class HdPackTests
         var wrongSlice = NewPack("wrong-slice", recipe: recipe);
         Chunk(wrongSlice, slice: "bodies");
         Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(wrongSlice.Write()).Status);
+        var repeated = NewPack("repeated-chunk", recipe: recipe);
+        Chunk(repeated);
+        Chunk(repeated, file: "chunks/4_1-again.png");
+        Assert.AreEqual(HdPackOpenStatus.DuplicateKey, HdPack.Open(repeated.Write()).Status, "one entry per chunk of a slice");
         var spriteInGround = NewPack("sprite-in-ground", recipe: recipe);
         spriteInGround.Add(sprite, slice: "ground");
         Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(spriteInGround.Write()).Status);

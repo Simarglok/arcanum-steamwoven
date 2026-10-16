@@ -68,6 +68,18 @@ public sealed class HdPackImportTests
         Assert.AreEqual(HdImportStatus.AlreadyExists, HdPackImport.Import(source.Directory, collection).Status);
         Assert.AreEqual(HdImportStatus.AlreadyExists, HdPackImport.Import(Path.Combine(collection, "synthetic-pack"), collection, replace: true).Status,
             "a pack cannot replace itself");
+        Assert.AreEqual(HdImportStatus.AlreadyExists, HdPackImport.Import(source.Directory, collection, replace: true).Status,
+            "an identical pack is not replaced by a copy of itself");
+        if (!OperatingSystem.IsWindows())
+        {
+            var alias = Path.Combine(_root, "alias");
+            Directory.CreateSymbolicLink(alias, collection);
+            var installed = Path.Combine(collection, "synthetic-pack", "manifest.json");
+            var before = File.GetLastWriteTimeUtc(installed);
+            Assert.AreEqual(HdImportStatus.AlreadyExists, HdPackImport.Import(Path.Combine(alias, "synthetic-pack"), collection, replace: true).Status,
+                "nor through a link to itself");
+            Assert.AreEqual(before, File.GetLastWriteTimeUtc(installed));
+        }
 
         // A rebuilt pack (other pixels) with the same id replaces the old one only on request.
         var rebuilt = new SyntheticHdPack(Path.Combine(_root, "rebuilt"));
@@ -118,5 +130,18 @@ public sealed class HdPackImportTests
             found.Select(f => f.Result.Status).ToArray());
         Assert.AreEqual("external", found[3].Result.Pack!.Id);
         Assert.AreEqual(2, HdPack.Discover([new(HdPackLocationKind.Collection, collection)], new HdPackOptions { MaxPacksPerCollection = 2 }).Count);
+
+        // A manifest with text that is not valid UTF-8 is one malformed pack, not a failed listing.
+        var badText = Built("c", "corrupt-text").Pack;
+        var manifest = Path.Combine(badText.Directory, "manifest.json");
+        var bytes = File.ReadAllBytes(manifest);
+        var at = bytes.AsSpan().IndexOf("\"gpu\":\"none\""u8);
+        bytes[at + 8] = 0xFF;
+        File.WriteAllBytes(manifest, bytes);
+        Directory.Move(badText.Directory, Path.Combine(collection, "corrupt-text"));
+        var listed = HdPack.Discover([new(HdPackLocationKind.Collection, collection)]);
+        Assert.AreEqual(4, listed.Count);
+        Assert.AreEqual(HdPackOpenStatus.Malformed, listed.Single(f => Path.GetFileName(f.Directory) == "corrupt-text").Result.Status);
+        Assert.AreEqual(HdImportStatus.SourceInvalid, HdPackImport.Import(Path.Combine(collection, "corrupt-text"), Path.Combine(_root, "other")).Status);
     }
 }

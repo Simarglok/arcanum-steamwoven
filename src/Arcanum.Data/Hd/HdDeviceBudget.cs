@@ -83,6 +83,6 @@ public static class HdDeviceBudgetCodec
                 (int)Math.Min(Value("areaRetainedFrames", ceiling.AreaRetainedFrames), int.MaxValue),
                 Value("areaRetainedBytes", ceiling.AreaRetainedBytes), Value("worldBytes", ceiling.WorldBytes), Value("terrainBytes", ceiling.TerrainBytes)).Clamped(scale);
         }
-        catch (Exception error) when (error is JsonException or HdFormatException) { return ceiling; }
+        catch (Exception error) when (error is JsonException or HdFormatException or ArgumentException) { return ceiling; }
     }
 }
