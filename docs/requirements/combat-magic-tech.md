@@ -40,7 +40,7 @@
 
 **Поведение и приёмка.** До атаки система проверяет, что выбранная цель допустима для конкретного действия; цель может быть critter, объектом или клеткой, а ограничения включают тип/состояние/дальность/область. Отмена или отказ оставляет цель и ресурсы без побочного изменения. Приёмка покрывает допустимую, мёртвую, невидимую/недоступную цель и клетку вне допустимого радиуса.
 
-**CE и данные.** `target_context_evaluate` проверяет флаги spell/target, типы, стороны, состояние и ограничения tile; `target_context_build_list` создаёт object/tile/radius/wall/circle targets. Его вызывают выбор цели из `intgame.c`, spell UI и magic-tech invocation ([validation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L463-L1047), [target lists](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L1148-L1530), [`target_pick_at_screen_xy` и callers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L250-L265), [`intgame` cast caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L2838-L2852)). **Steamwoven:** отсутствует ([status][status]). Cone/count, некоторые non-party checks и одна radius-проверка имеют TODO/FIXME в CE; это требует отдельного подтверждения.
+**CE и данные.** `target_context_evaluate` проверяет флаги spell/target, типы, стороны, состояние и ограничения tile; `target_context_build_list` создаёт object/tile/radius/wall/circle targets. Его вызывают выбор цели из `intgame.c`, spell UI и magic-tech invocation ([validation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L463-L1047), [target lists](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L1148-L1530), [`target_pick_at_screen_xy` и callers](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c#L250-L265), [`intgame` cast caller](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c#L2838-L2852)). **Steamwoven:** частично — [резолвер атаки](../world/attack-resolver-runtime.md) (ARC-COMBAT-001) отказывает неактивному атакующему и мёртвой цели-critter; общего выбора и проверки целей нет ([status][status]). Cone/count, некоторые non-party checks и одна radius-проверка имеют TODO/FIXME в CE; это требует отдельного подтверждения.
 
 <a id="fr-combat-005"></a>
 
@@ -48,7 +48,7 @@
 
 **Поведение и приёмка.** Melee/ranged атака проходит через skill/weapon check, целевые условия, hit/miss, dodge, aim/backstab и критический исход; попадание запускает damage только после разрешения проверки, а промах может иметь собственный эффект. Приёмка с фиксированным seed и актёрами по обе стороны порога сопоставляет выбранную цель, die/result, dodge и итоговое изменение состояния.
 
-**CE и данные.** `sub_4B3170` выполняет проверку weapon aptitude, ranged blocker, `SkillInvocation`, dodge, fate crits и затем вызывает melee/ranged processor ([attack resolution](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L830-L995)). `sub_4B2210` строит контекст из оружия/навыка и отмечает melee/ranged/backstab ([context](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L349-L404)). Требуются навыки, оружие, состояния и RNG; сами skill formulas принадлежат разделу персонажа. **Steamwoven:** нет combat resolver ([status][status]); эти входы не реализованы как gameplay.
+**CE и данные.** `sub_4B3170` выполняет проверку weapon aptitude, ranged blocker, `SkillInvocation`, dodge, fate crits и затем вызывает melee/ranged processor ([attack resolution](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L830-L995)). `sub_4B2210` строит контекст из оружия/навыка и отмечает melee/ranged/backstab ([context](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L349-L404)). Требуются навыки, оружие, состояния и RNG; сами skill formulas принадлежат разделу персонажа. **Steamwoven:** частично — [резолвер атаки](../world/attack-resolver-runtime.md) (ARC-COMBAT-001): чистая функция с внедрённым источником бросков разрешает место попадания, отказ технологии и отмену магии, проверку атаки, уклонение, судьбу и критический промах по себе; синтетические тесты по обе стороны порогов. Навыки, оружие и состояния задаёт вызывающий; к сессии, раунду и viewer не подключено ([status][status]).
 
 <a id="fr-combat-006"></a>
 
@@ -72,7 +72,7 @@
 
 **Поведение и приёмка.** Каждая атака вычисляет компоненты normal/poison/electrical/fire/fatigue, применяет сопротивления и иммунитеты, hit location/armor, flags weapon и выбранную difficulty; один вызов не смешивает damage и fatigue. Допустимые удары по разрушаемым порталам/контейнерам используют материал и HP, после чего вызывают bust/trap path. Приёмка сравнивает одну и ту же атаку на разных resistance, armor slot и material.
 
-**CE и данные.** `combat_calc_dmg`, `combat_apply_resistance` и `combat_dmg` рассчитывают типы/сопротивления, immunity и последствия для critter; `combat_critter_armor` выбирает экипированную защиту по hit location; non-critter branch обрабатывает portal/container damage ([damage/resistance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1390-L1475), [armor, material and object damage](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1897-L1943), [damage calculation/resistance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L2606-L2710), [resistance fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/resistance.c#L1-L9)). Armor and item stats are shared with предметным разделом. **Steamwoven:** damage, armor, portal/container damage absent ([status][status]).
+**CE и данные.** `combat_calc_dmg`, `combat_apply_resistance` и `combat_dmg` рассчитывают типы/сопротивления, immunity и последствия для critter; `combat_critter_armor` выбирает экипированную защиту по hit location; non-critter branch обрабатывает portal/container damage ([damage/resistance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1390-L1475), [armor, material and object damage](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L1897-L1943), [damage calculation/resistance](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c#L2606-L2710), [resistance fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/resistance.c#L1-L9)). Armor and item stats are shared with предметным разделом. **Steamwoven:** частично — [резолвер атаки](../world/attack-resolver-runtime.md) (ARC-COMBAT-001) считает пакет урона по типам с иммунитетами, сопротивлениями, сложностью, критическим множителем и материалом портала/контейнера; применение к HP/усталости, износ брони по месту попадания и bust/trap не реализованы ([status][status]).
 
 <a id="fr-combat-009"></a>
 
@@ -216,18 +216,18 @@
 
 ## Сводное покрытие на Steamwoven baseline
 
-Статусы относятся только к текущему Steamwoven source snapshot: для этих доменов нет игрового data model, resolver или UI integration. `Нет` не оценивает наличие соответствующей ветви в CE; CE source inspection — исследование, а не выполнение acceptance scenario. Ограниченный общий animation playback и диагностические/UI лаборатории не считаются combat/magic-tech покрытием.
+Статусы относятся только к текущему Steamwoven source snapshot: для этих доменов нет игрового data model или UI integration; правила одной атаки есть только как неподключённый [резолвер](../world/attack-resolver-runtime.md) (ARC-COMBAT-001). `Нет` не оценивает наличие соответствующей ветви в CE; CE source inspection — исследование, а не выполнение acceptance scenario. Ограниченный общий animation playback и диагностические/UI лаборатории не считаются combat/magic-tech покрытием.
 
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
 | FR-COMBAT-001 | Нет | Нет | Нет | Нет |
 | FR-COMBAT-002 | Нет | Нет | Нет | Нет |
 | FR-COMBAT-003 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-004 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-005 | Нет | Нет | Нет | Нет |
+| FR-COMBAT-004 | Нет | Частично | Нет | Частично |
+| FR-COMBAT-005 | Нет | Частично | Нет | Частично |
 | FR-COMBAT-006 | Нет | Нет | Нет | Нет |
 | FR-COMBAT-007 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-008 | Нет | Нет | Нет | Нет |
+| FR-COMBAT-008 | Нет | Частично | Нет | Частично |
 | FR-COMBAT-009 | Нет | Нет | Нет | Нет |
 | FR-COMBAT-010 | Нет | Нет | Нет | Нет |
 | FR-COMBAT-011 | Нет | Нет | Нет | Нет |

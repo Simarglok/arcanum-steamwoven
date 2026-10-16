@@ -64,6 +64,7 @@ public static class AreaMapPlans
         (AreaMappingRole.MissingPolicy, 1, "art/missing.dat"),
         (AreaMappingRole.WallStructure, 2, "art/wall/structure.mes"),
         (AreaMappingRole.WallName, 2, "art/wall/wallname.mes"),
+        (AreaMappingRole.Portal, 2, "art/portal/portal.mes"),
     ];
 
     public static AreaMapPlanResult Create(ContentStack stack, WorldCatalog catalog, string mapName)
