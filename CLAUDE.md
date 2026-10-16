@@ -19,9 +19,10 @@ summarizes the project and points to them.
   commits, PR titles and bodies) stays in English.
 - **Where work runs.** Work that builds, tests or runs code, Godot or original
   data runs on the owner's Mac (a Remote Control session in the owner's
-  checkout). A docs-only task may run in a cloud clone, which has no .NET or Godot: run
-  `python3 -B tools/research/dat_probe.py --self-test` and report the .NET root
-  checks as not run.
+  checkout). Following the owner's project instructions, a docs-only task
+  (Markdown only) may run in a cloud clone, which has no .NET or Godot: run
+  `python3 -B tools/research/dat_probe.py --self-test` and state in the PR that
+  the .NET root checks were not run because no code changed.
 - **The retired Hermes setup is off limits.** The Hermes task board and the
   Codex workflow were removed on 2026-10-16 (PR #137); do not touch `~/.hermes`
   on the owner's Mac (old board, profiles, logs with secrets) and do not run
@@ -57,7 +58,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   (`restore --locked-mode`), MSTest. Godot **4.7.2 .NET**, `godot_canonical`
   wrapper and paths in `docs/workflow/toolchain.md`.
 - Root checks: `dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"` and `python3 -B tools/research/dat_probe.py --self-test`.
-  Root sln excludes the terrain viewer and its tests, `Arcanum.Input*`, research
+  Root sln excludes the terrain viewer and its tests, `Arcanum.Input`, research
   probes and labs (own commands in `docs/workflow/toolchain.md`).
   Real-data tests are opt-in via env vars (`DAT_ROOT`, `ARCANUM_*`, `ARC_AREA_*`,
   `ARC_CAVE_*`, `ARC_NPC_*`) and categories `RealData`, `DlgRealData`,
@@ -76,8 +77,8 @@ under `docs/research`. Details: `docs/project/status.md`.
   starting hero, snapshot schema 6), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
-- Tools: `tools/terrain-viewer` (Core + Godot; modes `crash-site-area` (AREA)
-  and `world-diagnostic` (WORLD)), `tools/terrain-inspect`, `tools/research/*` probes,
+- Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`
+  (AREA) and `world-diagnostic` (WORLD), plus older diagnostic modes), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
 - Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
@@ -115,11 +116,12 @@ under `docs/research`. Details: `docs/project/status.md`.
   day, so the owner's local checkout often lags `origin/main`: fetch first and
   branch from `origin/main`, or read `git show origin/main:<path>` (only as
   fresh as the last fetch).
-- `.worktrees/` (~70 task worktrees, ignored via `.gitignore`) and many
+- `.worktrees/` (about 70 task worktrees as of 2026-10-13, ignored via `.gitignore`) and many
   `arcanum-steamwoven/t_<id>-arc-*` branches are left from the retired task board.
   Don't modify or delete them; they are evidence — except the one worktree your
-  task explicitly names (e.g. ARC-GPAD-005: `.worktrees/t_6346b4d1`). Unmerged
-  in-flight branches include ARC-DATA-010 and ARC-GPAD-005.
+  task explicitly names (e.g. ARC-GPAD-005: `.worktrees/t_6346b4d1`). ARC-GPAD-005
+  (`arcanum-steamwoven/t_6346b4d1-arc-gpad-005-gamepad-lab`) is still unmerged;
+  ARC-DATA-010 has no branch on the remote and is still todo.
 - The CE research clone (owner's Mac; `~/mnt/arcanum-ce` in bridged sessions) = `alexbatalov/arcanum-ce` at the exact pinned research
   commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` (cited ~1,200× in docs).
   C, Sustainable Use License: read to understand original mechanics

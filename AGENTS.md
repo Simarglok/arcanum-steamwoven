@@ -3,10 +3,10 @@
 ## Task authority
 
 - Work starts only from an explicit owner request: a direct instruction, a Claude project thread or a named `ARC-*` work item. Obsidian and repository roadmaps are knowledge/reference material, not task authority. Full rules: [task workflow](docs/workflow/tasks.md).
-- Every work item has a code under the [task naming policy](docs/workflow/task-naming.md); thread titles, branches, PR titles and commit subjects carry it first (PR titles and commits may put a short area prefix before it). The policy holds the type registry (`RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`, `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`). Check that a number is unused (git history, open and merged PRs, branches, codes reserved in the project) before taking it.
+- Every work item has a code under the [task naming policy](docs/workflow/task-naming.md); thread titles, branches, PR titles and commit subjects carry it first (PR titles and commits may put a short area prefix before it). The policy holds the type registry (`RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`, `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC`, `TECHNOLOGY`). Whoever allocates a number (the owner or an owner-authorized session) first checks that it is unused: git history, open and merged PRs, branches and codes reserved in the project.
 - Confirm task ID, scope, assigned workspace and existing changes before editing. Work in the task's isolated checkout and preserve unrelated work.
 - Read `docs/architecture/decisions.md`, `docs/research/method.md` and the relevant task references. Do not expand a bounded task into a full engine.
-- Project development currently runs natively on macOS: work that builds, tests or runs code, Godot or original data runs on the owner's Mac. A docs-only task may run in a cloud checkout without .NET or Godot; there run `python3 -B tools/research/dat_probe.py --self-test` and report the .NET root checks as not run. Do not install Windows, run legacy executables, patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
+- Project development currently runs natively on macOS: work that builds, tests or runs code, Godot or original data runs on the owner's Mac. Following the owner's project instructions, a docs-only task (Markdown only) may run in a cloud checkout without .NET or Godot; there run `python3 -B tools/research/dat_probe.py --self-test` and state in the PR that the .NET root checks were not run because no code changed. Do not install Windows, run legacy executables, patch the installed game, or change shared tool profiles/settings unless the task explicitly covers it.
 - The former Hermes task board and Codex workflow are retired: do not read `~/.hermes` or run `hermes`.
 
 ## Task readiness (Definition of Ready)
@@ -45,7 +45,7 @@ AC2. ...
   python3 -B tools/research/dat_probe.py --self-test
   ```
 
-  The root solution leaves out the terrain viewer and its tests, the `Arcanum.Input` projects, research probes and labs, which have their own commands in `docs/workflow/toolchain.md`. Documentation or source inspection alone is not runtime verification.
+  The root solution leaves out the terrain viewer and its tests, the `Arcanum.Input` project, research probes and labs, which have their own commands in `docs/workflow/toolchain.md`. Documentation or source inspection alone is not runtime verification.
 
 ## GitHub identity
 

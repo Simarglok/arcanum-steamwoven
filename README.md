@@ -33,7 +33,7 @@ With the game installed at `/Applications/Arcanum` and an exported build present
 ./arcanum status   # which modes have every input configured
 ```
 
-See [the project launcher](docs/workflow/local-development.md#project-launcher).
+The launcher runs the newest exported build of each mode; the features above need a build exported from current `main`. See [the project launcher](docs/workflow/local-development.md#project-launcher).
 
 ## Start here
 
