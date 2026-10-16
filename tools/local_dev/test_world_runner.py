@@ -60,7 +60,7 @@ class WorldRunnerFailureTests(unittest.TestCase):
         spec.loader.exec_module(runner)
         good = grid_fixtures.GridReportTests().sample()
         good["candidateCommit"] = "b" * 40
-        marker = "ARC-WORLD-001 native-smoke PASS fingerprints=immutable rendered=PASS\n"
+        marker = "ARC-WORLD-001 native-smoke PASS fingerprints=immutable rendered=PASS\nARC-RENDER-008 original overlay PASS {}\n"
         encoded = "ARC-WORLD-003 grid-readback " + json.dumps(good) + "\n"
         controls = [(marker, "report-count"), (marker + encoded + encoded, "report-count"),
                     (marker + 'ARC-WORLD-003 grid-readback {PRIVATE-SENTINEL\n', "report-json"),
@@ -131,6 +131,7 @@ class WorldRunnerStageTests(unittest.TestCase):
             argv += ["--app", str(self.app)]
         if child_output is None:
             child_output = ("ARC-WORLD-001 native-smoke PASS fingerprints=immutable rendered=PASS\n"
+                            "ARC-RENDER-008 original overlay PASS {}\n"
                             "ARC-WORLD-003 grid-readback " + json.dumps(good) + "\n")
         with contextlib.ExitStack() as stack:
             stack.enter_context(patch.object(sys, "argv", argv))
