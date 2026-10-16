@@ -164,7 +164,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
-        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); }
+        if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaFollowSmokeAsync(); await RunAreaCompanionCaveSmokeAsync(); await RunAreaVisualToggleSmokeAsync(result); }
         RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }
