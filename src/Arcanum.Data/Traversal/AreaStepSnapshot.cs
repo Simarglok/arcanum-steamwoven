@@ -110,7 +110,7 @@ public sealed class AreaStepSnapshot
 
     private AreaStepAssessment Result(AreaStepRequest request, CardinalTraversalCoverage coverage, CardinalTraversalDisposition? disposition,
         string reason, AreaStepTerrainEvidence? terrain, IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wall = null) =>
-        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps) { WallBlocker = wall };
+        new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall);
 
     private static AreaStepCell Neighbor(AreaStepCell cell, int direction) => new(cell.X + Deltas[direction].Dx, cell.Y + Deltas[direction].Dy);
 

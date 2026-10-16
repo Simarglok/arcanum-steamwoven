@@ -113,8 +113,9 @@ public sealed class AreaStepAssessment
 {
     internal AreaStepAssessment(AreaStepRequest request, AreaStepInputIdentity identity, long epoch, CardinalTraversalCoverage coverage,
         CardinalTraversalDisposition? disposition, string reason, AreaStepTerrainEvidence? terrain,
-        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps)
+        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wallBlocker = null)
     {
+        WallBlocker = wallBlocker;
         if ((coverage == CardinalTraversalCoverage.Supported) != disposition.HasValue) throw new ArgumentException("Whole Supported requires disposition.");
         Request = request; InputIdentity = identity; EvidenceEpoch = epoch; Coverage = coverage; Disposition = disposition; ReasonCode = reason;
         DestinationTerrain = terrain; Objects = Array.AsReadOnly(objects.ToArray()); Gaps = Array.AsReadOnly(gaps.ToArray());
@@ -136,7 +137,7 @@ public sealed class AreaStepAssessment
     public IReadOnlyList<AreaStepObjectEvidence> Objects { get; }
     public IReadOnlyList<AreaStepGap> Gaps { get; }
     /// <summary>The first solid wall whose edge the step crosses, when that decided the result.</summary>
-    public AreaObjectKey? WallBlocker { get; internal init; }
+    public AreaObjectKey? WallBlocker { get; }
 }
 
 /// <summary>One wall on one tile edge (odd direction 1, 3, 5, 7). Opening pieces have their own rules and stay Unknown.</summary>
