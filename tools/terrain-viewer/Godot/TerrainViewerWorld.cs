@@ -463,6 +463,9 @@ public partial class TerrainViewerApp
         // A following route also waits while a stick receipt is still open past the frontier
         // (a release observed after a click): deciding at an earlier step end would start a
         // step that receipt then cancels.
+        // ARC-WORLD-016: only a step the route itself drove, in a route that was following, is retried after a denial.
+        var routeDrove = false;
+        _worldActorDenied = false;
         if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
         {
             // Observed stick/neutral receipts close first; the follower only watches them.
@@ -472,11 +475,12 @@ public partial class TerrainViewerApp
         else
         {
             // No pending receipt: the route drives to the same frontier at exact step ends.
+            routeDrove = route.Status == RouteFollowStatus.Following;
             var drive = route.Drive(session.State, frontier, (until, input) => Run(until, input.ToArray()).Movement);
             if (!drive.Completed) throw new InvalidOperationException("GRID_" + drive.FailureCode);
         }
         _worldGridInput.PublishedThrough(frontier);
-        RetryActorDenial(route, frontier);
+        RetryActorDenial(routeDrove ? route : null, frontier);
         if (route is not null) _worldRouteDiagnostic = DescribeWorldRoute(route);
         DriveAreaCompanions(session, frontier);
         PublishWorldSelection();
@@ -504,7 +508,9 @@ public partial class TerrainViewerApp
         }
     }
     /// <summary>ARC-WORLD-016: the planner sees a companion where it stood when the route was planned; when it then steps
-    /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).</summary>
+    /// into the route, the denied goal is planned again around it (at most <see cref="ActorDenialRetries"/> times per goal).
+    /// <paramref name="route"/> is null unless this frame's advance was driven by a following route, so a stick bump into
+    /// a companion never revives an earlier, finished route.</summary>
     private void RetryActorDenial(RouteFollower? route, SimulationTime frontier)
     {
         var denied = _worldActorDenied; _worldActorDenied = false;
