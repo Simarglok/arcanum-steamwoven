@@ -684,6 +684,90 @@ readback of the open window) and the quick-save phase, which now
 also checks that F8 brings back the PC's items. Not verified: original inventory UI parity
 (grid, drag and drop, paper doll), a human on a physical mouse and display.
 
+### HD render path (ARC-RENDER-014)
+
+`crash-site-area` and `world-diagnostic` can draw characters and objects from an HD pack
+([format](../formats/hd-pack.md)) under the rules of the
+[HD presentation contract](hd-presentation-contract.md) (FR-PRODUCT-004). Code: Godot-free
+[`HdFrameSource`](../../tools/terrain-viewer/Core/HdFrameSource.cs),
+[`HdResidency`](../../tools/terrain-viewer/Core/HdResidency.cs),
+[`HdPresentation`](../../tools/terrain-viewer/Core/HdPresentation.cs) and the diagnostic
+[`HdNearestPack`](../../tools/terrain-viewer/Core/HdNearestPack.cs); the canvas partial
+`TerrainCanvasHd` and the `AreaDrawItem` crop and fade uniforms.
+
+- **What binds.** AREA bodies other than walls (art class 1) and the controlled actor; WORLD
+  statics and the actor. Terrain tiles, facades, terrain chunks and walls stay Legacy (walls
+  are a later stage, terrain ARC-RENDER-016). The scene plan, picking, routes, passability,
+  the wall check, light and Session read Legacy data only; HD is substituted when a texture
+  is bound to an already planned draw.
+- **AREA.** An HD item keeps its Legacy destination, reflection, phase and order and samples
+  the crop `(N·c, N·m)` with the exact nearest rule (`AreaNearestAxis`, no new mode); the
+  actor's crop is its whole Legacy frame. The wall-fade column is the Legacy column
+  `floor((sx − N·c) / N)` over the Legacy width (`fade_scale`, `fade_start`), so a faded
+  item gets exactly its Legacy alpha. Index-row keys include the crop, so Legacy and HD rows
+  never collide.
+- **WORLD.** `DrawTextureRectRegion` with the HD texture, the same destination and mirror
+  transform, and the source rectangle of the whole Legacy frame times N. The source of both
+  profiles now comes from the frame size, not the destination size (equal at the admitted
+  scale 100).
+- **Frame questions.** AREA frames use their `AreaFrameKey` (ART payload hash, view length,
+  group, frame, effective palette, entry name hash, Legacy RGBA hash). The actor and WORLD
+  statics, decoded outside the AREA owner, record the SHA-256 of the whole ART entry, its
+  length as the view, the entry name hash and their Legacy RGBA hash at load. For an ART with
+  bytes after its last frame (ARC-DATA-016) the AREA view is shorter than the entry, so such
+  an ART has two different keys; a pack built from one draws the other as `FrameMissing`.
+- **Per-frame fallback.** Every outcome other than a valid HD frame draws Legacy with its
+  reason: `NoPack`, `PackRejected`, `FrameMissing`, `SourceMismatch`, `FrameRejected`,
+  `Invalid` (the pack reader's checks, including the mask check against this device's Legacy
+  alpha), `HdAxisLimit` (`N·(c + m) > 65534`), `HdBudget` and `Pending`. Nothing fails the
+  view, the map load or the session. The Legacy visible set stays resident under both
+  profiles, so any fallback is immediate.
+- **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
+  decoded pixels are held only until their texture is uploaded, at most 64 frames or 64 MiB
+  per submission on the main thread; a frame that becomes visible later is decoded lazily and
+  draws Legacy (`Pending`) until it is ready. There is no whole-area HD CPU repository.
+- **Budgets.** One residency per domain, keyed by the pack question inside one pack (a new
+  pack or budget releases every HD texture). Admission is in draw order on the Legacy frame
+  size: a frame whose `N²·w·h·4` bytes would exceed the visible limit is `HdBudget` before it
+  is decoded. AREA: visible bytes, retained frames and bytes from the device budget
+  (ceilings `N²` times the Legacy ones); WORLD: one HD byte limit (`N²/4 · 256` MiB) for
+  visible and kept frames and the Legacy key caps (184 + 5). Frames that left the view are
+  kept within the retain limits, least recently used evicted first, before any new upload. A
+  switch to Legacy keeps them down to the retain limit; a map change, reload, failure, pack
+  change or exit releases every HD texture and drops pending decodes. A WORLD actor step
+  republishes the plan and keeps them.
+- **HUD.** The status line shows `visual HD pack <id> <N>x <review>: HD <n>, Legacy <m>
+  (<reason> <count>, …), HD textures <count>/<bytes> bytes, decoding <n>; terrain and walls
+  Legacy`, per submission, or `visual Legacy`.
+- **Selecting a pack (until ARC-UI-006).** The setting, its persistence and the toggle key
+  are ARC-UI-006. A diagnostic run selects them at start with environment variables:
+  `ARC_HD_PACK=DIR` (one pack directory outside the repository; implies profile Hd),
+  `ARC_VISUAL_PROFILE=hd|legacy` (`hd` without a pack draws everything Legacy as `NoPack`)
+  and `ARC_HD_BUDGET_PATH=FILE` (default `user://hd_budget_v1.json`; missing or invalid
+  means the ceilings). The start line `ARC-RENDER-014 visual profile=…` names the pack id,
+  scale and open status, never a path.
+
+Checks: `HdPresentationTests` (scaled crop and axis limit; frame questions; the nearest pack at
+2× and 4×; every per-frame reason from the frame source, reset and release; residency in draw
+order, shared textures, deterministic budget refusal before decoding, budget 0, LRU retention,
+the WORLD total limit, upload batches); the self-test `ARC-RENDER-014 self-test AREA HD PASS`
+(production AREA compositor with a synthetic nearest 4× pack: the HD raster equals Legacy at
+zoom 1, 2, 0.5, 1.5 with a fractional origin and 4, also with wall fades; a tinted pack keeps
+Legacy alpha and changes colour at magnification 2; `FrameMissing`, `NoPack`,
+`PackRejected`, `FrameRejected`, `HdBudget` and `Invalid` each draw the Legacy raster and are
+counted; switching back and clearing release HD) and `ARC-RENDER-014 self-test WORLD HD
+PASS` (statics and actor, identity at zoom 1, 2, 3, republish keeps HD); and the native
+smoke on the installed original, which writes a nearest 4× pack of every character and object
+frame to a temporary directory outside the repository, deletes it afterwards, and requires
+the whole window to equal Legacy with no fallback:
+`ARC-RENDER-014 native-smoke AREA HD identity PASS` (Crash Site exterior: 114 frames, 59
+body frames and 55 actor frames, 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
+0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
+22 MB resident at 4×, first bind 90 ms) and `ARC-RENDER-014 native-smoke WORLD HD identity
+PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: a real upscaled pack (ARC-RES-038/ARC-DEV-003),
+the toggle protocol and Session-snapshot invariance (ARC-UI-006), walls and terrain in HD,
+other GPUs and handhelds, human review (ARC-RENDER-015).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

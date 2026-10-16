@@ -3,7 +3,8 @@
 Status: **format, Godot-free reader, import and device budget, with synthetic tests.**
 Code: [`src/Arcanum.Data/Hd`](../../src/Arcanum.Data/Hd); tests:
 [`tests/Arcanum.Data.Tests/Hd`](../../tests/Arcanum.Data.Tests/Hd). Nothing here draws
-an HD frame: binding textures, caches, the HUD and the toggle are ARC-RENDER-014 and
+an HD frame: binding textures, caches and the HUD are the viewer's
+([ARC-RENDER-014](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)), the setting and toggle
 ARC-UI-006, the build tool (`./arcanum hd-build` / `hd-import`) is ARC-DEV-003, terrain
 chunks are ARC-RENDER-016. The rules this format serves are in the
 [HD presentation contract](../rendering/hd-presentation-contract.md) (ARC-RENDER-013, with
@@ -295,8 +296,8 @@ handheld (Steam Deck class) that also wants room for the game.
 
 ## Not ready / out of scope
 
-- No HD draw, texture cache, HUD counter, setting, toggle or diagnostic key
-  (ARC-RENDER-014, ARC-UI-006); no build or import command (ARC-DEV-003); no before/after
+- No setting, toggle or diagnostic key (ARC-UI-006); the HD draw, caches and HUD counter
+  are ARC-RENDER-014's ([viewer](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)); no build or import command (ARC-DEV-003); no before/after
   review tool (ARC-RENDER-015). Terrain chunk entries are never bound (ARC-RENDER-016).
 - One active pack; layering several packs is not defined. A whole-game manifest near the
   limits needs about its own size in memory to open; an index split is a later change.

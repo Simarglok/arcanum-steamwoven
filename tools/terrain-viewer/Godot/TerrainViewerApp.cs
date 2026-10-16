@@ -71,6 +71,7 @@ public partial class TerrainViewerApp : Node
         {
             (_nativeSmoke, _nativeSmokeScreenshot) = TakeNativeSmokeArguments(args);
             _arguments = TerrainViewerArguments.Parse(args);
+            ConfigureVisualProfile();
             _hud.SetMode(_arguments.Mode);
             if (IsWorld) InitializeWorld();
             _lastLoad = StartLoadAsync(_arguments);
@@ -998,6 +999,7 @@ public partial class TerrainViewerApp : Node
         cancellation?.Cancel();
         _coordinator.Dispose();
         cancellation?.Dispose();
+        _canvas?.ReleaseHd(); _hdSource?.Dispose();
         _cache.Dispose();
     }
 }

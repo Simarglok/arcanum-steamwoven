@@ -73,6 +73,7 @@ public partial class TerrainCanvas
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
+            if (_area is not null) ReleaseAreaHd(); // a map change releases the previous map's HD textures
         }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
         if (!ReferenceEquals(_area, plan) || _areaIndex is null)
@@ -173,7 +174,7 @@ public partial class TerrainCanvas
     }
     public override void _Process(double delta)
     {
-        if (_area is null) return;
+        if (_area is null) { ProcessWorldHd(); return; }
         try { UpdateAreaVisible(); }
         catch (Exception error) { AreaFailure?.Invoke(error); }
     }
@@ -182,7 +183,8 @@ public partial class TerrainCanvas
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
         var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled);
-        if (_areaView == state) { TrimAreaPool(); return; }
+        // Pending HD frames that became ready rebind the same view (ARC-RENDER-014).
+        if (_areaView == state && !HdRefreshDue()) { TrimAreaPool(); return; }
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
         bool Intersects(AreaDrawCommand command) => new Rect2(command.Destination.X, command.Destination.Y,
@@ -219,6 +221,9 @@ public partial class TerrainCanvas
         _textures.UploadAreaVisible(_areaFrames, draw.Where(command => command.Identity != ActorSentinel && !_areaChunkCommands.ContainsKey(command))
             .Select(command => command.Frame).ToHashSet());
         var logical = visible; visible = draw;
+        // ARC-RENDER-014: HD textures for characters and objects, after the Legacy set (every
+        // fallback draws Legacy, so the Legacy visible set stays resident under both profiles).
+        var hd = BindAreaHd(visible); var hdScale = HdActive ? ActiveHdSource.Scale : 1;
         while (_areaItems.Count < visible.Length)
         {
             var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };
@@ -228,7 +233,7 @@ public partial class TerrainCanvas
         for (var index = visible.Length; index < _areaActive; index++)
         {
             var item = _areaItems[index];
-            item.Hide(); item.FrameTexture = null; item.ReleaseMapping();
+            item.Hide(); item.FrameTexture = null; item.HdScale = 1; item.ReleaseMapping();
         }
         _areaActive = visible.Length;
         for (var index = 0; index < visible.Length; index++)
@@ -240,6 +245,7 @@ public partial class TerrainCanvas
             if (_areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
+            if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
             (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
             // The source drops every alpha mode for an additive (or sub/mul) object, so such a wall never fades.
@@ -283,6 +289,7 @@ public partial class TerrainCanvas
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
         _areaMappings.Clear(); // after the items stopped sampling the rows
         _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
+        ReleaseAreaHd(); // after the items stopped sampling HD textures
     }
     public override void _ExitTree()
     {

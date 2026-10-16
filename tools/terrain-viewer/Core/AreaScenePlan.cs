@@ -14,7 +14,12 @@ public sealed record AreaFrameKey(AreaEntryIdentity Entry, int Palette, int Grou
 }
 public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, AreaObjectKey? Identity,
     TerrainRect Source, TerrainRect Destination, bool FlipX, bool FlipY, int Phase, int MapX, int MapY,
-    int FirstRank, int SecondRank, int Alpha, bool Additive);
+    int FirstRank, int SecondRank, int Alpha, bool Additive)
+{
+    /// <summary>The ART class of the drawn art (raw art id &gt;&gt; 28; 1 = wall, as <see cref="AreaScenePlan.Hotspot"/>
+    /// reads it). ARC-RENDER-014 binds HD for characters and objects, not walls.</summary>
+    public int ArtClass { get; init; }
+}
 
 /// <summary>One world chart and one stable immutable body policy. Body appearance
 /// belongs to DATA009; footprint terrain cropping belongs to the established
@@ -81,7 +86,7 @@ public sealed class AreaScenePlan
             var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
-                ranks.First, ranks.Second, state.Alpha, state.Additive));
+                ranks.First, ranks.Second, state.Alpha, state.Additive) { ArtClass = (int)(visual.RawArt >> 28) });
             coverage.Add(new(body.Key, visual.Key, state.Flat ? state.UnderAll ? AreaDisposition.FlatUnderAll : AreaDisposition.FlatBody
                 : AreaDisposition.UprightBody, "DATA009ResolvedBody"));
         }
