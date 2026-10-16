@@ -22,7 +22,7 @@ public static partial class TerrainViewerSelfTest
         using var fixture=new AreaOwnerFixture(seamMarkers:true);
         var read=typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
             .GetMethod("ReadArea",BindingFlags.NonPublic|BindingFlags.Static)!;
-        var result=(AreaLoadResult)read.Invoke(null,[23L,fixture.Owner,CancellationToken.None])!;
+        var result=(AreaLoadResult)read.Invoke(null,[23L,fixture.Owner,CancellationToken.None,null])!;
         if(result.Generation!=23 || result.Plan.Commands.Count!=16389 || result.Snapshot.Reconciliation.CoreTerrain!=16384
             || result.Frames.Count!=2 || result.Plan.Commands.Count(c=>c.Identity is null&&c.FlipX)!=4)
             throw new InvalidOperationException("AREA_SEAM_STRICT_COVERAGE");

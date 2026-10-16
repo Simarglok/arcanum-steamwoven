@@ -20,7 +20,7 @@ public static partial class TerrainViewerSelfTest
         using var source = new AreaOwnerFixture(motionBodies: true);
         var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None])!;
+        var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         // Whole-core step evidence over the same strict publication; a second snapshot leaves tile names Unknown.
         var module = source.Streams[new(AreaSourceRole.Module)].Bytes;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, module, 7);
