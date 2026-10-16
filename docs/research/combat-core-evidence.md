@@ -421,6 +421,13 @@ neither see nor hear the attacker; then the critical chance gains
   then starts it a second time, so an NPC acting first runs its heartbeat
   script and AI twice ([next subturn][tb-next], [round][tb-round]).
 
+- **A10** (found by ARC-COMBAT-001) `combat_calc_dmg` keeps the backstab
+  flags after a critical miss retargets the attack to the attacker, so the
+  self-hit gets the backstab damage bonus ([calc][calc], [crit miss][crit-miss]).
+
+The decisions on A1–A10 (owner decision D2) are recorded in the [NPC combat
+AI plan](npc-combat-ai-plan.md#anomaly-decisions).
+
 ## Open questions
 
 - **O1** Retail parity of every constant and formula above (NOT_VERIFIED).
