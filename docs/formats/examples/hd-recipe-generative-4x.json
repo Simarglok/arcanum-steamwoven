@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "kind": "arcanum-steamwoven-hd-recipe",
+  "id": "example-generative-4x",
+  "scale": 4,
+  "slices": [
+    {
+      "name": "crash-site-exterior-scenery",
+      "map": "crash-site-exterior",
+      "kinds": ["scenery", "container", "item"]
+    }
+  ],
+  "method": {
+    "kind": "generative",
+    "tool": "example-diffusion-runner",
+    "toolVersion": "0.0.0",
+    "model": "example-base-model",
+    "licence": "check-before-use",
+    "modelFiles": [
+      { "name": "example-base-model.safetensors", "sha256": "0000000000000000000000000000000000000000000000000000000000000001" },
+      { "name": "example-controlnet-tile.safetensors", "sha256": "0000000000000000000000000000000000000000000000000000000000000002" }
+    ],
+    "adapters": [
+      { "name": "example-arcanum-style-lora.safetensors", "sha256": "0000000000000000000000000000000000000000000000000000000000000003", "weight": "0.8" }
+    ],
+    "seed": 20261016,
+    "prompt": "example prompt: pre-rendered isometric game sprite, same palette and lighting",
+    "negativePrompt": "example negative prompt",
+    "parameters": { "sampler": "example", "steps": "30", "denoise": "0.35", "controlStrength": "1.0" },
+    "nativeScale": 4,
+    "downscale": "none",
+    "tileSize": 1024
+  },
+  "rgb": { "edgeExtend": 8, "fill": "mean" },
+  "alpha": { "mode": "soft", "minIoUPermille": 950 }
+}

@@ -25,6 +25,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Bounded DLG reader](formats/dlg-reader.md)
 - [DLG: bounded seven-field research subset](formats/dlg.md)
 - [Bounded map and sector notes](formats/maps.md)
+- [HD pack and recipe format](formats/hd-pack.md)
 - [Static-object loader contract: bounded Crash Site candidate](world/static-object-loader-contract.md)
 - [Bounded static-object loader](world/static-object-loader.md)
 - [Static-scene contract: bounded Crash Site candidate](world/static-scene-contract.md)
