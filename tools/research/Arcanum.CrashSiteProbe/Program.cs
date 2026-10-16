@@ -50,6 +50,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.FirstOrDefault() == "--data-census") return ProbeDataCensus(args[1..]);
+            if (args.SequenceEqual(["--data-census-self-test"])) { DataCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
             if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-passability-closure") return ProbeAreaPassabilityClosure(args[1..]);

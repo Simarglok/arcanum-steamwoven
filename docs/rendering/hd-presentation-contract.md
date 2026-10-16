@@ -286,7 +286,7 @@ gate.
   roofs, UI and cursors until a later stage.
 - No shader smoothing profile, VRAM compression, mipmaps or box-filtered downsample.
 - Visual quality of any upscaler, AI determinism across GPUs and memory on real packs
-  are ARC-RES-032 / ARC-RENDER-014 questions, not claims of this contract.
+  are ARC-RES-033 / ARC-RENDER-014 questions, not claims of this contract.
 - Original-runtime pixel parity stays NOT_VERIFIED, as for Legacy.
 
 Provenance: the rules are derived from this repository's own exact sampling, scene
