@@ -10,7 +10,20 @@ zero-padded to at least three digits. `TYPE` identifies a product area; it does
 not identify a worker, role, assignee or model.
 
 The type registry is `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
-`SCRIPT` and `DEV`. Add a type only through an approved update to this policy.
+`SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC` and `TECHNOLOGY`. Add a
+type only through an approved update to this policy.
+
+| Type | Area |
+| --- | --- |
+| `AI` | NPC behaviour: awareness, hostility, targets, morale, action choice, orders |
+| `COMBAT` | Combat rules: mode, turns, action points, attack, damage, outcomes |
+| `SKILLS` | Skills and their checks, training and use |
+| `MAGIC` | Spells, colleges, casting, maintenance and effects |
+| `TECHNOLOGY` | Technological disciplines, schematics, devices and tech effects |
+
+The last five types were added by owner decision on 2026-10-16
+([NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16));
+research on these areas stays `RES`.
 
 The owner (or an owner-authorized session) allocates the number only after
 checking that it is unused: git history, open and merged PRs, branch names and
