@@ -56,7 +56,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** идентификаторы и содержимое таблицы схем; шестиканальная запись на час; безопасная проверка входных диапазонов и полноты. **Предложенные сценарии:** синтетическая схема с различными indoor/outdoor компонентами выдаёт 24 независимых пары и не меняет данные исходного ресурса; отсутствующий файл или некорректная запись дают явную диагностическую ошибку вместо молчаливой правдоподобной палитры.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-004"></a>
 
@@ -68,7 +68,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** подтверждённая грамматика схемы и правила её крайних слотов. **Предложенные сценарии:** на синтетических якорях подтвердить промежуточное значение каждого канала и округление; отдельно зафиксировать ожидаемое поведение пустых слотов до первого и после последнего якоря; reject или безопасно диагностировать таблицу без достаточных якорей.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-005"></a>
 
@@ -80,7 +80,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** clock и схема из FR-LIGHT-001/003; события игрового времени; инвалидирование palette/light buffers. **Предложенные сценарии:** в синтетической схеме цвета неизменны между двумя игровыми часовыми границами, меняются ровно при переходе часа и после восстановления из паузы сразу соответствуют текущему времени.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-006"></a>
 
@@ -92,7 +92,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** terrain/roof classification, ambient pair, tile/facade/roof pass order, source palettes и renderer blend behavior. **Предложенные сценарии:** контрастная синтетическая схема визуально различает indoor/outdoor terrain; смена одного канала затрагивает только соответствующий класс; крыша не получает indoor channel по умолчанию.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-007"></a>
 
@@ -104,7 +104,7 @@ executable/gameplay/visual parity **не реализованы / NOT_VERIFIED**
 
 **Зависимости:** карта, селектор сектора, mapinfo, поле sector light scheme и таблица scheme ids. **Предложенные сценарии:** два соседних синтетических сектора с разными схемами переключаются на границе; сектор с id map-default следует текущему map-default; переключение сохраняет тот же игровой час.
 
-**Steamwoven:** production runtime для этого требования отсутствует на audit baseline. [Time/light research](../world/time-lighting-contract.md) проверяет selected raw scheme/source facts; public scheme reader, hourly consumer и rendering отсутствуют.
+**Steamwoven:** частично, [ARC-RENDER-010](../rendering/area-lighting.md): ограниченная реализация для viewer `crash-site-area` (Data `Arcanum.Data.Lighting`, часы WORLD-004, шейдерный множитель по каналу). Границы, проверки и NOT_VERIFIED — в [описании компонента](../rendering/area-lighting.md); исследование — [RES-018](../world/time-lighting-contract.md).
 
 <a id="fr-light-008"></a>
 
@@ -190,11 +190,11 @@ Area Data owner сохраняет секционные границы/counts и
 | --- | --- | --- | --- | --- |
 | FR-LIGHT-001 | Нет: игровая дата/схема не загружается | Нет: авторитетных игровых часов нет | Нет: game runtime отсутствует | Нет: clock scenarios не проверялись |
 | FR-LIGHT-002 | Нет: нет профиля шага времени | Нет: нет game pause/advance runtime | Нет: ожидание и симуляция не связаны | Нет: поведение времени не проверялось |
-| FR-LIGHT-003 | Нет: нет игровых ambient palette records | Нет: схема цвета не применяется | Нет: production renderer не подключён | Нет: почасовые цвета не проверялись |
-| FR-LIGHT-004 | Нет: scheme entries не читаются | Нет: нет нормализации пустых часов | Нет: нет передаточной таблицы в renderer | Нет: края/пропуски не проверялись |
-| FR-LIGHT-005 | Нет: нет активных game schemes | Нет: runtime не применяет hourly event | Нет: viewer исключает lighting | Нет: смена часа не проверялась |
-| FR-LIGHT-006 | Нет: нет слоёв indoor/outdoor lighting | Нет: нет правил поверхностей | Нет: production lighting path отсутствует | Нет: крыши/сектора не сравнивались |
-| FR-LIGHT-007 | Нет: схемы карты/сектора не читаются | Нет: scheme selection отсутствует | Нет: нет world-sector lighting bridge | Нет: map/sector transition не проверялся |
+| FR-LIGHT-003 | Частично: scheme MES модуля по id через каталог схем, 24 часа outdoor/indoor | Частично: строгий разбор и typed failure, без угадываемой палитры | Частично: viewer crash-site-area применяет пару часа | Частично: synthetic литералы и opt-in original identity (scheme 1, digest) |
+| FR-LIGHT-004 | Частично: пустые часы читаются как пропуски | Частично: строгая интерполяция внутренних пропусков по своим якорям; края 0/23 обязательны | Частично: заполненная таблица идёт в viewer | Частично: synthetic gap/edge/malformed; CE multi-gap/reload не воспроизводится |
+| FR-LIGHT-005 | Частично: активная схема core-секторов Crash Site | Частично: дискретный выбор по целому игровому часу; ревизия меняется только при смене часа/схемы | Частично: viewer пересчитывает после каждого изменения часов WORLD-004 (палитра: +1 час) | Частично: synthetic + native smoke 15/21/06/12 ч; без планировщика событий |
+| FR-LIGHT-006 | Частично: канал по ART type и type bit tile/facade | Частично: правило palette callback CE; actor outdoor; unlit для interface/misc/light/eye-candy | Частично: множитель на каждый draw item в шейдере viewer | Частично: synthetic пиксели compositor (indoor только synthetic) и native smoke original для outdoor; крыши/local light не проверены |
+| FR-LIGHT-007 | Частично: mapinfo LightScheme и слово схемы core-секторов (+8), привязанные к snapshot | Частично: sentinel 0 → map default; явная схема сектора; без угадываемого fallback | Частично: активный сектор по клетке актёра, тот же час | Частично: synthetic override/sentinel; в original все 9 core секторов = sentinel; переходы карт нет |
 | FR-LIGHT-008 | Частично: только framing секции статического света и нулевой count одного выбранного сектора; записи не декодируются | Нет: нет правил локального света | Нет: локальные emitters не рисуются | Нет: runtime источники не проверялись |
 | FR-LIGHT-009 | Частично: ограниченное framing карты не описывает object/carried emitters | Нет: нет жизненного цикла объектного света | Нет: нет item/actor lighting integration | Нет: экипировка/overlay не проверялись |
 | FR-LIGHT-010 | Частично: просмотренный секторный framing не устанавливает time-sensitive свойства | Нет: нет временной активации источников | Нет: нет clock-to-light bridge | Нет: день/ночь для emitters не проверялись |

@@ -4,7 +4,10 @@ Status: **RESEARCH**, ARC-RES-018, 2026-10-07. This is a source/data contract an
 Godot-free inspector, **not a production clock, scheduler, light graph or renderer**.
 Original executable, gameplay, visual and night parity are **NOT_VERIFIED**.
 The [functional requirements](../requirements/lighting-time.md) remain proposals;
-this research does not promote their coverage to Implemented.
+this research does not promote their coverage to Implemented. The later bounded
+ambient implementation for the Crash Site viewer is
+[ARC-RENDER-010](../rendering/area-lighting.md); it adopts this document's strict
+gap policy and numeric map/sector resolution, not a general light graph.
 
 ## Evidence and authority
 

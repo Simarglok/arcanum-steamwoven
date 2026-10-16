@@ -97,6 +97,7 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaCanvasAsync(host);
             if (DisplayServer.GetName() != "headless") await AssertAreaOwnerAsync(host);
             await AssertAreaCompositionMatrixAsync(host);
+            await AssertAreaLightingAsync(host);
 
             if (DisplayServer.GetName() != "headless")
             {

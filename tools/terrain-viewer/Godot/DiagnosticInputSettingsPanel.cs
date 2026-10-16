@@ -26,6 +26,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? FitRequested;
     public event Action? ResetSceneRequested;
     public event Action? ReloadRequested;
+    public event Action? GameHourRequested;
+    public event Action? LightingToggleRequested;
+    private Label _lighting = null!;
     private Label _summary = null!;
     private Label _actionStatus = null!;
     private CheckButton _overlay = null!;
@@ -75,6 +78,11 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _rows.AddChild(new Label { Text = "Reset scene: actor and Follow return to spawn; preferences kept.\nReload: the current source loads again; the scene resets.\nBoth wait for an accepted step to settle.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         AddAction("Reset scene", () => ResetSceneRequested?.Invoke());
         AddAction("Reload current source", () => ReloadRequested?.Invoke());
+        // ARC-RENDER-010: the game clock moves only through this explicit diagnostic action.
+        _rows.AddChild(new Label { Text = "Day/night: game time advances only here, by whole hours.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
+        AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
+        _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);
         // The overlay state seam for ARC-RENDER-008. Until a real overlay exists the
         // row is visibly unavailable and is neither navigable nor toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
@@ -136,6 +144,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void Open(InputSettings settings) { Bind(settings); Show(); _selected = 0; ((SpinBox)_controls[0]).GetLineEdit().GrabFocus(); }
     public void SetSummary(string text) => _summary.Text = "Diagnostic summary: " + text;
     public void SetActionStatus(string text) => _actionStatus.Text = text;
+    public void SetLightingStatus(string text) => _lighting.Text = text;
     /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
     /// availability and state; a user toggle is reported once through OverlayToggled.
     /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>
