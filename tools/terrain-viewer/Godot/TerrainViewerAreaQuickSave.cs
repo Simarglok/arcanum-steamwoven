@@ -16,7 +16,8 @@ namespace Arcanum.TerrainViewer;
 // (GameSessionSaveSlot); the in-flight step, click route and walk-to-use/talk are host state and are not saved. A
 // load reads, decodes and restores a new session before anything here changes; a refused load keeps the running
 // session and scene. A successful load replaces the session, drops host state (route, approaches, a queued transfer)
-// and stands the actor settled on the saved map and cell, as a transfer does. Domains that live in the session are
+// and stands the actor settled on the saved map and cell, as a transfer does; the dialog host moves to the loaded
+// session (ARC-SCRIPT-006), so quests, rumors, flags and NPC dialog state come back with it. Domains that live in the session are
 // carried by the snapshot without changes here.
 public partial class TerrainViewerApp
 {
@@ -96,7 +97,17 @@ public partial class TerrainViewerApp
             Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
         if (result.Owner is null) { SetQuickStatus("F8 " + result.Status); return; }
-        AdoptLoadedSession(result.Owner, maps);
+        // ARC-SCRIPT-006: the dialog host reads its state from the session, so it moves to the loaded one; a session
+        // whose dialog values it cannot read is refused here, before anything changes.
+        AreaConversationHost? talk = null;
+        try { talk = _conversationHost?.Rebind(result.Owner); }
+        catch (ArgumentException)
+        {
+            result.Owner.Dispose();
+            SetQuickStatus("F8 quick load REFUSED: the save's dialog state is not readable");
+            return;
+        }
+        AdoptLoadedSession(result.Owner, maps, talk);
         SetQuickStatus("F8 " + result.Status);
     }
 
@@ -116,19 +127,19 @@ public partial class TerrainViewerApp
         return null;
     }
 
-    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps)
+    private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk)
     {
         StopWorldRoute("QUICK_LOAD");
         CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
         var actor = loaded.QueryActor();
-        ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap);
+        ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);
         var runtime = maps[actor.Map.RuntimeMap];
         _readyArea = _caveLoad is { } cave && runtime.RuntimeMap == cave.Area.Snapshot.RuntimeMap ? cave.Area : _exteriorArea ?? _readyArea;
         ConfigureAreaActor(runtime, runtime.Chart.ToChart(new AreaStepCell(actor.Cell.X, actor.Cell.Y)), actor.Facing);
         _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport);
         StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
-        PushAreaAmbient(); FollowAreaAmbient();
+        RebindAreaMapAmbient();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
         if (_areaTransitions is not null)
@@ -140,10 +151,16 @@ public partial class TerrainViewerApp
     /// <summary>The one place a running area session is replaced by another (today: quick load). Everything that
     /// uses the session reads <c>_areaSession</c> when it needs it and must not keep the owner, its clock or its flags
     /// across calls: the previous owner is disposed here. A component that mirrors session state rebinds here.</summary>
-    private void ReplaceAreaSession(GameSessionOwner session, IReadOnlyDictionary<int, AreaMapRuntime> maps, int currentMap)
+    private void ReplaceAreaSession(GameSessionOwner session, IReadOnlyDictionary<int, AreaMapRuntime> maps, int currentMap,
+        AreaConversationHost? talk)
     {
+        // Every refusal comes first, then the day/night driver is built: if either refuses, nothing has been swapped.
+        if (_conversationHost is not null && talk is null) throw new InvalidOperationException("AREA_CONVERSATION_REBIND_REQUIRED");
+        RebindAreaAmbient(session);
         var previous = _areaSession;
         _areaSession = session;
+        // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
+        if (_conversationHost is not null) _conversationHost = talk!;
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
         previous?.Dispose();
     }

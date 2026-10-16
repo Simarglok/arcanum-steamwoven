@@ -212,18 +212,20 @@
 
 [RES-019 dialog state](../scripting/dialog-state-contract.md) и [RES-021 negative IN](../scripting/negative-inventory-transfer-contract.md) описывают источники и будущие порты/сценарии. Production inventory/IN transfer, callbacks, parent mutation, quantity и recovery не реализованы. GF owner к инвентарю отношения не имеет. Ни research self-tests, ни Area body/frame checks не считаются выполнением передачи предмета.
 
+[ARC-RES-023 items and inventory](../research/crash-site-item-inventory.md) — research по данным T0: кто держит какие предметы на месте крушения (кольцо у Вергилия, его отдаёт единственная операция `IN` в первом узле диалога), как их получить (подбор, обыск мёртвых, генерация сундуков при первом обыске), как выбирается имя. Inventory owner, перенос и UI не реализованы.
+
 ## Сводная матрица покрытия Steamwoven
 
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
-| FR-ITEM-001 | Частично: Area item/container identities, effective fields и insertion-refused dispositions | Нет: ownership/transfer runtime отсутствует; negative IN — research/proposal | Нет: нет actor inventory/transaction service | Частично: original Area body/identity checks; inventory transfer не выполнялся |
+| FR-ITEM-001 | Частично: Area item/container identities, effective fields и insertion-refused dispositions; research [ARC-RES-023](../research/crash-site-item-inventory.md): граф владельцев на T0 сверен (37 предметов на земле, 15 в восьми инвентарях, оба сундука пусты до первого обыска) | Нет: ownership/transfer runtime отсутствует; negative IN — research/proposal | Нет: нет actor inventory/transaction service | Частично: original Area body/identity checks; inventory transfer не выполнялся |
 | FR-ITEM-002 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: carry/encumbrance rules отсутствуют | Нет: нет inventory-to-character link | Нет: weight cases отсутствуют |
-| FR-ITEM-003 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: merge/split runtime отсутствует | Нет: нет stack ownership path | Нет: stack suite отсутствует |
-| FR-ITEM-004 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: key matching/access rules отсутствуют | Нет: нет locks/inventory actions | Нет: unlock cases отсутствуют |
+| FR-ITEM-003 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы; research [ARC-RES-023](../research/crash-site-item-inventory.md): на T0 количественные только два стека золота у живых NPC, патронов нет | Нет: merge/split runtime отсутствует | Нет: нет stack ownership path | Нет: stack suite отсутствует |
+| FR-ITEM-004 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы; research [ARC-RES-023](../research/crash-site-item-inventory.md): в ядре нет ключей и связок ключей, оба сундука never-locked с key ID 0 | Нет: key matching/access rules отсутствуют | Нет: нет locks/inventory actions | Нет: unlock cases отсутствуют |
 | FR-ITEM-005 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: equipment slot rules отсутствуют | Нет: нет paperdoll/runtime actor | Нет: equip cases отсутствуют |
 | FR-ITEM-006 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: pools/eligibility absent | Нет: no combat/equipment bridge | Нет: ammo cases absent |
 | FR-ITEM-007 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: item effect runtime absent | Нет: no item/world lighting bridge | Нет: equipment light cases absent |
-| FR-ITEM-008 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: identify/valuation absent | Нет: no inspect UI | Нет: identification cases absent |
+| FR-ITEM-008 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы; research [ARC-RES-023](../research/crash-site-item-inventory.md): разобраны цепочка имени и смысл `OBJ_F_NAME`, все 52 предмета на T0 идентифицированы | Нет: identify/valuation absent | Нет: no inspect UI | Нет: identification cases absent |
 | FR-ITEM-009 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: consumable/charge rules absent | Нет: no item-action integration | Нет: use outcome cases absent |
 | FR-ITEM-010 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: no books/read state | Нет: no written-object UI | Нет: reading cases absent |
 | FR-ITEM-011 | Нет: предметные значения/их gameplay-смысл для этого требования не реализованы | Нет: damage/repair state absent | Нет: no repair/equipment bridge | Нет: repair cases absent |

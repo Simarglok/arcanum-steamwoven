@@ -29,22 +29,28 @@ public partial class TerrainViewerApp
 
     private bool InCave => _readyArea is not null && _caveLoad is not null && ReferenceEquals(_readyArea, _caveLoad.Area);
 
+    // ARC-SCRIPT-006: the area's game session exists with or without the cave; dialogs keep their consequences in it.
+    // Its clock profile comes from the area lighting source. A synthetic self-test publication has no lighting and
+    // gets an invented synthetic profile instead (never used for original data).
     private void StartAreaTransitions(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         StopAreaTransitions();
         _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
-        if (result.Cave is not { } cave || result.Area?.Lighting is not { } lighting)
-        { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
-        _caveLoad = cave;
+        if (result.Area is not { } area) return;
+        var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
+        ProfileBinding? clock = area.Lighting is { } lighting
+            ? AreaAmbientDriver.ClockProfile(lighting.Source)
+            : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
+        if (clock is not { } profile) { _areaUseStatus = "cave: not loaded (no session clock)"; return; }
         // The game-generated object file carries an empty module GUID here, so the session's module id is
         // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
-        var header = Convert.FromHexString(lighting.Source.ModuleSha256)[..16];
-        var clock = new ProfileBinding(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, lighting.Source.ModuleSha256,
-            lighting.Source.Startup.PayloadSha256, lighting.Source.Startup.Year, lighting.Source.Startup.Hour);
-        var created = AreaTransitionCoordinator.CreateSession(clock, Guid.NewGuid(), new Guid(header), AreaGridSession.Cell(AreaGridSession.Spawn), result.Area.Snapshot.RuntimeMap);
+        var header = Convert.FromHexString(moduleSha)[..16];
+        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), AreaGridSession.Cell(AreaGridSession.Spawn), area.Snapshot.RuntimeMap);
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+        if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
+        _caveLoad = cave;
         _areaTransitions = new([new(result.Area.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(cave.Area.Snapshot, cave.Steps, cave.Chart)],
-            result.Area.Snapshot.RuntimeMap, _areaSession);
+            area.Snapshot.RuntimeMap, _areaSession);
         _areaUseStatus = "cave: click the entrance within 2 cells";
         GD.Print("ARC-WORLD-009 transition-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Maps = _areaTransitions.Maps, Endpoints = _areaTransitions.Triggers().Select(t => t.Endpoint).ToArray(), CaveWalls = cave.Steps.WallEdges }));
@@ -193,7 +199,7 @@ public partial class TerrainViewerApp
         _readyArea = area;
         ConfigureAreaActor(target, transition.ArrivalChartCell, session.State.Facing);
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
-        PushAreaAmbient(); FollowAreaAmbient();
+        RebindAreaMapAmbient();
         // The camera centres on the arrival first, then the scene is published at that view.
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
@@ -234,6 +240,8 @@ public partial class TerrainViewerApp
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             var report = new List<object>();
             report.Add(await UseNextToTriggerAsync(79));
+            // ARC-RENDER-012: the cave's own ambient and stationary lights, observed after the transfer.
+            if (_areaAmbient is not null) report.Add(await RunCaveLightingSmokeAsync());
             report.Add(await UseNextToTriggerAsync(1));
             report.Add(await RunAreaWalkToUseSmokeAsync());
             report.Add(await RunAreaResetDropsTransferSmokeAsync());

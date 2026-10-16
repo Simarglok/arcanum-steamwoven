@@ -29,13 +29,13 @@ public sealed record DialogConversationRequest(
 
 /// <summary>
 /// Typed state ports. Local flags, quest and rumor commands reuse the existing narrow ports. Global flags
-/// are the production versioned owner. <paramref name="World"/> owns reaction, inventory, map and party
+/// are a production versioned owner (a <see cref="GlobalFlagOwner"/> or a session's flag view). <paramref name="World"/> owns reaction, inventory, map and party
 /// effects. A null capability turns every operation that needs it into a static frontier.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
     IDialogCommandPort Commands,
-    GlobalFlagOwner? GlobalFlags,
+    IVersionedGlobalFlagOwner? GlobalFlags,
     IDialogWorldPort? World = null);
 
 public enum DialogReactionMode

@@ -32,9 +32,11 @@ public sealed class AreaTransitionOriginalTests
         Assert.AreEqual(new CellCoord(39, 34), cave.Chart.Spawn, "The cave chart starts at the entrance's authored arrival (2087,2018).");
         Assert.AreEqual(125, cave.Area.Plan.Commands.Count(c => c.Identity is { } id && cave.Area.Snapshot.Objects.Single(o => o.Key == id).Type == 0), "Every wall is drawn.");
         AssertCaveWallCheck(cave.Area.Snapshot, cave.Area.Plan, cave.Steps);
+        // ARC-RENDER-012: the cave has its own map-default scheme and four stationary lights; the exterior core none.
+        Assert.AreEqual((2, 4), (cave.Area.Lighting!.Source.MapDefaultScheme, cave.Area.Lighting.Local!.LightCount));
+        Assert.AreEqual(0, result.Area!.Lighting!.Local!.LightCount);
 
-        var clock = new ProfileBinding(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, result.Area.Lighting!.Source.ModuleSha256,
-            result.Area.Lighting.Source.Startup.PayloadSha256, result.Area.Lighting.Source.Startup.Year, result.Area.Lighting.Source.Startup.Hour);
+        var clock = AreaAmbientDriver.ClockProfile(result.Area.Lighting!.Source);
         var created = AreaTransitionCoordinator.CreateSession(clock, Guid.NewGuid(), Guid.NewGuid(), AreaGridSession.Cell(AreaGridSession.Spawn), 1);
         using var session = created.Owner ?? throw new AssertFailedException("Session: " + created.Failure);
         var transitions = new AreaTransitionCoordinator([exterior, caveMap], 1, session);

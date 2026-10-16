@@ -19,6 +19,12 @@ and actions through this owner (Unknown is a frontier there). The
 [RES-019 contract](dialog-state-contract.md) remains research/proposal for all
 other seams and the eventual integrated trace.
 
+`IVersionedGlobalFlagOwner` (ARC-SCRIPT-006) adds the current `Version` to
+`IGlobalFlagOwner`; `GlobalFlagOwner` and the game session's flag view implement it, and
+the conversation runtime takes it as its GF port. `OriginalGlobalFlags.NewGame` builds the
+original new-game descriptor: flags 0..3199 admitted and known false (the source keeps
+100 32-bit words and zeroes them on init and reset).
+
 ## Binding and explicit bootstrap
 
 The host supplies `GlobalFlagOwnerDescriptor`:

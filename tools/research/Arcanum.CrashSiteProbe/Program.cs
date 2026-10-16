@@ -56,6 +56,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--area-passability-closure-self-test"])) { AreaPassabilityClosureSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-traversal-research") return ProbeAreaTraversal(args[1..]);
             if (args.SequenceEqual(["--area-traversal-self-test"])) { AreaTraversalSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--item-inventory") return ProbeItemInventory(args[1..]);
+            if (args.SequenceEqual(["--item-inventory-self-test"])) { ItemInventorySelfTest(); return 0; }
             if (args.FirstOrDefault() == "--cave-transition") return ProbeCaveTransition(args[1..]);
             if (args.SequenceEqual(["--cave-transition-self-test"])) { CaveTransitionSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-inventory") return ProbeArea(args[1..]);
@@ -87,6 +89,8 @@ internal static partial class Program
                     exception is InvalidOperationException && exception.Message.StartsWith("closure self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AREA_CLOSURE_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--cave-transition", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception is InvalidDataException or ArgumentException or InvalidOperationException && exception.Message.All(c => c is '_' or ' ' or '=' || char.IsAsciiLetter(c) || char.IsAsciiDigit(c)) && (exception.Message.StartsWith("CAVE_", StringComparison.Ordinal) || exception.Message.StartsWith("AGGREGATE_", StringComparison.Ordinal) || exception.Message.StartsWith("AREA_", StringComparison.Ordinal)) || exception.Message.StartsWith("cave self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CAVE_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--item-inventory", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("ITEM_", StringComparison.Ordinal) || exception.Message.StartsWith("item self-test failed: ", StringComparison.Ordinal) ? exception.Message : "ITEM_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: AREA_TRAVERSAL_INVOCATION_FAILED"
                 : args.Contains("--cardinal-traversal")
