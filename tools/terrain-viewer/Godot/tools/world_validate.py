@@ -49,6 +49,7 @@ def safe_diagnostics(output: str) -> list[str]:
         "ARC-WORLD-003 production observation PASS", "ARC-WORLD-001 self-test PASS",
         "ARC-WORLD-001 settings-test PASS", "ARC-GPAD-004 settings-test PASS",
         "ARC-INPUT-001 palette chord matrix PASS", "ARC-INPUT-001 palette UI PASS",
+        "ARC-RENDER-008 original overlay PASS", "ARC-RENDER-008 overlay matrix PASS", "ARC-RENDER-008 overlay invalidation PASS",
     )
     result = []
     for line in output.splitlines():
@@ -159,8 +160,10 @@ def _main(state: dict) -> int:
         code, output = run_child(argv, env, args.timeout)
         state["childExit"] = code
         state["stage"] = "report-processing"
-        passed = code == 0 and any(line.startswith("ARC-WORLD-001 native-smoke PASS ")
-                                  and "fingerprints=immutable rendered=PASS" in line for line in output.splitlines())
+        # ARC-RENDER-008: the original overlay check (Open/Blocked/reverse/outside) runs in every native smoke.
+        passed = (code == 0 and any(line.startswith("ARC-WORLD-001 native-smoke PASS ")
+                                    and "fingerprints=immutable rendered=PASS" in line for line in output.splitlines())
+                  and "ARC-RENDER-008 original overlay PASS " in output)
         if args.kind == "grid-original":
             from tools.local_dev.grid_validation import validate_report as validate_grid_report
             report_lines = [line.removeprefix("ARC-WORLD-003 grid-readback ")
@@ -221,7 +224,10 @@ def _main(state: dict) -> int:
         # ARC-INPUT-001: the palette chord matrix and the palette UI at both required viewports.
         passed = (code == 0 and "ARC-WORLD-001 self-test PASS" in output
                   and "ARC-INPUT-001 palette chord matrix PASS " in output
-                  and all(f"ARC-INPUT-001 palette UI PASS viewport={size} " in output for size in ("1280x800", "2560x1440")))
+                  and all(f"ARC-INPUT-001 palette UI PASS viewport={size} " in output for size in ("1280x800", "2560x1440"))
+                  # ARC-RENDER-008: overlay matrix (rasters when graphical) and failure/republish invalidation.
+                  and "ARC-RENDER-008 overlay matrix PASS mode=world-diagnostic " in output
+                  and "ARC-RENDER-008 overlay invalidation PASS " in output)
     else:
         # This file is created by this runner alone, never ordinary preferences.
         state["stage"] = "owned-temp"

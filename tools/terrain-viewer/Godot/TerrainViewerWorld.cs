@@ -27,6 +27,7 @@ public partial class TerrainViewerApp
     private bool _worldReloadPending;
     private IGridSession? _worldLifecycleSession;
     private string _worldGridDiagnostic = "No step assessment yet";
+    private string? _worldLastStepAttempt;
     private SimulationTime? _worldTestTime;
     private SimulationTime? _worldObservationTime;
     private SimulationTime WorldTime => _worldObservationTime ?? _worldTestTime ?? SimulationTime.At(Time.GetTicksUsec(), 1_000_000);
@@ -119,6 +120,7 @@ public partial class TerrainViewerApp
         _worldPanel.ReloadRequested += PaletteReload;
         _worldPanel.GameHourRequested += PaletteGameHour;
         _worldPanel.LightingToggleRequested += PaletteLightingToggle;
+        _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
         _worldFocusWindow = GetWindow();
@@ -165,7 +167,7 @@ public partial class TerrainViewerApp
         if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
-        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); }
+        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
         _worldAdapter.PaletteOpen = _worldPanel.IsOpen;
         RefreshReadyStatus();
     }
@@ -197,6 +199,7 @@ public partial class TerrainViewerApp
     private long? _worldPaletteReloadGeneration;
     private void PaletteScenePublished()
     {
+        _overlayPanelState = null; SyncPassabilityOverlay();
         if (_worldPaletteReloadGeneration != _generation) return;
         _worldPaletteReloadGeneration = null;
         _worldPanel?.SetActionStatus($"Reload done: generation {_generation} published; actor at spawn.");
@@ -493,6 +496,7 @@ public partial class TerrainViewerApp
         foreach (var evidence in advance.AreaEvidence)
         {
             var assessment = evidence.Assessment;
+            _worldLastStepAttempt = $"({evidence.Key.From.X},{evidence.Key.From.Y})->({evidence.Key.To.X},{evidence.Key.To.Y}) {evidence.Key.Direction} {assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} epoch={session.EvidenceEpoch}";
             _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} objects={assessment.Objects.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
             // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
             GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
@@ -504,6 +508,7 @@ public partial class TerrainViewerApp
         foreach (var evidence in advance.Evidence)
         {
             var assessment = evidence.Assessment;
+            _worldLastStepAttempt = $"({evidence.Key.From.X},{evidence.Key.From.Y})->({evidence.Key.To.X},{evidence.Key.To.Y}) {evidence.Key.Direction} {assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} epoch={session.EvidenceEpoch}";
             _worldGridDiagnostic = $"{assessment.Coverage}/{assessment.Disposition} {assessment.ReasonCode} records={assessment.RecordAssessments.Count} gaps={assessment.Gaps.Count} epoch={session.EvidenceEpoch}";
             // Numeric, path-free production diagnostic evidence; no archive bytes/pixels.
             GD.Print("ARC-WORLD-003 evidence=" + System.Text.Json.JsonSerializer.Serialize(new {
@@ -713,7 +718,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {
@@ -726,6 +731,7 @@ public partial class TerrainViewerApp
         {
             FlushWorldZoom();
             _worldChord.Reset(); _worldAdapter.PaletteOpen = false; _worldPaletteReloadGeneration = null;
+            RetirePassabilityOverlay(); _overlayPanelState = null;
             QuarantineWorld();
             GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
         }
@@ -751,7 +757,7 @@ public partial class TerrainViewerApp
                 {
                     panel.Changed -= SaveWorldSettings; panel.CloseRequested -= ToggleWorldSettings; panel.ResetRequested -= ResetWorldSettings;
                     panel.ZoomRequested -= SetPreferredWorldZoom; panel.FitRequested -= FitWorldView;
-                    panel.ResetSceneRequested -= PaletteResetScene; panel.ReloadRequested -= PaletteReload;
+                    panel.ResetSceneRequested -= PaletteResetScene; panel.ReloadRequested -= PaletteReload; panel.OverlayToggled -= SetPassabilityOverlay;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }
             }

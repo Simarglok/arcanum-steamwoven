@@ -273,7 +273,7 @@ substitute for those two complete neutral frames.
 
 Ctrl+Shift+F9, Start or the HUD button opens the bounded diagnostic palette
 ([contract](../input/diagnostic-palette.md)): Fit, Reset scene, Reload, exact zoom,
-the unavailable passability row, independent camera X/Y and
+the read-only [passability overlay](passability-overlay.md) checkbox (ARC-RENDER-008), independent camera X/Y and
 actor screen X/Y inversion, independent actor/camera deadzones and sensitivities,
 Reset preferences (scene kept) and close.
 WORLD first launch and Reset use **false/false**: stick right/down moves the
