@@ -10,7 +10,11 @@ namespace Arcanum.TerrainViewer.Core;
 
 public sealed record InputFingerprint(long Size, string Sha256);
 public sealed record DecodedTerrainTexture(TerrainTextureKey Key, int Width, int Height, byte[] Rgba);
-public sealed record DecodedStaticTexture(StaticSceneryTextureKey Key, int Width, int Height, byte[] Rgba);
+public sealed record DecodedStaticTexture(StaticSceneryTextureKey Key, int Width, int Height, byte[] Rgba)
+{
+    /// <summary>ARC-RENDER-014: the portable HD question of this frame, or null (draws Legacy as <c>FrameMissing</c>).</summary>
+    public Arcanum.Data.Hd.HdSpriteQuery? HdQuery { get; init; }
+}
 public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, IReadOnlyDictionary<TerrainTextureKey, DecodedTerrainTexture> Textures,
     int ResolvedCount, int TileCount, int FacadeCount, int NormalizationRecoveredCount, int NormalizationLookupCount,
     InputFingerprint ModuleFingerprint, InputFingerprint ResourceFingerprint, InputFingerprint ModuleFingerprintAfter,
@@ -271,7 +275,9 @@ public sealed class TerrainLoadCoordinator : IDisposable
                             catch (StaticObjectException) { throw new TerrainViewerException(new TerrainViewerError(TerrainViewerErrorCode.StaticDecode, Stage: TerrainViewerFailureStage.StaticDecode, Progress: progress)); }
                             cancellationToken.ThrowIfCancellationRequested();
                             checkedBytes = _budget.Add(checkedBytes, textures.Count + staticTextures.Count, staticTextures.Count, _budget.Statics, frame.Width, frame.Height, arguments.Mode, actorProfile);
-                            staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, frame.Rgba.ToArray()));
+                            var rgba = frame.Rgba.ToArray();
+                            staticTextures.Add(command.TextureKey, new DecodedStaticTexture(command.TextureKey, frame.Width, frame.Height, rgba)
+                            { HdQuery = StaticHdQuery(_resource, record, frame, rgba) });
                             _checkpoint?.Invoke(new("static", staticTextures.Count, textures.Count + staticTextures.Count, checkedBytes));
                         }
                         if (staticTextures.Count > TerrainCachePolicy.MaxStaticDistinctKeys)
@@ -390,6 +396,22 @@ public sealed class TerrainLoadCoordinator : IDisposable
         }
     }
 
+
+    // ARC-RENDER-014: the static's ART identity, read from the same selected archive entry the
+    // frame was decoded from (matched by ordinal); null when it cannot be read again.
+    private static Arcanum.Data.Hd.HdSpriteQuery? StaticHdQuery(DatArchive resource, StaticObjectRecord record, ArtFrame frame, byte[] rgba)
+    {
+        if (record.ArtMetadata is not { } metadata) return null;
+        try
+        {
+            var entries = resource.Entries.Where(entry => entry.Ordinal == metadata.ResourceIdentity.DatOrdinal).ToArray();
+            if (entries.Length != 1) return null;
+            var art = HdFrameQueries.ArtIdentity(resource.ReadEntry(entries[0]), entries[0].RawNameBytes);
+            return HdFrameQueries.FromArt(art.PayloadSha256, art.ViewLength, art.NameSha256, frame.GroupIndex, frame.FrameIndex,
+                frame.EffectivePaletteSlot, frame.Width, frame.Height, rgba);
+        }
+        catch (Exception error) when (error is DatException or IOException) { return null; }
+    }
 
     private static InputFingerprint Fingerprint(string path)
     {

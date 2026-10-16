@@ -162,6 +162,7 @@ public partial class TerrainViewerApp
             using var image = GetViewport().GetTexture().GetImage();
             if (image.SavePng(_nativeSmokeScreenshot) != Error.Ok) throw new InvalidOperationException("AREA_CAPTURE_FAILED");
         }
+        await RunAreaHdSmokeAsync(area, result);
         await RunAreaLightingSmokeAsync(area);
         if (_areaTransitions is not null) { await RunAreaHoverSmokeAsync(); await RunAreaInventorySmokeAsync(); await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); await RunAreaFollowSmokeAsync(); }
         RunAreaClockSmoke();

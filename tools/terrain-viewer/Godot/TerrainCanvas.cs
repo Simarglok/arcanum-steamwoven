@@ -89,6 +89,7 @@ public partial class TerrainCanvas : Node2D
     public void Publish(TerrainScenePlan plan, TerrainTextureCache textures)
     {
         ClearArea();
+        if (!ReferenceEquals(_textures, textures)) ReleaseHd();
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = null;
         _actorPlan = null;
@@ -99,6 +100,7 @@ public partial class TerrainCanvas : Node2D
     public void Publish(DiagnosticScenePlan plan, TerrainTextureCache textures)
     {
         ClearArea();
+        if (!ReferenceEquals(_textures, textures)) ReleaseHd();
         _plan = plan?.Terrain ?? throw new ArgumentNullException(nameof(plan));
         _staticPlan = plan.Statics;
         _actorPlan = plan.Actor;
@@ -109,6 +111,7 @@ public partial class TerrainCanvas : Node2D
     public void ClearScene()
     {
         ClearArea();
+        ReleaseHd(); // map change, reload, failure: every HD texture and pending decode goes
         _plan = null;
         _staticPlan = null;
         _actorPlan = null;
@@ -147,19 +150,31 @@ public partial class TerrainCanvas : Node2D
                 DrawTextureRectRegion(texture, new Rect2(command.Destination.X, command.Destination.Y, command.Destination.Width, command.Destination.Height), source);
             }
         }
-        DrawStatics();
-        DrawActor();
+        // ARC-RENDER-014: statics then the actor bind HD in this draw order; each source crop is
+        // the Legacy frame (scaled by N for an HD texture), the destination never changes.
+        var statics = _staticPlan is not null && _showStatics ? _staticPlan.Commands.Where(command => _textures.TryGet(command.TextureKey, out _)).ToArray()
+            : Array.Empty<StaticSceneryDrawCommand>();
+        var actorDrawn = _showActor && _actorPlan is not null && _textures.TryGet(_actorPlan.Current.TextureKey, out _);
+        var hd = BindWorldHd(statics.Select(command => _textures.TryGetStaticHd(command.TextureKey, out var q, out var p) ? ((Arcanum.Data.Hd.HdSpriteQuery?)q, (byte[]?)p) : (null, null))
+            .Concat(actorDrawn ? [_textures.TryGetActorHd(_actorPlan!.Current.TextureKey, out var aq, out var ap) ? (aq, ap) : (null, null)] : []).ToArray());
+        DrawStatics(statics, hd);
+        if (actorDrawn) DrawActor(hd[^1]);
     }
 
-    private void DrawActor()
+    // The source rectangle in the bound texture: the whole Legacy frame, times N for HD.
+    private (Texture2D Texture, Rect2 Source) WorldFrame(ImageTexture legacy, Core.HdBinding<ImageTexture> hd)
+        => hd.Texture is { } texture ? (texture, new Rect2(0, 0, texture.GetWidth(), texture.GetHeight()))
+            : (legacy, new Rect2(0, 0, legacy.GetWidth(), legacy.GetHeight()));
+
+    private void DrawActor(Core.HdBinding<ImageTexture> hd)
     {
         if (_showActor && _actorPlan is not null && _textures is not null)
         {
             var actor = _actorPlan.Current;
-            if (_textures.TryGet(actor.TextureKey, out var texture))
+            if (_textures.TryGet(actor.TextureKey, out var legacy))
             {
                 var destination = new Rect2(actor.Destination.X, actor.Destination.Y, actor.Destination.Width, actor.Destination.Height);
-                var source = new Rect2(0, 0, actor.Destination.Width, actor.Destination.Height);
+                var (texture, source) = WorldFrame(legacy, hd);
                 if (actor.FlipX)
                 {
                     DrawSetTransform(new Vector2(actor.Destination.X + actor.Destination.Width, actor.Destination.Y), 0, new Vector2(-1, 1));
@@ -174,13 +189,14 @@ public partial class TerrainCanvas : Node2D
         }
     }
 
-    private void DrawStatics()
+    private void DrawStatics(IReadOnlyList<StaticSceneryDrawCommand> statics, Core.HdBinding<ImageTexture>[] hd)
     {
-        if (_staticPlan is null || !_showStatics || _textures is null) return;
-        foreach (var command in _staticPlan.Commands)
+        if (_textures is null) return;
+        for (var index = 0; index < statics.Count; index++)
         {
-            if (!_textures.TryGet(command.TextureKey, out var texture)) continue;
-            var source = new Rect2(0, 0, command.Destination.Width, command.Destination.Height);
+            var command = statics[index];
+            if (!_textures.TryGet(command.TextureKey, out var legacy)) continue;
+            var (texture, source) = WorldFrame(legacy, hd[index]);
             if (command.FlipX)
             {
                 DrawSetTransform(new Vector2(command.Destination.X + command.Destination.Width, command.Destination.Y), 0, new Vector2(-1, 1));

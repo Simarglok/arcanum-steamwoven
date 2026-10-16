@@ -129,7 +129,7 @@ public sealed class AreaInputSet
     }
     internal IReadOnlyList<AreaInput> Inputs { get; }
 }
-public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName }
+public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal }
 public sealed record AreaMappingBinding(AreaMappingRole Role, AreaEntryIdentity Entry, string PayloadSha256);
 public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 

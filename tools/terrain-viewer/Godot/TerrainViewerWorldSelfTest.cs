@@ -33,7 +33,7 @@ public static partial class TerrainViewerSelfTest
             // retain the literal overlapping terrain/static/actor pixel oracle.
             new StaticSceneryPlanInput(i, 0, 0, -204, i == 0 ? -2600 : 157, identity, 0, i, 0, 9, 7, 0, 0, 0, 0, false)));
         var textures = statics.Commands.ToDictionary(command => command.TextureKey,
-            command => new DecodedStaticTexture(command.TextureKey, 9, 7, SolidRgba(9, 7, (byte)(100 + command.SourceIndex), 111, 222)));
+            command => SyntheticStatic(command.TextureKey, command.SourceIndex));
         var input = DiagnosticActorMotion.ToPlacement(new(new(6,1),5,ActorDiagnosticAction.Idle), 0);
         var actor = fixture.Result.ActorPlan!.Select(input);
         var bounds = DiagnosticWorldBounds.Create(terrain, statics, actor);
@@ -43,6 +43,13 @@ public static partial class TerrainViewerSelfTest
         var arguments = TerrainViewerArguments.Parse(["--mode", "world-diagnostic", "--module", "synthetic-module", "--resource", "synthetic-terrain",
             "--actor-resource", "synthetic-actor", "--prototypes", "synthetic-prototypes", "--source-id", "synthetic"]);
         return new(arguments, result);
+    }
+    // ARC-RENDER-014: a synthetic ART identity per static so the WORLD HD path has questions to ask.
+    private static DecodedStaticTexture SyntheticStatic(StaticSceneryTextureKey key, int index)
+    {
+        var rgba = SolidRgba(9, 7, (byte)(100 + index), 111, 222);
+        return new DecodedStaticTexture(key, 9, 7, rgba) { HdQuery = HdFrameQueries.FromArt(HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-static-art-{index}")),
+            4096, HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-static-{index}")), key.Group, key.Frame, key.Palette, 9, 7, rgba) };
     }
     private static async Task AssertSyntheticWorldAppAsync(Node host)
     {

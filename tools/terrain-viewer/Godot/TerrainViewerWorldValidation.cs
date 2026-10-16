@@ -176,6 +176,7 @@ public partial class TerrainViewerApp
             if (!matched) throw new TerrainViewerException(new(TerrainViewerErrorCode.RenderFailure));
             GD.Print("ARC-WORLD-001 native-smoke combined-window terrain/static/actor pixels=PASS");
         }
+        await RunWorldHdSmokeAsync(result);
         await RunHumanReadbackAsync(result);
         await RunGridOriginalReadbackAsync(result);
         await WorldOriginalReloadReadbackAsync(result);
