@@ -79,10 +79,12 @@ public sealed class GameSessionLimits
 /// <summary>
 /// Explicit new-game inputs. The flag descriptor's identity becomes the session's world/module. <paramref name="Hero"/>
 /// (ARC-WORLD-015) is the player character the module starts with; a session without one keeps no character and its host
-/// supplies PC facts itself.
+/// supplies PC facts itself. <paramref name="RandomSeed"/> (ARC-WORLD-019) seeds the session's gameplay randomness; the
+/// owner never reads a clock or OS entropy, so a host that wants a new sequence per game passes a new seed, and the
+/// default 0 gives every such session the same rolls.
 /// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
-    ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null);
+    ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
@@ -104,6 +106,8 @@ public enum GameSessionFailure
     SubstituteInventoryUnsupported, InsertRefused,
     // Hero domain (ARC-WORLD-015).
     InvalidHero,
+    // Session randomness (ARC-WORLD-019).
+    InvalidRoll, RandomExhausted,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -202,17 +206,19 @@ public sealed class SessionMapState
 public sealed class GameSessionSnapshot
 {
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
-    /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 adds
-    /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015). Schemas 1..5 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 6;
+    /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 added
+    /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 adds <see cref="Random"/>
+    /// (ARC-WORLD-019). Schemas 1..6 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 7;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionLightingState? lighting)
+        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
+        SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Random = random; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -227,6 +233,8 @@ public sealed class GameSessionSnapshot
     /// <summary>The player character, or null for a session started without one.</summary>
     public SessionHeroState? Hero { get; }
     public SessionInventoryState Inventory { get; }
+    /// <summary>The gameplay generator's seed and position (ARC-WORLD-019).</summary>
+    public SessionRandomState Random { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
 }
@@ -235,6 +243,7 @@ internal static class SessionValidation
 {
     internal const int MaxEntityCharacters = 128;
     internal const int MaxPropertyCharacters = 64;
+    internal const int MaxRollLabelCharacters = 64;
 
     internal static bool Map(SessionMapId map) => map.RuntimeMap >= 1;
 

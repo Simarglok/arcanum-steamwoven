@@ -46,7 +46,7 @@ Draft, 2026-10-02. CE source pin `a7ff41b300ef712f0e7d088183a3d08957110cdd`; и�
 
 ### FR-CONTENT-007 — Случайность относится к gameplay state
 
-**Поведение.** Gameplay checks имеют объявленную политику RNG; камера, частота кадров или смена visual mode не должны расходовать игровые броски. **CE-source:** [seed/state и integer-range draws](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c#L40-L107). Разделение rendering/RNG — **project policy**; точный порядок вызовов в оригинале не восстановлен этим отчётом. **Приёмка:** при заданном seed и последовательности игровых команд визуальные изменения не меняют броски. **Покрытие:** нет общего игрового RNG. Выбор legacy sequence, replay/save policy и точный compat baseline остаются решениями исследования; имя генератора не заменяет это решение.
+**Поведение.** Gameplay checks имеют объявленную политику RNG; камера, частота кадров или смена visual mode не должны расходовать игровые броски. **CE-source:** [seed/state и integer-range draws](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c#L40-L107). Разделение rendering/RNG — **project policy**; точный порядок вызовов в оригинале не восстановлен этим отчётом. **Приёмка:** при заданном seed и последовательности игровых команд визуальные изменения не меняют броски. **Покрытие:** частично — [генератор сессии](../world/session-random-runtime.md) (ARC-WORLD-019): SplitMix64 от seed хоста, равномерные броски с меткой, seed и позиция в snapshot-схеме 7, источник бросков для резолвера атаки; броски делает только явный вызов, поэтому отрисовка их не тратит. Решение задачи: проектный генератор вместо LCG оригинала (в CE seed берётся из времени и не сохраняется, поэтому исходную последовательность не воспроизвести) и без modulo-смещения CE; владелец может его пересмотреть. Ни один хост пока не бросает (viewer — seed 0, бой не подключён); пересев CE для инвентаря и диалога не моделируется.
 
 <a id="fr-content-008"></a>
 
@@ -112,7 +112,7 @@ Normal/depth/occlusion/emissive maps, soft shadows, fog, weather, particles, imp
 | FR-CONTENT-004 | Частично | Частично | Частично | Частично | Multisector v119 static/mobile/prototype identity/default/presence и typed NPC bindings; не mutable world registry/save. |
 | FR-CONTENT-005 | Частично | Неприменимо | Частично | Частично | Bounded DAT/ART/MES/SEC/PRO/mobile/DLG/SCR consumers; не все format variants/overlays. |
 | FR-CONTENT-006 | Частично | Частично | Нет | Частично | Raw DLG/MES projections; [ARC-DATA-013](../formats/mes-reader.md): byte-preserving MES reader с typed отказами и явными профилями ASCII/Windows-1252/Windows-1251 (synthetic латиница/кириллица, отсутствующий номер); файл Windows-1251 с `я` (0xFF) отклоняется — NOT READY; не UI/локализация. |
-| FR-CONTENT-007 | Нет | Нет | Нет | Нет | Gameplay RNG отсутствует. |
+| FR-CONTENT-007 | Частично | Частично | Нет | Частично | Генератор сессии ARC-WORLD-019: seed и позиция в снимке, равномерные броски с меткой, synthetic replay через сохранение; ни один хост ещё не бросает. |
 | FR-CONTENT-008 | Нет | Нет | Нет | Нет | Общего mod compatibility profile нет. |
 | FR-PRODUCT-001 | Неприменимо | Частично | Частично | Частично | Display lab; не production game UI/readability. |
 | FR-PRODUCT-002 | Неприменимо | Частично | Частично | Частично | Synthetic/diagnostic input, не все gameplay actions. |
