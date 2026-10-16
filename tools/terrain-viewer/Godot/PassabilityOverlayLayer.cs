@@ -11,8 +11,9 @@ namespace Arcanum.TerrainViewer;
 /// (outlined) or outside the authority's coverage. Open: no fill. Visible cells only, a fixed per-frame
 /// assessment budget and a visible-cell cap; nothing is assessed or drawn while the overlay is off.
 /// The layer moves with the canvas, so it is redrawn only when its drawn cells change: the view leaves the
-/// drawn region (the view grown by <see cref="DrawMargin"/>), new cells are assessed, or the cap flips.
-/// Each redraw submits a few batched commands (fills, one multiline per colour/width, arrows), not per-cell ones.
+/// drawn region (the view grown by <see cref="DrawMargin"/>) or shrinks under 1/16 of it, new cells are
+/// assessed, the authority fails, or the cap flips.
+/// Each redraw submits a few batched commands (fills, one multiline per colour/width, then arrows), not per-cell ones.
 /// </summary>
 public partial class PassabilityOverlayLayer : Node2D
 {
@@ -72,7 +73,9 @@ public partial class PassabilityOverlayLayer : Node2D
             // Recomputed when the view leaves the drawn region or shrinks far inside it (zoom in).
             else if (!_drawRect.Encloses(view) || view.Area * 16 < _drawRect.Area)
             {
-                var grown = view.Grow(DrawMargin * Math.Max(view.Size.X, view.Size.Y));
+                // Near the cap a quarter margin could exceed DrawnCellCap; a tenth stays well under it.
+                var margin = _visible.Count * 4 <= DrawnCellCap ? DrawMargin : DrawMargin / 2.5f;
+                var grown = view.Grow(margin * Math.Max(view.Size.X, view.Size.Y));
                 var drawn = _overlay.Visible(grown.Position.X, grown.Position.Y, grown.End.X, grown.End.Y, DrawnCellCap + 1);
                 if (drawn.Count > DrawnCellCap) { grown = view; drawn = _visible; }
                 _drawRect = grown; _drawn = drawn; redraw = true;
