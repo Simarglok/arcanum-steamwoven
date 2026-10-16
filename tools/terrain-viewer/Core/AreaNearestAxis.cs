@@ -32,6 +32,17 @@ public sealed class AreaNearestAxis
         return _sourceStart + (_reflected ? _sourceSize - 1 - index : index);
     }
 
+    /// <summary>The exact rule for screen pixels <c>start + i</c>, as a function of <c>i</c>
+    /// alone. Equal keys select equal source indices for every <c>i</c>, so one index row
+    /// serves every item and camera translation with that key. Shifting the origin and
+    /// <paramref name="start"/> by the same integer leaves the key unchanged.</summary>
+    public AreaNearestRowKey RowKey(int start)
+    {
+        var bias = _step * start + _bias;
+        var divisor = BigInteger.GreatestCommonDivisor(BigInteger.GreatestCommonDivisor(_step, bias), _denominator);
+        return new(_step / divisor, bias / divisor, _denominator / divisor, _sourceStart, _sourceSize, _reflected);
+    }
+
     public string[] CoordinateRatio(int screenPixel)
         => new[] { (_step * screenPixel + _bias).ToString(System.Globalization.CultureInfo.InvariantCulture),
             _denominator.ToString(System.Globalization.CultureInfo.InvariantCulture) };
@@ -45,5 +56,19 @@ public sealed class AreaNearestAxis
         var power = exponent == 0 ? -149 : exponent - 150;
         if ((bits & 0x80000000) != 0) mantissa = -mantissa;
         return power >= 0 ? (mantissa << power, BigInteger.One) : (mantissa, BigInteger.One << -power);
+    }
+}
+
+/// <summary>Translation-invariant identity of one exact nearest index row.</summary>
+public readonly record struct AreaNearestRowKey(BigInteger Step, BigInteger Bias, BigInteger Denominator,
+    int SourceStart, int SourceSize, bool Reflected)
+{
+    /// <summary>Source index for row position <paramref name="offset"/>, or -1 when excluded.</summary>
+    public int SourceIndex(int offset)
+    {
+        var numerator = Step * offset + Bias;
+        if (numerator < 0 || numerator >= Denominator * SourceSize) return -1;
+        var index = (int)(numerator / Denominator);
+        return SourceStart + (Reflected ? SourceSize - 1 - index : index);
     }
 }

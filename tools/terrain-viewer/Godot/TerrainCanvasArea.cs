@@ -16,11 +16,13 @@ public partial class TerrainCanvas
     private const int AreaPoolFloor = 256;
     private const int AreaPoolTrimPerUpdate = 1024;
     private AreaUprightOrder? _areaUpright;
+    private readonly AreaMappingCache _areaMappings = new();
 
     private static readonly AreaObjectKey ActorSentinel = new("controlled-session", 5051, AreaSourceKind.Mobile, null, int.MaxValue, 0, "controlled-session", 0);
     public Action<Exception>? AreaFailure { get; set; }
     public int AreaVisibleCount { get; private set; }
     internal int AreaPoolCount => _areaItems.Count;
+    internal long AreaMappingCreatedCount => _areaMappings.CreatedCount;
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
@@ -60,18 +62,14 @@ public partial class TerrainCanvas
         var ordered = _area.Commands.Where(command => command.Phase < 4).Concat(upright);
         var visible = ordered.Where(command => Intersects(command) && (command.Identity == ActorSentinel ? _showActor : command.Identity is null || _showStatics)).ToArray();
         if (visible.Length > _area.Commands.Count + 1) throw new InvalidOperationException("AREA_SUBMISSION_BUDGET");
-        var mappingBytes = visible.Sum(command => AreaDrawItem.EstimateMappingBytes(GetViewport(), command));
-        if (mappingBytes > AreaDrawItem.MaxMappingBytes) throw new InvalidOperationException("AREA_NEAREST_MAPPING_BUDGET");
-        // Bound replacement overlap as well as final residency. Mapping metadata
-        // may be evicted; the original ART repository is not re-decoded. Hidden
-        // pool items have already released theirs.
-        var liveMapping = 0L; for (var index = 0; index < _areaActive; index++) liveMapping += _areaItems[index].MappingBytes;
-        if (mappingBytes + liveMapping > AreaDrawItem.MaxMappingBytes)
-            for (var index = 0; index < _areaActive; index++) _areaItems[index].ReleaseMapping();
+        // Index rows used by this submission stay resident; rows from earlier views are
+        // reused across pans or evicted under the shared 16 MiB cap. The original ART
+        // repository is not re-decoded.
+        _areaMappings.BeginSubmission();
         _textures.UploadAreaVisible(_areaFrames, visible.Where(command => command.Identity != ActorSentinel).Select(command => command.Frame).ToHashSet());
         while (_areaItems.Count < visible.Length)
         {
-            var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest };
+            var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };
             AddChild(item); _areaItems.Add(item);
         }
         // Hide only items that were shown by the previous submission.
@@ -117,6 +115,7 @@ public partial class TerrainCanvas
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
+        _areaMappings.Clear(); // after the items stopped sampling the rows
     }
     public override void _ExitTree()
     {
