@@ -580,8 +580,8 @@ allocated when each task is created (D6). Each slice is a separate PR; all
 keep Data/Simulation/Session free of Godot, take randomness from an injected,
 seedable source with a purpose label per roll, and settle each anomaly they
 meet by an owner decision logged in the plan (D2). Under D8 only a bug of the
-original game gets a switch of the Original setting; a CE slip is fixed in both
-settings ([verification ledger](original-verification-ledger.md) says which is which).
+original game gets a switch of the Original setting; for a CE slip both
+settings follow the original ([verification ledger](original-verification-ledger.md) says which is which).
 
 1. **Spell definitions** (Data, FR-MAGIC-001): read `spelllist.mes` passes A
    and B, `magictech.mes` component names and `spell.mes` names into

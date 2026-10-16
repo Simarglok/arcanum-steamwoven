@@ -4,7 +4,7 @@ Status: **Research**, work item ARC-RES-048 (2026-10-17). One place that records
 game-mechanics anomaly and decision input this project took from a CE reading, what the retail
 1.0.7.4 executable does at the same function. It applies the
 [original executable check](original-executable-check.md) to the decisions of the domain studies,
-and its verdicts decide which differences become switches of the two rule modes of owner
+and its verdicts decide which differences become switches of the two rule settings of owner
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here
@@ -24,20 +24,20 @@ Owner decisions that rest on a contradicted fact are listed under
   function named below keeps its direct branches inside `.text`; none reaches the GOG `.IIDKing`
   section, so none is patched.
 - Two independent readings (method step 6): a first reader per domain, then a second reader that
-  did not see the first verdicts and re-read every row that sets or changes a decision (CE slips,
-  original bugs, rows flagged as decision inputs). [Second reading](#second-reading) records the
-  agreement and any disagreement.
+  did not see the first verdicts and re-read the rows that set or change a decision (most CE slips
+  and original bugs, and every row flagged as a decision input). [Second reading](#second-reading)
+  lists the rows read once, the agreement and the one difference in classification.
 - No bytes, listings or decompiled code are stored; scratch output stayed in the session
   scratchpad. Addresses are the retail virtual addresses.
 
-## Verdicts and what they mean for the two modes
+## Verdicts and what they mean for the two settings
 
-| Verdict | Meaning | Rule modes (D8) |
+| Verdict | Meaning | Rule settings (D8) |
 | --- | --- | --- |
 | **CE slip** | The original differs from CE's reading; CE reconstructed it wrongly. | No switch: Steamwoven and Original both follow the original. |
 | **Original bug** | The original does what CE does, and it looks unintended. | Switch candidate: Original keeps the bug; Steamwoven fixes it only when the owning slice records a fix under D2. |
-| **Original** | The original does what CE does, and it is plausibly intended (or the "anomaly" was a misreading). | No switch: both modes follow it. |
-| **CE change** | CE marks a deliberate change (`CE:` / `FIX:`); the row states the original. | The original behaviour is the Original mode; whether Steamwoven keeps CE's change is a D2 decision. |
+| **Original** | The original does what CE does, and it is plausibly intended (or the "anomaly" was a misreading). | No switch: both settings follow it. |
+| **CE change** | CE marks a deliberate change (`CE:` / `FIX:`); the row states the original. | The original behaviour is the Original setting; whether Steamwoven keeps CE's change is a D2 decision. |
 | **Not checked** | No code to compare (data, labels, editor-only) or out of scope; the reason is given. | Unchanged. |
 
 ## Magic (ARC-RES-043, load map ARC-RES-040)
@@ -128,10 +128,10 @@ Source: [AI plan](npc-combat-ai-plan.md#first-pass-ce-anomalies-to-confirm-not-a
 | P5 | `sub_4A8570`, `combat_turn_based_subturn_end` (0x4B7630) | START/END_COMBAT are per-turn hooks: real time runs END then START every pass in combat mode; turn-based runs START on every pass (before the turn check) and END at the end of the NPC's subturn. | Original |
 | P6 | `ai_action_perform` (0x4AC180), `sub_4AABE0`, `sub_57CC70` | FLEE becomes SURRENDER on the next pass, which leaves combat mode while the NPC keeps running; a surrendered NPC refuses dialog with the side it fled from. Consistent design. | Original |
 | P7 | `sub_4ABC70` (0x4ABC70) | The defensive list is tried when parameter 13 is below the d100: chance `100 − p13` %. Whether that is a bug depends on the label in the original `ai_params.mes` header (data). | Original (label open) |
-| LM3 | `ai_init` (0x4A8320), `ai_mod_load`, `ai_copy_params` | Rows fill by position from the first entry's number; no bounds check. Latent (no gaps in the data). | Original |
+| LM3 | `ai_init` (0x4A8320), `ai_mod_load`, `ai_copy_params` | Rows fill by position from the first entry's number; no bounds check, so a first entry at 100 or above (150 for the module) writes past the table. Latent (no gaps in the data). | Original bug (latent) |
 | LM4 | `ai_mod_unload` (0x4A84C0) | Empty: module rows survive. | Original |
 | LM8 | `combat_load` (0x4B2020) | Required action points read, then set to 0. | Original |
-| LM12 | `background_is_legal` (0x4C2B50), `sub_4C1500` | 8-entry race code table and 11×8 reaction table unchecked. Latent. | Original |
+| LM12 | `background_is_legal` (0x4C2B50), `sub_4C1500` | 8-entry race code table and 11×8 reaction table unchecked. Latent. | Original bug (latent) |
 | LM13 | `invensource_get_id_list` (0x4BF5D0) | Accepts `id ≤ count`: the last set is reachable. | CE slip |
 | LM15 | prototype range labels | Comments and labels only; the data census decides. | Not checked |
 | LM18 | `script_unlock` (0x44C450) | Returns early only **in** editor mode; unlocks in the game. | CE slip |
@@ -157,7 +157,7 @@ Source: [dispatcher](scr-event-dispatcher.md#11-anomalies-recorded-not-adopted-s
 | X3, tile | `tile_script_exec` (0x4C0980) | The **unmodified** record is stored back: nothing a tile script changes about itself persists, including "remove this script". | Original bug |
 | X4 | `sub_44B030` | Call-script runs one local copy and writes nothing back. | Original |
 | X5 | `script_execute`, `script_flags` | The two missing-file exits are as CE. | Original |
-| X6 | `script_execute`, `sub_44C1B0` | −1 next, −2 skip default, −3 and −4 run default; −2 and −3 clear an auto-removing script, −4 does not. Other negative values fail the bounds check (skip default). The admission refusal `NegativeGoto` stands. | Original (CE slip in the −4 removal detail) |
+| X6 | `script_execute`, `sub_44C1B0` | −1 next, −2 skip default, −3 and −4 run default; −2 and −3 clear an auto-removing script, −4 does not. Other negative values fail the bounds check (skip default). So the admission refusal `NegativeGoto` is the project's own strictness, not the original's: in the original a literal goto of −1..−4 is a control code. | Original (CE slip in the −4 removal detail) |
 | X7 | `script_execute_action`, divide (0x4474CE) | Stores the signed quotient; nothing for divisor 0. | CE slip |
 | X8 | `script_set_value` (0x44BB50) | Counter writes are masked to 8 bits. | CE slip |
 | X9 | `script_execute_action`, action 86 (0x4494DF) | Reads slot 1, as CE. (The headline punctuation test reads the last character; CE reads the terminator and always appends a period.) | Original |
@@ -192,7 +192,7 @@ Source: [locomotion](locomotion-evidence.md#anomalies),
 | Field inheritance | `obj_field_fetch` (0x408A20), `sub_408F40`, `sa_get` (0x4E76C0) | An instance field replaces the prototype's whole field; a missing sparse key reads 0. A null array would fault; "null reads 0" is the project's fail-safe. | Original |
 | Lock hours | `object_locked_get` (0x441D40) | Locked-by-day and by-night use hours 7..21. | Original |
 | Follow C7–C9, C3 | `anim_goal_follow_obj` (0x4346A0), `sub_42BF40`, `ai_timeevent_delay` (0x4AD5D0), `ai_init` | Follow ranges 4/7 and 2/5, walk within range + 2, AI delay `250 + 4750·min(d,30)/30` ms, 30-cell catch-up, row filling. | Original |
-| Clock add | `datetime_add_milliseconds` (0x45AA10) | Day carry only when the sum is above 86,400,000. | Original |
+| Clock add | `datetime_add_milliseconds` (0x45AA10), 0x45AA50 | Day carry only when the sum is above 86,400,000, so a sum of exactly one day stays as 86,400,000 ms of the same day. | Original bug (off by one; see [second reading](#second-reading)) |
 | Clock current day/month | `datetime_current_day` (0x45AB00), `datetime_current_month` (0x45AB20) | The two getters are exchanged; the ordinary getters are right. Nothing calls them. | Original bug (dead code) |
 | Clock subtraction | `datetime_sub_milliseconds` (0x45A9E0) | The underflow branch computes the same odd expression as CE. | Original bug |
 | Clock start | `gameinit_mod_load` (0x4B9C30) | 1885 and 15:00; hour 0 stored as 1 ms. | Original |
@@ -208,18 +208,20 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    no switch.
 2. **Dodge 5 × level** ([attack resolver](../world/attack-resolver-runtime.md), ARC-COMBAT-001,
    `AttackRules.DodgeEffectiveness`): implemented from CE; the original uses 2 × level. Under D8 both
-   modes follow the original.
+   settings follow the original.
 3. **Skills §9.5** ([skills study](skills-evidence.md#9-consequences-for-steamwoven-project-policy-proposals)):
-   SK1, SK2, SK4 and SK5 are CE slips, so the Original mode reproduces none of them; SK2's "one point
+   SK1, SK2, SK4 and SK5 are CE slips, so the Original setting reproduces none of them; SK2's "one point
    per click" becomes a design choice, not a fix. SK8 stays a switch candidate; SK7 is the original's
    code.
 4. **Window jump and door "leaving" test** ([locomotion](locomotion-evidence.md#anomalies) LA4/W3/D3,
    [first building](first-building-evidence.md) U4, ARC-WORLD-018 door admission and the research
    probes): the original swaps the tiles; the 324-window census and door results with an outdoor
-   portal tile need recomputing. The direction-5 side effect is an Original-mode switch candidate.
+   portal tile need recomputing. The direction-5 side effect is an Original-setting switch candidate.
 5. **SCR S2 choices** ([census](scr-census.md#anomalies-for-s1-s)): X7 (quotient, not sum) and X8
-   (masked counters) are settled by the original, so neither is an Original-mode option; X10 stays a
-   switch candidate.
+   (masked counters) are settled by the original, so neither is an Original-setting option; X10 stays a
+   switch candidate. X6: the S1 admission refusal of negative gotos (`NegativeGoto`) is stricter than
+   the original, which reads −1..−4 as control codes; whether the Original setting admits them is
+   open (the census decides whether any data uses them).
 6. **Tile script 2498 self-removal** ([Virgil script attachments](virgil-script-attachments.md),
    ARC-RES-037): holds only in CE; in the original the removal does not persist.
 7. **Starting hero `*n` / `/n`** ([starting hero](starting-hero-evidence.md), SH-07 and the runtime's
@@ -239,10 +241,19 @@ Four second readers re-read 77 decision-bearing rows from the executable without
 verdicts: magic (MG1–MG12, MG15, MG18, MG19, the CE changes, O9, LM9, LM20), skills (every basic
 and tech formula, SK1–SK5, SK8, LM1, LM2, LM11, LM17, auto-level A1–A3, A6), AI and scripts (P1–P4,
 P7, LM13, LM18, reputation P1 and A2, the wait timer, X1–X3, X6–X8, X10, TE1) and world (LA1, LA4,
-wilderness A1, the clock getters). **Every verdict agrees.** Two readers saw single lines of an
-early draft of this file through a repository-wide search after forming most of their verdicts;
-they say so in their notes, and the rows concerned (LM20; SK1–SK8, LM1, LM2, LM11, A1, LM17) had
-been read from the executable either before or again afterwards with the same result.
+wilderness A1, the clock functions). **Every observed behaviour agrees, and so does every verdict
+but one classification**: the clock's day carry on a sum above (not equal to) one day was rated
+"Original" by the first reader and "Original bug" by the second; the ledger records it as an
+off-by-one bug of the original. Two readers saw single lines of an early draft of this file
+through a repository-wide search after forming most of their verdicts; they say so in their
+notes. For magic the lines shown were MG1, MG2, MG4, MG8, MG19, O9, LM9 (verdicts already formed)
+and LM20 (read from the executable afterwards); for skills SK1–SK8, LM1, LM2, LM11, A1 and LM17
+(verdicts already formed). The results did not change.
+
+Read once (first reading only): LM10, LM3, LM12, MG13–MG17, MG20, LM5–LM7, LM19, SK6, SK7, auto-level
+A4 and A5, LM16, P5, P6, LM4, LM8, reputation A3 and A5, X4, X5, X9, TE2–TE7, TE9, OQ1–OQ3, the
+random facts, LA2, LA3, the window rows, wilderness A3 and A6, the combat fields and inheritance,
+the lock hours and the follow rows.
 
 Details the second reading added or sharpened:
 
