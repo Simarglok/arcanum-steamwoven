@@ -214,13 +214,20 @@ class TerrainTypes:
     transitions: list[tuple[int, int]]
 
 
+def ascii_text(raw: bytes) -> str:
+    try:
+        return raw.decode("ascii")
+    except UnicodeDecodeError as error:
+        raise ProbeFailure("MesNotAscii") from error
+
+
 def terrain_types(data: bytes) -> TerrainTypes:
     by_number = dict(parse_mes(data))
     names, blocked = [], []
     for number in range(TERRAIN_TYPE_MAX):  # consecutive from 0, as the original counts them
         if number not in by_number:
             break
-        text = by_number[number].decode("ascii")
+        text = ascii_text(by_number[number])
         cut = text.find("/b")
         blocked.append(cut >= 0)
         names.append(text[:cut].rstrip() if cut >= 0 else text)
@@ -230,7 +237,7 @@ def terrain_types(data: bytes) -> TerrainTypes:
     for number, text in parse_mes(data):
         if number < FIRST_TRANSITION_MESSAGE:
             continue
-        left, separator, right = text.decode("ascii").partition(" to ")
+        left, separator, right = ascii_text(text).partition(" to ")
         require(separator != "" and left.lower() in lowered and right.lower() in lowered, "TransitionUnparsed")
         transitions.append((lowered.index(left.lower()), lowered.index(right.lower())))
     require(transitions, "NoTransitions")
@@ -452,7 +459,17 @@ class Source:
         return hits[0].read_bytes()
 
 
+def unsupported_mounts(root: Path) -> bool:
+    """Archives the original would mount but this probe does not model (fail closed)."""
+    extra = [c for c in root.iterdir() if (m := re.fullmatch(r"arcanum(\d+)\.dat", c.name, re.I)) and int(m.group(1)) not in (1, 2, 3, 4)]
+    modules = find_case_insensitive(root, "modules")
+    if modules is not None and modules.is_dir():
+        extra += [c for c in modules.iterdir() if re.fullmatch(r"arcanum\.patch[1-9]", c.name, re.I)]
+    return bool(extra)
+
+
 def open_sources(root: Path) -> list[Source]:
+    require(root.is_dir() and not unsupported_mounts(root), "UnsupportedMount")
     sources = []
     for role, relative, kind in MOUNTS:
         path = root if relative == "." else find_case_insensitive(root, relative)
@@ -508,7 +525,7 @@ def survey_map(stack: Stack, map_folder: str, types: TerrainTypes, neighbours: b
             match = SECTOR_FILE.match(name)
             if match:
                 own.add(int(match.group(2)))
-    resolved, by_source, used, missing, blocked = Counter(), Counter(), Counter(), Counter(), Counter()
+    resolved, by_source, used, missing, blocked, generated = Counter(), Counter(), Counter(), Counter(), Counter(), Counter()
     fields = [Counter(), Counter(), Counter(), Counter()]
     for y, row in enumerate(terrain.tids):
         for x, tid in enumerate(row):
@@ -517,6 +534,7 @@ def survey_map(stack: Stack, map_folder: str, types: TerrainTypes, neighbours: b
             if sector_id(x, y) in own:
                 resolved["own_file"] += 1
                 continue
+            generated[tid_fields(tid)[0]] += 1
             kind, path = template_path(tid, types)
             if terrain_blocked(tid, types):
                 blocked["generated_world_map_blocked"] += 1
@@ -534,6 +552,7 @@ def survey_map(stack: Stack, map_folder: str, types: TerrainTypes, neighbours: b
         "tdf_source": role, "tdf_bytes": len(data), "tdf_sha256": sha(data), "flags": terrain.flags,
         "width": terrain.width, "height": terrain.height, "header_base_type": terrain.base_type,
         "header_padding": terrain.padding, "own_sector_files": len(own), "own_files_outside_grid": len(own - inside),
+        "own_files_in_grid": len(inside), "generated_base_types": {str(k): v for k, v in sorted(generated.items())},
         "resolution": dict(sorted(resolved.items())), "template_sources": dict(sorted(by_source.items())),
         "distinct_templates_used": len(used), "missing_templates": dict(sorted(missing.items())),
         "world_map_blocked_generated": blocked["generated_world_map_blocked"],
@@ -576,6 +595,7 @@ def census(stack: Stack, names: list[str], used: Counter) -> dict:
     types = {"all": Counter(), "used": Counter()}
     kinds_ = {"all": Counter(), "used": Counter()}
     light_rules, scripts = Counter(), Counter()
+    per_folder = {"lights": Counter(), "roofs": Counter(), "sector_scripts": Counter()}
     for name in names:
         match = TEMPLATE_FILE.match(name)
         slot_x, slot_y = int(match.group(2)) & SECTOR_X_MASK, int(match.group(2)) >> 26
@@ -608,8 +628,13 @@ def census(stack: Stack, names: list[str], used: Counter) -> dict:
                     continue
                 lx, ly = location & 0xFFFFFFFF, location >> 32 & 0xFFFFFFFF
                 t["objects_in_own_slot" if (lx >> 6, ly >> 6) == (slot_x, slot_y) else "objects_outside_own_slot"] += 1
-            if group == "all" and frame["sector_script"]:
-                scripts[str(frame["sector_script"])] += 1
+            if group == "all":
+                folder = match.group(1)
+                per_folder["lights"][folder] += len(frame["lights"])
+                per_folder["roofs"][folder] += frame["roof_empty"] == 0
+                per_folder["sector_scripts"][folder] += bool(frame["sector_script"])
+                if frame["sector_script"]:
+                    scripts[str(frame["sector_script"])] += 1
             for _, location in frame["lights"]:
                 lx, ly = location & 0xFFFFFFFF, location >> 32 & 0xFFFFFFFF
                 if group == "all":
@@ -620,7 +645,29 @@ def census(stack: Stack, names: list[str], used: Counter) -> dict:
     return {"totals": {g: dict(sorted(c.items())) for g, c in totals.items()},
             "object_types": {g: dict(sorted(c.items(), key=lambda i: int(i[0]))) for g, c in types.items()},
             "own_id_kinds": {g: dict(sorted(c.items())) for g, c in kinds_.items()},
-            "lights": dict(sorted(light_rules.items())), "sector_script_numbers": dict(sorted(scripts.items()))}
+            "lights": dict(sorted(light_rules.items())), "sector_script_numbers": dict(sorted(scripts.items())),
+            "sector_script_files": sorted(n for n in stack.all_names() for number in scripts
+                                          if n.startswith(f"scr/{number}") and n.endswith(".scr")),
+            "per_folder": {k: {f: v for f, v in sorted(c.items()) if v} for k, c in per_folder.items()}}
+
+
+def template_folder_tdfs(stack: Stack, folders: list[str]) -> dict:
+    """The terrain.tdf inside each template folder: header shape and whether any code is set."""
+    shapes = Counter()
+    for folder in folders:
+        name = f"terrain/{folder}/terrain.tdf"
+        if stack.winner(name) is None:
+            shapes["absent"] += 1
+            continue
+        _, data = stack.read(name, MAX_TDF_BYTES)
+        version = round(struct.unpack_from("<f", data)[0], 3) if len(data) >= 4 else None
+        try:
+            grid = decode_tdf(data)
+            codes = sum(1 for row in grid.tids for tid in row if tid_fields(tid)[2])
+            shapes[f"v{version} {grid.width}x{grid.height} nonzero_codes={codes}"] += 1
+        except ProbeFailure as error:
+            shapes[f"v{version} refused {error}"] += 1
+    return dict(sorted(shapes.items()))
 
 
 def survey(root: Path, main_map: str) -> dict:
@@ -642,7 +689,12 @@ def survey(root: Path, main_map: str) -> dict:
         report, used = survey_map(stack, folder, types, folder == main_map.lower())
         per_map[folder] = report
         used_all.update(used)
-    generated = {m: r for m, r in per_map.items() if r["width"] * r["height"] > r["own_sector_files"]}
+    generated = {m: r for m, r in per_map.items() if r["width"] * r["height"] > r["own_files_in_grid"]}
+    tdf_layout = Counter(f"{r['tdf_source']}:{'row_zlib' if r['flags'] & TDF_COMPRESSED else 'flat'}" for r in per_map.values())
+    generated_types = Counter()
+    for m, r in generated.items():
+        if m != main_map.lower():
+            generated_types.update({int(k): v for k, v in r["generated_base_types"].items()})
     slot_use = Counter()
     for path, count in used_all.items():
         number = int(path.rsplit("/", 1)[1][:-4])
@@ -664,9 +716,12 @@ def survey(root: Path, main_map: str) -> dict:
         "transition_folder_unreferenced_slot_files": sum(
             1 for n in template_names if " to " in n and
             (int(n.rsplit("/", 1)[1][:-4]) & SECTOR_X_MASK, int(n.rsplit("/", 1)[1][:-4]) >> 26) not in referenced),
-        "maps_with_terrain": len(maps), "maps_with_generated_sectors": len(generated),
+        "maps_with_terrain": len(maps), "map_tdf_layout": dict(sorted(tdf_layout.items())),
+        "maps_with_generated_sectors": len(generated),
+        "other_maps_generated_base_types": {str(k): v for k, v in sorted(generated_types.items())},
+        "template_folder_tdf": template_folder_tdfs(stack, sorted(folders)),
         "main_map": main_map.lower(), "main": per_map[main_map.lower()],
-        "other_maps_generated": {m: {k: r[k] for k in ("width", "height", "own_sector_files", "resolution", "header_base_type", "base_types")}
+        "other_maps_generated": {m: {k: r[k] for k in ("width", "height", "own_sector_files", "resolution", "header_base_type", "generated_base_types")}
                                  for m, r in sorted(generated.items()) if m != main_map.lower()},
         "templates_used_by_any_map": len(used_all), "template_slot_use": dict(sorted(slot_use.items())),
         "template_census": census(stack, template_names, used_all),
@@ -752,6 +807,7 @@ def self_test() -> dict:
     assert types.transitions == [(0, 1), (2, 0)]
     expect_failure("TransitionUnparsed", terrain_types, mes + b"{202}{grass into sea}")
     expect_failure("TransitionUnparsed", terrain_types, mes + b"{202}{grass to lava}")
+    expect_failure("MesNotAscii", terrain_types, b"{0}{gr\xe4ss}\n{200}{gr\xe4ss to gr\xe4ss}\n")
 
     # tid fields and the path rule for every code
     assert tid_fields(make_tid(17, 9, 13, 2)) == (17, 9, 13, 2)
@@ -767,6 +823,9 @@ def self_test() -> dict:
         assert seen[code][0] == "terrain/grass to cliff"
     for code in (7, 10, 11, 13, 14):
         assert seen[code] == ("terrain/cliff to grass", seen[15 - code][1])
+    expected_ids = {1: 1, 2: 134217729, 3: 67108865, 4: 134217731, 5: 0, 6: 134217730, 7: 3, 8: 3, 9: 2,
+                    10: 0, 11: 134217731, 12: 67108867, 13: 134217729, 14: 1}
+    assert {code: number for code, (_, number) in seen.items()} == expected_ids
     assert len({seen[c][1] for c in (1, 2, 3, 4, 5, 6, 8, 9, 12)}) == 9
     assert template_path(make_tid(0, 1, 15, 0), types) == ("no_slot", "terrain/cliff to grass/-1.sec")
     assert template_path(make_tid(5, 5, 0, 0), types) == ("invalid_type", None)
@@ -819,21 +878,28 @@ def self_test() -> dict:
                 make_tid(0, 0, 0, 2), make_tid(0, 1, 2, 0), make_tid(0, 0, 0, 1), make_tid(2, 2, 0, 0)]
         world = tdf(4, 2, grid, True)
         own = synthetic_sector([], [])
-        module = [(b"maps\\World\\terrain.tdf", 0, len(world), world),
+        shadow = synthetic_sector([], [])
+        module = [(b"maps\\World\\terrain.tdf", 0, len(world), world), (b"Terrain\\GRASS\\0.sec", 0, len(shadow), shadow),
                   (f"maps\\World\\{sector_id(3, 1)}.sec".encode(), 0, len(own), own)]
         (root / "modules" / "Arcanum.dat").write_bytes(dat_probe.make_archive(module))
         report = survey(root, "World")
         main = report["main"]
         assert main["resolution"] == {"own_file": 1, "plain": 4, "plain_fill": 1, "transition": 1, "transition_fill": 1}, main
         assert main["missing_templates"] == {f"terrain/grass/{1 | 1 << 26}.sec": 1, f"terrain/grass to cliff/{sector_id(1, 2)}.sec": 1}
-        assert main["world_map_blocked_generated"] == 3 and main["template_sources"] == {"arcanum2": 5}
+        assert main["world_map_blocked_generated"] == 3 and main["template_sources"] == {"module_dat": 1, "arcanum2": 4}
         assert [t["plain_variants"] for t in report["terrain_types"]] == [3, 1, 0]
         census_ = report["template_census"]
-        assert census_["totals"]["all"]["objects_in_own_slot"] == 3 and census_["totals"]["all"]["lights"] == 1
+        # the module's empty copy of grass/0 wins over arcanum2's copy with one object
+        assert census_["totals"]["all"]["objects_in_own_slot"] == 2 and census_["totals"]["all"]["lights"] == 1
+        assert census_["per_folder"]["lights"] == {"cliff": 1} and report["template_folder_tdf"] == {"absent": 3}
+        assert main["generated_base_types"] == {"0": 6, "1": 1}
+        (root / "arcanum5.dat").write_bytes(b"")
+        expect_failure("UnsupportedMount", survey, root, "World")
         assert census_["lights"] == {"lights_in_own_slot": 1, "object_rule_differs_from_as_written": 1}
         assert report["template_folders_named_by_mes_missing"] == ["cliff to grass", "grass to sea", "sea", "sea to grass"]
     return {"result": "PASS", "self_test": "mes types/transitions, tid fields, path rule for codes 0..15, "
-            "relocation rules, tdf flat/row-zlib and refusals, sector framing, v119 walker, end-to-end survey"}
+            "relocation rules, tdf flat/row-zlib and refusals, sector framing, v119 walker, end-to-end survey, "
+            "mount precedence and case folding, unsupported-mount refusal"}
 
 
 def main(argv: list[str] | None = None) -> int:
