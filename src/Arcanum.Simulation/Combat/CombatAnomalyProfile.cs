@@ -1,7 +1,7 @@
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
-/// Switches between the fixed default and the source (CE) behaviour of each confirmed CE slip the attack resolver
+/// Switches between the fixed default and the source (CE) behaviour of each confirmed slip the attack resolver
 /// touches (owner decision D2, recorded in docs/research/npc-combat-ai-plan.md#anomaly-decisions). <see cref="Default"/>
 /// is the source with the fixes; <see cref="Source"/> keeps every slip. A read of the original 1.0.7.4 executable at
 /// the CE addresses shows that all four switches here are bugs of the original game too, so <see cref="Source"/> is

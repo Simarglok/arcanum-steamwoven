@@ -23,7 +23,9 @@ roll it made. Numbers are the CE reading at
 `a7ff41b300ef712f0e7d088183a3d08957110cdd` (the research's C15–C21 and the
 "Hit, dodge and critical" steps), re-read for this task in `combat.c`,
 `skill.c`, `item.c`, `object.c` and `random.c`; no CE code or structure was
-copied. Original executable parity is **NOT_VERIFIED**.
+copied. Original executable parity is **NOT_VERIFIED**, except for the
+anomaly switches below, which were checked against the original 1.0.7.4
+executable.
 
 ## Inputs
 
