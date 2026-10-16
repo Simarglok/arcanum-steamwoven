@@ -457,8 +457,8 @@ list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
   place (`ReplaceAreaSession`), which disposes the previous owner: code that uses the
   session reads it when needed and keeps no owner, clock or flags reference across
   calls; a component that mirrors session state rebinds there. Snapshot sections other domains
-  add later are restored with the session; the viewer's day/night clock does not
-  read the session clock yet.
+  add later are restored with the session; the day/night driver (ARC-WORLD-010) rebinds
+  there to the loaded clock, so a load restores the saved time, pause and applied scheme.
 - **HUD.** The area status line shows the slot and the last F7/F8 result.
 
 The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after

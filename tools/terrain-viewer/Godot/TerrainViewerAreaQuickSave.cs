@@ -141,10 +141,11 @@ public partial class TerrainViewerApp
     /// across calls: the previous owner is disposed here. A component that mirrors session state rebinds here.</summary>
     private void ReplaceAreaSession(GameSessionOwner session, IReadOnlyDictionary<int, AreaMapRuntime> maps, int currentMap)
     {
+        // The day/night driver is built first: if it refused the session, nothing has been swapped.
+        RebindAreaAmbient(session);
         var previous = _areaSession;
         _areaSession = session;
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
-        RebindAreaAmbient(session);
         previous?.Dispose();
     }
 

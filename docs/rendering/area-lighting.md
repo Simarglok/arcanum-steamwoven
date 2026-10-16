@@ -42,8 +42,11 @@ sector change, the selection is re-applied and recorded in the session
 it (FR-LIGHT-012). The record is the selection, also in the cave (drawn unlit) and with
 the diagnostic lighting toggle off; in the cave the exterior sector last selected stays
 for the flow and the wait alike. Automated runs (self-test, native smoke) get no live flow; they drive
-the same tick with literal host times. Sleep/rest UI, turn-based combat, a scheduler
-and a save file are not implemented; the 8× rate is a CE source observation, NOT_VERIFIED.
+the same tick with literal host times. The F7/F8 quick-save slot
+([ARC-WORLD-011](terrain-viewer.md#quick-save-and-quick-load-arc-world-011)) saves and
+loads this clock and the applied scheme; on a quick load the driver rebinds to the
+loaded session. Sleep/rest UI, turn-based combat, a scheduler and a save list are not
+implemented; the 8× rate is a CE source observation, NOT_VERIFIED.
 
 On the selected original module (opt-in real-data test): map 5000, map default
 scheme 1, all nine core sector words 0, scheme 1 payload SHA-256
@@ -114,5 +117,5 @@ both actions report "unavailable". No launch argument or key binding was added.
 
 Original night appearance, TIG multiply rounding, palette/BPP behaviour and
 gameplay effects of darkness remain NOT_VERIFIED. Light sources (FR-LIGHT-008..010),
-luminance checks (FR-LIGHT-011) and a save file (FR-LIFECYCLE, ARC-WORLD-011) are
-separate work; the session snapshot already carries the clock and the applied scheme.
+luminance checks (FR-LIGHT-011) and a save list (FR-LIFECYCLE) are separate work; the
+session snapshot carries the clock and the applied scheme, saved by the ARC-WORLD-011 quick-save slot.
