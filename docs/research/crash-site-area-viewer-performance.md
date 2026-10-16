@@ -11,7 +11,9 @@ a budget or a regression gate. Numbers are single observations on one machine.
 actor-framed first publication and cached upright order, and F4 partly by the
 cached N/A count (see [F1/F4/F5 result](#f1f4f5-result-pool-startup-hud-order));
 F2 by the shared translation-invariant index-row cache (see
-[F2 result](#f2-result-shared-index-rows)). The other causes are unchanged.
+[F2 result](#f2-result-shared-index-rows)); L2 mostly by a faster inflate
+projection (see [L2 result](#l2-result-inflate-projection)). The other causes are
+unchanged.
 
 ## Scope and method
 
@@ -242,6 +244,37 @@ their pool slot (132 of 757 per moving frame at zoom 1, 8 of 203 at zoom 2). At 
 52 ms, but frames there remain bound by about 9,500 draw calls (cause F3), and the
 measured path covered a busier view, so that row is not comparable.
 
+## L2 result: inflate projection
+
+Timing the I3 and frame-copy sub-steps (temporary probe, same inputs) showed that
+the inferred per-byte pixel hashing was not the cost (0.2 s). About 90% of both
+phases in Debug (about half in Release) was `DatArchive.ReadEntry`, and inside it `DatInflateProjection.Measure`: the
+admission pre-pass that traverses every deflate token of an entry, bit by bit, to
+bound SharpZipLib's allocations before inflating untrusted input. It ran 12,497
+times per load (each entry read in I3, then again in the copy).
+
+`Measure` now reads bits from one peeked little-endian word, decodes codes of up to
+9 (literal/length) or 8 (distance) bits through small stack lookup tables built from
+the same canonical code, and falls back to the unchanged bit-serial canonical decode
+otherwise; consecutive fixed blocks reuse the fixed tables. The decoded symbols
+are identical by construction (codes are prefix-free); a differential test checks
+envelopes and failures against the verbatim previous implementation on valid,
+bit-flipped, truncated and wrong-size zlib streams and on crafted fixed blocks with
+the edge codes 285-287 and distances 29-31.
+
+| Measurement (same machine) | Before | After |
+| --- | ---: | ---: |
+| Projection, I3 + copy, Debug probe | 17.0 + 16.1 s | 6.0 + 5.5 s |
+| Projection, I3 + copy, Release probe | 3.1 + 2.7 s | 1.5 + 1.2 s |
+| `LoadStrict`, Debug / Release probe | 19.8 / 5.9 s | 8.9 / 4.4 s |
+| `CopyFrames`, Debug / Release probe | 18.4 / 4.9 s | 7.9 / 3.4 s |
+| Debug source launch to SOURCE READY | 49 s | 22 s |
+| Native `crash-site-area` smoke (two loads) | 99 s | 48 s |
+
+SharpZipLib's own inflate (about 1.5 s per phase in both configurations) and the
+projection remain the largest load steps; each entry is still read, projected and
+inflated twice because there is no persistent frame cache.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
@@ -266,9 +299,9 @@ contracts that the code currently enforces.
 3. **F3, 35 ms+ at zoom ≤ 0.25.** Reduce draw calls: shared material and
    batched or atlased submission, or pre-composited terrain chunks for the
    immutable terrain layer (36,864 of 37,363 commands are terrain).
-4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy.** Run
-   original-data loads from optimized assemblies (Release core libraries, or an
-   optimized export), or remove per-byte interface loops in decode/pixel hashing.
+4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy. Mostly done
+   (L2 result above: the cost was the inflate projection, not pixel hashing).**
+   The rest is SharpZipLib inflate and the projection, each paid twice per entry.
 5. **F4 (≈2 ms every frame) and F5 (≈3 ms per camera change). F5 done; F4 partly (N/A count cached, the line is still rebuilt every frame).** Update the HUD
    only on change; cache the upright order and patch only the actor marker.
 6. **F6 and minor load items.** Keep a bounded LRU of GPU textures instead of
