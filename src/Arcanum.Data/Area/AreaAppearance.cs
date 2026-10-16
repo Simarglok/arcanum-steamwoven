@@ -140,16 +140,21 @@ public sealed partial class AreaDataOwner
             entry = Unique(explicitBindings[0].Entry.Source, path);
             if (entry != explicitBindings[0].Entry) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
         }
-        else entry = source.HasValue ? Unique(source.Value, path) : ClosedUnique(path);
+        else entry = source.HasValue ? Resolve(source.Value, path) : ClosedUnique(path);
         return new(entry, lookup, nominal, group, frame, palette, mirror);
     }
+    /// <summary>A pinned profile reads a resource from the archive its mapping names. A whole-map
+    /// plan reads it from whichever resource archive holds it, as the original's file system does
+    /// across its mounted archives (still requiring one holder).</summary>
+    private AreaEntryIdentity Resolve(AreaInputKey source, string path) =>
+        _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original ? ClosedUnique(path) : Unique(source, path);
     private AreaEntryIdentity ClosedUnique(string path)
     {
         var matches = new List<AreaEntryIdentity>();
         foreach (var role in new[] { AreaSourceRole.Resource1, AreaSourceRole.Resource2 })
         {
             var key = new AreaInputKey(role);
-            if (!_indexes.TryGetValue(key, out var index) || !index.TryGetValue(path.ToLowerInvariant(), out var entries)) continue;
+            if (!_indexes.TryGetValue(key, out var index) || !index.TryGetValue(path.Replace('\\', '/').ToLowerInvariant(), out var entries)) continue;
             matches.AddRange(entries.Select(e => _entryIdentities[(key, e.Ordinal)]));
         }
         if (matches.Count != 1) throw Fail(matches.Count == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
@@ -186,6 +191,10 @@ public sealed partial class AreaDataOwner
             (policy, view, physical) = OriginalProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
         else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave && record is not null)
             (policy, view, physical) = CaveProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
+        // Whole-map plans read ART as the original does: a single-rotation ART has only group 0,
+        // whatever rotation the object asks for (pinned CE tig art.c, TIG_ART_0x01).
+        else if (!_plan.Original && _plan.AllowArtTrailingBytes && bytes.Length >= 4 && (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 1 && physical != 0)
+            (policy, physical) = ("original-single-group-rotation-v1", 0);
         var descriptor = InspectFrame(bytes.AsSpan(0, view), physical, frame, palette);
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.Pixels };
         _budget.CompleteFrame(checked((long)descriptor.Metadata.Width * descriptor.Metadata.Height * 4), descriptor.Metadata.EncodedPayloadLength);
@@ -222,9 +231,24 @@ public sealed partial class AreaDataOwner
         if (authenticateAfter) Authenticate(identity, token);
         return frame;
     }
-    private static ArtFrame DecodeFrame(ReadOnlySpan<byte> bytes, ArtFrameSelection selection)
+    private ArtDecoderOptions? _lenientArt;
+    private ArtDecoderOptions LenientArt
     {
-        try { return ArtDecoder.Decode(bytes, selection, WireLimits.ArtOptions); }
+        get
+        {
+            var strict = WireLimits.ArtOptions;
+            return _lenientArt ??= new()
+            {
+                MaxInputBytes = strict.MaxInputBytes, MaxEncodedFrameBytes = strict.MaxEncodedFrameBytes, MaxFrameCount = strict.MaxFrameCount,
+                MaxDimension = strict.MaxDimension, MaxFrameTableBytes = strict.MaxFrameTableBytes, MaxFramePixels = strict.MaxFramePixels,
+                MaxRgbaBytes = strict.MaxRgbaBytes, AllowTrailingBytes = true,
+            };
+        }
+    }
+    private ArtDecoderOptions ArtOptions => _plan.AllowArtTrailingBytes && !_plan.Original ? LenientArt : WireLimits.ArtOptions;
+    private ArtFrame DecodeFrame(ReadOnlySpan<byte> bytes, ArtFrameSelection selection)
+    {
+        try { return ArtDecoder.Decode(bytes, selection, ArtOptions); }
         catch (ArtException error) { throw Fail(error is ArtLimitExceededException ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Frame); }
         catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame); }
     }
@@ -238,7 +262,7 @@ public sealed partial class AreaDataOwner
         _budget.FrameAllocation(checked(frames * (long)groups * 384 + 16384));
         try
         {
-            var metadata = ArtDecoder.Inspect(bytes, WireLimits.ArtOptions);
+            var metadata = ArtDecoder.Inspect(bytes, ArtOptions);
             if (palette is < 0 or > 3) throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
             return (metadata.GetFrame(group, frame), frames * groups);
         }
