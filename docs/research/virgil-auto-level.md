@@ -214,12 +214,12 @@ matters only once both schemes are complete, since a running rule spends them.
 
 ## Proposal for implementation (P)
 
-1. Keep the level gate in the consent evaluator (slice 2 of the
-   [companion research](companion-follow-evidence.md#proposed-implementation-slices-project-policy-not-accepted))
-   with a synthetic test, but do not model a level gap for Virgil: with the
-   installed data it cannot arise.
-2. When party state exists, a follower level-up owner should implement L7 as
-   a pure function of (follower level, PC old and new level) with the cap at
+1. Keep the `LowLevel` result of the [party runtime](../world/party-runtime.md)
+   (ARC-WORLD-013) driven by explicit inputs and covered by a synthetic test,
+   but do not model a level gap for Virgil: with the installed data it cannot
+   arise, so passing his and the PC's current levels is enough.
+2. When follower levelling is added to the party runtime, implement L7 as a
+   pure function of (follower level, PC old and new level) with the cap at
    50, tested over every input against the invariant the self-test checks.
 3. Treat scheme purchase (L2–L5) as a separate later slice under FR-CHAR-021:
    it needs the stat, skill, spell, tech and hit-point cost and cap rules, and
