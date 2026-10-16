@@ -119,7 +119,8 @@ Rules of the wiring:
 - **Map change.** `PlaceActor` and `ApplyChanges` to another map move the pending timers of the PC's followers to that
   map (`GameEventQueue.Relocate`; an event moves only when every entity it names is on the old map and travels). A key
   collision on the new map refuses the whole step (`EventConflict`; the one-map-per-NPC rule leaves no way to reach it),
-  and a call from the host's world port during a pass is `InvalidEventPass`. Waiting and free NPCs keep their timers
+  and a call from the host's world port during a pass is `InvalidEventPass` (so is a life step from it that would move
+  an NPC's timers). Waiting and free NPCs keep their timers
   on their map. The source makes unconscious followers wait before the PC leaves; the session moves the timers of every
   follower in the party list, so a host that leaves an unconscious follower behind makes it wait first.
 - **Long waits.** A wait that advances many hours and then runs one pass fires each timer once, late: fatigue and resting

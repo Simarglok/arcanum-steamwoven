@@ -1188,9 +1188,9 @@ public sealed class GameSessionOwner : IDisposable
             .Select(timer => TimerEvent(timer, target, map, now, recoveryCopies)).Where(pending => !IsPending(pending.Kind, target.Entity)).ToArray();
         // One map per NPC's timers: a step on another map than its pending timers' (a teleport the session did not see)
         // takes them along, as the NPC is evidently here now.
-        var stray = target.IsHero ? [] : _events.QueryPending()
-            .Where(e => e.Payload.Entities.Length == 1 && e.Payload.Entities[0].Code == target.Entity && e.Payload.Entities[0].Map != map)
-            .Select(e => e.Payload.Entities[0].Map).Distinct().ToArray();
+        var stray = target.IsHero ? [] : StrayMaps(target.Entity!, map);
+        // A move needs the queue outside a pass: a life call from the host's world port during one is refused.
+        if (stray.Length > 0 && _passWorld is not null) return RejectLife(GameSessionFailure.InvalidEventPass);
         if (timers.Length > 0 && (_events.Count > _events.Limits.MaxPending - timers.Length ||
             _events.NextSequence > long.MaxValue - timers.Length || now > long.MaxValue - SessionEventKinds.RestingDelayMs))
             return RejectLife(GameSessionFailure.EventBudgetExceeded);
@@ -1222,6 +1222,23 @@ public sealed class GameSessionOwner : IDisposable
         return target.IsHero
             ? (SessionEventKinds.Kind(timer, true), new([], [.. values]))
             : (SessionEventKinds.Kind(timer, false), new([new GameEventEntity(map, target.Entity!)], [.. values]));
+    }
+
+    private static readonly string[] NpcKinds = [SessionEventKinds.NpcFatigue, SessionEventKinds.NpcPoisonDamage,
+        SessionEventKinds.NpcPoisonRecovery, SessionEventKinds.NpcResting];
+
+    // The maps other than this one where the NPC has pending timers (none while the one-map rule holds).
+    private int[] StrayMaps(string entity, int map)
+    {
+        var maps = new SortedSet<int>();
+        foreach (var kind in NpcKinds)
+            _events.Any(kind, e =>
+            {
+                var at = e.Payload.Entities[0];
+                if (at.Code == entity && at.Map != map) maps.Add(at.Map);
+                return false;
+            });
+        return maps.ToArray();
     }
 
     // One per critter and kind, whatever map the pending one is on (an NPC keeps all its timers on one map).
