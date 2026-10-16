@@ -120,6 +120,25 @@ public sealed class AreaHoverTests
     }
 
     [TestMethod]
+    public void GroundActionMatchesThePlannersRefusalsWithoutASearch()
+    {
+        var cells = new HashSet<CellCoord>();
+        for (var x = -40; x <= 40; x++) for (var y = -2; y <= 2; y++) cells.Add(new(x, y));
+        var open = new HashSet<(CellCoord, NeighborDirection)>();
+        foreach (var cell in cells) foreach (var direction in Enum.GetValues<NeighborDirection>()) open.Add((cell, direction));
+        var steps = new Steps(cells, open);
+        var actor = new CellCoord(0, 0);
+        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, actor), "the actor's own cell");
+        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(32, 0)), "at the axis reach");
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(33, 0)), "beyond the axis reach: ROUTE_TARGET_OUT_OF_RANGE");
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(0, 3)), "outside the area: ROUTE_TARGET_OUTSIDE_AREA");
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, new(0, 9), new(1, 0)), "actor outside: ROUTE_SOURCE_OUTSIDE_AREA");
+        Assert.AreEqual(AreaHoverAction.Walk, AreaHover.Ground(steps, actor, new(5, 1), new RouteLimits(axisDistance: 5)));
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(steps, actor, new(6, 1), new RouteLimits(axisDistance: 5)), "the follower's limits apply");
+        Assert.AreEqual(AreaHoverAction.NoRoute, AreaHover.Ground(new Steps(cells, []), actor, new(3, 0)), "no entry: ROUTE_NOT_FOUND pre-check");
+    }
+
+    [TestMethod]
     public void NamesNeedTheModuleArchiveInsideAGameFolder()
     {
         Assert.AreEqual(AreaNamesStatus.ModuleOutsideGameRoot, AreaHover.LoadNames("synthetic-module").Status);
@@ -133,6 +152,7 @@ public sealed class AreaHoverTests
             Assert.AreEqual(AreaNamesStatus.ModuleOutsideGameRoot, AreaHover.LoadNames(Path.Combine(root.FullName, "modules", "Synthetic.txt")).Status);
             var load = AreaHover.LoadNames(module);
             Assert.AreEqual(AreaNamesStatus.MountFailed, load.Status, "no tig.dat: the game folder does not mount");
+            Assert.IsFalse(load.Detail.Contains(root.FullName, StringComparison.Ordinal), "details never carry a path");
             Assert.IsNull(load.Catalog);
         }
         finally { root.Delete(true); }

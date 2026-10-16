@@ -7,14 +7,17 @@ using Arcanum.Simulation.Navigation;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>What a left press at the pointer would do in crash-site-area (ARC-UI-005). The original's main-mode
-/// cursor does not change per target; this action cursor is project policy (docs/ui/hover-tooltip-cursor.md).</summary>
+/// cursor does not change per target; this action cursor is project policy
+/// (docs/rendering/terrain-viewer.md, "Hover tooltip and action cursor").</summary>
 public enum AreaHoverAction
 {
     /// <summary>The press would be ignored: the pointer is off the world, over GUI, or world input is guarded.</summary>
     None,
-    /// <summary>A ground press sets a click-to-move goal whose cell some neighbour step can enter.</summary>
+    /// <summary>A ground press sets a click-to-move goal that passes the planner's cheap refusals (see
+    /// <see cref="AreaHover.Ground"/>); the bounded search itself can still end without a route.</summary>
     Walk,
-    /// <summary>A ground press would set a goal no neighbour step can enter (the planner answers NoRoute).</summary>
+    /// <summary>A ground press would set a goal the planner refuses outright: outside the area, beyond its axis
+    /// reach from the actor, or a cell no neighbour step can enter.</summary>
     NoRoute,
     Talk,
     WalkToTalk,
@@ -61,6 +64,7 @@ public sealed class AreaHoverIndex
     /// <summary>The pickable drawn bodies in draw order.</summary>
     public IReadOnlyList<AreaDrawCommand> Bodies { get; }
     public AreaObjectRecord Row(AreaObjectKey key) => _rows[key];
+    public bool Contains(AreaObjectKey key) => _rows.ContainsKey(key);
 
     public static bool ClickThrough(AreaObjectRecord row)
     {
@@ -130,6 +134,19 @@ public static class AreaHover
         return false;
     }
 
+    /// <summary>The ground action for a goal, from the planner's refusals that need no search
+    /// (<see cref="RoutePlanner.Plan"/>): both cells inside the area, the goal within the axis reach of the actor, and
+    /// the goal enterable (<see cref="GoalEnterable"/>). The actor's own cell is a walk (the route is already there).</summary>
+    public static AreaHoverAction Ground(IRouteStepSource source, CellCoord actor, CellCoord goal, RouteLimits? limits = null)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        limits ??= new RouteLimits();
+        if (!source.Contains(actor) || !source.Contains(goal)) return AreaHoverAction.NoRoute;
+        if (goal == actor) return AreaHoverAction.Walk;
+        if (Math.Abs((long)goal.X - actor.X) > limits.AxisDistance || Math.Abs((long)goal.Y - actor.Y) > limits.AxisDistance) return AreaHoverAction.NoRoute;
+        return GoalEnterable(source, goal) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
+    }
+
     /// <summary>The action label shown under the name, and alone in the status line.</summary>
     public static string Label(AreaHoverAction action) => action switch
     {
@@ -163,12 +180,14 @@ public static class AreaHover
             || !string.Equals(Path.GetExtension(full), ".dat", StringComparison.OrdinalIgnoreCase))
             return new(AreaNamesStatus.ModuleOutsideGameRoot, null, "module archive is not <game>/modules/<Name>.dat");
         var discovery = ContentMountPlan.Discover(root, Path.GetFileNameWithoutExtension(full));
-        if (discovery.Status != ContentMountStatus.Ready) return new(AreaNamesStatus.MountFailed, null, $"{discovery.Status} {discovery.Detail}");
+        // Details name statuses only: mount and stack details carry absolute paths, which logs never print.
+        if (discovery.Status != ContentMountStatus.Ready) return new(AreaNamesStatus.MountFailed, null, discovery.Status.ToString());
         var module = discovery.Plan!.SearchOrder.SingleOrDefault(source => source.Role == ContentSourceRole.ModuleArchive);
-        if (module is null || !string.Equals(Path.GetFullPath(module.Path), full, StringComparison.Ordinal))
+        // Discovery refuses names that differ only in case, so a case-insensitive comparison names one file.
+        if (module is null || !string.Equals(Path.GetFullPath(module.Path), full, StringComparison.OrdinalIgnoreCase))
             return new(AreaNamesStatus.ModuleOutsideGameRoot, null, "the mounted module archive is not the area's module file");
         var opened = ContentStack.Open(discovery.Plan);
-        if (opened.Status != ContentStackStatus.Ready) return new(AreaNamesStatus.StackFailed, null, $"{opened.Status} {opened.Detail}");
+        if (opened.Status != ContentStackStatus.Ready) return new(AreaNamesStatus.StackFailed, null, opened.Status.ToString());
         using var stack = opened.Stack!;
         var loaded = ObjectDescriptionCatalog.Load(stack);
         return loaded.Status == DescriptionCatalogStatus.Ready

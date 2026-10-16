@@ -31,6 +31,7 @@ public partial class TerrainViewerApp
     private Godot.Input.CursorShape _hoverCursor = Godot.Input.CursorShape.Arrow;
     private bool _pointerInWindow = true;
     private Vector2? _hoverPointerForSelfTest;
+    private bool _hoverOverGuiForSelfTest;
 
     internal AreaHoverAction HoverActionForSelfTest => _hoverAction;
     internal string? HoverTextForSelfTest => _hoverPanel?.Visible == true ? _hoverText : null;
@@ -63,7 +64,7 @@ public partial class TerrainViewerApp
     private void UnbindAreaHover()
     {
         _hoverIndex = null; _hoverIndexArea = null; _hoverRoutes = null; _hoverRoutesSession = null;
-        ShowAreaHover(null, AreaHoverAction.None, null);
+        ShowAreaHover(null, AreaHoverAction.None, null, refreshStatus: false);
         _hoverStamp = null;
     }
 
@@ -71,7 +72,7 @@ public partial class TerrainViewerApp
     {
         if (_hoverNames is not null || _hoverNamesTask is not { IsCompleted: true } task) return;
         _hoverNames = task.IsCompletedSuccessfully ? task.Result
-            : new(AreaNamesStatus.StackFailed, null, task.Exception?.GetBaseException().GetType().Name ?? "cancelled");
+            : new(AreaNamesStatus.StackFailed, null, "load threw " + (task.Exception?.GetBaseException().GetType().Name ?? "cancelled"));
         _hoverNamesTask = null; _hoverIndex = null;
         GD.Print($"ARC-UI-005 names status={_hoverNames.Status} detail={_hoverNames.Detail}");
     }
@@ -87,13 +88,15 @@ public partial class TerrainViewerApp
         return _hoverIndex;
     }
 
-    /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point.</summary>
+    /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point. A wall drawn faded
+    /// (ARC-RENDER-011) is see-through for the pick, as the original skips walls with OWAF_TRANS_LEFT/RIGHT.</summary>
     private AreaObjectKey? AreaObjectAtScreen(Vector2 screen)
     {
         if (_readyArea is not { } area || HoverIndex() is not { } index) return null;
         var transform = AreaDrawItem.RasterTransform(GetViewport());
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
-        return index.Pick(command => AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0);
+        return index.Pick(command => AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
+            && (command.Additive || _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None));
     }
 
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>
@@ -107,8 +110,8 @@ public partial class TerrainViewerApp
         AdoptHoverNames();
         var index = HoverIndex()!;
         var screen = _hoverPointerForSelfTest ?? GetViewport().GetMousePosition();
-        var overWorld = _pointerInWindow && (_hoverPointerForSelfTest is not null
-            || (GetViewport().GuiGetHoveredControl() is null && GetViewport().GetVisibleRect().HasPoint(screen)));
+        var overGui = _hoverPointerForSelfTest is not null ? _hoverOverGuiForSelfTest : GetViewport().GuiGetHoveredControl() is not null;
+        var overWorld = _pointerInWindow && !overGui && GetViewport().GetVisibleRect().HasPoint(screen);
         // A modal surface or lost focus hides the tooltip; the other click guards (closed gate, lifecycle, pending
         // transfer) keep the name but show no action, as the click would be ignored.
         var visible = overWorld && IsWorld && _worldInitialized && _worldFocused && !WorldModal;
@@ -141,10 +144,11 @@ public partial class TerrainViewerApp
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return AreaHoverAction.None;
         if (!ReferenceEquals(_hoverRoutesSession, session)) { _hoverRoutes = new AreaRouteSource(session.Snapshot, session.Chart); _hoverRoutesSession = session; }
-        return AreaHover.GoalEnterable(_hoverRoutes!, cell) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
+        // WorldRoute's follower uses the default limits.
+        return AreaHover.Ground(_hoverRoutes!, session.State.CommittedCell, cell);
     }
 
-    private void ShowAreaHover(AreaObjectKey? key, AreaHoverAction action, Vector2? screen)
+    private void ShowAreaHover(AreaObjectKey? key, AreaHoverAction action, Vector2? screen, bool refreshStatus = true)
     {
         var text = key is { } hit && _hoverIndex is { } index ? AreaHover.Tooltip(index.Name(hit), action) : null;
         var changed = key != _hoverKey || action != _hoverAction || text != _hoverText;
@@ -173,13 +177,15 @@ public partial class TerrainViewerApp
                 _hoverPanel.Visible = true;
             }
         }
-        if (changed) RefreshAreaStatus();
+        if (changed && refreshStatus) RefreshAreaStatus();
     }
 
     private string AreaHoverStatus()
     {
         var names = _hoverNames is null ? " (names loading)" : _hoverNames.Status == AreaNamesStatus.Ready ? string.Empty : $" (names {_hoverNames.Status})";
-        var name = _hoverKey is { } key && _hoverIndex is { } index ? index.Name(key) ?? "unnamed" : "-";
+        // A click can rebuild the index for a new map before the next hover update clears the old key.
+        var name = _hoverKey is { } key && _hoverIndex is { } index && ReferenceEquals(_hoverIndexArea, _readyArea) && index.Contains(key)
+            ? index.Name(key) ?? "unnamed" : "-";
         return $" | hover {name} -> {AreaHover.Label(_hoverAction)}{names}";
     }
 
@@ -190,13 +196,14 @@ public partial class TerrainViewerApp
         _hoverIndex = null; _hoverStamp = null;
     }
 
-    /// <summary>Places the test pointer over the world, or (null) outside the window.</summary>
-    internal void HoverAtForSelfTest(Vector2? screen)
+    /// <summary>Places the test pointer over the world, or (null) outside the window; <paramref name="overGui"/> stands
+    /// for a native control (HUD, palette) under the pointer.</summary>
+    internal void HoverAtForSelfTest(Vector2? screen, bool overGui = false)
     {
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
-        _hoverPointerForSelfTest = screen; _pointerInWindow = screen is not null; _hoverStamp = null;
+        _hoverPointerForSelfTest = screen; _pointerInWindow = screen is not null; _hoverOverGuiForSelfTest = overGui; _hoverStamp = null;
         UpdateAreaHover();
     }
 
-    internal void HoverReleaseForSelfTest() { _hoverPointerForSelfTest = null; _pointerInWindow = true; _hoverStamp = null; }
+    internal void HoverReleaseForSelfTest() { _hoverPointerForSelfTest = null; _pointerInWindow = true; _hoverOverGuiForSelfTest = false; _hoverStamp = null; }
 }

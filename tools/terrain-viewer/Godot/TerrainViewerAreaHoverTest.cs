@@ -70,7 +70,7 @@ public partial class TerrainViewerApp
             var name = index.Name(body.Identity!.Value)!;
             var chart = _canvas!.GetGlobalTransformWithCanvas().AffineInverse() * point;
             var cell = AreaCellPicking.Pick(new(chart.X, chart.Y))!.Value;
-            var expected = AreaHover.GoalEnterable(Routes(), cell) ? AreaHoverAction.Walk : AreaHoverAction.NoRoute;
+            var expected = AreaHover.Ground(Routes(), ((AreaGridSession)_worldActor.Session!).State.CommittedCell, cell);
             Require(HoverKeyForSelfTest == body.Identity && HoverActionForSelfTest == expected, $"body hover {HoverKeyForSelfTest} {HoverActionForSelfTest}, expected {expected}");
             Require(name.StartsWith("[", StringComparison.Ordinal) && name.EndsWith("name unavailable]", StringComparison.Ordinal), "type fallback name " + name);
             Require(HoverTextForSelfTest == AreaHover.Tooltip(name, expected), "tooltip names the body and its click action: " + HoverTextForSelfTest);
@@ -92,7 +92,7 @@ public partial class TerrainViewerApp
             var outcomes = new HashSet<AreaHoverAction>();
             foreach (var wanted in new[] { AreaHoverAction.Walk, AreaHoverAction.NoRoute })
             {
-                var (groundCell, ground) = near.FirstOrDefault(c => AreaHover.GoalEnterable(Routes(), c.Cell) == (wanted == AreaHoverAction.Walk));
+                var (groundCell, ground) = near.FirstOrDefault(c => AreaHover.Ground(Routes(), actor, c.Cell) == wanted);
                 if (ground is null) continue;
                 HoverAtForSelfTest(ground);
                 Require(HoverActionForSelfTest == wanted && HoverTextForSelfTest is null
@@ -102,8 +102,12 @@ public partial class TerrainViewerApp
             }
             Require(outcomes.Contains(AreaHoverAction.Walk) && outcomes.Contains(AreaHoverAction.NoRoute), "both ground outcomes observed near the actor");
 
-            // The palette is modal: no tooltip, default cursor. Closing it quarantines the click guards: name only.
+            // A native control (HUD, palette) under the pointer takes it: no tooltip, default cursor.
             point = await HoverPointAsync(host, body) ?? throw new InvalidOperationException("AREA hover: body not visible again");
+            HoverAtForSelfTest(point, overGui: true);
+            Require(HoverActionForSelfTest == AreaHoverAction.None && HoverTextForSelfTest is null && HoverCursorForSelfTest == Godot.Input.CursorShape.Arrow, "GUI under the pointer");
+
+            // The palette is modal: no tooltip, default cursor. Closing it quarantines the click guards: name only.
             ToggleWorldSettings();
             Require(WorldModal, "palette open");
             HoverAtForSelfTest(point);
@@ -238,12 +242,24 @@ public partial class TerrainViewerApp
             var use = Math.Max(Math.Abs(trigger.WorldX!.Value - actor.X), Math.Abs(trigger.WorldY!.Value - actor.Y)) <= AreaTransitionCoordinator.UseRange
                 ? AreaHoverAction.Use : AreaHoverAction.WalkToUse;
             Require(HoverKeyForSelfTest == trigger.Key && HoverActionForSelfTest == use && HoverCursorForSelfTest == Godot.Input.CursorShape.PointingHand, $"entrance {HoverActionForSelfTest}");
-            Require(HoverTextForSelfTest == AreaHover.Tooltip(index.Name(trigger.Key), use), "entrance tooltip");
+            var entranceName = Arcanum.Data.Messages.ObjectDisplayName.Resolve(trigger, _hoverNames.Catalog!, Arcanum.Data.Messages.CritterRecognition.NotRecognized);
+            Require(entranceName.Message is { } entranceMessage && HoverTextForSelfTest == AreaHover.Tooltip(
+                Arcanum.Data.Messages.MesText.Decode(entranceMessage, AreaHoverIndex.TextProfile).Text, use), "entrance tooltip names its description");
             await Capture("entrance");
 
-            // Click-through scenery (trees, plants) is never the hover target where its sprite is opaque.
+            // Click-through scenery (trees, plants) is passed through: where its sprite is opaque, the pick is the frontmost
+            // body behind it that is not click-through (scanned over the whole plan here, not the index), or nothing.
             var rows = _readyArea.Snapshot.Objects.ToDictionary(o => o.Key);
-            var passed = 0; var transform = AreaDrawItem.RasterTransform(GetViewport());
+            var passed = 0; var behind = 0; var transform = AreaDrawItem.RasterTransform(GetViewport());
+            AreaObjectKey? Expected(int x, int y)
+            {
+                for (var i = _readyArea.Plan.Commands.Count - 1; i >= 0; i--)
+                {
+                    var c = _readyArea.Plan.Commands[i];
+                    if (c.Identity is { } k && !AreaHoverIndex.ClickThrough(rows[k]) && AreaAlphaAt(c, _readyArea.Frames, transform, x, y) != 0) return k;
+                }
+                return null;
+            }
             foreach (var tree in _readyArea.Plan.Commands.Where(c => c.Identity is { } k && AreaHoverIndex.ClickThrough(rows[k])).Take(12))
             {
                 PublishWorldSelection();
@@ -257,7 +273,9 @@ public partial class TerrainViewerApp
                 {
                     if (AreaAlphaAt(tree, _readyArea.Frames, transform, x, y) == 0) continue;
                     hits++;
-                    Require(AreaObjectAtScreen(new(x + .5f, y + .5f)) != tree.Identity, "a click-through body was picked");
+                    var picked = AreaObjectAtScreen(new(x + .5f, y + .5f));
+                    Require(picked != tree.Identity && picked == Expected(x, y), "a click-through body is passed through");
+                    if (picked is not null) behind++;
                 }
                 if (hits > 0) passed++;
             }
@@ -265,7 +283,7 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn); PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             GD.Print("ARC-UI-005 native-smoke hover PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 Names = _hoverNames.Status.ToString(), Pickable = index.Bodies.Count, Virgil = talk.ToString(), Entrance = use.ToString(),
-                ClickThroughChecked = passed, Parity = "NOT_VERIFIED (original cursor does not change per target)" }));
+                ClickThroughChecked = passed, PickedBehindClickThrough = behind, Parity = "NOT_VERIFIED (original cursor does not change per target)" }));
         }
         finally
         {
