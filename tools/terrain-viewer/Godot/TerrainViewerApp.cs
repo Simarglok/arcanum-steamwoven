@@ -907,6 +907,7 @@ public partial class TerrainViewerApp : Node
     private void RefreshReadyStatus()
     {
         if (_readySourceId is null || _camera is null) return;
+        if (PaletteOpen) BindVisualPalette(); // a switch commits between frames (ARC-UI-006)
         if (_readyArea is not null) { RefreshAreaStatus(); return; }
         var mode = ModeName(_readyMode);
         var staticStatus = _readyMode is TerrainViewerMode.CombinedStaticDiagnostic or TerrainViewerMode.WorldDiagnostic

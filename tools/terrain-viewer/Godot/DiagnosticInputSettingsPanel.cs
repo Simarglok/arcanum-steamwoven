@@ -28,6 +28,8 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public event Action? ReloadRequested;
     public event Action? GameHourRequested;
     public event Action? LightingToggleRequested;
+    public event Action? VisualToggleRequested;
+    private Label _visual = null!;
     private Label _lighting = null!;
     private Label _summary = null!;
     private Label _actionStatus = null!;
@@ -85,6 +87,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
         AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
         _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);
+        // ARC-UI-006: the visual profile setting (also the H key); the switch commits once the visible frames are ready.
+        AddAction("Visual Legacy/HD (H)", () => VisualToggleRequested?.Invoke());
+        _visual = new Label { Name = "PaletteVisual", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_visual);
         // ARC-RENDER-008 overlay checkbox: the host binds availability/state (BindOverlay);
         // without a movement authority it is visibly unavailable, not navigable, not toggleable.
         _overlay = new CheckButton { Name = "PassabilityOverlay", Text = "Show passability (unavailable)", Disabled = true, FocusMode = Control.FocusModeEnum.None };
@@ -147,6 +152,7 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
     public void SetSummary(string text) => _summary.Text = "Diagnostic summary: " + text;
     public void SetActionStatus(string text) => _actionStatus.Text = text;
     public void SetLightingStatus(string text) => _lighting.Text = text;
+    public void SetVisualStatus(string text) => _visual.Text = text;
     /// <summary>The overlay state/action seam for ARC-RENDER-008: the host binds
     /// availability and state; a user toggle is reported once through OverlayToggled.
     /// Unavailable (the ARC-INPUT-001 default), the row is disabled and not navigable.</summary>

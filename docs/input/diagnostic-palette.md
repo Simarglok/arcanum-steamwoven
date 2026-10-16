@@ -43,6 +43,9 @@ its Close button. Contents:
   works while the open palette pauses time) or switch the ambient multiplier off/on; a
   status line shows time, DAY/NIGHT, whether time flows or is paused, and the scheme.
   Elsewhere they report "unavailable". See [area lighting](../rendering/area-lighting.md).
+- **Visual Legacy/HD (H)** (ARC-UI-006): requests the other visual profile, like `H`; the line
+  under it shows the active profile, a pending switch, the pack and the save outcome
+  ([viewer](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)).
 - **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
   checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
   without one it reads "unavailable" and is not navigable. The host binds it through
@@ -90,7 +93,9 @@ WORLD host (`TerrainViewerWorld.cs`).
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
    and while its session inventory exists I toggles the inventory window on key down
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)).
-   Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
+   `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
+   while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
+   the palette holds the same action. Every other key is unmapped. Reserved/unmapped keys are not keyboard input-method events either.
 3. **Palette route (palette open).** Up/Down navigate, Enter/Space activate,
    Escape/Backspace cancel (close); the numeric editor keeps its native digits,
    Backspace, Enter and Tab. W/S/Q/E/F1 are not palette keys.
