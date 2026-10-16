@@ -30,13 +30,15 @@ public sealed record DialogConversationRequest(
 /// <summary>
 /// Typed state ports. Local flags, quest and rumor commands reuse the existing narrow ports. Global flags
 /// are a production versioned owner (a <see cref="GlobalFlagOwner"/> or a session's flag view). <paramref name="World"/> owns reaction, inventory, map and party
-/// effects. A null capability turns every operation that needs it into a static frontier.
+/// effects. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
+/// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
 /// </summary>
 public sealed record DialogConversationPorts(
     IDialogStateQueryPort LocalFlags,
     IDialogCommandPort Commands,
     IVersionedGlobalFlagOwner? GlobalFlags,
-    IDialogWorldPort? World = null);
+    IDialogWorldPort? World = null,
+    IDialogPartyPort? Party = null);
 
 public enum DialogReactionMode
 {
@@ -68,6 +70,12 @@ public sealed record MarkAreaCommand(DialogParticipantId PlayerCharacter, int Ar
 /// <summary>JO 0 node: the NPC asks to follow the PC; on acceptance the dialog continues at the node.</summary>
 public sealed record JoinCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
 
+/// <summary>UW 0 node: a waiting NPC asks to follow the PC again; on acceptance the dialog continues at the node.</summary>
+public sealed record UnwaitCommand(DialogParticipantId Npc, DialogParticipantId PlayerCharacter) : DialogCommand;
+
+public readonly record struct DialogPartyQuery(DialogParticipantId Npc, DialogParticipantId PlayerCharacter);
+
+/// <summary>Result of JO and UW.</summary>
 public enum DialogJoinResult
 {
     Accepted,
@@ -88,6 +96,18 @@ public interface IDialogWorldPort
     DialogCommandResult Execute(MarkAreaCommand command);
     DialogCommandResult Execute(AlignmentCommand command);
     DialogJoinResult Execute(JoinCommand command);
+}
+
+/// <summary>
+/// Party seam (ARC-WORLD-013): WA reads, JO and UW. Calls are synchronous and serialized by the host. Rejected means the
+/// command had no effect; Refused is the follower rules' refusal; a thrown exception is recorded as indeterminate.
+/// </summary>
+public interface IDialogPartyPort
+{
+    /// <summary>WA: whether the NPC is waiting for this PC (the source's wait flag).</summary>
+    bool IsWaiting(DialogPartyQuery query);
+    DialogJoinResult Execute(JoinCommand command);
+    DialogJoinResult Execute(UnwaitCommand command);
 }
 
 public sealed class DialogConversationOptions
@@ -132,7 +152,7 @@ public enum DialogOptionTransition
     Exit,
     /// <summary>Negative response: end and continue the caller SCR at the given line.</summary>
     ScriptLine,
-    /// <summary>The reply action ends with JO: the NPC joins and the dialog continues at <see cref="DialogOption.Target"/>.</summary>
+    /// <summary>The reply action ends with JO (or UW): the NPC joins (or stops waiting) and the dialog continues at <see cref="DialogOption.Target"/>.</summary>
     Join,
     /// <summary>The reply action ends with FL: the NPC speaks <see cref="DialogOption.Target"/> and the dialog ends.</summary>
     FinalLine,

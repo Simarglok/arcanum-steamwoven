@@ -45,7 +45,10 @@ Ports: `IDialogStateQueryPort` + `IDialogCommandPort` (existing LF/QU/RU seams),
 production [`GlobalFlagOwner`](global-flag-state-runtime.md) and `IDialogWorldPort`
 (reaction query and commands, alignment, negative IN, MM, JO). A missing capability makes an
 NPC action or reply condition that needs it a static `CapabilityUnavailable` frontier, and
-blocks (`UnsupportedOperation`) a reply whose own action needs it.
+blocks (`UnsupportedOperation`) a reply whose own action needs it. The optional
+`IDialogPartyPort` (ARC-WORLD-013, [party runtime](../world/party-runtime.md#dialog-seam))
+answers `WA`, `JO` and `UW`; when present it admits `WA`/`UW` and takes `JO` instead of the
+world port, and without it the grammar is unchanged.
 
 ## Flow and source semantics
 
@@ -69,8 +72,8 @@ Source references are the pinned CE lineage below; implementation is independent
    selecting it returns `UnsupportedTransition` with no effect.
 5. **Selection** consumes the token before the first effect, runs the reply action, then:
    positive response → next NPC node (new turn); `0` → `Ended(ReturnToScript, caller+1)`;
-   negative `-n` → `Ended(ReturnToScript, n)`; a trailing `JO 0 node` → join, continue at
-   node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`.
+   negative `-n` → `Ended(ReturnToScript, n)`; a trailing `JO 0 node` (or, with a party port,
+   `UW 0 node`) → join (or stop waiting), continue at node; a trailing `FL node` → run that node's action, show its line, `Ended(NpcFinalLine)`.
    SCR continuation is reported, never executed.
 
 Text: NPC lines use the record text for a male PC and the alternate field for a female PC.
@@ -97,12 +100,12 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 
 | Field | Admitted operations (domains) |
 | --- | --- |
-| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1). |
+| Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not). |
 | NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
-| Player action tail | one `JO 0 node` or `FL node` as the last operation (NPC node checked statically). |
+| Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`) as the last operation (NPC node checked statically). |
 
-Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO` with a non-zero
-first operand, `JO`/`FL` in NPC actions or not last, and a non-space separator inside one
+Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
+first operand, `JO`/`UW`/`FL` in NPC actions or not last, `WA`/`UW` without a party port, and a non-space separator inside one
 operation (`GF 5,1`, `qu(5,6)`: the source's whitespace-skipping `atoi` would read 0 there)
 → `UnsupportedOperation`; such forms are never reinterpreted. Wrong arity,
 missing separators, out-of-domain values, non-ASCII, `+` outside `RE`/`AL` actions,
@@ -116,8 +119,8 @@ Caller options may only lower the hard caps: 64 structural replies, 1024 turns (
 4096 effects, 4096 text bytes, 4096 operation-field bytes, 32 operations per field. Turn and
 effect budgets are checked before a step's first effect (`TurnLimit`/`EffectLimit`
 frontiers). A port `Rejected` result records `Rejected` and fails; a thrown exception records
-`Indeterminate` and fails; earlier `Applied` receipts stay. `JO` refused by the world is a
-`JoinRefused` frontier (the source then speaks a generated refusal). No rollback is claimed.
+`Indeterminate` and fails; earlier `Applied` receipts stay. `JO` or `UW` refused by the follower
+rules is a `JoinRefused` frontier (the source then speaks a generated refusal). No rollback is claimed.
 
 ## AREA viewer integration (PROJECT diagnostic)
 
@@ -171,7 +174,8 @@ Observed with the user-owned installation: Virgil (script 1324) enters at SCR li
 node 1; choosing the first Direct reply each time walks 13 NPC nodes
 (1, 9, 15, 19, 24, 30, 32, 35, 57, 71, 120, 210, 74) with 16 applied effects
 (GF×4, IN, QU, RU×2, RE, MM×5, JO, AL) and exits to SCR line 5. Talking again while he
-follows enters at SCR line 6 → node 385, a frontier (`WA` condition); since ARC-SCRIPT-006
+follows enters at SCR line 6 → node 385, a frontier in the viewer (`WA` condition, no party port
+there yet; with the session party port it runs, see [party runtime](../world/party-runtime.md#tests)); since ARC-SCRIPT-006
 this holds after the session went to the cave and back and through a snapshot round trip,
 with the four flags, one quest and two rumors restored. These are diagnostic runs, not
 original gameplay verification.

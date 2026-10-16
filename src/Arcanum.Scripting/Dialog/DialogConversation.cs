@@ -297,6 +297,7 @@ public sealed class DialogConversation
                 ConversationLocalFlag local => ReadLocal(local),
                 ConversationGlobalFlag global => ReadGlobal(global),
                 ConversationReactionGate reaction => ReadReaction(reaction),
+                ConversationWaiting waiting => ReadWaiting(waiting),
                 // RA n>0: the PC race is n-1; RA n<=0: the PC race is not -n-1.
                 ConversationRaceGate race => race.Selector > 0
                     ? _request.Pc.Race + 1L == race.Selector
@@ -373,6 +374,22 @@ public sealed class DialogConversation
         return operation.Threshold < 0 ? result.Value <= -(long)operation.Threshold : result.Value >= operation.Threshold;
     }
 
+    /// <summary>WA 1: the NPC is waiting for the PC; WA 0: it is not.</summary>
+    private bool? ReadWaiting(ConversationWaiting operation)
+    {
+        bool waiting;
+        try
+        {
+            waiting = _ports.Party!.IsWaiting(new DialogPartyQuery(_request.Participants.Npc, _request.Participants.PlayerCharacter));
+        }
+        catch (Exception)
+        {
+            Fail(new DialogConversationFailure(DialogConversationFailureKind.QueryException, CurrentNode, operation.Source));
+            return null;
+        }
+        return waiting == operation.Value;
+    }
+
     private bool Execute(IReadOnlyList<ConversationOperation> operations)
     {
         foreach (var operation in operations)
@@ -382,13 +399,21 @@ public sealed class DialogConversation
                 // Control transfer, not a command: the caller enters the final line after this field.
                 continue;
             }
-            if (operation is ConversationJoin)
+            if (operation is ConversationJoin or ConversationUnwait)
             {
-                var join = new JoinCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter);
+                DialogCommand join = operation is ConversationJoin
+                    ? new JoinCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter)
+                    : new UnwaitCommand(_request.Participants.Npc, _request.Participants.PlayerCharacter);
                 DialogJoinResult joined;
                 try
                 {
-                    joined = _ports.World!.Execute(join);
+                    // A party port takes JO in place of the world port.
+                    joined = join switch
+                    {
+                        JoinCommand command when _ports.Party is { } party => party.Execute(command),
+                        JoinCommand command => _ports.World!.Execute(command),
+                        _ => _ports.Party!.Execute((UnwaitCommand)join),
+                    };
                 }
                 catch (Exception)
                 {
@@ -511,7 +536,7 @@ public sealed class DialogConversation
         var node = new DialogNodeId(npc.Id);
         try
         {
-            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options);
+            var action = DialogConversationGrammar.Parse(npc, npc.Action, ConversationField.NpcAction, _options, _ports.Party is not null);
             if (MissingCapability(action) is { } missing)
             {
                 frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing);
@@ -598,7 +623,7 @@ public sealed class DialogConversation
                     record.AlternateText.PayloadOffset, 0, record.AlternateText.Length, 0), response);
             return null;
         }
-        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options);
+        var condition = DialogConversationGrammar.Parse(record, record.Condition, ConversationField.PlayerCondition, _options, _ports.Party is not null);
         if (MissingCapability(condition) is { } missing)
         {
             frontier = new DialogConversationFrontier(DialogFrontierKind.CapabilityUnavailable, node, missing, response);
@@ -681,7 +706,7 @@ public sealed class DialogConversation
         {
             try
             {
-                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options);
+                action = DialogConversationGrammar.Parse(record, record.Action, ConversationField.PlayerAction, _options, _ports.Party is not null);
                 if (MissingCapability(action) is { } actionMissing)
                 {
                     block = new DialogOptionBlock(DialogOptionBlockKind.UnsupportedOperation, actionMissing);
@@ -694,17 +719,22 @@ public sealed class DialogConversation
                     exception.OperationSource);
             }
         }
-        if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationFinalLine)
+        if (block is null && action is { Count: > 0 } && action[^1] is ConversationJoin or ConversationUnwait or ConversationFinalLine)
         {
-            // JO/FL override the response: the source skips the response transition after them.
-            var continuation = action[^1] is ConversationJoin join ? join.Node : ((ConversationFinalLine)action[^1]).Node;
+            // JO/UW/FL override the response: the source skips the response transition after them.
+            var continuation = action[^1] switch
+            {
+                ConversationJoin join => join.Node,
+                ConversationUnwait unwait => unwait.Node,
+                _ => ((ConversationFinalLine)action[^1]).Node,
+            };
             if (!_document.TryGetRecord(continuation, out var next) || next is null || next.Role != DlgRecordRole.Npc)
             {
                 block = new DialogOptionBlock(DialogOptionBlockKind.TargetInvalid, action[^1].Source);
             }
             else
             {
-                transition = action[^1] is ConversationJoin ? DialogOptionTransition.Join : DialogOptionTransition.FinalLine;
+                transition = action[^1] is ConversationFinalLine ? DialogOptionTransition.FinalLine : DialogOptionTransition.Join;
                 target = next;
                 line = null;
             }
@@ -744,7 +774,9 @@ public sealed class DialogConversation
     private DialogOperationSource? MissingCapability(IReadOnlyList<ConversationOperation> operations) => operations.FirstOrDefault(operation => operation switch
     {
         ConversationGlobalFlag => _ports.GlobalFlags is null,
-        ConversationReactionGate or ConversationReaction or ConversationGiveItem or ConversationMarkArea or ConversationJoin or ConversationAlignment => _ports.World is null,
+        ConversationReactionGate or ConversationReaction or ConversationGiveItem or ConversationMarkArea or ConversationAlignment => _ports.World is null,
+        ConversationJoin => _ports.World is null && _ports.Party is null,
+        ConversationWaiting or ConversationUnwait => _ports.Party is null,
         _ => false,
     })?.Source;
 
