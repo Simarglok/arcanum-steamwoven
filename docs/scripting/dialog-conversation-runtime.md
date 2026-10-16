@@ -153,9 +153,9 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | Consequence | Where it lives |
 | --- | --- |
 | GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false ([source: 100 words of flags zeroed on init and reset][gf]); flags ≥3200 are not admitted and fail the dialog. |
-| QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's reaction to at least 41, Completed adds 10 (source rule). A quest outside 1000..1999 is refused and fails the dialog. |
+| QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's reaction to at least 41, Completed adds 10 (source rule); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
-| LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. |
+| LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, reaction outside `int`, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
 
 The SCR entry resolver reads Following and LF from the same session, so Virgil's

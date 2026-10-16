@@ -133,6 +133,11 @@ public sealed class AreaConversationTests
         Assert.AreEqual(revision, session.Version.Revision);
         Assert.AreEqual(SessionQuestState.Completed, session.QueryQuest(1003)!.Value.Effective);
 
+        // A restored session value this port cannot read is refused when the state is built.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(1),
+            MapChangeKey.ForEntity(Speaker0, AreaConversationState.LocalFlagsProperty), -1).Disposition);
+        Assert.ThrowsExactly<ArgumentException>(() => State(session, 30));
+
         // A quest number outside the source range is refused by the session and fails the dialog.
         var invalid = DialogConversation.Start(DlgReader.Read(Encoding.Latin1.GetBytes("{1}{?}{}{}{}{}{qu 7 1}")), Request(),
             new DialogConversationPorts(state, state, session.Flags, state));
@@ -212,7 +217,7 @@ public sealed class AreaConversationTests
         Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(79) }).Disposition);
         Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(snapshot.RuntimeMap) }).Disposition);
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
-        foreach (var write in written) Assert.AreEqual(write.Value, Flag(loaded, write.Flag), $"GF {write.Flag}");
+        foreach (var last in written.GroupBy(w => w.Flag).Select(g => g.Last())) Assert.AreEqual(last.Value, Flag(loaded, last.Flag), $"GF {last.Flag}");
         host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), loaded);
         Assert.IsTrue(host.State.Follows(0));
 

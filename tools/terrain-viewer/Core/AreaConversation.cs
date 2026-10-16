@@ -226,6 +226,15 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         _session = session ?? throw new ArgumentNullException(nameof(session));
         ArgumentNullException.ThrowIfNull(speakerEntities);
         _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
+        // A restored session may carry any long under these keys; refuse values this port cannot read.
+        foreach (var entity in _entities)
+        {
+            var lf = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
+            var reaction = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, ReactionProperty));
+            var follow = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, FollowProperty));
+            if (lf is < 0 or > uint.MaxValue || reaction is < int.MinValue or > int.MaxValue || follow is not (null or 1))
+                throw new ArgumentException("AREA_SESSION_DIALOG_STATE_INVALID", nameof(session));
+        }
     }
 
     /// <summary>Session entity id of an area object: its source object-id fingerprint.</summary>

@@ -100,9 +100,14 @@ rules ([quest state set][quest-set], [quest reset][quest-reset], [rumor known][r
   source (accepting lifts the NPC's reaction to 41, completing adds 10) in its own port.
 
 Invalid numbers or states are `InvalidQuest`, `InvalidQuestState` or `InvalidRumor`.
+`Restore` also refuses story records the rules cannot produce: a time after the saved
+clock (`InvalidSnapshot`), a PC record `Completed`/`OtherCompleted` without shared
+`Completed`, a botched one without shared `Botched`, or any other PC record under a shared
+state that left `Accepted` (`InvalidQuestState`). A shared state without a PC record is kept,
+as the source's shared state is not owned by one PC.
 
 [quest-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L337-L470
-[quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L108
+[quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
 ## Snapshot schema 2

@@ -67,7 +67,7 @@ public sealed class GameSessionOwner : IDisposable
         var limits = options.Limits ?? new GameSessionLimits();
         var failure = ImportMaps(snapshot.Maps, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportStory(snapshot.Story, out var story);
+        failure = ImportStory(snapshot.Story, snapshot.Clock.GameTimestampMs, out var story);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
@@ -299,7 +299,11 @@ public sealed class GameSessionOwner : IDisposable
         return GameSessionFailure.None;
     }
 
-    private static GameSessionFailure ImportStory(SessionStoryState saved, out Story story)
+    // Beyond each record's own range, the records must agree with the rules: no time after the saved clock, a PC
+    // record Completed/OtherCompleted only under a shared Completed state, a botched one only under shared Botched,
+    // and any other PC record only while the shared state is Accepted. A shared state without a PC record is kept
+    // (the source's shared state is not owned by one PC).
+    private static GameSessionFailure ImportStory(SessionStoryState saved, long clockMs, out Story story)
     {
         story = new();
         foreach (var quest in saved.Quests)
@@ -308,6 +312,7 @@ public sealed class GameSessionOwner : IDisposable
             // The stored state is never Botched itself, and an untouched quest is not listed.
             if (quest.State is < SessionQuestState.Unknown or > SessionQuestState.OtherCompleted || quest.TimestampMs < 0 ||
                 (quest.State == SessionQuestState.Unknown && !quest.Botched)) return GameSessionFailure.InvalidQuestState;
+            if (quest.TimestampMs > clockMs) return GameSessionFailure.InvalidSnapshot;
             if (!story.Quests.TryAdd(quest.Quest, quest)) return GameSessionFailure.InvalidSnapshot;
         }
         foreach (var quest in saved.GlobalQuests)
@@ -319,8 +324,18 @@ public sealed class GameSessionOwner : IDisposable
         foreach (var rumor in saved.Rumors)
         {
             if (!SessionStoryLimits.IsRumor(rumor.Rumor)) return GameSessionFailure.InvalidRumor;
-            if (rumor.TimestampMs < 0) return GameSessionFailure.InvalidSnapshot;
+            if (rumor.TimestampMs < 0 || rumor.TimestampMs > clockMs) return GameSessionFailure.InvalidSnapshot;
             if (!story.Rumors.TryAdd(rumor.Rumor, rumor.TimestampMs)) return GameSessionFailure.InvalidSnapshot;
+        }
+        foreach (var quest in story.Quests.Values)
+        {
+            var shared = quest.Effective switch
+            {
+                SessionQuestState.Botched => SessionQuestState.Botched,
+                SessionQuestState.Completed or SessionQuestState.OtherCompleted => SessionQuestState.Completed,
+                _ => SessionQuestState.Accepted,
+            };
+            if (story.GlobalQuests.GetValueOrDefault(quest.Quest, SessionQuestState.Accepted) != shared) return GameSessionFailure.InvalidQuestState;
         }
         return GameSessionFailure.None;
     }

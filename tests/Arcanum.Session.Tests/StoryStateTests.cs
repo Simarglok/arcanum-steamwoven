@@ -71,6 +71,34 @@ public sealed class StoryStateTests
     }
 
     [TestMethod]
+    public void RestoreRefusesStoryRecordsTheRulesCannotProduce()
+    {
+        void Refused(string story, GameSessionFailure failure)
+        {
+            var result = GameSessionOwner.Restore(Decode(GoldenJson.Replace(EmptyStory, story)), RestoreOptions());
+            Assert.IsNull(result.Owner, story);
+            Assert.AreEqual(failure, result.Failure, story);
+        }
+        string Story(string quests, string globals = "", string rumors = "") =>
+            $",\"story\":{{\"quests\":[{quests}],\"globalQuests\":[{globals}],\"rumors\":[{rumors}]}}";
+
+        Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":true,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
+        Refused(Story("{\"quest\":1001,\"state\":\"Completed\",\"botched\":false,\"timestampMs\":1}"), GameSessionFailure.InvalidQuestState);
+        Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":true,\"timestampMs\":1}",
+            "{\"quest\":1001,\"state\":\"Completed\"}"), GameSessionFailure.InvalidQuestState);
+        Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":1}",
+            "{\"quest\":1001,\"state\":\"Botched\"}"), GameSessionFailure.InvalidQuestState);
+        Refused(Story("{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000001}"), GameSessionFailure.InvalidSnapshot);
+        Refused(Story("", rumors: "{\"rumor\":1001,\"timestampMs\":54000001}"), GameSessionFailure.InvalidSnapshot);
+
+        // Consistent records restore, at the saved clock time included.
+        using var owner = Restore(Decode(GoldenJson.Replace(EmptyStory, Story(
+            "{\"quest\":1001,\"state\":\"OtherCompleted\",\"botched\":false,\"timestampMs\":54000000}",
+            "{\"quest\":1001,\"state\":\"Completed\"}", "{\"rumor\":1001,\"timestampMs\":54000000}"))));
+        Assert.AreEqual(SessionQuestState.OtherCompleted, owner.QueryQuest(1001)!.Value.Effective);
+    }
+
+    [TestMethod]
     public void RumorsAreLearnedOnceWithTheirTime()
     {
         using var owner = Create();

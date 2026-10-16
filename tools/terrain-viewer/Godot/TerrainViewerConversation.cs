@@ -164,12 +164,19 @@ public partial class TerrainViewerApp
             : $" | talk: left-click a dialog NPC ({_conversationHost!.Speakers.Count} in core; walks within {_conversationHost.Profile.Reach} tiles first)";
     }
 
-    // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip).
+    // ARC-SCRIPT-006: what the dialogs left in the session (survives the cave trip). The status line is rebuilt
+    // every frame, so the text is cached per session revision (every story or NPC change moves it).
+    private (AreaConversationHost Host, long Revision, string Text)? _storyStatus;
+
     private string StoryStatus()
     {
-        var state = _conversationHost!.State;
-        var story = state.Story;
-        var followers = Enumerable.Range(0, _conversationHost.Speakers.Count).Count(state.Follows);
-        return $" | session story: quests {story.Quests.Count}, rumors {story.Rumors.Count}, followers {followers}";
+        var host = _conversationHost!;
+        var revision = _areaSession!.Version.Revision;
+        if (_storyStatus is { } cached && ReferenceEquals(cached.Host, host) && cached.Revision == revision) return cached.Text;
+        var story = host.State.Story;
+        var followers = Enumerable.Range(0, host.Speakers.Count).Count(host.State.Follows);
+        var text = $" | session story: quests {story.Quests.Count}, rumors {story.Rumors.Count}, followers {followers}";
+        _storyStatus = (host, revision, text);
+        return text;
     }
 }
