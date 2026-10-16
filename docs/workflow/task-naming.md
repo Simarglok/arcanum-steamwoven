@@ -13,6 +13,8 @@ The type registry is `RES`, `DATA`, `RENDER`, `WORLD`, `INPUT`, `GPAD`, `UI`,
 `SCRIPT`, `DEV`, `AI`, `COMBAT`, `SKILLS`, `MAGIC` and `TECHNOLOGY`. Add a
 type only through an approved update to this policy.
 
+Areas of the types added on 2026-10-16:
+
 | Type | Area |
 | --- | --- |
 | `AI` | NPC behaviour: awareness, hostility, targets, morale, action choice, orders |
@@ -22,8 +24,10 @@ type only through an approved update to this policy.
 | `TECHNOLOGY` | Technological disciplines, schematics, devices and tech effects |
 
 The last five types were added by owner decision on 2026-10-16
-([NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16));
-research on these areas stays `RES`.
+([NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
+`MAGIC` and `TECHNOLOGY` cover FR-MAGIC, `SKILLS` the skill part of FR-CHAR;
+character state and the session runtime stay `WORLD`. Proposed convention, to
+be confirmed: research on these areas stays `RES`.
 
 The owner (or an owner-authorized session) allocates the number only after
 checking that it is unused: git history, open and merged PRs, branch names and
