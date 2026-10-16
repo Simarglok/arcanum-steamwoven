@@ -34,7 +34,8 @@ description and the stored pointer word are not kept. Each line is a condition
 and two actions (`OnTrue`, `OnFalse`), each a `ScrClause` of a type number and
 eight operands (kind byte, 32-bit value). An empty script (count 0) is a valid
 program. Programs, lines and clauses are immutable copies; nothing aliases the
-payload.
+payload. Invalid options throw `ArgumentOutOfRangeException`; a payload never
+throws.
 
 `ScrCatalogue` holds the type catalogue as format facts: 53 condition types
 (0..52) and 142 action types (0..141) with each type's operand signature
@@ -51,8 +52,11 @@ data and against every installed script (ARC-RES-045); no CE code is reused.
 `ScrAdmission.Admit(ScrProgram, ScrAdmissionSet)` returns `ScrAdmissionResult`:
 either `Admitted` (an `ScrAdmittedProgram` of the program and the set) or the
 first `ScrRefusal`. It checks **every line** (rule P7), in line order, the
-condition first, then the true action, then the false action, operands left to
-right, and stops at the first refusal.
+condition first, then the true action, then the false action; within a clause
+its type, then its operands left to right (slot 0's index, write and goto rules
+right after slot 0's kind), and stops at the first refusal. Only `Admit` creates
+an `ScrAdmittedProgram`, so holding one is the proof of admission; a result
+carries exactly one of the program and the refusal.
 
 | Code | Rule | Refused when |
 | --- | --- | --- |
@@ -115,9 +119,10 @@ flags, its query-only walk and frontier codes). Its results are unchanged.
   kind inside the catalogue) and `ScrAdmissionRealDataTests` (S1 admits 144, no
   unknown type, index or write refusal).
 
-Divide (14) and counter writes are admitted with CE anomalies X7 (divide stores
-the sum) and X8 (unmasked counter write) open: admission checks shape only, and
-the interpreter slice S2 decides their meaning
+Divide (14), counter writes and arithmetic writes into a global flag are
+admitted with CE anomalies X7 (divide stores the sum), X8 (unmasked counter
+write) and X10 (unmasked global-flag write) open: admission checks shape only,
+and the interpreter slice S2 decides their meaning
 ([census anomalies](../research/scr-census.md#anomalies-for-s1-s)).
 
 ## Not ready

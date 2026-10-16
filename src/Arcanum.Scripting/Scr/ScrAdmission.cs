@@ -82,18 +82,31 @@ public sealed class ScrAdmissionSet
         [ScrValueKind.Counter, ScrValueKind.LocalVariable, ScrValueKind.Number, ScrValueKind.GlobalFlag], []);
 }
 
-/// <summary>A script admitted as a whole for one set: every clause it could run is inside it.</summary>
-public sealed record ScrAdmittedProgram(ScrProgram Program, ScrAdmissionSet Set);
-
-public sealed record ScrAdmissionResult(ScrAdmittedProgram? Admitted, ScrRefusal? Refusal)
+/// <summary>A script admitted as a whole for one set: every clause it could run is inside it.
+/// Only <see cref="ScrAdmission.Admit"/> creates one, so holding it is the proof of admission.</summary>
+public sealed class ScrAdmittedProgram
 {
+    internal ScrAdmittedProgram(ScrProgram program, ScrAdmissionSet set) { Program = program; Set = set; }
+    public ScrProgram Program { get; }
+    public ScrAdmissionSet Set { get; }
+}
+
+/// <summary>Exactly one of <see cref="Admitted"/> and <see cref="Refusal"/>.</summary>
+public sealed class ScrAdmissionResult
+{
+    private ScrAdmissionResult(ScrAdmittedProgram? admitted, ScrRefusal? refusal) { Admitted = admitted; Refusal = refusal; }
+    internal static ScrAdmissionResult Of(ScrAdmittedProgram admitted) => new(admitted, null);
+    internal static ScrAdmissionResult Of(ScrRefusal refusal) => new(null, refusal);
+    public ScrAdmittedProgram? Admitted { get; }
+    public ScrRefusal? Refusal { get; }
     public bool IsAdmitted => Admitted is not null;
 }
 
 /// <summary>Static whole-script admission: a script runs only if every line can run under the
 /// set, so no run ever stops half-way on something unsupported. It checks every line, not only
-/// those an entry reaches, and reports the first refusal in line order (condition, then the
-/// true action, then the false action, then operands left to right).</summary>
+/// those an entry reaches, and reports the first refusal in line order: the condition, then the
+/// true action, then the false action; within a clause its type, then its operands left to right
+/// (slot 0's index, write and jump rules right after its kind).</summary>
 public static class ScrAdmission
 {
     public static ScrAdmissionResult Admit(ScrProgram program, ScrAdmissionSet set)
@@ -106,9 +119,9 @@ public static class ScrAdmission
                 ?? Check(line, ScrClauseSide.OnTrue, line.OnTrue, set, program.Count)
                 // The always-true condition never runs its false action, so its bytes are not read.
                 ?? (line.Condition.Type == ScrCatalogue.Condition.True ? null : Check(line, ScrClauseSide.OnFalse, line.OnFalse, set, program.Count));
-            if (refusal is not null) return new(null, refusal);
+            if (refusal is not null) return ScrAdmissionResult.Of(refusal);
         }
-        return new(new(program, set), null);
+        return ScrAdmissionResult.Of(new ScrAdmittedProgram(program, set));
     }
 
     private static ScrRefusal? Check(ScrLine line, ScrClauseSide side, ScrClause clause, ScrAdmissionSet set, int count)
@@ -137,18 +150,18 @@ public static class ScrAdmission
                     if ((ScrFocusKind)kind == ScrFocusKind.LocalObject && value is < 0 or >= ScrCatalogue.LocalSlots) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
                     break;
             }
-        }
-        // Operands that are themselves an index: a literal local or global flag number.
-        if (FlagIndexLimit(condition, type) is { } limit && (ScrValueKind)clause.Kind(0) == ScrValueKind.Number && clause.Value(0) is var flag && (flag < 0 || flag >= limit))
-            return new(line.Number, side, ScrRefusalCode.IndexOutOfRange, type, 0, clause.Kind(0), flag);
-        if (!condition && Writes(type) && (ScrValueKind)clause.Kind(0) == ScrValueKind.Number)
-            return new(line.Number, side, ScrRefusalCode.WriteToNumber, type, 0, clause.Kind(0));
-        if (!condition && type == ScrCatalogue.Action.Goto)
-        {
-            if ((ScrValueKind)clause.Kind(0) != ScrValueKind.Number) return new(line.Number, side, ScrRefusalCode.ComputedGoto, type, 0, clause.Kind(0));
-            // A goto to exactly the line count is the end of the script: skip default, without auto-removal.
-            if (clause.Value(0) < 0) return new(line.Number, side, ScrRefusalCode.NegativeGoto, type, 0, clause.Kind(0), clause.Value(0));
-            if (clause.Value(0) > count) return new(line.Number, side, ScrRefusalCode.GotoBeyondEnd, type, 0, clause.Kind(0), clause.Value(0));
+            // Slot 0 of these types is itself an index, a store or a jump target.
+            if (slot != 0) continue;
+            var literal = (ScrValueKind)kind == ScrValueKind.Number;
+            if (FlagIndexLimit(condition, type) is { } limit && literal && (value < 0 || value >= limit)) return Refuse(ScrRefusalCode.IndexOutOfRange, true);
+            if (!condition && Writes(type) && literal) return Refuse(ScrRefusalCode.WriteToNumber);
+            if (!condition && type == ScrCatalogue.Action.Goto)
+            {
+                if (!literal) return Refuse(ScrRefusalCode.ComputedGoto);
+                // A goto to exactly the line count is the end of the script: skip default, without auto-removal.
+                if (value < 0) return Refuse(ScrRefusalCode.NegativeGoto, true);
+                if (value > count) return Refuse(ScrRefusalCode.GotoBeyondEnd, true);
+            }
         }
         return null;
     }

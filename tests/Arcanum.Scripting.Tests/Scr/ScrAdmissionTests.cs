@@ -118,7 +118,10 @@ public sealed class ScrAdmissionTests
     public void Writes_into_a_number_literal_are_refused()
     {
         foreach (var type in new[] { 10, 11, 12, 13, 14, 42 })
-            AssertRefusal(Program(L(C(0), A(type, (Number, 1), (Number, 1), (Number, 1)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.WriteToNumber, type);
+        {
+            var r = AssertRefusal(Program(L(C(0), A(type, (Number, 1), (Number, 1), (Number, 1)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.WriteToNumber, type);
+            Assert.AreEqual(0, r.Slot); Assert.AreEqual(Number, r.Kind);
+        }
         // Set story state reads its operand, so a literal is fine.
         Assert.IsTrue(ScrAdmission.Admit(Program(L(C(0), A(43, (Number, 15)), A(0))), S1).IsAdmitted);
     }
@@ -131,7 +134,8 @@ public sealed class ScrAdmissionTests
         Assert.AreEqual(2, r.Value);
         foreach (var code in new[] { -1, -2, -3, -4, int.MinValue })
             Assert.AreEqual(code, AssertRefusal(Program(L(C(3, (Number, 0)), A(1), A(3, (Number, code)))), 0, ScrClauseSide.OnFalse, ScrRefusalCode.NegativeGoto, 3).Value);
-        AssertRefusal(Program(L(C(0), A(3, (Local, 0)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.ComputedGoto, 3);
+        var computed = AssertRefusal(Program(L(C(0), A(3, (Local, 0)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.ComputedGoto, 3);
+        Assert.AreEqual(0, computed.Slot); Assert.AreEqual(Local, computed.Kind);
         AssertRefusal(Program(L(C(0), A(3, (Counter, 0)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.ComputedGoto, 3);
     }
 
@@ -146,6 +150,11 @@ public sealed class ScrAdmissionTests
         AssertRefusal(Program(L(C(3, (Number, 1)), A(44), A(81))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.ActionNotAdmitted, 44);
         var r = AssertRefusal(Program(L(C(4, (GlobalVariable, 0), (PcFlag, 0)), A(1), A(1))), 0, ScrClauseSide.Condition, ScrRefusalCode.ValueKindNotAdmitted, 4);
         Assert.AreEqual(0, r.Slot);
+        // Slot 0's write rule comes before slot 1's kind.
+        r = AssertRefusal(Program(L(C(0), A(10, (Number, 1), (7, 1)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.WriteToNumber, 10);
+        Assert.AreEqual(0, r.Slot);
+        r = AssertRefusal(Program(L(C(0), A(10, (Local, 1), (7, 1)), A(0))), 0, ScrClauseSide.OnTrue, ScrRefusalCode.UnknownValueKind, 10);
+        Assert.AreEqual(1, r.Slot);
     }
 
     [TestMethod]
@@ -166,6 +175,20 @@ public sealed class ScrAdmissionTests
         CollectionAssert.AreEquivalent(new[] { ScrValueKind.Counter, ScrValueKind.LocalVariable, ScrValueKind.Number, ScrValueKind.GlobalFlag }, S1.ValueKinds.ToArray());
         Assert.AreEqual(0, S1.FocusKinds.Count);
         Assert.IsFalse(S1.Conditions is ISet<int> { IsReadOnly: false });
+    }
+
+    [TestMethod]
+    public void Only_admission_creates_an_admitted_program_or_a_result()
+    {
+        foreach (var type in new[] { typeof(ScrAdmittedProgram), typeof(ScrAdmissionResult) })
+        {
+            Assert.AreEqual(0, type.GetConstructors().Length, type.Name);
+            Assert.IsTrue(type.GetProperties().All(p => p.SetMethod is null || !p.SetMethod.IsPublic), type.Name);
+        }
+        var admitted = ScrAdmission.Admit(Program(L(C(0), A(1), A(0))), S1);
+        Assert.IsNotNull(admitted.Admitted); Assert.IsNull(admitted.Refusal);
+        var refused = ScrAdmission.Admit(Program(L(C(0), A(44), A(0))), S1);
+        Assert.IsNull(refused.Admitted); Assert.IsNotNull(refused.Refusal);
     }
 
     private static ScrRefusal AssertRefusal(ScrProgram program, int line, ScrClauseSide side, ScrRefusalCode code, int type, ScrAdmissionSet? set = null)

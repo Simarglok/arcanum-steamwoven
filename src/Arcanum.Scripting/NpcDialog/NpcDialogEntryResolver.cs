@@ -1,4 +1,3 @@
-using System.Buffers.Binary;
 using System.Security.Cryptography;
 using System.Text;
 using Arcanum.Data;
@@ -377,7 +376,6 @@ public static class NpcDialogEntryResolver
             return new(NpcDialogActionKind.Dialog, value);
         }
     }
-    private static int I32(byte[] bytes, int offset) => BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(offset, 4));
     private static EntryFailure Fail(NpcDialogStage stage, NpcDialogCode code, bool frontier = false, int? line = null) => new(stage, code, frontier, line);
     private static EntryFailure QueryFailure(NpcDialogQueryStatus status, int line) => Fail(NpcDialogStage.Query,
         status switch { NpcDialogQueryStatus.Unknown => NpcDialogCode.QueryUnknown, NpcDialogQueryStatus.Unavailable => NpcDialogCode.QueryUnavailable, NpcDialogQueryStatus.Stale => NpcDialogCode.QueryStale, _ => NpcDialogCode.QueryFailed },

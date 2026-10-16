@@ -46,11 +46,12 @@ public sealed class ScrClause : IEquatable<ScrClause>
     {
         if (kinds.Length != Operands || values.Length != Operands) throw new ArgumentException("A clause has exactly eight operands.");
         Type = type; _kinds = kinds.ToArray(); _values = values.ToArray();
+        Kinds = Array.AsReadOnly(_kinds); Values = Array.AsReadOnly(_values);
     }
 
     public int Type { get; }
-    public IReadOnlyList<byte> Kinds => Array.AsReadOnly(_kinds);
-    public IReadOnlyList<int> Values => Array.AsReadOnly(_values);
+    public IReadOnlyList<byte> Kinds { get; }
+    public IReadOnlyList<int> Values { get; }
     public byte Kind(int slot) => _kinds[slot];
     public int Value(int slot) => _values[slot];
 
@@ -68,7 +69,13 @@ public sealed class ScrClause : IEquatable<ScrClause>
 /// <summary>One line: a condition, the action run when it holds and the action run when it does not.</summary>
 public sealed record ScrLine(int Number, ScrClause Condition, ScrClause OnTrue, ScrClause OnFalse);
 
-public sealed record ScrReadResult(ScrReadStatus Status, ScrProgram? Program);
+/// <summary>The status, and the program exactly when the status is <see cref="ScrReadStatus.Read"/>.</summary>
+public sealed class ScrReadResult
+{
+    internal ScrReadResult(ScrReadStatus status, ScrProgram? program) { Status = status; Program = program; }
+    public ScrReadStatus Status { get; }
+    public ScrProgram? Program { get; }
+}
 
 /// <summary>An immutable SCR script as stored: the attachment header the file supplies (initial
 /// local flags and counters), the file flags, the stored capacity and the lines in order. The
@@ -76,11 +83,11 @@ public sealed record ScrReadResult(ScrReadStatus Status, ScrProgram? Program);
 public sealed class ScrProgram
 {
     public const int HeaderBytes = 64, LineBytes = 132, ClauseBytes = 44;
-    private readonly ScrLine[] _lines;
+    private readonly IReadOnlyList<ScrLine> _lines;
 
     private ScrProgram(uint initialLocalFlags, uint initialCounters, uint fileFlags, int capacity, ScrLine[] lines)
     {
-        InitialLocalFlags = initialLocalFlags; InitialCounters = initialCounters; FileFlags = fileFlags; Capacity = capacity; _lines = lines;
+        InitialLocalFlags = initialLocalFlags; InitialCounters = initialCounters; FileFlags = fileFlags; Capacity = capacity; _lines = Array.AsReadOnly(lines);
     }
 
     /// <summary>The 32 local flags a run starts from when no attachment supplies its own.</summary>
@@ -90,12 +97,13 @@ public sealed class ScrProgram
     /// <summary>Trap kinds, auto-removal, death and surrender speech, trap radius, teleport trigger.</summary>
     public uint FileFlags { get; }
     public int Capacity { get; }
-    public IReadOnlyList<ScrLine> Lines => Array.AsReadOnly(_lines);
-    public int Count => _lines.Length;
+    public IReadOnlyList<ScrLine> Lines => _lines;
+    public int Count => _lines.Count;
 
     /// <summary>Frames the whole payload strictly: the header, a non-negative line count, a
     /// capacity not below it, and exactly <c>count</c> lines with nothing after them. Counts are
-    /// checked before the line limit, so a malformed header never reads as a budget refusal.</summary>
+    /// checked before the line limit, so a malformed header never reads as a budget refusal.
+    /// Invalid options throw <see cref="ArgumentOutOfRangeException"/>; a payload never throws.</summary>
     public static ScrReadResult Read(ReadOnlySpan<byte> payload, ScrReaderOptions? options = null)
     {
         options ??= new();

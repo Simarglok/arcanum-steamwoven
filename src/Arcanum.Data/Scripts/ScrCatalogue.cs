@@ -49,7 +49,9 @@ public enum ScrOperandRole : byte
 /// the operand signature of each, which slots take a number and which an object, in order. The
 /// numbers and signatures are format facts read from the pinned CE interpreter and cross-checked
 /// against the ScriptEd 1.50 editor data and the installed scripts (ARC-RES-045); only the types
-/// the project reads by name have named constants.</summary>
+/// the project reads by name have named constants. Signatures are the editor's; for action 86
+/// (float newspaper headline) CE reads the object from slot 1 instead (census anomaly X9), so
+/// a slice that admits 86 must decide which slot it checks.</summary>
 public static class ScrCatalogue
 {
     public const int ConditionTypes = 53, ActionTypes = 142, ValueKinds = 7, FocusKinds = 24;
@@ -68,14 +70,19 @@ public static class ScrCatalogue
     /// <summary>The role of each of the eight operand slots, or null for an unknown type.</summary>
     public static IReadOnlyList<ScrOperandRole>? Signature(ScrClauseSide side, int type)
     {
-        var table = side == ScrClauseSide.Condition ? ConditionSignatures : ActionSignatures;
-        if (type < 0 || type >= table.Length) return null;
-        var text = table[type];
+        var table = side == ScrClauseSide.Condition ? ConditionRoles : ActionRoles;
+        return type >= 0 && type < table.Length ? table[type] : null;
+    }
+
+    private static readonly IReadOnlyList<ScrOperandRole>[] ConditionRoles = Roles(ConditionSignatures), ActionRoles = Roles(ActionSignatures);
+
+    private static IReadOnlyList<ScrOperandRole>[] Roles(string[] signatures) => signatures.Select(text =>
+    {
         var roles = new ScrOperandRole[ScrClause.Operands];
         if (text != "-")
             for (var i = 0; i < text.Length; i++) roles[i] = text[i] == 'n' ? ScrOperandRole.Number : ScrOperandRole.Object;
-        return Array.AsReadOnly(roles);
-    }
+        return (IReadOnlyList<ScrOperandRole>)Array.AsReadOnly(roles);
+    }).ToArray();
 
     /// <summary>Condition types the project reads by name.</summary>
     public static class Condition

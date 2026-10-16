@@ -105,6 +105,25 @@ public sealed class ScrProgramTests
         Assert.IsTrue(Enumerable.Range(0, 142).All(t => ScrCatalogue.Signature(ScrClauseSide.OnTrue, t)!.Count == 8));
     }
 
+    [TestMethod]
+    public void Every_signature_matches_the_reviewed_table()
+    {
+        // Golden table, cross-checked against how the pinned CE interpreter reads each operand
+        // (ARC-RES-045 and the ARC-SCRIPT-007 review; action 86 keeps the editor signature, X9).
+        const string conditions = "- - on n nn nn onn nn on on oo o o o o o o on oo on on on o o oo o o o oo oo o o onn on onnn on o o o o on n o n oon nn n o on on - o o";
+        const string actions = "- - - n n - n nnoo n n nn nnn nnn nnn nnn oo onn nn o - - oo o no nn no no no no oon oon oon on non on on oo nnn on on n noo n n onnn onn onn non ono no no no no on nnoon nnoon o o o on onn no on on no no no o o onn on oon on on onn on on onn on ooonn nooon onno n no on nn o nn o on n noon on o on onn n n n onn n n nnnonnn nnnn no n nn onn onn o n on on n no oo no o ono on no ono ono n no no no o on o no n - on on no no non onn on onnn onnn";
+        static string Text(ScrClauseSide side, int type)
+        {
+            var text = string.Concat(ScrCatalogue.Signature(side, type)!.Select(r => r switch { ScrOperandRole.Number => "n", ScrOperandRole.Object => "o", _ => "" }));
+            return text.Length == 0 ? "-" : text;
+        }
+        CollectionAssert.AreEqual(conditions.Split(' '), Enumerable.Range(0, 53).Select(t => Text(ScrClauseSide.Condition, t)).ToArray());
+        CollectionAssert.AreEqual(actions.Split(' '), Enumerable.Range(0, 142).Select(t => Text(ScrClauseSide.OnTrue, t)).ToArray());
+        // Roles fill from slot 0 with no gap.
+        Assert.IsTrue(Enumerable.Range(0, 142).All(t => ScrCatalogue.Signature(ScrClauseSide.OnTrue, t)!.SkipWhile(r => r != ScrOperandRole.Unused).All(r => r == ScrOperandRole.Unused)));
+        Assert.AreEqual(0, typeof(ScrReadResult).GetConstructors().Length);
+    }
+
     private static byte[] With(byte[] bytes, params int[] offsetValues)
     {
         var copy = bytes.ToArray();
