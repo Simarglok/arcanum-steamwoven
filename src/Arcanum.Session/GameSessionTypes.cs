@@ -72,9 +72,13 @@ public sealed class GameSessionLimits
     public int MaxPcItems { get; }
 }
 
-/// <summary>Explicit new-game inputs. The flag descriptor's identity becomes the session's world/module.</summary>
+/// <summary>
+/// Explicit new-game inputs. The flag descriptor's identity becomes the session's world/module. <paramref name="Hero"/>
+/// (ARC-WORLD-015) is the player character the module starts with; a session without one keeps no character and its host
+/// supplies PC facts itself.
+/// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
-    ActorPlacement Actor, GameSessionLimits? Limits = null);
+    ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
@@ -94,6 +98,8 @@ public enum GameSessionFailure
     InventoryUnavailable, InvalidInventorySeed, InventoryMismatch, InvalidItem, ItemNotAvailable, UnknownHolder,
     HolderNotLootable, HolderScriptUnsupported, ItemScriptUnsupported, ItemTypeUnsupported, WornItemUnsupported,
     SubstituteInventoryUnsupported, InsertRefused,
+    // Hero domain (ARC-WORLD-015).
+    InvalidHero,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -192,17 +198,17 @@ public sealed class SessionMapState
 public sealed class GameSessionSnapshot
 {
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
-    /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 adds <see cref="Inventory"/> (ARC-WORLD-014). Schemas 1..4 are
-    /// refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 5;
+    /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 adds
+    /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015). Schemas 1..5 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 6;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionInventoryState inventory, SessionLightingState? lighting)
+        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Inventory = inventory; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -214,6 +220,8 @@ public sealed class GameSessionSnapshot
     public IReadOnlyList<SessionMapState> Maps { get; }
     public SessionStoryState Story { get; }
     public SessionPartyState Party { get; }
+    /// <summary>The player character, or null for a session started without one.</summary>
+    public SessionHeroState? Hero { get; }
     public SessionInventoryState Inventory { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }

@@ -1,4 +1,6 @@
+using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Party;
 
@@ -6,8 +8,9 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
-/// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs) and the items
-/// the PC took from the world (pickup, loot, negative dialog IN) over host-attached T0 map inventories.
+/// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs), the player
+/// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
+/// loot, negative dialog IN) over host-attached T0 map inventories.
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -21,6 +24,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly Story _story;
     private readonly PartyDomain _party;
     private readonly InventoryDomain _inventory;
+    private readonly HeroDomain? _hero;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
@@ -30,19 +34,40 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, InventoryDomain inventory, SessionLightingState? lighting)
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _inventory = inventory; _lighting = lighting;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _lighting = lighting;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
-    /// <summary>Starts a new session from explicit inputs. Rejection leaves no component alive.</summary>
+    /// <summary>
+    /// Starts a new session from explicit inputs. Rejection leaves no component alive. A hero (ARC-WORLD-015) is checked
+    /// before any component is built (<see cref="GameSessionFailure.InvalidHero"/>); its gold and kit items enter the PC's
+    /// inventory at revision 0, the kit as <c>kit:1</c>, <c>kit:2</c>, … in order.
+    /// </summary>
     public static GameSessionCreationResult Create(GameSessionDescriptor? descriptor)
     {
         if (descriptor?.Flags is null) return Rejected(GameSessionFailure.InvalidDescriptor);
         if (!SessionValidation.Actor(descriptor.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         var limits = descriptor.Limits ?? new GameSessionLimits();
+        HeroDomain? hero = null;
+        var inventory = new InventoryDomain();
+        if (descriptor.Hero is { } definition)
+        {
+            hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
+                definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect);
+            var kit = definition.Kit?.ToArray();
+            if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
+                return Rejected(GameSessionFailure.InvalidHero);
+            for (var index = 0; index < kit.Length; index++)
+            {
+                if (kit[index] is not { } item || !Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type))
+                    return Rejected(GameSessionFailure.InvalidHero);
+                inventory.Add(new SessionKitItem(HeroDomain.KitEntity(index), item.Kind));
+            }
+            inventory.Gold = definition.Gold;
+        }
         var clock = GameClockOwner.Bootstrap(descriptor.Clock);
         if (clock.Owner is null) return Rejected(GameSessionFailure.ClockRejected, clock.Failure);
         var flags = GlobalFlagOwner.Create(descriptor.Flags);
@@ -51,7 +76,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), new(), null),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory, null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -78,7 +103,9 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportParty(snapshot.Party, limits, out var party);
         if (failure != GameSessionFailure.None) return Rejected(failure);
-        failure = ImportInventory(snapshot.Inventory, limits, out var inventory);
+        failure = ImportHero(snapshot.Hero, out var hero);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportInventory(snapshot.Inventory, hero is not null, limits, out var inventory);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
         var savedClock = snapshot.Clock;
@@ -100,7 +127,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, inventory, snapshot.Lighting),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, hero, inventory, snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -294,6 +321,33 @@ public sealed class GameSessionOwner : IDisposable
         return Changed();
     }
 
+    /// <summary>The player character's saved fields, or null for a session started without one.</summary>
+    public SessionHeroState? QueryHero() { ThrowIfDisposed(); return _hero?.State; }
+
+    /// <summary>
+    /// The hero's stats under <paramref name="context"/> (base and effective values, derived stats, applied innate effects),
+    /// or null without a hero. An out-of-range context is the character owner's typed failure.
+    /// </summary>
+    public CharacterStatsQueryResult? QueryHeroStats(CharacterStatContext context)
+    {
+        ThrowIfDisposed();
+        return _hero?.Stats.Query(context);
+    }
+
+    /// <summary>
+    /// The hero's DLG reply-eligibility facts, or null without a hero: gender, effective intelligence and the source race
+    /// index. <see cref="DialogPcFacts.IsDumb"/> is false: the source sets it only for backgrounds 55, 74 and 75, and the
+    /// session models no background (a pre-made hero's stored background 39..50 is display data, ARC-RES-027).
+    /// </summary>
+    public DialogPcFacts? QueryHeroDialogFacts() { ThrowIfDisposed(); return _hero?.DialogFacts(); }
+
+    /// <summary>The PC's gold: the hero's starting coins, 0 without a hero. Gold pickup and spending are not modelled.</summary>
+    public int QueryGold() { ThrowIfDisposed(); return _inventory.Gold; }
+
+    /// <summary>Detached copy of the hero's starting kit (<c>kit:1</c>, <c>kit:2</c>, … in kit order); empty without a hero.
+    /// In the PC's inventory these items precede <see cref="QueryPcInventory"/>.</summary>
+    public IReadOnlyList<SessionKitItem> QueryHeroKit() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Kit.ToArray()); }
+
     /// <summary>The NPC's party record; an NPC never recorded is free with no flags. An invalid entity id throws.</summary>
     public SessionCompanion QueryCompanion(string entity)
     {
@@ -432,6 +486,8 @@ public sealed class GameSessionOwner : IDisposable
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
+        // Kit items came from no map, so no seed may list them.
+        if (_inventory.Kit.Any(item => admitted.Items.ContainsKey(item.Entity))) return Reject(GameSessionFailure.InventoryMismatch);
         // An object lies on one map: an item another attached map lists would be hidden there too once taken.
         foreach (var (other, attached) in _inventory.Seeds)
             if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
@@ -448,8 +504,8 @@ public sealed class GameSessionOwner : IDisposable
         return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed) : null;
     }
 
-    /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The PC's own
-    /// starting items are not session state yet.</summary>
+    /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
+    /// starting kit, which precedes them, is <see cref="QueryHeroKit"/>.</summary>
     public IReadOnlyList<SessionPcItem> QueryPcInventory() { ThrowIfDisposed(); return Array.AsReadOnly(_inventory.Pc.ToArray()); }
 
     /// <summary>
@@ -525,7 +581,8 @@ public sealed class GameSessionOwner : IDisposable
             .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
-            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _inventory.Capture(), _lighting);
+            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
+            _inventory.Capture(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -663,7 +720,7 @@ public sealed class GameSessionOwner : IDisposable
         if (parented && facts.Worn) return RejectItem(GameSessionFailure.WornItemUnsupported);
         if (facts.HasScript(SessionScriptPoint.InsertItem) ||
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
-        if (_inventory.Pc.Count >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
+        if (_inventory.Held >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
         var (revision, map) = (_revision, _actor.Map);
         var verdict = insertCheck(item);
@@ -672,7 +729,7 @@ public sealed class GameSessionOwner : IDisposable
             _inventory.Taken.Contains(item.Entity)) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         // Any answer but Accepted refuses, an undefined one included.
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
-        _inventory.Add(new(item.Entity, _actor.Map, facts.Kind));
+        _inventory.Add(new SessionPcItem(item.Entity, _actor.Map, facts.Kind));
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, item.Entity, verdict, new(_identity, _revision));
     }
@@ -680,11 +737,31 @@ public sealed class GameSessionOwner : IDisposable
     private InventoryMutationResult RejectItem(GameSessionFailure failure, SessionInsertVerdict? verdict = null) =>
         new(GameSessionDisposition.Rejected, failure, null, verdict, new(_identity, _revision));
 
-    // The PC's items keep their saved order; each must be one a transfer can produce (an admitted type from a valid map).
-    private static GameSessionFailure ImportInventory(SessionInventoryState saved, GameSessionLimits limits, out InventoryDomain inventory)
+    // The hero is rebuilt from its saved fields under the same checks as a new one.
+    private static GameSessionFailure ImportHero(SessionHeroState? saved, out HeroDomain? hero)
+    {
+        hero = null;
+        if (saved is null) return GameSessionFailure.None;
+        hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
+            saved.RaceEffect, saved.GenderEffect);
+        return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
+    }
+
+    // The PC's items keep their saved order; each must be one the session can produce: a kit item, which only a hero has,
+    // named kit:1, kit:2, … in order (no transfer removes items yet), and an admitted type taken from a valid map. Gold,
+    // too, only comes with a hero.
+    private static GameSessionFailure ImportInventory(SessionInventoryState saved, bool hero, GameSessionLimits limits, out InventoryDomain inventory)
     {
         inventory = new();
-        if (saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        if (saved.Gold < 0 || (saved.Gold > 0 && !hero) || (saved.Kit.Count > 0 && !hero)) return GameSessionFailure.InvalidSnapshot;
+        inventory.Gold = saved.Gold;
+        if (saved.Kit.Count + saved.Pc.Count > limits.MaxPcItems) return GameSessionFailure.BudgetExceeded;
+        foreach (var item in saved.Kit)
+        {
+            if (!Enum.IsDefined(item.Kind.Type) || !InventoryDomain.Admitted(item.Kind.Type)) return GameSessionFailure.InvalidItem;
+            if (item.Entity != HeroDomain.KitEntity(inventory.Kit.Count)) return GameSessionFailure.InvalidSnapshot;
+            inventory.Add(item);
+        }
         foreach (var item in saved.Pc)
         {
             if (!SessionValidation.Entity(item.Entity) || !SessionValidation.Map(item.Origin) || !Enum.IsDefined(item.Kind.Type) ||
