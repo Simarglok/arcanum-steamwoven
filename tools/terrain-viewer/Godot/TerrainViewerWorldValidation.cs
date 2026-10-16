@@ -113,6 +113,7 @@ public partial class TerrainViewerApp
         await WorldZoomMatrixForSelfTestAsync();
         WorldLifecycleMatrixForSelfTest();
         await WorldModalRoutingMatrixForSelfTestAsync();
+        WorldPaletteChordMatrixForSelfTest();
         try { await WorldMouseSettingsMatrixForSelfTestAsync(); }
         catch (InvalidOperationException exception) when (exception.Message.StartsWith("WORLD mouse settings:", StringComparison.Ordinal))
         {
@@ -123,11 +124,13 @@ public partial class TerrainViewerApp
         // Every admitted physical facing/action selection, on the actual original
         // catalogue/cache and canvas, after motion rather than preview hotkeys.
         var directions = new[] { new Vec2(0,-1), new(1,-1), new(1,0), new(1,1), new(0,1), new(-1,1), new(-1,0), new(-1,-1) };
+        SelectSimulatedPadForSelfTest();
+        for (var i = 0; i < 3; i++) WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .01);
         foreach (var direction in directions)
         {
-            WorldFrameForSelfTest(new(-1, default, KeyboardActor: direction), Array.Empty<RawInputFrame>(), .01);
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(direction) }, .01);
             await AssertActorRasterAsync(result, _readyActor!);
-            WorldFrameForSelfTest(new(-1, default), Array.Empty<RawInputFrame>(), .01);
+            WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .01);
             await AssertActorRasterAsync(result, _readyActor!);
         }
         foreach (var size in new[] { new Vector2I(1280,800), new(1440,900), new(800,600) })
@@ -185,10 +188,17 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD simulation: " + why); }
         var none = new RawInputFrame(-1, default);
+        // The actor moves by the selected pad's left stick (the keyboard has no actor
+        // route in WORLD); arrows remain the keyboard camera route.
         var left = none with { KeyboardActor = new(-1, 1), KeyboardActorHeld = true };
         var right = none with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
         var both = left with { KeyboardCamera = new(1, 0), KeyboardCameraHeld = true };
-        void Frame(RawInputFrame raw, double delta = .1, bool complete = true) => WorldFrameForSelfTest(raw, Array.Empty<RawInputFrame>(), delta, complete);
+        void Frame(RawInputFrame raw, double delta = .1, bool complete = true)
+        {
+            var (keyboard, pad) = SplitActorFrame(raw);
+            WorldFrameForSelfTest(keyboard, new[] { pad }, delta, complete);
+        }
+        WorldFocusForSelfTest(true); SelectSimulatedPadForSelfTest();
         WorldFocusForSelfTest(true); Frame(none); Frame(none); Frame(none);
         var initial = _worldActor.State; var bounds = _readyDiagnosticPlan!.WorldBounds;
         _camera!.ZoomWorld(4, WorldAnchor, WorldViewport);
@@ -223,12 +233,18 @@ public partial class TerrainViewerApp
             _camera.ResetWorld(WorldAnchor, WorldViewport);
             _camera.ZoomWorld(8, WorldAnchor, WorldViewport);
             var old = _camera.State;
-            Frame(none with { KeyboardCamera = new(1, 1), KeyboardCameraHeld = true });
+            WorldFrameForSelfTest(none, new[] { new RawInputFrame(SimulatedPadId, default, new Vec2(1, 1)) }, .1);
             var now = _camera.State;
-            Require((x ? now.X < old.X : now.X > old.X) && (y ? now.Y < old.Y : now.Y > old.Y), "independent image inversion axes");
+            Require((x ? now.X < old.X : now.X > old.X) && (y ? now.Y < old.Y : now.Y > old.Y), "independent stick image inversion axes");
+            // KM-05: keyboard arrows keep one direction whatever the camera inversion.
+            old = _camera.State;
+            Frame(none with { KeyboardCamera = new(1, 1), KeyboardCameraHeld = true });
+            now = _camera.State;
+            Require(now.X > old.X && now.Y > old.Y, "arrows followed camera inversion");
         }
         Require(_worldActor.State.Position == actorBeforeCamera.Position && _readyDiagnosticPlan.WorldBounds == bounds && _cache.Count == _readyDecodedCount + _readyStaticDecodedCount + _readyActorPlan!.Profile.DistinctKeys, "camera/selection changed actor, bounds or cache");
         _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings; ResetWorldScene(); Frame(none); Frame(none); Frame(none);
+        _worldReducer.SetStartupDevices(Array.Empty<int>()); QuarantineWorld(); _worldAdapter.Clear();
         GD.Print("ARC-WORLD-001 control matrix PASS SIMULATION Manual/Follow/activity/neutral/focus/modal/inversion/bounds/cache; physical usability NOT_READY");
     }
 }

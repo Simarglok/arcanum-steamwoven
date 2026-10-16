@@ -41,6 +41,7 @@ public static partial class TerrainViewerSelfTest
             app.PublishSyntheticForSelfTest(arguments, result);
             var usage = source.Owner.Usage;
             app.WorldGridObservationMatrixForSelfTest();
+            app.WorldPaletteChordMatrixForSelfTest();
             var gridReport = await app.AreaGridMatrixForSelfTestAsync(arguments, result, unknown);
             var camera = await app.AreaCameraMatrixForSelfTestAsync(arguments, result);
             var report = new { Grid = gridReport, Camera = camera };
@@ -86,9 +87,11 @@ public partial class TerrainViewerApp
         var evidence = new List<AreaGridStepEvidence>();
         var cases = new List<object>();
         var views = new List<object>();
+        // ARC-INPUT-001: the selected pad's stick replays the former S/A/W/D key
+        // edges callback for callback; frames carry its held level.
         void Frame(int time)
         {
-            WorldFrameForSelfTest(level, Array.Empty<RawInputFrame>(), .1, true, SimulationTime.At(time));
+            WorldFrameForSelfTest(none, new[] { level }, .1, true, SimulationTime.At(time));
             if (_worldActor.Session?.LastAdvance is not { } advance) return;
             events.AddRange(advance.Movement.Events.Where(e => !events.Any(old => old.Ordinal == e.Ordinal)));
             evidence.AddRange(advance.AreaEvidence.Where(e => !evidence.Any(old => old.Key == e.Key)));
@@ -96,19 +99,19 @@ public partial class TerrainViewerApp
         void Keys(int time, bool down, params Key[] keys)
         {
             _worldTestTime = SimulationTime.At(time);
-            foreach (var key in keys) _Input(new InputEventKey { Keycode = key, Pressed = down });
-            level = _worldAdapter.SampleKeyboard(true);
+            foreach (var key in keys) SimulatedSectorKey(key, down);
+            level = SimulatedPadLevel();
         }
         void Prepare(AreaStepSnapshot? snapshot = null, MovementLimits? limits = null)
         {
             if (_readyArea is null) PublishSyntheticForSelfTest(arguments, result);
             if (WorldModal) ToggleWorldSettings();
-            GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); RetireWorldLifecycle();
+            GetViewport().GuiReleaseFocus(); RetireWorldLifecycle();
             _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
             _worldActor.Configure(snapshot ?? result.AreaStepSnapshot!, SimulationTime.At(0), StepDuration.Of(8), limits);
             _worldGridInput = new(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
-            _worldReducer.SetStartupDevices(Array.Empty<int>()); level = none;
-            QuarantineWorld(); Frame(1); Frame(2); Frame(3);
+            SelectSimulatedPadForSelfTest(); level = StickLevel(default);
+            Frame(1); Frame(2); Frame(3);
             Require(_worldGate.IsOpen, "two complete neutral frames");
             PublishWorldSelection(); _camera!.ResetWorld(WorldAnchor, WorldViewport, 2);
             events.Clear(); evidence.Clear();
@@ -290,7 +293,7 @@ public partial class TerrainViewerApp
         // Mirrored source column1 (left green) lands at destination column7.
         await Render("Walk-return-behind",-227,173,walkLeft,false);
         Case("native-moving-overlap");
-        _hud.Visible = true;
+        _hud.Visible = true; ReleaseSimulatedPadForSelfTest();
         return new { Schema = "arcanum-area-grid-synthetic-v1", Task = "ARC-RENDER-007", Outcome = "PASS", result.Generation,
             Source = "public strict FILE/DAT/ART area fixture and its whole-core T0 step evidence", Commands = result.Area!.Plan.Commands.Count,
             ControlledProfile = "HumanFixed", MainViewport = GetWindow().GetVisibleRect().Size.ToString(), Cases = cases, Views = views,

@@ -11,7 +11,7 @@ using Input = global::Godot.Input;
 
 public partial class TerrainViewerApp
 {
-    private GodotInputAdapter _worldAdapter = new();
+    private GodotInputAdapter _worldAdapter = new() { WorldRoute = true };
     private InputStateReducer _worldReducer = new();
     private DiagnosticInputSafetyGate _worldGate = new();
     private DiagnosticGridActor _worldActor = new();
@@ -46,7 +46,7 @@ public partial class TerrainViewerApp
     }
     private void RetireWorldLifecycle()
     {
-        _worldResetPending = false; _worldReloadPending = false; _worldLifecycleSession = null;
+        _worldResetPending = false; _worldReloadPending = false; _worldLifecycleSession = null; _worldPaletteReloadRequested = false;
     }
     private readonly DiagnosticInputSettingsStore _worldStore = new();
     private readonly DiagnosticZoomSettingsStore _worldZoomStore = new();
@@ -57,7 +57,9 @@ public partial class TerrainViewerApp
     private double _worldZoomSettled;
     private DiagnosticInputSettingsPanel? _worldPanel;
     private InputSettings _worldSettings = DiagnosticWorldPolicy.DefaultInputSettings;
-    private Vec2 _worldDrag;
+    // Diagnostic chord ownership comes before every other keyboard mapping.
+    private readonly DiagnosticPaletteChord _worldChord = new();
+    private string? _worldLastReserved;
     private bool _worldFocused = true;
     private Window? _worldFocusWindow;
     // One initialization owns the panel and every subscription; ExitWorld
@@ -105,12 +107,14 @@ public partial class TerrainViewerApp
         _worldPanel.ResetRequested += ResetWorldSettings;
         _worldPanel.ZoomRequested += SetPreferredWorldZoom;
         _worldPanel.FitRequested += FitWorldView;
+        _worldPanel.ResetSceneRequested += PaletteResetScene;
+        _worldPanel.ReloadRequested += PaletteReload;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
         _worldFocusWindow = GetWindow();
         _worldFocusWindow.FocusEntered += WorldWindowFocusEntered;
         _worldFocusWindow.FocusExited += WorldWindowFocusExited;
-        _worldAdapter.Clear();
+        _worldAdapter.Clear(); _worldAdapter.WorldRoute = true; _worldAdapter.PaletteOpen = false; _worldChord.Reset();
         _worldReducer.SetStartupDevices(Input.GetConnectedJoypads().Select(id => (int)id));
         _worldFocused = GetWindow().HasFocus();
         _worldUiFocused = WorldUiFocus;
@@ -120,7 +124,7 @@ public partial class TerrainViewerApp
         CameraDeadzone: _worldSettings.CameraDeadzone, ActorDeadzone: _worldSettings.ActorDeadzone,
         CameraSensitivity: _worldSettings.CameraSensitivity, ActorSensitivity: _worldSettings.ActorSensitivity,
         Delta: delta, Zoom: _camera?.State.Zoom ?? 1, InvertCameraX: _worldSettings.InvertCameraX,
-        InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance) { WorldZoomEnabled = true };
+        InvertCameraY: _worldSettings.InvertCameraY, Modal: WorldModal || WorldUiFocus, AdvanceTime: advance) { WorldZoomEnabled = true, KeyboardCameraFixedSign = true };
 
     private void QuarantineWorld() => WorldObservation(QuarantineWorldObserved);
     private void QuarantineWorldObserved()
@@ -130,7 +134,7 @@ public partial class TerrainViewerApp
         if (_worldActor.Session is { } session && !_exiting)
             _worldGridInput.Observe(session, WorldTime, ActorIntent.Neutral);
         _worldMenuAnalogDirection = 0;
-        _dragging = false; _worldDrag = default; _camera?.SafetyResetWorld();
+        _dragging = false; _camera?.SafetyResetWorld();
         if (IsWorldMode(_readyMode) && _readyActorPlan is not null) PublishWorldSelection();
     }
     private void ResetWorldScene() => WorldObservation(() => RequestWorldLifecycle(false));
@@ -148,7 +152,8 @@ public partial class TerrainViewerApp
         if (!_worldInitialized || !IsWorld || _worldPanel is null) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
-        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); }
+        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); }
+        _worldAdapter.PaletteOpen = _worldPanel.IsOpen;
         RefreshReadyStatus();
     }
     private void SaveWorldSettings(InputSettings settings)
@@ -159,10 +164,49 @@ public partial class TerrainViewerApp
         catch (InvalidOperationException) { _worldPanel?.SetSaveStatus(false); }
         TraceWorldInput("Save:after");
     }
+    // Preferences only: the scene, actor and Follow are not reset (Reset scene is separate).
     private void ResetWorldSettings()
     {
         SaveWorldSettings(DiagnosticWorldPolicy.DefaultInputSettings); SetPreferredWorldZoom(2);
-        _worldPanel?.Bind(_worldSettings); ResetWorldScene();
+        _worldPanel?.Bind(_worldSettings);
+        _worldPanel?.SetActionStatus("Preferences reset to defaults (input false/false, zoom 2.00); scene unchanged.");
+    }
+    private void PaletteResetScene()
+    {
+        if (_worldActor.Session is null) { _worldPanel?.SetActionStatus("Reset scene unavailable: no ready scene."); return; }
+        ResetWorldScene();
+        _worldPanel?.SetActionStatus("Reset scene requested: the accepted step settles, then actor/Follow reset; preferences kept.");
+    }
+    // The palette reports how its Reset scene / Reload ended, not only the request.
+    // A palette Reload is reported only for the load generation it started; a
+    // retired request or an unrelated later publish never reads as "Reload done".
+    private bool _worldPaletteReloadRequested;
+    private long? _worldPaletteReloadGeneration;
+    private void PaletteScenePublished()
+    {
+        if (_worldPaletteReloadGeneration != _generation) return;
+        _worldPaletteReloadGeneration = null;
+        _worldPanel?.SetActionStatus($"Reload done: generation {_generation} published; actor at spawn.");
+        BindWorldPaletteSummary();
+    }
+    private void PaletteSceneFailed(TerrainViewerError error)
+    {
+        _worldPaletteReloadGeneration = null;
+        if (_worldPanel is { } panel && GodotObject.IsInstanceValid(panel))
+            panel.SetActionStatus($"Scene FAILED: stage={error.Stage} code={error.Code}; the old scene is not republished.");
+    }
+    private void PaletteReload()
+    {
+        if (_arguments is null || _worldActor.Session is null) { _worldPanel?.SetActionStatus("Reload unavailable: no loaded source."); return; }
+        WorldObservation(() => RequestWorldLifecycle(true));
+        _worldPaletteReloadRequested = _worldReloadPending;
+        _worldPanel?.SetActionStatus("Reload requested: the accepted step settles, then the current source reloads; failures are shown, the old scene is not republished.");
+    }
+    private void BindWorldPaletteSummary()
+    {
+        if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel)) return;
+        var runtime = _worldActor.Session?.State;
+        _worldPanel.SetSummary($"{(_worldActor.Session is AreaGridSession ? "Whole Crash Site core at T0" : "Bounded WORLD test area")}; cell {runtime?.CommittedCell} {runtime?.Phase}; camera {_camera?.FollowState.Mode}; last assessment: {_worldGridDiagnostic}");
     }
     private void BindWorldZoom()
     {
@@ -265,6 +309,7 @@ public partial class TerrainViewerApp
     }
     private void ProcessWorldObserved(double delta)
     {
+        _worldAdapter.PaletteOpen = WorldModal;
         if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); AdvanceWorldGrid(default); return; }
         if (WorldUiFocus != _worldUiFocused) { _worldUiFocused = WorldUiFocus; QuarantineWorld(); }
         var complete = _worldFocused;
@@ -318,13 +363,12 @@ public partial class TerrainViewerApp
         var wasOpen = _worldGate.IsOpen;
         _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
-        { _worldDrag = default; AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
+        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
-        var pan = intents.Aggregate(_worldDrag, (sum, intent) => sum + intent.CameraPan);
+        var pan = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.CameraPan);
         var actorActive = intents.Any(intent => intent.ActorActive);
-        var cameraActive = intents.Any(intent => intent.CameraActive) || _dragging || _worldDrag.Length > 0;
-        _worldDrag = default;
+        var cameraActive = intents.Any(intent => intent.CameraActive);
         if (!double.IsFinite(pan.X) || !double.IsFinite(pan.Y)) { QuarantineWorld(); return; }
         try
         {
@@ -402,8 +446,10 @@ public partial class TerrainViewerApp
         {
             if (_worldReloadPending && _arguments is not null)
             {
+                var paletteReload = _worldPaletteReloadRequested;
                 RetireWorldLifecycle();
                 _lastLoad = StartLoadAsync(_arguments, false);
+                _worldPaletteReloadGeneration = paletteReload ? _generation : null;
             }
             else
             {
@@ -413,6 +459,8 @@ public partial class TerrainViewerApp
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                _worldPanel?.SetActionStatus("Reset scene done: actor at spawn, Follow; preferences kept.");
+                BindWorldPaletteSummary();
                 GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
             }
         }
@@ -425,6 +473,25 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         var wasModal = WorldModal;
+        _worldAdapter.PaletteOpen = WorldModal;
+        if (input is InputEventKey chordKey)
+        {
+            // Diagnostics first: a consumed chord key never reaches the shared
+            // mapping, native GUI or an original-key sink (down, echo or release).
+            var routedKey = chordKey.Keycode != Key.None ? chordKey.Keycode : chordKey.PhysicalKeycode;
+            var modifiers = (chordKey.CtrlPressed ? WorldKeyModifiers.Ctrl : 0) | (chordKey.ShiftPressed ? WorldKeyModifiers.Shift : 0)
+                | (chordKey.AltPressed ? WorldKeyModifiers.Alt : 0) | (chordKey.MetaPressed ? WorldKeyModifiers.Meta : 0);
+            var decision = _worldChord.Route(GodotInputAdapter.ToWorldKey(routedKey), chordKey.Pressed, chordKey.Echo, modifiers,
+                WorldModal, _worldFocused && !WorldUiFocus);
+            if (decision.Consumed)
+            {
+                GetViewport().SetInputAsHandled();
+                if (decision.TogglePalette) ToggleWorldSettings();
+                return;
+            }
+            if (decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+                _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
+        }
         var raw = _worldAdapter.Map(input, _worldFocused);
         if (input is InputEventMouseButton)
         {
@@ -443,29 +510,18 @@ public partial class TerrainViewerApp
         // Semantic keyboard/controller modal routing is owned above; do not
         // also let focused native controls toggle/navigate the same event.
         var semanticKey = input is InputEventKey keyEvent &&
-            (keyEvent.Keycode is Key.F1 or Key.Escape or Key.Up or Key.Down or Key.W or Key.S
-            || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.Space or Key.Backspace or Key.Q or Key.E));
+            (keyEvent.Keycode is Key.Escape or Key.Up or Key.Down
+            || (GetViewport().GuiGetFocusOwner() is not LineEdit && keyEvent.Keycode is Key.Enter or Key.Space or Key.Backspace));
         if ((wasModal || WorldModal) && (semanticKey || input is InputEventJoypadButton or InputEventJoypadMotion))
             GetViewport().SetInputAsHandled();
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
-        var overHud = input is InputEventMouse mouse && _hud?.Rect.HasPoint(mouse.Position) == true;
-        if (input is InputEventMouseButton button)
-        {
-            if (button.ButtonIndex == MouseButton.Left) _dragging = button.Pressed && !overHud && _worldGate.IsOpen;
-            if (_worldGate.IsOpen && !overHud && button.Pressed && button.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown)
-                StepPreferredWorldZoom(button.ButtonIndex == MouseButton.WheelUp ? 1.25 : .8);
-        }
-        else if (input is InputEventMouseMotion motion && _dragging && !overHud) _worldDrag += new Vec2(motion.Relative.X, motion.Relative.Y) * (1 / (_camera?.State.Zoom ?? 1));
-        else if (input is InputEventKey key && key.Pressed && !key.Echo && GetViewport().GuiGetFocusOwner() is null)
-        {
-            if (key.Keycode == Key.R) ResetWorldScene();
-            else if (key.Keycode == Key.F) FitWorldView();
-            else if (key.Keycode == Key.L && _arguments is not null) RequestWorldLifecycle(true);
-            else if (_worldGate.IsOpen && key.Keycode is Key.Plus or Key.Minus) StepPreferredWorldZoom(key.Keycode == Key.Plus ? 1.25 : .8);
-            else if (key.Keycode == Key.F11) GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
-            else if (key.Keycode == Key.Escape && GetWindow().Mode == Window.ModeEnum.Fullscreen) GetWindow().Mode = Window.ModeEnum.Windowed;
-        }
+        // The world mouse route is free for original controls: LMB neither drags
+        // the camera nor confirms (click-to-move is pending), and wheel/+/- do not
+        // zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
+        // F11 is a host window control (not an M/Q game key), not a diagnostic.
+        if (input is InputEventKey key && key.Pressed && !key.Echo && GetViewport().GuiGetFocusOwner() is null && key.Keycode == Key.F11)
+            GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
         RefreshReadyStatus();
     }
     private void CaptureWorldCallbackActor(RawInputFrame raw, IntentFrame reduced)
@@ -497,6 +553,11 @@ public partial class TerrainViewerApp
     }
     private RawInputFrame WorldKeyboardRouting(RawInputFrame raw)
     {
+        // Host-side enforcement of the WORLD keyboard route, independent of the
+        // adapter: no keyboard actor vector, no lab Inspect/Context/Q/E/F1 pulses,
+        // and semantic Confirm/Cancel/menu pulses only inside the open palette.
+        raw = raw with { KeyboardActor = default, Inspect = false, Context = false, Previous = false, Next = false, Settings = false, KeyboardActorHeld = false };
+        if (!WorldModal) raw = raw with { Confirm = false, Cancel = false, MenuUp = false, MenuDown = false };
         // The native numeric editor owns text, Enter, Backspace and Tab. Only
         // explicit Escape cancels here; do not reinterpret Backspace as Cancel.
         if (WorldModal && GetViewport().GuiGetFocusOwner() is LineEdit)
@@ -540,7 +601,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Controls WASD/left stick: eight screen sectors; actor-axis inversion separate from camera (F1); arrows/right stick pan; LT/RT zoom; F fit R reset L reload F1 settings | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; LMB click-to-move PENDING; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {
@@ -552,6 +613,7 @@ public partial class TerrainViewerApp
         try
         {
             FlushWorldZoom();
+            _worldChord.Reset(); _worldAdapter.PaletteOpen = false; _worldPaletteReloadGeneration = null;
             QuarantineWorld();
             GD.Print($"ARC-WORLD-003 lifecycle=disposed phase={_worldActor.Session?.State.Phase} time={_worldActor.Session?.State.Time.Value} (not CenterArrived)");
         }
@@ -577,6 +639,7 @@ public partial class TerrainViewerApp
                 {
                     panel.Changed -= SaveWorldSettings; panel.CloseRequested -= ToggleWorldSettings; panel.ResetRequested -= ResetWorldSettings;
                     panel.ZoomRequested -= SetPreferredWorldZoom; panel.FitRequested -= FitWorldView;
+                    panel.ResetSceneRequested -= PaletteResetScene; panel.ReloadRequested -= PaletteReload;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }
             }

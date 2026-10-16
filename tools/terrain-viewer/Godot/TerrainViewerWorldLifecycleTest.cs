@@ -13,17 +13,18 @@ public partial class TerrainViewerApp
         if (!SelfTestBootstrap && !_nativeSmoke) throw new InvalidOperationException("Explicit test launch required.");
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD lifecycle: " + why); }
         var none = new RawInputFrame(-1, default);
-        var held = none with { KeyboardActor = new(-1,1), KeyboardCamera = new(1,0), KeyboardActorHeld = true, KeyboardCameraHeld = true };
+        // Keyboard arrows pan; the actor moves only by the selected pad's stick.
+        var held = none with { KeyboardCamera = new(1,0), KeyboardCameraHeld = true };
         void Frame(RawInputFrame keys, params RawInputFrame[] pads) => WorldFrameForSelfTest(keys, pads, .1);
         void Neutral(params RawInputFrame[] pads) { Frame(none,pads); Frame(none,pads); Frame(none,pads); }
-        ResetWorldScene(); Neutral(); _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
-        Frame(held); var anchor = _worldActor.State.Position; var center = _camera.State;
-        Frame(none with { KeyboardCameraHeld = true });
-        Require(_camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "opposing held pan armed return");
-        WorldSettleForSelfTest(); anchor = _worldActor.State.Position; center = _camera.State;
-        _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld();
         var padNeutral = new RawInputFrame(3,default);
         var padHeld = new RawInputFrame(3,new(-1,1),new(1,0));
+        SelectSimulatedPadForSelfTest(); ResetWorldScene(); Neutral(padNeutral); _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
+        Frame(held, padHeld with { RightStick = default }); var anchor = _worldActor.State.Position; var center = _camera.State;
+        Frame(none with { KeyboardCameraHeld = true }, padNeutral);
+        Require(_camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "opposing held pan armed return");
+        WorldSettleForSelfTest(padNeutral); anchor = _worldActor.State.Position; center = _camera.State;
+        _worldReducer.SetStartupDevices(new[] { 3 }); QuarantineWorld();
         Frame(held,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor && _camera.State == center, "acquisition held moved");
         Neutral(padNeutral); Frame(none,padHeld); Frame(none,padHeld); Frame(none,padHeld);
@@ -38,8 +39,8 @@ public partial class TerrainViewerApp
         ResetWorldScene(); WorldSettleForSelfTest(); anchor = _worldActor.State.Position; center = _camera.State;
         WorldConnectionChanged(3,true); Frame(none,padHeld); Frame(none,padHeld);
         Require(_worldActor.State.Position == anchor && _camera.State == center, "reconnect held moved");
-        Frame(none,padNeutral); Frame(none with { KeyboardActorHeld = true },padNeutral); Frame(none,padNeutral); Frame(none,padHeld);
-        Require(_worldActor.State.Position == anchor, "opposing keyboard or one neutral sample opened reconnect");
+        Frame(none,padNeutral); Frame(none with { KeyboardCameraHeld = true },padNeutral); Frame(none,padNeutral); Frame(none,padHeld);
+        Require(_worldActor.State.Position == anchor, "opposing arrows or one neutral sample opened reconnect");
         Neutral(padNeutral); Frame(none,padHeld with { RightStick = default }); Frame(none,padHeld with { RightStick = default }); Frame(none,padHeld with { RightStick = default });
         Require(_worldActor.State.Position != anchor && _camera.FollowState.Mode == CameraMode.Follow, "fresh actor after reconnect did not follow");
         _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene(); WorldSettleForSelfTest(); Neutral();
@@ -48,19 +49,31 @@ public partial class TerrainViewerApp
         var beforeHud = _camera.State;
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = _hud!.Rect.Position + Vector2.One * 2 });
         Require(_camera.State == beforeHud, "HUD wheel zoomed world");
+        // ARC-INPUT-001: LMB is not a world drag/Confirm (click-to-move pending).
+        var followBefore = _camera.FollowState;
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = new(WorldViewport.X-2,WorldViewport.Y-2) });
         Frame(none);
-        Require(_camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "zero-delta active drag not Manual");
         _Input(new InputEventMouseMotion { Position = new(WorldViewport.X-2,WorldViewport.Y-2), Relative = new(10,5) }); Frame(none);
-        Require(_worldActor.State.Position == actorBefore.Position, "drag displaced actor");
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = false, Position = new(WorldViewport.X-2,WorldViewport.Y-2) });
-        Frame(none); var panCenter = _camera.State; var panState = _camera.FollowState;
+        Frame(none);
+        Require(_camera.State == beforeHud && _camera.FollowState == followBefore && _worldActor.State == actorBefore && !_dragging, "LMB dragged or acted on the world");
+        // Ordinary original keys carry no diagnostic action: no Fit/Reset/Reload/
+        // settings/zoom/actor intent from F1-F5, R/F/L, WASD, 1-0, +/- or Escape.
+        foreach (var key in new[] { Key.F1,Key.F2,Key.F3,Key.F4,Key.F5,Key.R,Key.F,Key.L,Key.W,Key.A,Key.S,Key.D,Key.I,Key.C,Key.Space,Key.Enter,Key.Escape,
+            Key.Key1,Key.Key2,Key.Key3,Key.Key4,Key.Key5,Key.Key6,Key.Key7,Key.Key8,Key.Key9,Key.Key0,Key.Plus,Key.Minus,Key.F9 })
+        {
+            _Input(new InputEventKey { Keycode = key, Pressed = true }); _Input(new InputEventKey { Keycode = key, Pressed = true, Echo = true });
+            Frame(none); _Input(new InputEventKey { Keycode = key, Pressed = false }); Frame(none);
+            Require(_camera.State == beforeHud && _camera.FollowState == followBefore && _worldActor.State == actorBefore && !WorldModal
+                && _worldLifecycleSession is null && !_worldFitView && _worldGate.IsOpen, $"plain {key} had a diagnostic/world effect");
+        }
         _camera.ZoomWorld(.5,WorldAnchor,WorldViewport);
-        Require(_camera.FollowState == panState && _worldActor.State.Position == actorBefore.Position, "zoom changed state");
-        _Input(new InputEventKey { Keycode = Key.F, Pressed = true });
-        Require(!_worldActor.IsPlaying && !_worldGate.IsOpen && _camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed, "Fit lifecycle");
+        Require(_camera.FollowState == followBefore && _worldActor.State.Position == actorBefore.Position, "zoom changed state");
+        // Palette actions (the same handlers its buttons call) are the Fit/Reset route.
+        FitWorldView();
+        Require(!_worldActor.IsPlaying && !_worldGate.IsOpen && _camera.FollowState.Mode == CameraMode.Manual && !_camera.FollowState.RecenterArmed && _worldFitView, "Fit lifecycle");
         var preferences = _worldSettings;
-        _Input(new InputEventKey { Keycode = Key.R, Pressed = true });
+        PaletteResetScene();
         WorldSettleForSelfTest();
         Require(_worldActor.State.Position == new DiagnosticSectorPosition(6,1) && _worldActor.State.Facing == 5 && _worldActor.CurrentFrame == 0
             && _worldSettings == preferences && _camera.FollowState.Mode == CameraMode.Follow, "reset lifecycle/preferences");
@@ -77,6 +90,24 @@ public partial class TerrainViewerApp
             adapter.RefreshKeyboardLevels(k => k == key);
             Require(InputStateReducer.HasAnyLevel(adapter.SampleKeyboard(true),new()), "mapped keyboard level omitted");
         }
+        // The WORLD route adapter: no keyboard actor level or lab pulses; arrows
+        // pan; only the open palette gets Up/Down/Enter/Space/Escape/Backspace.
+        var world = new GodotInputAdapter { WorldRoute = true };
+        foreach (var key in new[] { Key.W,Key.A,Key.S,Key.D,Key.F1,Key.I,Key.C,Key.Q,Key.E,Key.Enter,Key.Space,Key.Escape,Key.Backspace,Key.Key1,Key.R,Key.F,Key.L })
+        {
+            world.PaletteOpen = false; world.RefreshKeyboardLevels(k => k == key);
+            Require(!InputStateReducer.HasAnyLevel(world.SampleKeyboard(true),new()), $"WORLD keyboard level from {key}");
+            var mapped = world.Map(new InputEventKey { Keycode = key, Pressed = true }, true);
+            Require(!mapped.Keyboard && mapped.KeyboardActor == default && !mapped.Settings && !mapped.Confirm, $"WORLD key event {key} became intent");
+            world.Map(new InputEventKey { Keycode = key, Pressed = false }, true);
+        }
+        world.RefreshKeyboardLevels(k => k is Key.Right or Key.Down);
+        Require(world.SampleKeyboard(true).KeyboardCamera == new Vec2(1,1) && world.SampleKeyboard(true).KeyboardCameraHeld, "WORLD arrows pan");
+        world.PaletteOpen = true; world.RefreshKeyboardLevels(k => k is Key.Down or Key.Enter);
+        var palette = world.SampleKeyboard(true);
+        Require(palette.MenuDown && palette.Confirm && palette.KeyboardCamera == default && !palette.MenuUp, "palette keyboard controls");
+        world.RefreshKeyboardLevels(k => k is Key.W or Key.S or Key.Q or Key.E or Key.F1);
+        Require(!InputStateReducer.HasAnyLevel(world.SampleKeyboard(true),new()), "palette took original keys");
         foreach (var button in new[] { JoyButton.A,JoyButton.B,JoyButton.X,JoyButton.Y,JoyButton.LeftShoulder,JoyButton.RightShoulder,JoyButton.Start,JoyButton.DpadUp,JoyButton.DpadDown })
         {
             Require(adapter.RefreshControllerLevels(3,_ => 0,b => b == button) && InputStateReducer.HasAnyLevel(adapter.SampleController(3,true)!,new()), "mapped button omitted");
@@ -97,8 +128,8 @@ public partial class TerrainViewerApp
     {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD incomplete observation: " + why); }
         var none = new RawInputFrame(-1, default);
-        var moving = none with { KeyboardActor = new(-1,1), KeyboardActorHeld = true };
         var pad = new RawInputFrame(3, default);
+        var moving = pad with { LeftStick = new(-1,1) };
         foreach (var manual in new[] { false, true })
         foreach (var failure in new[] { "incomplete", "missing-active", "invalid-pad", "invalid-keyboard", "unfocused", "invalid-delta" })
         {
@@ -106,34 +137,34 @@ public partial class TerrainViewerApp
             WorldSettleForSelfTest(pad);
             for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
             _camera!.ZoomWorld(8, WorldAnchor, WorldViewport);
-            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(moving, new[] { pad }, .37);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { moving }, .37);
             Require(_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Walk, "precondition moving");
             if (manual)
             {
-                WorldFrameForSelfTest(moving with { KeyboardCamera = new(1,0), KeyboardCameraHeld = true }, new[] { pad }, .1);
+                WorldFrameForSelfTest(none with { KeyboardCamera = new(1,0), KeyboardCameraHeld = true }, new[] { moving }, .1);
                 WorldFrameForSelfTest(none, new[] { pad }, .1);
                 Require(_camera.FollowState.Mode == CameraMode.Manual && _camera.FollowState.RecenterArmed, "precondition armed Manual");
             }
             var position = _worldActor.State.Position; var center = _camera.State;
-            _worldDrag = new(100,100); _dragging = true; _worldMenuAnalogDirection = 1;
-            WorldFrameForSelfTest(failure == "invalid-keyboard" ? moving with { KeyboardActor = new(double.NaN,0), Settings = true }
-                : failure == "unfocused" ? moving with { Focused = false, Settings = true } : moving with { Settings = true },
+            _dragging = true; _worldMenuAnalogDirection = 1;
+            WorldFrameForSelfTest(failure == "invalid-keyboard" ? none with { KeyboardCamera = new(double.NaN,0) }
+                : failure == "unfocused" ? none with { Focused = false } : none,
                 failure == "missing-active" ? Array.Empty<RawInputFrame>()
-                : new[] { failure == "invalid-pad" ? pad with { LeftStick = new(double.NaN,0) } : pad },
+                : new[] { failure == "invalid-pad" ? pad with { LeftStick = new(double.NaN,0), Settings = true } : moving with { Settings = true } },
                 failure == "invalid-delta" ? double.NaN : 2, failure != "incomplete");
             Require(_camera.State == center && !WorldModal
-                && !_camera.FollowState.RecenterArmed && !_worldGate.IsOpen && !_dragging && _worldDrag == default && _worldMenuAnalogDirection == 0,
+                && !_camera.FollowState.RecenterArmed && !_worldGate.IsOpen && !_dragging && _worldMenuAnalogDirection == 0,
                 failure + " did not quarantine before actions");
             WorldSettleForSelfTest(pad); position = _worldActor.State.Position;
             Require(!_worldActor.IsPlaying && _worldActor.State.Action == ActorDiagnosticAction.Idle && _worldActor.CurrentFrame == 0
                 && _camera.State == center, failure + " accepted return/finish did not settle independently");
             QuarantineWorld();
-            WorldFrameForSelfTest(moving, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
-            WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            WorldFrameForSelfTest(none, new[] { moving }, .1); WorldFrameForSelfTest(none, new[] { moving }, .1);
+            WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(none, new[] { moving }, .1);
             Require(_worldActor.State.Position == position && _camera.State == center && !_worldGate.IsOpen, "held or single neutral reopened");
             WorldFrameForSelfTest(none, new[] { pad }, .1); WorldFrameForSelfTest(none, new[] { pad }, .1);
             Require(_worldGate.IsOpen && _worldActor.State.Position == position, "two full neutral frames required");
-            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(moving, new[] { pad }, .1);
+            for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { moving }, .1);
             Require(_worldActor.State.Position != position, "fresh activation did not recover");
         }
         _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
@@ -176,7 +207,7 @@ public partial class TerrainViewerApp
         {
             _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
             if (!WorldModal) ToggleWorldSettings();
-            var toggles = _worldPanel.FindChildren("*", "CheckButton", true, false).Cast<CheckButton>().ToArray();
+            var toggles = _worldPanel.FindChildren("*", "CheckButton", true, false).Cast<CheckButton>().Where(c => c.Name != "PassabilityOverlay").ToArray();
             Require(toggles.Length == 4, "four independent camera/actor controls required");
             foreach (var x in new[] { false, true }) foreach (var y in new[] { false, true })
             foreach (var axis in new[] { 0, 1, 2, 3 })
@@ -237,15 +268,40 @@ public partial class TerrainViewerApp
             Require(_worldSettings.InvertCameraX && _worldSettings.InvertCameraY && changes == 1, "controller/native activation duplicated");
             _worldReducer.SetStartupDevices(Array.Empty<int>()); QuarantineWorld();
             for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, Array.Empty<RawInputFrame>(), .1);
-            // Reset is a real native button click, not a default-property oracle.
-            var reset = _worldPanel.FindChildren("*", "Button", true, false).Cast<Button>().Single(b => b.Text == "Reset defaults and scene");
+            // Reset preferences is a real native button click, not a default-property
+            // oracle; it no longer resets the scene (Reset scene is its own action).
+            var buttons = _worldPanel.FindChildren("*", "Button", true, false).Cast<Button>().ToArray();
+            var reset = buttons.Single(b => b.Text == "Reset preferences");
             reset.GrabFocus(); await NextFrameAsync();
             changes = 0; resets = 0; await ClickAsync(reset);
-            WorldSettleForSelfTest();
             Require(_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false) && changes == 0 && resets == 1
-                && _worldStore.Load() == _worldSettings && _worldActor.State.Position == new DiagnosticSectorPosition(6, 1),
-                $"native Reset WORLD defaults changes={changes} resets={resets} defaults={_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)} saved={_worldStore.Load() == _worldSettings} actor={_worldActor.State.Position.X}/{_worldActor.State.Position.Y}");
-            GD.Print("ARC-WORLD-001 settings activation PASS native keyboard/controller once/native Reset false-false; lab default unchanged");
+                && _worldStore.Load() == _worldSettings && _worldLifecycleSession is null && !_worldResetPending && WorldModal,
+                $"native Reset preferences changes={changes} resets={resets} defaults={_worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)} saved={_worldStore.Load() == _worldSettings} lifecycle={_worldLifecycleSession is not null}");
+            // Palette Fit / Reset scene / Reload / exact zoom by native clicks: each
+            // once, observable, and never a world intent behind the palette.
+            var fitClicks = 0; var sceneClicks = 0; var reloadClicks = 0;
+            void Fit() => fitClicks++; void Scene() => sceneClicks++; void Reload() => reloadClicks++;
+            _worldPanel.FitRequested += Fit; _worldPanel.ResetSceneRequested += Scene; _worldPanel.ReloadRequested += Reload;
+            try
+            {
+                var status = _worldPanel.FindChild("PaletteActionStatus", true, false) as Label;
+                await ClickAsync(buttons.Single(b => b.Text.StartsWith("Fit", StringComparison.Ordinal)));
+                Require(fitClicks == 1 && _worldFitView && WorldModal && !_worldGate.IsOpen, "palette Fit once");
+                await ClickAsync(buttons.Single(b => b.Text == "100% (1.00)"));
+                Require(_camera!.State.Zoom == 1 && !_worldFitView && WorldModal, "palette exact zoom 1.00");
+                await ClickAsync(buttons.Single(b => b.Text == "Reset scene"));
+                Require(sceneClicks == 1 && _worldResetPending && WorldModal && status?.Text.StartsWith("Reset scene requested", StringComparison.Ordinal) == true, "palette Reset scene once");
+                WorldSettleForSelfTest();
+                Require(!_worldResetPending && _worldActor.State.Position == new DiagnosticSectorPosition(6, 1) && _worldSettings == new InputSettings(InvertCameraX: false, InvertCameraY: false)
+                    && status?.Text.StartsWith("Reset scene done", StringComparison.Ordinal) == true, "palette Reset scene settled and shown, preferences kept");
+                await ClickAsync(buttons.Single(b => b.Text == "Reload current source"));
+                Require(reloadClicks == 1 && WorldModal && status is not null
+                    && (_arguments is null ? status.Text.StartsWith("Reload unavailable", StringComparison.Ordinal) && !_worldReloadPending
+                        : status.Text.StartsWith("Reload requested", StringComparison.Ordinal) && _worldReloadPending), "palette Reload outcome shown");
+                if (_worldReloadPending) RetireWorldLifecycle();
+            }
+            finally { _worldPanel.FitRequested -= Fit; _worldPanel.ResetSceneRequested -= Scene; _worldPanel.ReloadRequested -= Reload; }
+            GD.Print("ARC-WORLD-001 settings activation PASS native keyboard/controller once/native Reset preferences false-false; ARC-INPUT-001 palette Fit/1.00/Reset scene/Reload clicks once with shown outcomes; lab default unchanged");
             await AssertWorldSettingsOpacityAsync();
         }
         finally
@@ -337,7 +393,12 @@ public partial class TerrainViewerApp
             _worldReducer.SetStartupDevices(Array.Empty<int>()); ResetWorldScene();
             Frame(none); Frame(none); Frame(none);
             KeyEvent(Key.F1,true); KeyEvent(Key.F1,false);
-            Require(WorldModal, "actual F1 did not open"); Frame(none); Frame(none); Frame(none);
+            Require(!WorldModal, "plain F1 opened the palette");
+            KeyEvent(Key.Ctrl,true); GetViewport().PushInput(new InputEventKey { Keycode = Key.Shift, Pressed = true, CtrlPressed = true });
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.F9, Pressed = true, CtrlPressed = true, ShiftPressed = true });
+            GetViewport().PushInput(new InputEventKey { Keycode = Key.F9, Pressed = false, CtrlPressed = true, ShiftPressed = true });
+            KeyEvent(Key.Shift,false); KeyEvent(Key.Ctrl,false);
+            Require(WorldModal, "actual Ctrl+Shift+F9 did not open"); Frame(none); Frame(none); Frame(none);
             var spins = _worldPanel!.FindChildren("*","SpinBox",true,false).Cast<SpinBox>().ToArray();
             Require(spins.Length == 5 && GetViewport().GuiGetFocusOwner() == spins[0].GetLineEdit(), "initial native numeric focus");
             var position = _worldActor.State.Position; var center = _camera!.State;
@@ -352,6 +413,9 @@ public partial class TerrainViewerApp
             }
             KeyEvent(Key.Down,false); Frame(none); KeyEvent(Key.Down,true); KeyEvent(Key.Down,false);
             Require(GetViewport().GuiGetFocusOwner() == spins[2].GetLineEdit(), "release/repress must navigate once");
+            // Original letters are not palette navigation (W/S/Q/E/F1 stay reserved).
+            foreach (var key in new[] { Key.W, Key.S, Key.Q, Key.E, Key.F1 }) { KeyEvent(key,true); KeyEvent(key,false); Frame(none); }
+            Require(GetViewport().GuiGetFocusOwner() == spins[2].GetLineEdit() && WorldModal, "original letters navigated or closed the palette");
             // Real native editor receives digits, Backspace, Enter and Tab via
             // the viewport dispatch, not a direct Text/property replacement.
             var editor = spins[2].GetLineEdit(); editor.SelectAll();

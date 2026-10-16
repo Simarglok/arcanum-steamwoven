@@ -48,6 +48,7 @@ def safe_diagnostics(output: str) -> list[str]:
         "ARC-WORLD-003 retirement/ownership PASS", "ARC-WORLD-003 original reload PASS",
         "ARC-WORLD-003 production observation PASS", "ARC-WORLD-001 self-test PASS",
         "ARC-WORLD-001 settings-test PASS", "ARC-GPAD-004 settings-test PASS",
+        "ARC-INPUT-001 palette chord matrix PASS", "ARC-INPUT-001 palette UI PASS",
     )
     result = []
     for line in output.splitlines():
@@ -217,7 +218,10 @@ def _main(state: dict) -> int:
         state["stage"] = "child-launch"
         code, output = run_child(prefix + ["--", "--self-test"], env, args.timeout)
         state["childExit"] = code
-        passed = code == 0 and "ARC-WORLD-001 self-test PASS" in output
+        # ARC-INPUT-001: the palette chord matrix and the palette UI at both required viewports.
+        passed = (code == 0 and "ARC-WORLD-001 self-test PASS" in output
+                  and "ARC-INPUT-001 palette chord matrix PASS " in output
+                  and all(f"ARC-INPUT-001 palette UI PASS viewport={size} " in output for size in ("1280x800", "2560x1440")))
     else:
         # This file is created by this runner alone, never ordinary preferences.
         state["stage"] = "owned-temp"

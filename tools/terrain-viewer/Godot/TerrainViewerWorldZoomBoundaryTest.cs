@@ -91,8 +91,14 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("WORLD visible focus: " + why); }
         var panel = _worldPanel!;
         var scroll = panel.FindChildren("*", "ScrollContainer", true, false).OfType<ScrollContainer>().Single();
-        var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton).ToArray();
-        Require(controls.Length == 15, "all camera/actor/zoom controls retained");
+        // Navigable palette controls: 8 input settings, zoom editor, 3 presets, Fit,
+        // Reset scene, Reload, Reset preferences, Close. The unavailable overlay
+        // row (ARC-RENDER-008 seam) is disabled and not navigable.
+        var overlay = scroll.GetChild(0).GetChildren().OfType<CheckButton>().Single(c => c.Name == "PassabilityOverlay");
+        Require(overlay.Disabled && overlay.FocusMode == Control.FocusModeEnum.None, "overlay row unavailable until ARC-RENDER-008");
+        var controls = scroll.GetChild(0).GetChildren().OfType<Control>().Where(c => c is SpinBox or BaseButton && c != overlay).ToArray();
+        Require(controls.Length == 17, "all camera/actor/zoom/palette controls retained");
+        var last = controls.Length - 1;
         var none = new RawInputFrame(-1, default); var pad = new RawInputFrame(3, default);
         var viewport = GetViewport(); var original = viewport.GetVisibleRect().Size;
         // Complete simulated levels own timing; actual GUI/layout still runs.
@@ -112,6 +118,7 @@ public partial class TerrainViewerApp
         void Zoom(double _) => operations++;
         void Action() => operations++;
         panel.ZoomRequested += Zoom; panel.FitRequested += Action; panel.ResetRequested += Action; panel.CloseRequested += Action;
+        panel.ResetSceneRequested += Action; panel.ReloadRequested += Action;
         async Task Visible(int index, string mode)
         {
             await NextFrameAsync(); await NextFrameAsync();
@@ -136,9 +143,9 @@ public partial class TerrainViewerApp
                     for (var i = 0; i < 3; i++) WorldFrameForSelfTest(none, new[] { pad }, .1);
                     await Visible(0, mode + " open/reopen");
                     for (var direction = 1; direction >= -1; direction -= 2)
-                    for (var step = 0; step < 14; step++)
+                    for (var step = 0; step < last; step++)
                     {
-                        var index = direction == 1 ? step + 1 : 13 - step;
+                        var index = direction == 1 ? step + 1 : last - 1 - step;
                         if (mode == "Dpad")
                         {
                             var button = direction == 1 ? JoyButton.DpadDown : JoyButton.DpadUp;
@@ -172,6 +179,7 @@ public partial class TerrainViewerApp
         finally
         {
             panel.ZoomRequested -= Zoom; panel.FitRequested -= Action; panel.ResetRequested -= Action; panel.CloseRequested -= Action;
+            panel.ResetSceneRequested -= Action; panel.ReloadRequested -= Action;
             Resize(new((int)original.X, (int)original.Y)); await NextFrameAsync(); await NextFrameAsync();
             _worldFocusSimulationForSelfTest = false;
             SetProcess(processing);

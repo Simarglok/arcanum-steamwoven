@@ -74,6 +74,8 @@ public static partial class TerrainViewerSelfTest
         app.WorldZoomForSelfTest(2);
         GD.Print("ARC-GPAD-004 default2/Follow actor framing exact1/2/3/fractional1.7 UI/geometry separation PASS; nearest public actor pixel=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS") + "; physical1:1/QHD NOT_VERIFIED");
         app.WorldGridObservationMatrixForSelfTest();
+        app.WorldPaletteChordMatrixForSelfTest();
+        await app.WorldPaletteGraphicalMatrixForSelfTestAsync();
         app.WorldControlMatrixForSelfTest();
         await app.WorldZoomMatrixForSelfTestAsync();
         app.WorldLifecycleMatrixForSelfTest();
@@ -90,16 +92,17 @@ public static partial class TerrainViewerSelfTest
         var camera = app.GetNode<Camera2D>("TerrainCamera");
         // Preserve the historical sector/guide raster oracle from explicit Fit;
         // ordinary default framing is verified independently by the zoom matrix.
-        app._Input(new InputEventKey { Keycode = Key.F, Pressed = true });
+        app.WorldPaletteFitForSelfTest(); // the palette Fit action (ARC-INPUT-001: no F key)
         for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(new(-1, default), Array.Empty<GamepadLab.Core.RawInputFrame>(), .1);
         // Fit is intentionally Manual and keeps its center under wheel zoom.
         // Explicitly frame the new diagnostic spawn before the sprite oracle;
         // the old free spawn happened to lie near the full-sector Fit center.
         app.WorldFitFollowForSelfTest();
-        // Zoom through the real world input route, away from UI.
-        // At least two screen pixels/source pixel keep the last sparse source
-        // column independently observable next to the 1px diagnostic outline.
-        for (var i = 0; i < 14; i++) app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = new(799,599) });
+        // Zoom through the production preferred-zoom route (the palette's exact
+        // zoom; the world wheel no longer zooms), to the ratio 14 former wheel
+        // steps reached. At least two screen pixels/source pixel keep the last
+        // sparse source column observable next to the 1px diagnostic outline.
+        app.WorldZoomForSelfTest(FormerWheelZoom(app));
         await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
         snapshot = app.GetSelfTestSnapshot();
         if (DisplayServer.GetName() != "headless")
@@ -127,12 +130,13 @@ public static partial class TerrainViewerSelfTest
             (new GamepadLab.Core.Vec2(-1,-1),6d,0d), (new GamepadLab.Core.Vec2(-1,1),8d,1d),
             (new GamepadLab.Core.Vec2(1,-1),6d,1d), (new GamepadLab.Core.Vec2(1,1),6d,3d) })
         {
-            app._Input(new InputEventKey { Keycode = Key.R, Pressed = true });
-            app.WorldSettleForSelfTest();
-            for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(none, Array.Empty<GamepadLab.Core.RawInputFrame>(), .1);
+            var pad = new[] { TerrainViewerApp.StickLevel(default) };
+            app.SelectSimulatedPadForSelfTest(); app.WorldPaletteResetSceneForSelfTest();
+            app.WorldSettleForSelfTest(pad);
+            for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(none, pad, .1);
             var time = app.WorldTimeForSelfTest.Value;
             foreach (var offset in new[] { Arcanum.Simulation.Movement.ExactScalar.Create(1,10), Arcanum.Simulation.Movement.ExactScalar.Integer(2), Arcanum.Simulation.Movement.ExactScalar.Create(21,10) })
-                app.WorldFrameForSelfTest(none with { KeyboardActor = direction, KeyboardActorHeld = true }, Array.Empty<GamepadLab.Core.RawInputFrame>(), .1,
+                app.WorldFrameForSelfTest(none, new[] { TerrainViewerApp.StickLevel(direction) }, .1,
                     observationTime: new Arcanum.Simulation.Movement.SimulationTime(time + offset));
             var corner = app.GetSelfTestSnapshot();
             var bounds = fixture.Result.DiagnosticPlan!.WorldBounds;
@@ -145,10 +149,10 @@ public static partial class TerrainViewerSelfTest
             // Resolve the guide in the real combined viewport at each corner.
             // Fit can downsample a one-pixel guide; use the production zoom
             // route for a resolved guide, as for the asymmetric sprite oracle.
-            app._Input(new InputEventKey { Keycode = Key.F, Pressed = true });
-            for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(none, Array.Empty<GamepadLab.Core.RawInputFrame>(), .1);
+            app.WorldPaletteFitForSelfTest();
+            for (var i = 0; i < 3; i++) app.WorldFrameForSelfTest(none, pad, .1);
             app.WorldFitFollowForSelfTest();
-            for (var i = 0; i < 14; i++) app._Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = new(799,599) });
+            app.WorldZoomForSelfTest(FormerWheelZoom(app));
             await host.ToSignal(host.GetTree(), SceneTree.SignalName.ProcessFrame);
             if (DisplayServer.GetName() != "headless")
             {
@@ -157,6 +161,7 @@ public static partial class TerrainViewerSelfTest
                 AssertGuideAt(image, corner.CanvasTransform, checked((int)corner.Actor!.AnchorX), checked((int)corner.Actor.AnchorY), true);
             }
         }
+        app.ReleaseSimulatedPadForSelfTest();
         GD.Print("ARC-WORLD-003 bounded adjacent zone/Blocked/Unsupported/envelope actual app PASS; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
         app.PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result);
         var reloaded = app.GetSelfTestSnapshot();
@@ -182,5 +187,12 @@ public static partial class TerrainViewerSelfTest
             childViewport.QueueFree(); await host.ToSignal(host.GetTree(),SceneTree.SignalName.ProcessFrame);
         }
         GD.Print("ARC-WORLD-001 integrated synthetic app PASS five statics/55 human actor/control matrix/resize/domain rollback; pixels=" + (DisplayServer.GetName() == "headless" ? "NOT_VERIFIED" : "PASS"));
+    }
+    // The ratio 14 former WORLD wheel-up events reached from the current view.
+    private static double FormerWheelZoom(TerrainViewerApp app)
+    {
+        var zoom = app.WorldCameraZoomForSelfTest;
+        for (var i = 0; i < 14; i++) zoom = WorldZoomPolicy.Step(zoom, 1.25);
+        return zoom;
     }
 }

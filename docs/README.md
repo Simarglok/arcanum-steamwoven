@@ -39,6 +39,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Static-scenery diagnostic contract (ARC-RES-008)](rendering/static-scenery-contract.md)
 - [Terrain, static and bounded actor diagnostic viewer (ARC-RENDER-003/004/005)](rendering/terrain-viewer.md)
 - [Bounded actor visual contract — original-runtime parity NOT READY](rendering/actor-visual-contract.md)
+- [ARC-INPUT-001 diagnostic palette and WORLD keyboard/mouse route](input/diagnostic-palette.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)

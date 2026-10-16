@@ -73,12 +73,15 @@ class LauncherSyncTests(unittest.TestCase):
 
     def test_project_launcher_modes_bind_known_modes_and_tasks(self):
         modes = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")["MODES"]
-        # Same pairing arcanum-local enforces at launch: crash-site-area only from ARC-RENDER-007.
-        allowed = {"crash-site-area": {"ARC-RENDER-007"},
+        # Same pairing arcanum-local enforces at launch: crash-site-area only from
+        # ARC-RENDER-007 or ARC-INPUT-001 (same AREA build plus the diagnostic palette).
+        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001"},
                    "world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
-        for mode, task in modes.values():
+        for mode, tasks in modes.values():
             self.assertIn(mode, launch.MODE_ROLES)
-            self.assertIn(task, allowed[mode], mode)
+            self.assertTrue(tasks and len(set(tasks)) == len(tasks), mode)
+            for task in tasks:
+                self.assertIn(task, allowed[mode], mode)
 
     def test_discovery_verifies_identity_and_rejects_links(self):
         game = self.root / "game"

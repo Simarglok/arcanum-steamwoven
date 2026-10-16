@@ -11,7 +11,7 @@ from . import config
 
 SUPPORTED_TOOLS = {
     "art": ("ARC-RENDER-001", "ARC-RENDER-002"),
-    "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001", "ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"),
+    "terrain": ("ARC-RENDER-003", "ARC-RENDER-004", "ARC-RENDER-005", "ARC-DEV-001", "ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001"),
     "gamepad": ("ARC-GPAD-001", "ARC-GPAD-002", "ARC-GPAD-003", "ARC-GPAD-005"),
     "display": ("ARC-UI-001",),
 }
@@ -170,7 +170,7 @@ def resolve_current(root: Path, tool: str, *, root_id: str | None = None, select
         candidates.extend((root / task / "current.json", root / task / "current-v2.json"))
     pointers = [candidate for candidate in candidates if config.optional_authority_bytes(candidate) is not None]
     if selected_task is not None:
-        if tool != "terrain" or selected_task not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+        if tool != "terrain" or selected_task not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001"):
             raise ValueError("unsupported task-specific current selection")
         # GPAD and historical WORLD must coexist at the closed world-builds
         # root. An explicit WORLD/GPAD selection disambiguates tasks, never duplicate

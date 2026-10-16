@@ -32,6 +32,9 @@ REQUIRED_SUCCESS_GATES = {
 }
 REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007'] = REQUIRED_TASK_SUCCESS_GATES['ARC-WORLD-003'] | {
     f'{host}-{name}' for host in ('source', 'exported') for name in ('area-original', 'area-grid', 'area-seams', 'area-nearest')}
+# ARC-INPUT-001 (diagnostic palette) is delivered on the whole-core AREA build: the same gates.
+REQUIRED_TASK_SUCCESS_GATES['ARC-INPUT-001'] = REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007']
+AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001")
 
 
 def _tool_for_task(task: str) -> str | None:
@@ -643,12 +646,12 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
     required = REQUIRED_SUCCESS_GATES.get(tool, set()) | REQUIRED_TASK_SUCCESS_GATES.get(task, set())
     if not required.issubset(named_outcomes):
         raise ValueError("register-export requires the complete tool-specific success gates")
-    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007") and payload.get("delivery", {}).get("originalInputModes") != "PASS":
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001") and payload.get("delivery", {}).get("originalInputModes") != "PASS":
         raise ValueError("world export requires verified original integrated inputs")
-    if task in ("ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007"):
+    if task in ("ARC-RENDER-006", "ARC-WORLD-003", *AREA_TASKS):
         from .human_validation import validate_reports
-        validate_reports(manifest.parent / "evidence", payload["candidate"]["commit"], 'ARC-WORLD-003' if task == 'ARC-RENDER-007' else task)
-    if task in ("ARC-WORLD-003", "ARC-RENDER-007"):
+        validate_reports(manifest.parent / "evidence", payload["candidate"]["commit"], 'ARC-WORLD-003' if task in AREA_TASKS else task)
+    if task in ("ARC-WORLD-003", *AREA_TASKS):
         from .grid_export_gates import gates_for, validate_reports as validate_gate_reports
         grid_gates = gates_for(task)
         validate_gate_reports(manifest.parent / "evidence", payload["candidate"]["commit"], task)
@@ -659,7 +662,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
                 entry.get("relativePath") for entry in recorded_evidence if isinstance(entry, dict))):
             raise ValueError("grid success-gate logs and exit receipts must be bound by the manifest inventory")
         from .grid_validation import validate_reports as validate_grid_reports
-        validate_grid_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
+        validate_grid_reports(manifest.parent / "evidence", payload["candidate"]["commit"], task)
     if task == "ARC-GPAD-005":
         from .gamepad_export_gates import validate_reports as validate_gamepad_reports
         required_evidence = validate_gamepad_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
@@ -667,7 +670,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
         if (not isinstance(recorded_evidence, list) or not required_evidence.issubset(
                 entry.get("relativePath") for entry in recorded_evidence if isinstance(entry, dict))):
             raise ValueError("gamepad reports/captures/exit receipts must be bound by the manifest inventory")
-    if task == "ARC-RENDER-007":
+    if task in AREA_TASKS:
         from .area_validation import validate_reports as validate_area_reports
         validate_area_reports(manifest.parent / "evidence", payload["candidate"]["commit"])
     app_path = manifest.parent / app["relativePath"]
