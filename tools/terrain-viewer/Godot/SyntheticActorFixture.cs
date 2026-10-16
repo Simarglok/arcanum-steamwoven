@@ -74,7 +74,11 @@ internal static class SyntheticActorFixture
                 var decoded = ArtDecoder.Decode(art, new ArtFrameSelection(group, frame, palette));
                 frames.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY,
                     decoded.Frame.OffsetX, decoded.Frame.OffsetY, frameCount, fps));
-                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
+                var rgba = decoded.Rgba.ToArray();
+                // ARC-RENDER-014: the same ART identity the production source records (synthetic bytes and name).
+                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, rgba)
+                { HdQuery = HdFrameQueries.FromArt(HdFrameQueries.Sha256(art), art.Length, HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-actor-{ordinal}")),
+                    group, frame, decoded.EffectivePaletteSlot, decoded.Width, decoded.Height, rgba) });
             }
         }
     }

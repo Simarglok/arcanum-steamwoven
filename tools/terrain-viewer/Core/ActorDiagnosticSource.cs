@@ -74,6 +74,8 @@ public static class ActorDiagnosticSource
         {
             cancellationToken.ThrowIfCancellationRequested();
             var bytes = resource.ReadEntry(entries[0]);
+            // ARC-RENDER-014: the install-independent ART identity of the frames read below.
+            var art = HdFrameQueries.ArtIdentity(bytes, entries[0].RawNameBytes);
             var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = descriptor.PhysicalGroups * descriptor.FramesPerGroup };
             var metadata = ArtDecoder.Inspect(bytes, options);
             if (metadata.Header.PhysicalGroupCount != descriptor.PhysicalGroups || metadata.Header.FramesPerGroup != descriptor.FramesPerGroup
@@ -99,7 +101,9 @@ public static class ActorDiagnosticSource
                 }
                 catch (TerrainViewerException exception) when (exception.Error.Code is TerrainViewerErrorCode.ResourceLimit or TerrainViewerErrorCode.DecodeFailure)
                 { throw Failure(exception.Error.Code, TerrainViewerFailureStage.ActorDecode); }
-                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, decoded.Rgba.ToArray()));
+                var rgba = decoded.Rgba.ToArray();
+                textures.Add(key, new DecodedActorTexture(key, decoded.Width, decoded.Height, rgba)
+                { HdQuery = HdFrameQueries.FromArt(art.PayloadSha256, art.ViewLength, art.NameSha256, group, frame, decoded.EffectivePaletteSlot, decoded.Width, decoded.Height, rgba) });
                 catalog.Add(new ActorDiagnosticFrame(key, decoded.Width, decoded.Height, geometry.HotX, geometry.HotY,
                     geometry.OffsetX, geometry.OffsetY, descriptor.FramesPerGroup, descriptor.RawFramesPerSecond));
                 retainedFrameCheckpoint?.Invoke(new("actor", textures.Count, alreadyRetainedCount + textures.Count, checkedRgbaBytes));
@@ -166,6 +170,11 @@ public sealed class ActorDiagnosticSourceOperation : IDisposable
         => new(new TerrainViewerError(TerrainViewerErrorCode.ActorFingerprint, Stage: TerrainViewerFailureStage.ActorFingerprint, Progress: progress));
 }
 
-public sealed record DecodedActorTexture(ActorDiagnosticTextureKey Key, int Width, int Height, byte[] Rgba);
+public sealed record DecodedActorTexture(ActorDiagnosticTextureKey Key, int Width, int Height, byte[] Rgba)
+{
+    /// <summary>ARC-RENDER-014: the portable HD question of this frame (null for fixtures
+    /// without an ART identity, which then draw Legacy as <c>FrameMissing</c>).</summary>
+    public Arcanum.Data.Hd.HdSpriteQuery? HdQuery { get; init; }
+}
 public sealed record ActorDiagnosticLoad(ActorDiagnosticScenePlan Plan, IReadOnlyDictionary<ActorDiagnosticTextureKey, DecodedActorTexture> Textures,
     long CheckedRgbaBytes);

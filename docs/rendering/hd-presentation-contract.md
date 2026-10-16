@@ -2,8 +2,10 @@
 
 Status: **contract and synthetic oracle tests, amended by ARC-DATA-014** (see
 [the amendment](#amendment-arc-data-014-2026-10-16)). The pack format, reader, import and
-device budget exist ([HD pack format](../formats/hd-pack.md)); no renderer path, toggle
-or setting exists yet. The parts are ARC-DATA-014 (pack format and
+device budget exist ([HD pack format](../formats/hd-pack.md)); the AREA/WORLD path for
+characters and objects exists since ARC-RENDER-014
+([viewer](terrain-viewer.md#hd-render-path-arc-render-014)); no setting, persistence or
+toggle key exists yet. The parts are ARC-DATA-014 (pack format and
 loader), ARC-RENDER-014 (AREA/WORLD HD path for characters and objects), ARC-UI-006
 (on-the-fly toggle), ARC-DEV-003 (pack build tool), ARC-RENDER-015 (before/after
 review) and ARC-RENDER-016 (terrain). Each of them implements its part of this
@@ -288,9 +290,18 @@ nonzero crop starts, while the rejected `N·width` gradient does not. The axis-l
 test checks the sampler refusal only; the `HdAxisLimit` fallback is ARC-RENDER-014.
 
 ARC-DATA-014 added the synthetic pack, recipe, PNG, import and budget tests in
-`tests/Arcanum.Data.Tests/Hd` ([format](../formats/hd-pack.md)). Later tasks must add:
-native HD draws on real viewports (ARC-RENDER-014), the toggle and Session-snapshot
-invariance (ARC-UI-006). Human review of real HD frames is ARC-RENDER-015 and never a merge
+`tests/Arcanum.Data.Tests/Hd` ([format](../formats/hd-pack.md)). ARC-RENDER-014 added the
+native HD draws ([viewer](terrain-viewer.md#hd-render-path-arc-render-014)):
+`HdPresentationTests` (scaled crop, `HdAxisLimit`, the frame source with every per-frame
+reason, draw-order budget admission, retention and upload batches), the self-tests
+`ARC-RENDER-014 self-test AREA HD PASS` / `WORLD HD PASS` (production compositor with a
+synthetic nearest 4× pack: the HD raster equals Legacy at magnifications 0.5 to 4, with
+fractional origins and with wall fades, and `FrameMissing`, `NoPack`, `PackRejected`,
+`FrameRejected`, `HdBudget` and `Invalid` each draw the Legacy raster; `HdAxisLimit`,
+`SourceMismatch` and `Pending` are unit-tested)
+and the native smoke `ARC-RENDER-014 native-smoke AREA HD identity PASS` / `WORLD HD
+identity PASS` on the installed original with a nearest 4× pack in a temporary directory.
+Later: the toggle and Session-snapshot invariance (ARC-UI-006). Human review of real HD frames is ARC-RENDER-015 and never a merge
 gate.
 
 ## Amendment ARC-DATA-014 (2026-10-16)
@@ -338,8 +349,10 @@ rules above as follows; the [pack format](../formats/hd-pack.md) has the details
 
 ## Not ready / out of scope
 
-- No runtime HD path, setting or key exists (the pack format and reader exist since
-  ARC-DATA-014).
+- The runtime HD path for characters and objects exists (ARC-RENDER-014), selected for a
+  diagnostic run by environment variables; the setting, its persistence, the toggle key and
+  the timed commit of the toggle protocol are ARC-UI-006. Until then a frame that is not
+  decoded yet draws Legacy (`Pending`) and switches on its own when ready.
 - Terrain tiles, facades and terrain chunks stay Legacy until ARC-RENDER-016; walls,
   roofs, UI and cursors until a later stage.
 - No shader smoothing profile, VRAM compression, mipmaps or box-filtered downsample.
