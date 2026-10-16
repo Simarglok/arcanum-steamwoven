@@ -80,7 +80,7 @@ public sealed class ScrDialogueDispatchTests
         // Two refusals in the region: the lower line is reported, whatever order the walk met them in; a refused
         // line's successors are not explored (line 4 behind refused line 3 is never reached).
         var two = Program(
-            L(C(3, N(0)), C(3, N(3)), C(3, N(2))),
+            L(C(3, N(0)), C(3, N(2)), C(3, N(3))),
             Do(C(1)),
             Do(C(23, N(1), (Attachee, 0))),
             Do(C(44, (21, 0), N(1), N(1), N(1))),

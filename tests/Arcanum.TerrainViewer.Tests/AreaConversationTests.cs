@@ -240,6 +240,23 @@ public sealed class AreaConversationTests
         Assert.AreEqual(DialogFrontierKind.UnsupportedOperation, again.Conversation!.Frontier!.Kind);
         Assert.AreEqual(0, again.Conversation.Effects.Count);
         Assert.AreEqual(dialogHash, Fingerprint(P("arcanum3.dat")), "input unchanged");
+
+        // ARC-SCRIPT-009: both archives are authenticated on every talk: a script archive that is not the area's
+        // resource input, and a dialog archive that changed after the first talk, are refused before anything runs.
+        var wrongScripts = new AreaConversationHost(snapshot, P("arcanum3.dat"), P("arcanum3.dat"), loaded);
+        Assert.AreEqual(AreaConversationStartStatus.SourceChanged, wrongScripts.Begin(wrongScripts.Speakers[0]).Status);
+        var directory = Directory.CreateTempSubdirectory("arc-script-009-");
+        try
+        {
+            var copy = Path.Combine(directory.FullName, "dialogs.dat");
+            File.Copy(P("arcanum3.dat"), copy);
+            var moving = new AreaConversationHost(snapshot, P("arcanum2.dat"), copy, loaded);
+            Assert.AreEqual(AreaConversationStartStatus.Started, moving.Begin(moving.Speakers[0]).Status);
+            using (var append = File.Open(copy, FileMode.Append)) append.WriteByte(0);
+            var changed = moving.Begin(moving.Speakers[0]);
+            Assert.AreEqual((AreaConversationStartStatus.SourceChanged, "the dialog archive changed"), (changed.Status, changed.Detail));
+        }
+        finally { directory.Delete(true); }
     }
 
     private static AreaConversationState State(GameSessionOwner session, int reaction) =>
