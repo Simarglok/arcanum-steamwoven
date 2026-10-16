@@ -18,7 +18,9 @@ internal sealed class AreaOwnerFixture : IDisposable
         var a = Record(63,63,-7,5); var b = Record(0,63,9,-13);
         // motionBodies: the canopy at cell6 must cover the actor witnesses in
         // cells 6 and 7 (tools/terrain-viewer/Godot/tools/area_motion_oracle.py).
-        var baseRecords = motionBodies ? new[] { Record(5,1,0,0), Record(6,1,-74,40) } : new[] { a,a };
+        // Whole-core movement: the body at cell5 blocks; the canopy carries OF_NO_BLOCK so the actor can
+        // stand and walk under it, as the moving-overlap witnesses require.
+        var baseRecords = motionBodies ? new[] { Record(5,1,0,0), Record(6,1,-74,40,flags:0x400) } : new[] { a,a };
         var module = Dat(("maps/test/86570436012.sec",Sector(seamMarkers ? 4095 : -1,baseRecords)),
             ("maps/test/86570436013.sec",Sector(seamMarkers ? 4032 : -1,b)),
             ("maps/test/86637544876.sec",Sector(seamMarkers ? 63 : -1,Record(63,0,-7,5))),
@@ -66,13 +68,25 @@ internal sealed class AreaOwnerFixture : IDisposable
         var bytes=new byte[24]; BinaryPrimitives.WriteInt16LittleEndian(bytes,type);
         BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(8),number); return bytes;
     }
-    private static byte[] Record(int x,int y,int ox,int oy)
+    private static byte[] Record(int x,int y,int ox,int oy,int? flags=null)
     {
         using var stream=new MemoryStream(); using var writer=new BinaryWriter(stream);
         writer.Write(119); writer.Write(Id(1,7001)); writer.Write(Id(0)); writer.Write(3);
-        writer.Write((short)3); writer.Write(14); writer.Write(0); writer.Write(0);
+        // Field mask word0: location 1, offsets 2/3 and, optionally, direct OBJ_F_FLAGS slot 18.
+        writer.Write((short)(flags is null ? 3 : 4)); writer.Write(14 | (flags is null ? 0 : 1 << 18)); writer.Write(0); writer.Write(0);
         writer.Write((byte)1); writer.Write((long)x|((long)y<<32)); writer.Write(ox); writer.Write(oy);
+        if (flags is { } value) writer.Write(value);
         return stream.ToArray();
+    }
+    /// <summary>Whole-core step evidence over this fixture's strict snapshot with public synthetic rule archives.
+    /// A table without the 300 anchor leaves every class-0 tile Unknown.</summary>
+    internal static Arcanum.Data.Traversal.AreaStepSnapshot Steps(AreaSnapshot area, byte[] module, long epoch, bool tileNamesResolved = true)
+    {
+        using var moduleArchive = DatArchive.Open(new MemoryStream(module));
+        using var names = DatArchive.Open(new MemoryStream(Dat(("art/tile/tilename.mes", Encoding.ASCII.GetBytes(
+            tileNamesResolved ? "{0}{grs}{100}{rck}{200}{flr}{300}{stn/s/n 4}" : "{0}{grs}{100}{rck}{200}{flr}")))));
+        using var effects = DatArchive.Open(new MemoryStream(Dat(("rules/effect.mes", Encoding.ASCII.GetBytes("{50}{st +1}")))));
+        return Arcanum.Data.Traversal.AreaStepInspector.Inspect(area, moduleArchive, names, effects, null, ReadOnlyMemory<byte>.Empty, epoch);
     }
     private static byte[] Prototype()
     {

@@ -71,10 +71,11 @@ same strict Area publication plus `--area-effects` (`arcanum3.dat`) and
 base-sector-relative cells (spawn 6,1; the western and northern core sectors have
 negative cells) and maps them to map cells for Data. Unknown, Blocked and
 outside-core requests remain denied; the core edge behaves like a map edge.
-The synthetic native AREA probes below still publish the bounded wire snapshot
-(x4..8/y0..3); exactly one movement source is accepted per publication. Being
-able to inspect the whole exterior, including the context ring, is not
-permission to walk outside the core.
+The area mode accepts only whole-core evidence bound to the publication's
+generation; the bounded single-sector snapshot is WORLD-only. The synthetic
+native AREA probes below use structural whole-core evidence over their strict
+owner fixture. Being able to inspect the whole exterior, including the context
+ring, is not permission to walk outside the core.
 
 Fit uses the complete admitted scene envelope, not one sector or only currently
 visible sprites. The existing minimum zoom is retained. If that limit prevents
@@ -254,12 +255,16 @@ export or ordinary-launch gates, nor original-runtime parity.
 
 The opt-in native `ARC_AREA_GRID_PROBE` publishes the strict
 `AreaOwnerFixture(motionBodies:true)` snapshot through the production app with
-HumanFixed and a bounded-adjacent wire traversal snapshot. Its literal script
+HumanFixed and structural whole-core step evidence built from that same
+snapshot (`AreaOwnerFixture.Steps`: the body at cell 5,1 blocks; the canopy at
+6,1 carries `OF_NO_BLOCK`; a second evidence set without the tile-name 300 anchor
+leaves every tile Unknown). Its literal script
 drives Godot key callbacks and complete SIMULATION frames through held renewal,
 turn at arrival, return reinput, Blocked/Unknown/Unsupported denials and three
 atomic fault controls (queue capacity, replay capacity, late callback). Fault
 disposal clears the scene, queue and GPU ownership and reports crash-site-area.
-Unsupported movement stops at the bounded zone; showing the area grants no cell.
+Unsupported movement stops at the admitted core edge: after (6,1)→(6,0) the step
+to (6,-1) lies in an absent fixture sector. Showing the area grants no cell.
 
 Moving overlap witnesses come from the independent standard-library
 `tools/area_motion_oracle.py`, which restates the projection, body center,

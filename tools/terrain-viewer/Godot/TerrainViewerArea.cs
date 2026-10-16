@@ -11,12 +11,11 @@ public partial class TerrainViewerApp
     private void PublishAreaReady(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         var area = result.Area ?? throw new InvalidOperationException("AREA_RESULT_REQUIRED");
-        // Production loads carry whole-core step evidence; the synthetic native probes still publish the
-        // bounded wire snapshot. Exactly one movement source, bound to this generation, is admitted.
+        // Whole-core step evidence bound to this generation is the only admitted movement source;
+        // the bounded single-sector snapshot is WORLD-only.
         if (area.Generation != result.Generation || arguments.Mode != TerrainViewerMode.CrashSiteArea ||
             result.ActorPlan?.Profile.Id != ActorDiagnosticProfileId.HumanFixed ||
-            (result.AreaStepSnapshot is null) == (result.TraversalSnapshot is null) ||
-            (result.AreaStepSnapshot?.EvidenceEpoch ?? result.TraversalSnapshot!.EvidenceEpoch) != result.Generation)
+            result.TraversalSnapshot is not null || result.AreaStepSnapshot?.EvidenceEpoch != result.Generation)
             throw new InvalidOperationException("AREA_GENERATION_MISMATCH");
         var core = area.Snapshot.Terrain.Where(record => record.Scope == AreaScope.Core).Select(record => record.Key).ToHashSet();
         var drawn = area.Plan.Commands.Where(command => command.Identity is null).Select(command => command.Visual).ToArray();
@@ -29,8 +28,7 @@ public partial class TerrainViewerApp
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
-        if (result.AreaStepSnapshot is { } steps) _worldActor.Configure(steps, WorldTime);
-        else _worldActor.Configure(result.TraversalSnapshot ?? throw new InvalidOperationException("GRID_SNAPSHOT_REQUIRED"), WorldTime);
+        _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
         _worldGridInput = new();
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
         _canvas!.AreaFailure = error =>
@@ -56,7 +54,7 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed)} | submitted visible {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | {(_worldActor.Session is AreaGridSession ? "movement: whole core (9 sectors) at new-game T0, core edge refused" : "movement only proven local x4..8/y0..3, other cells unavailable")} | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{WorldStatus()}");
+        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed)} | submitted visible {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | movement: whole core (9 sectors) at new-game T0, core edge refused | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{WorldStatus()}");
     }
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {
@@ -128,13 +126,10 @@ public partial class TerrainViewerApp
             ControlledActor = new { Generation = result.Generation, Profile = result.ActorPlan!.Profile.Id.ToString(),
                 Frames = result.ActorTextures.Count, RgbaBytes = result.ActorTextures.Values.Sum(frame => (long)frame.Rgba.Length),
                 result.ActorPlan.Current },
-            Traversal = result.AreaStepSnapshot is { } steps
-                ? (object)new { steps.EvidenceEpoch, steps.ProfileId, AdmissionPolicy = "WholeCoreT0", InputKind = steps.InputIdentity.Kind.ToString(),
-                    steps.EvidenceSha256, steps.AdmittedCells, steps.TerrainBlockedCells, steps.TerrainUnknownCells, steps.ObjectBlockerCells, steps.UnknownObjects }
-                : new { result.TraversalSnapshot!.EvidenceEpoch, result.TraversalSnapshot.ProfileId,
-                    AdmissionPolicy = result.TraversalSnapshot.AdmissionPolicy.ToString(),
-                    InputKind = result.TraversalSnapshot.InputIdentity.Kind.ToString(),
-                    result.TraversalSnapshot.InputIdentity.Sector, result.TraversalSnapshot.InputIdentity.OriginalIdentity },
+            Traversal = new { result.AreaStepSnapshot!.EvidenceEpoch, result.AreaStepSnapshot.ProfileId, AdmissionPolicy = "WholeCoreT0",
+                InputKind = result.AreaStepSnapshot.InputIdentity.Kind.ToString(), result.AreaStepSnapshot.EvidenceSha256,
+                result.AreaStepSnapshot.AdmittedCells, result.AreaStepSnapshot.TerrainBlockedCells, result.AreaStepSnapshot.TerrainUnknownCells,
+                result.AreaStepSnapshot.ObjectBlockerCells, result.AreaStepSnapshot.UnknownObjects },
             area.Snapshot.CatalogueMap, area.Snapshot.RuntimeMap, area.Snapshot.Profile, area.Snapshot.Endpoints,
             Chart = new { OriginX = AreaScenePlan.CameraOriginX, OriginY = AreaScenePlan.CameraOriginY }, Viewports = viewports.Select(v => new { v.X, v.Y }).ToArray(),
             area.Snapshot.Reconciliation, area.Snapshot.Sectors, Terrain = area.Snapshot.Terrain, Objects = area.Snapshot.Objects,

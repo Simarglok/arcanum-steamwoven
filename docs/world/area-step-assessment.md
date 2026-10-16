@@ -146,6 +146,7 @@ the research's core share. The only refusals at the reachable boundary are
 ## Not delivered
 
 No route search, state after T0, context-ring or southern admission, other
-actors or original executable comparison. The native synthetic AREA probes and
-the export gate matrix still exercise the bounded wire snapshot; moving them to
-whole-core evidence is a separate stage.
+actors or original executable comparison. The native synthetic AREA grid and
+camera probes use structural whole-core evidence, and the source `area-original`
+gate loads the original profile; the exported ARC-RENDER-007 gates have not yet
+been re-run on it.
