@@ -30,7 +30,7 @@ public sealed record DialogConversationRequest(
 /// <summary>
 /// Typed state ports. Local flags, quest and rumor commands reuse the existing narrow ports. Global flags
 /// are a production versioned owner (a <see cref="GlobalFlagOwner"/> or a session's flag view). <paramref name="World"/> owns reaction, inventory, map and party
-/// effects. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
+/// effects, except those a present <paramref name="Party"/> or <paramref name="Inventory"/> port takes. A null capability turns every operation that needs it into a static frontier. <paramref name="Party"/>
 /// (ARC-WORLD-013) admits WA and UW and, when present, also takes JO instead of <paramref name="World"/>.
 /// <paramref name="Inventory"/> (ARC-WORLD-014), when present, takes negative IN instead of <paramref name="World"/>.
 /// </summary>

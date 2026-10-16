@@ -28,7 +28,8 @@ public sealed class DialogInventoryTests
         var inventoryOnly = Start(Read(Record("10", "Take this.", action: "IN -2804") + Record("11", "Thanks.", iq: "1", response: "0")),
             new Ports(), Owner(), inventory: new Inventory());
         Assert.AreEqual(DialogConversationPhase.AwaitingSelection, inventoryOnly.Phase);
-        var neither = Start(Give, new Ports(), Owner());
+        var neither = Start(Read(Record("10", "Take this.", action: "LF 1 1, IN -2804") + Record("11", "Thanks.", iq: "1", response: "0")),
+            new Ports(), Owner());
         Assert.AreEqual(DialogFrontierKind.CapabilityUnavailable, neither.Frontier!.Kind);
         Assert.AreEqual(0, neither.Effects.Count);
     }

@@ -27,7 +27,8 @@ saved clock is rebuilt with the same validation as bootstrap. No public clock AP
 ## API
 
 Namespace `Arcanum.Session`. The caller serializes **all** calls, as with the clock
-and GF owners. There are no locks, events, callbacks, timers, files or Godot types.
+and GF owners. There are no locks, events, timers, files or Godot types. The one callback is the host's insert check
+during an inventory transfer; a call back into the owner from it makes that transfer `StaleVersion` with no effect.
 
 | Entry | Contract |
 | --- | --- |

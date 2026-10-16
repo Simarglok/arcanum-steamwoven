@@ -50,7 +50,7 @@ public sealed class GameSessionLimits
     public const int PolicyMaxTotalChanges = 16384;
     /// <summary>Party records (followers, waiting NPCs and free NPCs with a flag).</summary>
     public const int PolicyMaxCompanions = 64;
-    /// <summary>Items the PC took from the world (the source's critter list bound of the T0 reader).</summary>
+    /// <summary>Items the PC took from the world; the same bound as one list of the project's T0 inventory reader.</summary>
     public const int PolicyMaxPcItems = 512;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,

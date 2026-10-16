@@ -418,8 +418,8 @@ public sealed class GameSessionOwner : IDisposable
     /// <summary>
     /// Attaches (or replaces) the T0 inventory of one map, the baseline the inventory rules read. The seed is checked and
     /// copied (<see cref="GameSessionFailure.InvalidInventorySeed"/>). Every item the PC took from this map must be in it
-    /// with its saved kind, and no item the PC took from another map may be in it, else
-    /// <see cref="GameSessionFailure.InventoryMismatch"/> (a save of other data). A seed is not session state: like recorded
+    /// with its saved kind, and no item the PC took from another map or another attached seed lists may be in it, else
+    /// <see cref="GameSessionFailure.InventoryMismatch"/> (a save of other data, or one object on two maps). A seed is not session state: like recorded
     /// lighting it moves no revision, it is never saved and the host attaches it again after a restore.
     /// </summary>
     public GameSessionMutationResult AttachMapInventory(SessionMapId map, SessionMapInventorySeed seed)
@@ -432,6 +432,9 @@ public sealed class GameSessionOwner : IDisposable
             var listed = admitted.Items.TryGetValue(item.Entity, out var row);
             if (item.Origin == map ? !listed || row!.Facts.Kind != item.Kind : listed) return Reject(GameSessionFailure.InventoryMismatch);
         }
+        // An object lies on one map: an item another attached map lists would be hidden there too once taken.
+        foreach (var (other, attached) in _inventory.Seeds)
+            if (other != map && admitted.Items.Keys.Any(attached.Items.ContainsKey)) return Reject(GameSessionFailure.InventoryMismatch);
         if (!_inventory.Seeds.ContainsKey(map) && _inventory.Seeds.Count >= _limits.MaxMaps) return Reject(GameSessionFailure.BudgetExceeded);
         _inventory.Seeds[map] = admitted;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
@@ -464,7 +467,7 @@ public sealed class GameSessionOwner : IDisposable
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Items.TryGetValue(item, out var row) || row.Cell is null || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(new(item, row.Facts), false, insertCheck);
+        return Take(seed, new(item, row.Facts), false, insertCheck);
     }
 
     /// <summary>
@@ -487,7 +490,7 @@ public sealed class GameSessionOwner : IDisposable
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
-        return Take(new(item, seed.Items[item].Facts), true, insertCheck);
+        return Take(seed, new(item, seed.Items[item].Facts), true, insertCheck);
     }
 
     /// <summary>
@@ -509,7 +512,7 @@ public sealed class GameSessionOwner : IDisposable
         if (_inventory.Current(seed, row).FirstOrDefault(entry => entry.Facts.Kind.Name == name) is not { } found)
             return row.HasSubstituteInventory ? RejectItem(GameSessionFailure.SubstituteInventoryUnsupported)
                 : new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, null, new(_identity, _revision));
-        return Take(found, true, insertCheck);
+        return Take(seed, found, true, insertCheck);
     }
 
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
@@ -651,7 +654,9 @@ public sealed class GameSessionOwner : IDisposable
     }
 
     // Pickup, loot and IN share the item rules and the commit: every refusal precedes the insert check, which runs last.
-    private InventoryMutationResult Take(SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck)
+    // The check is the owner's only host callback, so a call back into the owner from it (a transfer, a placement, a new
+    // seed) makes this transfer stale instead of committing over the changed state.
+    private InventoryMutationResult Take(InventoryDomain.Seed seed, SessionInventoryItem item, bool parented, SessionInsertCheck insertCheck)
     {
         var facts = item.Facts;
         if (!InventoryDomain.Admitted(facts.Kind.Type)) return RejectItem(GameSessionFailure.ItemTypeUnsupported);
@@ -660,7 +665,11 @@ public sealed class GameSessionOwner : IDisposable
             facts.HasScript(parented ? SessionScriptPoint.RemoveItem : SessionScriptPoint.Get)) return RejectItem(GameSessionFailure.ItemScriptUnsupported);
         if (_inventory.Pc.Count >= _limits.MaxPcItems) return RejectItem(GameSessionFailure.BudgetExceeded);
         if (_revision == long.MaxValue) return RejectItem(GameSessionFailure.RevisionExhausted);
+        var (revision, map) = (_revision, _actor.Map);
         var verdict = insertCheck(item);
+        ThrowIfDisposed();
+        if (_revision != revision || _actor.Map != map || !_inventory.Seeds.TryGetValue(map, out var current) || !ReferenceEquals(current, seed) ||
+            _inventory.Taken.Contains(item.Entity)) return RejectItem(GameSessionFailure.StaleVersion, verdict);
         // Any answer but Accepted refuses, an undefined one included.
         if (verdict != SessionInsertVerdict.Accepted) return RejectItem(GameSessionFailure.InsertRefused, verdict);
         _inventory.Add(new(item.Entity, _actor.Map, facts.Kind));

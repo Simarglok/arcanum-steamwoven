@@ -89,6 +89,7 @@ public sealed class InventoryStateTests
             seed with { Items = [.. seed.Items, Ground("bread", Facts(SessionItemType.Food, 1, quantity: 2), 1)] },
             seed with { Items = [.. seed.Items, Ground("bread", Facts(SessionItemType.Food, 1) with { Kind = new((SessionItemType)4, 1, 1, 1) }, 1)] },
             seed with { Items = [.. seed.Items, Ground("bread", Facts(SessionItemType.Food, 1, scripts: [21, 21]), 1)] },
+            seed with { Items = [.. seed.Items, Ground("bread", Facts(SessionItemType.Food, 1, scripts: [36]), 1)] },
             seed with { Holders = [.. seed.Holders, holder with { Entity = "twin" }] },
             seed with { Holders = [.. seed.Holders, holder] },
             seed with { Holders = [.. seed.Holders, holder with { Entity = "apple", Items = [] }] },
@@ -161,6 +162,40 @@ public sealed class InventoryStateTests
         Assert.AreEqual(-5, asked[0].Facts.Complexity, "the host sees the facts its check needs");
         Assert.AreEqual(0, Pc(owner).Length);
         Assert.AreEqual(4, owner.QueryMapInventory(Exterior)!.Ground.Count);
+    }
+
+    [TestMethod]
+    public void ACallBackIntoTheOwnerFromTheInsertCheckMakesTheTransferStale()
+    {
+        using var owner = Attached();
+        // The host takes the same item from inside its check: only the inner transfer commits.
+        var inner = default(InventoryMutationResult);
+        Refused(owner.PickUpItem(owner.Version, "apple", _ => { inner = owner.PickUpItem(owner.Version, "apple", Accept); return SessionInsertVerdict.Accepted; }),
+            owner, GameSessionFailure.StaleVersion, 1, SessionInsertVerdict.Accepted);
+        Took(inner, owner, "apple", 1);
+        CollectionAssert.AreEqual(new[] { "apple" }, Pc(owner));
+        Assert.AreEqual(SnapshotDecodeFailure.None, GameSessionSnapshotCodec.TryDecode(GameSessionSnapshotCodec.Encode(owner.Capture())).Failure);
+
+        // A move to another map or a new seed during the check is stale as well, with no effect.
+        Refused(owner.PickUpItem(owner.Version, "cog", _ => { owner.PlaceActor(owner.Version, Start with { Map = Cave }); return SessionInsertVerdict.Accepted; }),
+            owner, GameSessionFailure.StaleVersion, 2, SessionInsertVerdict.Accepted);
+        Changed(owner.PlaceActor(owner.Version, Start), owner, 3);
+        Refused(owner.PickUpItem(owner.Version, "cog", _ => { owner.AttachMapInventory(Exterior, Seed()); return SessionInsertVerdict.Accepted; }),
+            owner, GameSessionFailure.StaleVersion, 3, SessionInsertVerdict.Accepted);
+        CollectionAssert.AreEqual(new[] { "apple" }, Pc(owner));
+        Assert.ThrowsExactly<ObjectDisposedException>(() => owner.PickUpItem(owner.Version, "cog", _ => { owner.Dispose(); return SessionInsertVerdict.Accepted; }));
+    }
+
+    [TestMethod]
+    public void OneItemCannotLieOnTwoAttachedMaps()
+    {
+        using var owner = Attached();
+        var cave = new SessionMapInventorySeed([], [Ground("apple", Facts(SessionItemType.Food, 3600), 5)]);
+        Assert.AreEqual(GameSessionFailure.InventoryMismatch, owner.AttachMapInventory(Cave, cave).Failure);
+        Assert.IsNull(owner.QueryMapInventory(Cave));
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Cave, cave with { Items = [Ground("pear", Facts(SessionItemType.Food, 3601), 5)] }).Disposition);
+        // Replacing a map's own seed is not a conflict with itself.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.AttachMapInventory(Exterior, Seed()).Disposition);
     }
 
     [TestMethod]

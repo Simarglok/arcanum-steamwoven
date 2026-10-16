@@ -20,6 +20,8 @@ public static class SessionScriptPoint
     public const int InsertItem = 21;
     public const int RemoveItem = 28;
     public const int Transfer = 32;
+    /// <summary>The last point, <c>SAP_CRITICAL_MISS</c>; script arrays have no other keys.</summary>
+    public const int Last = 35;
 }
 
 /// <summary>What identifies an item to a player and to a save: type, prototype, numeric name class (<c>OBJ_F_NAME</c>, the
@@ -188,8 +190,10 @@ internal sealed class InventoryDomain
         Points(facts.ScriptPoints) && (facts.Quantity is null) == (facts.Kind.Type is not (SessionItemType.Gold or SessionItemType.Ammo)) &&
         facts.Quantity is null or >= 0;
 
-    private static bool Points(IReadOnlyList<int> points) => points.All(point => point >= 0) && points.Distinct().Count() == points.Count;
+    private static bool Points(IReadOnlyList<int> points) =>
+        points.All(point => point is >= 0 and <= SessionScriptPoint.Last) && points.Distinct().Count() == points.Count;
 
-    /// <summary>Stacks merge into a matching stack and keys go to a key ring on insert; neither is modelled.</summary>
+    /// <summary>Gold and ammunition merge into a matching stack on insert, and a key goes onto the PC's key ring when it has
+    /// one; neither is modelled.</summary>
     internal static bool Admitted(SessionItemType type) => type is not (SessionItemType.Gold or SessionItemType.Ammo or SessionItemType.Key or SessionItemType.KeyRing);
 }

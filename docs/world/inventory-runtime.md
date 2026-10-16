@@ -22,9 +22,10 @@ weight, complexity, inventory location, quantity, script attachment points) and 
 listing holder. For the Crash Site the host builds it from the [T0 inventory view](area-inventory-view.md)
 (ARC-DATA-012) and life from the [step rules](area-step-assessment.md) (`CRITTER_DEAD` evidence); the real-data test
 holds that mapping until the viewer wiring takes it. The seed is validated (unique entity ids, each item listed once or
-on the ground, no dead or substitute container, admitted types, quantities only on gold and ammunition, distinct
-non-negative script points; at most 2,048 items and holders and 512 per list; otherwise `InvalidInventorySeed`) and
-copied. Attaching moves no revision, is never saved, and is repeated after every restore.
+on the ground, no dead or substitute container, defined item types 5..14, a quantity on gold and ammunition and only
+there, distinct script points 0..35 (`SAP_EXAMINE`..`SAP_CRITICAL_MISS`); at most 2,048 items and holders and 512 per list; otherwise `InvalidInventorySeed`) and
+copied; at most `MaxMaps` seeds are attached (`BudgetExceeded`). Attaching moves no revision, is never saved, and is
+repeated after every restore.
 
 **State.** The ordered list of items the PC took from the world (`SessionPcItem`: entity, origin map, kind). An item
 in it is hidden from its seed's ground and holder lists (`QueryMapInventory`); `QueryPcInventory` returns the list. The
@@ -45,11 +46,16 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, `item_remove` (item `SAP_REMOVE_ITEM`, unequip when worn), `item_insert` | an item still listed by an NPC the seed marks dead |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
-Refusals, in order after input, version and seed checks: `ItemNotAvailable` (not on that ground or list, or already
-taken), `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container: chest contents are generated on first open
-from the created PC and are not modelled), `HolderScriptUnsupported` (a holder `SAP_USE` script),
-`SubstituteInventoryUnsupported` (IN with no own match and a substitute inventory), `ItemTypeUnsupported` (gold and
-ammunition merge into stacks, keys go onto a key ring), `WornItemUnsupported` (a parented item in slots 1000..1008),
+Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:
+
+- pickup: `ItemNotAvailable` (not on that map's ground, or already taken);
+- loot: `UnknownHolder`, `HolderNotLootable` (a living NPC, or a container: chest contents are generated on first open
+  from the created PC and are not modelled), `HolderScriptUnsupported` (a holder `SAP_USE` script), `ItemNotAvailable`
+  (not in that holder's current list);
+- IN: `UnknownHolder` (not an NPC of that map), then no own match: NoChange, or `SubstituteInventoryUnsupported` when the
+  NPC has a substitute inventory;
+- then the shared item rules: `ItemTypeUnsupported` (gold and ammunition merge into stacks, a key may go onto the PC's
+  key ring), `WornItemUnsupported` (a parented item in slots 1000..1008),
 `ItemScriptUnsupported` (an item `SAP_INSERT_ITEM`, or `SAP_GET` for pickup, or `SAP_REMOVE_ITEM` for loot and IN;
 other attachments such as examine and use do not run on a transfer), `BudgetExceeded` (`GameSessionLimits.MaxPcItems`,
 at most 512), `RevisionExhausted`, and last `InsertRefused`.
@@ -57,7 +63,9 @@ at most 512), `RevisionExhausted`, and last `InsertRefused`.
 **Insert check.** `item_check_insert` depends on the created character (carry weight against its strength, the
 Technophobia background against technology items, free grid room around its own items), none of which the session owns.
 The host answers it per item with a `SessionInsertCheck` delegate (`Accepted`, `TooHeavy`, `TechnologyRefused`,
-`NoRoom`; any other value refuses). It runs only after every other refusal. A refusal changes nothing: for pickup and
+`NoRoom`; any other value refuses). It runs only after every other refusal. If the host calls back into the owner from it and anything the transfer read
+changed (revision, actor map, the attached seed, the item already taken), the transfer is `StaleVersion` with no effect.
+A refusal changes nothing: for pickup and
 loot that is the source behaviour; for IN the source would drop the item at the PC's location (into a junk pile when
 items lie there), which is not modelled, so IN is refused instead.
 
@@ -90,7 +98,8 @@ Decoding keeps the list order and refuses an entity listed twice (`NotCanonical`
 transfer cannot produce (gold, ammunition, key, key ring: `InvalidItem`), a repeated entity (`InvalidSnapshot`) and the
 caller's lower limit (`BudgetExceeded`). After a restore no seed is attached; `AttachMapInventory` then refuses
 (`InventoryMismatch`) a seed that lacks an item the PC took from that map, gives it another kind, or lists an item the
-PC took from another map, so a save of other data cannot silently duplicate or lose an item.
+PC took from another map, so a save of other data cannot silently duplicate or lose an item. For the same reason a seed
+may not list an item another attached seed lists (one object lies on one map).
 
 **Migration decision: none.** Schemas 1..4 are `UnsupportedSchema`; a schema-4 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer has no inventory state
