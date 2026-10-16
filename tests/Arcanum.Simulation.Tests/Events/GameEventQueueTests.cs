@@ -82,13 +82,13 @@ public sealed class GameEventQueueTests
         {
             if (firing.Event.Payload.Values[0] == 1)
             {
-                // Same domain, deadline after the pass position and at or before now.
-                Added(q.ScheduleAt(Global, Values(5), 500));
-                // A real-time handler scheduling a game event that is already due.
+                // A real-time handler scheduling a game event that is already due, and an animation event due now.
                 Added(q.ScheduleAfter(Global, Values(6), 0, firing.Clocks with { GameMs = 0 }));
-                // An animation event due now.
                 Added(q.ScheduleAt(Anim, Values(7), 1_000));
             }
+            if (firing.Event.Payload.Values[0] == 2)
+                // A game handler at 10: same domain, deadline after the pass position and at or before now.
+                Added(q.ScheduleAt(Global, Values(5), 500));
             return GameEventHandlerOutcome.Completed;
         };
         Added(queue.ScheduleAt(Ui, Values(1), 10));
