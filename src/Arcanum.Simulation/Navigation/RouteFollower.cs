@@ -1,0 +1,157 @@
+using Arcanum.Simulation.Movement;
+
+namespace Arcanum.Simulation.Navigation;
+
+public enum RouteFollowStatus { Idle, Following, Arrived, Stopped }
+
+/// <summary>One bounded advance the host must run next: advance to <see cref="Until"/> with exactly these batches.</summary>
+public sealed record RouteSubAdvance(SimulationTime Until, IReadOnlyList<InputBatch> Batches);
+
+/// <summary>Every sub-advance one drive ran, in order; a failed drive stops at the first non-completed result.</summary>
+public sealed record RouteDrive(MovementState State, IReadOnlyList<MovementResult> Advances, string? FailureCode)
+{
+    public bool Completed => FailureCode is null;
+}
+
+/// <summary>
+/// Click-to-move goal follower over <see cref="MovementRuntime"/> (Project policy, parity NOT_VERIFIED).
+/// A click sets a goal cell; the follower turns <see cref="RoutePlanner"/> segments into ordinary actor intents
+/// at exact step boundaries, plans again after each segment and never cancels a step it started: a new goal or a
+/// stop takes effect at the next cell centre. It owns no clock, I/O or evidence; the host runs every advance.
+/// </summary>
+public sealed class RouteFollower
+{
+    public const int SubAdvanceMaximum = 1024;
+    private readonly IRouteStepSource _source;
+    private readonly RouteLimits _limits;
+    private NeighborDirection[] _segment = [];
+    private int _segmentNext;
+    private CellCoord? _segmentCell;
+    private SimulationTime? _requestedAt;
+
+    public RouteFollower(IRouteStepSource source, RouteLimits? limits = null)
+    {
+        _source = source ?? throw new ArgumentNullException(nameof(source));
+        _limits = limits ?? new RouteLimits();
+    }
+
+    public RouteFollowStatus Status { get; private set; }
+    public CellCoord? Target { get; private set; }
+    public string? StopReason { get; private set; }
+    /// <summary>The newest plan made for the current goal, including a failed one.</summary>
+    public RoutePlan? LastPlan { get; private set; }
+    public int PlannedSegments { get; private set; }
+    public IReadOnlyList<NeighborDirection> RemainingSegment => Array.AsReadOnly(_segment[_segmentNext..]);
+
+    /// <summary>Sets a goal observed at <paramref name="observedAt"/>. The goal already followed is kept (no replan, no duplicate).</summary>
+    public bool SetTarget(CellCoord target, SimulationTime observedAt)
+    {
+        if (!observedAt.IsValid) throw new ArgumentException("ROUTE_TIME_INVALID", nameof(observedAt));
+        if (Status == RouteFollowStatus.Following && Target == target) return false;
+        Target = target; Status = RouteFollowStatus.Following; StopReason = null; LastPlan = null; PlannedSegments = 0;
+        _requestedAt = observedAt; ResetSegment();
+        return true;
+    }
+
+    /// <summary>Drops the goal; a started step still finishes at its cell centre.</summary>
+    public void Stop(SimulationTime observedAt, string reason = "ROUTE_STOPPED_BY_HOST")
+    {
+        if (!observedAt.IsValid) throw new ArgumentException("ROUTE_TIME_INVALID", nameof(observedAt));
+        ArgumentException.ThrowIfNullOrEmpty(reason);
+        if (Status != RouteFollowStatus.Following) return;
+        Finish(RouteFollowStatus.Stopped, reason); _requestedAt = observedAt;
+    }
+
+    /// <summary>
+    /// The next advance toward <paramref name="target"/>. Decisions are made only at a settled cell or at the exact end
+    /// of the current step, for the cell the actor will stand on, so no input lands inside a step.
+    /// </summary>
+    public RouteSubAdvance Next(MovementState state, SimulationTime target)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        if (!target.IsValid || target.Value < state.Time.Value) throw new ArgumentException("ROUTE_TARGET_TIME_INVALID", nameof(target));
+        if (state.Segment is { } segment)
+        {
+            if (segment.EndTime.Value > target.Value) return new(target, []);
+            var cell = state.Phase == MovementPhase.Returning ? segment.From : segment.To;
+            var intent = Desired(cell);
+            return new(segment.EndTime, intent == state.LatestIntent ? [] : [Batch(state, segment.EndTime, intent)]);
+        }
+        var desired = Desired(state.CommittedCell);
+        if (desired == state.LatestIntent) return new(target, []);
+        // A settled actor takes the input at the observation time if it is still open, otherwise at the target.
+        var at = _requestedAt is { } requested && Admissible(state, requested) && requested.Value <= target.Value ? requested : target;
+        if (!Admissible(state, at)) return new(target, []);
+        // A stale direction (for example after a denied step) is cleared first so the new one is material.
+        var inputs = desired.Active && state.LatestIntent.Active ? new[] { ActorIntent.Neutral, desired } : new[] { desired };
+        return new(at, [Batch(state, at, inputs)]);
+    }
+
+    /// <summary>Records one completed advance: consumed segment steps, denials and arrival.</summary>
+    public void Observe(MovementResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        if (result.Status != MovementStatus.Completed || result.State is null) throw new ArgumentException("ROUTE_RESULT_NOT_COMPLETED", nameof(result));
+        foreach (var e in result.Events)
+        {
+            if (Status != RouteFollowStatus.Following) break;
+            if (e.Kind == MovementEventKind.StepStarted)
+            {
+                if (_segmentCell == e.Key.From && _segmentNext < _segment.Length && _segment[_segmentNext] == e.Key.Direction)
+                { _segmentNext++; _segmentCell = e.Key.To; }
+                else ResetSegment(); // Someone else moved the actor: plan again from where it stands.
+            }
+            else if (e.Kind == MovementEventKind.StepRejected) Finish(RouteFollowStatus.Stopped, "ROUTE_STEP_DENIED");
+        }
+        var state = result.State;
+        if (Status == RouteFollowStatus.Following && state.Phase == MovementPhase.Settled && state.CommittedCell == Target)
+            Finish(RouteFollowStatus.Arrived, "ROUTE_ARRIVED");
+        if (Status != RouteFollowStatus.Following && !state.LatestIntent.Active) _requestedAt = null;
+    }
+
+    /// <summary>Runs <see cref="Next"/>/<see cref="Observe"/> until <paramref name="target"/> through the host's advance.</summary>
+    public RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime, IReadOnlyList<InputBatch>, MovementResult> advance)
+    {
+        ArgumentNullException.ThrowIfNull(advance);
+        var results = new List<MovementResult>();
+        for (var i = 0; i < SubAdvanceMaximum; i++)
+        {
+            var step = Next(state, target);
+            var result = advance(step.Until, step.Batches);
+            results.Add(result);
+            if (result.Status != MovementStatus.Completed || result.State is null) return new(state, results, "ROUTE_ADVANCE_REJECTED");
+            Observe(result);
+            state = result.State;
+            if (step.Until == target) return new(state, results, null);
+        }
+        return new(state, results, "ROUTE_SUB_ADVANCE_LIMIT");
+    }
+
+    private ActorIntent Desired(CellCoord cell)
+    {
+        if (Status != RouteFollowStatus.Following || Target is not { } goal || cell == goal) return ActorIntent.Neutral;
+        if (_segmentCell != cell || _segmentNext == _segment.Length)
+        {
+            var plan = RoutePlanner.Plan(_source, cell, goal, _limits);
+            LastPlan = plan;
+            if (plan.Outcome != RouteOutcome.Found) { Finish(RouteFollowStatus.Stopped, plan.ReasonCode); return ActorIntent.Neutral; }
+            _segment = plan.Segment.ToArray(); _segmentNext = 0; _segmentCell = cell; PlannedSegments++;
+        }
+        return ActorIntent.Toward(_segment[_segmentNext]);
+    }
+
+    private void Finish(RouteFollowStatus status, string reason) { Status = status; StopReason = reason; ResetSegment(); }
+    private void ResetSegment() { _segment = []; _segmentNext = 0; _segmentCell = null; }
+
+    private static bool Admissible(MovementState state, SimulationTime time) =>
+        state.IsClosed ? time.Value > state.Time.Value : time.Value >= state.Time.Value;
+
+    private static InputBatch Batch(MovementState state, SimulationTime time, params ActorIntent[] intents)
+    {
+        // Keys stay strictly after the latest receipt even when it shares this timestamp.
+        var sequence = state.LatestInputKey is { } latest ? checked(latest.Sequence + 1) : 0;
+        var inputs = new MovementInput[intents.Length];
+        for (var i = 0; i < intents.Length; i++) inputs[i] = MovementInput.Set(checked(sequence + i), intents[i]);
+        return new(time, inputs);
+    }
+}
