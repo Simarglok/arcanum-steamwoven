@@ -114,6 +114,8 @@ public sealed class ScrDispatcherTests
         Assert.AreEqual(ScrStop.DeadWithoutSpeech, RunNpc(both, Dialog).Stop);
         both.Dialog = ScrDialogState.Dead | ScrDialogState.Surrendered;
         Assert.AreEqual(ScrStop.DeadWithoutSpeech, RunNpc(both, Dialog).Stop);
+        var neither = With(plain, Dialog); neither.Dialog = ScrDialogState.Dead | ScrDialogState.Surrendered;
+        Assert.AreEqual(ScrStop.DeadWithoutSpeech, RunNpc(neither, Dialog).Stop, "dead is tested before surrendered");
         // The gates belong to the dialog point only.
         var heartbeat = With(plain); heartbeat.Dialog = ScrDialogState.Dead;
         Assert.AreEqual(ScrStop.ReturnSkipDefault, RunNpc(heartbeat).Stop);
