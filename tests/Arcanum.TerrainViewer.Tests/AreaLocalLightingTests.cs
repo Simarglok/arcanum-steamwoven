@@ -1,0 +1,156 @@
+using System.Text;
+using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
+using Arcanum.Data.Terrain;
+using Arcanum.Session;
+using Arcanum.TerrainViewer.Core;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+
+namespace Arcanum.TerrainViewer.Tests;
+
+// ARC-RENDER-012. Hand-computed anchors and colours on the exterior chart (origin cell 92928,82560 at
+// screen 0,0); no production helper supplies expectations.
+[TestClass]
+public sealed class AreaLocalLightingTests
+{
+    private const string Digest = AreaCompositionFixture.Digest;
+    private static readonly AmbientPair Pair = new(new(10, 20, 30), new(50, 60, 70));
+
+    private static AreaTerrainRecord Tile(long x, long y, uint raw, int index)
+    {
+        var key = new AreaVisualKey(AreaSourceKind.Terrain, new(Digest, 5051, 100), index, "");
+        return new(key, 0, 0, x, y, raw, 0, AreaScope.Core, key);
+    }
+    // Indoor tile (class bit 0) at the origin cell, outdoor (bit 8) one cell east.
+    private static readonly AreaTerrainRecord[] Tiles = [Tile(92928, 82560, 0, 0), Tile(92929, 82560, 0x100, 1)];
+
+    private static (int, int, int, int, int, byte[]) Uniform(int number, int width, int height, int hotX, int hotY, byte r)
+    {
+        var mask = new byte[width * height * 4];
+        for (var at = 0; at < mask.Length; at += 4) { mask[at] = r; mask[at + 3] = 255; }
+        return (number, width, height, hotX, hotY, mask);
+    }
+    private static StationaryLight Light(long x, long y, int ox, int oy, int number = 7, int index = 0)
+        => new(1, index, x, y, ox, oy, StationaryLightFlags.None, (uint)number << 19 | 9u << 28, AmbientColor.Neutral, Digest);
+
+    private static AreaLocalLighting Local(IEnumerable<AreaVisualRecord> visuals, params StationaryLight[] lights)
+        => AreaLocalLighting.Create(Tiles, visuals, AreaChart.Exterior,
+            AreaStationaryLightSource.Create(5000, lights, [Uniform(7, 10, 10, 0, 0, 100), Uniform(8, 400, 400, 200, 200, 100)]));
+
+    [TestMethod]
+    public void Body_takes_the_tile_class_ambient_plus_the_lights_at_its_anchor()
+    {
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var command = AreaScenePlan.Create([], [body], [visual]).Commands.Single();
+        // Anchor (0 + 0 + 40, 0 + 0 + 20); the 400x400 light at the origin cell covers (−160..239, −180..219).
+        var local = Local([visual], Light(92928, 82560, 0, 0, 8));
+        Assert.AreEqual(new AreaLitColors(new(150, 60, 70), new(150, 60, 70)), local.Body(command, AreaAmbientChannel.Outdoor, Pair),
+            "indoor tile (50,60,70) + light (100,0,0); the ART channel only decides lit/unlit");
+        Assert.AreEqual(AreaLitColors.Neutral, local.Body(command, AreaAmbientChannel.Unlit, Pair));
+        // The same body one cell east: outdoor tile, anchor (0,40) still inside the light.
+        Assert.AreEqual(new AmbientColor(110, 20, 30), local.Body(command with { MapX = 92929 }, AreaAmbientChannel.Outdoor, Pair).Left);
+        // Without lights the body is its tile's plain ambient.
+        Assert.AreEqual(new AmbientColor(50, 60, 70), Local([visual]).Body(command, AreaAmbientChannel.Outdoor, Pair).Left);
+        // A cell without a core tile is refused, never defaulted.
+        Assert.ThrowsExactly<InvalidOperationException>(() => local.Body(command with { MapY = 82561 }, AreaAmbientChannel.Outdoor, Pair));
+        Assert.ThrowsExactly<ArgumentException>(() => local.Body(command with { Identity = null }, AreaAmbientChannel.Outdoor, Pair));
+    }
+
+    [TestMethod]
+    public void Actor_is_coloured_at_its_placement_anchor()
+    {
+        var local = Local([], Light(92928, 82560, -5, -25));   // 10x10 rectangle (35,-5): covers (40,0) only
+        var at = AreaCompositionFixture.Placement(AreaCompositionFixture.Cases[0]) with { MapX = 0, MapY = 0, InstanceOffsetX = 0, InstanceOffsetY = -20 };
+        Assert.AreEqual(new AmbientColor(150, 60, 70), local.Actor(at, Pair), "anchor (40, 0)");
+        Assert.AreEqual(new AmbientColor(50, 60, 70), local.Actor(at with { InstanceOffsetY = 0 }, Pair), "anchor (40, 20) is outside");
+        Assert.AreEqual(new AmbientColor(10, 20, 30), local.Actor(at with { MapX = 1, InstanceOffsetY = 0 }, Pair), "outdoor tile east");
+    }
+
+    private static AreaVisualRecord Wall(int rotation) => AreaCompositionFixture.Visual(AreaCompositionFixture.Body(0), 80, 100, 0, 0)
+        with { RawArt = 0x10000000u | (uint)rotation << 11 };
+
+    [TestMethod]
+    public void Wall_samples_its_base_line_ends_from_front_side_lights_only()
+    {
+        var body = AreaCompositionFixture.Body(0);
+        var wall = Wall(1);   // odd rotation folds to 0: base line from tile point (40,0), one y per two x
+        var command = AreaScenePlan.Create([], [body], [AreaCompositionFixture.Visual(body, 80, 100, 0, 0)]).Commands.Single()
+            with { Visual = wall.Key, Destination = new TerrainRect(40, -60, 80, 100) };
+        // Left end (40,0); right end (40 + 79, 0 + 79 / 2) = (119,39). The 10x10 light at (35,-5) covers only the left end.
+        var front = Light(92928, 82560, -5, -25);
+        // Same rectangle from the cell west of the wall (tile screen (40,-20)): behind the wall for rotation 0.
+        var behind = Light(92927, 82560, -45, -5, index: 1);
+        Assert.AreEqual(new AreaLitColors(new(150, 60, 70), new(50, 60, 70)), Local([wall], front).Body(command, AreaAmbientChannel.Outdoor, Pair));
+        Assert.IsTrue(Local([wall], front).Body(command, AreaAmbientChannel.Outdoor, Pair).Gradient);
+        Assert.AreEqual(new AreaLitColors(new(50, 60, 70), new(50, 60, 70)), Local([wall], behind).Body(command, AreaAmbientChannel.Outdoor, Pair));
+        // An odd width rounds up to even: the right end of a 79-wide sprite is still (119,39), one pixel past the
+        // sprite, and a light there counts (the source samples the base-line band, not the sprite rectangle).
+        var odd = command with { Destination = new TerrainRect(40, -60, 79, 100) };
+        Assert.AreEqual(new AreaLitColors(new(50, 60, 70), new(150, 60, 70)), Local([wall], Light(92928, 82560, 75, 15)).Body(odd, AreaAmbientChannel.Outdoor, Pair));
+        // Without lights (or with lit: false) both ends are the base colour.
+        Assert.AreEqual(new AreaLitColors(new(50, 60, 70), new(50, 60, 70)), Local([wall], front).Body(command, AreaAmbientChannel.Outdoor, Pair, lit: false));
+        // Rotations 2 and 4 take the outdoor colour whatever the tile.
+        var south = Wall(2);
+        Assert.AreEqual(new AreaLitColors(new(10, 20, 30), new(10, 20, 30)),
+            Local([south]).Body(command with { Visual = south.Key }, AreaAmbientChannel.Outdoor, Pair));
+    }
+
+    [TestMethod]
+    public void View_colours_every_body_and_builds_the_lattice_only_with_active_lights()
+    {
+        var body = AreaCompositionFixture.Body(0);
+        var visual = AreaCompositionFixture.Visual(body, 160, 160, 40, 80);
+        var plan = AreaScenePlan.Create([], [body], [visual]);
+        var channels = AreaAmbientPolicy.Channels(plan, [], [visual]);
+        var lit = Local([visual], Light(92928, 82560, 0, 0, 8)).View(plan, channels, Pair);
+        Assert.AreEqual(1, lit.Bodies.Count);
+        Assert.IsNotNull(lit.Lattice);
+        var dark = Local([visual]).View(plan, channels, Pair);
+        Assert.IsNull(dark.Lattice);
+        Assert.AreEqual(new AmbientColor(50, 60, 70), dark.Bodies[visual.Key].Left);
+    }
+
+    private static string Rows(Func<int, string> row) => string.Concat(Enumerable.Range(0, 24).Select(h => $"{{{h}}}{{{row(h)}}}\n"));
+    private static LightSchemeTable Table(int id, Func<int, string> row)
+    {
+        Assert.AreEqual(LightingFailure.None, LightSchemeParser.TryParse(id, Encoding.ASCII.GetBytes(Rows(row)), out var table));
+        return table!;
+    }
+    private static readonly string Sha = new('b', 64);
+    private static readonly long Exterior = new AreaSectorCoordinate(1452, 1290).Packed, Cave = new AreaSectorCoordinate(32, 31).Packed;
+
+    [TestMethod]
+    public void Driver_rebinds_to_another_map_source_on_the_same_clock()
+    {
+        var startup = new StartupClockDeclaration(1885, 15, Sha);
+        var exterior = new AreaLightingSource(Sha, 5000, 1, Sha, new Dictionary<long, int> { [Exterior] = 0 },
+            new Dictionary<int, LightSchemeTable> { [1] = Table(1, h => $"{h},0,0,0,0,0") }, startup);
+        var cave = new AreaLightingSource(Sha, 5078, 2, Sha, new Dictionary<long, int> { [Cave] = 0 },
+            new Dictionary<int, LightSchemeTable> { [2] = Table(2, h => $"0,{h},0,0,0,{h}") }, startup);
+        var created = AreaTransitionCoordinator.CreateSession(AreaAmbientDriver.ClockProfile(exterior),
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), Guid.Parse("22222222-2222-2222-2222-222222222222"), new(100, 100), 1);
+        using var session = created.Owner!;
+        var driver = AreaAmbientDriver.Create(exterior, session, Exterior);
+        driver.AdvanceHours(2, Exterior);
+        var clock = driver.Clock; var revision = driver.Revision;
+        driver.Rebind(cave, Cave);
+        Assert.AreEqual(clock, driver.Clock, "the clock is not touched");
+        Assert.AreEqual(new AmbientSelection(2, true, Cave, 17, new(new(0, 17, 0), new(0, 0, 17))), driver.Selection);
+        Assert.AreEqual(revision + 1, driver.Revision, "revision stays monotonic across sources");
+        Assert.AreSame(cave, driver.Source);
+        Assert.AreEqual(new SessionLightingState(2, 17), session.QueryLighting(), "the session records the cave's scheme");
+        Assert.IsTrue(driver.AdvanceHours(1, Cave));
+        Assert.AreEqual(new AmbientPair(new(0, 18, 0), new(0, 0, 18)), driver.Selection.Pair);
+        // A sector of the other map is refused under the current source.
+        Assert.ThrowsExactly<InvalidOperationException>(() => driver.Apply(Exterior));
+        driver.Rebind(exterior, Exterior);
+        Assert.AreEqual(new AmbientSelection(1, true, Exterior, 18, new(new(18, 0, 0), new(0, 0, 0))), driver.Selection);
+        // Another module or startup is a different clock: refused, the current source stays.
+        var foreign = new AreaLightingSource(Sha, 5078, 2, Sha, new Dictionary<long, int> { [Cave] = 0 },
+            new Dictionary<int, LightSchemeTable> { [2] = Table(2, h => $"0,{h},0,0,0,{h}") }, new StartupClockDeclaration(1885, 14, Sha));
+        Assert.ThrowsExactly<InvalidOperationException>(() => driver.Rebind(foreign, Cave));
+        Assert.ThrowsExactly<InvalidOperationException>(() => driver.Rebind(cave, Exterior), "sector not admitted by the new source");
+        Assert.AreEqual(1, driver.Selection.SchemeId);
+    }
+}

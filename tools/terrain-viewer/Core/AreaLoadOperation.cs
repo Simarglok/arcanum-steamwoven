@@ -63,6 +63,10 @@ internal static class AreaLoadOperation
         var lighting = AreaLightingReader.Read(module, snapshot, token);
         if (lighting.Failure != LightingFailure.None) throw new InvalidOperationException("AREA_LIGHTING_" + lighting.Failure);
         Console.WriteLine($"ARC-RENDER-010 load stage=lighting mapDefault={lighting.Source!.MapDefaultScheme} schemes={lighting.Source.Schemes.Count} sectors={lighting.Source.SectorSchemes.Count}");
+        // ARC-RENDER-012: stationary sector lights from the snapshot's retained wire, their ART from the
+        // terrain resource (Resource2), which is re-verified below with the module.
+        using var artResource = DatArchive.Open(arguments.ResourcePath, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
+        var local = ReadLocalLighting(artResource, snapshot, AreaChart.Exterior, token);
         VerifyFile(arguments.ModulePath, moduleIdentity, token); VerifyFile(arguments.ResourcePath, resourceIdentity, token);
         VerifyFile(arguments.ActorResourcePath!, actorIdentity, token);
         // A genuine terrain plan supplies the legacy result's geometry, not a
@@ -98,11 +102,19 @@ internal static class AreaLoadOperation
             if (checked(retained + actor.CheckedRgbaBytes + caveArea.CpuRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
                 throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
             retained = checked(retained + caveArea.CpuRgbaBytes);
+            // ARC-RENDER-012: the cave's own ambient source (its map default and sector word) and its lights.
+            var caveLighting = AreaLightingReader.Read(module, caveArea.Snapshot, token);
+            if (caveLighting.Failure != LightingFailure.None) throw new InvalidOperationException("AREA_CAVE_LIGHTING_" + caveLighting.Failure);
+            var caveLocal = ReadLocalLighting(artResource, caveArea.Snapshot, caveChart, token);
+            Console.WriteLine($"ARC-RENDER-012 load stage=cave-lighting mapDefault={caveLighting.Source!.MapDefaultScheme} schemes={caveLighting.Source.Schemes.Count} lights={caveLocal.LightCount}");
+            caveArea = caveArea with { Lighting = new(caveLighting.Source, AreaAmbientPolicy.Channels(caveArea.Snapshot, caveArea.Plan)) { Local = caveLocal } };
             cave = new(caveArea, caveSteps, caveChart);
             Console.WriteLine($"ARC-WORLD-009 load stage=cave visuals={caveArea.Snapshot.Visuals.Count} cells={caveSteps.AdmittedCells} walls={caveSteps.WallEdges}");
+            // The cave lighting reads came after the first verification: verify both archives again.
+            VerifyFile(arguments.ModulePath, moduleIdentity, token); VerifyFile(arguments.ResourcePath, resourceIdentity, token);
         }
         var elapsed = Environment.TickCount64 - started;
-        area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)), FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
+        area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
             ManagedBytes = GC.GetTotalMemory(false), ProcessBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
             ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);
@@ -112,6 +124,14 @@ internal static class AreaLoadOperation
             mf, rf, mf, rf, retained + actor.CheckedRgbaBytes, elapsed, 1)
         { Area = area, ActorPlan = actor.Plan, ActorTextures = actor.Textures, AreaStepSnapshot = traversal,
             ActorResourceFingerprint = new(actorIdentity.Length, actorIdentity.Sha256), ActorResourceFingerprintAfter = new(actorIdentity.Length, actorIdentity.Sha256), Cave = cave };
+    }
+
+    private static AreaLocalLighting ReadLocalLighting(DatArchive artResource, AreaSnapshot snapshot, AreaChart chart, CancellationToken token)
+    {
+        var lights = StationaryLightReader.Read(artResource, snapshot, token);
+        if (lights.Failure != LightingFailure.None) throw new InvalidOperationException("AREA_STATIONARY_LIGHTS_" + lights.Failure);
+        Console.WriteLine($"ARC-RENDER-012 load stage=stationary-lights map={snapshot.CatalogueMap} lights={lights.Source!.Lights.Count} frames={lights.Source.Frames.Count}");
+        return AreaLocalLighting.Create(snapshot, chart, lights.Source);
     }
 
     // Bind the whole-core step evidence to this AREA generation. The source check is a

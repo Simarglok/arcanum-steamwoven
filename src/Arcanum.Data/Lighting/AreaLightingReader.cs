@@ -148,7 +148,7 @@ public static class AreaLightingReader
         return scheme < 0 ? LightingFailure.SectorSchemeNegative : LightingFailure.None;
     }
 
-    private static LightingFailure ReadEntry(DatArchive module, DatEntry entry, out byte[] bytes)
+    internal static LightingFailure ReadEntry(DatArchive module, DatEntry entry, out byte[] bytes)
     {
         bytes = Array.Empty<byte>();
         if (entry.DeclaredOutputSize > LightingMes.MaxPayloadBytes || entry.StoredSize > LightingMes.MaxPayloadBytes) return LightingFailure.LimitExceeded;
@@ -158,7 +158,7 @@ public static class AreaLightingReader
     }
 
     // Lower-case, '/'-separated ASCII name without its terminator; non-ASCII names are not addressable.
-    private static string? Name(DatEntry entry)
+    internal static string? Name(DatEntry entry)
     {
         var raw = entry.RawNameBytes;
         if (raw.Count < 2 || raw[^1] != 0) return null;
@@ -172,7 +172,7 @@ public static class AreaLightingReader
     }
 
     // One relative name token from rule data: printable ASCII, no separators or traversal.
-    private static string? SafeName(string value)
+    internal static string? SafeName(string value)
     {
         var token = value.Trim(' ', '\t');
         if (token.Length is 0 or > 128 || token.Contains("..", StringComparison.Ordinal) ||

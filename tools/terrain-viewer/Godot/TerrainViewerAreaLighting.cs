@@ -12,6 +12,8 @@ namespace Arcanum.TerrainViewer;
 // admitted host time), holds a Menu pause while the palette or a dialog is open, and the palette's
 // "+1 hour" is an explicit wait that works during that pause. Automated runs (self-test, native smoke)
 // get no live flow; they drive the same tick with literal host times.
+// ARC-RENDER-012: each map (exterior, cave) brings its own ambient source and stationary lights; a transfer
+// or a quick load across maps rebinds them on the same session clock.
 public partial class TerrainViewerApp
 {
     private AreaAmbientDriver? _areaAmbient;
@@ -31,7 +33,9 @@ public partial class TerrainViewerApp
     private void RebindAreaAmbient(GameSessionOwner session)
     {
         if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
-        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, session, previous.Selection.Sector);
+        // The source of the map shown so far (the exterior's or, after ARC-RENDER-012, the cave's); the map of the
+        // loaded actor is bound once it is placed (RebindAreaMapAmbient).
+        _areaAmbient = AreaAmbientDriver.Create(previous.Source, session, previous.Selection.Sector);
         _areaAmbient.Enabled = previous.Enabled;
         PushAreaAmbient(); BindAreaAmbientPalette();
         GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
@@ -43,14 +47,14 @@ public partial class TerrainViewerApp
         _canvas?.SetAreaAmbient(null); BindAreaAmbientPalette();
     }
 
-    // The sector the lighting follows: the actor's in the exterior; in the cave the exterior sector last
-    // selected stays (the lighting source is the exterior's).
-    private long AmbientSector() => InCave && _areaAmbient is { } driver ? driver.Selection.Sector : ActiveAreaSector();
+    // The sector the lighting follows: the actor's, on the shown map (each map has its own source).
+    private long AmbientSector() => ActiveAreaSector();
 
+    // The sector under the actor's committed cell on the shown map's own chart (the exterior spawn
+    // before the first session exists).
     private long ActiveAreaSector()
     {
-        // The actor's sector; in the cave this is the exterior spawn's (AmbientSector keeps the last selected one there).
-        var cell = InCave ? AreaGridSession.Cell(AreaGridSession.Spawn) : AreaGridSession.Cell(_worldActor.Session?.State.CommittedCell ?? AreaGridSession.Spawn);
+        var cell = _worldActor.Session is AreaGridSession session ? session.Chart.ToWorld(session.State.CommittedCell) : AreaGridSession.Cell(AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
 
@@ -77,14 +81,26 @@ public partial class TerrainViewerApp
     // FR-LIGHT-007: re-select when the actor commits into another sector, at the same hour.
     private void FollowAreaAmbient()
     {
-        if (_areaAmbient is null || InCave) return;
+        if (_areaAmbient is null) return;
         if (_areaAmbient.Apply(ActiveAreaSector())) { PushAreaAmbient(); GD.Print("ARC-RENDER-010 lighting-sector " + AreaAmbientReceipt()); }
     }
 
+    // ARC-RENDER-012: a map transfer (or a quick load onto the other map) switches to the shown map's ambient
+    // source and lights on the same clock (the cave has its own map default scheme and stationary lights).
+    private void RebindAreaMapAmbient()
+    {
+        if (_areaAmbient is null) return;
+        // A map without lighting inputs is drawn unlit; the driver never stays bound to the other map.
+        if (_readyArea?.Lighting is not { } lighting) { StopAreaAmbient(); GD.Print("ARC-RENDER-012 lighting-map none (unlit)"); return; }
+        _areaAmbient.Rebind(lighting.Source, ActiveAreaSector());
+        PushAreaAmbient(); BindAreaAmbientPalette();
+        GD.Print("ARC-RENDER-012 lighting-map " + AreaAmbientReceipt());
+    }
+
     // Off sends no ambient at all (identical white pixels), so unlit views keep terrain chunks
-    // even where a chunk mixes indoor and outdoor tiles.
+    // even where a chunk mixes indoor and outdoor tiles. Local lights are part of the lit view only.
     private void PushAreaAmbient() => _canvas?.SetAreaAmbient(_areaAmbient is { Enabled: true } driver && _readyArea?.Lighting is { } lighting
-        ? new AreaAmbientView(driver.Effective, lighting.Channels) : null);
+        ? new AreaAmbientView(driver.Effective, lighting.Channels) { Local = lighting.Local?.View(_readyArea.Plan, lighting.Channels, driver.Effective) } : null);
 
     // Palette actions (ARC-INPUT-001 route: diagnostics live in the palette, not on game keys).
     private void PaletteGameHour()
@@ -118,6 +134,7 @@ public partial class TerrainViewerApp
             : $"time flows {GameTimeFlow.GameMillisecondsPerHostMillisecond}x";
         return $" | {clock.Hour:00}:{clock.Minute:00} day {clock.DayIndex + 1} {(clock.IsDay ? "DAY" : "NIGHT")} {flow} | ambient scheme {selection.SchemeId}"
             + $"{(selection.FromMapDefault ? " (map default)" : " (sector)")} hour {selection.Hour} {(driver.Enabled ? "ON" : "OFF (unlit source)")}"
+            + $" | stationary lights {_readyArea?.Lighting?.Local?.LightCount ?? 0}"
             + " | palette: Game time +1 hour (wait), Ambient lighting on/off | hourly discrete, 8x rate and original night/visual parity NOT_VERIFIED";
     }
 
@@ -129,6 +146,7 @@ public partial class TerrainViewerApp
             driver.Clock.GameTimestampMs, driver.Clock.Hour, driver.Clock.IsDay, ClockRevision = driver.Clock.Revision,
             Paused = driver.Clock.PauseDisposition.Paused, PauseReason = driver.Clock.PauseDisposition.Reason.ToString(),
             selection.SchemeId, selection.FromMapDefault, selection.Sector, AmbientRevision = driver.Revision, driver.Enabled,
+            Map = _readyArea?.Snapshot.CatalogueMap, StationaryLights = _readyArea?.Lighting?.Local?.LightCount ?? 0,
             TerrainChunks = _canvas?.AreaChunkCount ?? 0 });
     }
 

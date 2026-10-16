@@ -6,7 +6,11 @@ using Arcanum.TerrainViewer.Core;
 namespace Arcanum.TerrainViewer;
 
 /// <summary>ARC-RENDER-010: the applied hourly pair and the channel of every drawn visual.</summary>
-public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels);
+public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels)
+{
+    /// <summary>ARC-RENDER-012 stationary lights of the shown map at this hour; null draws ambient only.</summary>
+    public AreaLocalLightView? Local { get; init; }
+}
 
 public partial class TerrainCanvas
 {
@@ -88,6 +92,41 @@ public partial class TerrainCanvas
             ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED")).Distinct().ToArray();
         var channel = channels.Length == 1 ? channels[0] : (AreaAmbientChannel?)null;
         _areaChunkChannels[chunk] = channel; return channel;
+    }
+    // ARC-RENDER-012: terrain under a light lattice samples it per pixel; bodies take their CE object
+    // colour (walls a two-end gradient), the actor its colour at the current placement.
+    private (Color Left, Color Right, AreaLatticeBinding? Lattice) AreaItemLight(AreaDrawCommand command, bool isActor)
+    {
+        var ambient = AreaAmbientColor(command, isActor);
+        if (_areaAmbient?.Local is not { } local) return (ambient, ambient, null);
+        static Color Of(AmbientColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
+        if (isActor) { var actor = Of(local.Actor(_areaActorPlacement!)); return (actor, actor, null); }
+        if (command.Identity is not null)
+        {
+            if (!local.Bodies.TryGetValue(command.Visual, out var body)) throw new InvalidOperationException("AREA_LIGHT_BODY_REQUIRED");
+            return (Of(body.Left), Of(body.Right), null);
+        }
+        // Terrain (tiles, facades, their chunks) is always on the indoor or outdoor channel.
+        return (ambient, ambient, local.Lattice is { } lattice ? AreaLattice(lattice) : null);
+    }
+    private (StationaryLightLattice Lattice, AreaLatticeBinding Binding)? _areaLattice;
+    private AreaLatticeBinding AreaLattice(StationaryLightLattice lattice)
+    {
+        if (_areaLattice is { } known && ReferenceEquals(known.Lattice, lattice)) return known.Binding;
+        DisposeAreaLattice();
+        ImageTexture Texture(IReadOnlyList<byte> rows)
+        {
+            using var image = Image.CreateFromData(lattice.Columns, lattice.Rows, false, Image.Format.Rgba8, rows.ToArray());
+            return ImageTexture.CreateFromImage(image);
+        }
+        var binding = new AreaLatticeBinding(Texture(lattice.Lighter), Texture(lattice.Darker), new(lattice.FirstColumn, lattice.FirstRow, lattice.Columns, lattice.Rows));
+        _areaLattice = (lattice, binding); return binding;
+    }
+    // Materials still holding the textures keep their own references; this drops the canvas's.
+    private void DisposeAreaLattice()
+    {
+        if (_areaLattice is { } old) { old.Binding.Lighter.Dispose(); old.Binding.Darker.Dispose(); }
+        _areaLattice = null;
     }
     // The actor is a critter: outdoor channel (CE palette callback), like other bodies.
     private Color AreaAmbientColor(AreaDrawCommand command, bool isActor)
@@ -171,7 +210,7 @@ public partial class TerrainCanvas
             else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
-            item.Ambient = AreaAmbientColor(command, isActor);
+            (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }
@@ -205,7 +244,7 @@ public partial class TerrainCanvas
     }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null;
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null; DisposeAreaLattice();
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();

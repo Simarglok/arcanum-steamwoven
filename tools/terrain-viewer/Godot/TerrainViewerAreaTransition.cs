@@ -199,7 +199,7 @@ public partial class TerrainViewerApp
         _readyArea = area;
         ConfigureAreaActor(target, transition.ArrivalChartCell, session.State.Facing);
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
-        PushAreaAmbient(); FollowAreaAmbient();
+        RebindAreaMapAmbient();
         // The camera centres on the arrival first, then the scene is published at that view.
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
@@ -240,6 +240,8 @@ public partial class TerrainViewerApp
             _worldFocused = true; SelectSimulatedPadForSelfTest();
             var report = new List<object>();
             report.Add(await UseNextToTriggerAsync(79));
+            // ARC-RENDER-012: the cave's own ambient and stationary lights, observed after the transfer.
+            if (_areaAmbient is not null) report.Add(await RunCaveLightingSmokeAsync());
             report.Add(await UseNextToTriggerAsync(1));
             report.Add(await RunAreaWalkToUseSmokeAsync());
             report.Add(await RunAreaResetDropsTransferSmokeAsync());

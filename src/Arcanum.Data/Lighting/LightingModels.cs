@@ -21,6 +21,8 @@ public enum LightingFailure
     MapNotCatalogued, MapDefaultMissing, MapDefaultMalformed, UnsafeResourceName,
     SectorIdentityMismatch, SectorMalformed, SectorMetadataAbsent, SectorSchemeNegative,
     SchemeNotCatalogued, StartupMalformed, InvalidHour, SectorNotAdmitted, SnapshotNotStrict, MapDirectoryMismatch,
+    // ARC-RENDER-012 stationary sector lights.
+    LightRecordMalformed, LightNotStationary, LightOutsideSector, LightFlagsUnsupported, LightArtUnsupported, LightArtNotCatalogued,
 }
 
 /// <summary>A complete normalized 24-hour scheme. Empty interior hours are filled from
