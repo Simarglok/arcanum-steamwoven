@@ -300,6 +300,27 @@ zoom compose the chunks they need (worst observed frame 133 ms when entering zoo
 0.3 at full resolution, about 40–65 ms elsewhere); later pans reuse them from the
 192 MiB chunk cache. Bodies stay per-item draws.
 
+## F4/F6 result: frame rate, HUD, frame texture LRU
+
+Debug source run on the development Mac (180 Hz display), isolated preferences,
+still view after `SOURCE READY`, `--print-fps` and `ps` CPU of the viewer process:
+
+| Pacing | Frame rate | CPU |
+| --- | ---: | ---: |
+| Uncapped (before) | about 1,070 FPS | about 52% |
+| Godot cap 60 / 180 alone | about 50 / 120 FPS | about 6% / 12% |
+| Idle, corrected cap (after) | 58–61 FPS | 4–7% |
+| Active, corrected cap (after) | 179–182 FPS | 9–11% |
+
+The active row was forced through a temporary local hook, not real input; under
+real panning the frame cost of the view also applies. The corrected cap settles
+within about ten seconds after a target change (the first measurements still
+include load frames). The WORLD status line is rebuilt at most ten times per second
+instead of every frame. Frames leaving the view stay uploaded within a 512-frame /
+32 MiB least-recently-used allowance: in the native smoke's per-command sweep the
+resident maximum was 997 frames (13.3 MB), with 6,084 reuploads and 5,631
+evictions across 240 steps.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
@@ -331,8 +352,10 @@ contracts that the code currently enforces.
    The rest is SharpZipLib inflate and the projection, each paid twice per entry.
 5. **F4 (≈2 ms every frame) and F5 (≈3 ms per camera change). F5 done; F4 partly (N/A count cached, the line is still rebuilt every frame).** Update the HUD
    only on change; cache the upright order and patch only the actor marker.
-6. **F6 and minor load items.** Keep a bounded LRU of GPU textures instead of
-   visible-only; avoid decoding frames twice; cap the idle frame rate.
+   (F4 since limited to ten status rebuilds per second, see the F4/F6 result.)
+6. **F6 and minor load items. LRU and frame-rate cap done (F4/F6 result).** Keep a
+   bounded LRU of GPU textures instead of visible-only; avoid decoding frames
+   twice; cap the idle frame rate.
 
 ## Not established
 

@@ -58,6 +58,7 @@ public partial class TerrainCanvas
     internal void PublishArea(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
     {
+        if (!ReferenceEquals(_textures, textures)) _areaView = null;
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);

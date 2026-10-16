@@ -89,6 +89,7 @@ public static partial class TerrainViewerSelfTest
             AssertUploadOwnership(frame, keys.Tile);
             AssertStaticUploadOwnership(frame);
             AssertActorUploadOwnership(frame);
+            AssertAreaRetentionOrder();
             AssertReloadAndExitTextureOwnership(frame);
             AssertReadyStateRetainsOnlyHudMetrics();
             await AssertSyntheticProductionAppAsync(host);
@@ -679,6 +680,45 @@ public static partial class TerrainViewerSelfTest
         if (cache.Count != 0 || disposals != 1) throw new InvalidOperationException("Partial texture upload was not rolled back exactly once.");
         cache.Clear();
         if (disposals != 1) throw new InvalidOperationException("Repeated cache clear disposed an already rolled-back texture.");
+    }
+
+    // Area frame LRU: frames that leave the view are evicted least recently used first
+    // once the frame or byte allowance is exceeded, and a new repository releases all.
+    private static void AssertAreaRetentionOrder()
+    {
+        var disposed = new List<ImageTexture>();
+        AreaFrameKey Key(int frame) => new(null!, 0, 0, frame, "synthetic-retention", "", 0, "");
+        var repository = Enumerable.Range(0, 4).ToDictionary(Key, _ => new DecodedAreaFrame(2, 2, new byte[16]));
+        foreach (var (frames, bytes) in new[] { (1, long.MaxValue), (int.MaxValue, 16L) })
+        {
+            disposed.Clear();
+            using var cache = new TerrainTextureCache(ImageTexture.CreateFromImage, texture => { disposed.Add(texture); texture.Dispose(); }) { AreaRetainFrames = frames, AreaRetainBytes = bytes };
+            void Show(params int[] keys) => cache.UploadAreaVisible(repository, keys.Select(Key).ToHashSet());
+            bool Has(int frame) => cache.TryGet(Key(frame), out _);
+            Show(0); Show(1); Show(2);
+            if (Has(0) || !Has(1) || !Has(2) || disposed.Count != 1 || cache.AreaCount != 2
+                || cache.AreaVisibleFrames != 1 || cache.AreaVisibleBytes != 16 || cache.AreaRgbaBytes != 32)
+                throw new InvalidOperationException("AREA retention did not evict the least recently used frame.");
+            Show(1, 3);
+            if (Has(0) || !Has(1) || !Has(2) || !Has(3) || disposed.Count != 1 || cache.AreaRgbaBytes != 48)
+                throw new InvalidOperationException("AREA retention lost a frame within its allowance.");
+            Show(3);
+            if (Has(2) || !Has(1) || !Has(3) || disposed.Count != 2)
+                throw new InvalidOperationException("AREA retention evicted out of order.");
+            Show(0);
+            if (!Has(0) || Has(1) || !Has(3) || disposed.Count != 3 || cache.AreaCount != 2)
+                throw new InvalidOperationException("AREA retention kept frames beyond its allowance.");
+            var replacement = repository.ToDictionary(pair => pair.Key, pair => pair.Value);
+            cache.UploadAreaVisible(replacement, new HashSet<AreaFrameKey> { Key(0) });
+            if (disposed.Count != 5 || cache.AreaCount != 1 || cache.AreaRgbaBytes != 16)
+                throw new InvalidOperationException("AREA repository change kept another repository's textures.");
+        }
+        foreach (var invalid in new Func<TerrainTextureCache>[] { () => new() { AreaRetainFrames = -1 }, () => new() { AreaRetainBytes = -1 } })
+        {
+            try { using var rejected = invalid(); }
+            catch (ArgumentOutOfRangeException) { continue; }
+            throw new InvalidOperationException("AREA retention accepted a negative allowance.");
+        }
     }
 
     private static void AssertStaticUploadOwnership(ArtFrame frame)

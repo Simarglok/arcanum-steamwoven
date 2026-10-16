@@ -831,6 +831,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
+        PaceFrames();
         if (IsWorld)
         {
             try { ProcessWorld(delta); }
@@ -853,6 +854,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Input(InputEvent @event)
     {
+        NotePacingActivity();
         if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)

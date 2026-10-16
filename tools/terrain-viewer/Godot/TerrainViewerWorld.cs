@@ -345,7 +345,7 @@ public partial class TerrainViewerApp
         if (!complete || !_worldFocused || !double.IsFinite(delta) || delta < 0 || !Valid(keyboard)
             || controllers.Any(raw => !Valid(raw))
             || (observedActive is int device && !controllers.Any(raw => raw.DeviceId == device)))
-        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatus(); return; }
+        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatusPerFrame(delta); return; }
         keyboard = WorldKeyboardRouting(keyboard);
         var context = WorldContext(delta, true);
         var priorActive = _worldReducer.ActiveDevice;
@@ -365,7 +365,7 @@ public partial class TerrainViewerApp
         var wasOpen = _worldGate.IsOpen;
         _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
-        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
+        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatusPerFrame(delta); return; }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         var pan = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.CameraPan);
@@ -385,7 +385,7 @@ public partial class TerrainViewerApp
             var zoom = WorldZoomPolicy.Advance(_camera!.State.Zoom, drive, delta);
             if (zoom != _camera.State.Zoom) ApplyPreferredWorldZoom(zoom, true);
             SettleWorldZoom(delta, drive != 0);
-            RefreshReadyStatus();
+            RefreshReadyStatusPerFrame(delta);
         }
         catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
         catch (OverflowException) { PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan)); }
