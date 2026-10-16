@@ -257,7 +257,8 @@ carry/room check against the ring.
 
 ## Proposal for implementation (P)
 
-1. **T0 inventory import (Data).** A Godot-free, read-only view over the Area
+1. **T0 inventory import (Data).** Delivered by ARC-DATA-012 as the
+   [Area T0 inventory view](../world/area-inventory-view.md). A Godot-free, read-only view over the Area
    snapshot: owners with ordered lists and declared counts, items with parent,
    inventory location, flags and the name/description fields, and the
    reconciliation above as a fail-closed check. No new reader is needed; the Area
