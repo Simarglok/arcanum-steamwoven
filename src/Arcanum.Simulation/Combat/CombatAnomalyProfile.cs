@@ -1,11 +1,12 @@
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
-/// Switches between the fixed default and the source (CE) behaviour of each confirmed CE slip the attack resolver
+/// Switches between the fixed default and the source (CE) behaviour of each confirmed slip the attack resolver
 /// touches (owner decision D2, recorded in docs/research/npc-combat-ai-plan.md#anomaly-decisions). <see cref="Default"/>
-/// is the source with the fixes; <see cref="Source"/> keeps every CE slip, for comparison with CE behaviour.
-/// The profile holds no state, so it may change between attacks. Anomaly A8 has no source variant: CE reads an
-/// unassigned value there, which no rule can reproduce, so both profiles use 0.
+/// is the source with the fixes; <see cref="Source"/> keeps every slip. A read of the original 1.0.7.4 executable at
+/// the CE addresses shows that all four switches here are bugs of the original game too, so <see cref="Source"/> is
+/// also the retail behaviour. The profile holds no state, so it may change between attacks. Anomaly A8 has no switch:
+/// the original uses 0, as the default does, and CE's unassigned value is a reconstruction slip.
 /// </summary>
 public sealed record CombatAnomalyProfile
 {
@@ -30,7 +31,7 @@ public sealed record CombatAnomalyProfile
     /// <summary>The source with every recorded D2 fix.</summary>
     public static readonly CombatAnomalyProfile Default = new();
 
-    /// <summary>CE behaviour for every switch.</summary>
+    /// <summary>The slip for every switch: CE behaviour, which here is also the original 1.0.7.4 behaviour.</summary>
     public static readonly CombatAnomalyProfile Source = new()
     {
         InvocationModifierCountedTwice = true,

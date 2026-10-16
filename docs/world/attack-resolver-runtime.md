@@ -23,7 +23,9 @@ roll it made. Numbers are the CE reading at
 `a7ff41b300ef712f0e7d088183a3d08957110cdd` (the research's C15–C21 and the
 "Hit, dodge and critical" steps), re-read for this task in `combat.c`,
 `skill.c`, `item.c`, `object.c` and `random.c`; no CE code or structure was
-copied. Original executable parity is **NOT_VERIFIED**.
+copied. Original executable parity is **NOT_VERIFIED**, except for the
+anomaly switches below, which were checked against the original 1.0.7.4
+executable.
 
 ## Inputs
 
@@ -58,7 +60,7 @@ copied. Original executable parity is **NOT_VERIFIED**.
   damage; weapon destruction and ammunition loss on a critical miss). The
   default `NoCriticalEffects` returns none.
 - `CombatAnomalyProfile`: `Default` (source plus the recorded D2 fixes) or
-  `Source` (CE behaviour), see below.
+  `Source` (CE and original 1.0.7.4 behaviour), see below.
 
 Helpers in `AttackRules` expose each formula on its own: effectiveness, dodge
 effectiveness, critical hit and miss chances, true-backstab bonus,
@@ -121,8 +123,12 @@ item wear or busting is the vital-state and item owners' job.
 
 ## D2 anomaly switches
 
-Owner decision D2 fixes confirmed CE slips in the default and keeps the CE
-behaviour behind a switch; the full decision table is in the
+Owner decision D2 fixes confirmed slips in the default and keeps the slip
+behind a switch. A read of the original 1.0.7.4 executable
+([original check](../research/combat-core-evidence.md#original-executable-check-arc-combat-001))
+shows that A2, A6, A7 and A10 are bugs of the retail game too, so `Source` is
+also the original behaviour, while A8 is a CE-only slip whose original value is
+the default's 0. The full decision table is in the
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#anomaly-decisions).
 This slice settles the five that touch the attack (A8 has no switch):
 
@@ -131,8 +137,8 @@ This slice settles the five that touch the attack (A8 has no switch):
 | A2 | The bed's −30 counts once. | `InvocationModifierCountedTwice`: −60. |
 | A6 | `AttackRules.ArmorClass` adds AC-adjustment effects once, through the effective AcAdjustment stat. | `ArmorClassEffectsCountedTwice`: effects also applied to base + worn AC. |
 | A7 | A critical self-hit rolls the critical-hit procedure once, at damage time. | `CriticalSelfHitRolledTwice`: also in the critical-miss branch; flags add up. |
-| A8 | Critical effect chance with cancelled weapon magic: 0 (as the critical-miss path). | None: CE reads an unassigned value, which no rule reproduces. |
-| A10 | The backstab bonus is not added to a critical self-hit. | `BackstabDamageOnSelfHit`: added, as in CE. |
+| A8 | Critical effect chance with cancelled weapon magic: 0, as in the original. | None: CE's unassigned value is a reconstruction slip. |
+| A10 | The backstab bonus is not added to a critical self-hit. | `BackstabDamageOnSelfHit`: added, as in CE and the original. |
 
 A10 was found by this task's re-reading: `combat_calc_dmg` keeps the backstab
 flags after a critical miss retargets the attack to the attacker.
