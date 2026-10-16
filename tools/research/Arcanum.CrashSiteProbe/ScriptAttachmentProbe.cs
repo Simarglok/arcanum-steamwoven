@@ -194,6 +194,7 @@ internal static partial class Program
         if (stack.Resolve("rules/maplist.mes") is { Status: ContentResolutionStatus.Resolved } listed && Read(listed.Winner!, "maplist") is { } listBytes &&
             Arcanum.Data.Messages.MesFile.Parse(listBytes) is { Status: Arcanum.Data.Messages.MesParseStatus.Parsed, File: { } listFile })
             for (var n = 5000; listFile.Find(n) is { } entry; n++) catalogue[n] = Encoding.Latin1.GetString(entry.Bytes.Span).Split(',')[0].Trim();
+        else refusals.Add("maplist|unavailable");
         int? CatalogueOf(string map) => catalogue.Where(c => string.Equals(c.Value, map, StringComparison.OrdinalIgnoreCase)).Select(c => (int?)c.Key).FirstOrDefault();
         var hitMaps = hits.Select(h => h.Map).Where(m => m.Length > 0 && m[0] != '<').Distinct().Order(StringComparer.Ordinal)
             .Select(m => new { map = m, catalogue = CatalogueOf(m) }).ToArray();
