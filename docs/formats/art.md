@@ -99,7 +99,8 @@ supports exactly this input and output contract:
   tables; dimension, multiplication, offset, or payload-size overflow; a
   payload outside the entry; zero/overrunning/truncated RLE control runs; RLE
   output not exactly equal to `width × height`; or trailing bytes after the
-  declared full-frame payload sequence.
+  declared full-frame payload sequence (unless the caller opts into the
+  original's leniency, below).
 - Research caps used by the evidence probe: decoded DAT entry at most 1 MiB,
   at most 1,024 frame headers, width/height at most 4,096 each, and at most
   4 MiB decoded pixels per frame. These are safety policy, not format facts.
@@ -107,6 +108,23 @@ supports exactly this input and output contract:
 A production decoder retains checked arithmetic and configurable reviewed caps.
 It must not treat the exposed FPS/action labels as runtime semantics or silently
 accept a different layout.
+
+## Trailing bytes after the last frame (ARC-DATA-016)
+
+437 of the 13,993 installed ART files (interface 326, eye candy 35, wall 33,
+item 18, scenery 16, portal 8, monster 1) carry bytes after the last frame
+payload: 1 byte in 44 files, 2–64 bytes in 134, more in 259. Every frame of
+every one of them decodes to exactly `width × height` pixels. The pinned CE
+reader (`first_party/tig/src/art.c`, `art_read_header` and the frame loop) reads
+the header, palettes, frame table and payloads in order and never checks the
+end of the file, so the tail is invisible to it.
+
+`ArtDecoderOptions.AllowTrailingBytes` (off by default) accepts such a tail and
+reports its length as `ArtMetadata.TrailingBytes`; a payload that runs past the
+end of the file is still refused as truncated. Existing callers keep the strict
+form; the universal loader opts in. An opt-in `RealData` test
+(`ArtStackRealDataTests`) reads every installed ART file this way: 13,993
+read, 437 with a tail, and exactly those 437 are refused by the strict form.
 
 ## Unsupported and unresolved
 

@@ -162,6 +162,25 @@ public sealed class ArtDecoderTests
     }
 
     [TestMethod]
+    public void Trailing_bytes_are_refused_by_default_and_counted_when_allowed()
+    {
+        var valid = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(1, 1, [1])], new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
+        var tailed = Fixture.WithTrailingByte(Fixture.WithTrailingByte(valid));
+        Throws<ArtFormatException>(() => ArtDecoder.Inspect(tailed));
+        var lenient = new ArtDecoderOptions { AllowTrailingBytes = true };
+
+        var metadata = ArtDecoder.Inspect(tailed, lenient);
+        Assert.AreEqual(2, metadata.TrailingBytes);
+        Assert.AreEqual(1, metadata.Frames.Count);
+        Assert.AreEqual(0, ArtDecoder.Inspect(valid, lenient).TrailingBytes);
+        Assert.AreEqual(0, ArtDecoder.Inspect(valid).TrailingBytes);
+        CollectionAssert.AreEqual(ArtDecoder.Decode(valid, new ArtFrameSelection(0, 0, 0)).Rgba.ToArray(),
+            ArtDecoder.Decode(tailed, new ArtFrameSelection(0, 0, 0), lenient).Rgba.ToArray());
+        // Leniency covers only a tail: a payload that runs past the end is still truncated.
+        Throws<ArtFormatException>(() => ArtDecoder.Inspect(valid[..^1], lenient));
+    }
+
+    [TestMethod]
     public void Decode_rejects_structure_unsupported_format_and_policy_limits()
     {
         var valid = Fixture.Create(staticFlag: true, framesPerGroup: 1, [new Frame(1, 1, [1])], new Dictionary<int, byte[]> { [0] = Palette((1, 2, 3, 0)) });
