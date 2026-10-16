@@ -50,6 +50,8 @@ internal static partial class Program
     {
         try
         {
+            if (args.FirstOrDefault() == "--locomotion-research") return ProbeLocomotion(args[1..]);
+            if (args.SequenceEqual(["--locomotion-self-test"])) { LocomotionSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--data-census") return ProbeDataCensus(args[1..]);
             if (args.SequenceEqual(["--data-census-self-test"])) { DataCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
@@ -115,6 +117,8 @@ internal static partial class Program
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("AUTOLEVEL_", StringComparison.Ordinal) || exception.Message.StartsWith("autolevel self-test failed: ", StringComparison.Ordinal) ? exception.Message : "AUTOLEVEL_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--item-inventory", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("ITEM_", StringComparison.Ordinal) || exception.Message.StartsWith("item self-test failed: ", StringComparison.Ordinal) ? exception.Message : "ITEM_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--locomotion", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("LOCOMOTION_", StringComparison.Ordinal) && exception.Message.All(c => c is '_' or ' ' || char.IsAsciiLetterOrDigit(c)) ? exception.Message : "LOCOMOTION_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--area-traversal", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: AREA_TRAVERSAL_INVOCATION_FAILED"
                 : args.Contains("--cardinal-traversal")
