@@ -8,14 +8,15 @@ common_dir=$(git rev-parse --path-format=absolute --git-common-dir)
 main_root=$(dirname "$common_dir")
 head=$(git rev-parse HEAD)
 task=${ARCANUM_TERRAIN_EXPORT_TASK:-ARC-DEV-001}
-case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
+case "$task" in ARC-DEV-001) artifact_dir=builds ;; ARC-WORLD-001|ARC-GPAD-004|ARC-RENDER-006|ARC-WORLD-003|ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) artifact_dir=world-builds ;; *) printf '%s\n' 'Unsupported terrain export task.' >&2; exit 2 ;; esac
 build_root=${ARCANUM_BUILD_ROOT:-"$main_root/artifacts/$artifact_dir/$task/$head"}
 regression_task=$task
 # ARC-INPUT-001 (diagnostic palette) is delivered on the whole-core AREA build and
 # keeps every ARC-RENDER-007 gate; its palette matrices run in the synthetic gates.
 # ARC-WORLD-007 (LMB click-to-move) likewise; its route matrix runs in the area-grid probe.
+# ARC-WORLD-009 (cave and return) likewise; area_validate.py adds the cave input and its transition smoke.
 area_task=0
-case "$task" in ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007) area_task=1; regression_task=ARC-WORLD-003 ;; esac
+case "$task" in ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009) area_task=1; regression_task=ARC-WORLD-003 ;; esac
 if test "$build_root" != "$main_root/artifacts/$artifact_dir/$task/$head"; then printf '%s\n' 'Build root must bind the closed exact-head terrain task.' >&2; exit 2; fi
 if test -n "$(git status --porcelain)"; then printf '%s\n' 'Candidate must be clean and committed before exporting.' >&2; exit 2; fi
 if test "${ARCANUM_EXPORT_LEASE_HELD:-}" != 1; then
@@ -48,7 +49,8 @@ if test ! -x "$DOTNET" || test ! -x "$GODOT"; then printf '%s\n' 'Canonical SDK 
 mkdir -p "$build_root/evidence"
 cleanup_candidate() {
   git -C "$candidate_root" restore -- src/Arcanum.Data/packages.lock.json src/Arcanum.Presentation/packages.lock.json src/Arcanum.Input/packages.lock.json \
-    src/Arcanum.Simulation/packages.lock.json tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
+    src/Arcanum.Simulation/packages.lock.json src/Arcanum.Scripting/packages.lock.json src/Arcanum.Session/packages.lock.json \
+    tools/terrain-viewer/Core/packages.lock.json tools/terrain-viewer/Godot/packages.lock.json
   # Godot .uid files are tracked; the export must leave them unchanged.
 }
 trap cleanup_candidate EXIT HUP INT TERM
@@ -91,7 +93,7 @@ if test "$task" = ARC-WORLD-003 || test "$area_task" = 1; then
   run_log source-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --task "$regression_task" --kind grid-original --timeout 180
 fi
 if test "$area_task" = 1; then
-  run_log source-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root"
+  run_log source-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root" --task "$task"
   # Independent frozen oracles are generated before any native readback.
   oracles=$(/usr/bin/mktemp -d "$TMPDIR/area-oracles.XXXXXX")
   /usr/bin/python3 -B "$project_root/tools/area_motion_oracle.py" --output "$oracles/motion.json" >/dev/null
@@ -125,7 +127,7 @@ if test "$task" = ARC-WORLD-003 || test "$area_task" = 1; then
   run_log exported-grid-original.log /usr/bin/python3 -B "$project_root/tools/world_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$regression_task" --kind grid-original --timeout 180
 fi
 if test "$area_task" = 1; then
-  run_log exported-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root" --app "$app"
+  run_log exported-area-original.log /usr/bin/python3 -B "$project_root/tools/area_validate.py" --candidate-root "$candidate_root" --app "$app" --task "$task"
   area_probe exported-area-grid.log ARC_AREA_GRID_PROBE ARC_AREA_MOTION_ORACLE "$oracles/motion.json" "$app"
   area_probe exported-area-seams.log ARC_AREA_OWNER_SEAM_PROBE ARC_AREA_SEAM_ORACLE "$oracles/seams.json" "$app"
   area_probe exported-area-nearest.log ARC_AREA_NEAREST_PROBE ARC_AREA_NEAREST_ORACLE "$oracles/nearest.json" "$app"

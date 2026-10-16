@@ -406,8 +406,9 @@ before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
-checks the same transfers. The ordinary launcher does not pass the cave input yet:
-exported AREA builds that predate it reject the flag.
+checks the same transfers. The ordinary launcher passes the cave input only to an
+ARC-WORLD-009 build (`./arcanum area` prefers it); exported AREA builds that predate
+it reject the flag ([launcher](../workflow/local-development.md#cave-and-return-candidate-arc-world-009)).
 
 ## Verification and evidence status
 

@@ -36,7 +36,7 @@ class AreaRunnerTests(unittest.TestCase):
             spec.loader.exec_module(self.runner)
 
     def exercise(self, *, exported=False, code=0, output=None, coverage='valid',
-                 comparator_error=None, mutate_candidate=False, timeout=60, unsafe_private=False):
+                 comparator_error=None, mutate_candidate=False, timeout=60, unsafe_private=False, task=None):
         marker = 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS '
         output = output if output is not None else marker + 'PUBLIC-SYNTHETIC\n'
         with tempfile.TemporaryDirectory() as owned:
@@ -53,6 +53,8 @@ class AreaRunnerTests(unittest.TestCase):
             argv = [str(self.source), '--candidate-root', str(root), '--timeout', str(timeout)]
             if exported:
                 argv += ['--app', str(app)]
+            if task is not None:
+                argv += ['--task', task]
             report = {'publicSynthetic': True}
             result = dict(oracleSha256=area_validation.ORACLE_SHA256,
                 originalOccurrenceCoverage='PASS', originalAppearanceCoverage='PASS', drawCoverage='PASS',
@@ -123,6 +125,22 @@ class AreaRunnerTests(unittest.TestCase):
                 self.assertNotIn('PUBLIC-SYNTHETIC', encoded)
                 self.assertNotIn('synthetic-oracle', encoded)
                 self.assertNotIn('native.log', encoded)
+
+    def test_cave_task_passes_its_task_to_the_launcher_and_requires_the_transition_marker(self):
+        marker = 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS PUBLIC-SYNTHETIC\n'
+        missing = self.exercise(task='ARC-WORLD-009', output=marker)
+        self.assertEqual((1, 'native-observation', 0), (missing['exit'], missing['receipt']['failureStage'], missing['comparator_calls']))
+        self.assertIn('cave transition outcome', missing['failure'])
+        self.assertEqual('ARC-WORLD-009', missing['arguments_calls'][0].kwargs['task'])
+        passed = self.exercise(task='ARC-WORLD-009', output=marker + 'ARC-WORLD-009 native-smoke transition PASS []\n')
+        self.assertEqual((0, 'PASS'), (passed['exit'], passed['receipt']['caveTransition']))
+        # The receipt binds the cave smoke to its export task, and only to it.
+        area_validation.validate_report(passed['receipt'], 'a' * 40, 'source', 'ARC-WORLD-009')
+        with self.assertRaises(ValueError):
+            area_validation.validate_report(passed['receipt'], 'a' * 40, 'source')
+        with self.assertRaises(ValueError):
+            area_validation.validate_report(self.exercise()['receipt'], 'a' * 40, 'source', 'ARC-WORLD-009')
+        self.assertEqual('ARC-RENDER-007', self.exercise()['arguments_calls'][0].kwargs['task'])
 
     def test_failed_timeout_missing_marker_and_engine_errors_refuse_before_comparison(self):
         cases: tuple[dict[str, Any], ...] = ({'code': 1}, {'code': 124}, {'output': 'no marker\n'},

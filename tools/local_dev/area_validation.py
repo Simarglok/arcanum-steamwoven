@@ -486,7 +486,11 @@ def resource_summary(raw: object) -> dict:
             'residentBytes': resident, 'handles': handles, 'retiredGenerationCollected': True, 'outcome': 'PASS'}
 
 
-def validate_report(report: object, head: str, host: str) -> None:
+# Export tasks whose area-original native smoke also loads the cave and must bind its transition smoke.
+CAVE_TASKS = ('ARC-WORLD-009',)
+
+
+def validate_report(report: object, head: str, host: str, task: str = 'ARC-RENDER-007') -> None:
     if not isinstance(report, dict):
         raise ValueError('area report object')
     _require(re.fullmatch(r'[0-9a-f]{40}', head) is not None, 'area exact head')
@@ -499,11 +503,13 @@ def validate_report(report: object, head: str, host: str) -> None:
     resources = report.get('resources')
     _require(isinstance(resources, dict) and resources.get('outcome') == 'PASS'
              and resources.get('sweepCommands') == 37363, 'area resource observation')
+    # The summary task names the gate schema; the cave receipt binds the export task's own smoke.
+    _require(report.get('caveTransition') == ('PASS' if task in CAVE_TASKS else None), 'area cave transition binding')
 
 
-def validate_reports(evidence: Path, head: str) -> None:
+def validate_reports(evidence: Path, head: str, task: str = 'ARC-RENDER-007') -> None:
     for host in ('source','exported'):
         data = config.optional_authority_bytes(evidence / f'{host}-area-original.log')
         _require(data is not None, 'missing area report')
         assert data is not None
-        validate_report(json.loads(data),head,host)
+        validate_report(json.loads(data),head,host,task)

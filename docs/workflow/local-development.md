@@ -8,7 +8,7 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-007 build, else ARC-INPUT-001, else ARC-RENDER-007
+    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-WORLD-009 build, else ARC-WORLD-007, else ARC-INPUT-001, else ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum status                                      # which modes have every input configured
 
@@ -36,11 +36,11 @@ The only persistent files are owner-only (0600), atomically replaced JSON docume
 
 They have schemas `arcanum-local-config-v1` and `build-registry-v1`. They hold registered artifact-root identifiers, explicit original-input roles, a safe non-path source label, preferences, selection, and acceptance lifecycle records. They never belong in Git. Test runs may set `ARCANUM_LOCAL_HOME` to an owned temporary directory.
 
-Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
+Configuration does not scan a machine. `configure discover --game-root PATH` examines only that caller-selected directory and the known role candidates in `GAME_ROLES` (`tools/local_dev/launch.py`: module, the three resource archives, the module patch, the normal-game mobile file, the cave object file and the prototype directory), without following symlinks; a result requires the documented candidate's exact size and SHA-256 gate (the prototype directory must hold `.pro` files). `--write-inputs` replaces the configured inputs with every verified role and fails closed, writing nothing, when any role is missing. `configure inputs` sets roles explicitly instead. The original installation is never changed and paths are not printed unless an inventory has the explicit local-only `--show-paths` option.
 
     tools/arcanum-local list [--json]
     tools/arcanum-local configure discover --game-root PATH [--write-inputs]
-    tools/arcanum-local configure inputs --module PATH --terrain-resource PATH --actor-resource PATH --prototypes PATH [--source-id LABEL]
+    tools/arcanum-local configure inputs --module PATH --terrain-resource PATH --actor-resource PATH --prototypes PATH [--source-id LABEL] [--area-mobile PATH --area-effects PATH --area-patch PATH] [--cave-mobile PATH]
     tools/arcanum-local configure add-artifact-root --id ID PATH
     tools/arcanum-local configure select-launch --tool terrain --candidate ROOT_ID:ARC-DEV-001:CANDIDATE
 
@@ -137,8 +137,8 @@ gate and environment input (AREA probes, human/grid regressions as ARC-WORLD-003
 and its synthetic gates additionally require the `ARC-INPUT-001 palette chord matrix`
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
 `crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
-an exact ARC-RENDER-007, ARC-INPUT-001 or ARC-WORLD-007 v2 artifact and nothing
-broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007 or ARC-WORLD-009 v2 artifact and
+nothing broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
 
 ## Click-to-move candidate (ARC-WORLD-007)
 
@@ -147,6 +147,24 @@ ARC-WORLD-007 uses the same endpoint, root and literal task mechanism
 set. Its route matrix runs inside the source and exported `area-grid` probes
 (`ARC-WORLD-007 AREA route synthetic PASS`, a failure exits non-zero), and its
 grid-original reports must carry the keyboard route like ARC-INPUT-001's.
+
+## Cave and return candidate (ARC-WORLD-009)
+
+ARC-WORLD-009 uses the same endpoint, root and literal task mechanism
+(`ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-009`) with exactly the ARC-RENDER-007 gate
+set. Its builds take one more input role, `caveMobile` (the cave's object file
+`modules/Arcanum/maps/rknp rivh uhngp`, 6,698 bytes, pinned like the other roles),
+which `./arcanum setup` discovers. The launcher passes `--area-cave-mobile` only when
+the launched manifest's task is ARC-WORLD-009 (`launch.TASK_ROLES`); older AREA
+builds reject that flag and never receive it. In the export, `area_validate.py --task
+ARC-WORLD-009` adds the cave input to both area-original native smokes and requires
+`ARC-WORLD-009 native-smoke transition PASS`; its area-original receipts carry
+`caveTransition: PASS`, which registration requires for this task and refuses for any
+other. A home configured before this role existed must run `./arcanum setup` (or
+`configure discover --write-inputs`, or `configure inputs ... --cave-mobile PATH`)
+again: launching the ARC-WORLD-009 build otherwise stops with the missing role named,
+and `./arcanum status` lists it for the build `area` would choose. Setup writes nothing
+unless every pinned role, the cave file included, is found with its exact identity.
 
 ## Bounded original grid candidate (ARC-WORLD-003)
 

@@ -185,7 +185,8 @@ runtime receives therefore share one Data verdict.
   `ROUTE_LOCAL_SEARCH` and the actor arrived at (3,3) in one segment.
 - Export: literal task `ARC-WORLD-007` in the closed terrain endpoint with exactly the
   ARC-RENDER-007 gate set; the route matrix runs inside its source and exported
-  `area-grid` probes. `./arcanum area` prefers the current ARC-WORLD-007 build.
+  `area-grid` probes. `./arcanum area` prefers the current ARC-WORLD-007 build over
+  older AREA builds (an ARC-WORLD-009 cave build, which includes the route, comes first).
 
 ## NOT READY
 
