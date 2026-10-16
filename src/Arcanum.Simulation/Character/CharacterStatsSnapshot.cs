@@ -5,7 +5,8 @@ namespace Arcanum.Simulation.Character;
 /// <summary>
 /// Detached, fully computed view of one revision under one context. Later owner changes never alter it.
 /// Base of a stored stat is the stored value; base of a derived stat is its formula before effects.
-/// Effective = effects applied to base, then clamped to the race range.
+/// Effective = the context's situational adjustment (poison, crippled legs) added to base, then effects, then clamped to
+/// the race range.
 /// </summary>
 public sealed class CharacterStatsSnapshot
 {

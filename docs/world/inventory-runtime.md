@@ -87,7 +87,7 @@ the host replaces the owner, like the party port.
 
 ## Snapshot schema 5
 
-(Schema 7 since ARC-WORLD-019; the inventory part is described here.)
+(Schema 7 since ARC-WORLD-019, schema 8 since ARC-COMBAT-002; the inventory part is described here.)
 
 `GameSessionSnapshot.Inventory` is encoded between `hero` and `random` (between `hero` and `lighting` before schema 7). Schema 6 (ARC-WORLD-015) added `gold` and the
 `kit` list:

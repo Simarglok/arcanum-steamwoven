@@ -5,7 +5,8 @@ Godot-free C# owner in `Arcanum.Simulation` (namespace `Arcanum.Simulation.Chara
 for [FR-CHAR-008..011](../requirements/characters-skills.md#fr-char-008): stored base
 versus effective values, set-time limits, race/gender innate effects and read-only
 derived stats. Since ARC-WORLD-015 the [game session's hero](starting-hero-runtime.md) is one
-of these owners (saved in snapshot schema 6, effective intelligence for dialog gates); the viewer is not wired and
+of these owners (saved in snapshot schema 6, effective intelligence for dialog gates). Since ARC-COMBAT-002 a query
+context also carries the [life state](life-state-runtime.md)'s poison level and crippled legs; the viewer is not wired and
 its conversation keeps the PROJECT diagnostic PC profile
 (see [dialog conversation](../scripting/dialog-conversation-runtime.md)). Character
 creation, skills, levels, backgrounds and effect lifetimes are separate requirements.
@@ -61,7 +62,10 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
   invalid effect. Intermediate results saturate at ±1,000,000,000 (beyond that bound
   accumulation becomes order-dependent); source overflow behaviour is unknown.
 - **Context is explicit.** Sector aptitude adjustment is a query argument bounded to
-  −100..100, not read from a world location.
+  −100..100, not read from a world location. Poison level (0..1000) and crippled legs
+  (ARC-COMBAT-002) are query arguments too: poison lowers ST and DX by `min(3, poison / 100)`
+  and crippled legs lower speed by 5, added to the base before effects and the clamp, as in
+  [`stat_level_get`][stat-get]. `GetBase` still reports the stored value or the formula.
 
 ## API
 
@@ -78,8 +82,8 @@ and revision unchanged. The owner is caller-serialized: no locks, events or call
 
 ## Not implemented
 
-Skill/spell/tech prerequisite checks when lowering a stat; background, poison,
-Tempus Fugit, crippled-leg, day/night mage and persuasion-expert adjustments; level,
+Skill/spell/tech prerequisite checks when lowering a stat; background,
+Tempus Fugit, day/night mage and persuasion-expert adjustments; level,
 experience, alignment, fate, unspent points, age and poison stats; HP/fatigue and
 encumbrance recalculation on effect changes; effect lifetimes and durations (FR-CHAR-022);
 skills and resistances; character creation beyond the pre-made start of
