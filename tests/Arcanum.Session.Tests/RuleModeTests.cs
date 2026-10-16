@@ -110,6 +110,8 @@ public sealed class RuleModeTests
             "{\"schema\":1,\"rules\":\"Original\"}", "{\"schema\":1,\"rules\":1}",
             "{\"schema\":1,\"rules\":\"original\",\"extra\":0}", "{\"schema\":1,\"rules\":\"original\",\"rules\":\"original\"}",
             "{\"schema\":1.5,\"rules\":\"original\"}", "{\"schema\":1,\"rules\":\"\\ud800\"}",
+            "{\"schema\":1,\"rules\":\"\ud800\"}", "{\"schema\":1,\"rules\":\"original\",}", "{\"schema\":1,\"rules\":{\"a\":[[[]]]}}",
+            new string('[', 100) + new string(']', 100),
         })
             Assert.AreEqual(RuleMode.Steamwoven, RuleModeSettingCodec.DeserializeOrSteamwoven(json), json ?? "null");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => RuleModeSettingCodec.Serialize((RuleMode)9));

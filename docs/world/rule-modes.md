@@ -3,8 +3,9 @@
 Status: **Implemented bounded component**, ARC-WORLD-023. The game has two rule modes (owner decision D8 of the
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#owner-decisions-2026-10-16), extended to every domain by the
 owner on 2026-10-17): **Steamwoven**, the original game with the recorded fixes, which is the default, and
-**Original**, the retail 1.0.7.4 behaviour including the bugs of the original game. The player picks the mode in the
-settings menu and can change it during play without a restart. This contract fixes the mechanism every domain uses and
+**Original**, the retail 1.0.7.4 behaviour including the bugs of the original game. The player will pick the mode in
+the settings menu and change it during play without a restart (there is no menu yet, see [Not ready](#not-ready)); the
+mechanism below already allows it. This contract fixes the mechanism every domain uses and
 keeps the registry of mode differences. The architecture decision is recorded in
 [architecture direction](../architecture/decisions.md).
 
@@ -22,9 +23,9 @@ and the [verification ledger](../research/original-verification-ledger.md) recor
 | Project improvement recorded by the owner (for example persisted AI ticks, OQ2) | the improvement | the original's behaviour (a switch) |
 
 So a switch exists only where Steamwoven deliberately differs from the retail game. A CE slip never becomes a switch.
-**The Original mode never reproduces a crash, a hang or an out-of-bounds read**: such bugs are fixed in both modes and
-listed in the registry as "both fixed", because reproducing them would end the game rather than show the original
-rules.
+Project policy (proposed with this contract, open to the owner): **the Original mode never reproduces a crash, a hang
+or an out-of-bounds access**; such bugs are fixed in both modes and listed in the registry as "both fixed", because
+reproducing them would end the game rather than show the original rules.
 
 ## Mechanism
 
@@ -73,16 +74,19 @@ until then both modes behave as the original):
 | Domain | Ledger IDs | Note |
 | --- | --- | --- |
 | Combat | A9 | `FirstSubturnStartedTwice` reserved (fix accepted). |
-| Magic | MG3, MG4, MG5, MG6, MG7, MG9, MG10, MG11, MG15, MG18, MG19; CE changes: shell order, charm bonus, summon palette, resistance source (O9), effect min/max | MG12 and LM20 (out-of-bounds writes and copies) are fixed in both modes. |
-| Skills | SK8, LM17, auto-level A3 (both fixed: null read) | SK1, SK2, SK4, SK5, LM1, LM2 and dodge are CE slips, no switch; dodge already follows the original's 2 × level in `AttackRules`. |
-| AI and reaction | reaction A2 (a deliberate hit raises the follower's reaction; Steamwoven fix proposed, owner to confirm), reaction A4 charm asymmetry (decision D2 of that study), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (decision D1 to revisit) and the companion wait timer are CE slips. |
+| Magic | MG3, MG4, MG5, MG6, MG7, MG9, MG10, MG11, MG15, MG18, MG19, LM10; CE changes: shell order, charm bonus, summon palette, resistance source (O9), effect min/max | MG12 and LM20 (out-of-bounds writes and copies) are fixed in both modes. |
+| Skills | SK8, LM17, SK3 repair off-by-one (multiplayer only), auto-level A3 (both fixed: null read) | SK1, SK2, SK4, SK5, LM1, LM2 and dodge are CE slips, no switch; dodge already follows the original's 2 × level in `AttackRules`. |
+| AI and reaction | LM3 and LM12 (both fixed: out-of-bounds, latent), reputation A5 (both fixed: out-of-bounds read, latent), reaction A2 (a deliberate hit raises the follower's reaction; Steamwoven fix proposed, owner to confirm), reaction A4 charm asymmetry (decision D2 of that study), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (decision D1 to revisit) and the companion wait timer are CE slips. |
 | Scripts | X3 tile writeback, X10 unmasked flag write, X2 (both fixed: uninitialised read) | X1, X3 sector, X6 detail, X7, X8 are CE slips. |
 | Event queue | TE1 (overflow edges), TE3/OQ1 tie order (FIFO decided without a switch) | |
-| World | LA4 direction-5 leaving on the portal tile | LA1, LA2 and the tile swap itself are CE slips. |
+| World | LA4 direction-5 leaving on the portal tile; clock day carry only above one day (off by one), clock subtraction underflow, exchanged current day/month getters (dead code); wilderness A6 (both fixed: a null name faults) | LA1, LA2 and the tile swap itself are CE slips. |
+
+The list covers every "Original bug" and "CE change" row of the ledger.
 
 ## Not ready
 
 - No domain reads `GameSessionOwner.Rules` yet: combat is not wired into the session and the event queue is not owned
   by it; each wiring slice passes `Rules.Combat` or `Rules.Events` at its call.
-- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu.
+- There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
+  (F8) keeps the current session's mode.
 - Domains other than combat and the event queue have no profile yet; their first switch adds one.

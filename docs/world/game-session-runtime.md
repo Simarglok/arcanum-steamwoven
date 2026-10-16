@@ -35,8 +35,8 @@ during an inventory transfer; a call back into the owner from it makes that tran
 
 | Entry | Contract |
 | --- | --- |
-| `GameSessionOwner.Create(GameSessionDescriptor)` | Clock `ProfileBinding`, GF descriptor, initial `ActorPlacement`, optional limits, optional hero (ARC-WORLD-015) and the random seed (ARC-WORLD-019, default 0). Validates the actor and the hero (`InvalidHero`), bootstraps the clock, then creates the GF owner. Any rejection returns no owner, a `GameSessionFailure`, and the inner `ClockFailure` / `GlobalFlagReason`; a clock already built is disposed. |
-| `GameSessionOwner.Restore(GameSessionSnapshot, GameSessionRestoreOptions)` | Checks schema, world, module, the exact clock profile, actor, map keys, budgets, story, party, hero and inventory **before** building anything, then rebuilds clock (saved time, pause, revision) and GF (saved domain, known values, revision, new epoch). Never touches an existing owner. |
+| `GameSessionOwner.Create(GameSessionDescriptor)` | Clock `ProfileBinding`, GF descriptor, initial `ActorPlacement`, optional limits, optional hero (ARC-WORLD-015) the random seed (ARC-WORLD-019, default 0) and the rule mode (ARC-WORLD-023, default Steamwoven; undefined is `InvalidDescriptor`). Validates the actor and the hero (`InvalidHero`), bootstraps the clock, then creates the GF owner. Any rejection returns no owner, a `GameSessionFailure`, and the inner `ClockFailure` / `GlobalFlagReason`; a clock already built is disposed. |
+| `GameSessionOwner.Restore(GameSessionSnapshot, GameSessionRestoreOptions)` | Checks the options' rule mode (undefined is `InvalidDescriptor`; the snapshot holds none), schema, world, module, the exact clock profile, actor, map keys, budgets, story, party, hero and inventory **before** building anything, then rebuilds clock (saved time, pause, revision) and GF (saved domain, known values, revision, new epoch). Never touches an existing owner. |
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
 | `ApplyChanges(expected, actor?, changes)` | ARC-WORLD-017: one guarded atomic step over the actor (when given) and a list of `MapChangeEdit(Map, Key, Value?)` (null clears the key). Validates the actor, every map and key and that no key is listed twice, then the version; NoChange when nothing would differ; the budget is checked on the state after the whole step (an update or a move of a key never needs room); then revision capacity. A refusal applies nothing; otherwise everything applies with one revision. The viewer's map transfer carries the PC's followers with it ([companion map change](companion-follow-runtime.md#map-change-arc-world-017)). |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
@@ -246,6 +246,8 @@ and a literal, independently written canonical JSON text:
 - `SessionRandomTests`: labelled rolls, their save and replay, and the combat roll source
   (see [session randomness](session-random-runtime.md#tests)).
 - `LifeStateTests`: the life domain (see [life state](life-state-runtime.md#tests)).
+- `RuleModeTests`: the rule mode composition and names, create and restore under either mode, switching without a
+  revision or snapshot change, disposal, and the setting codec (see [rule modes](rule-modes.md)).
 - `SaveSlotTests`: the file is exactly the codec text and restores the same session;
   missing file or directory, a directory at the slot path; overwrite; a failure before the replace keeps the previous
   save and removes the temporary file; an unwritable slot; a stale temporary file;

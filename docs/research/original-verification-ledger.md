@@ -90,7 +90,7 @@ Source: [skills](skills-evidence.md#8-ce-anomalies-found-by-this-reading),
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| Dodge (new, SKX1) | `basic_skill_effectiveness` (0x4C62E0) | Dodge effectiveness is **2 × level**; CE and the project use 5 × level. The other basic and tech formulas match CE. | CE slip |
+| Dodge (new, SKX1) | `basic_skill_effectiveness` (0x4C62E0) | Dodge effectiveness is **2 × level**; CE uses 5 × level (the project did until ARC-WORLD-023). The other basic and tech formulas match CE. | CE slip |
 | SK1 | `script_execute_action` (0x447220), get-skill case | Returns after storing the level; no fall-through into "cast spell". | CE slip |
 | SK2 | `skill_ui_dec_skill` (0x57AEB0) | The loop re-reads the points each pass: one click removes points until the level changes and refunds each; no hang. | CE slip |
 | SK3 | `skill_ui_set_training` (0x57AC90) | Routes basic and tech correctly, except that skill 12 (repair) goes to the basic setter, which refuses it. `ui_set_skill_training` is called only from the multiplayer handler. | CE slip (labels); off-by-one is an original bug, multiplayer only |

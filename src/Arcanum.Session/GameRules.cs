@@ -23,7 +23,7 @@ public enum RuleMode
 /// calls without a restart and any save loads under either mode (D4). A domain slice that adds switches adds its
 /// profile here; until then it has no difference between the modes.
 /// </summary>
-public sealed record GameRules
+public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events)
     {
