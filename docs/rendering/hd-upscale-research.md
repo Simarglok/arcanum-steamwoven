@@ -183,14 +183,17 @@ process per file (start-up dominates the pixel-art rows).
   value range; hq2x and xBR blend a little (87–94 % in palette). They were designed
   for flat-colour sprites; Arcanum's sprites are pre-rendered and dithered, with
   ~170 colours per frame, so the detectors find few clean edges. Judgement from the
-  local outputs: at 2× they look like the nearest replica with slightly smoothed
-  outlines. They also change silhouettes: xBR and xBRZ the most (IoU 0.96–0.97),
+  local outputs: at 2× Scale2x, Eagle, hq2x and xBR look like the nearest replica
+  with slightly smoothed outlines. They also change silhouettes: xBR and xBRZ the most (IoU 0.96–0.97),
   Scale2x and Eagle 0.98, hq2x 0.996.
 - **xBRZ** blends the most of the family (56 % in palette, ~2,800 colours, MAE 2.6)
   and is the only one with a visible smoothing of contours and large shapes in the
   local outputs (judgement), but it adds no texture detail: rock, cloth and foliage
   stay as blocky as in the nearest replica. Its alpha-aware mode produces soft alpha
-  on 2.8 % of pixels (the most of the family) with almost no dark halo (0.14 %).
+  on 2.8 % of pixels (the most of the family) and is the only one of the family
+  with any dark halo, though small (0.14 %). Its `argb` mode builds a buffer once
+  per process (100–300 ms per the header; `argbUnbuffered` avoids it), which is
+  part of its per-file time here.
 - **AI scalers repaint every pixel** (only ~9–10 % of output pixels keep a source
   colour; ~6,000–12,000 colours per frame) and invent soft alpha on ~14 % of the
   pixels when fed RGBA directly. Because transparent pixels are `(0,0,0,0)`, the
@@ -243,7 +246,8 @@ pixels on this Mac, see Determinism).
   and facades are 78×40 diamonds with transparent corners; upscaled one by one, the
   diamond edges get dark seams (AI: 0.4–0.9 % of the chunk, the alpha variants remove
   most of it) and Scale2x, Eagle and xBR erode the diamond edges so that 1.0–1.4 %
-  of the chunk is left uncovered (holes the Legacy terrain does not have; hq2x 0.07 %). Per-tile is
+  of the chunk is left uncovered (holes the Legacy terrain does not have; hq2x 0.07 %,
+  xBRZ 0.06 %). Per-tile is
   also the slowest (one process per frame).
 - **A 512 chunk alone gets an edge band.** AI output differs from the neighbourhood
   bake mainly in the outer 16 pixels (band MAE 1.6–3.4 vs interior 0.06–1.3), i.e. a
@@ -276,7 +280,7 @@ allocations the process owns).
 | x4plus | 13.5 s (~67 k px/s), 665 MiB | 24.7 s (~96 k px/s), 1,833 MiB | 32.3 s, 926 MiB |
 | x4anime | 4.0 s (~228 k px/s), 320 MiB | 10.8 s, 1,586 MiB | 13.4 s, 664 MiB |
 | hq2X / xbr2X (ImageMagick) | — | 1.5 s / 2.1 s, 246 MiB | — |
-| xbrz2X (local CLI, one thread, plus raw/PNG conversion) | — | 2.8 s | — |
+| xbrz2X (local CLI, one thread, plus raw/PNG conversion; from the terrain run, where hq2X/xbr2X took 1.3/1.7 s; footprint not taken, ~220 MiB RSS) | — | 2.8 s | — |
 
 The x4 models are much slower mostly because of their architecture (a deep RRDB
 network against av3's compact one; inference, not profiled) and need the extra Box
@@ -349,8 +353,9 @@ same settings work on small GPUs; permissive licences for code, binary and weigh
   reaches the screen only above magnification 1).
 - **Not recommended:** `realesrgan-x4plus-anime` (flattens texture; strongest halo
   when fed RGBA) and any AI run on raw RGBA (soft alpha, dark halo).
-- **No-AI fallback:** hq2x, the pixel-art scaler with near-zero holes (0.07 %) and
-  dark pixels (0.05 %) in the per-tile test and no sprite halo; expect little visible
+- **No-AI fallback:** hq2x: near-zero holes (0.07 %) and dark pixels (0.05 %) in the
+  per-tile test like xBRZ (0.06 % / 0.08 %), but no sprite halo and far less soft
+  alpha; expect little visible
   gain over Legacy. xBRZ smooths contours more but invents soft alpha (2.8 %) and
   keeps only 56 % of source colours, so it is the pick only if smoother outlines
   are wanted without AI. The pixel-art family measured here (Scale2x, Eagle, hq2x,
