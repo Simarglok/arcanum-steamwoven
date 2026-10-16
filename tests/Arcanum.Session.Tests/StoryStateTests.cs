@@ -149,7 +149,7 @@ public sealed class StoryStateTests
 
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"story\":{\"quests\":[{\"quest\":1001,\"state\":\"Accepted\",\"botched\":false,\"timestampMs\":54000000}]," +
-            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}]}" + EmptyParty + NoHero + EmptyInventory + ",\"lighting\":null}");
+            "\"globalQuests\":[],\"rumors\":[{\"rumor\":1200,\"timestampMs\":54000000}]}" + EmptyParty + NoHero + EmptyInventory + FreshRandom + ",\"lighting\":null}");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(owner.QueryQuest(1001), restored.QueryQuest(1001));
         Assert.AreEqual(StartMs, restored.QueryRumor(1200));

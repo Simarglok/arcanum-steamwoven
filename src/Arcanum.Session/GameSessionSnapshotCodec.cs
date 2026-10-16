@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Collections.Immutable;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using Arcanum.Scripting.GlobalFlags;
@@ -19,7 +20,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 6. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 7. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -29,7 +30,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -53,6 +54,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
+    private static readonly string[] RandomFields = ["seed", "draws"];
 
     public static string Encode(GameSessionSnapshot snapshot)
     {
@@ -235,6 +237,11 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("random");
+            w.WriteString("seed", snapshot.Random.Seed.ToString("x16", CultureInfo.InvariantCulture));
+            w.WriteNumber("draws", snapshot.Random.Draws);
+            w.WriteEndObject();
+
             if (snapshot.Lighting is { } lighting)
             {
                 w.WriteStartObject("lighting");
@@ -306,7 +313,19 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Lighting(f["lighting"]));
+    }
+
+    private static SessionRandomState Random(JsonElement element)
+    {
+        const string p = "$.random";
+        var f = Fields(element, p, RandomFields);
+        // Exactly 16 lowercase hex digits, so one seed has one spelling.
+        var text = String(f["seed"], p + ".seed");
+        if (text.Length != 16 || !text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f')))
+            throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".seed");
+        var seed = ulong.Parse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
+        return new(seed, Long(f["draws"], p + ".draws", 0, long.MaxValue));
     }
 
     private static SessionLightingState? Lighting(JsonElement element)

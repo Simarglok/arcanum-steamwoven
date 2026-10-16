@@ -196,7 +196,7 @@ public sealed class PartyStateTests
         StringAssert.Contains(text, ",\"party\":{\"followers\":[{\"entity\":\"golem\",\"forced\":true,\"spreadOut\":true}," +
             "{\"entity\":\"ari\",\"forced\":false,\"spreadOut\":false}]," +
             "\"others\":[{\"entity\":\"sogg\",\"standing\":\"Waiting\",\"spreadOut\":false,\"jilted\":false}," +
-            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true}]}" + NoHero + EmptyInventory + ",\"lighting\":null}");
+            "{\"entity\":\"virgil\",\"standing\":\"Free\",\"spreadOut\":false,\"jilted\":true}]}" + NoHero + EmptyInventory + FreshRandom + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryParty().Followers.ToArray(), restored.QueryParty().Followers.ToArray());
@@ -320,7 +320,7 @@ public sealed class PartyStateTests
         GameSessionFailure Restored(SessionCompanion[] followers, SessionCompanion[] others)
         {
             var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
-                saved.Actor, saved.Maps.ToArray(), saved.Story, new SessionPartyState(followers, others), saved.Hero, saved.Inventory, saved.Lighting);
+                saved.Actor, saved.Maps.ToArray(), saved.Story, new SessionPartyState(followers, others), saved.Hero, saved.Inventory, saved.Random, saved.Lighting);
             var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
             result.Owner?.Dispose();
             return result.Failure;
