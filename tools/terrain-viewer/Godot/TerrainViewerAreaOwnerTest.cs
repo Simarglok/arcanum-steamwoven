@@ -121,6 +121,38 @@ public static partial class TerrainViewerSelfTest
                 await SameAsPerCommand($"decimated zoom {zoom} pan {pan}",level);
                 views++;
             }
+            // ARC-RENDER-010: under ambient lighting a single-channel chunk is tinted like its
+            // per-command terrain (identical readback), and a mixed-channel chunk is not drawn
+            // as a chunk. Fixture terrain words have type bit 0 (indoor).
+            var channels=AreaAmbientPolicy.Channels(snapshot,plan);
+            if(plan.Commands.Where(c=>c.Identity is null).Any(c=>channels[c.Visual]!=AreaAmbientChannel.Indoor))
+                throw new InvalidOperationException("AREA_OWNER_LIGHT_CHANNELS");
+            var pair=new Arcanum.Data.Lighting.AmbientPair(new(200,180,120),new(90,140,230));
+            foreach(var (zoom,level) in new[]{(1f,0),(.5f,1)})
+            {
+                var origin=new Vector2(60,100)-new Vector2(0,MathF.Round(2520*zoom));
+                viewport.CanvasTransform=new Transform2D(0,new(zoom,zoom),0,origin);
+                canvas.AreaTerrainChunksEnabled=true; canvas.SetStaticVisibilityForReadback(false);
+                canvas.SetAreaAmbient(new(pair,channels));
+                canvas.PublishArea(plan,frames,actor.Result.ActorPlan!,actor.Arguments.ActorInput!,cache); await Settle();
+                await SameAsPerCommand($"lit zoom {zoom}",level);
+                if(zoom==1f)
+                    using(var image=viewport.GetTexture().GetImage())
+                    {
+                        // Tile source (10,20,200) x indoor (90,140,230)/255, hand-computed: (3.5,11.0,180.4).
+                        var p=image.GetPixel((int)MathF.Floor(origin.X-20),(int)MathF.Floor(origin.Y+2520));
+                        var lit=((int)Math.Round(p.R*255),(int)Math.Round(p.G*255),(int)Math.Round(p.B*255));
+                        if(Math.Abs(lit.Item1-4)>1 || Math.Abs(lit.Item2-11)>1 || Math.Abs(lit.Item3-180)>1)
+                            throw new InvalidOperationException($"AREA_OWNER_LIT_TILE {lit}");
+                        samples++;
+                    }
+                var mixed=new Dictionary<AreaVisualKey,AreaAmbientChannel>(channels);
+                foreach(var command in plan.Commands.Where(c=>c.Identity is null).Where((_,i)=>i%2==1)) mixed[command.Visual]=AreaAmbientChannel.Outdoor;
+                canvas.SetAreaAmbient(new(pair,mixed)); await Settle();
+                if(canvas.AreaChunkCount!=0) throw new InvalidOperationException($"AREA_OWNER_MIXED_CHUNK_DRAWN zoom {zoom}");
+                canvas.SetAreaAmbient(null); canvas.SetStaticVisibilityForReadback(true); await Settle();
+                views++;
+            }
             canvas.AreaTerrainChunksEnabled=true;
             // B's logical center anchor (9,2547) is left of this world view.
             // Its selected canopy still covers the literal sample (20,2540).

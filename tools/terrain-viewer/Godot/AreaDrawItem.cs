@@ -16,6 +16,7 @@ public partial class AreaDrawItem : Node2D
         uniform ivec2 screen_start;
         uniform ivec2 screen_size;
         uniform float body_alpha = 1.0;
+        uniform vec3 ambient = vec3(1.0);
         void fragment() {
             ivec2 p = ivec2(FRAGCOORD.xy) - screen_start;
             if (any(lessThan(p, ivec2(0))) || any(greaterThanEqual(p, screen_size))) discard;
@@ -24,7 +25,7 @@ public partial class AreaDrawItem : Node2D
             int sx = x.x + x.y * 256 - 1;
             int sy = y.x + y.y * 256 - 1;
             if (sx < 0 || sy < 0) discard;
-            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(1.0, 1.0, 1.0, body_alpha);
+            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(ambient, body_alpha);
         }
         """;
     // Two immutable shader programs for process lifetime, not per-object copies.
@@ -32,6 +33,7 @@ public partial class AreaDrawItem : Node2D
     private static readonly Lazy<Shader> AddShader = new(() => new Shader { Code = Code.Replace("blend_mix", "blend_add", StringComparison.Ordinal) });
     private ShaderMaterial? _material;
     private (bool Additive, int Alpha)? _materialState;
+    private Color? _ambientState;
     private ImageTexture? _mapping;
     private AreaMappingKey? _key;
     private (Transform2D Transform, Rect2I Envelope, TerrainRect Source, TerrainRect Destination, bool X, bool Y)? _keyed;
@@ -42,6 +44,8 @@ public partial class AreaDrawItem : Node2D
     public ImageTexture? FrameTexture { get; set; }
     public AreaDrawCommand? Command { get; set; }
     public ActorDiagnosticDrawCommand? Actor { get; set; }
+    /// <summary>ARC-RENDER-010 ambient multiplier of this item's channel; white leaves source pixels unchanged.</summary>
+    public Color Ambient { get; set; } = Colors.White;
     /// <summary>Shared index rows owned by the canvas. A standalone item (tests, probes)
     /// keeps a private cache holding only its current row.</summary>
     internal AreaMappingCache? Mappings { get; set; }
@@ -99,6 +103,12 @@ public partial class AreaDrawItem : Node2D
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
             _materialState = (command.Additive, command.Alpha);
+            _ambientState = null; // re-send the ambient uniform with every shader swap
+        }
+        if (_ambientState != Ambient)
+        {
+            _material.SetShaderParameter("ambient", new Vector3(Ambient.R, Ambient.G, Ambient.B));
+            _ambientState = Ambient;
         }
         if (_state == state)
         {
@@ -176,7 +186,7 @@ public partial class AreaDrawItem : Node2D
 
     public override void _ExitTree()
     {
-        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null;
+        ReleaseMapping(); Material = null; _material?.Dispose(); _material = null; _materialState = null; _ambientState = null;
         _ownMappings?.Dispose(); _ownMappings = null;
     }
 }

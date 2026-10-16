@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
 using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 
@@ -10,7 +11,11 @@ namespace Arcanum.TerrainViewer.Core;
 public sealed record DecodedAreaFrame(int Width, int Height, byte[] Rgba);
 public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, AreaScenePlan Plan,
     IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Frames, AreaBudgetUsage InitialUsage, AreaBudgetUsage FinalUsage,
-    long CpuRgbaBytes, long AllocatedBytes, long ManagedBytes, long ProcessBytes, long ElapsedMilliseconds);
+    long CpuRgbaBytes, long AllocatedBytes, long ManagedBytes, long ProcessBytes, long ElapsedMilliseconds)
+{
+    /// <summary>ARC-RENDER-010 day/night inputs; absent for structural fixtures (drawn unlit).</summary>
+    public AreaLightingPlan? Lighting { get; init; }
+}
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
 public static class AreaRepositoryPolicy
@@ -53,6 +58,11 @@ internal static class AreaLoadOperation
         var actor = ActorDiagnosticSource.Create(module, actorResource, arguments.ActorInput!, 0, 0, token, mode: TerrainViewerMode.WorldDiagnostic);
         if (checked(retained + actor.CheckedRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
+        // Lighting rules and sector scheme words come from the same module archive, bound to this
+        // snapshot's sector identities; the module file is re-verified below.
+        var lighting = AreaLightingReader.Read(module, snapshot, token);
+        if (lighting.Failure != LightingFailure.None) throw new InvalidOperationException("AREA_LIGHTING_" + lighting.Failure);
+        Console.WriteLine($"ARC-RENDER-010 load stage=lighting mapDefault={lighting.Source!.MapDefaultScheme} schemes={lighting.Source.Schemes.Count} sectors={lighting.Source.SectorSchemes.Count}");
         VerifyFile(arguments.ModulePath, moduleIdentity, token); VerifyFile(arguments.ResourcePath, resourceIdentity, token);
         VerifyFile(arguments.ActorResourcePath!, actorIdentity, token);
         // A genuine terrain plan supplies the legacy result's geometry, not a
@@ -65,7 +75,7 @@ internal static class AreaLoadOperation
                 command.MapY - AreaScenePlan.CameraOriginY, command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
         var elapsed = Environment.TickCount64 - started;
-        area = area with { FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
+        area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)), FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
             ManagedBytes = GC.GetTotalMemory(false), ProcessBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
             ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);

@@ -116,6 +116,8 @@ public partial class TerrainViewerApp
         _worldPanel.FitRequested += FitWorldView;
         _worldPanel.ResetSceneRequested += PaletteResetScene;
         _worldPanel.ReloadRequested += PaletteReload;
+        _worldPanel.GameHourRequested += PaletteGameHour;
+        _worldPanel.LightingToggleRequested += PaletteLightingToggle;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
         _worldFocusWindow = GetWindow();
@@ -162,7 +164,7 @@ public partial class TerrainViewerApp
         if (!_worldInitialized || !IsWorld || _worldPanel is null) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
-        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); }
+        else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); }
         _worldAdapter.PaletteOpen = _worldPanel.IsOpen;
         RefreshReadyStatus();
     }
@@ -410,6 +412,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not null)
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
+            FollowAreaAmbient();
             _canvas!.PublishArea(_readyArea, actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);

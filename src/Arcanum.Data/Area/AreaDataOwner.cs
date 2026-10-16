@@ -47,7 +47,7 @@ public sealed partial class AreaDataOwner : IDisposable
             if (inputs.Inputs.Count > 4L + limits.MaxPrototypes ||
                 plan.Identities.Count > 4L + limits.MaxPrototypes ||
                 plan.Identities.Count(i => i.Key.Role == AreaSourceRole.Prototype) > limits.MaxPrototypes ||
-                plan.Mappings.Count > 8 || plan.ArtBindings.Count > limits.MaxVisuals)
+                plan.Mappings.Count > Enum.GetValues<AreaMappingRole>().Length || plan.ArtBindings.Count > limits.MaxVisuals)
                 throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
             if (plan.Identities.Any(i => !Enum.IsDefined(i.Key.Role)))
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
