@@ -88,7 +88,7 @@ internal static class OriginalProfile
             Map(AreaMappingRole.UniqueNpcNames, AreaSourceRole.Resource1, 5847, 237, 552, 443052894, "224e1197160e88c683dc7ce54cf27e92d5f6d18ae72cf01c421cbd3955b6d20b", "611e82ba4e99498aaacb3e9527ef610b4939e704452182523e9c72a5a1e3c541"),
             Map(AreaMappingRole.MissingPolicy, AreaSourceRole.Resource1, 4695, 108, 332, 278084522, "90de5bb07348cecfc2bc60cfb68d8b56493a8f36ae906da63d1ec6499f84b3a6", "49502ba4e4236f7c7835e697c3ff569f894f2814f82cd3543ce861c28526b7e0")
         };
-        return new(5000, 1, new(1452, 1290), 2, "maps/Arcanum1-024-fixed", identities, mappings) { Original = true };
+        return new(5000, 1, new(1452, 1290), 2, "maps/Arcanum1-024-fixed", identities, mappings) { OriginalMap = OriginalAreaMap.CrashSiteExterior };
     }
 
     internal static void Check(AreaReconciliation counts, IEnumerable<AreaSectorRecord> sectors, IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals)

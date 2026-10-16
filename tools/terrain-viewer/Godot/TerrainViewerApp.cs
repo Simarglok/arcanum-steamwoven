@@ -58,6 +58,9 @@ public partial class TerrainViewerApp : Node
         if (SelfTestBootstrap) return;
 
         var args = OS.GetCmdlineUserArgs().ToList();
+        // The process hosting --self-test is automated too: its frame loop drives the frame-bound
+        // tests, so it must not cap the engine frame rate (ARC-RENDER-009 pacing).
+        _automatedHost = args.Contains("--self-test", StringComparer.Ordinal);
         if (RunWorldSettingsTest(args)) return;
         if (args.Contains("--self-test", StringComparer.Ordinal))
         {
@@ -230,6 +233,8 @@ public partial class TerrainViewerApp : Node
     {
         RetireWorldLifecycle();
         _worldActor.DisposeSession(); _worldGridInput = new();
+        // A disposed session's follower must not keep its step snapshot reachable.
+        _worldRoute = null; _worldRouteSession = null;
         RetirePassabilityOverlay();
         ClearReadyMetrics();
         _canvas!.ClearScene();
@@ -832,6 +837,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Process(double delta)
     {
+        PaceFrames();
         if (IsWorld)
         {
             try { ProcessWorld(delta); }
@@ -855,6 +861,7 @@ public partial class TerrainViewerApp : Node
 
     public override void _Input(InputEvent @event)
     {
+        NotePacingActivity();
         if (IsWorld) { InputWorld(@event); return; }
         var before = _camera?.State;
         if (@event is InputEventMouseButton button)
@@ -912,7 +919,7 @@ public partial class TerrainViewerApp : Node
 
     private void ClearReadyMetrics()
     {
-        StopAreaAmbient();
+        StopAreaAmbient(); StopAreaTransitions();
         _readyArea = null;
         _readySourceId = null;
         _readyDecodedCount = 0;

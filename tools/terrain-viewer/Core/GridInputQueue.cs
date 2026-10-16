@@ -11,6 +11,8 @@ public sealed class GridInputQueue
     private IGridSession? _owner;
     private SimulationTime? _newest;
     public SimulationTime? CompleteFrontier { get; private set; }
+    /// <summary>Whether any observed material input still waits, including inputs after the complete frontier.</summary>
+    public bool HasPending => _pending.Count > 0;
     public void Observe(IGridSession session, SimulationTime time, ActorIntent intent)
     {
         if (_owner is not null && !ReferenceEquals(_owner, session))

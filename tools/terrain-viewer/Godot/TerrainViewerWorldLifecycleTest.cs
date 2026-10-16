@@ -49,7 +49,7 @@ public partial class TerrainViewerApp
         var beforeHud = _camera.State;
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.WheelUp, Pressed = true, Position = _hud!.Rect.Position + Vector2.One * 2 });
         Require(_camera.State == beforeHud, "HUD wheel zoomed world");
-        // ARC-INPUT-001: LMB is not a world drag/Confirm (click-to-move pending).
+        // ARC-INPUT-001: LMB is not a world drag/Confirm; world-diagnostic has no click route (ARC-WORLD-007 is crash-site-area only).
         var followBefore = _camera.FollowState;
         _Input(new InputEventMouseButton { ButtonIndex = MouseButton.Left, Pressed = true, Position = new(WorldViewport.X-2,WorldViewport.Y-2) });
         Frame(none);

@@ -26,7 +26,8 @@ public static partial class TerrainViewerSelfTest
         // must be compared with that settled state, not the pre-disposal hold.
         var usage=fixture.Owner.Usage;
         if(fixture.Streams.Values.Any(s=>s.DisposeCount!=1)) throw new InvalidOperationException("AREA_OWNER_TRANSFERRED_HANDLES");
-        using var cache=new TerrainTextureCache();
+        // Exact visible residency is asserted below: no LRU retention.
+        using var cache=new TerrainTextureCache { AreaRetainFrames = 0 };
         var actor=SyntheticActorFixture.Create(human:true);
         cache.UploadActor(actor.Result.ActorTextures);
         var viewport=new SubViewport { Size=new(480,400),TransparentBg=true,RenderTargetUpdateMode=SubViewport.UpdateMode.Always };

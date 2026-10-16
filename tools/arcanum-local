@@ -55,6 +55,8 @@ def command_configure(args: argparse.Namespace) -> None:
             conf["inputs"]["areaEffects"] = str(config.canonical_existing(args.area_effects, directory=False))
         if args.area_patch is not None:
             conf["inputs"]["areaPatch"] = str(config.canonical_existing(args.area_patch, directory=False))
+        if args.cave_mobile is not None:
+            conf["inputs"]["caveMobile"] = str(config.canonical_existing(args.cave_mobile, directory=False))
         config.save_config(conf); emit({"configured": sorted(conf["inputs"])})
     elif args.configure == "add-artifact-root":
         root = config.canonical_existing(args.path, directory=True)
@@ -82,7 +84,7 @@ def selected_root(conf: dict, registry: dict, tool: str) -> Path:
         raise ValueError("configure an explicit launch selection before launch")
     matches: list[Path] = []
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-RENDER-008") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008") else None
     for root_id, root_text in roots.items():
         if not isinstance(root_id, str) or not isinstance(root_text, str):
             continue
@@ -109,16 +111,16 @@ def command_launch(args: argparse.Namespace) -> None:
     root = selected_root(conf, registry, tool)
     selection = conf.get("launchSelection", {}).get(tool, "")
     parts = selection.split(":")
-    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-RENDER-008") else None
+    selected_task = parts[1] if tool == "terrain" and len(parts) == 3 and parts[1] in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008") else None
     _, manifest, _ = manifests.resolve_current(root, tool, selected_task=selected_task)
-    if tool == "terrain" and args.mode == "crash-site-area" and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-RENDER-008")):
-        raise ValueError("crash-site-area requires an exact ARC-RENDER-007, ARC-INPUT-001 or ARC-RENDER-008 v2 artifact")
+    if tool == "terrain" and args.mode == "crash-site-area" and (manifest.get("schema"), manifest.get("task")) not in (("arcanum-build-manifest-v2", "ARC-RENDER-007"), ("arcanum-build-manifest-v2", "ARC-INPUT-001"), ("arcanum-build-manifest-v2", "ARC-WORLD-007"), ("arcanum-build-manifest-v2", "ARC-WORLD-009", "ARC-RENDER-008")):
+        raise ValueError("crash-site-area requires an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2 artifact")
     if tool == "terrain" and args.mode == "world-diagnostic" and (manifest.get("task") or manifest.get("taskId")) not in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"):
         raise ValueError("world-diagnostic requires an ARC-WORLD-001, ARC-GPAD-004, ARC-RENDER-006 or ARC-WORLD-003 artifact")
     executable, argv = launch.argv_from_manifest(manifest)
     if tool == "terrain":
         separator = argv.index("--")
-        argv = [*argv[:separator + 1], *launch.terrain_arguments(conf.get("inputs", {}), args.mode or "terrain-only", preview)]
+        argv = [*argv[:separator + 1], *launch.terrain_arguments(conf.get("inputs", {}), args.mode or "terrain-only", preview, task=manifest.get("task"))]
     emit(launch.start(executable, argv, allow_duplicate=args.allow_duplicate, lock_root=config.home(), tool=tool,
                       dry_run=args.dry_run, show_paths=args.show_paths))
 
@@ -177,6 +179,7 @@ def parser() -> argparse.ArgumentParser:
     inputs.add_argument("--area-mobile")
     inputs.add_argument("--area-effects")
     inputs.add_argument("--area-patch")
+    inputs.add_argument("--cave-mobile")
     artifact = configure_sub.add_parser("add-artifact-root"); artifact.add_argument("--id", required=True); artifact.add_argument("path")
     selected = configure_sub.add_parser("select-launch"); selected.add_argument("--tool", required=True, choices=manifests.SUPPORTED_TOOLS); selected.add_argument("--candidate", required=True)
     configure.set_defaults(func=command_configure)

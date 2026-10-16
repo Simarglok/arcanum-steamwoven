@@ -64,8 +64,10 @@ public sealed class DiagnosticGridActorTests
         using var fixture = new GridWireFixture();
         var session = new DiagnosticGridSession(fixture.Snapshot, SimulationTime.At(0), StepDuration.Of(8));
         var queue = new GridInputQueue();
+        Assert.IsFalse(queue.HasPending);
         queue.Observe(session, SimulationTime.At(0), ActorIntent.Toward(NeighborDirection.XPlus));
         Assert.IsNull(queue.CompleteFrontier);
+        Assert.IsTrue(queue.HasPending, "An input at the newest, still open tick is pending.");
         queue.Observe(session, SimulationTime.At(0), ActorIntent.Toward(NeighborDirection.XPlus));
         Assert.IsNull(queue.CompleteFrontier);
         queue.Observe(session, SimulationTime.At(2), ActorIntent.Neutral);
@@ -82,6 +84,7 @@ public sealed class DiagnosticGridActorTests
         Assert.AreEqual(ExactScalar.Create(49,8), session.State.Anchor.U);
         Assert.AreEqual(new CellCoord(6,1), session.State.CommittedCell);
         queue.PublishedThrough(queue.CompleteFrontier.Value);
+        Assert.IsFalse(queue.HasPending);
         queue.Observe(session, SimulationTime.At(5), ActorIntent.Neutral);
         result = session.Advance(queue.CompleteFrontier!.Value, queue.CompleteThrough(queue.CompleteFrontier.Value));
         Assert.AreEqual("CenterArrived:4/1|ActionChanged:4/1",

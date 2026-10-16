@@ -103,6 +103,34 @@ public sealed partial class AreaDataOwner
             path = NpcPath(cls, population, armor, animation, weapon, shield, maps);
             lookup = aid; // source selector transformations are recorded, never replace raw state
         }
+        else if (cls == 1 && WallsAdmitted)
+        {
+            // Wall art: one undamaged file chosen by the structure row (interior name for
+            // rotations 0,1,6,7, exterior otherwise), the piece code, damage letter U and the
+            // variation digit; MakeVisual then requires a single-rotation ART for group 0.
+            // Rotation and the flip/palette bits stay in the raw selector; the renderer applies them.
+            // Flag bits other than the flip bit (bits 1-3) and bit 6 are not admitted.
+            if ((aid & 0x480) != 0 || (aid & 0x4E) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            var number = (int)((aid >> 20) & 255); var rotation = (int)((aid >> 11) & 7); var piece = (int)((aid >> 14) & 63); var variation = (int)((aid >> 8) & 3);
+            if (piece >= WallPieces.Length) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            // Structure rows carry option words such as "/nowindows"; only the first two
+            // name tokens are read, so the row is not passed through the single-name check.
+            // The source indexes rows by position from key 0 up to key 1000; admit only a table
+            // whose keys below 1000 are exactly 0..n-1, so key and position agree.
+            if (!maps.TryGetValue(AreaMappingRole.WallStructure, out var structures)) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
+            var positional = structures.Keys.TakeWhile(k => k < 1000).ToArray();
+            if (positional.Where((k, i) => k != i).Any()) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
+            if (!structures.TryGetValue(number, out var row) || number >= positional.Length) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
+            var tokens = row.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (tokens.Length < 2) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
+            var side = tokens[rotation / 2 is 0 or 3 ? 0 : 1];
+            if (side.Length < 3) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
+            var names = maps[AreaMappingRole.WallName].Values.Where(v => v.Length >= 3 && string.Equals(v[..3], side[..3], StringComparison.OrdinalIgnoreCase)).ToArray();
+            if (names.Length != 1) throw Fail(names.Length == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
+            path = "art/wall/" + Safe(names[0][..3]) + WallPieces[piece] + "u" + (char)('0' + variation) + ".art";
+            source = MappingSource(AreaMappingRole.WallStructure);
+            nominal = rotation; group = 0; frame = 0; mirror = (aid & 1) != 0; lookup = aid;
+        }
         else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
         AreaEntryIdentity entry;
         var explicitBindings = _plan.ArtBindings.Where(b => b.RawArt == aid).ToArray();
@@ -150,8 +178,14 @@ public sealed partial class AreaDataOwner
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
         _budget.StartFrame(entry.StoredBytes, entry.DecodedBytes);
         var bytes = ReadEntry(entry); var sha = ObjectWireReader.Hash(bytes); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
-        if (_plan.Original && record is not null)
+        // A wall is drawn from group 0 only when its ART holds a single rotation; an
+        // eight-rotation wall ART would need the rotation's own group, which is not admitted.
+        if (raw >> 28 == 1 && (bytes.Length < 4 || (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 0))
+            throw Fail(AreaErrorCode.UnsupportedPhysicalSelection, AreaStage.Frame);
+        if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior && record is not null)
             (policy, view, physical) = OriginalProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
+        else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave && record is not null)
+            (policy, view, physical) = CaveProfile.SelectionPolicy(key, raw, entry, bytes, record, nominal, group, frame, palette);
         var descriptor = InspectFrame(bytes.AsSpan(0, view), physical, frame, palette);
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.Pixels };
         _budget.CompleteFrame(checked((long)descriptor.Metadata.Width * descriptor.Metadata.Height * 4), descriptor.Metadata.EncodedPayloadLength);
@@ -227,4 +261,13 @@ public sealed partial class AreaDataOwner
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
     private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror);
+    private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);
+    // Wall piece file codes by piece index: the file naming order specified by the pinned
+    // CE a_name.c 1562-1660 (build_wall_file_name), cited in docs/research/cave-transition-evidence.md T7.
+    private static readonly string[] WallPieces =
+    [
+        "bse", "lfc", "bse", "bcl", "bcr", "tcl", "tcr", "uec", "lec", "w3l", "w3a", "w3r", "w4l", "w4a", "w4b", "w4r",
+        "w5l", "w5a", "w5b", "w5c", "w5r", "d3l", "d3a", "d3r", "d4l", "d4a", "d4b", "d4r", "d6l", "d6a", "d6b", "d6c",
+        "d6d", "d6r", "p3l", "p3a", "p3r", "p4l", "p4a", "p4b", "p4r", "p5l", "p5a", "p5b", "p5c", "p5r",
+    ];
 }

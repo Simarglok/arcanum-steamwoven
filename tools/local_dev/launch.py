@@ -19,11 +19,13 @@ GAME_ROLES: dict[str, tuple[str, int | None, str | None]] = {
     "areaEffects": ("arcanum3.dat", 9605011, "cbadd76bb3df798fa25dcc05871af1ea751c1164fb1426dccc520cd7d9edc499"),
     "areaPatch": ("modules/Arcanum.PATCH0", 18804, "d9a3313f71d78115dcac489296bf3d8a5801dd55b20267bd6017b7a898364bce"),
     "areaMobile": ("modules/Arcanum/maps/qrmvs-420-1zjcnpgn", 1823280, "a548f611ff5de9842bba1f700f6614c0b9651cf3ab640a23d19efc7626dde6a5"),
+    "caveMobile": ("modules/Arcanum/maps/rknp rivh uhngp", 6698, "aa29827de32c5cb6bf7aa03ea049f9f01d7698b003097172cd26ab80c9658318"),
     "prototypes": ("data/proto", None, None),
 }
 # Viewer flag of each role, and the roles each terrain mode requires (sourceId is always required too).
 ROLE_FLAGS = {"module": "--module", "terrainResource": "--resource", "prototypes": "--prototypes", "actorResource": "--actor-resource",
-              "areaMobile": "--area-mobile", "areaEffects": "--area-effects", "areaPatch": "--area-patch"}
+              "areaMobile": "--area-mobile", "areaEffects": "--area-effects", "areaPatch": "--area-patch",
+              "caveMobile": "--area-cave-mobile"}
 MODE_ROLES: dict[str, tuple[str, ...]] = {
     "terrain-only": ("module", "terrainResource"),
     "combined": ("module", "terrainResource", "prototypes"),
@@ -31,6 +33,10 @@ MODE_ROLES: dict[str, tuple[str, ...]] = {
     "world-diagnostic": ("module", "terrainResource", "prototypes", "actorResource"),
     "crash-site-area": ("module", "terrainResource", "prototypes", "actorResource", "areaMobile", "areaEffects", "areaPatch"),
 }
+# Roles only builds of one exact task understand: older AREA builds reject the cave flag, so it is passed only to
+# an ARC-WORLD-009 or later ARC-RENDER-008 build (the task named by the launched manifest), never to the mode as a whole.
+TASK_ROLES: dict[str, tuple[str, ...]] = {"ARC-WORLD-009": ("caveMobile",), "ARC-RENDER-008": ("caveMobile",)}
+TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-008": "crash-site-area"}
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
@@ -87,7 +93,7 @@ def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
     return values
 
 
-def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None) -> list[str]:
+def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
     Inputs are revalidated on every launch because local configuration is not a
@@ -98,9 +104,14 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
         raise ValueError("unsupported terrain diagnostic mode")
     if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
-    required = MODE_ROLES[mode] + ("sourceId",)
-    if not isinstance(inputs, dict) or any(not isinstance(inputs.get(key), str) for key in required):
+    task_roles = TASK_ROLES.get(task, ()) if isinstance(task, str) and TASK_MODES.get(task) == mode else ()
+    required = MODE_ROLES[mode] + task_roles + ("sourceId",)
+    if not isinstance(inputs, dict):
         raise ValueError("configure explicit terrain input roles before launch")
+    missing = [key for key in required if not isinstance(inputs.get(key), str)]
+    if missing:
+        raise ValueError("configure explicit terrain input roles before launch (missing " + ", ".join(missing)
+                         + "; run ./arcanum setup again)")
 
     def local_file(role: str, *, directory: bool = False) -> str:
         path = Path(inputs[role]).expanduser().absolute()
@@ -119,6 +130,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     if mode == "crash-site-area":
         for role in ("areaMobile", "areaEffects", "areaPatch"):
             arguments.extend((ROLE_FLAGS[role], local_file(role)))
+    for role in task_roles:
+        arguments.extend((ROLE_FLAGS[role], local_file(role)))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

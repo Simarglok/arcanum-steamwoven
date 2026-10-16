@@ -1,6 +1,7 @@
 using Arcanum.Input;
 using Arcanum.Input.Godot;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Navigation;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
 using Godot;
@@ -16,6 +17,12 @@ public partial class TerrainViewerApp
     private DiagnosticInputSafetyGate _worldGate = new();
     private DiagnosticGridActor _worldActor = new();
     private GridInputQueue _worldGridInput = new();
+    // ARC-WORLD-007: LMB click-to-move, bound only to the whole-core AREA session. The
+    // follower belongs to exactly one session; a reset/reload session gets a fresh one.
+    private RouteFollower? _worldRoute;
+    private IGridSession? _worldRouteSession;
+    private string _worldRouteDiagnostic = "no click yet";
+    private string _worldRouteClick = "none";
     private bool _worldResetPending;
     private bool _worldReloadPending;
     private IGridSession? _worldLifecycleSession;
@@ -135,6 +142,9 @@ public partial class TerrainViewerApp
     {
         TraceWorldInput("Quarantine");
         _worldGate.Close(); _worldReducer.Quarantine();
+        // Palette, focus loss, device change, reset/reload and faults all pass here:
+        // the route stops, and the step already started still ends at its cell centre.
+        StopWorldRoute("ROUTE_STOPPED_QUARANTINE");
         if (_worldActor.Session is { } session && !_exiting)
             _worldGridInput.Observe(session, WorldTime, ActorIntent.Neutral);
         _worldMenuAnalogDirection = 0;
@@ -348,7 +358,7 @@ public partial class TerrainViewerApp
         if (!complete || !_worldFocused || !double.IsFinite(delta) || delta < 0 || !Valid(keyboard)
             || controllers.Any(raw => !Valid(raw))
             || (observedActive is int device && !controllers.Any(raw => raw.DeviceId == device)))
-        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatus(); return; }
+        { QuarantineWorld(); AdvanceWorldGrid(default); RefreshReadyStatusPerFrame(delta); return; }
         keyboard = WorldKeyboardRouting(keyboard);
         var context = WorldContext(delta, true);
         var priorActive = _worldReducer.ActiveDevice;
@@ -368,7 +378,7 @@ public partial class TerrainViewerApp
         var wasOpen = _worldGate.IsOpen;
         _worldGate.ObserveCompleteFrame(_worldFocused, WorldModal || WorldUiFocus || _worldLifecycleSession is not null, complete, neutral);
         if (!wasOpen || !_worldGate.IsOpen || _readyActorPlan is null || !IsWorldMode(_readyMode))
-        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatus(); return; }
+        { AdvanceWorldGrid(default); SettleWorldZoom(delta, false); RefreshReadyStatusPerFrame(delta); return; }
         var actor = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.Movement);
         if (actor.Length > _worldSettings.ActorSensitivity) actor = actor.Normalized() * _worldSettings.ActorSensitivity;
         var pan = intents.Aggregate(default(Vec2), (sum, intent) => sum + intent.CameraPan);
@@ -388,7 +398,7 @@ public partial class TerrainViewerApp
             var zoom = WorldZoomPolicy.Advance(_camera!.State.Zoom, drive, delta);
             if (zoom != _camera.State.Zoom) ApplyPreferredWorldZoom(zoom, true);
             SettleWorldZoom(delta, drive != 0);
-            RefreshReadyStatus();
+            RefreshReadyStatusPerFrame(delta);
         }
         catch (TerrainViewerException exception) { PublishFailure(_arguments?.Mode ?? _readyMode, exception.Error); }
         catch (OverflowException) { PublishFailure(_arguments?.Mode ?? _readyMode, new(TerrainViewerErrorCode.ActorPlan, Stage: TerrainViewerFailureStage.ActorPlan)); }
@@ -415,14 +425,70 @@ public partial class TerrainViewerApp
     private void AdvanceWorldGrid(Vec2 actor)
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
+        if (ProcessAreaTransition()) return;
         var time = WorldTime;
-        var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
+        // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
+        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
+            : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
+        // The stick takes over at once; the click route never fights it.
+        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
-        var advance = _worldActor.Advance(frontier, _worldGridInput.CompleteThrough(frontier), input => _readyActorPlan.Select(input));
-        if (advance.Movement.Status != MovementStatus.Completed)
-            throw new InvalidOperationException($"GRID_RUNTIME_{advance.Movement.Status}_{advance.Movement.Failure?.Kind}");
+        var batches = _worldGridInput.CompleteThrough(frontier);
+        var route = WorldRoute(session);
+        GridAdvance Run(SimulationTime until, ReadOnlySpan<InputBatch> input)
+        {
+            var advance = _worldActor.Advance(until, input, selection => _readyActorPlan.Select(selection));
+            if (advance.Movement.Status != MovementStatus.Completed)
+                throw new InvalidOperationException($"GRID_RUNTIME_{advance.Movement.Status}_{advance.Movement.Failure?.Kind}");
+            PublishWorldAdvance(session, advance);
+            return advance;
+        }
+        // A following route also waits while a stick receipt is still open past the frontier
+        // (a release observed after a click): deciding at an earlier step end would start a
+        // step that receipt then cancels.
+        if (route is null || batches.Length > 0 || (route.Status == RouteFollowStatus.Following && _worldGridInput.HasPending))
+        {
+            // Observed stick/neutral receipts close first; the follower only watches them.
+            var advance = Run(frontier, batches);
+            route?.Observe(advance.Movement);
+        }
+        else
+        {
+            // No pending receipt: the route drives to the same frontier at exact step ends.
+            var drive = route.Drive(session.State, frontier, (until, input) => Run(until, input.ToArray()).Movement);
+            if (!drive.Completed) throw new InvalidOperationException("GRID_" + drive.FailureCode);
+        }
         _worldGridInput.PublishedThrough(frontier);
+        if (route is not null) _worldRouteDiagnostic = DescribeWorldRoute(route);
+        PublishWorldSelection();
+        if (ReferenceEquals(_worldLifecycleSession, session) && session.State.Phase == MovementPhase.Settled)
+        {
+            if (_worldReloadPending && _arguments is not null)
+            {
+                var paletteReload = _worldPaletteReloadRequested;
+                RetireWorldLifecycle();
+                _lastLoad = StartLoadAsync(_arguments, false);
+                _worldPaletteReloadGeneration = paletteReload ? _generation : null;
+            }
+            else
+            {
+                if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
+                RetireWorldLifecycle();
+                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time, chart: area.Chart);
+                else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
+                _worldGridInput = new(); _worldGate.Close();
+                PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
+                _worldPanel?.SetActionStatus("Reset scene done: actor at spawn, Follow; preferences kept.");
+                BindWorldPaletteSummary();
+                GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
+            }
+        }
+    }
+    private Action<GridAdvance>? _worldAdvanceObserverForSelfTest;
+    private void PublishWorldAdvance(IGridSession session, GridAdvance advance)
+    {
+        _worldAdvanceObserverForSelfTest?.Invoke(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             var assessment = evidence.Assessment;
@@ -449,29 +515,59 @@ public partial class TerrainViewerApp
         }
         foreach (var item in advance.Movement.Events)
             GD.Print("ARC-WORLD-003 event=" + System.Text.Json.JsonSerializer.Serialize(item));
-        PublishWorldSelection();
-        if (ReferenceEquals(_worldLifecycleSession, session) && session.State.Phase == MovementPhase.Settled)
+    }
+    private RouteFollower? WorldRoute(IGridSession session)
+    {
+        if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
+        if (!ReferenceEquals(_worldRouteSession, session))
         {
-            if (_worldReloadPending && _arguments is not null)
-            {
-                var paletteReload = _worldPaletteReloadRequested;
-                RetireWorldLifecycle();
-                _lastLoad = StartLoadAsync(_arguments, false);
-                _worldPaletteReloadGeneration = paletteReload ? _generation : null;
-            }
-            else
-            {
-                if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
-                RetireWorldLifecycle();
-                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time);
-                else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
-                _worldGridInput = new(); _worldGate.Close();
-                PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
-                _worldPanel?.SetActionStatus("Reset scene done: actor at spawn, Follow; preferences kept.");
-                BindWorldPaletteSummary();
-                GD.Print("ARC-WORLD-003 lifecycle=explicit-settled-reset");
-            }
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart));
+            _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
+        return _worldRoute;
+    }
+    private void StopWorldRoute(string reason)
+    {
+        if (_exiting || _worldRoute is not { Status: RouteFollowStatus.Following } route
+            || !ReferenceEquals(_worldRouteSession, _worldActor.Session)) return;
+        route.Stop(WorldTime, reason);
+        _worldRouteDiagnostic = DescribeWorldRoute(route);
+        GD.Print($"ARC-WORLD-007 route stop reason={reason} target={route.Target}");
+    }
+    private static string DescribeWorldRoute(RouteFollower route) =>
+        $"{route.Status} target={route.Target?.ToString() ?? "none"}{(route.StopReason is { } reason ? " " + reason : "")}"
+        + $" plan={route.LastPlan?.ReasonCode ?? "none"} segments={route.PlannedSegments}";
+    /// <summary>ARC-WORLD-007: an unhandled LMB press on the ground sets the route goal (KM-03). Native
+    /// GUI (HUD, palette) handles its own clicks first; release has no meaning.</summary>
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (!IsWorld || !_worldInitialized || _exiting) return;
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
+            WorldObservation(() => WorldRouteClick(click.Position));
+    }
+    private void WorldRouteClick(Vector2 screen)
+    {
+        if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
+        if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null || !_worldGate.IsOpen || _worldLifecycleSession is not null)
+        {
+            _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
+            RefreshReadyStatus(); return;
+        }
+        if (_areaTransitions?.Pending is not null)
+        {
+            _worldRouteClick = "ignored (map transfer pending)";
+            RefreshReadyStatus(); return;
+        }
+        // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
+        if (TryAreaUse(screen)) return;
+        var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
+        if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
+        CancelAreaUseApproach("a ground click replaced it");
+        var accepted = route.SetTarget(cell, WorldTime);
+        _worldRouteDiagnostic = DescribeWorldRoute(route);
+        _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
+        GD.Print($"ARC-WORLD-007 route click cell={cell} accepted={accepted}");
+        RefreshReadyStatus();
     }
     private void InputWorld(InputEvent input)
     {
@@ -525,8 +621,8 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
         // The world mouse route is free for original controls: LMB neither drags
-        // the camera nor confirms (click-to-move is pending), and wheel/+/- do not
-        // zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
+        // the camera nor confirms (in crash-site-area an unhandled LMB press sets the
+        // click-to-move goal, see _UnhandledInput), and wheel/+/- do not zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
         // F11 is a host window control (not an M/Q game key), not a diagnostic.
         if (input is InputEventKey key && key.Pressed && !key.Echo && GetViewport().GuiGetFocusOwner() is null && key.Keycode == Key.F11)
             GetWindow().Mode = GetWindow().Mode == Window.ModeEnum.Fullscreen ? Window.ModeEnum.Windowed : Window.ModeEnum.Fullscreen;
@@ -609,7 +705,7 @@ public partial class TerrainViewerApp
         var profile = _worldActor.Profile;
         var binding = profile.Facing(s.Action, s.Facing);
         var runtime = _worldActor.Session?.State;
-        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; LMB click-to-move PENDING; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | original motion/spawn/occlusion parity NOT_VERIFIED";
+        return zoomStatus + $" | Grid committed={runtime?.CommittedCell} continuous anchor=({runtime?.Anchor.U},{runtime?.Anchor.V}) phase={runtime?.Phase} time={runtime?.Time.Value} step={runtime?.Segment?.Key.ProposedStepId} opportunity={runtime?.LastOpportunity?.OpportunityId} | {(_worldActor.Session is AreaGridSession ? "whole Crash Site core (9 sectors) at new-game T0, core edge refused" : "small diagnostic test area x4..8/y0..3 sector1452,1290")} spawn(6,1); movement may stop without visible obstacles; D=1/2s diagnostic NOT original speed | {_worldGridDiagnostic} | lifecycle={(_worldReloadPending ? "reload pending settled" : _worldResetPending ? "reset pending settled" : "active")} | Actor: {profile.Id} {s.Action} Frame: {_worldActor.CurrentFrame} | ART clock Idle6/Walk17 | Facing: octant{s.Facing} source{binding.SourceFacing} group{binding.PhysicalGroup} flip{binding.FlipX} | Camera: {_camera!.FollowState.Mode} | neutral gate {(_worldGate.IsOpen ? "open" : "quarantined")} | Diagnostic palette: Ctrl+Shift+F9 / on-screen button / gamepad Start (Fit, Reset scene, Reload, exact zoom) | Gamepad: left stick eight screen sectors, right stick pan, LT/RT zoom | Keyboard/mouse (original route): arrows pan (fixed direction); original keys reserved, NOT IMPLEMENTED; {(_worldActor.Session is AreaGridSession && _readyMode == TerrainViewerMode.CrashSiteArea ? "LMB click-to-move route " + _worldRouteDiagnostic + " (last click " + _worldRouteClick + ")" : "LMB click-to-move only in crash-site-area")}; no WASD/debug keys{(_worldLastReserved is null ? "" : " | last reserved key: " + _worldLastReserved)} | {PassabilityOverlayStatus()} | original motion/spawn/occlusion parity NOT_VERIFIED";
     }
     private void ExitWorld()
     {
@@ -628,7 +724,7 @@ public partial class TerrainViewerApp
         }
         finally
         {
-            _worldActor.DisposeSession();
+            _worldActor.DisposeSession(); _worldRoute = null; _worldRouteSession = null;
             RetireWorldLifecycle(); _worldGridInput = new();
             Input.JoyConnectionChanged -= WorldConnectionChanged;
             if (_worldFocusWindow is { } window)

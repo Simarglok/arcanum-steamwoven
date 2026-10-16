@@ -29,22 +29,33 @@ public interface IPassabilityAuthority
     OverlayStep Assess(CellCoord from, CellCoord to, NeighborDirection direction);
 }
 
-/// <summary>Whole-core T0 authority of <see cref="AreaGridSession"/> (crash-site-area).</summary>
-public sealed class AreaPassabilityAuthority(AreaGridSession session) : IPassabilityAuthority
+/// <summary>Whole-map T0 authority of <see cref="AreaGridSession"/> (crash-site-area exterior or the cave): the
+/// assessable chart is the bounding rectangle of the snapshot's admitted sectors in this session's chart.</summary>
+public sealed class AreaPassabilityAuthority : IPassabilityAuthority
 {
-    public string Identity { get; } = $"{session.Snapshot.ProfileId}|{session.Snapshot.EvidenceSha256}|{session.EvidenceEpoch}|{session.State.Binding.ContextId}";
-    public string ProfileId => session.Snapshot.ProfileId;
-    public string ActorId => session.State.Binding.ActorId;
-    public string CoverageDescription => "nine Crash Site core sectors at new-game T0; outside them every step is Unsupported";
-    public object Owner => session;
-    public (int MinX, int MinY, int MaxX, int MaxY) Chart => (AreaGridSession.MinimumChartCell, AreaGridSession.MinimumChartCell,
-        AreaGridSession.MaximumChartCell, AreaGridSession.MaximumChartCell);
-    // The drawn context ring is one sector around the core.
-    public (int MinX, int MinY, int MaxX, int MaxY) Envelope => (AreaGridSession.MinimumChartCell - 64, AreaGridSession.MinimumChartCell - 64,
-        AreaGridSession.MaximumChartCell + 64, AreaGridSession.MaximumChartCell + 64);
+    private readonly AreaGridSession _session;
+    public AreaPassabilityAuthority(AreaGridSession session)
+    {
+        _session = session;
+        Identity = $"{session.Snapshot.ProfileId}|{session.Snapshot.EvidenceSha256}|{session.EvidenceEpoch}|{session.State.Binding.ContextId}|{session.Chart.BindingName}";
+        var sectors = session.Snapshot.AdmittedSectors;
+        int Min(Func<(long X, long Y), long> axis, long origin) => checked((int)(sectors.Min(axis) * 64 - origin));
+        int Max(Func<(long X, long Y), long> axis, long origin) => checked((int)(sectors.Max(axis) * 64 + 63 - origin));
+        Chart = (Min(s => s.X, session.Chart.OriginX), Min(s => s.Y, session.Chart.OriginY), Max(s => s.X, session.Chart.OriginX), Max(s => s.Y, session.Chart.OriginY));
+        // The drawn context ring is one sector around the admitted sectors.
+        Envelope = (Chart.MinX - 64, Chart.MinY - 64, Chart.MaxX + 64, Chart.MaxY + 64);
+        CoverageDescription = $"{sectors.Count} admitted sectors of this map at new-game T0 ({session.Chart.BindingName}); outside them every step is Unsupported";
+    }
+    public string Identity { get; }
+    public string ProfileId => _session.Snapshot.ProfileId;
+    public string ActorId => _session.State.Binding.ActorId;
+    public string CoverageDescription { get; }
+    public object Owner => _session;
+    public (int MinX, int MinY, int MaxX, int MaxY) Chart { get; }
+    public (int MinX, int MinY, int MaxX, int MaxY) Envelope { get; }
     public OverlayStep Assess(CellCoord from, CellCoord to, NeighborDirection direction)
     {
-        var assessment = session.Assess(from, to, direction);
+        var assessment = _session.Assess(from, to, direction);
         return new(PassabilityOverlay.Verdict(assessment.Coverage, assessment.Disposition), assessment.ReasonCode);
     }
 }

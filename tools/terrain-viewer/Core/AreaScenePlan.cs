@@ -21,8 +21,10 @@ public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, A
 /// diagnostic TerrainGeometry seam. No ART/resource lookup occurs here.</summary>
 public sealed class AreaScenePlan
 {
-    private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage)
-    { WorldBounds = bounds; Commands = commands; Coverage = coverage; }
+    private AreaScenePlan(TerrainRect bounds, IReadOnlyList<AreaDrawCommand> commands, IReadOnlyList<AreaCoverage> coverage, AreaChart chart)
+    { WorldBounds = bounds; Commands = commands; Coverage = coverage; Chart = chart; }
+    /// <summary>The chart whose origin every projection and sort key of this plan is relative to.</summary>
+    public AreaChart Chart { get; }
     public TerrainRect WorldBounds { get; }
     public IReadOnlyList<AreaDrawCommand> Commands { get; }
     public IReadOnlyList<AreaCoverage> Coverage { get; }
@@ -30,14 +32,15 @@ public sealed class AreaScenePlan
     public const int CameraOriginX = 92928;
     public const int CameraOriginY = 82560;
 
-    public static AreaScenePlan Create(AreaSnapshot snapshot)
-        => Create(snapshot.Terrain, snapshot.Objects, snapshot.Visuals);
+    public static AreaScenePlan Create(AreaSnapshot snapshot, AreaChart? chart = null)
+        => Create(snapshot.Terrain, snapshot.Objects, snapshot.Visuals, chart);
 
     // A value-input seam, also used by synthetic tests. It runs the complete
     // production disposition, placement and ordering rules, not pre-made draws.
     public static AreaScenePlan Create(IEnumerable<AreaTerrainRecord> terrain, IEnumerable<AreaObjectRecord> objects,
-        IEnumerable<AreaVisualRecord> visuals)
+        IEnumerable<AreaVisualRecord> visuals, AreaChart? chart = null)
     {
+        chart ??= AreaChart.Exterior;
         var catalog = visuals.ToDictionary(visual => visual.Key);
         var commands = new List<AreaDrawCommand>(); var coverage = new List<AreaCoverage>();
         foreach (var tile in terrain)
@@ -47,7 +50,7 @@ public sealed class AreaScenePlan
             var visual = catalog[tile.SelectedVisual];
             var facade = tile.RawArt >> 28 != 0;
             var kind = facade ? TerrainKind.Facade : TerrainKind.Tile;
-            var position = TerrainGeometry.Project(checked((int)(tile.WorldX - CameraOriginX)), checked((int)(tile.WorldY - CameraOriginY)));
+            var position = TerrainGeometry.Project(checked((int)(tile.WorldX - chart.OriginX)), checked((int)(tile.WorldY - chart.OriginY)));
             // Never clip to an individual sector: all nine sectors share the chart.
             var footprint = new TerrainRect(position.X + 1, position.Y, facade ? 80 : 78, 40);
             var source = new TerrainRect(0, 0, Math.Min(footprint.Width, visual.Width), Math.Min(40, visual.Height));
@@ -68,12 +71,13 @@ public sealed class AreaScenePlan
             if (visual is null || body.WorldX is null || body.WorldY is null)
                 throw new InvalidOperationException("AREA_VISUAL_REQUIRED");
             var phase = state.Flat ? state.UnderAll ? 2 : 3 : 4;
-            var projected = TerrainGeometry.Project(checked((int)(body.WorldX.Value - CameraOriginX)), checked((int)(body.WorldY.Value - CameraOriginY)));
+            var projected = TerrainGeometry.Project(checked((int)(body.WorldX.Value - chart.OriginX)), checked((int)(body.WorldY.Value - chart.OriginY)));
             var width = checked(visual.Width * state.Scale / 100) / (state.Shrunk ? 2 : 1);
             var height = checked(visual.Height * state.Scale / 100) / (state.Shrunk ? 2 : 1);
             if (width <= 0 || height <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
-            var destination = new TerrainRect(checked(projected.X + visual.ObjectOffsetX + 40 - visual.HotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
-                checked(projected.Y + visual.ObjectOffsetY + 20 - visual.HotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), width, height);
+            var (hotX, hotY) = Hotspot(visual);
+            var destination = new TerrainRect(checked(projected.X + visual.ObjectOffsetX + 40 - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
+                checked(projected.Y + visual.ObjectOffsetY + 20 - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), width, height);
             var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
@@ -89,7 +93,19 @@ public sealed class AreaScenePlan
         var left = commands.Min(command => command.Destination.X); var top = commands.Min(command => command.Destination.Y);
         var right = commands.Max(command => checked(command.Destination.X + command.Destination.Width));
         var bottom = commands.Max(command => checked(command.Destination.Y + command.Destination.Height));
-        return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly());
+        return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart);
+    }
+
+    /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009): rotations 0, 1, 6 and 7 move it
+    /// 40 left and 20 down, then the flip bit mirrors it as width − x − 2 (research T7 and the pinned
+    /// tig art.c 1235–1253). The source applies the same shift to portal art, which no admitted core
+    /// draws; every other body uses its frame hotspot unchanged.</summary>
+    public static (int X, int Y) Hotspot(AreaVisualRecord visual)
+    {
+        if (visual.RawArt >> 28 != 1) return (visual.HotX, visual.HotY);
+        var rotation = (int)((visual.RawArt >> 11) & 7);
+        var (x, y) = rotation is < 2 or > 5 ? (checked(visual.HotX - 40), checked(visual.HotY + 20)) : (visual.HotX, visual.HotY);
+        return (visual.RawArt & 1) != 0 ? (checked(visual.Width - x - 2), y) : (x, y);
     }
 
     /// <summary>The integral local ordering coordinates of the original object
@@ -105,20 +121,20 @@ public sealed class AreaScenePlan
     }
 
     public static IReadOnlyList<AreaDrawCommand> UprightOrder(IEnumerable<AreaDrawCommand> commands,
-        ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
+        ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity, AreaChart? chart = null)
     {
-        var marker = ActorMarker(placement, actor, actorIdentity);
+        var marker = ActorMarker(placement, actor, actorIdentity, chart ?? AreaChart.Exterior);
         return Array.AsReadOnly(commands.Where(command => command.Phase == 4).Append(marker).OrderBy(command => command.MapY)
             .ThenBy(command => command.MapX).ThenBy(command => command.SecondRank).ThenBy(command => command.FirstRank)
             .ThenBy(command => command.Identity?.Kind).ThenBy(command => command.Identity?.SourceIndex).ThenBy(command => command.Identity?.Offset).ToArray());
     }
 
-    internal static AreaDrawCommand ActorMarker(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
+    internal static AreaDrawCommand ActorMarker(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity, AreaChart chart)
     {
         var ranks = SameCellRanks(placement.InstanceOffsetX!.Value, placement.InstanceOffsetY!.Value);
         // ActorIdentity is a reserved session sentinel, never a DATA009 identity.
         return new AreaDrawCommand(default, default!, actorIdentity, default, actor.Destination, actor.FlipX, false, 4,
-            checked(CameraOriginX + (int)placement.MapX!.Value), checked(CameraOriginY + (int)placement.MapY!.Value), ranks.First, ranks.Second, 255, false);
+            checked((int)(chart.OriginX + placement.MapX!.Value)), checked((int)(chart.OriginY + placement.MapY!.Value)), ranks.First, ranks.Second, 255, false);
     }
 
     /// <summary>The seven <see cref="UprightOrder"/> keys, in order.</summary>
@@ -160,9 +176,11 @@ public sealed class AreaScenePlan
 public sealed class AreaUprightOrder
 {
     private readonly AreaDrawCommand[] _bodies;
-    public AreaUprightOrder(IEnumerable<AreaDrawCommand> commands)
+    private readonly AreaChart _chart;
+    public AreaUprightOrder(IEnumerable<AreaDrawCommand> commands, AreaChart? chart = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
+        _chart = chart ?? AreaChart.Exterior;
         _bodies = commands.Where(command => command.Phase == 4).OrderBy(command => command.MapY)
             .ThenBy(command => command.MapX).ThenBy(command => command.SecondRank).ThenBy(command => command.FirstRank)
             .ThenBy(command => command.Identity?.Kind).ThenBy(command => command.Identity?.SourceIndex).ThenBy(command => command.Identity?.Offset).ToArray();
@@ -170,7 +188,7 @@ public sealed class AreaUprightOrder
 
     public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
     {
-        var marker = AreaScenePlan.ActorMarker(placement, actor, actorIdentity);
+        var marker = AreaScenePlan.ActorMarker(placement, actor, actorIdentity, _chart);
         // Upper bound: the first body that orders strictly after the marker.
         int low = 0, high = _bodies.Length;
         while (low < high)

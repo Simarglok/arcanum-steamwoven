@@ -58,12 +58,13 @@ public partial class TerrainCanvas
     internal void PublishArea(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
     {
+        if (!ReferenceEquals(_textures, textures)) _areaView = null;
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
         }
-        if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands);
+        if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         UpdateAreaVisible(); QueueRedraw();

@@ -42,11 +42,19 @@ It additionally requires source/exported WORLD persistence and dual-hostfxr
 gates, with isolated input and zoom paths; the task/root/head v2 binding,
 capacity/lease/frozen-observation and finalized-rerun rejection are unchanged.
 
-ARC-INPUT-001 (diagnostic palette) and ARC-RENDER-008 (passability overlay) use that
-same endpoint/root with literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001` or
-`ARC-RENDER-008` and exactly the ARC-RENDER-007 gate set; the synthetic gates require the
-palette and overlay markers and the native WORLD/AREA observations the original overlay
-check ([palette](../input/diagnostic-palette.md), [overlay](../rendering/passability-overlay.md)).
+ARC-INPUT-001 (diagnostic palette) uses that same endpoint/root with literal
+`ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001` and exactly the ARC-RENDER-007 gate set;
+the synthetic source/exported gates additionally require its palette markers
+([contract](../input/diagnostic-palette.md)). ARC-WORLD-007 (LMB click-to-move) uses
+literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-007` with the same gate set; its route
+matrix runs in the `area-grid` probes ([contract](../world/click-route-runtime.md)).
+ARC-WORLD-009 (cave and return) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-009`
+with the same gate set; its area-original gates load the cave input and require the
+transition smoke ([viewer](../rendering/terrain-viewer.md#crash-site-cave-and-return-arc-world-009)).
+ARC-RENDER-008 (passability overlay) uses literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-RENDER-008`
+with the same gate set and, like ARC-WORLD-009, the cave input; its synthetic gates require the
+overlay markers and the native WORLD/AREA observations the original overlay check
+([contract](../rendering/passability-overlay.md)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original
@@ -106,6 +114,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Terrain | `ARCANUM_TERRAIN_MODULE`, `ARCANUM_TERRAIN_RESOURCE` | Data project, `FullyQualifiedName~TerrainLoaderTests&TestCategory=RealData`; [loader](../world/terrain-loader.md) |
 | Static objects | `ARCANUM_STATIC_MODULE`, `ARCANUM_STATIC_RESOURCE`, `ARCANUM_STATIC_PROTOTYPES` | Data project, `FullyQualifiedName~StaticObjectLoaderTests&TestCategory=RealData`; [loader](../world/static-object-loader.md) |
 | Complete exterior area | `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`, `ARC_AREA_MOBILE`, `ARC_AREA_PROTOTYPES`, `ARC_AREA_ORACLE` | Data project, `FullyQualifiedName~AreaOriginalTests&TestCategory=RealData`; [profile, independent oracle and measurements](../world/crash-site-area-loader.md) |
+| Crash Site cave | `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`, `ARC_AREA_PROTOTYPES`, `ARC_CAVE_MOBILE` (the cave's game-generated object file next to `areaMobile`) | Data project, `FullyQualifiedName~AreaCaveOriginalTests&TestCategory=RealData`; [cave profile](../world/crash-site-area-loader.md#crash-site-cave-profile) |
 | Whole-core step assessment | The Area variables except the oracle, plus `ARC_AREA_EFFECTS`, `ARC_AREA_PATCH` | Data project, `FullyQualifiedName~AreaStepOriginalDataTests&TestCategory=RealData`; [API and observations](../world/area-step-assessment.md) |
 | Click route on the whole core | `ARC_AREA_ORIGINAL=1` and the area coordinator roles (module, resource1/2, mobile, prototypes, effects, patch) | Terrain Viewer tests, `FullyQualifiedName~AreaRouteOriginalTests&TestCategory=RealData`; [route core](../world/click-route-runtime.md) |
 

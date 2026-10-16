@@ -20,7 +20,8 @@ not a collision system, a permit, navigation or original-executable parity.
 ## Authority and classification
 
 The overlay calls exactly the assessor the movement session uses:
-`AreaGridSession.Assess` (whole Crash Site core at T0, profile `CRASH_SITE_CORE_T0_V1`)
+`AreaGridSession.Assess` (the current map at T0 in its own chart: the whole Crash Site core,
+profile `CRASH_SITE_CORE_T0_V1`, or after ARC-WORLD-009 the cave)
 or `DiagnosticGridSession.Assess` (bounded WORLD003 zone x4..8, y0..3 of sector
 1452,1290, profile `BASE_SECTOR_1452_1290_ADJACENT_V1`), with the session's own
 snapshot, actor (`HUMAN_FIXED_DIAGNOSTIC`) and declared context. Each verdict keeps
@@ -75,7 +76,8 @@ above it. Pan, Fit, zoom and resize change only what is visible, never a cell's 
   not rescanned until it moves.
 - Above 20,000 visible cells (e.g. AREA Fit at minimum zoom) nothing is drawn and the
   HUD says `OVERLAY_ZOOM_IN`.
-- AREA: cells outside the nine core sectors (the drawn context ring) are Outside
+- AREA: cells outside the current map's admitted sectors (exterior: the nine core sectors;
+  the drawn context ring) are Outside
   without a request. WORLD: every cell of the sector outside the bounded zone is
   answered Unsupported by the assessor (`ZONE_UNSUPPORTED`).
 - OFF: no overlay instance exists, no assessment and no drawing happen.

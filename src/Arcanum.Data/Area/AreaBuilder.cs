@@ -193,11 +193,17 @@ public sealed partial class AreaDataOwner
         var reconciliation = new AreaReconciliation(survey.Count, core.Count, present.Length - core.Count, ring.Count - (present.Length - core.Count),
             terrain.Count(t => t.Scope == AreaScope.Core), terrain.Count(t => t.Scope == AreaScope.Context), objects.Count(o => o.Key.Kind == AreaSourceKind.Static && o.Scope == AreaScope.Core),
             aggregate.Count, partitions[0], partitions[1], partitions[2], partitions[3], editorIds.Count, prototypes.Count, visuals.Count);
-        if (_plan.Original) OriginalProfile.Check(reconciliation, sectors, objects, visuals);
+        if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior) OriginalProfile.Check(reconciliation, sectors, objects, visuals);
+        else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave) CaveProfile.Check(reconciliation, sectors, objects, visuals);
         // Only the actual new immutable collection copies/sort/endpoints remain
         // here; object/visual graphs were admitted before their construction.
         output.Allocate(checked(8192 + 32L * sectors.Count + 8L * (_plan.Identities.Count + terrain.Count + objects.Count + visuals.Count)));
-        var endpoints = _plan.Original ? OriginalProfile.Endpoints(objects) : [];
+        var endpoints = _plan.OriginalMap switch
+        {
+            OriginalAreaMap.CrashSiteExterior => OriginalProfile.Endpoints(objects),
+            OriginalAreaMap.CrashSiteCave => CaveProfile.Endpoints(objects),
+            _ => [],
+        };
         var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, endpoints);
         return new(snapshot, issues, _budget.Usage);
     }
@@ -239,7 +245,8 @@ public sealed partial class AreaDataOwner
             if (!x.HasValue || !y.HasValue) throw Fail(AreaErrorCode.UnknownLocation, AreaStage.Appearance, offset, ordinal);
             if (scope == AreaScope.Core)
             {
-                if (record.Type is not 2 and not 3 and not 5 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16)
+                // Walls (type 0) only where the plan binds both wall-name tables.
+                if (record.Type is not 2 and not 3 and not 5 and not 6 and not 7 and not 8 and not 9 and not 13 and not 14 and not 16 && !(record.Type == 0 && WallsAdmitted))
                     throw Fail(AreaErrorCode.UnsupportedVersionOrSchema, AreaStage.Appearance, offset, ordinal);
                 var aid = unchecked((uint)Number(effective, 0)); var ox = checked((int)Number(effective, 2)); var oy = checked((int)Number(effective, 3)); var scale = checked((int)Number(effective, 11));
                 var visualSector = sector ?? new AreaSectorCoordinate(x.Value / 64, y.Value / 64);

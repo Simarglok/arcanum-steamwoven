@@ -20,7 +20,7 @@ public static partial class TerrainViewerSelfTest
         using var source = new AreaOwnerFixture(motionBodies: true);
         var read = typeof(TerrainLoadCoordinator).Assembly.GetType("Arcanum.TerrainViewer.Core.AreaLoadOperation")!
             .GetMethod("ReadArea", BindingFlags.NonPublic | BindingFlags.Static)!;
-        var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None])!;
+        var area = (AreaLoadResult)read.Invoke(null, [7L, source.Owner, CancellationToken.None, null])!;
         // Whole-core step evidence over the same strict publication; a second snapshot leaves tile names Unknown.
         var module = source.Streams[new(AreaSourceRole.Module)].Bytes;
         var steps = AreaOwnerFixture.Steps(area.Snapshot, module, 7);
@@ -45,8 +45,9 @@ public static partial class TerrainViewerSelfTest
             // ARC-RENDER-008 on the whole-core authority: blocker (5,1), Open (7,1), (-1,1) outside the admitted sectors.
             await app.WorldPassabilityOverlayMatrixForSelfTestAsync(new(5, 1), new(7, 1), new(-1, 1), "crash-site-area");
             var gridReport = await app.AreaGridMatrixForSelfTestAsync(arguments, result, unknown);
+            var route = await app.AreaRouteMatrixForSelfTestAsync(viewport, result);
             var camera = await app.AreaCameraMatrixForSelfTestAsync(arguments, result);
-            var report = new { Grid = gridReport, Camera = camera };
+            var report = new { Grid = gridReport, Route = route, Camera = camera };
             if (source.Owner.Usage != usage || source.Streams.Values.Any(stream => stream.DisposeCount != 1))
                 throw new InvalidOperationException("AREA_GRID_PROVIDER_OWNERSHIP");
             var path = System.Environment.GetEnvironmentVariable("ARC_AREA_GRID_REPORT");

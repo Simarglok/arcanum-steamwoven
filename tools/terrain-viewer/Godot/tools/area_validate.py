@@ -32,6 +32,8 @@ def main() -> int:
     parser.add_argument('--candidate-root', type=Path, required=True)
     parser.add_argument('--app', type=Path)
     parser.add_argument('--timeout', type=int, default=900)
+    # The literal export task: ARC-WORLD-009 and ARC-RENDER-008 builds also load the cave and must pass its transition smoke.
+    parser.add_argument('--task', choices=('ARC-RENDER-007', 'ARC-INPUT-001', 'ARC-WORLD-007', 'ARC-WORLD-009', 'ARC-RENDER-008'), default='ARC-RENDER-007')
     args = parser.parse_args()
     host = 'exported' if args.app else 'source'
     summary: dict = dict(schema='arcanum-area-validation-v1', task='ARC-RENDER-007',
@@ -66,7 +68,7 @@ def main() -> int:
                    ARC_AREA_REPORT=str(evidence / 'coverage.json'))
         prefix = [str(args.app.resolve(strict=True))] if args.app else [
             '/Applications/Godot_mono.app/Contents/MacOS/Godot', '--path', str(root / 'tools/terrain-viewer/Godot')]
-        argv = prefix + ['--', '--native-smoke', *launch.terrain_arguments(config.load_config().get('inputs', {}), 'crash-site-area')]
+        argv = prefix + ['--', '--native-smoke', *launch.terrain_arguments(config.load_config().get('inputs', {}), 'crash-site-area', task=args.task)]
         stage = 'native-observation'
         code, output = run_child(argv, env, args.timeout)
         summary['exitCode'] = code
@@ -75,6 +77,10 @@ def main() -> int:
         if (code != 0 or 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS ' not in output
                 or 'ARC-RENDER-008 original overlay PASS ' not in output or 'ERROR:' in output):
             raise ValueError('native outcome')
+        if args.task in area_validation.CAVE_TASKS:
+            if 'ARC-WORLD-009 native-smoke transition PASS ' not in output:
+                raise ValueError('cave transition outcome')
+            summary['caveTransition'] = 'PASS'
         stage = 'original-reconciliation'
         raw = config.optional_authority_bytes(evidence / 'coverage.json')
         if raw is None:
@@ -89,7 +95,7 @@ def main() -> int:
             raise ValueError('candidate changed')
         summary.update(result, outcome='PASS', coverageSha256=hashlib.sha256(raw).hexdigest(),
                        originalRuntimeParity='NOT_VERIFIED')
-        area_validation.validate_report(summary, head, summary['host'])
+        area_validation.validate_report(summary, head, summary['host'], args.task)
     except (OSError, ValueError, TypeError, KeyError, subprocess.SubprocessError, ChildFailure) as error:
         if evidence is not None:
             # Exception details belong to ignored private diagnostics, not the

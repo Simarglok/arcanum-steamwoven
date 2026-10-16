@@ -48,11 +48,30 @@ class LauncherSyncTests(unittest.TestCase):
             for role in launch.MODE_ROLES[mode]:
                 self.assertIn(launch.ROLE_FLAGS[role], argv, f"{mode} must pass {role}")
         passed |= {token for token in launch.terrain_arguments(self.inputs(), "actor-diagnostic", {}) if token.startswith("--")}
+        for task, roles in launch.TASK_ROLES.items():
+            argv = launch.terrain_arguments(self.inputs(), launch.TASK_MODES[task], task=task)
+            passed |= {token for token in argv if token.startswith("--")}
+            for role in roles:
+                self.assertIn(launch.ROLE_FLAGS[role], argv, f"{task} must pass {role}")
         self.assertEqual(viewer, passed | NON_LAUNCHER_FLAGS,
                          "a viewer flag was added or removed: update GAME_ROLES/MODE_ROLES/ROLE_FLAGS and terrain_arguments")
         self.assertTrue(set(launch.ROLE_FLAGS.values()) <= viewer)
         self.assertEqual(set(launch.ROLE_FLAGS), set(launch.GAME_ROLES))
         self.assertTrue(all(set(roles) <= set(launch.GAME_ROLES) for roles in launch.MODE_ROLES.values()))
+        self.assertTrue(all(set(roles) <= set(launch.GAME_ROLES) for roles in launch.TASK_ROLES.values()))
+        self.assertEqual(set(launch.TASK_ROLES), set(launch.TASK_MODES))
+
+    def test_the_cave_input_is_passed_only_to_an_arc_world_009_area_build(self):
+        # Older AREA builds reject --area-cave-mobile; only the launched manifest's own task adds it.
+        for task in (None, "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007"):
+            self.assertNotIn("--area-cave-mobile", launch.terrain_arguments(self.inputs(), "crash-site-area", task=task), task)
+        argv = launch.terrain_arguments(self.inputs(), "crash-site-area", task="ARC-WORLD-009")
+        self.assertEqual(1, argv.count("--area-cave-mobile"))
+        self.assertNotIn("--area-cave-mobile", launch.terrain_arguments(self.inputs(), "world-diagnostic", task="ARC-WORLD-009"))
+        without = {role: path for role, path in self.inputs().items() if role != "caveMobile"}
+        launch.terrain_arguments(without, "crash-site-area", task="ARC-WORLD-007")
+        with self.assertRaises(ValueError):
+            launch.terrain_arguments(without, "crash-site-area", task="ARC-WORLD-009")
 
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()
@@ -64,6 +83,10 @@ class LauncherSyncTests(unittest.TestCase):
         for role in ("module", "actorResource", "terrainResource", "areaMobile"):
             _, size, sha256 = launch.GAME_ROLES[role]
             self.assertIn(f"{size}, \"{sha256}\"", profile, role)
+        cave = (REPO / "src/Arcanum.Data/Area/CaveProfile.cs").read_text()
+        _, size, sha256 = launch.GAME_ROLES["caveMobile"]
+        self.assertIn(f"NormalGameMobileBytes = {size};", cave)
+        self.assertIn(f"NormalGameMobileSha256 = \"{sha256}\";", cave)
         inventory = (REPO / "docs/research/crash-site-area-inventory.md").read_text()
         _, size, sha256 = launch.GAME_ROLES["areaEffects"]
         self.assertIn(f"| {size} | `{sha256}` |", inventory)
@@ -74,8 +97,8 @@ class LauncherSyncTests(unittest.TestCase):
     def test_project_launcher_modes_bind_known_modes_and_tasks(self):
         modes = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")["MODES"]
         # Same pairing arcanum-local enforces at launch: crash-site-area only from
-        # ARC-RENDER-007 or ARC-INPUT-001 (same AREA build plus the diagnostic palette).
-        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-RENDER-008"},
+        # ARC-RENDER-007, ARC-INPUT-001 (diagnostic palette), ARC-WORLD-007 (LMB click-to-move) ARC-WORLD-009 (cave) or ARC-RENDER-008 (passability overlay).
+        allowed = {"crash-site-area": {"ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008"},
                    "world-diagnostic": {"ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003"}}
         for mode, tasks in modes.values():
             self.assertIn(mode, launch.MODE_ROLES)

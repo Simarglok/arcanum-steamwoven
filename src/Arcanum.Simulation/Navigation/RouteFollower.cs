@@ -28,7 +28,7 @@ public sealed class RouteFollower
     private int _segmentNext;
     private CellCoord? _segmentCell;
     private SimulationTime? _requestedAt;
-    private ActorIntent? _issued;
+    private InputKey? _issued;
 
     public RouteFollower(IRouteStepSource source, RouteLimits? limits = null)
     {
@@ -79,9 +79,10 @@ public sealed class RouteFollower
         {
             if (segment.EndTime.Value > target.Value) return new(target, []);
             // While following, the click owns movement; afterwards only an intent the follower issued is cleared.
-            var owns = Status == RouteFollowStatus.Following || Owned(state);
+            // With nothing of its own to decide, the follower never splits another source's advance at a step end.
+            if (Status != RouteFollowStatus.Following && !Owned(state)) return new(target, []);
             var intent = Desired(state.Phase == MovementPhase.Returning ? segment.From : segment.To);
-            if (intent == state.LatestIntent || (!intent.Active && !owns)) return new(segment.EndTime, []);
+            if (intent == state.LatestIntent) return new(segment.EndTime, []);
             return new(segment.EndTime, [Issue(state, segment.EndTime, intent)]);
         }
         var owned = Status == RouteFollowStatus.Following || Owned(state);
@@ -158,12 +159,14 @@ public sealed class RouteFollower
     private static bool Admissible(MovementState state, SimulationTime time) =>
         state.IsClosed ? time.Value > state.Time.Value : time.Value >= state.Time.Value;
 
-    private bool Owned(MovementState state) => _issued is { } issued && state.LatestIntent == issued;
+    // Ownership is the receipt key, not the intent value: another source that sets the same direction owns it.
+    private bool Owned(MovementState state) => _issued is { } issued && state.LatestInputKey == issued;
 
     private InputBatch Issue(MovementState state, SimulationTime time, params ActorIntent[] intents)
     {
-        _issued = intents[^1];
-        return Batch(state, time, intents);
+        var batch = Batch(state, time, intents);
+        _issued = new InputKey(time, batch.Entries[^1].Sequence);
+        return batch;
     }
 
     private static InputBatch Batch(MovementState state, SimulationTime time, params ActorIntent[] intents)

@@ -43,12 +43,66 @@ counts remain separate sector metadata. Active required composite references tha
 this profile cannot resolve fail completeness; absence in these originals does not
 claim general overlay/underlay, wall or roof-rendering support.
 
-Cave loading, executing the recorded connector, PATCH/dif/loose-file precedence,
+The cave is a second pinned profile (see [Crash Site cave profile](#crash-site-cave-profile)).
+Executing the recorded connector, PATCH/dif/loose-file precedence,
 lighting, time, navigation, interaction, AI and original runtime/pixel parity remain
 unimplemented. The snapshot reports `RendererExecutionVerified == false` and
 `GameplayVerified == false`. The independent frozen 4,096-terrain/317-record sector
 regression is separate and unchanged; this API does not widen the five-only static
 resource API or the bounded traversal profile.
+
+## Crash Site cave profile
+
+ARC-WORLD-009 adds `AreaOriginalValidator.OpenCave(inputs, options)` and
+`OpenCaveFiles(module, resource1, resource2, caveMobile, prototypes, options)`
+for the cave, catalogue map 5078 / runtime map 79, under the pinned profile
+`arc-world-009-cave-file-effective-source-v1` (`CaveProfile`). It uses the same
+owner, budget, identity and frame contract as the exterior. Facts and sources are
+in the [cave transition research](../research/cave-transition-evidence.md).
+
+| Domain | Required reconciliation |
+| --- | ---: |
+| Surveyed cave sectors | 1 |
+| Core sector (32,31), townmap 141, 4 serialized lights | 1 |
+| Context sectors present / absent | 0 / 8 |
+| Core terrain cells | 4,096 |
+| Core static objects (125 walls, 13 scenery) | 138 |
+| Normal-game aggregate records, all core | 39 |
+| Aggregate/editor correspondences | 39 |
+| Required prototype definitions | 30 |
+| Distinct terrain frame chains plus core object bodies | 194 |
+
+The NormalGameMobile role is the cave's game-generated object file (6,698 bytes,
+SHA-256 `aa29827d…8318`), never the exterior one. The profile binds all ten mapping
+roles, including the two wall tables.
+
+**Walls.** Object type 0 is admitted only when a plan binds both `WallStructure`
+and `WallName`; otherwise it stays `UnsupportedVersionOrSchema`, as before. A wall
+selector (art class 1) chooses one file: the structure row for its wall number gives
+an interior name (rotations 0, 1, 6, 7) or an exterior name (2–5), matched by its
+first three characters to exactly one wall-name row; then the piece code, damage
+letter `u` and the variation digit. Damaged walls (selector bits 0x480), unknown
+pieces, other flag bits (1–3, 6), missing rows and ambiguous names fail. Structure
+rows are positional in the source, so a table whose keys below 1000 are not exactly
+0..n−1 is refused. The visual is physical group 0 of a single-rotation ART (an
+eight-rotation wall ART fails), frame 0, requested palette from bits 4–5;
+`NominalFacing` keeps the rotation and `Mirrored` keeps the flip bit (bit 0). For a
+wall, `Mirrored` means that flip bit, whose hotspot rule (width − hotX − 2) differs
+from the critter rotation alias. The loader does not move hotspots: drawing
+a wall (hotspot adjustment for rotations 0, 1, 6, 7 and the flip) and wall edge
+blocking are the next ARC-WORLD-009 steps.
+
+**Exact exceptions.** Five aggregate bodies use pinned policies, each bound to the
+object, record, raw selector, ART entry identity and payload digest: four contained
+items whose ground ART has trailing bytes after its last frame
+(`arc-world-009-exact-art-view-v1`; one NUL for entry 919, the bytes `02 00` for
+entries 955 and 956) and one container whose single-rotation ART is selected with
+rotation 1 (`arc-world-009-exact-single-group-alias-v1`). Any other mismatch fails.
+
+**Endpoint.** The snapshot publishes one endpoint: cave sector 2080374816 index 99,
+prototype 4047, use slot 1, script 1532 → catalogue 5000 / runtime 1, arrival
+(92913,82598). The exterior snapshot keeps its endpoint into the cave. Neither is
+executed by Data.
 
 ## API and explicit sources
 
@@ -119,7 +173,10 @@ population, exact record advancement and instance/editor bijection are validated
 there is no scan-to-next-version recovery or unchecked native handle restoration.
 
 Appearance resolution covers the admitted tile/facade and class4/7 scenery/container,
-class6 ground-item and class2/12/13 NPC source rules. The original profile has two
+class6 ground-item, class2/12/13 NPC and, where a plan binds both wall tables, class1
+wall source rules (see the cave profile). Object types 2, 3, 5–9, 13, 14 and 16 are
+admitted bodies, plus type 0 under the same wall condition; ammo (type 6) was added
+with the cave, which carries two. The original profile has two
 **exact-identity-only** exceptions: four specific item records use an authenticated
 1,418-byte ART view of a 1,419-byte entry, and one specific unique NPC aliases its
 nominal facing5 to physical group0 in an authenticated single-group entry. Raw
@@ -180,7 +237,7 @@ keys, checked section/count/range framing and the shared bounded ART decoder
 (4,096 frames/dimension, 256 KiB frame table, 4 Mi pixels, 16 MiB RGBA).
 The component reservation limit can reject a frame below those individual decoder
 limits. `Open` checks at most four non-prototype sources plus `MaxPrototypes`,
-eight mapping roles and `MaxVisuals` explicit ART bindings before authentication.
+one binding per mapping role (ten roles) and `MaxVisuals` explicit ART bindings before authentication.
 Caller-created source plans/input sets are outside the owner's allocation accounting;
 callers must not construct unlimited enumerables and expect `Open` to undo that work.
 
@@ -242,6 +299,10 @@ phase cancellation and lease/batch/disposal. Run with the pinned [toolchain](../
 "$DOTNET" test tests/Arcanum.Data.Tests/Arcanum.Data.Tests.csproj --no-restore \
   --filter 'FullyQualifiedName~.Area.&TestCategory!=RealData'
 ```
+
+The cave's opt-in check (`FullyQualifiedName~AreaCaveOriginalTests&TestCategory=RealData`)
+uses `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`,
+`ARC_AREA_PROTOTYPES` and `ARC_CAVE_MOBILE`, the cave's game-generated object file.
 
 For the opt-in full-original check, set `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`,
 `ARC_AREA_RESOURCE2`, `ARC_AREA_MOBILE`, `ARC_AREA_PROTOTYPES` and `ARC_AREA_ORACLE`
