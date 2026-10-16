@@ -24,14 +24,29 @@ tests and logs use counts, scheme ids and SHA-256 digests only.
 | FR-LIGHT-006 indoor/outdoor surfaces | Per drawn ART type, following the CE palette callback: tile/facade take **indoor** when their type bit is 0 (tile bit 8, facade bit 25) and **outdoor** otherwise; wall, critter, portal, scenery, container, roof, monster and unique NPC take outdoor; items only in ground disposition; interface, misc, light and eye-candy are unlit. The controlled actor is a critter (outdoor). The shader multiplies each item by its channel colour / 255. | Roof/roof-fade modes (no roofs in this core), local light blending, TIG palette/BPP rounding parity. |
 | FR-LIGHT-007 map default and sector scheme | Map default from `maps/<dir>/mapinfo.txt` `LightScheme` (one positive value, no guessed fallback) via `rules/maplist.mes`; each **core** sector's scheme word at metadata +8, re-read from the module and bound to the snapshot's entry identity and payload SHA-256. Word 0 is the map-default sentinel. The active sector is the one holding the actor's committed cell; a change re-selects at the same hour. | All nine original core sectors use the sentinel, so a visible sector switch is proven synthetically only. Context sectors, other maps and map transitions are out of scope. |
 
-Clock: the viewer does not use the [WORLD-008 session owner](../world/game-session-runtime.md)
-yet, so it bootstraps one `GameClockOwner` per load generation from the
-module's `rules/gameinit.mes` (year key 4, hour key 5, payload digest bound into
-the profile). Time advances **only** by explicit whole hours; there is no
-wall-clock flow, pause UI, sleep/wait or save state. FR-LIGHT-001/002 therefore
-stay open beyond this bootstrap/advance use. When the viewer adopts the session
-owner, the driver must read and advance that session's clock instead of its own,
-so that lighting and every other consumer see one clock.
+Clock (ARC-WORLD-010): the driver reads and advances the clock of the viewer's one
+[game session](../world/game-session-runtime.md), never a clock of its own. The session
+is created per load generation whenever area lighting is loaded (with or without the
+cave), with the clock profile of the module's `rules/gameinit.mes` (year key 4, hour
+key 5, payload digest bound into the profile; `AreaAmbientDriver.ClockProfile`). Each
+frame `AreaAmbientDriver.Tick` admits host time through
+[`GameTimeFlow`](../world/game-clock-runtime.md#host-time-flow-arc-world-010) (8× the
+admitted interval, so one game hour per 7.5 real minutes) and holds a `Menu` pause
+while the diagnostic palette or a dialog is open, releasing only a Menu pause it holds
+(a Menu pause already on the session when the driver binds, as after a restore, counts
+as held; User or TurnBased pauses are left alone); resume has no catch-up. Time keeps
+flowing while the window is unfocused or minimised: only a modal window pauses it. **Game time +1 hour** is an explicit wait (`ExplicitWait`) that also
+works during that pause. After every clock change that crosses an hour, and after a
+sector change, the selection is re-applied and recorded in the session
+(`RecordLighting`), so a session capture carries the time and the scheme selected for
+it (FR-LIGHT-012). The record is the selection, also in the cave (drawn unlit) and with
+the diagnostic lighting toggle off; in the cave the exterior sector last selected stays
+for the flow and the wait alike. Automated runs (self-test, native smoke) get no live flow; they drive
+the same tick with literal host times. The F7/F8 quick-save slot
+([ARC-WORLD-011](terrain-viewer.md#quick-save-and-quick-load-arc-world-011)) saves and
+loads this clock and the applied scheme; on a quick load the driver rebinds to the
+loaded session. Sleep/rest UI, turn-based combat, a scheduler and a save list are not
+implemented; the 8× rate is a CE source observation, NOT_VERIFIED.
 
 On the selected original module (opt-in real-data test): map 5000, map default
 scheme 1, all nine core sector words 0, scheme 1 payload SHA-256
@@ -59,9 +74,10 @@ Viewer Core (`tools/terrain-viewer/Core/AreaAmbient.cs`): `AreaAmbientPolicy`
 
 Following the [ARC-INPUT-001 route](../input/diagnostic-palette.md), diagnostics
 live in the diagnostic palette (Ctrl+Shift+F9 / gamepad Start), never on original
-game keys. In `crash-site-area` the palette has **Game time +1 hour** and
+game keys. In `crash-site-area` the palette has **Game time +1 hour** (a one-hour wait) and
 **Ambient lighting on/off** (off shows unlit source pixels) plus a lighting status
-line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), the scheme id and
+line. The HUD shows the game time, DAY/NIGHT (`[06:00,18:00)`), whether time flows
+(`time flows 8x`) or is paused (`PAUSED (dialog/palette open)`), the scheme id and
 whether it came from the map default. Without loaded lighting (other WORLD modes)
 both actions report "unavailable". No launch argument or key binding was added.
 
@@ -72,7 +88,10 @@ both actions report "unavailable". No launch argument or key binding was added.
   selection and reader fail-closed cases over a synthetic module; opt-in
   `RealData` test with the identities above (`ARC_AREA_*` inputs).
 - `tests/Arcanum.TerrainViewer.Tests/AreaAmbientTests.cs`: ART-type channels,
-  plan coverage, clock bootstrap/advance/day roll-over and sector change.
+  plan coverage, session-clock bootstrap/wait/day roll-over and sector change, 8×
+  flow to the hour boundary with the scheme switch, Menu pause without catch-up and
+  wait during it, a foreign clock profile refused, and capture → restore of time and
+  applied scheme.
 - Godot self-test `AssertAreaLightingAsync`: the production compositor with
   literal hand-computed pixels for outdoor, indoor, unlit, neutral and cleared
   ambient, and rejection of a command without a channel.
@@ -88,8 +107,15 @@ both actions report "unavailable". No launch argument or key binding was added.
   the indoor channel is proven by the synthetic self-test only.
   `ARC_AREA_LIGHTING_CAPTURE=<dir>` additionally saves one
   screenshot per checked hour (local evidence only, never committed).
+- `--native-smoke` clock phase (ARC-WORLD-010), after the transition phase: the
+  production tick at literal host times flows to the next hour boundary in exactly
+  ⌈remaining/2,000⌉ frames of 250 ms and the recorded scheme follows; the open
+  palette and an open dialog each hold the clock for 400 frames and resume with no
+  catch-up; the palette's +1 hour waits during the pause; a capture is encoded,
+  decoded and restored into a separate owner with the same time and applied scheme.
+  It prints `ARC-WORLD-010 native-smoke clock PASS`.
 
 Original night appearance, TIG multiply rounding, palette/BPP behaviour and
 gameplay effects of darkness remain NOT_VERIFIED. Light sources (FR-LIGHT-008..010),
-luminance checks (FR-LIGHT-011) and saving the clock/scheme (FR-LIGHT-012) are
-separate work.
+luminance checks (FR-LIGHT-011) and a save list (FR-LIFECYCLE) are separate work; the
+session snapshot carries the clock and the applied scheme, saved by the ARC-WORLD-011 quick-save slot.

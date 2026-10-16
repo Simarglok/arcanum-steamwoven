@@ -15,7 +15,8 @@ establish all of them. Original-runtime visual, placement and movement parity
 remain NOT_VERIFIED. Physical controller/Bluetooth and QHD comfort are separate
 observations, not software-test results.
 
-Day/night ambient lighting over this mode (game clock, hourly scheme, indoor/outdoor
+Day/night ambient lighting over this mode (session game clock that flows by itself and
+pauses while the palette or a dialog is open (ARC-WORLD-010), hourly scheme, indoor/outdoor
 channels; diagnostic palette actions *Game time +1 hour* and *Ambient lighting on/off*) is the separate
 [ARC-RENDER-010 component](area-lighting.md). The source-pixel gates below observe
 unlit pixels; the native smoke then runs its own lit-pixel phase.

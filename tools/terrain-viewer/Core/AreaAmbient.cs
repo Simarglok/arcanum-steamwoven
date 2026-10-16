@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
+using Arcanum.Session;
 using Arcanum.Simulation.Clock;
 
 namespace Arcanum.TerrainViewer.Core;
@@ -51,64 +52,101 @@ public static class AreaAmbientPolicy
 public sealed record AreaLightingPlan(AreaLightingSource Source, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels);
 
 /// <summary>
-/// Viewer wiring of day/night: one WORLD-004 clock owner bootstrapped from the module's startup
-/// declaration, advanced only by explicit whole-hour requests, and the Data hourly selection for the
-/// active sector. Caller-serialized like the clock. No wall-clock flow, scheduler or save state.
+/// Viewer wiring of day/night over the session clock (ARC-WORLD-010): the lighting reads and advances the
+/// <see cref="GameSessionOwner"/>'s clock, never one of its own, so lighting, HUD and snapshot see one time.
+/// <see cref="Tick"/> lets time flow from host milliseconds through <see cref="GameTimeFlow"/> and holds a
+/// Menu pause while a modal window is open, releasing only a pause it holds (a Menu pause already on the
+/// session when the driver binds, as after a restore, counts as held); <see cref="AdvanceHours"/> is an explicit wait that also works
+/// while paused. After every clock change the Data hourly selection for the active sector is re-applied
+/// and recorded in the session, so a capture carries the time and the scheme selected for it. The session is
+/// owned by the caller and outlives this driver. Caller-serialized like the session.
 /// </summary>
-public sealed class AreaAmbientDriver : IDisposable
+public sealed class AreaAmbientDriver
 {
     public const string ClockPolicy = "steamwoven-normalized-clock-v1";
     public const string ClockSourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     public const long HourMilliseconds = 3_600_000;
-    private readonly GameClockOwner _clock;
+    private readonly GameSessionOwner _session;
     private readonly AmbientLightingState _state;
     private readonly AreaLightingSource _source;
+    private readonly GameTimeFlow _flow = new();
+    private bool _holdsPause;
 
-    private AreaAmbientDriver(AreaLightingSource source, GameClockOwner clock, AmbientLightingState state, ClockSnapshot snapshot)
-    { _source = source; _clock = clock; _state = state; Clock = snapshot; }
+    private AreaAmbientDriver(AreaLightingSource source, GameSessionOwner session, AmbientLightingState state)
+    {
+        _source = source; _session = session; _state = state;
+        _holdsPause = session.QueryClockSnapshot().PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
+    }
 
-    public ClockSnapshot Clock { get; private set; }
+    public ClockSnapshot Clock => _session.QueryClockSnapshot();
     public AmbientSelection Selection => _state.Current ?? throw new InvalidOperationException("AREA_AMBIENT_NOT_APPLIED");
     public long Revision => _state.Revision;
-    /// <summary>Viewer toggle: off shows the unlit source pixels (neutral pair).</summary>
+    /// <summary>Viewer toggle: off shows the unlit source pixels (neutral pair). Not session state.</summary>
     public bool Enabled { get; set; } = true;
     public AmbientPair Effective => Enabled ? Selection.Pair : AmbientPair.Neutral;
+    /// <summary>True while this driver holds the session clock in a Menu pause for a modal window.</summary>
+    public bool ModalPaused => _holdsPause && Clock.PauseDisposition == new PauseDisposition(true, PauseReason.Menu);
 
-    public static AreaAmbientDriver Create(AreaLightingSource source, long activeSector)
+    /// <summary>The clock profile of the area lighting source's module and startup declaration.</summary>
+    public static ProfileBinding ClockProfile(AreaLightingSource source)
     {
         ArgumentNullException.ThrowIfNull(source);
-        var profile = new ProfileBinding(1, ClockPolicy, ClockSourceRevision, source.ModuleSha256,
+        return new(1, ClockPolicy, ClockSourceRevision, source.ModuleSha256,
             source.Startup.PayloadSha256, source.Startup.Year, source.Startup.Hour);
-        var boot = GameClockOwner.Bootstrap(profile);
-        if (boot.Disposition != ClockBootstrapDisposition.Ready) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_" + boot.Failure);
-        var state = new AmbientLightingState(source);
-        var driver = new AreaAmbientDriver(source, boot.Owner!, state, boot.Snapshot!.Value);
+    }
+
+    /// <summary>Binds to a session whose clock was started from this source's profile and applies the
+    /// current hour for the active sector.</summary>
+    public static AreaAmbientDriver Create(AreaLightingSource source, GameSessionOwner session, long activeSector)
+    {
+        ArgumentNullException.ThrowIfNull(source); ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryClockSnapshot().ProfileBinding != ClockProfile(source)) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_PROFILE");
+        var driver = new AreaAmbientDriver(source, session, new AmbientLightingState(source));
         driver.Apply(activeSector);
         return driver;
     }
 
     public static long SectorOf(long worldX, long worldY) => new AreaSectorCoordinate(worldX / 64, worldY / 64).Packed;
 
-    /// <summary>Advance the clock by whole game hours; the selection follows the new hour at once.
-    /// The sector is checked first, so a refusal leaves clock and selection unchanged together.</summary>
+    /// <summary>One host frame: hold or release the Menu pause for <paramref name="modal"/>, then admit the
+    /// host interval as ordinary game time (a paused clock ignores it, so a resume has no catch-up).
+    /// Returns true when the applied selection changed. A pause of another reason is left alone.</summary>
+    public bool Tick(long hostMilliseconds, bool modal, long activeSector)
+    {
+        var resolve = _source.TryResolveScheme(activeSector, out _, out _);
+        if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
+        var clock = Clock;
+        if (modal && !clock.PauseDisposition.Paused) { clock = Mutate(_session.SetPaused(clock.Token, new(true, PauseReason.Menu))); _holdsPause = true; }
+        else if (!modal && ModalPaused) { clock = Mutate(_session.SetPaused(clock.Token, default)); _holdsPause = false; }
+        else if (!ModalPaused) _holdsPause = false;
+        var admitted = _flow.Observe(hostMilliseconds);
+        var hour = clock.Hour;
+        if (admitted > 0) clock = Mutate(_session.AdvanceGameTime(clock.Token, admitted, ClockAdvanceReason.OrdinaryAdvance));
+        return clock.Hour != hour && Apply(activeSector);
+    }
+
+    /// <summary>Explicit wait of whole game hours (FR-LIGHT-002), also while paused; the selection follows the
+    /// new hour at once. The sector is checked first, so a refusal leaves clock and selection unchanged together.</summary>
     public bool AdvanceHours(int hours, long activeSector)
     {
         if (hours <= 0) throw new ArgumentOutOfRangeException(nameof(hours));
         var resolve = _source.TryResolveScheme(activeSector, out _, out _);
         if (resolve != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + resolve);
-        var result = _clock.AdvanceGameTime(Clock.Token, checked(hours * HourMilliseconds), ClockAdvanceReason.OrdinaryAdvance);
-        if (result.Disposition == ClockMutationDisposition.Rejected) throw new InvalidOperationException("AREA_AMBIENT_CLOCK_" + result.Failure);
-        Clock = result.Snapshot;
+        Mutate(_session.AdvanceGameTime(Clock.Token, checked(hours * HourMilliseconds), ClockAdvanceReason.ExplicitWait));
         return Apply(activeSector);
     }
 
-    /// <summary>Re-select for the active sector at the current hour (FR-LIGHT-007 sector change).</summary>
+    /// <summary>Re-select for the active sector at the current hour (FR-LIGHT-007 sector change) and record
+    /// the applied scheme in the session.</summary>
     public bool Apply(long activeSector)
     {
         var failure = _state.Apply(Clock.Hour, activeSector, out var changed);
         if (failure != LightingFailure.None) throw new InvalidOperationException("AREA_AMBIENT_" + failure);
+        var recorded = _session.RecordLighting(new(Selection.SchemeId, Selection.Hour));
+        if (recorded.Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_AMBIENT_RECORD_" + recorded.Failure);
         return changed;
     }
 
-    public void Dispose() => _clock.Dispose();
+    private static ClockSnapshot Mutate(ClockMutationResult result) => result.Disposition == ClockMutationDisposition.Rejected
+        ? throw new InvalidOperationException("AREA_AMBIENT_CLOCK_" + result.Failure) : result.Snapshot;
 }

@@ -42,9 +42,9 @@ public sealed class GameClockOwner : IDisposable
     {
         ObjectDisposedException.ThrowIf(disposed, this);
         if (durationGameMs < 0) return Reject(ClockFailure.InvalidDuration);
-        if (reason != ClockAdvanceReason.OrdinaryAdvance) return Reject(ClockFailure.InvalidReason);
+        if (reason is not (ClockAdvanceReason.OrdinaryAdvance or ClockAdvanceReason.ExplicitWait)) return Reject(ClockFailure.InvalidReason);
         if (token != state.Token) return Reject(ClockFailure.StaleToken);
-        if (durationGameMs == 0 || state.PauseDisposition.Paused) return NoChange();
+        if (durationGameMs == 0 || (state.PauseDisposition.Paused && reason == ClockAdvanceReason.OrdinaryAdvance)) return NoChange();
         long timestamp;
         try { timestamp = checked(state.GameTimestampMs + durationGameMs); }
         catch (OverflowException) { return Reject(ClockFailure.TimeOverflow); }

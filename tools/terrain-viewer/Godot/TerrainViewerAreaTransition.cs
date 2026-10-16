@@ -39,8 +39,7 @@ public partial class TerrainViewerApp
         if (result.Area is not { } area) return;
         var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
         ProfileBinding? clock = area.Lighting is { } lighting
-            ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, lighting.Source.ModuleSha256,
-                lighting.Source.Startup.PayloadSha256, lighting.Source.Startup.Year, lighting.Source.Startup.Hour)
+            ? AreaAmbientDriver.ClockProfile(lighting.Source)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
         if (clock is not { } profile) { _areaUseStatus = "cave: not loaded (no session clock)"; return; }
         // The game-generated object file carries an empty module GUID here, so the session's module id is

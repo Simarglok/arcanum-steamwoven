@@ -32,7 +32,10 @@ Accepted departures in this component:
 - Hour/minute/second are whole values; subsecond remainder remains in
   MillisecondOfDay. Year is checked **long**, never narrowed to int. IsDay is `[6,18)`.
 - Explicit already-admitted game duration, not unconditional8× wall time, source
-  5/250 admission, nested menu counters or animation advancement.
+  5/250 admission, nested menu counters or animation advancement. The host-side
+  admission adapter `GameTimeFlow` (ARC-WORLD-010, below) is separate from the authority.
+- `ExplicitWait` (ARC-WORLD-010) is a deliberate wait that advances while paused and
+  keeps the pause disposition; `OrdinaryAdvance` keeps the paused no-op.
 - Explicit pause disposition, no replay on resume. Freeze is a clock no-op,
   not a promise that already-due callbacks elsewhere are suppressed.
 
@@ -42,6 +45,21 @@ network behavior, resource precedence, save/gameplay/night/visual parity remain
 retail parity. Movement `SimulationTime`/`StepDuration` remain separate and unchanged;
 no conversion or integration with [movement](grid-movement-runtime.md) is accepted.
 
+## Host time flow (ARC-WORLD-010)
+
+`GameTimeFlow` turns monotonic, nonnegative host milliseconds into admitted game
+milliseconds for `OrdinaryAdvance`, following the bounded source worksheet of
+[RES-020](game-clock-policy.md#separate-time-domains-and-source-admission): the first
+observation admits nothing; an interval under 5 ms admits nothing and keeps the
+reference (short intervals accumulate); an admitted interval moves the reference and
+is clamped to 250 ms, the excess discarded; game time gains 8 × the admitted interval
+(one game hour per 7.5 real minutes at a steady frame rate). A host time that goes
+backwards restarts the reference; `Reset()` forgets it. The 8× rate is the CE source
+observation, not an original-runtime measurement (**NOT_VERIFIED**). Pause stays the
+clock's: the host keeps observing while paused and the clock ignores the ordinary
+advance, so resume has no catch-up. Network gate counters, turn-based combat and
+animation time are not modelled. Tests: `tests/Arcanum.Simulation.Tests/Clock/TimeFlowTests.cs`.
+
 ## API and caller ownership
 
 Namespace `Arcanum.Simulation.Clock`:
@@ -50,7 +68,7 @@ Namespace `Arcanum.Simulation.Clock`:
 | --- | --- |
 | `GameClockOwner.Bootstrap(ProfileBinding)` | Explicit validation before readiness. Returns `ClockBootstrapResult`: Ready/None with Owner and initial Snapshot, or Rejected/typed failure with **both null**. No public owner constructor. |
 | `QueryClockSnapshot()` | Full detached immutable value, structurally equal on repeated reads. No time/revision change or publication. |
-| `AdvanceGameTime(ClockToken,long durationGameMs,ClockAdvanceReason)` | Explicit reason `OrdinaryAdvance` only. Negative duration rejects even paused. Zero or paused yields equal-state NoChange after request/token validation. Otherwise stage complete normalized output and revision+1 once. |
+| `AdvanceGameTime(ClockToken,long durationGameMs,ClockAdvanceReason)` | Reason `OrdinaryAdvance` or `ExplicitWait`; any other value is InvalidReason. Negative duration rejects even paused. Zero, or paused with `OrdinaryAdvance`, yields equal-state NoChange after request/token validation. `ExplicitWait` advances while paused and preserves the disposition. Otherwise stage complete normalized output and revision+1 once. |
 | `SetPaused(ClockToken,PauseDisposition)` | Identical disposition NoChange; reason-only change is semantic. Resume changes disposition/revision only, never advances time. |
 | `Dispose()` | Idempotent, no semantic revision/publication. Every later query/advance/pause throws `ObjectDisposedException`, even a malformed/no-op request. Returned history remains readable. |
 

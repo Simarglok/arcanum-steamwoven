@@ -34,6 +34,14 @@ public readonly record struct MapChangeKey(MapChangeScope Scope, long Sector, st
 
 public readonly record struct MapChange(MapChangeKey Key, long Value);
 
+/// <summary>
+/// Applied ambient lighting (FR-LIGHT-012): the resolved scheme id (positive; the map-default sentinel 0 is
+/// never applied) and the game hour it was selected for. The host records it after it applies a selection;
+/// it is presentation state derived from the clock, map and sector, saved with the time (FR-LIGHT-012) so a
+/// load restores the selected scheme of the saved hour together with the clock.
+/// </summary>
+public readonly record struct SessionLightingState(int SchemeId, int Hour);
+
 /// <summary>Session limits can be lowered, never raised above the policy maxima.</summary>
 public sealed class GameSessionLimits
 {
@@ -70,7 +78,7 @@ public enum GameSessionFailure
 {
     None, InvalidDescriptor, ClockRejected, FlagsRejected, InvalidActor, InvalidMap, InvalidChangeKey,
     BudgetExceeded, StaleVersion, RevisionExhausted, UnsupportedSchema, WrongWorld, WrongModule,
-    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor,
+    IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidLighting,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -168,13 +176,16 @@ public sealed class SessionMapState
 /// </summary>
 public sealed class GameSessionSnapshot
 {
-    public const int CurrentSchemaVersion = 2;
+    /// <summary>Schema 3 carries <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010),
+    /// which landed together; schemas 1 and 2 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 3;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
-        SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story)
+        SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
+        SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
-        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story;
+        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -185,6 +196,8 @@ public sealed class GameSessionSnapshot
     public ActorPlacement Actor { get; }
     public IReadOnlyList<SessionMapState> Maps { get; }
     public SessionStoryState Story { get; }
+    /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
+    public SessionLightingState? Lighting { get; }
 }
 
 internal static class SessionValidation
@@ -193,6 +206,8 @@ internal static class SessionValidation
     internal const int MaxPropertyCharacters = 64;
 
     internal static bool Map(SessionMapId map) => map.RuntimeMap >= 1;
+
+    internal static bool Lighting(SessionLightingState lighting) => lighting.SchemeId >= 1 && lighting.Hour is >= 0 and <= 23;
 
     internal static bool Actor(ActorPlacement actor) => Map(actor.Map) &&
         actor.Cell.X >= 0 && actor.Cell.Y >= 0 && Enum.IsDefined(actor.Facing);

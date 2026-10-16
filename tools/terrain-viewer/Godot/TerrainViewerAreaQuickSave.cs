@@ -153,10 +153,13 @@ public partial class TerrainViewerApp
     private void ReplaceAreaSession(GameSessionOwner session, IReadOnlyDictionary<int, AreaMapRuntime> maps, int currentMap,
         AreaConversationHost? talk)
     {
+        // Every refusal comes first, then the day/night driver is built: if either refuses, nothing has been swapped.
+        if (_conversationHost is not null && talk is null) throw new InvalidOperationException("AREA_CONVERSATION_REBIND_REQUIRED");
+        RebindAreaAmbient(session);
         var previous = _areaSession;
         _areaSession = session;
         // The dialog host borrows the session (ARC-SCRIPT-006): it is swapped with it, before the old one is disposed.
-        if (_conversationHost is not null) _conversationHost = talk ?? throw new InvalidOperationException("AREA_CONVERSATION_REBIND_REQUIRED");
+        if (_conversationHost is not null) _conversationHost = talk!;
         if (_areaTransitions is not null) _areaTransitions = new(maps.Values, currentMap, session);
         previous?.Dispose();
     }

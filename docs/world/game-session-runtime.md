@@ -33,6 +33,7 @@ and GF owners. There are no locks, events, callbacks, timers, files or Godot typ
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
 | `QueryClockSnapshot` / `AdvanceGameTime` / `SetPaused` | Forwarded to the session's clock with the clock's own token contract. Clock changes do not move the session revision. |
+| `QueryLighting` / `RecordLighting` | Applied ambient lighting (ARC-WORLD-010, FR-LIGHT-012): `SessionLightingState(SchemeId ≥1, Hour 0..23)` or `null` when none was recorded. `RecordLighting` refuses (`InvalidLighting`) a value whose hour is not the clock's current hour, and a changed `AdvanceGameTime` that leaves the recorded hour clears the record, so a capture never pairs a time with another hour's scheme (it carries `null` until the host records the new hour). Equal value is NoChange. It does not move the session revision. |
 | `Flags` / `FlagVersion` | A forwarding `IVersionedGlobalFlagOwner` view of the session's GF owner (reads, writes, current version, `GlobalFlagAdapter`, dialog conversations; no Dispose or MarkFailed) and its current version. GF changes do not move the session revision. |
 | `SetQuestState` / `LearnRumor` | Story mutations with the same expected-version guard and refusal order (input, version, NoChange, revision capacity). One revision per change. See [Story domain](#story-domain). |
 | `QueryQuest` / `QueryGlobalQuest` / `QueryRumor` / `QueryStory` | PC quest record or `null` (never changed); shared state (`Accepted` by default); rumor time or `null`; a detached ascending copy of the whole domain. A number outside the source range throws `ArgumentOutOfRangeException`. |
@@ -111,20 +112,20 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 2
+## Snapshot schema 3
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
 pause, revision; no owner identity), `Flags` (revision and every admitted flag in
 ascending order, `null` = Unknown), `Actor`, `Maps` (ascending map, each with
-changes in canonical order: scope, sector, entity, property, ordinal) and `Story`
-(PC quests, shared quests that left `Accepted`, known rumors; each ascending). Collections
-are read-only copies.
+changes in canonical order: scope, sector, entity, property, ordinal), `Story`
+(PC quests, shared quests that left `Accepted`, known rumors; each ascending) and
+`Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":2,
+{"format":"arcanum-steamwoven-session","schemaVersion":3,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -136,7 +137,8 @@ are read-only copies.
    {"scope":"entity","entity":"npc-1","property":"hp","value":12}]}],
  "story":{"quests":[{"quest":1001,"state":"Accepted","botched":false,"timestampMs":54000000}],
           "globalQuests":[{"quest":1002,"state":"Completed"}],
-          "rumors":[{"rumor":1200,"timestampMs":54000000}]}}
+          "rumors":[{"rumor":1200,"timestampMs":54000000}]},
+ "lighting":{"schemeId":1,"hour":15}}
 ```
 
 (Line breaks added here; the encoder writes no whitespace.) `TryDecode` returns a
@@ -160,12 +162,20 @@ policy, source pin, data/startup fingerprints, start year/hour), whose clock or 
 state the component owners refuse, or that exceeds the caller's limits. A refused
 restore returns no owner and leaves the caller's current session as it was.
 
-**Migration decision (ARC-SCRIPT-006): none.** Schema 2 is the only accepted version;
-schema 1 text is `UnsupportedSchema`, and a schema-1 quick-save file (ARC-WORLD-011)
-loads as "written by an incompatible version" with the running session kept. The only
-schema-1 host (the AREA viewer) had a one-flag placeholder GF domain, so a migrated
-session could not run any dialog. Adding another domain (inventory, party) needs
-schema 3 with its own explicit migration decision.
+Restore also refuses (`InvalidLighting`) a lighting value outside the ranges or whose
+hour differs from the saved clock's hour. A restored clock keeps its saved pause: a
+snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
+and the host releases or re-applies its modal pause from what is actually open.
+
+**Migration decision: none.** Schema 3 is the only accepted version. ARC-SCRIPT-006
+added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
+field; each was briefly schema 2 on its own while they landed together, so the merged
+format is schema 3 and schemas 1 and 2 are `UnsupportedSchema`. A schema-1 or schema-2
+quick-save file (ARC-WORLD-011) loads as "written by an incompatible version" with the
+running session kept, and the next F7 overwrites it. The only earlier host (the AREA
+viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
+dialog. Adding another domain (inventory, party) needs schema 4 with its own explicit
+migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -192,6 +202,8 @@ and a literal, independently written canonical JSON text:
 - `SessionOwnerTests`: creation and rejection, leave-and-return across two maps with an
   untouched neighbour sector, version guards and revision counting, key validation,
   budgets, detached capture, clock forwarding, disposal.
+- `SessionLightingTests`: lighting validation and current-hour rule, no revision move,
+  `null` round trip, restore refusing another hour, paused restore with lighting.
 - `StoryStateTests`: quest rises, shared completion and terminal states, botched over a
   kept state, shared states that convert a request, rumor times, invalid and stale
   requests, survival across a map round trip and the snapshot, story decode failures,
@@ -215,7 +227,7 @@ and a literal, independently written canonical JSON text:
 
 - Save/load UI, a save list, more than one slot, backups, autosave, thumbnails (the
   one quick-save slot is ARC-WORLD-011).
-- Clock integration with lighting or the viewer's own time; script (SCR) state and timers.
+- Script (SCR) state and timers.
 - Concrete map-change vocabulary beyond the viewer's NPC dialog keys (doors, containers,
   other NPC state) and their application to rendering or step assessment; original
   sector-diff and mobile-object formats.

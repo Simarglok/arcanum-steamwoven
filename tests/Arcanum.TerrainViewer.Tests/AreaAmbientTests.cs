@@ -1,6 +1,8 @@
 using System.Text;
 using Arcanum.Data.Area;
 using Arcanum.Data.Lighting;
+using Arcanum.Session;
+using Arcanum.Simulation.Clock;
 using Arcanum.TerrainViewer.Core;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 
@@ -55,20 +57,31 @@ public sealed class AreaAmbientTests
         new Dictionary<int, LightSchemeTable> { [1] = Table(1, h => $"{h},{h},{h},{100 + h},0,0"), [3] = Table(3, h => $"0,{h},0,0,{200 + h},0") },
         new StartupClockDeclaration(1885, startHour, Sha));
 
+    private static GameSessionOwner Session(AreaLightingSource source, ProfileBinding? profile = null)
+    {
+        var created = AreaTransitionCoordinator.CreateSession(profile ?? AreaAmbientDriver.ClockProfile(source),
+            Guid.Parse("11111111-1111-1111-1111-111111111111"), Guid.Parse("22222222-2222-2222-2222-222222222222"), new(100, 100), 1);
+        Assert.AreEqual(GameSessionFailure.None, created.Failure);
+        return created.Owner!;
+    }
+
     [TestMethod]
     public void Driver_starts_at_declared_hour_and_applies_whole_hours_and_sector_changes()
     {
-        using var driver = AreaAmbientDriver.Create(Source(15), West);
+        using var session = Session(Source(15));
+        var driver = AreaAmbientDriver.Create(Source(15), session, West);
         Assert.AreEqual(54_000_000, driver.Clock.GameTimestampMs);
         Assert.AreEqual((15, true), (driver.Clock.Hour, driver.Clock.IsDay));
         Assert.AreEqual(new AmbientSelection(1, true, West, 15, new(new(15, 15, 15), new(115, 0, 0))), driver.Selection);
         Assert.AreEqual(1, driver.Revision);
         Assert.AreEqual(driver.Selection.Pair, driver.Effective);
+        Assert.AreEqual(new SessionLightingState(1, 15), session.QueryLighting());
 
         Assert.IsFalse(driver.Apply(West)); Assert.AreEqual(1, driver.Revision);
         Assert.IsTrue(driver.Apply(East)); Assert.AreEqual(2, driver.Revision);
         Assert.AreEqual(new AmbientSelection(3, false, East, 15, new(new(0, 15, 0), new(0, 215, 0))), driver.Selection);
         Assert.AreEqual(15, driver.Clock.Hour, "a sector change keeps the game hour");
+        Assert.AreEqual(new SessionLightingState(3, 15), session.QueryLighting());
 
         Assert.IsTrue(driver.AdvanceHours(4, East));
         Assert.AreEqual((19, false, 68_400_000L), (driver.Clock.Hour, driver.Clock.IsDay, driver.Clock.GameTimestampMs));
@@ -79,6 +92,7 @@ public sealed class AreaAmbientTests
         Assert.IsFalse(driver.AdvanceHours(24, West), "a whole day returns to the same hour and scheme");
         Assert.AreEqual((1, 2L), (driver.Clock.Hour, driver.Clock.DayIndex));
         Assert.AreEqual(4, driver.Revision);
+        Assert.AreEqual(driver.Clock, session.QueryClockSnapshot(), "the driver has no clock of its own");
 
         driver.Enabled = false;
         Assert.AreEqual(AmbientPair.Neutral, driver.Effective);
@@ -87,8 +101,103 @@ public sealed class AreaAmbientTests
         Assert.ThrowsExactly<InvalidOperationException>(() => driver.Apply(new AreaSectorCoordinate(1, 1).Packed));
         var clock = driver.Clock; var selection = driver.Selection;
         Assert.ThrowsExactly<InvalidOperationException>(() => driver.AdvanceHours(1, new AreaSectorCoordinate(1, 1).Packed));
+        Assert.ThrowsExactly<InvalidOperationException>(() => driver.Tick(10_000, false, new AreaSectorCoordinate(1, 1).Packed));
         Assert.AreEqual(clock, driver.Clock, "a refused advance leaves the clock unchanged");
         Assert.AreEqual(selection, driver.Selection);
+    }
+
+    [TestMethod]
+    public void Driver_refuses_a_session_started_from_another_profile()
+    {
+        using var session = Session(Source(15), AreaAmbientDriver.ClockProfile(Source(16)));
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaAmbientDriver.Create(Source(15), session, West));
+    }
+
+    [TestMethod]
+    public void Tick_flows_eight_times_admitted_host_time_and_switches_the_scheme_at_the_hour()
+    {
+        // Start 15:00; 450,000 host ms at 8x is exactly one game hour. Ticks of 250 ms admit 2,000 game ms each.
+        using var session = Session(Source(15));
+        var driver = AreaAmbientDriver.Create(Source(15), session, West);
+        Assert.IsFalse(driver.Tick(0, false, West), "the first observation admits nothing");
+        var changes = 0;
+        for (var host = 250L; host <= 449_750; host += 250) changes += driver.Tick(host, false, West) ? 1 : 0;
+        Assert.AreEqual((0, 15, 54_000_000L + 3_598_000L), (changes, driver.Clock.Hour, driver.Clock.GameTimestampMs));
+        Assert.IsTrue(driver.Tick(450_000, false, West), "the hour boundary re-applies the scheme");
+        Assert.AreEqual((16, 0, 57_600_000L), (driver.Clock.Hour, driver.Clock.Minute, driver.Clock.GameTimestampMs));
+        Assert.AreEqual(new AmbientSelection(1, true, West, 16, new(new(16, 16, 16), new(116, 0, 0))), driver.Selection);
+        Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
+        Assert.IsFalse(driver.ModalPaused);
+        // A hitch admits at most 250 host ms.
+        driver.Tick(1_000_000, false, West);
+        Assert.AreEqual(57_602_000L, driver.Clock.GameTimestampMs);
+    }
+
+    [TestMethod]
+    public void Modal_window_pauses_the_clock_without_catch_up_and_wait_still_works()
+    {
+        using var session = Session(Source(15));
+        var driver = AreaAmbientDriver.Create(Source(15), session, West);
+        driver.Tick(0, false, West);
+        driver.Tick(100, false, West);
+        Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs);
+
+        driver.Tick(200, true, West);
+        Assert.IsTrue(driver.ModalPaused);
+        Assert.AreEqual(new PauseDisposition(true, PauseReason.Menu), session.QueryClockSnapshot().PauseDisposition);
+        Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs, "the interval observed while opening is not game time");
+        for (var host = 450L; host < 3_600_000; host += 250) driver.Tick(host, true, West);
+        driver.Tick(3_600_000, true, West);
+        Assert.AreEqual(54_000_800L, driver.Clock.GameTimestampMs, "an hour of open dialog moves nothing");
+
+        Assert.IsTrue(driver.AdvanceHours(1, West), "an explicit wait works while the dialog pause holds");
+        Assert.AreEqual((16, true), (driver.Clock.Hour, driver.ModalPaused));
+        Assert.AreEqual(new SessionLightingState(1, 16), session.QueryLighting());
+
+        driver.Tick(3_600_100, false, West);
+        Assert.IsFalse(driver.ModalPaused);
+        Assert.AreEqual(57_600_800L + 800L, driver.Clock.GameTimestampMs, "resume admits only the interval after the last paused frame");
+
+        // A pause the driver did not set (another reason) is not released by a closed modal.
+        var user = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.User));
+        Assert.AreEqual(ClockMutationDisposition.Changed, user.Disposition);
+        driver.Tick(3_600_400, false, West);
+        Assert.AreEqual(new PauseDisposition(true, PauseReason.User), driver.Clock.PauseDisposition);
+        Assert.AreEqual(57_601_600L, driver.Clock.GameTimestampMs);
+
+        // Nor a Menu pause someone else set while this driver held none.
+        var menu = session.SetPaused(session.QueryClockSnapshot().Token, new(true, PauseReason.Menu));
+        Assert.AreEqual(ClockMutationDisposition.Changed, menu.Disposition);
+        Assert.IsFalse(driver.ModalPaused);
+        driver.Tick(3_600_800, false, West);
+        Assert.AreEqual(new PauseDisposition(true, PauseReason.Menu), driver.Clock.PauseDisposition);
+    }
+
+    [TestMethod]
+    public void Capture_carries_the_time_and_the_applied_scheme_and_restores_them()
+    {
+        using var session = Session(Source(15));
+        var driver = AreaAmbientDriver.Create(Source(15), session, East);
+        driver.AdvanceHours(5, East);
+        driver.Tick(0, true, East);
+        var text = GameSessionSnapshotCodec.Encode(session.Capture());
+        StringAssert.Contains(text, "\"timestampMs\":72000000,\"paused\":true,\"pauseReason\":\"Menu\"");
+        StringAssert.EndsWith(text, ",\"lighting\":{\"schemeId\":3,\"hour\":20}}");
+        var decoded = GameSessionSnapshotCodec.TryDecode(text);
+        Assert.AreEqual(SnapshotDecodeFailure.None, decoded.Failure);
+        var identity = new Arcanum.Scripting.GlobalFlags.GlobalFlagIdentity(new(Guid.Parse("11111111-1111-1111-1111-111111111111")),
+            new(Guid.Parse("22222222-2222-2222-2222-222222222222")));
+        var restoredResult = GameSessionOwner.Restore(decoded.Snapshot, new(identity, AreaAmbientDriver.ClockProfile(Source(15)), new(Guid.NewGuid())));
+        Assert.AreEqual(GameSessionFailure.None, restoredResult.Failure);
+        using var restored = restoredResult.Owner!;
+        Assert.AreEqual(new SessionLightingState(3, 20), restored.QueryLighting());
+        // A driver on the restored session selects the same scheme for the restored hour at once.
+        var resumed = AreaAmbientDriver.Create(Source(15), restored, East);
+        Assert.AreEqual((3, 20), (resumed.Selection.SchemeId, resumed.Selection.Hour));
+        Assert.IsTrue(resumed.ModalPaused);
+        resumed.Tick(1_000, false, East);
+        resumed.Tick(1_100, false, East);
+        Assert.AreEqual(72_000_800L, resumed.Clock.GameTimestampMs);
     }
 
     [TestMethod]

@@ -416,6 +416,9 @@ session, then clicks the entrance from the return cell three cells away, checks 
 ground click cancels that walk-to-use, clicks again and lets the route walk there
 before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
+A clock phase follows (ARC-WORLD-010, [area lighting](area-lighting.md#verification)): the session clock flows to the
+next hour at literal host times, holds while the palette and a dialog are open, waits +1 hour during the pause
+and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher passes the cave input only to an
@@ -459,8 +462,8 @@ list, naming, confirmation or autosave. Elsewhere F7/F8 stay reserved.
   (ARC-SCRIPT-006) is rebuilt over the loaded session there, so flags, quests, rumors
   and NPC dialog state (LF, reaction, follow consent) come back with the save; a save
   whose dialog values it cannot read is refused before anything changes. Snapshot sections other domains
-  add later are restored with the session; the viewer's day/night clock does not
-  read the session clock yet.
+  add later are restored with the session; the day/night driver (ARC-WORLD-010) rebinds
+  there to the loaded clock, so a load restores the saved time, pause and applied scheme.
 - **HUD.** The area status line shows the slot and the last F7/F8 result.
 
 The native smoke (`--native-smoke` with the cave input) runs a quick-save phase after

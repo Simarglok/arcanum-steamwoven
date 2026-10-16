@@ -162,6 +162,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaLightingSmokeAsync(area);
         if (_areaTransitions is not null) { await RunAreaTransitionSmokeAsync(); await RunAreaQuickSaveSmokeAsync(); }
+        RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }
     private bool TryAreaPixel(AreaDrawCommand command, AreaLoadResult area, Image image, out object sample, out AreaPixelDiagnostics diagnostics)
