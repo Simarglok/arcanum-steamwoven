@@ -1,6 +1,6 @@
 # Documentation index
 
-Start with [current status](project/status.md), [vision](project/vision.md), [dependency roadmap](project/roadmap.md) and [toolchain](workflow/toolchain.md). Research documents retain historical claims and evidence boundaries; linked implementation pages describe current APIs. The Hermes board supplies active tasks.
+Start with [current status](project/status.md), [vision](project/vision.md), [dependency roadmap](project/roadmap.md) and [toolchain](workflow/toolchain.md). Research documents retain historical claims and evidence boundaries; linked implementation pages describe current APIs. Active tasks come from the owner ([task workflow](workflow/tasks.md)).
 
 ## Project
 
@@ -14,7 +14,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md)
-- [Hermes project workflow](workflow/hermes.md)
+- [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 

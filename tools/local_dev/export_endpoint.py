@@ -87,8 +87,6 @@ class ObservationSampler:
         qualified = self.coverage and self.error is None and not self.truncated and success
         return {"schema": "arcanum-export-observation-v1", "candidateId": candidate_id,
                 "candidateCommit": candidate_id.split(":")[-1], "tool": tool,
-                "taskRun": os.environ.get("HERMES_KANBAN_TASK"),
-                "session": os.environ.get("HERMES_SESSION_ID"),
                 "samplingIntervalSeconds": self.interval, "sampleCount": len(self.samples),
                 "destinationBindings": {role: retention.destination_proof(path)[1] for role, path in self.paths.items()},
                 "finishedAt": datetime.now(timezone.utc).isoformat(), "successfulValidation": success,
