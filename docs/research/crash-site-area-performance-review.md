@@ -78,7 +78,7 @@ over the 961 MB of DAT inputs (inferred, not timed per call):
 
 | Option | Expected gain | Size | Notes |
 | --- | --- | --- | --- |
-| L-A Release assemblies for daily runs (a release export preset, or optimized Data/Core assemblies in Debug) | 22 → 12–13 s | small code, but export gates and presets | Owner decision: the earlier plan chose hot-loop fixes over the optimize flag, and the export/evidence chain is built around `macOS debug`. |
+| L-A Release assemblies for daily runs (a release export preset, or optimized Data/Core assemblies in Debug) | 22 → 12–13 s | small code, but export gates and presets | Owner approved on 2026-10-16; done, see the L-A result. |
 | L-B Keep the RGBA decoded in the strict build and hand it to the frame copy | about half the copy: 4 s Debug, 1.5–2 s Release | medium | Changes the loader contract (strict build retains pixels for selected frames, about 26 MB); the copy keeps its batch authentication. |
 | L-C Share authentication within one load (cave owner and `VerifyFile` reuse the main owner's verified identities while the files are held open) | 1.5–2 s in both configurations | medium | Needs an explicit argument for why a held-open, already hashed file cannot change, or a cheaper size/mtime guard; fail-closed contract change. |
 | L-D Decode frames in parallel (14 cores) | copy 8.5 → about 3 s Debug, 3.6 → about 2 s Release, unless batch authentication is also split (estimate) | medium–large | The owner's budget and admission counters are sequential and deterministic today; parallel work must keep exact, reproducible accounting. |
@@ -188,11 +188,43 @@ takes 10.0 of the Data project's 12.6 s.
 | --- | --- | --- | --- |
 | D-A Shrink the differential corpus of that test (or keep the full corpus in an opt-in category) | −9 s per root test run | small | Keep the edge-code and truncation cases. |
 
+## F-A result: overlay redraw and batching
+
+Implemented as described in the [overlay contract](../rendering/passability-overlay.md).
+Same probe and machine, two runs each (before = the table above):
+
+| Phase (uncapped) | Before | After | Draw calls before / after | Redraws per frame after |
+| --- | ---: | ---: | ---: | ---: |
+| Pan, zoom 1, overlay on | 10.0–13.3 ms | 5.1–7.8 ms | 458–573 / 43–119 | 0.05–0.11 |
+| Pan, zoom 0.5, overlay on | 29.6–33.2 ms | 8.4–8.7 ms | 1,633–2,508 / 100–167 | about 0.2 |
+| Idle, zoom 1, overlay on | 3.6–5.6 ms | 2.2–3.5 ms | 339–1,122 / 43–104 | 0 |
+
+The remaining redraws during a pan come from newly assessed cells entering the view.
+
+## L-A result: release export
+
+The terrain endpoint now exports with the release template, and `Directory.Build.props`
+optimizes every project built in Godot's ExportRelease configuration: a first release
+export without that setting still shipped `Arcanum.Data` unoptimized and loaded in the
+same 23.6–23.9 s as Debug. Same machine, original-data native smoke of a scratch export
+at `42a76c8` plus the change, two runs:
+
+| Measurement | Debug source run | Release export |
+| --- | ---: | ---: |
+| Load (`ElapsedMilliseconds`, first and reload generation) | 23.0–24.1 s | 12.2–13.1 s |
+| Whole native smoke (two loads, sweeps, lighting, cave, reload) | 57–66 s | 36.8 s |
+
+Exported self-tests (headless and GUI), `hostfxr_validate.py` and `codesign --verify`
+pass on the release export. The ordinary `./arcanum area` launch gets this once a
+release export is registered by the endpoint. `Arcanum.Input`'s locked restore against
+its committed `packages.ExportDebug.<RID>` locks (the gamepad export graph) applies only
+to ExportDebug, so in the release export it restores from its ordinary lock file like
+the other terrain projects.
+
 ## Recommended order
 
-1. F-A overlay redraw and batching: the largest visible problem, small and display-only.
-2. L-A Release assemblies for daily runs: halves the load. This is the owner's call
-   because it touches the export presets and evidence chain.
+1. F-A overlay redraw and batching: the largest visible problem, small and display-only (done).
+2. L-A Release assemblies for daily runs: halves the load (done, release export).
 3. F-C budgeted chunk composition, then F-B spatial index: remove the spikes and
    most of the per-pan CPU cost.
 4. L-B and L-C: reuse decoded frames and share authentication, about 4–6 s Debug
@@ -203,7 +235,7 @@ takes 10.0 of the Data project's 12.6 s.
 
 ## Not established
 
-The exported `.app`, real input (the probe moves the camera by script), GPU-side
+Frame times of the exported `.app` (its load is measured in the L-A result), real input (the probe moves the camera by script), GPU-side
 timing beyond draw-call counts, other machines, and the cost of click routing and
 NPC conversation (not probed; no frame spike was attributed to them). Quick save
 and character stats, merged after the measured commit, were not measured. Gains in the

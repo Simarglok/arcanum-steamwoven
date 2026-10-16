@@ -78,6 +78,19 @@ above it. Pan, Fit, zoom and resize change only what is visible, never a cell's 
   not rescanned until it moves.
 - Above 20,000 visible cells (e.g. AREA Fit at minimum zoom) nothing is drawn and the
   HUD says `OVERLAY_ZOOM_IN`.
+- Drawing: the layer moves with the canvas, so it is redrawn only when its drawn cells
+  change: the view leaves the drawn region (the view grown by a quarter of its larger
+  side on every side, a tenth near the visible-cell cap, at most 60,000 cells, otherwise
+  just the view), the view shrinks
+  to under 1/16 of that region, new cells are assessed, or the cap flips. Assessed
+  cached cells in the margin are drawn too; assessment and the HUD counts still cover
+  the view only. A redraw submits a few batched commands (all fills, one line batch per
+  colour and width, all arrows) instead of per-cell commands; gray lines are drawn
+  below red ones and arrows above all lines. Outlines are separate segments, not joined
+  polylines (corner joins may differ by a sub-pixel). Measured on the Crash Site area (ARC-RENDER-009,
+  [performance review](../research/crash-site-area-performance-review.md)): a pan
+  frame with the overlay on at zoom 0.5 fell from 30–33 ms to 8.4–8.7 ms and from
+  1,633–2,508 to 100–167 draw calls.
 - AREA: cells outside the current map's admitted sectors (exterior: the nine core sectors;
   the drawn context ring) are Outside
   without a request. WORLD: every cell of the sector outside the bounded zone is
