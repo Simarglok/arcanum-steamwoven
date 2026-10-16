@@ -16,7 +16,13 @@ public partial class TerrainViewerApp
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("GRID observation: " + why); }
         var none = new RawInputFrame(-1, default);
         var observed = none;
-        var snapshot = _worldActor.CardinalSession!.Snapshot;
+        // The matrix runs on whichever movement profile the publication installed (WORLD bounded or AREA whole-core).
+        var original = _worldActor.Session!;
+        void Configure(SimulationTime time, StepDuration? duration = null)
+        {
+            if (original is AreaGridSession area) _worldActor.Configure(area.Snapshot, time, duration);
+            else _worldActor.Configure(((DiagnosticGridSession)original).Snapshot, time, duration);
+        }
         var events = new List<MovementEvent>();
         void Frame(int time, bool complete = true, params RawInputFrame[] pads)
         {
@@ -32,7 +38,7 @@ public partial class TerrainViewerApp
             if (WorldModal) ToggleWorldSettings();
             GetViewport().GuiReleaseFocus(); _worldAdapter.Clear(); RetireWorldLifecycle();
             observed = none;
-            _worldActor.Configure(snapshot, SimulationTime.At(0), StepDuration.Of(8));
+            Configure(SimulationTime.At(0), StepDuration.Of(8));
             _worldGridInput = new(); _worldTestTime = SimulationTime.At(0); _worldFocused = true;
             _worldReducer.SetStartupDevices(pad ? new[] { 3 } : Array.Empty<int>());
             QuarantineWorld(); PublishWorldSelection();
@@ -106,7 +112,7 @@ public partial class TerrainViewerApp
         Frame(13, true, new RawInputFrame(3, default)); Frame(14, true, new RawInputFrame(3, default)); Frame(15, true, new RawInputFrame(3, default));
         Require(Trace() == start + cancel + arrive, "neutral mouse callback released active stick: " + Trace());
         // Restore a fresh live-duration session after isolated D8 assertions.
-        _worldActor.Configure(snapshot, _worldTestTime!.Value); _worldGridInput = new(); RetireWorldLifecycle();
+        Configure(_worldTestTime!.Value); _worldGridInput = new(); RetireWorldLifecycle();
         _worldReducer.SetStartupDevices(Array.Empty<int>()); QuarantineWorld(); PublishWorldSelection();
         GD.Print("ARC-WORLD-003 production observation PASS callbacks/between-frame/same-tick/aggregate/focus/modal/disconnect/incomplete early/equality/late full literal D8 transcripts");
     }
