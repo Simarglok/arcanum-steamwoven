@@ -17,9 +17,9 @@ project discussion, 2026-10-16):
 - The owner rejected the ARC-RES-033 outputs (2× restoration upscalers and pixel-art
   scalers keep staircase edges and add no detail) and chose a **soft-edge 4× base**
   (Real-ESRGAN `realesrgan-x4plus` at native 4× on colour-bled RGB, alpha from the
-  same network on the binary mask; the format's example
-  [`hd-recipe-x4plus-4x-soft.json`](../formats/examples/hd-recipe-x4plus-4x-soft.json))
-  as the provisional base, with
+  same network on the binary mask; the shape of the format's example
+  [`hd-recipe-x4plus-4x-soft.json`](../formats/examples/hd-recipe-x4plus-4x-soft.json),
+  here with a 12-px bleed) as the provisional base, with
   this generative experiment as the main bet.
 - **Acceptance: shading and form must survive.** On the soft 4× base the owner saw
   the heroine's back view lose the hip and garment shading that the original carries
@@ -94,10 +94,10 @@ frame on the CPU (0.02 s for the control frame, 0.3 s for the tree).
 4-px staircase of the nearest mask and of the x4plus mask and keeps the silhouette's
 position: the opaque area changes by 0 to +2.1 % (tree), 63 isolated source pixels of
 the tree fall below α 128, and no pixel with α > 0 lies outside one Legacy texel of
-the Legacy silhouette (checked on the five statics at strength 0.5 and all 50 walk
-frames). Its IoU against the Legacy
-mask is 0.948–0.996 on the statics and 0.938–0.98 on the walk frames (16 of 50 below
-0.95, minimum 0.938 at g4 f1). Every generative output uses it. An experiment that also
+the Legacy silhouette (checked on the five statics and all 50 walk frames, with the
+pack format's exact `soft` rule). Its IoU against the Legacy mask is 0.948–0.996 on
+the statics and 0.938–0.968 on the walk frames (16 of 50 below 0.95, minimum 0.938 at
+g4 f1). Every generative output uses it. An experiment that also
 re-coloured the original's dark outline ring (pre-render anti-aliasing against
 black: 26 % of the control frame's opaque pixels) with interior colours made thin
 limbs visibly fatter and was dropped: on 25-px-wide characters the dark ring carries
@@ -269,23 +269,25 @@ Findings:
    slightly lower 4× flicker (12.11 vs 12.55) but needs 21.0–23.7 GiB of MPS memory,
    at the edge of this machine. Sheet A's low flicker comes with half the working
    resolution per frame and visibly less detail (judgement from the strips; its
-   pre-lock tone error is also the largest, MAE 6.2), so it is not a fair winner. Flicker 4× rises with added detail, so it ranks methods with similar
-   detail only.
+   pre-lock tone error is also the largest of the generative runs, MAE 6.2), so it
+   is not a fair winner. Flicker 4× rises with added detail, so it ranks methods
+   with similar detail only.
 4. **The original walk is itself uneven:** in group 6 the garment renders dark in
-   frames f1–f4 (0-based) and white in the others (the source frames, not an artefact); every
-   method keeps that.
+   frames f1–f4 (0-based) and white in the others (the source frames, not an
+   artefact); every method keeps that.
 5. Mirrored facings 1–3 are flips of groups 7–5, so the walk needs 5 × 10 = 50
    generated frames, not 80.
 
 ### LoRA training
 
 Local observation. 300 images, 17 distinct captions; precompute (text embeddings and
-VAE latents) 122 s; 2.4–3.1 s per step; MPS driver allocation 12.9 GiB rising to
-14.2 GiB. The planned 1,500 steps were stopped at step 1,175 when the machine
-started swapping (12 GiB of swap in use with the owner's other applications open,
-step time above 10 s; MPS allocation 9.2 GiB at the start, 12.9 GiB by step 200); the **step-1,000 checkpoint** (93 MB of safetensors, ~50 min of
-training) is the LoRA used everywhere above; because the cosine schedule was planned
-for 1,500 steps, its learning rate had only decayed to about 3.3e-5 there. Loss stayed flat around 0.05–0.08
+VAE latents) 122 s; 2.4–3.1 s per step; MPS driver allocation 9.2 GiB at the start,
+12.9 GiB by step 200, 14.2 GiB peak. The planned 1,500 steps were stopped at step
+1,175 when the machine started swapping (12 GiB of swap in use with the owner's
+other applications open, step time above 10 s); the **step-1,000 checkpoint** (93 MB
+of safetensors, ~50 min of training) is the LoRA used everywhere above; because the
+cosine schedule was planned for 1,500 steps, its learning rate had only decayed to
+about 3.3e-5 there. Loss stayed flat around 0.05–0.08
 (min-SNR weighted), as usual for a style LoRA. For a pack build: cap canvases at
 768 px and free the MPS cache between steps, or train with the owner's other
 applications closed.
@@ -344,7 +346,9 @@ without the style LoRA, any result without the second shading lock, SUPIR
 **Mapping onto the existing pack format** ([hd-pack.md](../formats/hd-pack.md),
 ARC-DATA-014; judgement):
 
-- `method.kind: "generative"` holds step 3: `model` and `modelFiles` = the SDXL base
+- `method.kind: "generative"` holds step 3: `tool`/`toolVersion` = the build tool
+  (diffusers 0.41.0 here), `licence` = `CreativeML-OpenRAIL++-M`, `nativeScale: 4`
+  with `downscale: "none"`; `model` and `modelFiles` = the SDXL base
   UNet and text encoders, the fp16-fix VAE and ControlNet Tile (hashes in the licence
   table); `adapters` = the local style LoRA `{name, sha256, weight: "1.0"}`; `seed`,
   `prompt`, `negativePrompt`; `parameters` labels such as `sampler`
@@ -352,12 +356,15 @@ ARC-DATA-014; judgement):
   `cfg` (`5`), `workLongSide` (`704`); `rgb: {edgeExtend: 12, fill: "mean"}`.
 - What the format cannot say yet: the **two-stage** pipeline (a network base, then
   generation), the **shading lock** (iterations, luminance only) and the **smooth
-  alpha** (σ, ramp). Today they could only be `parameters` labels, with the x4plus
+  alpha** (σ, ramp), and the **work canvas** (generation on an enlarged canvas,
+  about 2.3× above 4× for the control frame, then a Lanczos reduction to 4×, which
+  `downscale` cannot express: it allows only `none` or an integer `box`). Today they
+  could only be `parameters` labels, with the x4plus
   model file joining `modelFiles`; a later format task should decide whether a
   pipeline is one method with labels or a list of stages.
 - `alpha: {mode: "soft"}` fits: no pixel of any generated frame lies outside one
   Legacy texel of the silhouette. With this smooth alpha `minIoUPermille` must be at
-  most **935** (walk minimum 938‰); the format's generative example uses 950, which 16
+  most **937** (walk minimum 937.8‰; 935 leaves a margin); the format's generative example uses 950, which 16
   of the 50 walk frames and the tree (948‰) would fail with `AlphaMismatch`. A smaller σ (2.0 output px
   kept the control frame at 980‰ and the chest at 992‰) trades some staircase back
   for margin.
