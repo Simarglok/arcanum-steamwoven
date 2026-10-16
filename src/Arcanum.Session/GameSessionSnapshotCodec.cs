@@ -320,10 +320,12 @@ public static class GameSessionSnapshotCodec
     {
         const string p = "$.random";
         var f = Fields(element, p, RandomFields);
-        // Exactly 16 lowercase hex digits, so one seed has one spelling.
+        // Exactly 16 lowercase hex digits, so one seed has one spelling; uppercase digits are another spelling.
         var text = String(f["seed"], p + ".seed");
-        if (text.Length != 16 || !text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f')))
+        if (text.Length != 16 || !text.All(char.IsAsciiHexDigit))
             throw new DecodeException(SnapshotDecodeFailure.OutOfRange, p + ".seed");
+        if (!text.All(c => c is (>= '0' and <= '9') or (>= 'a' and <= 'f')))
+            throw new DecodeException(SnapshotDecodeFailure.NotCanonical, p + ".seed");
         var seed = ulong.Parse(text, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture);
         return new(seed, Long(f["draws"], p + ".draws", 0, long.MaxValue));
     }

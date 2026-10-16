@@ -120,6 +120,7 @@ public sealed class SessionRandomTests
         using var owner = Seeded();
         Assert.AreEqual(66, owner.CombatRolls.Roll(CombatRollPurpose.HitLocation, 1, 100));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => owner.CombatRolls.Roll((CombatRollPurpose)999, 1, 100));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => owner.CombatRolls.Roll(CombatRollPurpose.HitLocation, 2, 1));
         Assert.AreEqual(new SessionRandomState(Seed, 1), owner.QueryRandom());
     }
 
@@ -152,7 +153,8 @@ public sealed class SessionRandomTests
         Fails("{\"seed\":\"0000000000000000\"}", SnapshotDecodeFailure.MissingField, "$.random.draws");
         Fails("{\"seed\":\"0000000000000000\",\"draws\":0,\"label\":\"x\"}", SnapshotDecodeFailure.UnknownField, "$.random.label");
         Fails("{\"seed\":0,\"draws\":0}", SnapshotDecodeFailure.WrongType, "$.random.seed");
-        Fails("{\"seed\":\"0123456789ABCDEF\",\"draws\":0}", SnapshotDecodeFailure.OutOfRange, "$.random.seed");
+        Fails("{\"seed\":\"0123456789ABCDEF\",\"draws\":0}", SnapshotDecodeFailure.NotCanonical, "$.random.seed");
+        Fails("{\"seed\":\"0123456789abcdeg\",\"draws\":0}", SnapshotDecodeFailure.OutOfRange, "$.random.seed");
         Fails("{\"seed\":\"123456789abcdef\",\"draws\":0}", SnapshotDecodeFailure.OutOfRange, "$.random.seed");
         Fails("{\"seed\":\"00123456789abcdef\",\"draws\":0}", SnapshotDecodeFailure.OutOfRange, "$.random.seed");
         Fails("{\"seed\":\"0x23456789abcdef\",\"draws\":0}", SnapshotDecodeFailure.OutOfRange, "$.random.seed");
@@ -161,6 +163,17 @@ public sealed class SessionRandomTests
         Fails("{\"seed\":\"0000000000000000\",\"draws\":1.0}", SnapshotDecodeFailure.OutOfRange, "$.random.draws");
         Fails("{\"seed\":\"0000000000000000\",\"draws\":9223372036854775808}", SnapshotDecodeFailure.OutOfRange, "$.random.draws");
         Fails("{\"seed\":\"0000000000000000\",\"draws\":\"0\"}", SnapshotDecodeFailure.WrongType, "$.random.draws");
+    }
+
+    [TestMethod]
+    public void RestoreRefusesANegativePositionBuiltByHand()
+    {
+        using var owner = Seeded();
+        var saved = owner.Capture();
+        var snapshot = new GameSessionSnapshot(saved.SchemaVersion, saved.Identity, saved.Revision, saved.Clock, saved.Flags,
+            saved.Actor, saved.Maps.ToArray(), saved.Story, saved.Party, saved.Hero, saved.Inventory, new(Seed, -1), saved.Lighting);
+        var result = GameSessionOwner.Restore(snapshot, RestoreOptions());
+        Assert.AreEqual((null, GameSessionFailure.InvalidSnapshot), (result.Owner, result.Failure));
     }
 
     [TestMethod]

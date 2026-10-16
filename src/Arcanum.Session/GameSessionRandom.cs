@@ -17,15 +17,17 @@ public sealed record SessionRollResult(SessionRoll? Roll, GameSessionFailure Fai
 
 /// <summary>
 /// The session generator behind the attack resolver's <see cref="ICombatRollSource"/>: each roll is labelled
-/// <c>combat.</c> and the <see cref="CombatRollPurpose"/> name. The source interface has no refusal channel, so a refused
-/// roll throws <see cref="InvalidOperationException"/>; <see cref="CombatRollLog"/> already refuses bad ranges first, so
-/// only a generator that ran out of its 2^63 - 1 draws can reach it.
+/// <c>combat.</c> and the <see cref="CombatRollPurpose"/> name. The source interface has no refusal channel: a range with
+/// <c>min &gt; max</c> breaks its precondition and throws <see cref="ArgumentOutOfRangeException"/> (as in
+/// <see cref="CombatRollLog"/>), and a generator that ran out of its 2^63 - 1 draws throws
+/// <see cref="InvalidOperationException"/>. The label is checked, not recorded; the resolver's log keeps the trace.
 /// </summary>
 internal sealed class SessionCombatRolls(GameSessionOwner owner) : ICombatRollSource
 {
     public int Roll(CombatRollPurpose purpose, int min, int max)
     {
         if (!Enum.IsDefined(purpose)) throw new ArgumentOutOfRangeException(nameof(purpose));
+        if (min > max) throw new ArgumentOutOfRangeException(nameof(min), "min must not exceed max");
         var result = owner.Roll(Label(purpose), min, max);
         return result.Roll?.Value ?? throw new InvalidOperationException($"Session roll {purpose} refused: {result.Failure}.");
     }

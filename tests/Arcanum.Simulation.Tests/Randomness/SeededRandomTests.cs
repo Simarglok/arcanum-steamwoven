@@ -32,7 +32,7 @@ public sealed class SeededRandomTests
         Assert.AreEqual((53, 5L), Next(random, 1, 100));
         Assert.AreEqual(Seed, random.Seed);
 
-        // The widest range takes the draw's low 32 bits unchanged in order.
+        // The widest range is int.MinValue plus the draw's low 32 bits.
         Assert.AreEqual((613395101, 1L), Next(new SeededRandom(Seed), int.MinValue, int.MaxValue));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SeededRandom(Seed).TryNext(2, 1, out _));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => new SeededRandom(Seed, -1));

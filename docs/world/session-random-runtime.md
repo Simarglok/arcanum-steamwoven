@@ -19,11 +19,12 @@ Read in CE at the pinned commit `a7ff41b`; no CE code or structure was copied.
 - The seed is the wall-clock time at start-up ([`random_seed_generate`][seed]). The "Random" game module registers only
   init and exit, no save or load function ([module table][module], [module fields][fields]), so a saved game does not
   keep the generator, and a load continues from whatever state the running process had.
-- Two callers re-seed the shared generator: generating a spawned inventory seeds it from the object's location and the
-  PC's race, background, gender and name ([`item.c`][item]), and a dialog re-seeds it with the seed it stored when it
-  first built its replies ([`dialog.c`][dialog]). The generator then continues from that seed.
+- Two callers re-seed the shared generator. Generating a spawn-once inventory seeds it from the object's location, the
+  product of the PC's race and background, the PC's gender and pairwise character products of the PC's examine text
+  ([`item.c`][item]). A dialog re-seeds it from the time when it first builds its replies, stores that seed, and
+  re-seeds with it when it rebuilds them ([`dialog.c`][dialog]). The generator then continues from that seed.
 
-The original sequence therefore cannot be replayed: its seed is the time, and nothing saves the state.
+The original sequence therefore cannot be replayed: its seeds come from the time, and nothing saves the state.
 
 ## Project decision
 
@@ -53,7 +54,7 @@ that needs its own replayable sequence can use it without a session.
 | `GameSessionDescriptor.RandomSeed` | 64-bit seed of a new session; its generator starts at draw 0. |
 | `GameSessionOwner.Roll(label, min, max)` | One uniform integer in `min..max` inclusive. Returns `SessionRollResult` with a `SessionRoll(Label, Min, Max, Value, Position)`, where `Position` is the draws made after this roll. The label is 1..64 ASCII letters, digits and `. _ : -` (for example `combat.AttackCheck`, `loot:gold`). A bad label or `min > max` is `InvalidRoll`; a generator at its last draw (2^63 − 1) is `RandomExhausted`; a refused roll draws nothing. |
 | `GameSessionOwner.QueryRandom()` | `SessionRandomState(Seed, Draws)`. |
-| `GameSessionOwner.CombatRolls` | The session generator as the attack resolver's `ICombatRollSource`; each roll is labelled `combat.` and the `CombatRollPurpose` name. The source interface has no refusal channel, so a refusal throws `InvalidOperationException` (only an exhausted generator can reach it). |
+| `GameSessionOwner.CombatRolls` | The session generator as the attack resolver's `ICombatRollSource`; each roll is labelled `combat.` and the `CombatRollPurpose` name. The source interface has no refusal channel: `min > max` throws `ArgumentOutOfRangeException` (the interface's precondition, as in `CombatRollLog`), and an exhausted generator throws `InvalidOperationException`. The label is checked but not recorded: the resolver's `CombatRollLog` keeps the trace by purpose. |
 | `SeededRandom(seed, draws)` / `TryNext(min, max, out value)` / `Output(seed, index)` | The generator: position, one range roll (false when exhausted, with no draw), and draw `index` (1-based) of a seed. |
 
 Rolls are caller-serialized like every session call. Like clock and flag changes, a roll takes no expected version and
@@ -70,8 +71,11 @@ asks for one.
 ```
 
 `seed` is exactly 16 lowercase hex digits (one spelling per seed, and no JSON number precision limit); `draws` is
-0..2^63 − 1. Decoding refuses anything else (`OutOfRange`), a non-object or a seed that is not a string (`WrongType`),
-and missing or unknown fields. Any seed and position restore.
+0..2^63 − 1. Decoding refuses a seed in another spelling, such as uppercase (`NotCanonical`), any other seed text or
+draw count (`OutOfRange`), a non-object or a seed that is not a string (`WrongType`), and missing or unknown fields.
+Any seed and position restore, including the last one: a hand-edited save at draw 2^63 − 1 then refuses every roll that
+needs a draw, and through `CombatRolls` that refusal is an exception out of the resolver, after any earlier rolls of
+that attack. Normal play cannot reach it; a typed path is part of wiring combat.
 
 **Migration decision: none.** Schemas 1..6 are `UnsupportedSchema`. A schema-6 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. No host made gameplay rolls
@@ -85,8 +89,8 @@ before this schema, so nothing is lost.
   even die over 60,000 rolls.
 - [`SessionRandomTests`](../../tests/Arcanum.Session.Tests/SessionRandomTests.cs): labelled rolls without a revision
   move, the label not changing values, refused labels and ranges with no draw, the same rolls after encode, decode and
-  restore, four attacks resolved through `CombatRolls` replayed exactly from a save, combat labels, an exhausted
-  generator, decode failures of the `random` section, disposal.
+  restore, four attacks resolved through `CombatRolls` replayed exactly from a save, combat labels and ranges, an
+  exhausted generator, decode failures of the `random` section, a hand-built negative position, disposal.
 
 ```sh
 "$DOTNET" test tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj --no-build --filter "FullyQualifiedName~Randomness"
