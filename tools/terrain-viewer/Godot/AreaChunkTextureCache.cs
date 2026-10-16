@@ -30,15 +30,42 @@ internal sealed class AreaChunkTextureCache : IDisposable
     public static bool Fits(int chunks, int level)
         => chunks <= MaxChunks && (long)chunks * AreaTerrainChunks.Side(level) * AreaTerrainChunks.Side(level) * 4 <= MaxBytes;
 
+    /// <summary>Makes every chunk of a submission resident. Resident ones are marked used first so
+    /// adding cannot evict them; missing ones are composed in parallel (pure CPU over the immutable
+    /// plan and frames, byte-identical to <see cref="AreaTerrainChunks.Compose"/> one at a time), in
+    /// batches of <see cref="ComposeBatch"/> to bound transient memory, then uploaded in order.</summary>
+    public void Prepare(AreaTerrainChunks terrain, IReadOnlyList<(int X, int Y)> chunks, int level)
+    {
+        var missing = new List<(int X, int Y)>();
+        foreach (var chunk in chunks)
+            if (_entries.TryGetValue((chunk, level), out var found)) found.LastUse = _submission;
+            else if (!missing.Contains(chunk)) missing.Add(chunk);
+        for (var start = 0; start < missing.Count; start += ComposeBatch)
+        {
+            var batch = missing.Skip(start).Take(ComposeBatch).ToArray(); var composed = new byte[batch.Length][];
+            if (batch.Length == 1) composed[0] = terrain.Compose(batch[0], level);
+            else Parallel.For(0, batch.Length, new ParallelOptions { MaxDegreeOfParallelism = System.Environment.ProcessorCount },
+                index => composed[index] = terrain.Compose(batch[index], level));
+            for (var index = 0; index < batch.Length; index++) Add(batch[index], level, composed[index]);
+        }
+    }
+    internal const int ComposeBatch = 32;
+
     public ImageTexture Acquire(AreaTerrainChunks terrain, (int X, int Y) chunk, int level)
     {
         if (_entries.TryGetValue((chunk, level), out var found)) { found.LastUse = _submission; return found.Texture; }
+        return Add(chunk, level, terrain.Compose(chunk, level));
+    }
+
+    private ImageTexture Add((int X, int Y) chunk, int level, byte[] rgba)
+    {
         var side = AreaTerrainChunks.Side(level); var bytes = (long)side * side * 4;
+        if (rgba.Length != bytes) throw new InvalidOperationException("AREA_TERRAIN_CHUNK_SIZE");
         if (Bytes + bytes > MaxBytes || _entries.Count + 1 > MaxChunks)
             EvictUnused(MaxBytes * 3 / 4 - bytes, MaxChunks * 3 / 4 - 1);
         if (Bytes + bytes > MaxBytes || _entries.Count + 1 > MaxChunks)
             throw new InvalidOperationException("AREA_TERRAIN_CHUNK_BUDGET");
-        using var image = Image.CreateFromData(side, side, false, Image.Format.Rgba8, terrain.Compose(chunk, level));
+        using var image = Image.CreateFromData(side, side, false, Image.Format.Rgba8, rgba);
         var entry = new Entry(ImageTexture.CreateFromImage(image), bytes) { LastUse = _submission };
         _entries.Add((chunk, level), entry); Bytes += bytes; CreatedCount++;
         return entry.Texture;

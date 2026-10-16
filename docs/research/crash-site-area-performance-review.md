@@ -221,12 +221,39 @@ its committed `packages.ExportDebug.<RID>` locks (the gamepad export graph) appl
 to ExportDebug, so in the release export it restores from its ordinary lock file like
 the other terrain projects.
 
+## F-B and F-C result: visibility index and parallel chunk composition
+
+F-B is the coarse grid index described in the
+[viewer contract](../rendering/crash-site-area-viewer.md). For F-C the per-command
+fallback was dropped: a terrain command that spans a ready and a missing chunk would be
+drawn over the ready chunk after it and break painter order there. Missing chunks are
+instead composed in parallel on the CPU cores before upload. Same probe, two runs each,
+on `0a7d1ab` plus the change (before = the frame table above, overlay phases after F-A):
+
+| Phase (uncapped) | Avg before | Avg after | Max before | Max after | Canvas update after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Pan, zoom 2 | 5.1–7.6 ms | 2.3–2.5 ms | 17–23 ms | 17–25 ms | 0.2 ms |
+| Pan, zoom 1 | 6.4–6.8 ms | 2.6 ms | 82–93 ms | 19–24 ms | 0.3 ms |
+| Pan, zoom 0.5 | 5.6–5.9 ms | 3.5–4.7 ms | 40–66 ms | 27–39 ms | 0.8–1.1 ms |
+| Pan, zoom 0.3 | 6.6–7.7 ms | 5.9–7.8 ms | 135–137 ms | 81–92 ms | 2.0–3.0 ms |
+| Pan, zoom 0.25 | 9.8–10.2 ms | 6.1–6.9 ms | 29–44 ms | 32–38 ms | 2.2–2.4 ms |
+| Pan, zoom 0.125 | 7.5–7.7 ms | 7.3–9.1 ms | 57–61 ms | 50–51 ms | 1.6–2.9 ms |
+| Pan, zoom 1, overlay on | 5.1–7.8 ms | 3.7–4.3 ms | 19–50 ms | 28–36 ms | 0.4–0.5 ms |
+| Pan, zoom 0.5, overlay on | 8.4–8.7 ms | 5.2–6.1 ms | 30–35 ms | 38–43 ms | 0.5–0.8 ms |
+
+Steady pan frames at zoom 1–2 fall to about a third. The first visit of the
+full-resolution zoom 0.3 still costs up to 81–92 ms: about 110–140 new 512 px chunks
+are uploaded on the main thread after composition (not timed separately). When the
+view covers more than half of the occupied grid cells (the lowest zooms), the index
+scans every command as before; at low zoom most of the remaining canvas update is the
+per-item work, which grows with the visible count.
+
 ## Recommended order
 
 1. F-A overlay redraw and batching: the largest visible problem, small and display-only (done).
 2. L-A Release assemblies for daily runs: halves the load (done, release export).
-3. F-C budgeted chunk composition, then F-B spatial index: remove the spikes and
-   most of the per-pan CPU cost.
+3. F-C chunk composition (done as parallel composition), then F-B spatial index (done):
+   most of the per-pan CPU cost is gone; zoom 0.3 first-visit spikes remain.
 4. L-B and L-C: reuse decoded frames and share authentication, about 4–6 s Debug
    together; both change the loader contract.
 5. D-A, I-A, M-A: small comfort items.
