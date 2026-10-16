@@ -94,7 +94,8 @@ public partial class TerrainViewerApp
     private bool _worldUiFocused;
     private int _worldMenuAnalogDirection;
     private bool IsWorld => (_arguments is not null && IsWorldMode(_arguments.Mode)) || IsWorldMode(_readyMode);
-    private bool WorldModal => _worldPanel?.IsOpen == true;
+    private bool PaletteOpen => _worldPanel?.IsOpen == true;
+    private bool WorldModal => PaletteOpen || ConversationOpen;
     private bool WorldUiFocus => !WorldModal && GetViewport().GuiGetFocusOwner() is not null;
     private Vec2 WorldAnchor => DiagnosticActorMotion.Project(_worldActor.State.Position) + new Vec2(0, 20);
     private Vector2 WorldViewport => GetViewport().GetVisibleRect().Size;
@@ -163,7 +164,7 @@ public partial class TerrainViewerApp
     }
     private void ToggleWorldSettings()
     {
-        if (!_worldInitialized || !IsWorld || _worldPanel is null) return;
+        if (!_worldInitialized || !IsWorld || _worldPanel is null || ConversationOpen) return;
         QuarantineWorld();
         if (_worldPanel.IsOpen) { _worldPanel.Hide(); GetViewport().GuiReleaseFocus(); }
         else { _worldPanel.Open(_worldSettings); BindWorldZoom(); BindWorldPaletteSummary(); BindAreaAmbientPalette(); _overlayPanelState = null; SyncPassabilityOverlay(); }
@@ -301,6 +302,7 @@ public partial class TerrainViewerApp
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Pulse accepted={intent.Accepted} confirm={intent.Confirm}");
         if (!intent.Accepted) return;
+        if (ConversationOpen) { HandleConversationPulse(intent); return; }
         if (intent.Settings || (WorldModal && intent.Cancel)) { ToggleWorldSettings(); return; }
         if (!WorldModal) return;
         if (intent.MenuPressedDirection != 0) _worldPanel?.Navigate(intent.MenuPressedDirection);
@@ -324,7 +326,7 @@ public partial class TerrainViewerApp
     }
     private void ProcessWorldObserved(double delta)
     {
-        _worldAdapter.PaletteOpen = WorldModal;
+        _worldAdapter.PaletteOpen = PaletteOpen;
         if (!double.IsFinite(delta) || delta < 0) { QuarantineWorld(); AdvanceWorldGrid(default); return; }
         if (WorldUiFocus != _worldUiFocused) { _worldUiFocused = WorldUiFocus; QuarantineWorld(); }
         var complete = _worldFocused;
@@ -426,12 +428,14 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         if (ProcessAreaTransition()) return;
+        ProcessTalkAfterRoute();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
-        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
+        // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
+        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null || WorldModal ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
-        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); }
+        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
@@ -558,11 +562,13 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
+        if (TryAreaTalk(screen)) return;
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
         if (TryAreaUse(screen)) return;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
-        CancelAreaUseApproach("a ground click replaced it");
+        CancelAreaUseApproach("a ground click replaced it"); CancelTalkApproach("a ground click replaced it");
         var accepted = route.SetTarget(cell, WorldTime);
         _worldRouteDiagnostic = DescribeWorldRoute(route);
         _worldRouteClick = $"{cell.X},{cell.Y} {(accepted ? "goal set" : "same goal kept")}";
@@ -576,8 +582,13 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
+        if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
+        {
+            GetViewport().SetInputAsHandled();
+            return;
+        }
         var wasModal = WorldModal;
-        _worldAdapter.PaletteOpen = WorldModal;
+        _worldAdapter.PaletteOpen = PaletteOpen;
         if (input is InputEventKey chordKey)
         {
             // Diagnostics first: a consumed chord key never reaches the shared
@@ -661,7 +672,8 @@ public partial class TerrainViewerApp
         // adapter: no keyboard actor vector, no lab Inspect/Context/Q/E/F1 pulses,
         // and semantic Confirm/Cancel/menu pulses only inside the open palette.
         raw = raw with { KeyboardActor = default, Inspect = false, Context = false, Previous = false, Next = false, Settings = false, KeyboardActorHeld = false };
-        if (!WorldModal) raw = raw with { Confirm = false, Cancel = false, MenuUp = false, MenuDown = false };
+        // The conversation panel is modal too, but keyboard keys are not dialog controls (ARC-SCRIPT-005).
+        if (!PaletteOpen) raw = raw with { Confirm = false, Cancel = false, MenuUp = false, MenuDown = false };
         // The native numeric editor owns text, Enter, Backspace and Tab. Only
         // explicit Escape cancels here; do not reinterpret Backspace as Cancel.
         if (WorldModal && GetViewport().GuiGetFocusOwner() is LineEdit)

@@ -4,7 +4,10 @@
 
 ARC-RES-019 is **research/contract only**. This document does not add a state
 service, expression VM, UI, conversation loop or gameplay integration. Virgil's
-conversation **does not work in the current runtime**. The merged
+conversation **does not work in the current runtime**. ARC-SCRIPT-005 later added a
+separate bounded [conversation runtime](dialog-conversation-runtime.md) with its own project
+decisions (source five-eligible short-circuit instead of the overflow proposal below, typed
+diagnostic world port); this research document is not retroactively accepted by it. The merged
 [entry resolver](npc-dialog-entry-runtime.md) computes a checked entry without
 starting [DialogTransitionRuntime](dialog-transition-runtime.md). That runtime
 admits LF/QU/RU only and rejects a sixth structural response before any ports.
