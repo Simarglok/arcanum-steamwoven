@@ -25,6 +25,7 @@ internal static class CharacterStatRules
     public static bool IsDefined(CharacterRace race) => race is >= CharacterRace.Human and <= CharacterRace.Orc;
     public static bool IsDefined(CharacterGender gender) => gender is CharacterGender.Female or CharacterGender.Male;
     public static bool IsDefined(EffectCause cause) => cause is >= EffectCause.Race and <= EffectCause.Gender;
+    // Setter-owned causes only; the source's wider "innate" filter (adds Background, Class) is not modelled.
     public static bool IsInnate(EffectCause cause) => cause is EffectCause.Race or EffectCause.Gender;
     public static bool IsDefined(StatModifierOperator op) => op is >= StatModifierOperator.Add and <= StatModifierOperator.Percent;
 
@@ -102,7 +103,7 @@ internal static class CharacterStatRules
 
     /// <summary>
     /// Applies every modifier for <paramref name="stat"/>. Integer division truncates toward zero; intermediates
-    /// saturate at ±1e9 (original overflow behaviour is NOT_VERIFIED). The caller clamps the result to the range.
+    /// saturate at ±1e9, so beyond that bound accumulation is order-dependent (original overflow behaviour is NOT_VERIFIED). The caller clamps the result to the range.
     /// </summary>
     public static int ApplyModifiers(CharacterStat stat, int value, IReadOnlyList<AppliedEffect> effects)
     {

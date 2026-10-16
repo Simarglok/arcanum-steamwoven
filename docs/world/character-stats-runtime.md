@@ -52,12 +52,13 @@ Derived formulas over effective inputs (C integer division, truncation toward ze
   stored (as in the source) and its effective value is clamped; it can only be lowered.
 - **Removal by instance.** `AddEffect` returns an `AppliedEffectId`; `RemoveEffect`
   removes exactly that instance. Race and Gender causes are reserved for the setters,
-  and their effects cannot be added or removed directly.
+  and their effects cannot be added or removed directly. Background and Class, which the
+  source also treats as innate, are ordinary causes here until backgrounds are modelled.
 - **No `-1` sentinel.** A minimum or maximum modifier of −1 is an ordinary bound.
 - **Bounded arithmetic.** Explicit `CharacterStatLimits` (default 64 non-innate effects,
   7 modifiers per effect, |value| ≤ 1000; ceilings 4096/64/1,000,000). Divisor 0 is an
-  invalid effect. Intermediate results saturate at ±1,000,000,000; source overflow
-  behaviour is unknown.
+  invalid effect. Intermediate results saturate at ±1,000,000,000 (beyond that bound
+  accumulation becomes order-dependent); source overflow behaviour is unknown.
 - **Context is explicit.** Sector aptitude adjustment is a query argument bounded to
   −100..100, not read from a world location.
 

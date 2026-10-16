@@ -15,8 +15,8 @@ public sealed class RaceGenderTests
         Assert.AreEqual(0L, snapshot.Revision);
         Assert.AreEqual(1, Count(snapshot, EffectCause.Race));
         Assert.AreEqual(1, Count(snapshot, EffectCause.Gender));
-        Assert.AreEqual(7, snapshot.GetEffective(CharacterStat.Strength));
-        Assert.AreEqual(11, snapshot.GetEffective(CharacterStat.Constitution));
+        Assert.AreEqual(6, snapshot.GetEffective(CharacterStat.Strength));
+        Assert.AreEqual(13, snapshot.GetEffective(CharacterStat.Constitution));
         Assert.AreEqual(7, snapshot.GetEffective(CharacterStat.Charisma));
         foreach (var stat in Primary) Assert.AreEqual(8, snapshot.GetBase(stat));
     }
@@ -57,8 +57,8 @@ public sealed class RaceGenderTests
             Changed(owner.SetGender(CharacterGender.Female));
             var female = Snap(owner);
             Assert.AreEqual(1, Count(female, EffectCause.Gender));
-            Assert.AreEqual(7, female.GetEffective(CharacterStat.Strength));
-            Assert.AreEqual(11, female.GetEffective(CharacterStat.Constitution));
+            Assert.AreEqual(6, female.GetEffective(CharacterStat.Strength));
+            Assert.AreEqual(13, female.GetEffective(CharacterStat.Constitution));
             Changed(owner.SetGender(CharacterGender.Male));
             var male = Snap(owner);
             Assert.AreEqual(0, Count(male, EffectCause.Gender));

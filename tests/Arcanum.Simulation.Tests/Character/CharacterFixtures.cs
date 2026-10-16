@@ -4,7 +4,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Character;
 
-/// <summary>Synthetic fixtures only; no effect values are taken from original data.</summary>
+/// <summary>Synthetic fixtures only; innate effect values are invented and deliberately differ from source rules.</summary>
 internal static class CharacterFixtures
 {
     public static readonly CharacterStat[] Primary =
@@ -83,7 +83,7 @@ internal static class CharacterFixtures
         },
         new Dictionary<CharacterGender, StatEffectDefinition>
         {
-            [CharacterGender.Female] = Effect(903, Add(CharacterStat.Strength, -1), Add(CharacterStat.Constitution, 1)),
+            [CharacterGender.Female] = Effect(903, Add(CharacterStat.Strength, -2), Add(CharacterStat.Constitution, 3)),
         });
 
     public static int Count(CharacterStatsSnapshot snapshot, EffectCause cause) =>

@@ -45,24 +45,43 @@ public sealed class BaseEffectiveTests
         Assert.AreEqual(11, during.GetEffective(CharacterStat.Strength), "older snapshot stays detached");
     }
 
+    // Each row pairs two adjacent steps whose result differs if their order is swapped.
     [TestMethod]
-    public void AggregationOrderIsPercentMultiplyDivideAddMinimumMaximum()
+    [DataRow(5, StatModifierOperator.Percent, 50, StatModifierOperator.Multiply, 2, 14, DisplayName = "percent before multiply (else 15)")]
+    [DataRow(5, StatModifierOperator.Multiply, 3, StatModifierOperator.Divide, 2, 7, DisplayName = "multiply before divide (else 6)")]
+    [DataRow(10, StatModifierOperator.Divide, 3, StatModifierOperator.Add, 5, 8, DisplayName = "divide before add (else 5)")]
+    [DataRow(10, StatModifierOperator.Add, 5, StatModifierOperator.Minimum, 12, 15, DisplayName = "add before minimum (else 17)")]
+    [DataRow(10, StatModifierOperator.Minimum, 17, StatModifierOperator.Maximum, 16, 16, DisplayName = "minimum before maximum (else 17)")]
+    public void AggregationOrderIsPercentMultiplyDivideAddMinimumMaximum(int baseValue, StatModifierOperator first,
+        int firstValue, StatModifierOperator second, int secondValue, int expected)
+    {
+        var owner = Owner(CharacterRace.Ogre);
+        Changed(owner.SetBase(CharacterStat.Strength, baseValue));
+        // The later step is listed first and in a separate effect, so list order cannot explain the result.
+        Added(owner.AddEffect(Effect(1, new StatModifier(CharacterStat.Strength, second, secondValue)), EffectCause.Item));
+        Added(owner.AddEffect(Effect(2, new StatModifier(CharacterStat.Strength, first, firstValue)), EffectCause.Bless));
+        Assert.AreEqual(expected, Snap(owner).GetEffective(CharacterStat.Strength));
+        Assert.AreEqual(baseValue, Snap(owner).GetBase(CharacterStat.Strength));
+    }
+
+    [TestMethod]
+    public void SameKindModifiersCombineAcrossEffects()
     {
         var owner = Owner(CharacterRace.Ogre);
         Changed(owner.SetBase(CharacterStat.Strength, 10));
-        // 10 * 150% = 15; *2 = 30; /3 = 10; +5 = 15; minimum max(12, 17) -> 17; maximum min(19, 16) -> 16.
-        Added(owner.AddEffect(Effect(1,
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Add, 5),
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Maximum, 19),
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Divide, 3),
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Minimum, 12)), EffectCause.Item));
-        Added(owner.AddEffect(Effect(2,
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Minimum, 17),
+        // Percents sum (+20 +30 = 150%), multipliers/divisors multiply, minimum takes the largest, maximum the smallest.
+        Added(owner.AddEffect(Effect(1, new StatModifier(CharacterStat.Strength, StatModifierOperator.Percent, 20),
             new StatModifier(CharacterStat.Strength, StatModifierOperator.Multiply, 2),
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Percent, 50),
-            new StatModifier(CharacterStat.Strength, StatModifierOperator.Maximum, 16)), EffectCause.Bless));
-        Assert.AreEqual(16, Snap(owner).GetEffective(CharacterStat.Strength));
-        Assert.AreEqual(10, Snap(owner).GetBase(CharacterStat.Strength));
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Divide, 2),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Minimum, 3),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Maximum, 25)), EffectCause.Item));
+        Added(owner.AddEffect(Effect(2, new StatModifier(CharacterStat.Strength, StatModifierOperator.Percent, 30),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Multiply, 3),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Divide, 5),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Minimum, 1),
+            new StatModifier(CharacterStat.Strength, StatModifierOperator.Maximum, 24)), EffectCause.Spell));
+        // 10 * 150 / 100 = 15; * 6 = 90; / 10 = 9; minimum 3 keeps 9; maximum 24 keeps 9.
+        Assert.AreEqual(9, Snap(owner).GetEffective(CharacterStat.Strength));
     }
 
     [TestMethod]
@@ -80,8 +99,15 @@ public sealed class BaseEffectiveTests
     {
         var owner = Owner();
         Changed(owner.SetBase(CharacterStat.Willpower, 7));
-        Added(owner.AddEffect(Effect(1, new StatModifier(CharacterStat.Willpower, StatModifierOperator.Divide, -2)), EffectCause.Spell));
-        Assert.AreEqual(1, Snap(owner).GetEffective(CharacterStat.Willpower), "7 / -2 = -3, clamped to 1");
+        Added(owner.AddEffect(Effect(1, new StatModifier(CharacterStat.Willpower, StatModifierOperator.Divide, -2),
+            Add(CharacterStat.Willpower, 10)), EffectCause.Spell));
+        Assert.AreEqual(7, Snap(owner).GetEffective(CharacterStat.Willpower), "7 / -2 = -3 (floor would give -4), +10");
+
+        var percent = Owner();
+        Changed(percent.SetBase(CharacterStat.Perception, 5));
+        Added(percent.AddEffect(Effect(1, new StatModifier(CharacterStat.Perception, StatModifierOperator.Percent, -150),
+            Add(CharacterStat.Perception, 10)), EffectCause.Curse));
+        Assert.AreEqual(8, Snap(percent).GetEffective(CharacterStat.Perception), "5 * -50 / 100 = -2 (floor -3), +10");
 
         var huge = Owner();
         for (var i = 0; i < 4; i++)

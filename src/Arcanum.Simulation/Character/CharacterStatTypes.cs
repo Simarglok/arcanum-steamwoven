@@ -17,10 +17,16 @@ public enum CharacterStat
 public enum CharacterRace { Human, Dwarf, Elf, HalfElf, Gnome, Halfling, HalfOrc, HalfOgre, DarkElf, Ogre, Orc }
 public enum CharacterGender { Female, Male }
 
-/// <summary>Why an effect is applied. Race and Gender are reserved for the innate setters.</summary>
+/// <summary>
+/// Why an effect is applied. Race and Gender are reserved for the race/gender setters (Background and Class are
+/// ordinary causes here). Values are Steamwoven identifiers, not wire codes: map data codes explicitly.
+/// </summary>
 public enum EffectCause { Race, Background, Class, Bless, Curse, Item, Spell, Injury, Tech, Gender }
 
-/// <summary>Aggregation kinds. Evaluation order is Percent, Multiply, Divide, Add, Minimum, Maximum.</summary>
+/// <summary>
+/// Aggregation kinds. Evaluation order is Percent, Multiply, Divide, Add, Minimum, Maximum.
+/// Values are Steamwoven identifiers, not wire codes: map data codes explicitly.
+/// </summary>
 public enum StatModifierOperator { Add, Multiply, Divide, Minimum, Maximum, Percent }
 
 public readonly record struct StatModifier(CharacterStat Stat, StatModifierOperator Operator, int Value);

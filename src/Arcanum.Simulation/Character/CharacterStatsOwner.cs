@@ -71,7 +71,7 @@ public sealed class CharacterStatsOwner
         if (CharacterStatRules.IsDerived(stat)) return Reject(CharacterStatsFailure.DerivedStatReadOnly);
         if (!CharacterStatRules.Range(race, stat).Contains(value)) return Reject(CharacterStatsFailure.OutOfRange);
         if (stored[(int)stat] == value) return NoChange();
-        if (Exhausted) return Reject(CharacterStatsFailure.RevisionExhausted);
+        if (revision == long.MaxValue) return Reject(CharacterStatsFailure.RevisionExhausted);
         stored[(int)stat] = value;
         return Changed(null);
     }
@@ -122,7 +122,7 @@ public sealed class CharacterStatsOwner
         var index = effects.FindIndex(effect => effect.Id == id);
         if (index < 0) return Reject(CharacterStatsFailure.UnknownEffect);
         if (CharacterStatRules.IsInnate(effects[index].Cause)) return Reject(CharacterStatsFailure.InvalidCause);
-        if (Exhausted) return Reject(CharacterStatsFailure.RevisionExhausted);
+        if (revision == long.MaxValue) return Reject(CharacterStatsFailure.RevisionExhausted);
         effects.RemoveAt(index);
         return Changed(null);
     }
