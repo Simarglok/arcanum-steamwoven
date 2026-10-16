@@ -42,6 +42,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Bounded actor visual contract — original-runtime parity NOT READY](rendering/actor-visual-contract.md)
 - [ARC-INPUT-001 diagnostic palette and WORLD keyboard/mouse route](input/diagnostic-palette.md)
 - [Crash Site day/night ambient lighting (ARC-RENDER-010)](rendering/area-lighting.md)
+- [ARC-RENDER-008 passability overlay](rendering/passability-overlay.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)
 - [Synthetic movement study](input/gamepad-movement-study.md)

@@ -114,6 +114,8 @@ public partial class TerrainViewerApp
         WorldLifecycleMatrixForSelfTest();
         await WorldModalRoutingMatrixForSelfTestAsync();
         WorldPaletteChordMatrixForSelfTest();
+        // Outside the bounded WORLD003 zone x4..8 y0..3, inside the sector.
+        OriginalPassabilityOverlayCheck("world-diagnostic", new(20, 20), blockerReason: "ADMITTED_DESTINATION_SCENERY_BLOCKER");
         try { await WorldMouseSettingsMatrixForSelfTestAsync(); }
         catch (InvalidOperationException exception) when (exception.Message.StartsWith("WORLD mouse settings:", StringComparison.Ordinal))
         {

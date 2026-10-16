@@ -20,10 +20,11 @@ LOCAL = ROOT / "tools" / "arcanum-local"
 DEFAULT_GAME_ROOT = Path("/Applications/Arcanum")
 ROOT_ID = "world"
 # Mode -> (viewer --mode, exact artifact tasks in preference order). The first task
-# with a current pointer is launched: ARC-WORLD-009 (cave and return) supersedes
+# with a current pointer is launched: ARC-RENDER-008 (passability overlay, on top of all the
+# following) supersedes ARC-WORLD-009 (cave and return), which supersedes
 # ARC-WORLD-007 (LMB click-to-move), which supersedes ARC-INPUT-001 (diagnostic palette),
 # which supersedes ARC-RENDER-007, on the same whole-core AREA mode when its build exists.
-MODES = {"area": ("crash-site-area", ("ARC-WORLD-009", "ARC-WORLD-007", "ARC-INPUT-001", "ARC-RENDER-007")), "world": ("world-diagnostic", ("ARC-WORLD-003",))}
+MODES = {"area": ("crash-site-area", ("ARC-RENDER-008", "ARC-WORLD-009", "ARC-WORLD-007", "ARC-INPUT-001", "ARC-RENDER-007")), "world": ("world-diagnostic", ("ARC-WORLD-003",))}
 
 
 def main_checkout() -> Path:
