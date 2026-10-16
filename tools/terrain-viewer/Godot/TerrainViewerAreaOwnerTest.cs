@@ -28,7 +28,7 @@ public static partial class TerrainViewerSelfTest
         if(fixture.Streams.Values.Any(s=>s.DisposeCount!=1)) throw new InvalidOperationException("AREA_OWNER_TRANSFERRED_HANDLES");
         // Exact visible residency is asserted below: no LRU retention.
         using var cache=new TerrainTextureCache { AreaRetainFrames = 0 };
-        var actor=SyntheticActorFixture.Create(human:true);
+        var actor=SyntheticActorFixture.Create(human: true, run: true);
         cache.UploadActor(actor.Result.ActorTextures);
         var viewport=new SubViewport { Size=new(480,400),TransparentBg=true,RenderTargetUpdateMode=SubViewport.UpdateMode.Always };
         var canvas=new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);

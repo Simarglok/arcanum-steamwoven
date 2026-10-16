@@ -18,8 +18,11 @@ internal static class SyntheticActorFixture
     internal static readonly (byte R, byte G, byte B) IdleRightPixel = (24, 218, 236);
     internal static readonly (byte R, byte G, byte B) WalkLeftPixel = (18, 197, 71);
     internal static readonly (byte R, byte G, byte B) WalkRightPixel = (237, 58, 184);
+    internal static readonly (byte R, byte G, byte B) RunLeftPixel = (201, 143, 22);
+    internal static readonly (byte R, byte G, byte B) RunRightPixel = (52, 109, 233);
 
-    internal static SyntheticActorLoad Create(bool human = false)
+    /// <param name="run">ARC-WORLD-020: the human also carries run frames (the AREA game view's profile).</param>
+    internal static SyntheticActorLoad Create(bool human = false, bool run = false)
     {
         var input = new ActorDiagnosticPlacementInput(0, 0, 100, 40, 0, 0,
             ActorDiagnosticRenderBranch.NormalUncached, 100, false, ActorDiagnosticAction.Idle, 0, 0,
@@ -30,7 +33,10 @@ internal static class SyntheticActorFixture
             human ? 1 : 15, human ? 6 : 8, IdleLeftPixel, IdleRightPixel, frames, textures, human);
         AddAction(ActorDiagnosticAction.Walk, human ? 2668 : 4754, human ? 0x20000040u : 0xc9001850u,
             human ? 10 : 8, human ? 17 : 15, WalkLeftPixel, WalkRightPixel, frames, textures, human);
-        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, frames, human ? ActorDiagnosticProfile.HumanFixed : ActorDiagnosticProfile.MonsterRegression);
+        if (human && run)
+            AddAction(ActorDiagnosticAction.Run, 2671, 0x20000180u, 10, 20, RunLeftPixel, RunRightPixel, frames, textures, human);
+        var actor = ActorDiagnosticScenePlan.CreateSynthetic(input, frames, !human ? ActorDiagnosticProfile.MonsterRegression
+            : run ? ActorDiagnosticProfile.HumanFixedRun : ActorDiagnosticProfile.HumanFixed);
         var terrainKey = new TerrainTextureKey("synthetic", 1, 0, 1, "terrain", 0, 0, 0);
         var terrain = TerrainScenePlan.CreateSynthetic(new TerrainRect(0, 0, 200, 100),
         [

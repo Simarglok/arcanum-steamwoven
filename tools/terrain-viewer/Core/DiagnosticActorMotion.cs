@@ -20,7 +20,7 @@ public sealed class DiagnosticActorMotion
     {
         ArgumentNullException.ThrowIfNull(previous);
         DiagnosticActorStep Reject(DiagnosticMotionStatus status) => new(previous, status, false, false, Array.Empty<DiagnosticMotionSegment>());
-        if (!ValidPosition(previous.Position) || previous.Facing is < 0 or > 7 || !Enum.IsDefined(previous.Action))
+        if (!ValidPosition(previous.Position) || previous.Facing is < 0 or > 7 || previous.Action is not (ActorDiagnosticAction.Idle or ActorDiagnosticAction.Walk))
             return Reject(DiagnosticMotionStatus.InvalidState);
         if (!Finite(screenIntent) || !double.IsFinite(elapsedSeconds) || elapsedSeconds < 0 || screenIntent.Length > 2 + 1e-12)
             return Reject(DiagnosticMotionStatus.InvalidInput);

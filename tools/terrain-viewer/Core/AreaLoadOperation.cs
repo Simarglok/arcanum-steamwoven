@@ -57,7 +57,9 @@ internal static class AreaLoadOperation
         VerifyAreaSteps(generation, snapshot, traversal);
         using var module = DatArchive.Open(arguments.ModulePath, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
         using var actorResource = DatArchive.Open(arguments.ActorResourcePath!, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
-        var actor = ActorDiagnosticSource.Create(module, actorResource, arguments.ActorInput!, 0, 0, token, mode: TerrainViewerMode.WorldDiagnostic);
+        // ARC-WORLD-020: the AREA game view also draws the human's run ART.
+        var actor = ActorDiagnosticSource.CreateWithBudget(module, actorResource, arguments.ActorInput!, 0, 0, token, TerrainLoadBudget.Default,
+            null, TerrainViewerMode.WorldDiagnostic, ActorDiagnosticProfile.HumanFixedRun);
         if (checked(retained + actor.CheckedRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
         // Lighting rules and sector scheme words come from the same module archive, bound to this

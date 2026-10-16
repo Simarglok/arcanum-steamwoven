@@ -23,7 +23,7 @@ public static partial class TerrainViewerSelfTest
         var plan = AreaScenePlan.Create([], [body], [bv]);
         var frames = new Dictionary<AreaFrameKey,DecodedAreaFrame> {
             [AreaFrameKey.From(bv)] = new(160,160,SolidRgba(160,160,10,20,200)) };
-        var synthetic = SyntheticActorFixture.Create(human:true);
+        var synthetic = SyntheticActorFixture.Create(human: true, run: true);
         var input = synthetic.Arguments.ActorInput! with { MapX=0, MapY=0, CameraOriginX=0, CameraOriginY=0 };
         var actor = synthetic.Result.ActorPlan!.Select(input);
         using var cache = new TerrainTextureCache(); cache.UploadActor(synthetic.Result.ActorTextures);
