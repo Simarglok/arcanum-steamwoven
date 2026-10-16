@@ -43,6 +43,11 @@ prototype events back in. Serialized event9 script0 is `ZeroScript`. The owned
 attachment records flags/counters/script, origin/presence and a semantic field
 projection digest. That digest is NOT a raw serialized-field hash.
 
+The script is framed by the shared strict reader `ScrProgram.Read`
+([SCR program and admission](scr-program-admission.md), ARC-SCRIPT-007); this
+resolver keeps its own rules on top (at least one line, capacity within
+`MaxScriptEntries`, no file flags).
+
 Plans contain only privately normalized instructions and owned metadata: no live
 DAT entry, source handle or original DLG text/expressions escape. Results survive
 input mutation and disposal. The caller retains stream ownership, must exclusively
