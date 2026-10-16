@@ -50,21 +50,26 @@ public sealed class GameSessionLimits
     public const int PolicyMaxTotalChanges = 16384;
     /// <summary>Party records (followers, waiting NPCs and free NPCs with a flag).</summary>
     public const int PolicyMaxCompanions = 64;
+    /// <summary>Items the PC took from the world; the same bound as one list of the project's T0 inventory reader.</summary>
+    public const int PolicyMaxPcItems = 512;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
-        int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions)
+        int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
         if (maxTotalChanges is < 1 or > PolicyMaxTotalChanges) throw new ArgumentOutOfRangeException(nameof(maxTotalChanges));
         if (maxCompanions is < 1 or > PolicyMaxCompanions) throw new ArgumentOutOfRangeException(nameof(maxCompanions));
+        if (maxPcItems is < 1 or > PolicyMaxPcItems) throw new ArgumentOutOfRangeException(nameof(maxPcItems));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
+        MaxPcItems = maxPcItems;
     }
 
     public int MaxMaps { get; }
     public int MaxChangesPerMap { get; }
     public int MaxTotalChanges { get; }
     public int MaxCompanions { get; }
+    public int MaxPcItems { get; }
 }
 
 /// <summary>Explicit new-game inputs. The flag descriptor's identity becomes the session's world/module.</summary>
@@ -85,6 +90,10 @@ public enum GameSessionFailure
     IncompatibleClockProfile, InvalidSnapshot, InvalidQuest, InvalidQuestState, InvalidRumor, InvalidLighting,
     // Party domain (ARC-WORLD-013).
     InvalidCompanion, InvalidConsentFacts, ConsentRefused, LeaveRefused, NotInParty, NotWaiting,
+    // Inventory domain (ARC-WORLD-014).
+    InventoryUnavailable, InvalidInventorySeed, InventoryMismatch, InvalidItem, ItemNotAvailable, UnknownHolder,
+    HolderNotLootable, HolderScriptUnsupported, ItemScriptUnsupported, ItemTypeUnsupported, WornItemUnsupported,
+    SubstituteInventoryUnsupported, InsertRefused,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -183,15 +192,17 @@ public sealed class SessionMapState
 public sealed class GameSessionSnapshot
 {
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
-    /// adds <see cref="Party"/> (ARC-WORLD-013). Schemas 1..3 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 4;
+    /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 adds <see cref="Inventory"/> (ARC-WORLD-014). Schemas 1..4 are
+    /// refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 5;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionLightingState? lighting)
+        SessionPartyState party, SessionInventoryState inventory, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
-        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party; Lighting = lighting;
+        Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
+        Inventory = inventory; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -203,6 +214,7 @@ public sealed class GameSessionSnapshot
     public IReadOnlyList<SessionMapState> Maps { get; }
     public SessionStoryState Story { get; }
     public SessionPartyState Party { get; }
+    public SessionInventoryState Inventory { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
     public SessionLightingState? Lighting { get; }
 }

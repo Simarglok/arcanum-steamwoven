@@ -199,6 +199,9 @@ matters only once both schemes are complete, since a running rule spends them.
   original executable or a fix), every later XP award at level 50 would call
   L7 with PC levels 50 → 51 and raise a lagging follower by one level, capped
   at 50. [level.c 366–377][to-next], [level.c 492–500][recalc], [stat.c 732–737][xp-recalc]
+  The 1.0.7.4 update notes describe that behaviour (followers level up at PC
+  level 50; [ARC-RES-032](virgil-level-replay.md#5-outside-sources-x), X2);
+  the installed executable was not traced.
 - **A2** The PC's level-up message is built with `sizeof` of a pointer as the
   remaining buffer length; only the PC path builds the message.
   [level.c 831–834][apply]
@@ -229,13 +232,15 @@ matters only once both schemes are complete, since a running rule spends them.
 
 - **U1** Which scheme-91 steps Virgil actually buys at each level was not
   replayed: that needs the key-stat skill cap, stat costs, his maximum hit
-  points and the spell intelligence/willpower requirements. Next check: a
-  replay over his T0 sheet with those tables.
+  points and the spell intelligence/willpower requirements. Answered by
+  [ARC-RES-032](virgil-level-replay.md): a replay over his T0 sheet.
 - **U2** Who triggers script 2023 (scheme 101) was not traced beyond the Crash
   Site. A scheme change never changes a level, so it could change only what
-  Virgil buys, not the gate.
+  Virgil buys, not the gate. Answered by [ARC-RES-032](virgil-level-replay.md):
+  it is his own story event (name 6409), setting scheme 101.
 - **U3** Local variable 1 in his enter-combat script was not evaluated; it
-  changes his alignment, not his level.
+  changes his alignment, not his level. Answered by
+  [ARC-RES-032](virgil-level-replay.md): it copies the player's alignment.
 - **U4** Original-executable behaviour of L7 (including A1, A5 and A6) is
   NOT_VERIFIED.
 - **U5** The probe does not follow call edges from Virgil's six scripts, so a
@@ -243,6 +248,9 @@ matters only once both schemes are complete, since a running rule spends them.
   counted only in the whole-archive totals above (no adjust-stat names the
   level anywhere). Next check: the call-edge census of the
   [cave research](cave-transition-evidence.md) applied to his scripts.
+  Answered by [ARC-RES-032](virgil-level-replay.md): through call and
+  change-script edges 20 scripts are reached, only
+  1997 has an adjust-stat action, 15 call-ex edges stay unresolved.
 
 ## Method
 

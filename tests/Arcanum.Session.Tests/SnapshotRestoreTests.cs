@@ -126,15 +126,19 @@ public sealed class SnapshotRestoreTests
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":5,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        // Schema 1 (no story, no lighting), schema 2 (story without lighting) and schema 3 (no party) are refused, not migrated.
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(EmptyStory + EmptyParty + LightingTail, "}"),
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":6,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        // Schema 1 (no story, no lighting), schema 2 (story without lighting), schema 3 (no party) and schema 4 (no inventory)
+        // are refused, not migrated.
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(EmptyStory + EmptyParty + EmptyInventory + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(EmptyParty + LightingTail, "}"),
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(EmptyParty + EmptyInventory + LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(EmptyParty, ""),
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":3,\"world\"").Replace(EmptyParty + EmptyInventory, ""),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":4,\"world\"").Replace(EmptyInventory, ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With(EmptyParty, ""), SnapshotDecodeFailure.MissingField, "$.party");
+        Fails(With(EmptyInventory, ""), SnapshotDecodeFailure.MissingField, "$.inventory");
         Fails(With("\"revision\":2,", "\"revision\":2,\"extra\":0,"), SnapshotDecodeFailure.UnknownField, "$.extra");
         Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":3,"), SnapshotDecodeFailure.DuplicateField, "$.revision");
         Fails(With("\"revision\":2,", ""), SnapshotDecodeFailure.MissingField, "$.revision");
@@ -182,13 +186,13 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":5,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":6,\"equipment\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":4,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":5,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));
-        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + EmptyStory + EmptyParty + LightingTail,
+        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + EmptyStory + EmptyParty + EmptyInventory + LightingTail,
             SnapshotDecodeFailure.BudgetExceeded, "$.maps");
         var tooManyFlags = string.Join(",", Enumerable.Range(0, GlobalFlagLimits.MaxFlags + 1).Select(flag => $"{{\"flag\":{flag},\"value\":null}}"));
         Fails(With("\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]", "\"entries\":[" + tooManyFlags + "]"),
@@ -201,7 +205,7 @@ public sealed class SnapshotRestoreTests
         var changes = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxChangesPerMap)
             .Select(sector => $"{{\"scope\":\"sector\",\"sector\":{sector},\"property\":\"p\",\"value\":{sector}}}"));
         var text = GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] +
-            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + EmptyParty + LightingTail;
+            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + EmptyParty + EmptyInventory + LightingTail;
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionLimits.PolicyMaxChangesPerMap, restored.QueryMapChanges(Exterior).Count);
         Assert.AreEqual(4095, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(4095, "p")));
