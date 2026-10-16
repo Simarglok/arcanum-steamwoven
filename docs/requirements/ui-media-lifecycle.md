@@ -199,8 +199,8 @@
 | FR-MEDIA-003 | Нет: no game sound resources | Нет: no game audio rules | Нет: no mixer/game adapter | Нет: no audible/device check |
 | FR-MEDIA-004 | Нет: no sector audio records | Нет: no spatial/event rules | Нет: no audio-world integration | Нет: no audio transition check |
 | FR-LIFECYCLE-001 | Нет: no game module/session state | Нет: no game bootstrap | Нет: viewer archive lifecycle only | Нет: no launch/continue flow |
-| FR-LIFECYCLE-002 | Нет: no game save payload/metadata | Нет: no game save actions | Нет: no persistence store/UI | Нет: no save/load run |
-| FR-LIFECYCLE-003 | Частично: [session snapshot schema 2](../world/game-session-runtime.md) | Частично: identity/profile checks before restore | Нет: no save store/UI | Частично: synthetic decode/restore tests |
+| FR-LIFECYCLE-002 | Частично: session snapshot payload, no metadata/preview | Частично: one quick-save slot (F7/F8), no list/delete | Частично: [atomic slot file](../world/game-session-runtime.md#save-slot-arc-world-011), area viewer HUD status (ARC-WORLD-011) | Частично: synthetic tests and real-data native smoke |
+| FR-LIFECYCLE-003 | Частично: [session snapshot schema 2](../world/game-session-runtime.md) | Частично: identity/profile checks before restore; quick load also checks loaded map and cell first | Частично: atomic quick-save slot (ARC-WORLD-011), no save UI | Частично: synthetic decode/restore/slot tests, damaged-slot native smoke |
 | FR-LIFECYCLE-004 | Частично: strict input/zoom preference schemas; не все game preferences | Частично: migration/default/reset/coalesced saving в diagnostics | Частично: WORLD settings/restart path; общего product options bridge нет | Частично: historical source/export persistence stages; не game preferences parity |
 
 ## Инвентарь просмотренных источников и охват

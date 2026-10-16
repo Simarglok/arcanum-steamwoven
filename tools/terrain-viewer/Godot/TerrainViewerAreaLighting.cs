@@ -25,6 +25,18 @@ public partial class TerrainViewerApp
         GD.Print("ARC-RENDER-010 lighting-ready " + AreaAmbientReceipt());
     }
 
+    // ARC-WORLD-011 quick load replaced the session: the day/night driver binds to the loaded clock (its time,
+    // pause and the lighting it carries) and keeps the viewer's lighting toggle. The sector is the last selected
+    // one until the host re-applies for the loaded actor (FollowAreaAmbient after the actor is placed).
+    private void RebindAreaAmbient(GameSessionOwner session)
+    {
+        if (_areaAmbient is not { } previous || (_exteriorArea ?? _readyArea)?.Lighting is not { } lighting) return;
+        _areaAmbient = AreaAmbientDriver.Create(lighting.Source, session, previous.Selection.Sector);
+        _areaAmbient.Enabled = previous.Enabled;
+        PushAreaAmbient(); BindAreaAmbientPalette();
+        GD.Print("ARC-WORLD-010 clock-rebound " + AreaAmbientReceipt());
+    }
+
     private void StopAreaAmbient()
     {
         _areaAmbient = null;
