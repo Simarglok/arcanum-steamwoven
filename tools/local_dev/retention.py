@@ -34,7 +34,9 @@ REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007'] = REQUIRED_TASK_SUCCESS_GATES['ARC
     f'{host}-{name}' for host in ('source', 'exported') for name in ('area-original', 'area-grid', 'area-seams', 'area-nearest')}
 # ARC-INPUT-001 (diagnostic palette) is delivered on the whole-core AREA build: the same gates.
 REQUIRED_TASK_SUCCESS_GATES['ARC-INPUT-001'] = REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007']
-AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001")
+# ARC-WORLD-007 (LMB click-to-move) ships on the same AREA build; its route matrix runs in the area-grid gate.
+REQUIRED_TASK_SUCCESS_GATES['ARC-WORLD-007'] = REQUIRED_TASK_SUCCESS_GATES['ARC-RENDER-007']
+AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007")
 
 
 def _tool_for_task(task: str) -> str | None:
@@ -646,7 +648,7 @@ def register_export(registry: dict[str, Any], *, conf: dict[str, Any], tool: str
     required = REQUIRED_SUCCESS_GATES.get(tool, set()) | REQUIRED_TASK_SUCCESS_GATES.get(task, set())
     if not required.issubset(named_outcomes):
         raise ValueError("register-export requires the complete tool-specific success gates")
-    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001") and payload.get("delivery", {}).get("originalInputModes") != "PASS":
+    if task in ("ARC-WORLD-001", "ARC-GPAD-004", "ARC-RENDER-006", "ARC-WORLD-003", "ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007") and payload.get("delivery", {}).get("originalInputModes") != "PASS":
         raise ValueError("world export requires verified original integrated inputs")
     if task in ("ARC-RENDER-006", "ARC-WORLD-003", *AREA_TASKS):
         from .human_validation import validate_reports

@@ -1,11 +1,12 @@
-# Click-to-move route core (ARC-WORLD-007)
+# Click-to-move route (ARC-WORLD-007)
 
-Status: **Implemented Godot-free core**, stage 1. It plans a bounded route to a
-clicked cell over the caller's step evidence and turns it into ordinary
-[movement runtime](grid-movement-runtime.md) intents. Stage 2 binds LMB in the
-`crash-site-area` viewer to it; until then no mouse click moves the actor
-(`LMB click-to-move PENDING`, [palette route](../input/diagnostic-palette.md)).
-Original pathfinder and runtime parity are **NOT_VERIFIED**.
+Status: **Implemented**, stage 1 (Godot-free core) and stage 2 (LMB in the
+`crash-site-area` viewer). The core plans a bounded route to a clicked cell over the
+caller's step evidence and turns it into ordinary
+[movement runtime](grid-movement-runtime.md) intents; the viewer picks the clicked
+ground cell and drives the actor there ([viewer binding](#viewer-binding-stage-2)).
+`world-diagnostic` has no click route. Original pathfinder and runtime parity are
+**NOT_VERIFIED**.
 
 Requirements: [FR-NAV-001](../requirements/world-travel-runtime.md#fr-nav-001)
 (click is a route goal), [FR-NAV-002](../requirements/world-travel-runtime.md#fr-nav-002)
@@ -95,7 +96,10 @@ RouteDrive Drive(MovementState state, SimulationTime target, Func<SimulationTime
 - While a goal is followed it owns movement and stops the actor on the goal even if
   another source set the same direction; otherwise the follower clears only an intent
   it issued itself, so a host may keep driving it while another input source moves the
-  actor. Observation times gate a settled actor only; a goal change during a step
+  actor. Ownership is the receipt key of the follower's last input, not the intent
+  value: after a stop, a stick that sets the same direction owns it. With no goal and
+  no intent of its own the follower returns the host's target directly, so it never
+  splits another source's advance at a step end. Observation times gate a settled actor only; a goal change during a step
   applies at that step's end. `Next` plans as it decides, so `LastPlan`,
   `PlannedSegments` and a plan failure are recorded even if the host drops that advance.
 - `Drive` runs `Next`/`Observe` through the host's advance up to the frame target,
@@ -110,6 +114,40 @@ Supported Open is `Open`, Supported Blocked is `Blocked`, `Unknown` and
 `Unsupported` (the core edge, owner decision of 2026-10-15) stay distinct.
 `Contains` is the nine admitted core sectors. A planned step and the step the
 runtime receives therefore share one Data verdict.
+
+## Viewer binding (stage 2)
+
+`TerrainViewerWorld` binds the follower to the whole-core `AreaGridSession` only
+(`crash-site-area`); each session (spawn, Reset scene, Reload) gets a fresh
+`RouteFollower` over its own `AreaRouteSource`.
+
+- **Click.** An LMB press that native GUI leaves unhandled (`_UnhandledInput`; the
+  HUD panel and the palette consume their own clicks) sets the goal with the
+  observation time of the click. It is ignored while the palette or a GUI control has
+  focus, the window is unfocused, the neutral gate is closed or Reset/Reload is
+  pending. Release, drag, double click and the other buttons have no route meaning;
+  the same cell again keeps the goal (KM-03).
+- **Picking.** `AreaCellPicking` maps the click through the canvas transform to chart
+  space and picks the diamond of the drawn ground: cell (x,y) is centred at
+  `(40(y-x)+40, 20(y+x)+20)`, the centre of the AREA tile rectangle and the anchor of
+  AREA scenery (CE `location_xy` plus the object `+40,+20`). Shared diamond edges go to
+  the larger map coordinate. The HumanFixed actor's retained foot projection
+  `(40(y-x), 20(y+x)+20)` is 40 px left of that centre (checked on a zoom-2 capture on
+  2026-10-16): a settled actor stands on the left vertex of its diamond. Picking
+  follows the ground, not the sprite; correcting the actor offset is a separate change.
+- **Driving.** `AdvanceWorldGrid` closes the same complete-observation frontier as
+  before. Pending stick/neutral receipts run first as one ordinary advance and the
+  follower only observes it; with none pending, `RouteFollower.Drive` runs the
+  sub-advances to the frontier through the same `DiagnosticGridActor.Advance` and
+  presentation selection, and every sub-advance's evidence and events are logged.
+  A drive failure is the ordinary observation fault (`GRID_ROUTE_*`).
+- **Stops.** An active stick direction stops the route at once
+  (`ROUTE_STOPPED_BY_STICK`) and keeps its own intent. Every quarantine stops it
+  (`ROUTE_STOPPED_QUARANTINE`): the palette, focus loss, device changes, settings
+  saves, Fit, Reset scene and Reload. A started step is never cancelled by a stop or
+  a new click: it ends at its cell centre, then the follower clears its own intent.
+- **HUD.** `LMB click-to-move route <status> target=<cell> <reason> plan=<reason>
+  segments=<n>`; the log prints `ARC-WORLD-007 route click` and `route stop` lines.
 
 ## Evidence
 
@@ -127,10 +165,28 @@ runtime receives therefore share one Data verdict.
   without a search; of eight goals 20 cells from spawn four were found and walked to
   arrival through the session (plans 0.1–3.4 ms); the other four are cells no step
   can enter at T0 and end `ROUTE_NOT_FOUND` from their eight entries.
+- Picking: `tests/Arcanum.TerrainViewer.Tests/AreaCellPickingTests.cs` (diamond
+  centre against `TerrainGeometry`, inside/outside each edge, the actor foot anchor
+  on the left vertex, non-finite and far points).
+- Native synthetic AREA probe (`ARC_AREA_GRID_PROBE=1`, see the
+  [area viewer](../rendering/crash-site-area-viewer.md)): `ARC-WORLD-007 AREA route
+  synthetic PASS` over the strict owner fixture: a detour around the blocker at
+  (5,1) from an off-centre click, a new click mid-step (the started step completes),
+  the same goal kept, a stick takeover in the route's own direction, the palette stop
+  (step ends at its centre, a click under the palette is ignored), an occupied goal
+  (`ROUTE_NOT_FOUND`, no step), and native dispatch (a ground click through
+  `SubViewport.PushInput` sets the goal, a HUD click does not).
+- Original data (development Mac, 2026-10-16, local check, not a sealed gate): in the
+  running `crash-site-area` viewer a click inside the (3,3) diamond planned
+  `ROUTE_LOCAL_SEARCH` and the actor arrived at (3,3) in one segment.
+- Export: literal task `ARC-WORLD-007` in the closed terrain endpoint with exactly the
+  ARC-RENDER-007 gate set; the route matrix runs inside its source and exported
+  `area-grid` probes. `./arcanum area` prefers the current ARC-WORLD-007 build.
 
 ## NOT READY
 
-LMB/hover binding, screen-to-cell picking and the cursor are stage 2. No running,
+No hover cursor or route preview, no physical mouse check (synthetic and local
+software checks only), and the actor's 40 px foot offset is not corrected. No running,
 NPC/object goals, doors, windows, traps, followers, other actors, state after T0,
 movement speed or original path choice. Unknown or unsupported evidence is
 reported, not explored. A target more than 32 cells away on an axis is refused,

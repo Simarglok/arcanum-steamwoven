@@ -174,6 +174,40 @@ public sealed class RouteFollowerTests
     }
 
     [TestMethod]
+    public void IdleFollowerNeverSplitsAnotherSourcesAdvanceAtAStepEnd()
+    {
+        var source = GridSource.Open(16, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        host.Advance(T(0), [Batch(0, Press(0))]); // The stick walks; no goal was ever set.
+        var follower = new RouteFollower(source);
+        // One frame spanning a step end (T1) is still one advance, exactly as the host would run it without a route.
+        var drive = follower.Drive(host.State, T(3, 2), host.Advance);
+        Assert.IsTrue(drive.Completed, drive.FailureCode);
+        Assert.AreEqual(1, drive.Advances.Count);
+        CollectionAssert.AreEqual(new[] { T(0), T(1) }, host.Events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Time).ToArray());
+    }
+
+    [TestMethod]
+    public void StoppedRouteNeverClearsTheSameDirectionSetByAnotherSource()
+    {
+        var source = GridSource.Open(16, 1);
+        var host = new RouteHost(source, new(0, 0), Step);
+        var follower = new RouteFollower(source);
+        follower.SetTarget(new(8, 0), host.State.Time);
+        host.Frames(follower, 2); // Mid first step east, with the route's own Toward(XPlus).
+        follower.Stop(host.State.Time, "ROUTE_STOPPED_BY_STICK");
+        // The stick takes over in the same direction: equal intent value, a newer receipt.
+        var stick = host.State.LatestInputKey!.Value.Sequence + 1;
+        follower.Observe(host.Advance(T(3, 4), [new InputBatch(T(3, 4), [MovementInput.Set(stick, ActorIntent.Toward(NeighborDirection.XPlus))])]));
+        host.Frames(follower, 4 * 4);
+        Assert.AreEqual((RouteFollowStatus.Stopped, "ROUTE_STOPPED_BY_STICK"), (follower.Status, follower.StopReason));
+        Assert.AreEqual(ActorIntent.Toward(NeighborDirection.XPlus), host.State.LatestIntent, "The stick's intent is not the follower's to clear.");
+        Assert.AreEqual(new InputKey(T(3, 4), stick), host.State.LatestInputKey);
+        Assert.IsTrue(host.State.CommittedCell.X >= 4, "The actor keeps walking under the stick.");
+        Assert.IsFalse(host.Events.Any(e => e.Kind is MovementEventKind.StepCancelled or MovementEventKind.StepRejected));
+    }
+
+    [TestMethod]
     public void HostCancelledStepIsReplannedFromItsSourceCell()
     {
         var source = GridSource.Open(8, 1);

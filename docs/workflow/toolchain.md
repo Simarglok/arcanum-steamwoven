@@ -45,7 +45,9 @@ capacity/lease/frozen-observation and finalized-rerun rejection are unchanged.
 ARC-INPUT-001 (diagnostic palette) uses that same endpoint/root with literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-INPUT-001` and exactly the ARC-RENDER-007 gate set;
 the synthetic source/exported gates additionally require its palette markers
-([contract](../input/diagnostic-palette.md)).
+([contract](../input/diagnostic-palette.md)). ARC-WORLD-007 (LMB click-to-move) uses
+literal `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-007` with the same gate set; its route
+matrix runs in the `area-grid` probes ([contract](../world/click-route-runtime.md)).
 The bounded grid source candidate uses literal
 `ARCANUM_TERRAIN_EXPORT_TASK=ARC-WORLD-003` in that same endpoint/root. It retains
 the sixteen terrain/WORLD/GPAD/Human gates and adds source/exported original
