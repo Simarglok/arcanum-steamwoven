@@ -502,7 +502,7 @@ internal static class PassabilityProbe
         return checked(x | (y << 6));
     }
 
-    private static bool IsBlocked(ReadOnlySpan<byte> mask, int ordinal)
+    internal static bool IsBlocked(ReadOnlySpan<byte> mask, int ordinal)
     {
         if ((uint)ordinal >= CellCount) throw new InvalidDataException("Block-mask ordinal is outside the fixed sector.");
         var word = BinaryPrimitives.ReadUInt32LittleEndian(mask.Slice(checked((ordinal / 32) * sizeof(uint)), sizeof(uint)));

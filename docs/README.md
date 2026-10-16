@@ -31,6 +31,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Terrain loader](world/terrain-loader.md)
 - [Bounded terrain obstruction components](world/terrain-obstruction-components.md)
 - [Bounded production cardinal traversal assessment](world/cardinal-traversal-assessment.md)
+- [Click-to-move route core (ARC-WORLD-007, stage 1)](world/click-route-runtime.md)
 - [Ordinary static-scenery obstruction contract — bounded component only](world/static-obstruction-contract.md)
 - [Proposed selected-sector passability contract — NOT READY](world/passability-contract.md)
 
@@ -40,6 +41,7 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Terrain, static and bounded actor diagnostic viewer (ARC-RENDER-003/004/005)](rendering/terrain-viewer.md)
 - [Bounded actor visual contract — original-runtime parity NOT READY](rendering/actor-visual-contract.md)
 - [ARC-INPUT-001 diagnostic palette and WORLD keyboard/mouse route](input/diagnostic-palette.md)
+- [Crash Site day/night ambient lighting (ARC-RENDER-010)](rendering/area-lighting.md)
 - [ARC-RENDER-008 passability overlay](rendering/passability-overlay.md)
 - [ARC-UI-001 display/UI validation](input/display-ui-validation.md)
 - [Gamepad prototype evidence](input/gamepad-prototype.md)

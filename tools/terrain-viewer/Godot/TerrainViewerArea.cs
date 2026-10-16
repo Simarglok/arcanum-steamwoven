@@ -32,6 +32,7 @@ public partial class TerrainViewerApp
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
+        StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
         _canvas!.AreaFailure = error =>
@@ -60,11 +61,13 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | submitted visible {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | movement: whole core (9 sectors) at new-game T0, core edge refused | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{WorldStatus()}");
+        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | visible commands {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | terrain {(_canvas.AreaTerrainChunked ? $"chunks {_canvas.AreaChunkCount}{(_canvas.AreaChunkLevel > 0 ? $" at 1/{1 << _canvas.AreaChunkLevel}" : string.Empty)}, resident {_canvas.AreaChunkResidentCount}/{_canvas.AreaChunkResidentBytes} bytes" : "per command")} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | movement: whole core (9 sectors) at new-game T0, core edge refused | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{AreaAmbientStatus()}{WorldStatus()}");
     }
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {
         var area = result.Area!;
+        // Source-pixel gates below observe unlit source pixels; lighting has its own phase at the end.
+        if (_areaAmbient is not null) { _areaAmbient.Enabled = false; PushAreaAmbient(); }
         var viewports = new List<Vector2I>();
         // This is a real native viewport observation. A requested size or a
         // headless success can never substitute for its readback dimensions.
@@ -155,6 +158,7 @@ public partial class TerrainViewerApp
             using var image = GetViewport().GetTexture().GetImage();
             if (image.SavePng(_nativeSmokeScreenshot) != Error.Ok) throw new InvalidOperationException("AREA_CAPTURE_FAILED");
         }
+        await RunAreaLightingSmokeAsync(area);
         // The caller releases its load result, then runs S5 and quits.
     }
     private bool TryAreaPixel(AreaDrawCommand command, AreaLoadResult area, Image image, out object sample, out AreaPixelDiagnostics diagnostics)
@@ -167,7 +171,7 @@ public partial class TerrainViewerApp
     // native fixtures. The fixture must still publish via the real compositor.
     internal static bool TryAreaPixel(AreaDrawCommand command, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         IReadOnlyList<AreaDrawCommand> ordered, Image image, Viewport viewport, Rect2? hud, Rect2? actor,
-        double zoom, out object sample, out AreaPixelDiagnostics diagnostics)
+        double zoom, out object sample, out AreaPixelDiagnostics diagnostics, Arcanum.Data.Lighting.AmbientColor? ambient = null)
     {
         sample = null!;
         var frame = frames[command.Frame]; var destination = command.Destination;
@@ -203,6 +207,10 @@ public partial class TerrainViewerApp
             if (px < 0 || py < 0) { diagnostics.Reject("crop"); continue; }
             var at = checked((py * frame.Width + px) * 4);
             if (frame.Rgba[at + 3] != 255) { diagnostics.Reject("target-alpha"); continue; }
+            // A lit observation counts only where the tint is visible beyond the tolerance.
+            if (ambient is { } lit && Math.Max(Math.Abs(frame.Rgba[at] * lit.R / 255d - frame.Rgba[at]), Math.Max(
+                    Math.Abs(frame.Rgba[at + 1] * lit.G / 255d - frame.Rgba[at + 1]), Math.Abs(frame.Rgba[at + 2] * lit.B / 255d - frame.Rgba[at + 2]))) <= 3)
+            { diagnostics.Reject("tint-not-observable"); continue; }
             // The compositor uses exact CPU integer index rows and texelFetch.
             // Sparse halfzoom targets no longer need a uniform neighboring block.
             diagnostics.TargetOnlyEligible++;
@@ -210,6 +218,9 @@ public partial class TerrainViewerApp
             if (occluder is not null) { diagnostics.LastOccluder = occluder.Visual; diagnostics.Reject("later-alpha"); continue; }
             if (actor is { } a && a.HasPoint(actualWorld)) { diagnostics.Reject("actor-guide"); continue; }
             var observed = image.GetPixel(sx, sy);
+            // Lit observation (ARC-RENDER-010): source channel times the applied ambient channel / 255.
+            var tint = ambient ?? Arcanum.Data.Lighting.AmbientColor.Neutral;
+            var expected = new[] { frame.Rgba[at] * tint.R / 255d, frame.Rgba[at + 1] * tint.G / 255d, frame.Rgba[at + 2] * tint.B / 255d };
             sample = new { command.Visual, command.Identity, command.Frame, command.Destination, Zoom = zoom,
                 command.Source, command.FlipX, command.FlipY, RasterTransform = transform.ToString(),
                 SourceU = xAxis.CoordinateRatio(sx), SourceV = yAxis.CoordinateRatio(sy), SamplingDomain = "exact-binary-rational-center-discrete-reflection-v1",
@@ -221,9 +232,10 @@ public partial class TerrainViewerApp
                     BitConverter.SingleToUInt32Bits(viewport.GetCanvasTransform().Origin.X),
                     BitConverter.SingleToUInt32Bits(viewport.GetCanvasTransform().Origin.Y) },
                 SourceX = px, SourceY = py, ScreenX = sx, ScreenY = sy,
-                Expected = new[] { (int)frame.Rgba[at], frame.Rgba[at+1], frame.Rgba[at+2], 255 },
+                Expected = ambient is null ? new[] { (int)frame.Rgba[at], frame.Rgba[at+1], frame.Rgba[at+2], 255 }
+                    : new[] { (int)Math.Round(expected[0]), (int)Math.Round(expected[1]), (int)Math.Round(expected[2]), 255 },
                 Actual = new[] { (int)Math.Round(observed.R * 255), (int)Math.Round(observed.G * 255), (int)Math.Round(observed.B * 255), (int)Math.Round(observed.A * 255) } };
-            if (Math.Abs(observed.R * 255 - frame.Rgba[at]) > 2 || Math.Abs(observed.G * 255 - frame.Rgba[at + 1]) > 2 || Math.Abs(observed.B * 255 - frame.Rgba[at + 2]) > 2 || Math.Abs(observed.A * 255 - 255) > 2)
+            if (Math.Abs(observed.R * 255 - expected[0]) > 2 || Math.Abs(observed.G * 255 - expected[1]) > 2 || Math.Abs(observed.B * 255 - expected[2]) > 2 || Math.Abs(observed.A * 255 - 255) > 2)
             {
                 // Detailed original pixels remain private, never in public logs.
                 var path = System.Environment.GetEnvironmentVariable("ARC_AREA_REPORT");

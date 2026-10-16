@@ -1,11 +1,16 @@
 using Godot;
 using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
 using Arcanum.TerrainViewer.Core;
 
 namespace Arcanum.TerrainViewer;
 
+/// <summary>ARC-RENDER-010: the applied hourly pair and the channel of every drawn visual.</summary>
+public sealed record AreaAmbientView(AmbientPair Pair, IReadOnlyDictionary<AreaVisualKey, AreaAmbientChannel> Channels);
+
 public partial class TerrainCanvas
 {
+    private AreaAmbientView? _areaAmbient;
     private AreaScenePlan? _area;
     private IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame>? _areaFrames;
     private ActorDiagnosticPlacementInput? _areaActorPlacement;
@@ -17,6 +22,23 @@ public partial class TerrainCanvas
     private const int AreaPoolTrimPerUpdate = 1024;
     private AreaUprightOrder? _areaUpright;
     private readonly AreaMappingCache _areaMappings = new();
+    // Terrain drawn as pre-composed chunks when the plan admits it (exact under the
+    // nearest rule; see docs/research/crash-site-area-draw-calls.md); null keeps
+    // per-command terrain items.
+    private AreaTerrainChunks? _areaChunks;
+    private readonly AreaChunkTextureCache _areaChunkTextures = new();
+    private readonly Dictionary<AreaDrawCommand, (int X, int Y)> _areaChunkCommands = new(ReferenceEqualityComparer.Instance);
+    internal bool AreaTerrainChunksEnabled { get; set; } = true;
+    /// <summary>Terrain chunk items in the current submission, 0 when terrain is drawn per command.</summary>
+    public int AreaChunkCount { get; private set; }
+    public int AreaChunkLevel { get; private set; }
+    internal long AreaChunkCreatedCount => _areaChunkTextures.CreatedCount;
+    internal long AreaChunkDisposedCount => _areaChunkTextures.DisposedCount;
+    /// <summary>Resident terrain chunk textures and their RGBA bytes.</summary>
+    public int AreaChunkResidentCount => _areaChunkTextures.Count;
+    public long AreaChunkResidentBytes => _areaChunkTextures.Bytes;
+    /// <summary>Whether terrain can be drawn as chunks at all (plan admitted, not disabled).</summary>
+    public bool AreaTerrainChunked => AreaTerrainChunksEnabled && _areaChunks is not null;
 
     private static readonly AreaObjectKey ActorSentinel = new("controlled-session", 5051, AreaSourceKind.Mobile, null, int.MaxValue, 0, "controlled-session", 0);
     public Action<Exception>? AreaFailure { get; set; }
@@ -26,7 +48,7 @@ public partial class TerrainCanvas
     public int AreaCulledCount => (_area?.Commands.Count ?? 0) - AreaVisibleCount;
     public IReadOnlyList<AreaDrawCommand> AreaVisibleCommands { get; private set; } = Array.Empty<AreaDrawCommand>();
     private (Rect2 View, Transform2D Transform, ActorDiagnosticDrawCommand Actor,
-        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible)? _areaView;
+        ActorDiagnosticPlacementInput Placement, bool ActorVisible, bool BodiesVisible, bool Chunks)? _areaView;
 
     public void PublishArea(AreaLoadResult area, ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
         => PublishArea(area.Plan, area.Frames, actor, placement, textures);
@@ -36,11 +58,50 @@ public partial class TerrainCanvas
     internal void PublishArea(AreaScenePlan plan, IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> frames,
         ActorDiagnosticScenePlan actor, ActorDiagnosticPlacementInput placement, TerrainTextureCache textures)
     {
-        if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames)) _areaView = null;
+        if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
+        {
+            var chunks = AreaTerrainChunks.TryCreate(plan, frames);
+            _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
+        }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands);
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         UpdateAreaVisible(); QueueRedraw();
+    }
+    /// <summary>Applies a new ambient pair to every item from the next submission (null draws source
+    /// pixels unlit). Only the per-item multiplier changes; plan, frames and index rows are reused.</summary>
+    public void SetAreaAmbient(AreaAmbientView? ambient)
+    {
+        if (Equals(_areaAmbient, ambient)) return;
+        if (!ReferenceEquals(_areaAmbient?.Channels, ambient?.Channels)) _areaChunkChannels.Clear();
+        _areaAmbient = ambient; _areaView = null; QueueRedraw();
+    }
+    // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
+    // when all its terrain shares one channel (null = mixed, drawn per command instead).
+    private readonly Dictionary<(int X, int Y), AreaAmbientChannel?> _areaChunkChannels = new();
+    private AreaAmbientChannel? AreaChunkChannel((int X, int Y) chunk)
+    {
+        if (_areaAmbient is not { } ambient) return AreaAmbientChannel.Unlit;
+        if (_areaChunkChannels.TryGetValue(chunk, out var known)) return known;
+        var channels = _areaChunks!.CommandsIn(chunk).Select(command => ambient.Channels.TryGetValue(command.Visual, out var found)
+            ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED")).Distinct().ToArray();
+        var channel = channels.Length == 1 ? channels[0] : (AreaAmbientChannel?)null;
+        _areaChunkChannels[chunk] = channel; return channel;
+    }
+    // The actor is a critter: outdoor channel (CE palette callback), like other bodies.
+    private Color AreaAmbientColor(AreaDrawCommand command, bool isActor)
+    {
+        if (_areaAmbient is not { } ambient) return Colors.White;
+        var channel = isActor ? AreaAmbientChannel.Outdoor
+            : _areaChunkCommands.TryGetValue(command, out var chunk) ? AreaChunkChannel(chunk) ?? throw new InvalidOperationException("AREA_AMBIENT_MIXED_CHUNK")
+            : ambient.Channels.TryGetValue(command.Visual, out var found) ? found : throw new InvalidOperationException("AREA_AMBIENT_VISUAL_REQUIRED");
+        var color = channel switch
+        {
+            AreaAmbientChannel.Outdoor => ambient.Pair.Outdoor,
+            AreaAmbientChannel.Indoor => ambient.Pair.Indoor,
+            _ => AmbientColor.Neutral,
+        };
+        return new Color(color.R / 255f, color.G / 255f, color.B / 255f);
     }
     public override void _Process(double delta)
     {
@@ -52,7 +113,7 @@ public partial class TerrainCanvas
     {
         if (!IsInsideTree() || _area is null || _areaFrames is null || _textures is null || _actorPlan is null || _areaActorPlacement is null) return;
         var view = GetViewport().GetVisibleRect(); var inverse = GetViewport().GetCanvasTransform().AffineInverse();
-        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics);
+        var state = (view, GetViewport().GetCanvasTransform(), _actorPlan.Current, _areaActorPlacement, _showActor, _showStatics, AreaTerrainChunksEnabled);
         if (_areaView == state) { TrimAreaPool(); return; }
         var a = inverse * view.Position; var b = inverse * view.End;
         var world = new Rect2(a, b - a).Abs();
@@ -66,7 +127,27 @@ public partial class TerrainCanvas
         // reused across pans or evicted under the shared 16 MiB cap. The original ART
         // repository is not re-decoded.
         _areaMappings.BeginSubmission();
-        _textures.UploadAreaVisible(_areaFrames, visible.Where(command => command.Identity != ActorSentinel).Select(command => command.Frame).ToHashSet());
+        // Terrain chunks replace the visible terrain commands in the draw list only;
+        // AreaVisibleCommands below keeps the per-command visibility.
+        var draw = visible; _areaChunkCommands.Clear(); AreaChunkCount = 0; AreaChunkLevel = 0; var chunked = false;
+        if (AreaTerrainChunksEnabled && _areaChunks is not null)
+        {
+            var level = ChunkLevel(AreaDrawItem.RasterTransform(GetViewport()));
+            var chunks = _areaChunks.Intersecting(world.Position.X, world.Position.Y, world.Size.X, world.Size.Y).ToArray();
+            if (AreaChunkTextureCache.Fits(chunks.Length, level) && chunks.All(chunk => AreaChunkChannel(chunk) is not null))
+            {
+                _areaChunkTextures.BeginSubmission();
+                var chunkDraws = chunks.Select(chunk => AreaTerrainChunks.Command(chunk, level)).ToArray();
+                for (var index = 0; index < chunks.Length; index++) _areaChunkCommands.Add(chunkDraws[index], chunks[index]);
+                draw = chunkDraws.Concat(visible.Where(command => command.Identity is not null)).ToArray();
+                AreaChunkCount = chunks.Length; AreaChunkLevel = level; chunked = true;
+            }
+        }
+        // Per-command terrain holds no chunk textures alongside its frame textures.
+        if (!chunked) _areaChunkTextures.Clear();
+        _textures.UploadAreaVisible(_areaFrames, draw.Where(command => command.Identity != ActorSentinel && !_areaChunkCommands.ContainsKey(command))
+            .Select(command => command.Frame).ToHashSet());
+        var logical = visible; visible = draw;
         while (_areaItems.Count < visible.Length)
         {
             var item = new AreaDrawItem { TextureFilter = TextureFilterEnum.Nearest, Mappings = _areaMappings };
@@ -85,14 +166,16 @@ public partial class TerrainCanvas
             var command = visible[index];
             ImageTexture texture;
             var isActor = command.Identity == ActorSentinel;
-            if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
+            if (_areaChunkCommands.TryGetValue(command, out var chunk)) texture = _areaChunkTextures.Acquire(_areaChunks!, chunk, AreaChunkLevel);
+            else if (!(isActor ? _textures.TryGet(_actorPlan.Current.TextureKey, out texture!) : _textures.TryGet(command.Frame, out texture!)))
                 throw new InvalidOperationException("AREA_VISIBLE_TEXTURE_MISSING");
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
+            item.Ambient = AreaAmbientColor(command, isActor);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }
         TrimAreaPool();
-        AreaVisibleCommands = Array.AsReadOnly(visible.Where(command => command.Identity != ActorSentinel).ToArray());
+        AreaVisibleCommands = Array.AsReadOnly(logical.Where(command => command.Identity != ActorSentinel).ToArray());
         AreaVisibleCount = AreaVisibleCommands.Count;
         _areaView = state;
     }
@@ -109,13 +192,24 @@ public partial class TerrainCanvas
             _areaItems.RemoveAt(last); item.FrameTexture = null; RemoveChild(item); item.Free();
         }
     }
+    // Level k >= 1 (texels 2^(k-1) mod 2^k only) is exact only at zoom 2^-k on both axes
+    // with an integer raster origin; full-resolution chunks are exact at any zoom.
+    private static int ChunkLevel(Transform2D transform)
+    {
+        var o = transform.Origin;
+        if (transform.X.X != transform.Y.Y || MathF.Floor(o.X) != o.X || MathF.Floor(o.Y) != o.Y) return 0;
+        for (var level = AreaTerrainChunks.MaxLevel; level >= 1; level--)
+            if (transform.X.X == 1f / (1 << level)) return level;
+        return 0;
+    }
     private void ClearArea()
     {
-        _area = null; _areaFrames = null; _areaActorPlacement = null;
+        _area = null; _areaFrames = null; _areaActorPlacement = null; _areaAmbient = null;
         _areaView = null; _areaUpright = null; _areaActive = 0;
         foreach (var item in _areaItems) { item.FrameTexture = null; RemoveChild(item); item.Free(); }
         _areaItems.Clear(); AreaVisibleCount = 0; AreaVisibleCommands = Array.Empty<AreaDrawCommand>();
         _areaMappings.Clear(); // after the items stopped sampling the rows
+        _areaChunkTextures.Clear(); _areaChunks = null; _areaChunkCommands.Clear(); AreaChunkCount = 0; _areaChunkChannels.Clear();
     }
     public override void _ExitTree()
     {

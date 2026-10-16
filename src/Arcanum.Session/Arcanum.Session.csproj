@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Arcanum.Session</AssemblyName>
+    <RootNamespace>Arcanum.Session</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Arcanum.Simulation/Arcanum.Simulation.csproj" />
+    <ProjectReference Include="../Arcanum.Scripting/Arcanum.Scripting.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Arcanum.Session.Tests" />
+  </ItemGroup>
+</Project>
