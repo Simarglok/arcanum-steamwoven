@@ -109,7 +109,7 @@ public sealed class AreaTransitionOriginalTests
 
     // Finds a reachable cell within use range of the target by breadth-first search over the same step
     // evidence, then walks there in route hops of at most 8 cells with the authoritative session.
-    private static CellCoord Walk(AreaMapRuntime map, CellCoord start, AreaStepCell target)
+    internal static CellCoord Walk(AreaMapRuntime map, CellCoord start, AreaStepCell target)
     {
         var routes = new AreaRouteSource(map.Steps, map.Chart);
         var goalChart = map.Chart.ToChart(target);

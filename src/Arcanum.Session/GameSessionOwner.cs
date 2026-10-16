@@ -2,7 +2,9 @@ using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Party;
+using Arcanum.Simulation.Randomness;
 
 namespace Arcanum.Session;
 
@@ -10,7 +12,7 @@ namespace Arcanum.Session;
 /// Single owner of one game session: the clock, global flags, actor placement, map-local changes and the
 /// story domain (PC quests, shared quest states, known rumors), the PC's party (followers, waiting NPCs), the player
 /// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
-/// loot, negative dialog IN) over host-attached T0 map inventories.
+/// loot, negative dialog IN) over host-attached T0 map inventories, and the seeded gameplay randomness (labelled rolls).
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -25,6 +27,8 @@ public sealed class GameSessionOwner : IDisposable
     private readonly PartyDomain _party;
     private readonly InventoryDomain _inventory;
     private readonly HeroDomain? _hero;
+    private readonly SeededRandom _random;
+    private readonly SessionCombatRolls _combatRolls;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
@@ -34,17 +38,19 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SessionLightingState? lighting)
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _hero = hero; _inventory = inventory; _lighting = lighting;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _lighting = lighting;
+        _combatRolls = new(this);
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
     /// <summary>
     /// Starts a new session from explicit inputs. Rejection leaves no component alive. A hero (ARC-WORLD-015) is checked
     /// before any component is built (<see cref="GameSessionFailure.InvalidHero"/>); its gold and kit items enter the PC's
-    /// inventory at revision 0, the kit as <c>kit:1</c>, <c>kit:2</c>, … in order.
+    /// inventory at revision 0, the kit as <c>kit:1</c>, <c>kit:2</c>, … in order. The generator starts at draw 0 of the
+    /// descriptor's seed (ARC-WORLD-019).
     /// </summary>
     public static GameSessionCreationResult Create(GameSessionDescriptor? descriptor)
     {
@@ -76,7 +82,8 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory, null),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
+                new(descriptor.RandomSeed), null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -93,7 +100,7 @@ public sealed class GameSessionOwner : IDisposable
         if (snapshot.Identity.World != options.ExpectedIdentity.World) return Rejected(GameSessionFailure.WrongWorld);
         if (snapshot.Identity.Module != options.ExpectedIdentity.Module) return Rejected(GameSessionFailure.WrongModule);
         if (snapshot.Clock.Profile != options.ExpectedClockProfile) return Rejected(GameSessionFailure.IncompatibleClockProfile);
-        if (snapshot.Revision < 0) return Rejected(GameSessionFailure.InvalidSnapshot);
+        if (snapshot.Revision < 0 || snapshot.Random.Draws < 0) return Rejected(GameSessionFailure.InvalidSnapshot);
         if (!SessionValidation.Actor(snapshot.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         if (snapshot.Lighting is { } lighting && !SessionValidation.Lighting(lighting)) return Rejected(GameSessionFailure.InvalidLighting);
         var limits = options.Limits ?? new GameSessionLimits();
@@ -127,7 +134,8 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, hero, inventory, snapshot.Lighting),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party, hero, inventory,
+                new(snapshot.Random.Seed, snapshot.Random.Draws), snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -241,6 +249,65 @@ public sealed class GameSessionOwner : IDisposable
         changes.Remove(key);
         _totalChanges--;
         if (changes.Count == 0) _maps.Remove(map);
+        return Changed();
+    }
+
+    /// <summary>
+    /// ARC-WORLD-017: one guarded atomic step over the actor and several map changes, such as a map transfer that
+    /// carries the PC's followers. Every input is validated (the actor when given, each map and key, no key listed
+    /// twice), then the version, then the whole result: NoChange when nothing would differ, the budget against the state
+    /// after every edit (an update of an existing key never needs room), revision capacity. A refusal applies nothing;
+    /// otherwise every edit applies and the revision moves by exactly one.
+    /// </summary>
+    public GameSessionMutationResult ApplyChanges(GameSessionVersion expected, ActorPlacement? actor, IReadOnlyList<MapChangeEdit> changes)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(changes);
+        if (actor is { } placement && !SessionValidation.Actor(placement)) return Reject(GameSessionFailure.InvalidActor);
+        var seen = new HashSet<(SessionMapId, MapChangeKey)>();
+        foreach (var change in changes)
+        {
+            if (!SessionValidation.Map(change.Map)) return Reject(GameSessionFailure.InvalidMap);
+            if (!SessionValidation.Key(change.Key) || !seen.Add((change.Map, change.Key))) return Reject(GameSessionFailure.InvalidChangeKey);
+        }
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var actorChanged = actor is { } next && next != _actor;
+        var effective = changes.Where(change =>
+        {
+            var current = _maps.TryGetValue(change.Map, out var map) && map.TryGetValue(change.Key, out var value) ? value : (long?)null;
+            return current != change.Value;
+        }).ToArray();
+        if (!actorChanged && effective.Length == 0) return NoChange();
+        // The budget is checked on the state after the whole step.
+        var counts = _maps.ToDictionary(pair => pair.Key, pair => pair.Value.Count);
+        var total = _totalChanges;
+        foreach (var change in effective)
+        {
+            var exists = _maps.TryGetValue(change.Map, out var map) && map.ContainsKey(change.Key);
+            var delta = change.Value is null ? (exists ? -1 : 0) : (exists ? 0 : 1);
+            counts[change.Map] = counts.GetValueOrDefault(change.Map) + delta; total += delta;
+        }
+        if (counts.Count(pair => pair.Value > 0) > _limits.MaxMaps || counts.Values.Any(count => count > _limits.MaxChangesPerMap) || total > _limits.MaxTotalChanges)
+            return Reject(GameSessionFailure.BudgetExceeded);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+
+        // All refusals precede the commit.
+        if (actorChanged) _actor = actor!.Value;
+        foreach (var change in effective)
+        {
+            if (change.Value is { } value)
+            {
+                if (!_maps.TryGetValue(change.Map, out var map)) _maps.Add(change.Map, map = []);
+                if (map.TryAdd(change.Key, value)) _totalChanges++;
+                else map[change.Key] = value;
+            }
+            else
+            {
+                var map = _maps[change.Map];
+                map.Remove(change.Key); _totalChanges--;
+                if (map.Count == 0) _maps.Remove(change.Map);
+            }
+        }
         return Changed();
     }
 
@@ -571,6 +638,31 @@ public sealed class GameSessionOwner : IDisposable
         return Take(seed, found, true, insertCheck);
     }
 
+    /// <summary>The generator's seed and position (draws made so far).</summary>
+    public SessionRandomState QueryRandom() { ThrowIfDisposed(); return new(_random.Seed, _random.Draws); }
+
+    /// <summary>
+    /// One labelled gameplay roll (ARC-WORLD-019): a uniform integer in <paramref name="min"/>..<paramref name="max"/>
+    /// inclusive from the session's seeded sequence. The label (1..64 ASCII letters, digits and <c>. _ : -</c>, such as
+    /// <c>combat.AttackCheck</c>) names what the roll decides; it does not change the value, which depends only on the seed
+    /// and the position, so the same calls after the same restore return the same rolls. Equal bounds draw nothing.
+    /// A bad label or range is <see cref="GameSessionFailure.InvalidRoll"/>, a generator at its last draw
+    /// <see cref="GameSessionFailure.RandomExhausted"/>; a refusal draws nothing. Like clock and flag changes, a roll
+    /// takes no expected version and does not move the session revision; the position is saved with the snapshot.
+    /// </summary>
+    public SessionRollResult Roll(string label, int min, int max)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Code(label, SessionValidation.MaxRollLabelCharacters) || min > max)
+            return new(null, GameSessionFailure.InvalidRoll);
+        if (!_random.TryNext(min, max, out var value)) return new(null, GameSessionFailure.RandomExhausted);
+        return new(new(label, min, max, value, _random.Draws), GameSessionFailure.None);
+    }
+
+    /// <summary>The session generator as the attack resolver's roll source; rolls are labelled <c>combat.</c> and the
+    /// purpose name (for example <c>combat.DodgeCheck</c>). Its lifetime belongs to the session.</summary>
+    public ICombatRollSource CombatRolls { get { ThrowIfDisposed(); return _combatRolls; } }
+
     /// <summary>Copies every component at this call boundary into one detached snapshot.</summary>
     public GameSessionSnapshot Capture()
     {
@@ -582,7 +674,7 @@ public sealed class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _lighting);
+            _inventory.Capture(), new(_random.Seed, _random.Draws), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

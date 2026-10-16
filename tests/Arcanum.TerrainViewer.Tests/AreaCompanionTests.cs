@@ -1,4 +1,6 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Lighting;
+using Arcanum.Data.Terrain;
 using Arcanum.Data.Traversal;
 using Arcanum.Session;
 using Arcanum.Simulation.Movement;
@@ -31,6 +33,9 @@ public sealed class AreaCompanionTests
             scenery.WorldX!.Value, scenery.WorldY!.Value);
         return new(area, steps, speaker, scenery.Key);
     }
+
+    private static IReadOnlyList<AreaCompanionTemplate> Templates(Fixture f, AreaSpeaker? speaker = null) =>
+        AreaCompanionTemplate.From([speaker ?? f.Speaker], AreaScenePlan.Create(f.Area), f.Area.Visuals, AreaChart.Exterior, new(1));
 
     private static AreaStepAssessment Assess(AreaStepSnapshot steps, CellCoord from, NeighborDirection direction) =>
         steps.Assess(steps.Request(AreaGridSession.Cell(from), AreaGridSession.Cell(RoutePlanner.Neighbor(from, direction)), GridReplayDirection(direction)));
@@ -95,7 +100,7 @@ public sealed class AreaCompanionTests
     {
         var f = Load();
         using var session = ConversationSessionFixture.Create();
-        var group = AreaCompanionGroup.Create([f.Speaker], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
         var companion = group.Companions.Single();
         Assert.AreEqual((new CellCoord(5, 1), CompanionStanding.Free), (companion.Grid.State.CommittedCell, companion.Standing));
         Assert.AreEqual("oid:" + f.Scenery.ObjectIdSha256, companion.Entity);
@@ -135,7 +140,7 @@ public sealed class AreaCompanionTests
         // Its body is drawn on its cell: the T0 command moved by the projected offset and ordered at the new cell.
         var plan = AreaScenePlan.Create(f.Area);
         var t0 = plan.Commands.Single(c => c.Identity == f.Scenery);
-        var drawn = group.Commands(plan).Single();
+        var drawn = group.Commands().Single();
         Assert.AreEqual((t0.Destination.X + 40 * -(cell.X - 5), t0.Destination.Y + 20 * (cell.X - 5)), (drawn.Destination.X, drawn.Destination.Y));
         Assert.AreEqual(((int)AreaGridSession.ChartOriginX + cell.X, (int)AreaGridSession.ChartOriginY + 1), (drawn.MapX, drawn.MapY));
         Assert.AreEqual((t0.Frame, t0.Visual, t0.Destination.Width), (drawn.Frame, drawn.Visual, drawn.Destination.Width));
@@ -143,8 +148,8 @@ public sealed class AreaCompanionTests
         // The hover/click pick sees it where it is drawn, not on its T0 cell.
         var hover = new AreaHoverIndex(f.Area.Objects, plan.Commands, null);
         bool Under(AreaDrawCommand c, AreaDrawCommand at) => c.Destination == at.Destination;
-        Assert.AreEqual(f.Scenery, hover.Pick(c => Under(c, drawn), group.Commands(plan)));
-        Assert.IsNull(hover.Pick(c => Under(c, t0), group.Commands(plan)), "nothing is picked on the empty T0 cell");
+        Assert.AreEqual(f.Scenery, hover.Pick(c => Under(c, drawn), group.Commands()));
+        Assert.IsNull(hover.Pick(c => Under(c, t0), group.Commands()), "nothing is picked on the empty T0 cell");
         Assert.AreEqual(f.Scenery, hover.Pick(c => Under(c, t0)), "without the moved bodies the T0 pick is unchanged");
 
         // The PC cannot walk into it; its T0 cell no longer blocks the PC.
@@ -162,7 +167,7 @@ public sealed class AreaCompanionTests
     {
         var f = Load();
         using var session = ConversationSessionFixture.Create();
-        var group = AreaCompanionGroup.Create([f.Speaker], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        var group = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
         Assert.AreEqual(GameSessionFailure.None, group.Record(session));
         Assert.IsNull(session.QueryMapChange(new(1), AreaCompanionPlacement.Key(group.Companions[0].Entity)), "on its T0 cell: no change");
 
@@ -180,18 +185,165 @@ public sealed class AreaCompanionTests
         Assert.AreEqual(AreaCompanionPlacement.Encode(new((int)world.X, (int)world.Y), companion.Grid.State.Facing),
             session.QueryMapChange(new(1), AreaCompanionPlacement.Key(companion.Entity)));
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
-        var again = AreaCompanionGroup.Create([f.Speaker], f.Steps, AreaChart.Exterior, loaded, new(1), SimulationTime.At(9));
+        var again = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, loaded, new(1), SimulationTime.At(9));
         Assert.AreEqual((companion.Grid.State.CommittedCell, companion.Grid.State.Facing, CompanionStanding.Following),
             (again.Companions[0].Grid.State.CommittedCell, again.Companions[0].Grid.State.Facing, again.Companions[0].Standing));
 
         // A placement the chart cannot stand is skipped, not guessed.
         Assert.AreEqual(GameSessionDisposition.Changed, loaded.SetMapChange(loaded.Version, new(1), AreaCompanionPlacement.Key(companion.Entity),
             AreaCompanionPlacement.Encode(new(10, 10), NeighborDirection.XPlus)).Disposition);
-        var skipped = AreaCompanionGroup.Create([f.Speaker], f.Steps, AreaChart.Exterior, loaded, new(1), SimulationTime.At(9));
+        var skipped = AreaCompanionGroup.Create(Templates(f), f.Steps, AreaChart.Exterior, loaded, new(1), SimulationTime.At(9));
         Assert.AreEqual(0, skipped.Companions.Count);
         Assert.AreEqual(1, skipped.Skipped.Count);
         // Other speakers are not companions.
         var other = f.Speaker with { ScriptId = 1325 };
-        Assert.AreEqual(0, AreaCompanionGroup.Create([other], f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0)).Companions.Count);
+        Assert.AreEqual(0, AreaCompanionGroup.Create(Templates(f, other), f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0)).Companions.Count);
+    }
+    // ARC-WORLD-017: the fixture stands for both maps of a transfer, home map 1 and a second map 2 on the same chart.
+    [TestMethod]
+    public void AFollowingCompanionGoesWithThePcToTheArrivalCellAndBackAndAWaitingOneStays()
+    {
+        var f = Load();
+        var templates = Templates(f);
+        using var session = ConversationSessionFixture.Create();
+        SessionMapId home = new(1), away = new(2);
+        var entity = templates[0].Entity;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var group = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
+        Assert.AreEqual(0, group.Absent.Count);
+        Assert.IsTrue(group.Companions.Single().Template.Home == home);
+        Assert.ThrowsExactly<ArgumentException>(() => group.Carry(session, home, new(0, 0)));
+
+        // The PC leaves map 1 for map 2 at (12,3): the follower goes onto the same arrival cell, at any distance, in one revision.
+        var arrival = new CellCoord(12, 3);
+        var arrivalWorld = AreaChart.Exterior.ToWorld(arrival);
+        var world = new CellCoord((int)arrivalWorld.X, (int)arrivalWorld.Y);
+        var carry = group.Carry(session, away, world);
+        Assert.AreEqual(1, carry.Carried.Count);
+        var revision = session.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(away, world, NeighborDirection.XPlus), carry.Changes).Disposition);
+        Assert.AreEqual(revision + 1, session.Version.Revision, "the PC and its followers move in one session step");
+        Assert.AreEqual(2L, session.QueryMapChange(home, AreaCompanionPlacement.MapKey(entity)));
+        Assert.AreEqual(AreaCompanionPlacement.Encode(world, NeighborDirection.XPlus), session.QueryMapChange(away, AreaCompanionPlacement.Key(entity)));
+        Assert.IsNull(session.QueryMapChange(home, AreaCompanionPlacement.Key(entity)));
+        Assert.AreEqual(new AreaCompanionWhere(away, (world, NeighborDirection.XPlus), null), AreaCompanionPlacement.Where(session, home, entity));
+
+        // On map 1 it is absent: not a companion there, and its T0 record no longer blocks the PC.
+        var left = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, home, SimulationTime.At(0));
+        Assert.AreEqual((0, true), (left.Companions.Count, left.Absent.Contains(f.Scenery)));
+        Assert.AreEqual(RouteStepVerdict.Open, new AreaRouteSource(f.Steps, occupancy: left.OccupancyForPc).Assess(new(6, 1), NeighborDirection.XMinus));
+        Assert.AreEqual(RouteStepVerdict.Blocked, new AreaRouteSource(f.Steps).Assess(new(6, 1), NeighborDirection.XMinus), "without the group the T0 record blocks");
+        Assert.AreEqual(0, left.Commands().Count);
+
+        // On map 2 it is a visitor on the arrival cell; with the PC on the same cell it steps off to a neighbour.
+        var visit = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, away, SimulationTime.At(0));
+        var visitor = visit.Companions.Single();
+        Assert.AreEqual((arrival, CompanionStanding.Following, 0), (visitor.Grid.State.CommittedCell, visitor.Standing, visit.Absent.Count));
+        var pc = new AreaGridSession(f.Steps, SimulationTime.At(0), Step, start: arrival) { Occupancy = visit.OccupancyForPc };
+        for (var i = 1; i <= 12; i++) { pc.Advance(SimulationTime.At(i, 4), []); visit.Drive(session, pc.State, SimulationTime.At(i, 4)); }
+        var cell = visitor.Grid.State.CommittedCell;
+        Assert.AreEqual((1, MovementPhase.Settled), (FollowDistanceRules.Distance(cell, arrival), visitor.Grid.State.Phase), visit.Status());
+        // Drawn there with its T0 body (moved by the projected offset from its home T0 cell) and lit where it stands.
+        var t0 = AreaScenePlan.Create(f.Area).Commands.Single(c => c.Identity == f.Scenery);
+        var drawn = visit.Commands().Single();
+        int du = cell.X - 5, dv = cell.Y - 1;
+        Assert.AreEqual((t0.Destination.X + 40 * (dv - du), t0.Destination.Y + 20 * (du + dv), t0.Frame), (drawn.Destination.X, drawn.Destination.Y, drawn.Frame));
+        var pair = new AmbientPair(new(200, 100, 50), new(10, 20, 30));
+        var channel = AreaAmbientPolicy.Channel(templates[0].Visuals[drawn.Visual].RawArt);
+        var ambient = AreaLocalLighting.Ambient(channel, pair);
+        Assert.AreEqual(new AreaLitColors(ambient, ambient), visit.Light(drawn, pair, null));
+        Assert.IsNull(visit.Light(t0 with { Identity = null }, pair, null), "only the group's companion bodies");
+
+        // Its cell on map 2 survives a save and load.
+        Assert.AreEqual(GameSessionFailure.None, visit.Record(session));
+        using var loaded = ConversationSessionFixture.SaveAndLoad(session);
+        var restored = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, away, SimulationTime.At(0));
+        Assert.AreEqual(cell, restored.Companions.Single().Grid.State.CommittedCell);
+        Assert.IsTrue(AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, home, SimulationTime.At(0)).Absent.Contains(f.Scenery));
+
+        // Waiting on map 2: the PC goes home alone; it stays where it stands.
+        Assert.AreEqual(GameSessionDisposition.Changed, loaded.WaitParty(loaded.Version, entity).Disposition);
+        var back = restored.Carry(loaded, home, new(checked((int)f.Speaker.WorldX + 3), checked((int)f.Speaker.WorldY)));
+        Assert.AreEqual(0, back.Carried.Count);
+        Assert.AreEqual(GameSessionDisposition.Changed, loaded.ApplyChanges(loaded.Version, new ActorPlacement(home, world, NeighborDirection.XPlus), back.Changes).Disposition);
+        Assert.AreEqual(away, AreaCompanionPlacement.Where(loaded, home, entity).Map);
+        Assert.IsTrue(AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, home, SimulationTime.At(0)).Absent.Contains(f.Scenery));
+
+        // Following again, it comes home with the PC: the away map is forgotten and its map 2 cell cleared.
+        Assert.AreEqual(GameSessionDisposition.Changed, loaded.UnwaitParty(loaded.Version, entity,
+            AreaCompanionRoster.Facts(AreaCompanionRoster.Virgil, 0, 50), true).Disposition);
+        var homeArrival = new CellCoord(checked((int)f.Speaker.WorldX + 3), checked((int)f.Speaker.WorldY));
+        var returning = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, away, SimulationTime.At(0)).Carry(loaded, home, homeArrival);
+        Assert.AreEqual(1, returning.Carried.Count);
+        var before = loaded.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, loaded.ApplyChanges(loaded.Version, new ActorPlacement(home, homeArrival, NeighborDirection.XPlus), returning.Changes).Disposition);
+        Assert.AreEqual(before + 1, loaded.Version.Revision, "the way back is one session step too");
+        Assert.IsNull(loaded.QueryMapChange(home, AreaCompanionPlacement.MapKey(entity)));
+        Assert.IsNull(loaded.QueryMapChange(away, AreaCompanionPlacement.Key(entity)));
+        Assert.AreEqual(0, loaded.QueryMapChanges(away).Count);
+        var home2 = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, home, SimulationTime.At(0));
+        Assert.AreEqual((AreaChart.Exterior.ToChart(new(homeArrival.X, homeArrival.Y)), 0), (home2.Companions.Single().Grid.State.CommittedCell, home2.Absent.Count));
+        Assert.AreEqual(0, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, loaded, away, SimulationTime.At(0)).Companions.Count);
+    }
+
+    [TestMethod]
+    public void AnUnreadableAwayMapOrAMissingAwayPlacementIsReportedNotGuessed()
+    {
+        var f = Load();
+        var templates = Templates(f);
+        var entity = templates[0].Entity;
+        using var session = ConversationSessionFixture.Create();
+        // The away map names the home map itself: unreadable, skipped on the home map.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(1), AreaCompanionPlacement.MapKey(entity), 1).Disposition);
+        Assert.AreEqual("map unreadable", AreaCompanionPlacement.Where(session, new(1), entity).Error);
+        var home = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0));
+        Assert.AreEqual((0, 1, 1), (home.Companions.Count, home.Skipped.Count, home.Absent.Count), "reported, and its T0 body does not stand in");
+        Assert.IsTrue(new AreaRouteSource(f.Steps, occupancy: home.OccupancyForPc).Assess(new(6, 1), NeighborDirection.XMinus) == RouteStepVerdict.Open);
+        // Away on map 2 without a cell there: absent at home, skipped on map 2.
+        Assert.AreEqual(GameSessionDisposition.Changed, session.SetMapChange(session.Version, new(1), AreaCompanionPlacement.MapKey(entity), 2).Disposition);
+        Assert.AreEqual(1, AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0)).Absent.Count);
+        var away = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(2), SimulationTime.At(0));
+        Assert.AreEqual((0, "placement missing on map 2"), (away.Companions.Count, AreaCompanionPlacement.Where(session, new(1), entity).Error));
+        Assert.AreEqual(1, away.Skipped.Count);
+    }
+
+    [TestMethod]
+    public void TemplatesCarryTheT0BodyAndAddItsFramesToAnotherMap()
+    {
+        var f = Load();
+        var plan = AreaScenePlan.Create(f.Area);
+        var template = Templates(f).Single();
+        Assert.AreEqual((new CellCoord(5, 1), new SessionMapId(1)), (template.HomeOrigin, template.Home));
+        Assert.IsTrue(template.Commands.Count > 0 && template.Commands.All(c => c.Identity == f.Scenery && template.Visuals.ContainsKey(c.Visual)));
+        var frames = template.Commands.Select(c => c.Frame).Distinct().ToDictionary(k => k, _ => new DecodedAreaFrame(1, 1, [1, 2, 3, 4]));
+        var merged = AreaCompanionTemplate.Frames(new Dictionary<AreaFrameKey, DecodedAreaFrame>(), [template], frames);
+        Assert.AreEqual(frames.Count, merged.Count);
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaCompanionTemplate.Frames(new Dictionary<AreaFrameKey, DecodedAreaFrame>(), [template], new Dictionary<AreaFrameKey, DecodedAreaFrame>()));
+        var other = frames.ToDictionary(p => p.Key, _ => new DecodedAreaFrame(1, 1, [9, 9, 9, 9]));
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaCompanionTemplate.Frames(other, [template], frames), "a conflicting frame is refused");
+        Assert.AreEqual(0, AreaCompanionTemplate.From([f.Speaker with { ScriptId = 1325 }], plan, f.Area.Visuals, AreaChart.Exterior, new(1)).Count);
+    }
+    // A visitor on a map with another chart origin is drawn where that map's plan would draw a body on its cell.
+    [TestMethod]
+    public void AVisitorOnAShiftedChartIsDrawnByThatChartsProjection()
+    {
+        var f = Load();
+        var templates = Templates(f);
+        var entity = templates[0].Entity;
+        var shifted = new AreaChart(AreaChart.Exterior.OriginX + 3, AreaChart.Exterior.OriginY - 2, new(6, 3), "TEST_SHIFTED_CHART");
+        using var session = ConversationSessionFixture.Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ForceJoinParty(session.Version, entity).Disposition);
+        var world = AreaChart.Exterior.ToWorld(new(14, 4));
+        var arrival = new CellCoord((int)world.X, (int)world.Y);
+        var carry = AreaCompanionGroup.Create(templates, f.Steps, AreaChart.Exterior, session, new(1), SimulationTime.At(0)).Carry(session, new(2), arrival);
+        Assert.AreEqual(GameSessionDisposition.Changed, session.ApplyChanges(session.Version, new ActorPlacement(new(2), arrival, NeighborDirection.XPlus), carry.Changes).Disposition);
+        var visit = AreaCompanionGroup.Create(templates, f.Steps, shifted, session, new(2), SimulationTime.At(0));
+        Assert.AreEqual(shifted.ToChart(new(world.X, world.Y)), visit.Companions.Single().Grid.State.CommittedCell);
+        var t0 = templates[0].Commands.Single();
+        var drawn = visit.Commands().Single();
+        var home = TerrainGeometry.Project(checked((int)(f.Speaker.WorldX - AreaChart.Exterior.OriginX)), checked((int)(f.Speaker.WorldY - AreaChart.Exterior.OriginY)));
+        var here = TerrainGeometry.Project(checked((int)(world.X - shifted.OriginX)), checked((int)(world.Y - shifted.OriginY)));
+        Assert.AreEqual((t0.Destination.X - home.X + here.X, t0.Destination.Y - home.Y + here.Y), (drawn.Destination.X, drawn.Destination.Y));
+        Assert.AreEqual(((int)world.X, (int)world.Y), (drawn.MapX, drawn.MapY));
     }
 }

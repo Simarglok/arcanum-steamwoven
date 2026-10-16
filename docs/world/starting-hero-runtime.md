@@ -116,7 +116,8 @@ more than 64 modifiers (`BudgetExceeded`), a negative effect id or gold, a proto
 hero under the same checks as `Create` (`InvalidHero`) and refuses gold or a kit item without a hero, and a kit item that
 is not the next `kit:n` (`InvalidSnapshot`).
 
-**Migration decision: none.** Schemas 1..5 are `UnsupportedSchema`; a schema-5 quick save loads as "written by an
+**Migration decision: none.** Schemas 1..5 are `UnsupportedSchema` (and schema 6 since ARC-WORLD-019, which added
+[`random`](session-random-runtime.md#snapshot-schema-7)); a schema-5 quick save loads as "written by an
 incompatible version" with the running session kept, and the next F7 overwrites it. The viewer's sessions have no hero,
 so nothing is lost.
 

@@ -1,13 +1,14 @@
 # Game session state runtime
 
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
-inventory ARC-WORLD-014; player character ARC-WORLD-015.
+inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
 quest states, known rumors), the PC's [party](party-runtime.md) (followers, waiting NPCs), the
 [player character](starting-hero-runtime.md) (stats, level, alignment, gold and starting kit), the items the PC
-took from the world ([inventory](inventory-runtime.md): pickup, loot, negative dialog `IN`), plus a
+took from the world ([inventory](inventory-runtime.md): pickup, loot, negative dialog `IN`), the seeded gameplay
+generator with labelled rolls ([session randomness](session-random-runtime.md)), plus a
 versioned snapshot schema with a strict JSON codec.
 The AREA viewer keeps every [dialog consequence](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic)
 it can store here. It covers the state boundary of
@@ -33,9 +34,10 @@ during an inventory transfer; a call back into the owner from it makes that tran
 
 | Entry | Contract |
 | --- | --- |
-| `GameSessionOwner.Create(GameSessionDescriptor)` | Clock `ProfileBinding`, GF descriptor, initial `ActorPlacement`, optional limits and optional hero (ARC-WORLD-015). Validates the actor and the hero (`InvalidHero`), bootstraps the clock, then creates the GF owner. Any rejection returns no owner, a `GameSessionFailure`, and the inner `ClockFailure` / `GlobalFlagReason`; a clock already built is disposed. |
+| `GameSessionOwner.Create(GameSessionDescriptor)` | Clock `ProfileBinding`, GF descriptor, initial `ActorPlacement`, optional limits, optional hero (ARC-WORLD-015) and the random seed (ARC-WORLD-019, default 0). Validates the actor and the hero (`InvalidHero`), bootstraps the clock, then creates the GF owner. Any rejection returns no owner, a `GameSessionFailure`, and the inner `ClockFailure` / `GlobalFlagReason`; a clock already built is disposed. |
 | `GameSessionOwner.Restore(GameSessionSnapshot, GameSessionRestoreOptions)` | Checks schema, world, module, the exact clock profile, actor, map keys, budgets, story, party, hero and inventory **before** building anything, then rebuilds clock (saved time, pause, revision) and GF (saved domain, known values, revision, new epoch). Never touches an existing owner. |
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
+| `ApplyChanges(expected, actor?, changes)` | ARC-WORLD-017: one guarded atomic step over the actor (when given) and a list of `MapChangeEdit(Map, Key, Value?)` (null clears the key). Validates the actor, every map and key and that no key is listed twice, then the version; NoChange when nothing would differ; the budget is checked on the state after the whole step (an update or a move of a key never needs room); then revision capacity. A refusal applies nothing; otherwise everything applies with one revision. The viewer's map transfer carries the PC's followers with it ([companion map change](companion-follow-runtime.md#map-change-arc-world-017)). |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
 | `QueryClockSnapshot` / `AdvanceGameTime` / `SetPaused` | Forwarded to the session's clock with the clock's own token contract. Clock changes do not move the session revision. |
 | `QueryLighting` / `RecordLighting` | Applied ambient lighting (ARC-WORLD-010, FR-LIGHT-012): `SessionLightingState(SchemeId ≥1, Hour 0..23)` or `null` when none was recorded. `RecordLighting` refuses (`InvalidLighting`) a value whose hour is not the clock's current hour, and a changed `AdvanceGameTime` that leaves the recorded hour clears the record, so a capture never pairs a time with another hour's scheme (it carries `null` until the host records the new hour). Equal value is NoChange. It does not move the session revision. |
@@ -45,6 +47,7 @@ during an inventory transfer; a call back into the owner from it makes that tran
 | `QueryCompanion` / `QueryParty` / `JoinParty` / `ForceJoinParty` / `UnwaitParty` / `WaitParty` / `LeaveParty` / `SetSpreadOut` | Party domain (ARC-WORLD-013) with the same guard and one revision per change; join and unwait run the follow check and return its reason. See [party runtime](party-runtime.md). |
 | `AttachMapInventory` / `QueryMapInventory` / `QueryPcInventory` / `PickUpItem` / `LootItem` / `GiveItemToPc` | Inventory domain (ARC-WORLD-014): a host-attached T0 seed per map (not state, no revision) and the PC's taken items; transfers take the expected version, refuse before any effect and add one revision each. See [inventory runtime](inventory-runtime.md). |
 | `QueryHero` / `QueryHeroStats` / `QueryHeroDialogFacts` / `QueryGold` | Player character (ARC-WORLD-015), read-only: saved fields, the character owner's stats under a context, the DLG reply facts, the PC's gold; `null` (gold 0) for a session without a hero. See [starting hero runtime](starting-hero-runtime.md). |
+| `Roll` / `QueryRandom` / `CombatRolls` | Session randomness (ARC-WORLD-019): one labelled uniform roll in an inclusive range, the generator's seed and position, and the generator as the attack resolver's roll source. A roll takes no expected version and does not move the revision. See [session randomness](session-random-runtime.md). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
 | `Dispose()` | Idempotent; disposes the clock and GF owner. Every later call except `Dispose` throws `ObjectDisposedException`. |
 
@@ -52,7 +55,8 @@ A map transition is several separately guarded calls (for example `PlaceActor`,
 `SetMapChange`, `AdvanceGameTime`); the caller sequences them, and a refusal partway
 leaves the earlier calls applied. The session revision counts actor and map changes
 only, so a caller that needs one coherent point captures after the whole sequence.
-There is no transactional multi-component transition operation yet.
+The actor and any number of map changes can be applied as one step with `ApplyChanges`
+(ARC-WORLD-017); clock, flags, story, party and inventory are not part of it.
 
 Owner identity is a fresh process-local reference per create/restore. A restored
 owner continues the saved revisions, but versions, clock tokens and GF epochs of any
@@ -120,7 +124,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 6
+## Snapshot schema 7
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -130,13 +134,14 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 (PC quests, shared quests that left `Accepted`, known rumors; each ascending), `Party`
 (the follower array in order, then waiting and flagged free NPCs; [party runtime](party-runtime.md#snapshot-schema-4)),
 `Hero` (the player character or `null`; [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)),
-`Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5))
+`Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
+`Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":6,
+{"format":"arcanum-steamwoven-session","schemaVersion":7,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -152,6 +157,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "party":{"followers":[{"entity":"oid:…","forced":false,"spreadOut":false}],"others":[]},
  "hero":null,
  "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
+ "random":{"seed":"0000000000000000","draws":0},
  "lighting":{"schemeId":1,"hour":15}}
 ```
 
@@ -181,7 +187,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 6 is the only accepted version. ARC-WORLD-015 added the
+**Migration decision: none.** Schema 7 is the only accepted version. ARC-WORLD-019 added the
+required `random` section; schema 6 is refused like the earlier ones (see
+[session randomness](session-random-runtime.md#snapshot-schema-7)). ARC-WORLD-015 had added the
 required, nullable `hero` field and the inventory's `gold` and `kit`; schema 5
 is refused like the earlier ones (see [starting hero runtime](starting-hero-runtime.md#snapshot-schema-6)). ARC-WORLD-014 had added the
 required `inventory` domain and refused schema 4 (see
@@ -190,10 +198,10 @@ required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of schema 1..5 (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of schema 1..6 (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
-dialog. Adding another domain needs schema 7 with its own explicit migration decision.
+dialog. Adding another domain needs schema 8 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -228,6 +236,8 @@ and a literal, independently written canonical JSON text:
   restore consistency checks, and the original new-game GF domain.
 - `PartyStateTests`, `SessionDialogPartyPortTests`: the party domain and its dialog port
   (see [party runtime](party-runtime.md#tests)).
+- `SessionRandomTests`: labelled rolls, their save and replay, and the combat roll source
+  (see [session randomness](session-random-runtime.md#tests)).
 - `SaveSlotTests`: the file is exactly the codec text and restores the same session;
   missing file or directory, a directory at the slot path; overwrite; a failure before the replace keeps the previous
   save and removes the temporary file; an unwritable slot; a stale temporary file;
@@ -253,5 +263,6 @@ and a literal, independently written canonical JSON text:
   sector-diff and mobile-object formats.
 - Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's kit and taken
   items (stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), changes to the hero after the start
-  (alignment, purchases, levels), the quest logbook, experience and quest data, RNG and other domains.
+  (alignment, purchases, levels), the quest logbook, experience and quest data, gameplay rolls by any host, and other
+  domains.
 - Schema migration and compatibility with original saves.
