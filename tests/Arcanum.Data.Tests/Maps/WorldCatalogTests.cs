@@ -79,6 +79,64 @@ public sealed class WorldCatalogTests
     }
 
     [TestMethod]
+    public void Small_files_follow_the_original_reading_rules()
+    {
+        StandardMap("alpha");
+        Write("maps/alpha/startloc.txt", "\r\n5\r\n6\r\n"u8.ToArray());
+        Write("maps/alpha/mapinfo.txt", "LightScheme:4\r\nLightScheme:-2\r\nSoundScheme: 7 , 8\r\n"u8.ToArray());
+        Write("maps/alpha/sub/deeper.txt", [1]);
+        var tdf = new byte[32 + 4];
+        BinaryPrimitives.WriteSingleLittleEndian(tdf, 1.2f); BinaryPrimitives.WriteUInt32LittleEndian(tdf.AsSpan(4), 0x10);
+        BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(8), 2); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(16), 1);
+        Write("maps/alpha/terrain.tdf", tdf);
+
+        using var stack = Stack();
+        var map = WorldCatalog.Open(stack).Find("alpha")!;
+        Assert.AreEqual(new WorldLocation(0, 5), map.StartLocation);
+        Assert.AreEqual(new WorldMapInfo(-2, 7, 8, 0), map.Info);
+        Assert.IsNotNull(map.Terrain);
+        Assert.IsFalse(map.Terrain!.RowCompressed);
+        CollectionAssert.AreEqual(new[] { "maps/alpha/sub/deeper.txt" }, map.Issues.Select(i => i.Path).ToArray());
+        Assert.AreEqual(-12L, WorldCatalogStrToLong(" -12abc"));
+        Assert.AreEqual(0L, WorldCatalogStrToLong("x"));
+        Assert.AreEqual(long.MaxValue, WorldCatalogStrToLong("99999999999999999999"));
+    }
+
+    [TestMethod]
+    public void Catalogue_reports_prototype_names_and_limits_instead_of_dropping_them()
+    {
+        StandardMap("alpha");
+        StandardMap("beta");
+        Write("proto/007001 - Other.pro", AreaIdentityTests.Prototype());
+        Write("proto/7002.pro", AreaIdentityTests.Prototype());
+        using var stack = Stack();
+
+        var catalog = WorldCatalog.Open(stack, new WorldLoaderOptions { MaxMaps = 1 });
+        Assert.AreEqual(1, catalog.Maps.Count);
+        CollectionAssert.AreEquivalent(new[] { "LimitExceeded maps/beta", "Malformed proto/007001 - thing.pro", "UnrecognisedFile proto/7002.pro" },
+            catalog.Issues.Select(i => $"{i.Code} {i.Path}").ToArray());
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorldCatalog.Open(stack, new WorldLoaderOptions { MaxTerrainSectors = long.MaxValue }));
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorldCatalog.Open(stack, new WorldLoaderOptions { MaxJumpPoints = int.MaxValue }));
+    }
+
+    [TestMethod]
+    public void Trailing_bytes_after_the_declared_objects_are_reported()
+    {
+        StandardMap("alpha");
+        var sector = AreaIdentityTests.Sector(AreaIdentityTests.Record(AreaIdentityTests.Id(2, 11)));
+        var padded = new byte[sector.Length + 3];
+        sector.AsSpan(0, sector.Length - 4).CopyTo(padded); sector.AsSpan(sector.Length - 4).CopyTo(padded.AsSpan(padded.Length - 4));
+        Write("maps/alpha/67108865.sec", padded);
+        using var stack = Stack();
+        var catalog = WorldCatalog.Open(stack);
+        var read = catalog.ReadSector(catalog.Find("alpha")!, new(1, 1)).Sector!;
+        Assert.AreEqual(1, read.Objects.Count);
+        Assert.AreEqual(new WorldIssue(WorldIssueCode.Malformed, "maps/alpha/67108865.sec", 1, "object window has trailing bytes"), read.ObjectIssue);
+    }
+
+    private static long WorldCatalogStrToLong(string text) => WorldCatalog.StrToLong(text);
+
+    [TestMethod]
     public void ReadSector_returns_raw_sections_and_objects_and_keeps_the_prefix_before_a_refused_record()
     {
         StandardMap("alpha");

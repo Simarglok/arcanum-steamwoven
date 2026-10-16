@@ -88,9 +88,10 @@ public sealed class ContentStack : IDisposable
             : new(ContentResolutionStatus.NotFound, key, Array.Empty<ContentCandidate>());
     }
 
-    /// <summary>Every indexed virtual path that starts with <paramref name="prefix"/> (same
-    /// normalisation as <see cref="Resolve"/>: lower case, <c>/</c> separators), in ordinal order.
-    /// An empty prefix lists every path.</summary>
+    /// <summary>Every indexed virtual path that starts with <paramref name="prefix"/>, in ordinal
+    /// order. The prefix is only lower-cased (ASCII) and its <c>\</c> turned into <c>/</c>; it is a
+    /// plain string prefix, not a validated path. An empty prefix lists every path; a prefix with
+    /// non-printable-ASCII characters matches nothing.</summary>
     public IReadOnlyList<string> Keys(string prefix = "")
     {
         ArgumentNullException.ThrowIfNull(prefix);

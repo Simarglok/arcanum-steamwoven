@@ -35,17 +35,37 @@ is the new enumeration the catalogue is built on.
 A failure refuses the smallest unit that can be skipped, never the catalogue:
 
 - A map folder without a readable 24-byte `map.prp` is left out and listed in
-  `WorldCatalog.Issues`.
+  `WorldCatalog.Issues` with the reason (missing, too large, malformed).
+- A `proto/*.pro` file whose name is not `NNNNNN - label.pro` is listed as
+  `UnrecognisedFile` (the original loads it anyway, so it must not vanish
+  silently); two files with one number are listed as `Malformed`.
 - A malformed small file (`terrain.tdf` header, `startloc.txt`, `mapinfo.txt`,
   `map.jmp`) leaves its value null or empty and adds a map issue. Unknown files
-  in a map folder are listed as `UnrecognisedFile`.
+  in a map folder, including any in a subfolder, are listed as `UnrecognisedFile`.
 - A sector that does not frame is `Refused` with its reason; other sectors read.
 - Object records are sequential, so a refused record ends the readable part of
   its window: the objects before it are kept and `ObjectIssue` names the index.
   The same holds for the aggregate. An editor `.mob` file is refused alone.
 
 Limits are explicit in `WorldLoaderOptions` (sector, wire, aggregate, terrain,
-jump-point and small-file bounds) and default above the largest observed values.
+jump-point and small-file bounds) and default above the largest observed values;
+options that would let a derived size leave an array or Int32 offset are refused.
+
+## Leniency matches the original
+
+Where the original reader is lenient, the catalogue is too, so a file the game
+accepts is not refused here (pinned CE `map.c`, `terrain.c`):
+
+- `startloc.txt`: the first two lines, blank ones included, read like `strtoll`
+  (leading digits, else 0); only a missing line is an issue.
+- `mapinfo.txt`: each `LightScheme` / `SoundScheme` line is applied as read, so
+  a later line wins; signed values are accepted; other lines are counted.
+- `terrain.tdf`: header flag bits other than row compression are ignored; a
+  compressed row must inflate to at least one row, and anything after that row
+  is not examined.
+
+Opening the catalogue reads each `terrain.tdf` in full to get its 32-byte
+header (1.8 MB for the main map); this costs time, not correctness.
 
 ## Choices
 
@@ -62,8 +82,10 @@ jump-point and small-file bounds) and default above the largest observed values.
 ## Verification
 
 - Synthetic tests (`tests/Arcanum.Data.Tests/Maps/WorldCatalogTests.cs`):
-  loose-file installations covering every refusal path, terrain decoding,
-  aggregate and editor mobiles, prototype lookup and stack shadowing.
+  loose-file installations covering missing and malformed map files, refused
+  sectors and object records, trailing object bytes, the map and option limits,
+  prototype names, the lenient small-file rules, terrain decoding, aggregate and
+  editor mobiles, prototype lookup and stack shadowing.
 - Opt-in `RealData` tests with `DAT_ROOT`: all 81 maps of `Arcanum` (1,680
   sectors, 263,902 objects, 12,723 aggregate mobiles, 1,423 prototypes, 45 jump
   points, the 2,000 × 2,000 grid) read without refusals in about one second;

@@ -202,6 +202,9 @@ public sealed class WorldLoaderOptions
         if (MaxMaps <= 0 || MaxFilesPerMap <= 0 || MaxSmallFileBytes <= 0 || MaxJumpPoints < 0 || MaxMobileBytes <= 0 || MaxAggregateBytes <= 0 ||
             MaxAggregateRecords <= 0 || MaxTerrainBytes <= 0 || MaxTerrainSectors <= 0 || Sector is null || Wire is null)
             throw new ArgumentOutOfRangeException(nameof(WorldLoaderOptions), "World limits must be positive.");
+        // Upper bounds keep every derived size inside an array and an Int32 offset.
+        if (MaxTerrainSectors > Array.MaxLength || MaxJumpPoints > (int.MaxValue - 4) / 32)
+            throw new ArgumentOutOfRangeException(nameof(WorldLoaderOptions), "World limits exceed the addressable array size.");
         Sector.Validate(); Wire.Validate();
     }
 }

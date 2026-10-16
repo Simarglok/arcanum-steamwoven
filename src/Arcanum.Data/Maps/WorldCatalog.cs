@@ -48,7 +48,7 @@ public sealed class WorldCatalog
         options ??= new(); options.Validate();
         var issues = new List<WorldIssue>();
         var keys = stack.Keys("maps/");
-        var folders = keys.Select(k => k.Split('/')).Where(p => p.Length == 3).GroupBy(p => p[1], p => p[2], StringComparer.Ordinal)
+        var folders = keys.Select(k => k.Split('/')).Where(p => p.Length >= 3).GroupBy(p => p[1], p => string.Join('/', p[2..]), StringComparer.Ordinal)
             .OrderBy(g => g.Key, StringComparer.Ordinal).ToArray();
         var loose = keys.Select(k => k.Split('/')).Where(p => p.Length == 2).Select(p => p[1]).ToHashSet(StringComparer.Ordinal);
         var maps = new List<WorldMap>();
@@ -58,8 +58,8 @@ public sealed class WorldCatalog
             if (!files.Contains("map.prp", StringComparer.Ordinal)) { issues.Add(new(WorldIssueCode.Missing, $"maps/{folder.Key}/map.prp")); continue; }
             if (maps.Count >= options.MaxMaps) { issues.Add(new(WorldIssueCode.LimitExceeded, $"maps/{folder.Key}")); continue; }
             if (files.Length > options.MaxFilesPerMap) { issues.Add(new(WorldIssueCode.LimitExceeded, $"maps/{folder.Key}")); continue; }
-            var map = new Reader(stack, options).Map(folder.Key, files, loose);
-            if (map is null) { issues.Add(new(WorldIssueCode.Malformed, $"maps/{folder.Key}/map.prp")); continue; }
+            var map = new Reader(stack, options).Map(folder.Key, files, loose, out var refusal);
+            if (map is null) { issues.Add(refusal!); continue; }
             maps.Add(map);
         }
 
@@ -67,7 +67,10 @@ public sealed class WorldCatalog
         foreach (var key in stack.Keys("proto/"))
         {
             var name = key[6..];
-            if (key.Count(c => c == '/') != 1 || !TryPrototypeNumber(name, out var number)) continue;
+            if (key.Count(c => c == '/') != 1 || !name.EndsWith(".pro", StringComparison.Ordinal)) continue;
+            // The original loads every proto/*.pro whatever its name; only the canonical
+            // "NNNNNN - label.pro" form is addressable here, so others are reported, not dropped.
+            if (!TryPrototypeNumber(name, out var number)) { issues.Add(new(WorldIssueCode.UnrecognisedFile, key)); continue; }
             if (!prototypes.TryAdd(number, key)) issues.Add(new(WorldIssueCode.Malformed, key, number, "duplicate prototype number"));
         }
         return new(stack, options, maps.AsReadOnly(), new ReadOnlyDictionary<int, string>(prototypes), issues.AsReadOnly());
@@ -184,10 +187,11 @@ public sealed class WorldCatalog
             {
                 using var input = new MemoryStream(bytes, offset, size, writable: false);
                 using var inflate = new ZLibStream(input, CompressionMode.Decompress);
+                // Like the original, only one row of output is required; bytes after it, or
+                // after the zlib stream inside the length-prefixed row, are not examined.
                 var filled = 0; int n;
                 while (filled < row.Length && (n = inflate.Read(row, filled, row.Length - filled)) > 0) filled += n;
-                if (filled != row.Length || inflate.ReadByte() != -1 || input.Position != input.Length)
-                    return new(null, new(WorldIssueCode.Malformed, path, y, "row does not inflate to one row"));
+                if (filled != row.Length) return new(null, new(WorldIssueCode.Malformed, path, y, "row inflates to less than one row"));
             }
             catch (InvalidDataException) { return new(null, new(WorldIssueCode.Malformed, path, y, "row is not zlib")); }
             for (var x = 0; x < width; x++) words[x + y * width] = BinaryPrimitives.ReadUInt16LittleEndian(row.AsSpan(x * 2));
@@ -228,6 +232,24 @@ public sealed class WorldCatalog
         return new string(chars);
     }
 
+    /// <summary>C <c>strtoll(s, NULL, 10)</c>: leading white space, an optional sign, then
+    /// as many decimal digits as follow; no digits gives 0, overflow saturates.</summary>
+    internal static long StrToLong(string text)
+    {
+        var i = 0;
+        while (i < text.Length && text[i] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r') i++;
+        var negative = false;
+        if (i < text.Length && text[i] is '+' or '-') negative = text[i++] == '-';
+        long value = 0;
+        for (; i < text.Length && char.IsAsciiDigit(text[i]); i++)
+        {
+            var digit = text[i] - '0';
+            if (value > (long.MaxValue - digit) / 10) return negative ? long.MinValue : long.MaxValue;
+            value = value * 10 + digit;
+        }
+        return negative ? -value : value;
+    }
+
     internal static bool TryPrototypeNumber(string fileName, out int number)
     {
         number = 0;
@@ -259,7 +281,7 @@ public sealed class WorldCatalog
         var fields = new SortedDictionary<int, WorldFieldValue>();
         foreach (var (slot, value) in record.Fields)
             fields[slot] = new((WorldFieldPresence)(int)value.Presence, value.Number,
-                value.Elements.Select(e => new WorldFieldElement(e.Key, e.Words)).ToArray(), value.Fingerprint);
+                Array.AsReadOnly(value.Elements.Select(e => new WorldFieldElement(e.Key, e.Words)).ToArray()), value.Fingerprint);
         return new(record.Type, record.Parent.Kind == 1 ? record.Parent.Number : null, record.Own.Kind, record.Own.Sha256, record.Sha256, record.SemanticSha256,
             new ReadOnlyDictionary<int, WorldFieldValue>(fields));
     }
@@ -278,15 +300,18 @@ public sealed class WorldCatalog
             return read.Bytes;
         }
 
-        internal WorldMap? Map(string name, string[] files, HashSet<string> loose)
+        internal WorldMap? Map(string name, string[] files, HashSet<string> loose, out WorldIssue? refusal)
         {
             var folder = $"maps/{name}";
             var issues = new List<WorldIssue>();
-            var prp = Bytes($"{folder}/map.prp", options.MaxSmallFileBytes, out var prpIssue);
-            if (prp is null || prp.Length != 24) return null;
+            var prp = Bytes($"{folder}/map.prp", options.MaxSmallFileBytes, out refusal);
+            if (prp is null) return null;
+            refusal = new(WorldIssueCode.Malformed, $"{folder}/map.prp");
+            if (prp.Length != 24) return null;
             var properties = new WorldMapProperties(BinaryPrimitives.ReadInt32LittleEndian(prp), BinaryPrimitives.ReadInt32LittleEndian(prp.AsSpan(4)),
                 BinaryPrimitives.ReadInt64LittleEndian(prp.AsSpan(8)), BinaryPrimitives.ReadInt64LittleEndian(prp.AsSpan(16)));
             if (properties.WidthTiles <= 0 || properties.HeightTiles <= 0) return null;
+            refusal = null;
 
             WorldTerrainHeader? terrain = null;
             if (files.Contains("terrain.tdf", StringComparer.Ordinal))
@@ -298,8 +323,8 @@ public sealed class WorldCatalog
                 {
                     var header = new WorldTerrainHeader(BinaryPrimitives.ReadSingleLittleEndian(tdf), (BinaryPrimitives.ReadUInt32LittleEndian(tdf.AsSpan(4)) & 1) != 0,
                         BinaryPrimitives.ReadInt64LittleEndian(tdf.AsSpan(8)), BinaryPrimitives.ReadInt64LittleEndian(tdf.AsSpan(16)), BinaryPrimitives.ReadInt32LittleEndian(tdf.AsSpan(24)));
+                    // Flag bits other than bit 0 (row compression) are ignored, as by the original.
                     if (header.Version != 1.2f) issues.Add(new(WorldIssueCode.Malformed, $"{folder}/terrain.tdf", null, "version is not 1.2"));
-                    else if ((BinaryPrimitives.ReadUInt32LittleEndian(tdf.AsSpan(4)) & ~1u) != 0) issues.Add(new(WorldIssueCode.Malformed, $"{folder}/terrain.tdf", null, "unknown header flags"));
                     else if (header.WidthSectors <= 0 || header.HeightSectors <= 0 || header.WidthSectors > WorldSectorCoordinate.MaxCoordinate + 1L ||
                              header.HeightSectors > WorldSectorCoordinate.MaxCoordinate + 1L || header.WidthSectors * header.HeightSectors > options.MaxTerrainSectors)
                         issues.Add(new(WorldIssueCode.LimitExceeded, $"{folder}/terrain.tdf", null, "grid size"));
@@ -313,8 +338,9 @@ public sealed class WorldCatalog
             {
                 var text = Bytes($"{folder}/startloc.txt", options.MaxSmallFileBytes, out var startIssue);
                 if (text is null) issues.Add(startIssue!);
-                else if (Lines(text) is [var x, var y, ..] && long.TryParse(x.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var sx) &&
-                         long.TryParse(y.Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var sy) && sx >= 0 && sy >= 0)
+                // The original reads the first two lines (blank ones too) with strtoll; it fails
+                // the map only when a line is missing.
+                else if (RawLines(text) is [var x, var y, ..] && StrToLong(x) is var sx and >= 0 && StrToLong(y) is var sy and >= 0)
                     start = new(sx, sy);
                 else issues.Add(new(WorldIssueCode.Malformed, $"{folder}/startloc.txt"));
             }
@@ -332,7 +358,7 @@ public sealed class WorldCatalog
             {
                 var jmp = Bytes($"{folder}/map.jmp", 4L + (long)options.MaxJumpPoints * JumpPointBytes, out var jumpIssue);
                 if (jmp is null) issues.Add(jumpIssue!);
-                else if (jmp.Length < 4 || BinaryPrimitives.ReadInt32LittleEndian(jmp) is var count && (count < 0 || count > options.MaxJumpPoints || jmp.Length != 4 + count * JumpPointBytes))
+                else if (jmp.Length < 4 || BinaryPrimitives.ReadInt32LittleEndian(jmp) is var count && (count < 0 || count > options.MaxJumpPoints || jmp.Length != 4L + (long)count * JumpPointBytes))
                     issues.Add(new(WorldIssueCode.Malformed, $"{folder}/map.jmp"));
                 else
                     for (var i = 0; i < count; i++)
@@ -347,7 +373,8 @@ public sealed class WorldCatalog
             var sectors = new List<WorldSectorCoordinate>(); var mobiles = new List<string>();
             foreach (var file in files.Order(StringComparer.Ordinal))
             {
-                if (file.EndsWith(".sec", StringComparison.Ordinal))
+                if (file.Contains('/')) issues.Add(new(WorldIssueCode.UnrecognisedFile, $"{folder}/{file}"));
+                else if (file.EndsWith(".sec", StringComparison.Ordinal))
                 {
                     var stem = file[..^4];
                     if (stem.Length is > 0 and <= 16 && stem.All(char.IsAsciiDigit) && long.TryParse(stem, NumberStyles.None, CultureInfo.InvariantCulture, out var id) &&
@@ -365,7 +392,14 @@ public sealed class WorldCatalog
                 loose.Contains(aggregate) ? $"maps/{aggregate}" : null, issues.AsReadOnly());
         }
 
-        private static string[] Lines(byte[] text) => Encoding.Latin1.GetString(text).Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToArray();
+        private static string[] Lines(byte[] text) => RawLines(text).Where(l => l.Length > 0).ToArray();
+        private static string[] RawLines(byte[] text)
+        {
+            var lines = Encoding.Latin1.GetString(text).Split('\n').Select(l => l.TrimEnd('\r')).ToList();
+            if (lines.Count > 0 && lines[^1].Length == 0) lines.RemoveAt(lines.Count - 1);
+            return lines.ToArray();
+        }
+
 
         /// <summary>The original reads <c>Key:Value</c> lines and acts on LightScheme and
         /// SoundScheme (music, ambient); other lines are ignored, so they are only counted.</summary>
@@ -378,14 +412,15 @@ public sealed class WorldCatalog
                 var key = parts[0].Trim();
                 if (parts.Length == 2 && key.Equals("LightScheme", StringComparison.OrdinalIgnoreCase))
                 {
-                    if (light.HasValue || !int.TryParse(parts[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var value)) issues.Add(new(WorldIssueCode.Malformed, path, null, "LightScheme"));
+                    // Each line is applied as read, so a later one wins, as in the original.
+                    if (!int.TryParse(parts[1].Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var value)) issues.Add(new(WorldIssueCode.Malformed, path, null, "LightScheme"));
                     else light = value;
                 }
                 else if (parts.Length == 2 && key.Equals("SoundScheme", StringComparison.OrdinalIgnoreCase))
                 {
                     var values = parts[1].Split(',');
-                    if (music.HasValue || values.Length != 2 || !int.TryParse(values[0].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var m) ||
-                        !int.TryParse(values[1].Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var a)) issues.Add(new(WorldIssueCode.Malformed, path, null, "SoundScheme"));
+                    if (values.Length != 2 || !int.TryParse(values[0].Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var m) ||
+                        !int.TryParse(values[1].Trim(), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var a)) issues.Add(new(WorldIssueCode.Malformed, path, null, "SoundScheme"));
                     else { music = m; ambient = a; }
                 }
                 else unknown++;
