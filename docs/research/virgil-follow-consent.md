@@ -171,7 +171,7 @@ real PC talking to Virgil at T0:
 | Forced follower | (accept) | No: the bit is clear and every operand is 0 |
 | Reaction ≤ −1000 | dislike | Not in practice: his T0 reaction for a fresh PC is 60 + race term (−5..+10 for a human NPC) + beauty modifier (−65 at beauty 1) + reputation (0), at least −10; the lowest his DLG's reaction actions produce is a set to 61 or a −5 delta (PC reaction effects can scale deltas; not read) |
 | Alignment gap > 2001 | too good / too bad | No: alignments are clamped to ±1000, so any gap is at most 2000 (1001 with his alignment 1) |
-| Level ≥ PC level + 30 | low level | No at T0 (he is level 1); later only with a 30-level gap (U3) |
+| Level ≥ PC level + 30 | low level | No: his level never exceeds the PC's ([ARC-RES-031](virgil-auto-level.md), answering U3) |
 | Max followers 0 | not allowed | No as read: the clamp keeps max followers ≥ 1 |
 | Non-forced followers ≥ max | limit reached | Yes, when the PC already leads that many; never at the start of a new game |
 
@@ -181,8 +181,8 @@ through the consent check without the charisma limit
 ([ai.c 2412–2443](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2412-L2443),
 also after a hit, [ai.c 996–1015](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L996-L1015)),
 so it refuses only on dislike (≤ −1000), an alignment gap above 2001 or the
-30-level gate. As read Virgil therefore never leaves on his own unless the U3
-level gap arises; `LV` or a script disband ends the link. A hit from his
+30-level gate. As read Virgil therefore never leaves on his own (the level gap
+cannot arise, [ARC-RES-031](virgil-auto-level.md)); `LV` or a script disband ends the link. A hit from his
 leader lowers his reaction by 0 (field 9). Wait index 6 schedules no timer
 under any Persuasion bonus ([ai.c 1472–1485](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1472-L1485)),
 so the timeout question O3 does not apply to him.
@@ -212,7 +212,9 @@ PC is already at his follower limit.
 - **U2** Reaction changes outside his DLG (theft, combat with others, quest
   scripts) and the reputation term later in the game were not read.
 - **U3** How auto-level scheme 91 raises his level as the game goes on was not
-  read; it only matters if a 30-level gap could ever arise.
+  read; it only matters if a 30-level gap could ever arise. Answered by
+  [ARC-RES-031](virgil-auto-level.md): the scheme only spends points, his level
+  moves with the PC's and can never exceed it, so the gap cannot arise.
 - **U4** O3–O7 of the companion research stay open, except that O3 no longer
   concerns Virgil.
 
