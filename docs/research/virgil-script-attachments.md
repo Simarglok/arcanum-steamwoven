@@ -140,8 +140,8 @@ project's local toolkit archive (ignored by git; nothing from them is copied
 here beyond names):
 
 - **ScriptEd 1.50** ([TimoP80/ScriptEd_v1_50](https://github.com/TimoP80/ScriptEd_v1_50),
-  commit `da7e6d2`, GPL), a community script editor whose data files say they
-  are kept in sync with the enums in the original `Script.h`.
+  commit `da7e6d2`, GPL), a community script editor whose data files tell its
+  maintainers to keep them in sync with the enums of a `Script.h`.
 - **Troika's editor documents** in `editdocs.zip` from
   [Terra-Arcanum](https://terra-arcanum.com/downloads/arcanum/resources/editdocs.zip)
   (SHA-256 `a237d7f6…b1137b`): the event-script guide and the reference sheet.
