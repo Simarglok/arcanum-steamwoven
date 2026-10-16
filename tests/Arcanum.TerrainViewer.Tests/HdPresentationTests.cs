@@ -180,15 +180,31 @@ public sealed class HdPresentationTests
     }
 
     [TestMethod]
-    public void ResetDropsWorkThatFinishesLater()
+    public void WorkFromBeforeAResetNeverFillsANewQuestion()
     {
         var frames = Enumerable.Range(0, 24).Select(i => Frame("f" + i, 40, 30, i)).ToArray();
         using var source = new HdFrameSource(WritePack("reset", 4, frames), 1);
-        foreach (var frame in frames) source.Request(frame.Query, () => frame.Rgba);
-        source.Reset();
-        Thread.Sleep(200);
-        Assert.AreEqual(0, source.PendingCount);
-        Assert.AreEqual(0, source.ReadyCount, "no staging buffer outlives a reset");
+        // Asked again while the old decodes may still run: only the new request may fill it.
+        for (var round = 0; round < 3; round++)
+        {
+            foreach (var frame in frames) source.Request(frame.Query, () => frame.Rgba);
+            source.Reset();
+        }
+        Assert.AreEqual(0, source.PendingCount + source.ReadyCount, "no staging buffer outlives a reset");
+        source.Request(frames[0].Query, () => frames[0].Rgba);
+        Drain(source);
+        Assert.AreEqual(1, source.ReadyCount, "late results of reset work were dropped");
+        CollectionAssert.AreEqual(HdNearestPack.Replicate(frames[0].Rgba, 40, 30, 4), source.Peek(frames[0].Query).Rgba);
+
+        // A switch to Legacy: pending and decoded work goes, refusals stay.
+        var missing = Frame("not-in-pack", 4, 4, 9);
+        source.Request(missing.Query, () => missing.Rgba); Drain(source);
+        foreach (var frame in frames.Skip(1)) source.Request(frame.Query, () => frame.Rgba);
+        source.CancelPending();
+        Assert.AreEqual(0, source.PendingCount + source.ReadyCount);
+        Assert.AreEqual(HdFallbackReason.FrameMissing, source.Peek(missing.Query).Reason);
+        Thread.Sleep(100);
+        Assert.AreEqual(0, source.ReadyCount, "work cancelled by the switch never lands");
         source.Dispose();
         Assert.ThrowsExactly<ObjectDisposedException>(() => source.Request(frames[0].Query, () => frames[0].Rgba));
     }

@@ -725,20 +725,24 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 - **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
   decoded pixels are held only until their texture is uploaded, at most 64 frames or 64 MiB
   per submission on the main thread; a frame that becomes visible later is decoded lazily and
-  draws Legacy (`Pending`) until it is ready. There is no whole-area HD CPU repository.
+  draws Legacy (`Pending`) until it is ready; a frame whose decode fails for any reason is
+  `Invalid`. There is no whole-area HD CPU repository. The texture cache keeps the Legacy RGBA
+  of the actor and WORLD static frames (a few MB, counted at load) in both profiles, because
+  the mask check of an HD frame needs this device's Legacy alpha.
 - **Budgets.** One residency per domain, keyed by the pack question inside one pack (a new
   pack or budget releases every HD texture). Admission is in draw order on the Legacy frame
   size: a frame whose `N²·w·h·4` bytes would exceed the visible limit is `HdBudget` before it
-  is decoded. AREA: visible bytes, retained frames and bytes from the device budget
+  is decoded; a frame already known to be refused takes no budget. AREA: visible bytes, retained frames and bytes from the device budget
   (ceilings `N²` times the Legacy ones); WORLD: one HD byte limit (`N²/4 · 256` MiB) for
   visible and kept frames and the Legacy key caps (184 + 5). Frames that left the view are
   kept within the retain limits, least recently used evicted first, before any new upload. A
-  switch to Legacy keeps them down to the retain limit; a map change, reload, failure, pack
+  switch to Legacy keeps them down to the retain limit and drops pending decodes; a map change, reload, failure, pack
   change or exit releases every HD texture and drops pending decodes. A WORLD actor step
   republishes the plan and keeps them.
 - **HUD.** The status line shows `visual HD pack <id> <N>x <review>: HD <n>, Legacy <m>
   (<reason> <count>, …), HD textures <count>/<bytes> bytes, decoding <n>; terrain and walls
-  Legacy`, per submission, or `visual Legacy`.
+  Legacy`, per submission; under Legacy `visual Legacy`, or `visual Legacy (HD pack <id>
+  <N>x loaded)` when a pack is selected. In AREA it is refreshed with the status line.
 - **Selecting a pack (until ARC-UI-006).** The setting, its persistence and the toggle key
   are ARC-UI-006. A diagnostic run selects them at start with environment variables:
   `ARC_HD_PACK=DIR` (one pack directory outside the repository; implies profile Hd),
@@ -756,7 +760,9 @@ zoom 1, 2, 0.5, 1.5 with a fractional origin and 4, also with wall fades; a tint
 Legacy alpha and changes colour at magnification 2; `FrameMissing`, `NoPack`,
 `PackRejected`, `FrameRejected`, `HdBudget` and `Invalid` each draw the Legacy raster and are
 counted; switching back and clearing release HD) and `ARC-RENDER-014 self-test WORLD HD
-PASS` (statics and actor, identity at zoom 1, 2, 3, republish keeps HD); and the native
+PASS` (statics and actor, identity at zoom 1, 2, 3; a pack recoloured per parent texel
+equals a Legacy draw of the recoloured frames, which also catches a wrong crop on the uniform
+statics; republish keeps HD); and the native
 smoke on the installed original, which writes a nearest 4× pack of every character and object
 frame to a temporary directory outside the repository, deletes it afterwards, and requires
 the whole window to equal Legacy with no fallback:

@@ -296,7 +296,9 @@ native HD draws ([viewer](terrain-viewer.md#hd-render-path-arc-render-014)):
 reason, draw-order budget admission, retention and upload batches), the self-tests
 `ARC-RENDER-014 self-test AREA HD PASS` / `WORLD HD PASS` (production compositor with a
 synthetic nearest 4× pack: the HD raster equals Legacy at magnifications 0.5 to 4, with
-fractional origins and with wall fades, and each fallback reason draws the Legacy raster)
+fractional origins and with wall fades, and `FrameMissing`, `NoPack`, `PackRejected`,
+`FrameRejected`, `HdBudget` and `Invalid` each draw the Legacy raster; `HdAxisLimit`,
+`SourceMismatch` and `Pending` are unit-tested)
 and the native smoke `ARC-RENDER-014 native-smoke AREA HD identity PASS` / `WORLD HD
 identity PASS` on the installed original with a nearest 4× pack in a temporary directory.
 Later: the toggle and Session-snapshot invariance (ARC-UI-006). Human review of real HD frames is ARC-RENDER-015 and never a merge

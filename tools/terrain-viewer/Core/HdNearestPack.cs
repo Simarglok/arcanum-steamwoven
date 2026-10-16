@@ -20,7 +20,8 @@ public static class HdNearestPack
     /// <summary>The nearest N× replica of a w × h RGBA frame, with an optional colour change
     /// on every opaque subtexel whose x offset is <paramref name="tintColumn"/> (a stand-in
     /// for an upscaler that adds detail; alpha is always the parent's).</summary>
-    public static byte[] Replicate(ReadOnlySpan<byte> rgba, int width, int height, int scale, int tintColumn = -1, byte tint = 0)
+    public static byte[] Replicate(ReadOnlySpan<byte> rgba, int width, int height, int scale, int tintColumn = -1, byte tint = 0,
+        Func<int, int, byte>? parentTint = null)
     {
         if (width <= 0 || height <= 0 || scale < 1 || rgba.Length != (long)width * height * 4) throw new ArgumentException("Legacy RGBA must be width × height × 4 bytes.", nameof(rgba));
         var w = width * scale; var h = height * scale;
@@ -31,16 +32,22 @@ public static class HdNearestPack
             var from = ((y / scale) * width + x / scale) * 4; var to = (y * w + x) * 4;
             rgba.Slice(from, 4).CopyTo(hd.AsSpan(to, 4));
             if (hd[to + 3] != 0 && x % scale == tintColumn) hd[to] = (byte)(hd[to] ^ tint);
+            if (hd[to + 3] != 0 && parentTint is not null) hd[to] = (byte)(hd[to] ^ parentTint(x / scale, y / scale));
         }
         return hd;
     }
 
     /// <summary>Writes a pack to <paramref name="directory"/> (created; must not hold a pack
     /// yet). Duplicate questions are written once. Returns the directory.</summary>
+    /// <param name="parentTint">Optional colour change as a function of the parent Legacy texel
+    /// (x, y): the result is then the nearest replica of a recoloured Legacy frame, so a Legacy
+    /// draw of that recoloured frame is its exact oracle (it detects a wrong crop even on
+    /// uniform frames).</param>
     public static string Write(string directory, string id, int scale, IEnumerable<Frame> frames, HdReviewStatus review = HdReviewStatus.Unreviewed,
-        int tintColumn = -1, byte tint = 0)
+        int tintColumn = -1, byte tint = 0, Func<int, int, byte>? parentTint = null)
     {
         ArgumentException.ThrowIfNullOrEmpty(directory);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-z0-9][a-z0-9_-]{0,63}$")) throw new ArgumentException("Not a pack id.", nameof(id));
         ArgumentNullException.ThrowIfNull(frames);
         if (File.Exists(Path.Combine(directory, HdPack.ManifestFile))) throw new IOException("The directory already holds a pack.");
         Directory.CreateDirectory(directory);
@@ -53,7 +60,7 @@ public static class HdNearestPack
             if (!seen.Add(frame.Query.Key)) continue;
             var legacy = frame.Query.Legacy;
             if (HdFrameQueries.Sha256(frame.Rgba) != legacy.RgbaSha256) throw new ArgumentException("Legacy RGBA does not hash to its question.", nameof(frames));
-            var png = HdPng.EncodeRgba(legacy.Width * scale, legacy.Height * scale, Replicate(frame.Rgba, legacy.Width, legacy.Height, scale, tintColumn, tint));
+            var png = HdPng.EncodeRgba(legacy.Width * scale, legacy.Height * scale, Replicate(frame.Rgba, legacy.Width, legacy.Height, scale, tintColumn, tint, parentTint));
             var file = $"frames/{entries.Count / 1000:D4}/{entries.Count % 1000:D3}.png";
             WriteFile(directory, file, png);
             entries.Add(new JsonObject

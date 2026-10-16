@@ -11,8 +11,9 @@ public static partial class TerrainViewerSelfTest
     // ARC-RENDER-014: the production AREA compositor under profile Hd with a synthetic nearest
     // 4× pack (Legacy hard edge). By ARC-RENDER-013 consequence 4 every HD raster must equal
     // the Legacy raster pixel for pixel, at any transform, also with wall fades; a tinted pack
-    // proves the HD texture is really bound (invisible at magnification 1, visible at 2, alpha
-    // unchanged); every fallback reason draws Legacy and is counted. Synthetic pixels only.
+    // proves the HD texture is really bound (colour changes at magnification 2, alpha never);
+    // six fallback reasons draw Legacy and are counted (HdAxisLimit, SourceMismatch and Pending
+    // are unit-tested). Synthetic pixels only.
     private static async Task AssertHdPresentationAsync(Node host)
     {
         var native = DisplayServer.GetName() != "headless";
@@ -195,7 +196,8 @@ public static partial class TerrainViewerSelfTest
 
     // ARC-RENDER-014 WORLD: statics and the actor bind HD with the source crop scaled from the
     // Legacy frame size and the same destination; with the nearest pack the GPU nearest raster
-    // equals Legacy at integer transforms.
+    // equals Legacy at integer transforms. A pack recoloured per parent texel must equal a
+    // Legacy draw of the recoloured frames, which also catches a wrong crop on uniform statics.
     private static async Task AssertWorldHdPresentationAsync(Node host)
     {
         var native = DisplayServer.GetName() != "headless";
@@ -248,6 +250,35 @@ public static partial class TerrainViewerSelfTest
             var resident = canvas.HdResidentCount;
             canvas.Publish(fixture.Result.DiagnosticPlan!, cache); await Settle();
             if (canvas.HdResidentCount != resident || canvas.WorldHdStats.Hd != 6) throw new InvalidOperationException("HD_WORLD_REPUBLISH");
+
+            static byte Recolour(int x, int y) => (byte)(x * 37 + y * 11 + 64);
+            var recoloured = HdPack.Open(HdNearestPack.Write(System.IO.Path.Combine(root, "recoloured"), "recoloured", 4, frames, parentTint: Recolour));
+            using var tinted = new HdFrameSource(recoloured.Pack ?? throw new InvalidOperationException("HD_WORLD_PACK:" + recoloured.Status));
+            canvas.SetVisualProfile(VisualProfile.Hd, tinted, HdDeviceBudget.Ceiling(4));
+            for (var wait = 0; tinted.PendingCount > 0 || canvas.WorldHdStats.Hd != 6; wait++)
+            {
+                if (wait > 600) throw new InvalidOperationException("HD_WORLD_PENDING_TINT:" + canvas.WorldHdStats.Format());
+                await Settle();
+            }
+            var hdTinted = await Capture();
+            canvas.SetVisualProfile(VisualProfile.Legacy, tinted, HdDeviceBudget.Ceiling(4));
+            static byte[] Recoloured(byte[] rgba, int width)
+            {
+                var copy = (byte[])rgba.Clone();
+                for (var at = 0; at < copy.Length; at += 4) if (copy[at + 3] != 0) copy[at] ^= Recolour(at / 4 % width, at / 4 / width);
+                return copy;
+            }
+            using var oracleCache = new TerrainTextureCache();
+            oracleCache.Upload(fixture.Result.Textures);
+            oracleCache.UploadStatic(fixture.Result.StaticTextures.ToDictionary(p => p.Key, p => new DecodedStaticTexture(p.Key, p.Value.Width, p.Value.Height, Recoloured(p.Value.Rgba, p.Value.Width))));
+            oracleCache.UploadActor(fixture.Result.ActorTextures.ToDictionary(p => p.Key, p => new DecodedActorTexture(p.Key, p.Value.Width, p.Value.Height, Recoloured(p.Value.Rgba, p.Value.Width))));
+            canvas.Publish(fixture.Result.DiagnosticPlan!, oracleCache);
+            var legacyTinted = await Capture();
+            for (var t = 0; t < legacy.Length; t++)
+            {
+                if (!legacyTinted[t].AsSpan().SequenceEqual(hdTinted[t])) throw new InvalidOperationException("HD_WORLD_RECOLOURED:" + t);
+                if (native && legacyTinted[t].AsSpan().SequenceEqual(legacy[t])) throw new InvalidOperationException("HD_WORLD_RECOLOUR_NOT_OBSERVED:" + t);
+            }
             canvas.ClearScene();
             if (canvas.HdResidentCount != 0) throw new InvalidOperationException("HD_WORLD_RELEASE");
         }
@@ -256,7 +287,7 @@ public static partial class TerrainViewerSelfTest
             canvas.ClearScene(); viewport.QueueFree(); source?.Dispose();
             System.IO.Directory.Delete(root, true);
         }
-        GD.Print("ARC-RENDER-014 self-test WORLD HD PASS statics+actor 6 HD, nearest-4x identity at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
+        GD.Print("ARC-RENDER-014 self-test WORLD HD PASS statics+actor 6 HD, nearest-4x identity and per-parent recoloured oracle at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
     }
 
     // Distinct colours per texel with holes, so a wrong subtexel or crop changes pixels.

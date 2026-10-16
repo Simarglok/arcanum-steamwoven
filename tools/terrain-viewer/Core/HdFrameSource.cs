@@ -108,10 +108,11 @@ public sealed class HdFrameSource : IDisposable
     {
         token.ThrowIfCancellationRequested();
         HdFrameResult result;
-        // A query that contradicts its own pixels is a caller defect; it still only costs
-        // this frame its HD texture, never the view.
+        // A query that contradicts its own pixels is a caller defect, and any other failure of
+        // one frame (memory, a reader defect) still only costs that frame its HD texture: it
+        // draws Legacy as Invalid, never stays Pending and never fails the view.
         try { result = pack.ResolveSprite(query, legacy); }
-        catch (ArgumentException) { return new(HdSourceState.Refused, HdFallbackReason.Invalid); }
+        catch (Exception error) when (error is not OperationCanceledException) { return new(HdSourceState.Refused, HdFallbackReason.Invalid); }
         return result.Status switch
         {
             HdFrameStatus.Hd => new(HdSourceState.Ready, null, result.Rgba),
@@ -138,6 +139,18 @@ public sealed class HdFrameSource : IDisposable
         lock (_gate)
             foreach (var query in _slots.Where(pair => pair.Value.State == HdSourceState.Ready && !keep.Contains(pair.Key)).Select(pair => pair.Key).ToArray())
                 _slots.Remove(query);
+    }
+
+    /// <summary>Cancels pending work and drops decoded pixels, keeping the refusals (a switch to
+    /// Legacy): nothing decoded later stays outside the HD budgets.</summary>
+    public void CancelPending()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _cancel.Cancel(); _cancel.Dispose(); _cancel = new CancellationTokenSource();
+            foreach (var query in _slots.Where(pair => pair.Value.State != HdSourceState.Refused).Select(pair => pair.Key).ToArray()) _slots.Remove(query);
+        }
     }
 
     /// <summary>Cancels pending work and forgets everything (map change, reload, exit): no

@@ -294,5 +294,6 @@ public partial class TerrainCanvas
     public override void _ExitTree()
     {
         ClearArea();
+        ReleaseHd(); _hdOwnedSource?.Dispose(); _hdOwnedSource = null;
     }
 }

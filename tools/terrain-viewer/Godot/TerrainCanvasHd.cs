@@ -17,9 +17,10 @@ public partial class TerrainCanvas
     private HdResidency<ImageTexture>? _hdArea;
     private HdResidency<ImageTexture>? _hdWorld;
     private long _hdSeenCompletions = -1;
-    /// <summary>Per-item ART class that may bind HD; walls (1) are a later stage. A self-test may
-    /// widen it to prove the wall-fade column with an HD crop.</summary>
-    internal Func<int, bool> HdArtClassEligible { get; set; } = artClass => artClass != 1;
+    // The pack-less source made for Hd without a selected source; owned (disposed) here.
+    private HdFrameSource? _hdOwnedSource;
+    /// <summary>Walls (ART class 1) stay Legacy in this stage.</summary>
+    private static bool HdArtClassEligible(int artClass) => artClass != 1;
 
     public VisualProfile VisualProfile => _visualProfile;
     public HdFrameSource? HdSource => _hdSource;
@@ -40,19 +41,29 @@ public partial class TerrainCanvas
     public void SetVisualProfile(VisualProfile profile, HdFrameSource? source, HdDeviceBudget? budget = null)
     {
         if (!ReferenceEquals(source, _hdSource) || !Equals(budget, _hdBudget)) ReleaseHd();
+        if (_hdOwnedSource is { } owned && !ReferenceEquals(owned, source)) { if (ReferenceEquals(_hdSource, owned)) _hdSource = null; owned.Dispose(); _hdOwnedSource = null; }
         _hdSource = source; _hdBudget = budget;
         _visualProfile = profile;
         if (profile == VisualProfile.Legacy && _hdSource is { } legacySource)
         {
+            // Pending decodes are dropped (their pixels would sit outside every budget) and HD
+            // textures are kept down to the retain limits.
+            legacySource.CancelPending();
             _hdArea?.ReleaseToRetained(legacySource); _hdWorld?.ReleaseToRetained(legacySource);
             AreaHdStats.Clear(); WorldHdStats.Clear();
         }
         _areaView = null; _hdSeenCompletions = -1; QueueRedraw();
+        // Rebind the AREA items now: none may keep sampling an HD texture released above.
+        if (_area is not null && IsInsideTree())
+        {
+            try { UpdateAreaVisible(); }
+            catch (Exception error) { AreaFailure?.Invoke(error); }
+        }
     }
 
     private bool HdActive => _visualProfile == VisualProfile.Hd;
     // The frame source used under Hd: the selected one, or a pack-less one (NoPack everywhere).
-    private HdFrameSource ActiveHdSource => _hdSource ??= new HdFrameSource(null);
+    private HdFrameSource ActiveHdSource => _hdSource ??= _hdOwnedSource = new HdFrameSource(null);
     private HdDeviceBudget ActiveHdBudget => _hdBudget ?? HdDeviceBudget.Ceiling(Math.Max(2, ActiveHdSource.Scale));
 
     private HdResidency<ImageTexture> HdResidency(ref HdResidency<ImageTexture>? residency, Func<HdDeviceBudget, HdDomainBudget> domain)

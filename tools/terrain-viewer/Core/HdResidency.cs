@@ -30,8 +30,8 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
 {
     private readonly Func<int, int, byte[], TTexture> _create;
     private readonly Action<TTexture> _dispose;
-    private readonly Dictionary<HdSpriteQuery, (TTexture Texture, long Bytes, long LastUse)> _resident = new();
-    private long _submission;
+    private readonly Dictionary<HdSpriteQuery, (TTexture Texture, long Bytes, long LastUse, long Order)> _resident = new();
+    private long _submission, _uploadOrder;
 
     /// <param name="create">Makes a texture from w, h and RGBA (the caller's GPU upload).</param>
     /// <param name="maxUploadsPerSubmission">Uploads per submission; the rest stay Pending
@@ -63,9 +63,11 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
     public bool UploadsDeferred { get; private set; }
 
     /// <summary>Binds one submission. <paramref name="draws"/> is in draw order; the result
-    /// has one binding per draw. Admission is a function of the draw order and the Legacy
-    /// frame sizes only: a frame whose <c>N²·w·h·4</c> bytes would exceed the visible budget
-    /// is <see cref="HdFallbackReason.HdBudget"/> whether or not it is decoded yet. Admitted
+    /// has one binding per draw. Admission walks the draw order on the Legacy frame sizes: a
+    /// frame whose <c>N²·w·h·4</c> bytes would exceed the visible budget is
+    /// <see cref="HdFallbackReason.HdBudget"/> whether or not it is decoded yet; a frame
+    /// already known to be refused takes no budget (so a later frame may fit once an earlier
+    /// refusal is known). Equal last use evicts the earlier admitted frame first. Admitted
     /// frames bind once resident; otherwise they are requested from <paramref name="source"/>
     /// and bind when Ready and within the upload batch (Pending until then).</summary>
     public HdBinding<TTexture>[] Submit(IReadOnlyList<HdDraw> draws, HdFrameSource source)
@@ -97,7 +99,8 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
         // Frames that left the view are retained within the limits, least recently used
         // evicted first, before anything new is uploaded.
         var retainBytesLimit = Budget.TotalBytes is { } total ? Math.Max(0, Math.Min(Budget.RetainBytes, total - visible)) : Budget.RetainBytes;
-        var retained = _resident.Where(pair => !admitted.ContainsKey(pair.Key)).OrderBy(pair => pair.Value.LastUse).Select(pair => pair.Key).ToList();
+        var retained = _resident.Where(pair => !admitted.ContainsKey(pair.Key)).OrderBy(pair => pair.Value.LastUse).ThenBy(pair => pair.Value.Order)
+            .Select(pair => pair.Key).ToList();
         var retainedBytes = retained.Sum(key => _resident[key].Bytes); var retainedCount = retained.Count;
         foreach (var key in retained)
         {
@@ -124,7 +127,7 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
                 {
                     var texture = _create(scale * query.Legacy.Width, scale * query.Legacy.Height, status.Rgba!);
                     CreatedCount++; uploads++; uploadBytes += status.Rgba!.Length;
-                    _resident[query] = (texture, admitted[query], _submission); Bytes += admitted[query];
+                    _resident[query] = (texture, admitted[query], _submission, _uploadOrder++); Bytes += admitted[query];
                     source.Release(query);
                     ready[query] = new(texture, null);
                     break;
