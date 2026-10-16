@@ -34,18 +34,23 @@ are not admitted.
 
 | Cell class | Rule | Drawn as |
 | --- | --- | --- |
-| Blocked | at least one admitted incoming step, and **every** admitted one is `Supported/Blocked` | translucent red fill + red outline |
+| Blocked | **every** admitted incoming step is `Supported/Blocked`, and at least one of them is map-cardinal | translucent red fill + red outline |
 | Open | at least one admitted incoming step is `Supported/Open` | no fill |
-| Unknown | no admitted step is Open and at least one is `Unknown` | gray hatch + gray outline |
+| Unknown | no admitted step is Open, and one is `Unknown` or every admitted one is a Blocked map diagonal | gray hatch + gray outline |
 | Outside | no admitted incoming step (outside the authority's coverage) | gray hatch |
 
 Directed marks keep edge-only facts: a `Blocked` step into a cell that is not wholly
 blocked is a **red boundary and inward arrow** on the shared edge (map-cardinal step)
 or at the shared corner (map-diagonal step); an `Unknown` step into an Open cell is a
 gray arrow. The reverse direction is a different step and appears only on the other
-cell, so asymmetric pairs stay visible. A red fill therefore needs the strict proof of
-all incoming directions; an isolated blocked edge never becomes a blocked cell, and
-neither Unknown nor Outside is ever drawn as Open or red.
+cell, so asymmetric pairs stay visible. A red fill needs the strict proof of all
+admitted incoming directions **and** a map-cardinal one: in both assessors a
+map-cardinal step is Blocked only by the destination cell itself (AREA
+`DESTINATION_TERRAIN_BLOCKED`/`DESTINATION_OBJECT_BLOCKER`, WORLD003 destination terrain or
+`ADMITTED_DESTINATION_SCENERY_BLOCKER`), while a map-diagonal step can also be blocked by a
+shoulder (`SHOULDER_OBJECT_BLOCKER`, `ADMITTED_ADJACENT_SCENERY_BLOCKER`). Diagonal-only
+blocks therefore stay directed marks on an Unknown cell. Neither Unknown nor Outside is
+ever drawn as Open or red.
 
 Example (original data, both modes): `(6,1)->(5,1)` is Blocked by the admitted scenery
 at `(5,1)` (WORLD: `ADMITTED_DESTINATION_SCENERY_BLOCKER`, AREA:
@@ -64,8 +69,10 @@ above it. Pan, Fit, zoom and resize change only what is visible, never a cell's 
 
 - Only visible cells are assessed, at most 1,024 new cells per frame, in a fixed
   row-major order. Results are cached per authority identity (profile, evidence digest,
-  epoch, context); a new snapshot/epoch/context binds a new overlay, a failure or
-  scene clear drops every cell. Cached cells are never reassessed.
+  epoch, context) and movement session: a new session (Reset scene, Reload, republish),
+  snapshot, epoch or context binds a new overlay, and a failure or scene clear drops every
+  cell and the last-step line. Cached cells are never reassessed; a fully assessed view is
+  not rescanned until it moves.
 - Above 20,000 visible cells (e.g. AREA Fit at minimum zoom) nothing is drawn and the
   HUD says `OVERLAY_ZOOM_IN`.
 - AREA: cells outside the nine core sectors (the drawn context ring) are Outside

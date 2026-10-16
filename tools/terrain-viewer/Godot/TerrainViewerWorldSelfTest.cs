@@ -171,7 +171,7 @@ public static partial class TerrainViewerSelfTest
         app.PublishSyntheticForSelfTest(fixture.Arguments,fixture.Result);
         app.PassabilityOverlayFillForSelfTest();
         if (app.PassabilityOverlayLayerForSelfTest?.Overlay is not { } republished || republished.Failure is not null || republished.CachedCells == 0
-            || (republished.Identity != previousOverlay.Identity && ReferenceEquals(republished, previousOverlay)))
+            || ReferenceEquals(republished, previousOverlay) || !ReferenceEquals(republished.Authority.Owner, app.WorldSessionForSelfTest))
             throw new InvalidOperationException("ARC-RENDER-008 overlay did not rebind after republish");
         var reloaded = app.GetSelfTestSnapshot();
         if (reloaded.CreatedTextures != 122 || reloaded.DisposedTextures != 61 || reloaded.CacheCount != 61)

@@ -20,6 +20,8 @@ public interface IPassabilityAuthority
     string ProfileId { get; }
     string ActorId { get; }
     string CoverageDescription { get; }
+    /// <summary>The movement session whose assessor this is; a replaced session gets a new overlay.</summary>
+    object Owner { get; }
     /// <summary>Inclusive chart cell range the authority can address; cells and neighbours outside it are not requested.</summary>
     (int MinX, int MinY, int MaxX, int MaxY) Chart { get; }
     /// <summary>Inclusive cell range the scene draws; cells in it but outside <see cref="Chart"/> are Outside without a request.</summary>
@@ -34,6 +36,7 @@ public sealed class AreaPassabilityAuthority(AreaGridSession session) : IPassabi
     public string ProfileId => session.Snapshot.ProfileId;
     public string ActorId => session.State.Binding.ActorId;
     public string CoverageDescription => "nine Crash Site core sectors at new-game T0; outside them every step is Unsupported";
+    public object Owner => session;
     public (int MinX, int MinY, int MaxX, int MaxY) Chart => (AreaGridSession.MinimumChartCell, AreaGridSession.MinimumChartCell,
         AreaGridSession.MaximumChartCell, AreaGridSession.MaximumChartCell);
     // The drawn context ring is one sector around the core.
@@ -53,6 +56,7 @@ public sealed class CardinalPassabilityAuthority(DiagnosticGridSession session) 
     public string ProfileId => session.Snapshot.ProfileId;
     public string ActorId => session.State.Binding.ActorId;
     public string CoverageDescription => "bounded zone x4..8 y0..3 of sector 1452,1290; outside it every step is Unsupported";
+    public object Owner => session;
     public (int MinX, int MinY, int MaxX, int MaxY) Chart => (0, 0, 63, 63);
     public (int MinX, int MinY, int MaxX, int MaxY) Envelope => (0, 0, 63, 63);
     public OverlayStep Assess(CellCoord from, CellCoord to, NeighborDirection direction)
@@ -66,9 +70,12 @@ public enum OverlayCellKind
 {
     /// <summary>At least one admitted incoming step is Open: no fill (edges may still be marked).</summary>
     Open,
-    /// <summary>Every admitted incoming step is Blocked: proven blocked-cell fill.</summary>
+    /// <summary>Every admitted incoming step is Blocked and at least one of them is map-cardinal: a proven
+    /// blocked-cell fill. (In both movement assessors a map-cardinal step is Blocked only by the destination
+    /// cell itself; diagonal-only blocks can come from shoulders and stay directed edges.)</summary>
     Blocked,
-    /// <summary>No admitted incoming step is Open and at least one is Unknown.</summary>
+    /// <summary>No admitted incoming step is Open and either one is Unknown, or every admitted one is a
+    /// Blocked map diagonal (no cardinal proof of a destination blocker).</summary>
     Unknown,
     /// <summary>No admitted incoming step: outside the authority's coverage (Unsupported).</summary>
     Outside,
@@ -129,7 +136,8 @@ public sealed class PassabilityOverlay
     {
         var admitted = incoming.Where(i => i.Step.Verdict != OverlayStepVerdict.Unsupported).ToArray();
         if (admitted.Length == 0) return OverlayCellKind.Outside;
-        if (admitted.All(i => i.Step.Verdict == OverlayStepVerdict.Blocked)) return OverlayCellKind.Blocked;
+        if (admitted.All(i => i.Step.Verdict == OverlayStepVerdict.Blocked) && admitted.Any(i => ((int)i.Direction & 1) == 1))
+            return OverlayCellKind.Blocked;
         if (admitted.Any(i => i.Step.Verdict == OverlayStepVerdict.Open)) return OverlayCellKind.Open;
         return OverlayCellKind.Unknown;
     }

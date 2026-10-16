@@ -22,6 +22,7 @@ public partial class PassabilityOverlayLayer : Node2D
     private PassabilityOverlay? _overlay;
     private IReadOnlyList<CellCoord> _visible = Array.Empty<CellCoord>();
     private Rect2 _view;
+    private bool _complete;
 
     public PassabilityOverlay? Overlay => _overlay;
     public IReadOnlyList<CellCoord> VisibleCells => _visible;
@@ -35,7 +36,7 @@ public partial class PassabilityOverlayLayer : Node2D
     /// <summary>Binds a fresh overlay (or none). A different authority never inherits cached cells.</summary>
     public void Bind(PassabilityOverlay? overlay)
     {
-        _overlay = overlay; _visible = Array.Empty<CellCoord>(); _view = default; Capped = false; DrawnCells = 0;
+        _overlay = overlay; _visible = Array.Empty<CellCoord>(); _view = default; Capped = false; DrawnCells = 0; _complete = false;
         Visible = overlay is not null; QueueRedraw();
     }
 
@@ -50,12 +51,18 @@ public partial class PassabilityOverlayLayer : Node2D
         var changed = false;
         if (view != _view)
         {
-            _view = view; changed = true;
+            _view = view; changed = true; _complete = false;
             var cells = _overlay.Visible(view.Position.X, view.Position.Y, view.End.X, view.End.Y, VisibleCellCap + 1);
             Capped = cells.Count > VisibleCellCap;
             _visible = Capped ? Array.Empty<CellCoord>() : cells;
         }
-        if (_overlay.Fill(_visible, CellsPerFrame) > 0 || _overlay.Failure is not null) changed = true;
+        // A fully assessed view is not rescanned until the view or the overlay changes.
+        if (!_complete)
+        {
+            var before = _overlay.CachedCells;
+            if (_overlay.Fill(_visible, CellsPerFrame) > 0 || _overlay.CachedCells != before || _overlay.Failure is not null) changed = true;
+            else _complete = true;
+        }
         if (changed) QueueRedraw();
         return changed;
     }

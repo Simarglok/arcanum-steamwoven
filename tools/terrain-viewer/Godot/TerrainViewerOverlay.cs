@@ -15,6 +15,7 @@ public partial class TerrainViewerApp
 
     internal bool PassabilityOverlayOnForSelfTest => _passabilityOverlayOn;
     internal PassabilityOverlayLayer? PassabilityOverlayLayerForSelfTest => _overlayLayer;
+    internal IGridSession? WorldSessionForSelfTest => _worldActor.Session;
 
     private void SetPassabilityOverlay(bool on)
     {
@@ -55,13 +56,15 @@ public partial class TerrainViewerApp
             if (_overlayLayer.Overlay is not null) _overlayLayer.Bind(null);
             return;
         }
-        if (_overlayLayer.Overlay?.Identity != _overlayAuthority.Identity) _overlayLayer.Bind(new PassabilityOverlay(_overlayAuthority));
+        // A new session object (reset, reload, republish) or identity always binds a fresh overlay.
+        if (_overlayLayer.Overlay is not { } current || !ReferenceEquals(current.Authority, _overlayAuthority))
+            _overlayLayer.Bind(new PassabilityOverlay(_overlayAuthority));
         if (_overlayLayer.Tick(GetViewport().GetVisibleRect())) _overlayCounts = _overlayLayer.Overlay!.Count(_overlayLayer.VisibleCells);
     }
 
     private void RetirePassabilityOverlay()
     {
-        _overlaySession = null; _overlayAuthority = null; _overlayCounts = default;
+        _overlaySession = null; _overlayAuthority = null; _overlayCounts = default; _worldLastStepAttempt = null;
         if (_overlayLayer is not null && GodotObject.IsInstanceValid(_overlayLayer)) _overlayLayer.Bind(null);
     }
 

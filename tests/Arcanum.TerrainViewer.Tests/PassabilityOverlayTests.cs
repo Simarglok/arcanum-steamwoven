@@ -23,6 +23,7 @@ public sealed class PassabilityOverlayTests
         public string ProfileId => "FAKE";
         public string ActorId => "FAKE_ACTOR";
         public string CoverageDescription => "literal table";
+        public object Owner => this;
         public (int MinX, int MinY, int MaxX, int MaxY) Chart { get; init; } = (0, 0, 9, 9);
         public (int MinX, int MinY, int MaxX, int MaxY) Envelope { get; init; } = (-2, -2, 11, 11);
         public OverlayStep Assess(CellCoord from, CellCoord to, NeighborDirection direction)
@@ -82,6 +83,20 @@ public sealed class PassabilityOverlayTests
         Assert.AreEqual(OverlayCellKind.Open, cell.Kind);
         CollectionAssert.AreEqual(new[] { NeighborDirection.XMinusYMinus, NeighborDirection.XMinus, NeighborDirection.XMinusYPlus, NeighborDirection.YPlus,
             NeighborDirection.XPlusYPlus, NeighborDirection.XPlus, NeighborDirection.XPlusYMinus }, cell.BlockedEdges.Select(e => e.Direction).ToArray());
+    }
+
+    [TestMethod]
+    public void DiagonalOnlyBlocksAreNotAProvenBlockedCell()
+    {
+        // Only the four map diagonals are admitted and all are Blocked: shoulders could explain them,
+        // so the cell is Unknown (gray) with four red directed marks, never a red fill.
+        var table = new Table(); table.Into(5, 5, B, X, B, X, B, X, B, X);
+        var cell = Cell(table, 5, 5);
+        Assert.AreEqual(OverlayCellKind.Unknown, cell.Kind);
+        Assert.AreEqual(4, cell.BlockedEdges.Count());
+        // One admitted map-cardinal Blocked step proves the destination blocker.
+        table = new Table(); table.Into(5, 5, B, X, B, B, B, X, B, X);
+        Assert.AreEqual(OverlayCellKind.Blocked, Cell(table, 5, 5).Kind);
     }
 
     [TestMethod]
