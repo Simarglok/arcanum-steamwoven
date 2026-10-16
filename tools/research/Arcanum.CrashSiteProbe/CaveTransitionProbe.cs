@@ -41,9 +41,12 @@ internal static partial class Program
     // Window/opening wall pieces are the p-piece values the pinned traversal code
     // treats separately; every other wall piece is a solid edge.
     private static readonly int[] OpeningWallPieces = [10, 13, 14, 17, 18, 19, 22, 25, 26, 29, 30, 31, 32];
-    // Teleport and fade-and-teleport; call-script, call-in, call-at and call-ex.
+    // Teleport and fade-and-teleport. Script-number edges: call-script, call-in and
+    // call-at (operand 0), change-this-script (operand 0) and change-script (operand 2).
+    // Call-ex (81) runs a focus object's own attachment and is always unresolved.
     private static readonly int[] TeleportActions = [44, 102];
-    private static readonly int[] CallActions = [7, 54, 55, 81];
+    private static readonly IReadOnlyDictionary<int, int> ScriptEdgeOperand = new Dictionary<int, int> { [7] = 0, [54] = 0, [55] = 0, [6] = 0, [99] = 2 };
+    private const int CallExAction = 81;
 
     internal sealed record CaveOperand(int Kind, int Value);
     internal sealed record CaveAction(int Type, IReadOnlyList<CaveOperand> Operands);
@@ -109,22 +112,26 @@ internal static partial class Program
         return (teleport.Operands[1].Value, teleport.Operands[2].Value, teleport.Operands[3].Value, tail.Type);
     }
 
-    /// <summary>Census of any other script: action types per branch only. A literal call
-    /// target (kind 3 in slot 0) is reported; computed targets are counted as gaps.</summary>
-    internal static (uint Flags, int Lines, int Teleports, IReadOnlyList<int> LiteralCalls, int ComputedCalls) CaveScriptCensus(ReadOnlySpan<byte> bytes)
+    internal readonly record struct CaveScriptEdge(int Action, int Target);
+
+    /// <summary>Census of any other script: action types per branch only. A script-number
+    /// edge with a literal operand (kind 3) is reported with its action; a computed one,
+    /// and every call-ex, is counted as unresolved.</summary>
+    internal static (uint Flags, int Lines, int Teleports, IReadOnlyList<CaveScriptEdge> Edges, int Unresolved) CaveScriptCensus(ReadOnlySpan<byte> bytes)
     {
         var (flags, count, _) = CaveScriptFraming(bytes);
-        var teleports = 0; var computed = 0; var calls = new List<int>();
+        var teleports = 0; var unresolved = 0; var edges = new List<CaveScriptEdge>();
         for (var line = 0; line < count; line++)
             foreach (var offset in new[] { 44, 88 })
             {
                 var slot = bytes.Slice(ScriptHeaderBytes + line * ScriptLineBytes + offset, 44);
                 var type = BinaryPrimitives.ReadInt32LittleEndian(slot);
                 if (TeleportActions.Contains(type)) teleports++;
-                if (!CallActions.Contains(type)) continue;
-                if (slot[4] == 3) calls.Add(BinaryPrimitives.ReadInt32LittleEndian(slot[12..])); else computed++;
+                if (type == CallExAction) { unresolved++; continue; }
+                if (!ScriptEdgeOperand.TryGetValue(type, out var operand)) continue;
+                if (slot[4 + operand] == 3) edges.Add(new(type, BinaryPrimitives.ReadInt32LittleEndian(slot[(12 + 4 * operand)..]))); else unresolved++;
             }
-        return (flags, count, teleports, calls, computed);
+        return (flags, count, teleports, edges, unresolved);
     }
 
     internal static CaveWallArt DecodeWallArt(uint aid)
@@ -300,8 +307,8 @@ internal static partial class Program
                 if (found is null) { census.Add(new { script = item.Script, hop = item.Hop, present = false }); continue; }
                 var c = CaveScriptCensus(found.Value.Bytes);
                 if (c.Teleports != 0) throw new InvalidDataException("CAVE_UNEXPECTED_TELEPORT");
-                census.Add(new { script = item.Script, hop = item.Hop, present = true, sha256 = AreaHash(found.Value.Bytes), file_flags = c.Flags, lines = c.Lines, teleport_actions = c.Teleports, literal_calls = c.LiteralCalls, computed_calls = c.ComputedCalls });
-                if (item.Hop == 0) foreach (var target in c.LiteralCalls.Where(t => t > 0 && seen.Add(t) && t is not 2793 and not 1532)) queue.Enqueue((target, 1));
+                census.Add(new { script = item.Script, hop = item.Hop, present = true, sha256 = AreaHash(found.Value.Bytes), file_flags = c.Flags, lines = c.Lines, teleport_actions = c.Teleports, script_edges = c.Edges, unresolved_edges = c.Unresolved });
+                if (item.Hop == 0) foreach (var target in c.Edges.Select(e => e.Target).Where(t => t > 0 && seen.Add(t) && t is not 2793 and not 1532)) queue.Enqueue((target, 1));
             }
 
             // Terrain at trigger and arrival cells, by the written F1 rule.
@@ -373,7 +380,7 @@ internal static partial class Program
                 root = root == "data" ? "data" : "module-folder",
                 scripts = LooseFiles(gameRoot, root, "scr").Count(f => ScriptNumberFromFile(f) is { } n && (n is 2793 or 1532 || seen.Contains(n))),
                 map_catalogue = LooseFiles(gameRoot, root, "rules").Count(f => f.Equals("maplist.mes", StringComparison.OrdinalIgnoreCase)),
-                tile_names = LooseFiles(gameRoot, Path.Combine(root, "art"), "tile").Count(f => f.Equals("tilename.mes", StringComparison.OrdinalIgnoreCase)),
+                tile_names = LooseFiles(gameRoot, root + "/art", "tile").Count(f => f.Equals("tilename.mes", StringComparison.OrdinalIgnoreCase)),
             }).ToArray();
             if (looseOverrides.Any(o => o.scripts != 0 || o.map_catalogue != 0 || o.tile_names != 0)) throw new InvalidDataException("CAVE_LOOSE_OVERRIDE_PRESENT");
 
@@ -448,10 +455,10 @@ internal static partial class Program
     // One folder level, case-insensitive names, no recursion and no symlink following.
     private static IEnumerable<string> LooseFiles(string gameRoot, string relative, string folder)
     {
-        var parent = Path.Combine(gameRoot, relative);
-        if (!Directory.Exists(parent)) return [];
-        var match = new DirectoryInfo(parent).EnumerateDirectories().Where(d => d.Name.Equals(folder, StringComparison.OrdinalIgnoreCase) && d.LinkTarget is null).ToArray();
-        return match.SelectMany(d => d.EnumerateFiles().Where(f => f.LinkTarget is null).Select(f => f.Name)).ToArray();
+        IEnumerable<DirectoryInfo> level = Directory.Exists(gameRoot) ? [new DirectoryInfo(gameRoot)] : [];
+        foreach (var part in relative.Split('/').Append(folder))
+            level = level.SelectMany(d => d.EnumerateDirectories().Where(c => c.Name.Equals(part, StringComparison.OrdinalIgnoreCase) && c.LinkTarget is null)).ToArray();
+        return level.SelectMany(d => d.EnumerateFiles().Where(f => f.LinkTarget is null).Select(f => f.Name)).ToArray();
     }
 
     private static CaveSectorData CaveSectorObjects(DatArchive module, string prototypeRoot, string prefix, long packed, Dictionary<string, InputFingerprint> prototypeInputs)
@@ -526,9 +533,10 @@ internal static partial class Program
         BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(52), 2); BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(56), 2);
         BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 88), 102);
         BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 132 + 44), 7); other[64 + 132 + 48] = 3; BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 132 + 56), 1893);
-        BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 132 + 88), 81); other[64 + 132 + 92] = 10;
+        BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 132 + 88), 81); other[64 + 132 + 92] = 3; // call-ex: literal focus is still unresolved
+        BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 44), 99); other[64 + 44 + 6] = 3; BinaryPrimitives.WriteInt32LittleEndian(other.AsSpan(64 + 44 + 20), 2884); // change-script target in operand 2
         var census = CaveScriptCensus(other);
-        Check(census.Teleports == 1 && census.LiteralCalls.SequenceEqual([1893]) && census.ComputedCalls == 1 && census.Lines == 2, "script census");
+        Check(census.Teleports == 1 && census.Edges.SequenceEqual([new CaveScriptEdge(99, 2884), new CaveScriptEdge(7, 1893)]) && census.Unresolved == 1 && census.Lines == 2, "script census");
         // Wall art: class1, number 11, piece 0, rotation 5 (edge 5), variation 0.
         Check(DecodeWallArt(0x10b02800) == new CaveWallArt(1, 11, 0, 5, 5, 0) && DecodeWallArt(0x10b01a11).EdgeRotation == 3 && DecodeWallArt(0x10b01a11).Rotation == 3 &&
             DecodeWallArt(0x1000_0000 | (2u << 11)).EdgeRotation == 3 && DecodeWallArt(0x1000_0000 | (13u << 14)).Piece == 13, "wall art fields");
