@@ -39,9 +39,10 @@ the same state at any frame rate). The clock it builds on is the
   call of the source's per-frame time function. **Due** means the list's clock
   has reached the deadline.
 - **CE anomaly** is a branch that looks like a reconstruction slip or an
-  unintended edge, numbered TE1..TE9 in [section 7](#7-ce-anomalies-recorded-not-adopted).
-  Under owner decision [D2](npc-combat-ai-plan.md#owner-decisions-2026-10-16)
-  the slice that implements the branch decides it; nothing is adopted silently.
+  unintended edge, numbered TE1..TE9 in [section
+  7](#7-ce-anomalies-recorded-not-adopted). Under owner decision
+  [D2](npc-combat-ai-plan.md#owner-decisions-2026-10-16) the slice that
+  implements the branch decides it; nothing is adopted silently.
 
 No original file, probe or game data was read for this work item (cloud
 session, no installed game).
@@ -77,14 +78,16 @@ session, no installed game).
 - **Time jumps do not replay periods.** Sleep, world-map travel, a timed
   teleport, the end of a turn-based round (+1 s) and a script teleport with a
   time argument add a duration to game and animation time at once
-  ([jump][te-inc]). Sleep, travel and the round end jump inside a real-time
-  handler, so the game events that became due fire in the same ping (the game
-  list is processed after the real list) and the rest in the following pings,
-  in deadline order, each seeing the final time. Periodic kinds do not catch
-  up period by period: fatigue, resting and recharge scale the effect by the
-  time elapsed since scheduling ([fatigue][cr-fatigue], [resting][cr-rest],
-  [recharge][mt-recharge]); poison, decay and the focus wipe apply one step,
-  late; all of them reschedule from *now*.
+  ([jump][te-inc]). Sleep and travel (and the round end when the turn-based
+  step ends it) jump inside a real-time handler, so the game events that
+  became due fire in the same ping, because the game list is processed after
+  the real list; a jump made between pings (an end-turn key press) lets them
+  fire at the next ping. Events beyond the 500-event guard wait for later
+  pings. All fire in deadline order, each seeing the final time. Periodic
+  kinds do not catch up period by period: fatigue, resting and recharge scale
+  the effect by the time elapsed since scheduling ([fatigue][cr-fatigue],
+  [resting][cr-rest], [recharge][mt-recharge]); poison, decay and the focus
+  wipe apply one step, late; all of them reschedule from *now*.
 - **Save, map change, restart.** The global save writes the three clock values
   and, per list, the events of saveable kinds with their parameters by type;
   object parameters are written as object IDs ([save][te-save],
@@ -92,21 +95,22 @@ session, no installed game).
   travel with the PC move to the destination map's `TimeEvent.dat`, events
   that reference anything left behind are parked in the old map's file, and
   events without object parameters stay global; this parking ignores the save
-  flag, so a travelling follower's AI tick is carried too (P3); seven kinds (animation,
-  magic/tech, AI, combat, turn-based combat, world map, teleported) are
-  cleared on map close ([teleport][te-teleported], [map close][te-mapclose],
-  [park][te-park], [map open][te-mapopen]). A parked event fires late, at the
-  first ping after the PC returns. AI ticks are never saved: every NPC gets a
-  new immediate tick when its sector's objects are folded in
-  ([AI tick][ai-schedule], [fold][fold-list]).
-- **Consumers.** The AI tick (250..5000 ms by distance, +0..5 s jitter on
-  the tick after the first), deferred script calls (call-in multiplies its
-  seconds by 8, read as real seconds by inference; call-at a time of day), magic maintenance and recharge, poison (15 s damage, 120 s
-  recovery), fatigue recovery every 80 s, resting heal every game hour for
-  free NPCs, body decay, item decay, combat-focus wipe of the dead, lock and
-  jam resets, store restock, scenery respawn, traps, newspapers, random
-  encounters, the companion wait timeout and the turn-based subturn step all
-  live on this one mechanism ([section 3](#3-event-kinds-and-consumers-s)).
+  flag, so a travelling follower's AI tick is carried too (P3); seven kinds
+  (animation, magic/tech, AI, combat, turn-based combat, world map,
+  teleported) are cleared on map close ([teleport][te-teleported], [map
+  close][te-mapclose], [park][te-park], [map open][te-mapopen]). A parked
+  event fires late, at the first ping after the PC returns. AI ticks are never
+  saved: every NPC gets a new immediate tick when its sector's objects are
+  folded in ([AI tick][ai-schedule], [fold][fold-list]).
+- **Consumers.** The AI tick (250..5000 ms by distance, +0..5 s jitter on the
+  tick after the first), deferred script calls (call-in multiplies its seconds
+  by 8, read as real seconds by inference; call-at a time of day), magic
+  maintenance and recharge, poison (15 s damage, 120 s recovery), fatigue
+  recovery every 80 s, resting heal every game hour for free NPCs, body decay,
+  item decay, combat-focus wipe of the dead, lock and jam resets, store
+  restock, scenery respawn, traps, newspapers, random encounters, the
+  companion wait timeout and the turn-based subturn step all live on this one
+  mechanism ([section 3](#3-event-kinds-and-consumers-s)).
 - **Steamwoven today (C).** The session owns the normalized game clock with
   pause reasons (`Arcanum.Simulation/Clock`, `GameSessionOwner.AdvanceGameTime`),
   the viewer's ambient host admits host time 5..250 ms × 8
@@ -147,7 +151,7 @@ and in `GameTimeFlow`; this section adds only what the queue needs.
 | Q3 | Insert walks the sorted list and stops at the first event whose deadline is **not earlier**, so a new event goes in front of every event with the same deadline (ties fire newest first). | [add 1085–1091][te-add] |
 | Q4 | While a ping is running, a non-immediate event goes to a side list of its clock; after the ping each side-list event is dropped if any of its object parameters is an invalid handle (no recovery is tried; the null handle counts as valid, [handle check][obj-valid]), otherwise it is inserted into its list. | [add 1079–1083][te-add], [merge][te-merge] |
 | Q5 | An "immediate" event (AI first tick, an animation goal in turn-based mode when it is not the actor's turn (otherwise the goal waits 5 ms), teleported object) is inserted straight into its list even during a ping, with the 1 ms deadline of Q2, so it is not due in the ping that created it either. | [immediate][te-add], [ai immediate][ai-schedule], [anim][anim-immediate], [map][map-teleported] |
-| Q6 | A ping pops the head of each list while the list's clock is at or past its deadline, in the list order real, game, animation. Before the handler runs, every object parameter is revalidated: an invalid handle is recovered from the stored object ID; a failed recovery, a destroyed object or a map that is clearing its objects drops the event without running it; only a failed recovery prints a debug line. A null object ID (an object already lost at load or re-insert, TE9) only nulls the handle, and the handler runs. | [ping 843–897][te-ping], [recover][te-recover] |
+| Q6 | A ping pops the head of each list while the list's clock is at or past its deadline, in the list order real, game, animation. Before the handler runs, every object parameter is revalidated: an invalid handle is recovered from the stored object ID; a failed recovery, a destroyed object or a map that is clearing its objects drops the event without running it; only a failed recovery prints a debug line. A null object ID (for example an object already lost at load or re-insert, TE9; a parameter that was null when scheduled takes the same branch) only nulls the handle, and the handler runs. | [ping 843–897][te-ping], [recover][te-recover] |
 | Q7 | The handler's boolean result is ignored. An optional per-kind exit hook would run after the handler; CE notes that no kind has one. | [ping 874–884][te-ping], [type table][te-table] |
 | Q8 | A loop guard counts processed events across the lists of one ping; above 500 it logs the last kind, resets the count and leaves the current list. The next list starts counting from 0. | [ping 886–895][te-ping] |
 | Q9 | Cancellation and queries go by kind plus a caller predicate over the parameters: remove all matches, remove the first match, test for any match, test for any event of the kind. Each of them walks the side list too. "Remove first" stops after one match in the main list **and** after one in the side list. | [clear typed][te-cleartyped], [any][te-any] |
@@ -157,10 +161,11 @@ and in `GameTimeFlow`; this section adds only what the queue needs.
 ## 3. Event kinds and consumers (S)
 
 Domain: **G** game, **R** real, **A** animation. Saved: in the global save
-(the map-change parking of P3/P4 writes any kind, saved or not). Map close: cleared when a map closes. Delays are game
-milliseconds unless the domain is R. The handler column names the owning
-module; the Steamwoven column names the slice that would own the kind
-(P, [section 8](#8-proposed-implementation-slices-world)).
+(the map-change parking of P3/P4 writes any kind still queued, saved or not).
+Map close: cleared when a map closes. Delays are game milliseconds unless the
+domain is R. The handler column names the owning module; the Steamwoven column
+names the slice that would own the kind (P, [section
+8](#8-proposed-implementation-slices-world)).
 
 | Kind | Dom. | Saved | Map close | Scheduled by, delay | Steamwoven owner |
 | --- | --- | --- | --- | --- | --- |
@@ -197,7 +202,7 @@ difference to the current game time when they fire
 ([seconds since reference][te-seconds]); late firing (after a jump, a load or
 a return to a parked map) therefore applies the whole elapsed span once.
 Poison, item decay, body decay and the combat-focus wipe store the same
-parameter (or none) but never read it: a late firing applies one step, late.
+parameter but never read it: a late firing applies one step, late.
 Neither group replays each missed period.
 
 ## 4. Persistence and map change (S)
@@ -252,7 +257,7 @@ body decay fire at once and a resting NPC heal for the whole absence.
 | TE6 | A side-list event with a stale handle is dropped at merge without the object-ID recovery that a firing event gets (Q4 against Q6). | Default: one validation rule at fire time, with a typed "entity missing" outcome. |
 | TE7 | Handler results are ignored and dropped events leave at most a debug line (Q6, Q7); nothing tells the caller or a trace that a timer did not run. | Default: typed outcomes in the pass result and the trace. |
 | TE8 | The companion wait timer is scheduled only for an extraordinary-charisma leader and never gets its NPC parameter ([wait][ai-wait]). | Already open as [ARC-RES-024 O3](companion-follow-evidence.md#open-questions); listed here for completeness. |
-| TE9 | An object lost before the event fires — not found when the event was loaded (P2) or force-recovered at map open (P5) — turns into a null parameter, and the handler runs with a null object instead of the event being dropped like one whose object is destroyed (Q6). Handlers guard against null, so the visible effect is usually a no-op ([handle reader][obj-load], [recover][te-recover]). | Default: one rule, "entity missing" is a typed drop at fire time, whatever the path. |
+| TE9 | An object lost before the event fires — not found when the event was loaded (P2), or whose handle fails the force recovery at map open (P5) — turns into a null parameter, and the handler runs with a null object instead of the event being dropped like one whose object is destroyed (Q6). Most life-state handlers return early on a null object, but the deferred script call still runs `SAP_USE` with a null triggerer or attachee ([script call][scr-process], [handle reader][obj-load], [recover][te-recover]). | Default: one rule, "entity missing" is a typed drop at fire time, whatever the path. |
 
 ## 8. Proposed implementation slices (`WORLD`)
 
@@ -268,10 +273,10 @@ explicit limits, typed results, Godot-free assemblies):
   source (Q2), so "immediate" stays "next pass"; the delay is a checked
   signed64 in the clock's millisecond domain.
 - **Kind registry.** Closed and versioned: per kind the domain, whether it is
-  persisted, the uniqueness policy (replace, keep existing, merge, many) and its key,
-  and the scope rule (global, the map of its referenced entities, active map
-  only and rebuilt). An unknown kind, a missing handler or a payload that
-  fails validation is refused at scheduling, never dropped later.
+  persisted, the uniqueness policy (replace, keep existing, merge, many) and
+  its key, and the scope rule (global, the map of its referenced entities,
+  active map only and rebuilt). An unknown kind, a missing handler or a
+  payload that fails validation is refused at scheduling, never dropped later.
 - **Pass.** `ProcessDue(expected version, budget)` reads the clock once,
   takes due events of the active scope in order, but never one scheduled in
   the same pass (Q4/Q5), validates its entity references, runs the kind's
@@ -287,8 +292,8 @@ explicit limits, typed results, Godot-free assemblies):
   interleaves them. Handlers of periodic kinds compute from elapsed time and
   reschedule from now; nothing replays per period.
 - **Pause.** Paused or turn-based game time does not advance by ordinary
-  admission, but a pass still fires events that are already due (the
-  [clock policy](../world/game-clock-policy.md#separate-time-domains-and-source-admission)
+  admission, but a pass still fires events that are already due (the [clock
+  policy](../world/game-clock-policy.md#separate-time-domains-and-source-admission)
   already records that the source does not suppress due processing).
 
 | Slice | Needs | Result |
@@ -364,7 +369,7 @@ code or structure was copied; names in this note are descriptive.
 [gamelib-modules]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L148-L160
 [gamelib-ping]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L493-L503
 [menu-loop]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c#L1741-L1747
-[obj-load]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4987-L5035
+[obj-load]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L4986-L5047
 [gameinit-start]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gameinit.c#L85-L118
 [obj-valid]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_pool.c#L735-L743
 [quest-ts]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L436
