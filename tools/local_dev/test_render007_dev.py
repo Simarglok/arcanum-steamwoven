@@ -102,6 +102,11 @@ class Render007DevTests(unittest.TestCase):
         writer = runpy.run_path(str(tools / "terrain_write_manifest.py"), run_name="terrain_write_manifest")
         script = (tools / "validate-macos.sh").read_text()
         self.assertIn("ARC-RENDER-007|ARC-INPUT-001|ARC-WORLD-007|ARC-WORLD-009|ARC-RENDER-008) area_task=1; regression_task=ARC-WORLD-003", script)
+        # ARC-RENDER-008 builds sit on top of the cave build: the cave role and transition smoke apply too.
+        from tools.local_dev import area_validation
+        self.assertIn("ARC-RENDER-008", area_validation.CAVE_TASKS)
+        self.assertEqual(launch.TASK_ROLES["ARC-WORLD-009"], launch.TASK_ROLES["ARC-RENDER-008"])
+        self.assertEqual("crash-site-area", launch.TASK_MODES["ARC-RENDER-008"])
         for task in ("ARC-INPUT-001", "ARC-RENDER-008"):
             self.assertIn(task, manifests.SUPPORTED_TOOLS["terrain"])
             self.assertIn(task, retention.AREA_TASKS)

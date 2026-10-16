@@ -15,6 +15,7 @@ TASKS["ARC-RENDER-007"] = "world-builds"
 TASKS["ARC-INPUT-001"] = "world-builds"
 TASKS["ARC-WORLD-007"] = "world-builds"
 TASKS["ARC-WORLD-009"] = "world-builds"
+TASKS["ARC-RENDER-008"] = "world-builds"
 AREA_TASKS = ("ARC-RENDER-007", "ARC-INPUT-001", "ARC-WORLD-007", "ARC-WORLD-009", "ARC-RENDER-008")
 GATES = {
     "locked-build": "locked-build.log", "source-headless": "source-headless.log",

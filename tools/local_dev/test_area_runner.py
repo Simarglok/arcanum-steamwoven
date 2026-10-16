@@ -127,7 +127,8 @@ class AreaRunnerTests(unittest.TestCase):
                 self.assertNotIn('native.log', encoded)
 
     def test_cave_task_passes_its_task_to_the_launcher_and_requires_the_transition_marker(self):
-        marker = 'ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS PUBLIC-SYNTHETIC\n'
+        marker = ('ARC-RENDER-007 native-smoke source-coverage and sampled-pixels PASS PUBLIC-SYNTHETIC\n'
+                  'ARC-RENDER-008 original overlay PASS {}\n')
         missing = self.exercise(task='ARC-WORLD-009', output=marker)
         self.assertEqual((1, 'native-observation', 0), (missing['exit'], missing['receipt']['failureStage'], missing['comparator_calls']))
         self.assertIn('cave transition outcome', missing['failure'])
