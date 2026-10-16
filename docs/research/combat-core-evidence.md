@@ -400,7 +400,7 @@ neither see nor hear the attacker; then the critical chance gains
   free on any other subturn; the 5 AP charge is unreachable
   ([get up][getup]).
 - **A4** The every-fifth-run-step fatigue charge in combat mode (every 20th
-  for fatigue-limiting, every 1–2nd for fatigue-draining critters) writes back
+  for fatigue-limiting, every step for fatigue-draining critters) writes back
   the unchanged fatigue damage, so running never costs fatigue; and because
   the write returns the stored value, a critter with no fatigue damage fails
   that step without paying AP. What the failed step does next was not traced
@@ -420,6 +420,13 @@ neither see nor hear the attacker; then the critical chance gains
   last entry, the new round already starts its first subturn and the function
   then starts it a second time, so an NPC acting first runs its heartbeat
   script and AI twice ([next subturn][tb-next], [round][tb-round]).
+
+- **A10** (found by ARC-COMBAT-001) `combat_calc_dmg` keeps the backstab
+  flags after a critical miss retargets the attack to the attacker, so the
+  self-hit gets the backstab damage bonus ([calc][calc], [crit miss][crit-miss]).
+
+The decisions on A1–A10 (owner decision D2) are recorded in the [NPC combat
+AI plan](npc-combat-ai-plan.md#anomaly-decisions).
 
 ## Open questions
 
@@ -466,7 +473,7 @@ take randomness from an injected, seedable source so tests can pin every roll.
    records (skill level and training, AC, resistances, flags, light, distance)
    returning hit location, hit/miss/dodge, critical and the per-type damage
    with the difficulty and resistance steps (C17–C21), with the critical-effect
-   table left as an injected FR-COMBAT-009 hook. Anomalies A1–A9 are settled
+   table left as an injected FR-COMBAT-009 hook. Anomalies A1–A10 are settled
    by an explicit owner decision, not copied: owner decision D2 of 2026-10-16
    ([NPC combat AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16))
    fixes a confirmed slip in the default and logs it there.
