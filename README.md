@@ -39,9 +39,9 @@ See [the project launcher](docs/workflow/local-development.md#project-launcher).
 - [ART format boundary](docs/formats/art.md)
 - [Arcanum.Data API, limits and commands](docs/Arcanum.Data.md)
 - [Arcanum.Godot viewer](docs/Arcanum.Godot.md)
-- [Hermes delivery workflow](docs/workflow/hermes.md)
+- [Task workflow](docs/workflow/tasks.md) and [task naming](docs/workflow/task-naming.md)
 - [Contributor guidance](CONTRIBUTING.md)
 
-**The Hermes Kanban board `arcanum-steamwoven` is authoritative for board-managed tasks and acceptance contracts.** Explicit user instructions may authorize bounded direct Codex work. Obsidian stores research and discussions; it is not a task queue. Repository documents describe product and engineering policy, not runnable tickets.
+**Tasks and acceptance contracts come from the owner's explicit requests ([task workflow](docs/workflow/tasks.md)).** Obsidian stores research and discussions; it is not a task queue. Repository documents describe product and engineering policy, not runnable tickets.
 
 The local `toolkit/` archive is intentionally ignored. No task starts merely because a roadmap or research note exists.

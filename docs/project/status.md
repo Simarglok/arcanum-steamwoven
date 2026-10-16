@@ -104,4 +104,4 @@ The [roadmap](roadmap.md) describes dependency gates; the [vision](vision.md) de
 
 ## Maintaining this catalogue
 
-After a merged product change, update its affected FR domain/table and [combined matrix](../requirements/coverage.md), concrete bounded scope, implementation/test links and verification conditions. Keep research-only work and unmerged candidates separate. Re-snapshot main/board when planning; do not reuse this dated observation as live authority or infer delivery from Done/decomposition.
+After a merged product change, update its affected FR domain/table and [combined matrix](../requirements/coverage.md), concrete bounded scope, implementation/test links and verification conditions. Keep research-only work and unmerged candidates separate. Re-snapshot main and open PRs when planning; do not reuse this dated observation as live authority or infer delivery from Done/decomposition.
