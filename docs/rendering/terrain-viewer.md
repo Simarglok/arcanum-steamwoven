@@ -131,8 +131,8 @@ sticky limitations, wrapped/scrollable detail and content at 480x320, 640x360,
 800x500, and 1280x800; resizing affects HUD layout only, not world state.
 
 In `crash-site-area` mode, the original left click on an NPC whose effective SAP_DIALOG
-attachment names a script talks to it when the actor stands within 3 tiles (ARC-SCRIPT-005,
-project diagnostic reach; walking to a farther NPC waits for click-to-move). The modal
+attachment names a script talks to it (ARC-SCRIPT-005): within 3 tiles at once (project
+diagnostic reach), otherwise after the click-to-move route walks within reach. The modal
 conversation panel closes the actor gate; replies are clicked (controller menu navigates and
 confirms), keyboard keys stay reserved and are not redirected, and a diagnostic Leave button
 closes the dialog. The HUD says whether a dialog NPC is in reach. Rules, state profile and

@@ -121,10 +121,13 @@ frontiers). A port `Rejected` result records `Rejected` and fails; a thrown exce
 
 ## AREA viewer integration (PROJECT diagnostic)
 
-In `crash-site-area` mode the original **left click** on an NPC whose effective SAP_DIALOG
-attachment names a script talks to it when the actor's committed cell is within 3 tiles
-(Chebyshev; project rule, not source range: walking to a farther NPC waits for the pending
-click-to-move route, and the HUD says how far it is). Replies are chosen by **mouse**, as in
+In `crash-site-area` mode the original **left click** on an opaque pixel of an NPC whose
+effective SAP_DIALOG attachment names a script talks to it. The click takes the guarded
+ground-click path of the [click-to-move route](../world/click-route-runtime.md) (focus, modal, gate,
+lifecycle, pending map transfer). Within 3 tiles (Chebyshev; project rule, not source range)
+the dialog opens at once; farther away the route walks to the nearest standable cell within
+reach and the talk starts on arrival, unless a stick, another click, a reset/reload or a modal
+cancels it (like the cave walk-to-use). The cave map has no dialog NPC. Replies are chosen by **mouse**, as in
 the source (`tc.c` reads only mouse messages); the controller menu navigates, confirms and
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),

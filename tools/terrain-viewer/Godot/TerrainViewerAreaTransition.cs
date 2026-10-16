@@ -109,11 +109,18 @@ public partial class TerrainViewerApp
     private CellCoord? UseApproach(AreaGridSession session, AreaObjectKey trigger)
     {
         var target = _areaTransitions!.Current.Snapshot.Objects.Single(o => o.Key == trigger);
+        return ApproachCell(session, target.WorldX!.Value, target.WorldY!.Value, AreaTransitionCoordinator.UseRange);
+    }
+
+    /// <summary>A standable cell within <paramref name="range"/> of a world cell, nearest the target then the actor
+    /// (shared by walk-to-use and ARC-SCRIPT-005 walk-to-talk).</summary>
+    private static CellCoord? ApproachCell(AreaGridSession session, long worldX, long worldY, int range)
+    {
         var steps = session.Snapshot; var chart = session.Chart; var actor = session.State.CommittedCell;
-        var center = chart.ToChart(new(target.WorldX!.Value, target.WorldY!.Value));
+        var center = chart.ToChart(new(worldX, worldY));
         var candidates = new List<CellCoord>();
-        for (var dy = -AreaTransitionCoordinator.UseRange; dy <= AreaTransitionCoordinator.UseRange; dy++)
-        for (var dx = -AreaTransitionCoordinator.UseRange; dx <= AreaTransitionCoordinator.UseRange; dx++)
+        for (var dy = -range; dy <= range; dy++)
+        for (var dx = -range; dx <= range; dx++)
             if (dx != 0 || dy != 0) candidates.Add(new(center.X + dx, center.Y + dy));
         foreach (var cell in candidates.OrderBy(c => Math.Max(Math.Abs(c.X - center.X), Math.Abs(c.Y - center.Y)))
             .ThenBy(c => Math.Max(Math.Abs(c.X - actor.X), Math.Abs(c.Y - actor.Y))))
@@ -152,7 +159,7 @@ public partial class TerrainViewerApp
         if (_areaTransitions is null) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
-            CancelAreaUseApproach("reset/reload");
+            CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload");
             if (_areaTransitions.Cancel() is { } dropped)
             {
                 _areaUseStatus = $"transfer to map {dropped.ToMap} cancelled by reset/reload";

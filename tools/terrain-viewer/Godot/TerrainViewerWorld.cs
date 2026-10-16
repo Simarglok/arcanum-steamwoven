@@ -425,12 +425,13 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
         if (ProcessAreaTransition()) return;
+        ProcessTalkAfterRoute();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
-        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); }
+        if (direction is not null) { StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
@@ -555,7 +556,10 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
+        if (TryAreaTalk(screen)) return;
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
+        CancelTalkApproach("another click replaced it");
         if (TryAreaUse(screen)) return;
         var chart = _canvas.GetGlobalTransformWithCanvas().AffineInverse() * screen;
         if (AreaCellPicking.Pick(new(chart.X, chart.Y)) is not { } cell) return;
@@ -622,10 +626,6 @@ public partial class TerrainViewerApp
             GetViewport().SetInputAsHandled();
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:handled semanticKey={semanticKey} handled={GetViewport().IsInputHandled()}");
         if (!_worldFocused || WorldModal || WorldUiFocus || _readyActorPlan is null) return;
-        // Original LMB on a dialog NPC talks (ARC-SCRIPT-005); walking to a far NPC is pending.
-        if (input is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click && _conversationHost is not null
-            && _hud?.Rect.HasPoint(click.Position) != true && GetViewport().GuiGetFocusOwner() is null)
-            TalkAt(click.Position);
         // The world mouse route is free for original controls: LMB neither drags
         // the camera nor confirms (in crash-site-area an unhandled LMB press sets the
         // click-to-move goal, see _UnhandledInput), and wheel/+/- do not zoom. Exact zoom, Fit, Reset scene and Reload live in the palette.
