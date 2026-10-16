@@ -40,6 +40,7 @@ AC2. ...
 - No mechanical copying from CE or CE-derived projects. Record provenance and applicable licenses before reuse; MIT labels alone do not prove independent lineage.
 - Do not commit original/extracted game content, third-party toolkit archives, secrets or personal paths. Use synthetic public fixtures and opt-in local real-data checks. Keep the original installation unchanged.
 - Validate offsets, sizes, decompression limits and untrusted archive paths. Do not infer gameplay/resource-precedence rules from a parser's convenience behavior.
+- Launcher sync: a change that adds or changes a viewer mode's arguments or original inputs updates `tools/local_dev/launch.py` (`GAME_ROLES`, `MODE_ROLES`, `ROLE_FLAGS`), the root `./arcanum` launcher when it adds a mode, and [the launcher docs](docs/workflow/local-development.md#project-launcher) in the same PR; `tools/local_dev/test_launcher_sync.py` must pass.
 - Run checks appropriate to changed behavior and all checks required by the accepted task. The repository has .NET tests and separate Godot/lab checks; see `docs/workflow/toolchain.md`. Documentation or source inspection alone is not runtime verification.
 
 ## GitHub identity

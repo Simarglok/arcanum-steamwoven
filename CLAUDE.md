@@ -52,6 +52,10 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
   diagnostic), `tools/terrain-inspect`, `tools/research/*` probes,
   `tools/arcanum-local` + `tools/local_dev` (local export/lease/retention
   authority — heavy, fail-closed). Labs: `experiments/{gamepad,display-ui,audio}-lab`.
+- Launcher: `./arcanum setup|area|world|status` wraps `tools/arcanum-local`. When a
+  viewer mode gains or changes an argument or input, update `tools/local_dev/launch.py`
+  (`GAME_ROLES`/`MODE_ROLES`/`ROLE_FLAGS`), `./arcanum` and the launcher docs in the
+  same PR; `test_launcher_sync.py` catches drift.
 - Hard rules: no original/extracted game content, toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
   are ignored); synthetic fixtures only; no mechanical copying/translation from CE;

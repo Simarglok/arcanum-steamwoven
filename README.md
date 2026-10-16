@@ -15,6 +15,17 @@ Research-first, independent reimplementation of **Arcanum: Of Steamworks and Mag
 
 Players provide their own legally acquired copy. Original game assets, third-party binaries and extracted content are not distributed here. MIT applies to independently authored project code and documentation, not to Arcanum or archived third-party material. This unofficial fan project is not affiliated with the game's rights holders.
 
+## Run the viewer
+
+With the game installed at `/Applications/Arcanum` and an exported build present:
+
+```sh
+./arcanum setup
+./arcanum area     # walk the Crash Site core
+```
+
+See [the project launcher](docs/workflow/local-development.md#project-launcher).
+
 ## Start here
 
 - [Documentation index](docs/README.md)
