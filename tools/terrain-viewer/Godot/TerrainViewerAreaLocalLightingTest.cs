@@ -15,7 +15,7 @@ public static partial class TerrainViewerSelfTest
     private static async Task AssertAreaLocalLightingAsync(Node host)
     {
         using var cache = new TerrainTextureCache();
-        var synthetic = SyntheticActorFixture.Create(human: true);
+        var synthetic = SyntheticActorFixture.Create(human: true, run: true);
         cache.UploadActor(synthetic.Result.ActorTextures);
         var viewport = new SubViewport { Size = new(480, 400), TransparentBg = true, RenderTargetUpdateMode = SubViewport.UpdateMode.Always };
         var canvas = new TerrainCanvas(); viewport.AddChild(canvas); host.AddChild(viewport);

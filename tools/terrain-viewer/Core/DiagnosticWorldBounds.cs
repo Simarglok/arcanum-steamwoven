@@ -12,7 +12,7 @@ public static class DiagnosticWorldBounds
         try
         {
             foreach (var corner in new[] { new DiagnosticSectorPosition(0, 0), new(0, 63), new(63, 0), new(63, 63) })
-            foreach (var action in new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk })
+            foreach (var action in actor.Profile.Actions)
             foreach (var facing in Enumerable.Range(0, 8))
             foreach (var frame in Enumerable.Range(0, actor.Profile.Resource(action).FramesPerGroup))
             {

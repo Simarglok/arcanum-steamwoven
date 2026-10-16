@@ -16,7 +16,7 @@ public sealed class HumanDiagnosticTests
         Assert.AreSame(ActorDiagnosticProfile.MonsterRegression, ActorDiagnosticProfile.ForMode(TerrainViewerMode.ActorDiagnostic));
         Assert.IsNull(human.ModuleOrdinal);
         Assert.AreEqual(new ActorDiagnosticResource(ActorDiagnosticAction.Idle, 0x20000000, 2667, 0, 8, 1, 6, 6), human.Idle);
-        Assert.AreEqual(new ActorDiagnosticResource(ActorDiagnosticAction.Walk, 0x20000040, 2668, 0, 8, 10, 17, 17), human.Walk);
+        Assert.AreEqual(new ActorDiagnosticResource(ActorDiagnosticAction.Walk, 0x20000040, 2668, 0, 8, 10, 17, 17) { Stride = new(10, 17, 42, 22, 60) }, human.Walk);
         Assert.AreEqual(ActorDiagnosticClock.ArtMetadata, human.Clock);
         Assert.AreEqual(55, human.DistinctKeys); Assert.AreEqual(457676L, human.OriginalRgbaBytes);
         foreach (var action in new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk })

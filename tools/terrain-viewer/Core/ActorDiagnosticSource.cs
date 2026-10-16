@@ -48,10 +48,10 @@ public static class ActorDiagnosticSource
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);
         var catalog = new List<ActorDiagnosticFrame>(profile.DistinctKeys);
         var textures = new Dictionary<ActorDiagnosticTextureKey, DecodedActorTexture>();
-        var checkedRgbaBytes = DecodeAction(resource, profile.Idle, profile, authenticateOriginalMetadata,
-            catalog, textures, alreadyRetainedCount, alreadyCheckedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
-        checkedRgbaBytes = DecodeAction(resource, profile.Walk, profile, authenticateOriginalMetadata,
-            catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
+        var checkedRgbaBytes = alreadyCheckedRgbaBytes;
+        foreach (var action in profile.Actions)
+            checkedRgbaBytes = DecodeAction(resource, profile.Resource(action), profile, authenticateOriginalMetadata,
+                catalog, textures, alreadyRetainedCount, checkedRgbaBytes, cancellationToken, budget, retainedFrameCheckpoint, mode);
         if (textures.Count != profile.DistinctKeys || catalog.Count != profile.DistinctKeys
             || (authenticateOriginalMetadata && profile.OriginalRgbaBytes is long expectedBytes && checkedRgbaBytes - alreadyCheckedRgbaBytes != expectedBytes))
             throw Failure(TerrainViewerErrorCode.ActorMetadata, TerrainViewerFailureStage.ActorMetadata);

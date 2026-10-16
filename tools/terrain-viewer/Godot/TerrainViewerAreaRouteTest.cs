@@ -172,6 +172,50 @@ public partial class TerrainViewerApp
         Run(40); Settled(new(12, 6), "native click");
         Case("native-dispatch");
 
+        // ARC-WORLD-020: gait. Without an explicit duration the session takes the human gait timing; a plain ground
+        // click walks, Ctrl runs once, Num Lock and the Always Run option set the default, Ctrl then walks once.
+        Prepare();
+        _worldActor.Configure(steps, SimulationTime.At(time)); _worldGridInput = new(); _worldTestTime = SimulationTime.At(time);
+        Run(3); PublishWorldSelection(); events.Clear();
+        var alwaysRun = _alwaysRunOption; var numLock = _numLockRun;
+        _alwaysRunOption = false; _numLockRun = false;
+        StepAssessmentTiming[] Permits() => events.Where(e => e.Kind == MovementEventKind.StepStarted).Select(e => e.Assessment!).ToArray();
+        bool Gait(StepAssessmentTiming permit, MovementGait gait) => permit.Provenance.Contains(GaitTiming.Provenance(gait))
+            && permit.Duration == GaitTiming.HumanFixed.For(gait, permit.Key.Direction);
+        // macOS reports Ctrl+left as a right press with Ctrl held; both are Ctrl+LMB.
+        void CtrlClick(CellCoord cell, bool macRight = false)
+        {
+            _worldTestTime = SimulationTime.At(time);
+            _UnhandledInput(new InputEventMouseButton { ButtonIndex = macRight ? MouseButton.Right : MouseButton.Left, Pressed = true, CtrlPressed = true, Position = Screen(cell) });
+        }
+        try
+        {
+            Click(new(10, 1)); Run(8); Settled(new(10, 1), "walk click");
+            Require(Permits().Length == 4 && Permits().All(p => Gait(p, MovementGait.Walk)), "a plain ground click walks at the ART walk time");
+            Require(_worldActor.State.Action == ActorDiagnosticAction.Idle, "settled idle");
+            events.Clear(); CtrlClick(new(30, 1)); Run(2);
+            Require(_worldActor.State.Action == ActorDiagnosticAction.Run, $"a Ctrl click draws the run ART: {_worldActor.State.Action} gait={_worldGait} phase={State().Phase} cell={State().CommittedCell} seg={string.Join(",", State().Segment?.Assessment.Provenance ?? [])} route={DescribeWorldRoute(Route())} permits={Permits().Length}");
+            Run(8); Settled(new(30, 1), "Ctrl click");
+            Require(Permits().Length == 20 && Permits().All(p => Gait(p, MovementGait.Run)), "a Ctrl click runs at the ART run time");
+            InputWorld(new InputEventKey { Keycode = Key.Numlock, PhysicalKeycode = Key.Numlock, Pressed = true });
+            InputWorld(new InputEventKey { Keycode = Key.Numlock, PhysicalKeycode = Key.Numlock, Pressed = false });
+            Require(_numLockRun, "Num Lock turns the always-run lock on");
+            events.Clear(); Click(new(26, 1)); Run(6); Settled(new(26, 1), "Num Lock click");
+            Require(Permits().Length > 0 && Permits().All(p => Gait(p, MovementGait.Run)), "with Num Lock on a plain click runs");
+            events.Clear(); CtrlClick(new(22, 1)); Run(6); Settled(new(22, 1), "Num Lock Ctrl click");
+            Require(Permits().Length > 0 && Permits().All(p => Gait(p, MovementGait.Run)), "with the option off Ctrl still runs");
+            _numLockRun = false; PaletteAlwaysRunToggle();
+            Require(_alwaysRunOption && GetSelfTestSnapshot().Hud.Contains("Always Run on", StringComparison.Ordinal), "palette option on, shown in the HUD");
+            events.Clear(); CtrlClick(new(19, 1), macRight: true); Run(8); Settled(new(19, 1), "option Ctrl click");
+            Require(Permits().Length > 0 && Permits().All(p => Gait(p, MovementGait.Walk)), "with Always Run on, Ctrl walks once");
+            events.Clear(); Click(new(23, 1)); Run(6); Settled(new(23, 1), "option click");
+            Require(Permits().Length > 0 && Permits().All(p => Gait(p, MovementGait.Run)), "with Always Run on a plain click runs");
+            PaletteAlwaysRunToggle(); SetObjectApproachGait();
+            Require(_worldGait == MovementGait.Run && !_alwaysRunOption, "an object approach runs with the option off");
+            Case("gait");
+        }
+        finally { _alwaysRunOption = alwaysRun; _numLockRun = numLock; _worldGait = MovementGait.Walk; _gaitOrigin = "no move yet"; }
+
         GD.Print("ARC-WORLD-007 AREA route synthetic PASS cases=" + string.Join(",", names));
         return new { Schema = "arcanum-area-route-synthetic-v1", Task = "ARC-WORLD-007", Outcome = "PASS", Cases = cases,
             Picking = "chart diamond centre (40(y-x)+40, 20(y+x)+20); the actor stands on the same centre (ARC-RENDER-011)",
