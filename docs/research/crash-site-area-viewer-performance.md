@@ -6,8 +6,11 @@ Measured diagnosis of the `crash-site-area` Terrain Viewer mode
 suspected causes. It changes no code and is not a fix, a performance contract,
 a budget or a regression gate. Numbers are single observations on one machine.
 
-**Update after the frame-batch change.** Cause L1 is addressed by the owner frame
-batch (see [L1 result](#l1-result-frame-batch)); the other causes are unchanged.
+**Updates.** Cause L1 is addressed by the owner frame batch (see
+[L1 result](#l1-result-frame-batch)); F1 and F5 by the bounded draw item pool,
+actor-framed first publication and cached upright order, and F4 partly by the
+cached N/A count (see [F1/F4/F5 result](#f1f4f5-result-pool-startup-hud-order)).
+The other causes are unchanged.
 
 ## Scope and method
 
@@ -181,6 +184,41 @@ pixel hash, about four times slower in Debug; the linear descriptor lookup costs
 The load now also includes the whole-core step stage (0.2 s) merged after the
 diagnosis.
 
+## F1/F4/F5 result: pool, startup, HUD, order
+
+- The first area publication now happens after the camera is placed on the actor,
+  not in the Fit view at minimum zoom: 191 visible items in 24 ms instead of 32,339
+  in 1,170 ms. Godot nodes after load: about 250 instead of 32,400.
+- `UpdateAreaVisible` hides only the items shown by the previous submission.
+  Every frame, still or moving, frees at most 1,024 hidden items until at most
+  max(256, 2 × shown) items remain. An explicit Fit still submits the whole
+  envelope (about 32,000 items, about 1.2 s when last measured); only startup no
+  longer does.
+- The status line no longer counts N/A over all 37,363 coverage rows every frame
+  (status build 1.9 ms → 1.0–1.3 ms). It is still formatted and assigned every
+  frame; updating it only on change remains open.
+- `AreaUprightOrder` sorts bodies once per plan and inserts the actor marker by
+  binary search; a test checks it is identical to `UprightOrder`.
+
+Same method, isolated preferences (zoom 2 default), two runs at `origin/main`
+`2758c4f` plus the change:
+
+| Phase | Before | After |
+| --- | ---: | ---: |
+| Idle, WORLD follow, zoom 2 | 3.9 ms | 2.2–3.4 ms |
+| Pan, zoom 2 | 35.2 ms | 9.0–10.1 ms |
+| Pan, zoom 1 | 46.4 ms | 21.7–27.1 ms |
+| Pan, zoom 0.5 | 88.3 ms | 65.5–70.7 ms |
+| Pan, zoom 0.25 | 80.1 ms | 66.8–67.0 ms |
+| Idle, zoom 0.25, where the pan stopped | 33.0 ms | 37.6–40.4 ms |
+
+Zooming out now creates draw items on demand, so the first frame after a large
+zoom-out (to 0.25) costs up to about 140 ms; zooming back in frees the surplus over
+the following frames (worst observed frame 72 ms instead of 139 ms). Idle zoom 0.25 is bound by
+draw calls (cause F3, ≈4.7 µs each) and did not improve; the pan ended on a busier
+view (≈8,070 draw calls after, 7,125 before). Per-sprite mapping rebuilds (F2) are now
+the largest panning cost.
+
 ## Ranked suspected causes and fix directions
 
 Directions are suggestions for separately scoped work; none is implemented or
@@ -197,7 +235,7 @@ contracts that the code currently enforces.
    example, authenticate once per owner generation and rely on those checks per
    frame. Estimated load without the per-frame passes: ≈25–30 s Debug,
    ≈7–10 s Release, assuming the untimed per-frame remainder stays small.
-2. **F1 + F2, most of the 26–81 ms `UpdateAreaVisible` per camera-moving frame.** Create items for visible
+2. **F1 + F2, most of the 26–81 ms `UpdateAreaVisible` per camera-moving frame. F1 done for startup and pool size (an explicit Fit still submits the whole envelope); F2 remains.** Create items for visible
    commands only (no Fit-sized pool, or shrink it) and touch only items whose
    state changed; make the nearest-sampling mapping independent of pan (for
    example derive it per zoom level, or compute indices in the shader from
@@ -208,7 +246,7 @@ contracts that the code currently enforces.
 4. **L2, ≈18 s of load in I3 plus ≈15 s of the remaining frame copy.** Run
    original-data loads from optimized assemblies (Release core libraries, or an
    optimized export), or remove per-byte interface loops in decode/pixel hashing.
-5. **F4 (≈2 ms every frame) and F5 (≈3 ms per camera change).** Update the HUD
+5. **F4 (≈2 ms every frame) and F5 (≈3 ms per camera change). F5 done; F4 partly (N/A count cached, the line is still rebuilt every frame).** Update the HUD
    only on change; cache the upright order and patch only the actor marker.
 6. **F6 and minor load items.** Keep a bounded LRU of GPU textures instead of
    visible-only; avoid decoding frames twice; cap the idle frame rate.

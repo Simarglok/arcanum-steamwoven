@@ -8,6 +8,7 @@ namespace Arcanum.TerrainViewer;
 
 public partial class TerrainViewerApp
 {
+    private int _readyAreaNotApplicable;
     private void PublishAreaReady(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         var area = result.Area ?? throw new InvalidOperationException("AREA_RESULT_REQUIRED");
@@ -24,6 +25,8 @@ public partial class TerrainViewerApp
         if (objectRows.Length != area.Snapshot.Objects.Count || objectRows.Select(row => row.Identity).Distinct().Count() != objectRows.Length)
             throw new InvalidOperationException("AREA_OBJECT_COVERAGE");
         _cache.UploadActor(result.ActorTextures);
+        // Counted once per publication; the status line is rebuilt every frame.
+        _readyAreaNotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed);
         _readyArea = area; _readySourceId = arguments.SourceId; _readyMode = arguments.Mode;
         _readyActorPlan = result.ActorPlan; _readyActor = result.ActorPlan.Current; _readyActorInput = arguments.ActorInput;
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
@@ -37,6 +40,9 @@ public partial class TerrainViewerApp
             PublishFailure(TerrainViewerMode.CrashSiteArea, new(TerrainViewerErrorCode.RenderFailure, Stage: TerrainViewerFailureStage.Upload));
             if (_nativeSmoke) GetTree().Quit(1);
         };
+        // Frame the actor before the first publication: SetAreaPlan Fits the whole
+        // envelope at minimum zoom, and publishing there would submit ~32k items.
+        _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         // As in WORLD: quarantine first, then enter Follow on the actor, so the
         // safety reset cannot clear the fresh camera's actor tracking.
         QuarantineWorld(); PublishWorldSelection();
@@ -44,7 +50,7 @@ public partial class TerrainViewerApp
         RefreshAreaStatus();
         GD.Print("ARC-RENDER-007 source-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             area.Generation, area.Snapshot.Reconciliation, DrawnTerrain = drawn.Length, DrawnBodies = area.Plan.DrawableBodies,
-            NotApplicable = area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed),
+            NotApplicable = _readyAreaNotApplicable,
             CpuFrames = area.Frames.Count, area.CpuRgbaBytes, area.InitialUsage, area.FinalUsage, area.ElapsedMilliseconds,
             area.AllocatedBytes, area.ManagedBytes, area.ProcessBytes, Parity = "NOT_VERIFIED" }));
     }
@@ -54,7 +60,7 @@ public partial class TerrainViewerApp
         var r = area.Snapshot.Reconciliation;
         var b = area.Plan.WorldBounds;
         var limited = b.Width * _camera.State.Zoom > WorldViewport.X - 64 || b.Height * _camera.State.Zoom > WorldViewport.Y - 64;
-        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {area.Plan.Coverage.Count(row => row.Disposition == Core.AreaDisposition.Suppressed)} | submitted visible {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | movement: whole core (9 sectors) at new-game T0, core edge refused | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{WorldStatus()}");
+        ShowStatus($"Crash Site area | SOURCE READY generation {area.Generation} | core sectors {r.CoreSectors} | terrain {r.CoreTerrain} | static {r.Statics} | core mobile {r.CoreMobiles} | bodies {area.Plan.DrawableBodies} | N/A {_readyAreaNotApplicable} | submitted visible {_canvas.AreaVisibleCount} / culled {_canvas.AreaCulledCount} | CPU frames {area.Frames.Count}/{area.CpuRgbaBytes} bytes | GPU {_cache.AreaCount}/{_cache.AreaRgbaBytes} estimated RGBA bytes | load {area.ElapsedMilliseconds}ms | zoom {FormatZoom(_camera.State.Zoom)} | context {r.ContextPresent} present/{r.ContextMissing} absent, not drawn | movement: whole core (9 sectors) at new-game T0, core edge refused | no cave transfer/gameplay | roofs/walls/portals/active composites absent, not general support | {(_worldFitView && limited ? "Fit limited by minimum zoom" : "area envelope")}{WorldStatus()}");
     }
     private async Task RunAreaSmokeAsync(TerrainLoadResult result)
     {

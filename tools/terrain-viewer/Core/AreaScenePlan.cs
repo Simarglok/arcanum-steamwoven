@@ -107,13 +107,30 @@ public sealed class AreaScenePlan
     public static IReadOnlyList<AreaDrawCommand> UprightOrder(IEnumerable<AreaDrawCommand> commands,
         ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
     {
-        var ranks = SameCellRanks(placement.InstanceOffsetX!.Value, placement.InstanceOffsetY!.Value);
-        // ActorIdentity is a reserved session sentinel, never a DATA009 identity.
-        var marker = new AreaDrawCommand(default, default!, actorIdentity, default, actor.Destination, actor.FlipX, false, 4,
-            checked(CameraOriginX + (int)placement.MapX!.Value), checked(CameraOriginY + (int)placement.MapY!.Value), ranks.First, ranks.Second, 255, false);
+        var marker = ActorMarker(placement, actor, actorIdentity);
         return Array.AsReadOnly(commands.Where(command => command.Phase == 4).Append(marker).OrderBy(command => command.MapY)
             .ThenBy(command => command.MapX).ThenBy(command => command.SecondRank).ThenBy(command => command.FirstRank)
             .ThenBy(command => command.Identity?.Kind).ThenBy(command => command.Identity?.SourceIndex).ThenBy(command => command.Identity?.Offset).ToArray());
+    }
+
+    internal static AreaDrawCommand ActorMarker(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
+    {
+        var ranks = SameCellRanks(placement.InstanceOffsetX!.Value, placement.InstanceOffsetY!.Value);
+        // ActorIdentity is a reserved session sentinel, never a DATA009 identity.
+        return new AreaDrawCommand(default, default!, actorIdentity, default, actor.Destination, actor.FlipX, false, 4,
+            checked(CameraOriginX + (int)placement.MapX!.Value), checked(CameraOriginY + (int)placement.MapY!.Value), ranks.First, ranks.Second, 255, false);
+    }
+
+    /// <summary>The seven <see cref="UprightOrder"/> keys, in order.</summary>
+    internal static int CompareUpright(AreaDrawCommand a, AreaDrawCommand b)
+    {
+        var c = a.MapY.CompareTo(b.MapY); if (c != 0) return c;
+        c = a.MapX.CompareTo(b.MapX); if (c != 0) return c;
+        c = a.SecondRank.CompareTo(b.SecondRank); if (c != 0) return c;
+        c = a.FirstRank.CompareTo(b.FirstRank); if (c != 0) return c;
+        c = Comparer<AreaSourceKind?>.Default.Compare(a.Identity?.Kind, b.Identity?.Kind); if (c != 0) return c;
+        c = Comparer<int?>.Default.Compare(a.Identity?.SourceIndex, b.Identity?.SourceIndex); if (c != 0) return c;
+        return Comparer<long?>.Default.Compare(a.Identity?.Offset, b.Identity?.Offset);
     }
 
     private sealed record BodyState(bool Suppressed, string Reason, bool Flat, bool UnderAll, int Scale, bool Shrunk, int Alpha, bool Additive, bool FlipX, bool FlipY);
@@ -133,5 +150,37 @@ public sealed class AreaScenePlan
         if ((flags & 0x40) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_TRANSLUCENCY");
         return new(suppressed, reason, (flags & 0x4) != 0, body.Type == 3 && (Field(36) & 0x200) != 0,
             (int)scale, (flags & 0x80) != 0, 255, (blit & 0x10) != 0, (blit & 1) != 0, (blit & 2) != 0);
+    }
+}
+
+/// <summary><see cref="AreaScenePlan.UprightOrder"/> for one fixed command list: the
+/// bodies are stably sorted once, and each call only inserts the actor marker after
+/// every equal-key body, exactly where the stable sort of bodies + appended marker
+/// places it. The result is identical to <c>UprightOrder</c>; it is not a new order.</summary>
+public sealed class AreaUprightOrder
+{
+    private readonly AreaDrawCommand[] _bodies;
+    public AreaUprightOrder(IEnumerable<AreaDrawCommand> commands)
+    {
+        ArgumentNullException.ThrowIfNull(commands);
+        _bodies = commands.Where(command => command.Phase == 4).OrderBy(command => command.MapY)
+            .ThenBy(command => command.MapX).ThenBy(command => command.SecondRank).ThenBy(command => command.FirstRank)
+            .ThenBy(command => command.Identity?.Kind).ThenBy(command => command.Identity?.SourceIndex).ThenBy(command => command.Identity?.Offset).ToArray();
+    }
+
+    public IReadOnlyList<AreaDrawCommand> With(ActorDiagnosticPlacementInput placement, ActorDiagnosticDrawCommand actor, AreaObjectKey actorIdentity)
+    {
+        var marker = AreaScenePlan.ActorMarker(placement, actor, actorIdentity);
+        // Upper bound: the first body that orders strictly after the marker.
+        int low = 0, high = _bodies.Length;
+        while (low < high)
+        {
+            var middle = low + (high - low) / 2;
+            if (AreaScenePlan.CompareUpright(_bodies[middle], marker) <= 0) low = middle + 1; else high = middle;
+        }
+        var ordered = new AreaDrawCommand[_bodies.Length + 1];
+        Array.Copy(_bodies, ordered, low); ordered[low] = marker;
+        Array.Copy(_bodies, low, ordered, low + 1, _bodies.Length - low);
+        return Array.AsReadOnly(ordered);
     }
 }
