@@ -12,9 +12,13 @@ public sealed class DlgReaderOptions
 
     internal void Validate()
     {
-        if (MaxInputBytes <= 0 || MaxRecordCount <= 0 || MaxFieldBytes <= 0 || !Enum.IsDefined(Mode))
+        if (MaxInputBytes <= 0 || MaxRecordCount <= 0 || MaxFieldBytes <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(DlgReaderOptions), "All reader limits must be positive.");
+        }
+        if (!Enum.IsDefined(Mode))
+        {
+            throw new ArgumentOutOfRangeException(nameof(DlgReaderOptions), "The DLG read mode is not defined.");
         }
     }
 }

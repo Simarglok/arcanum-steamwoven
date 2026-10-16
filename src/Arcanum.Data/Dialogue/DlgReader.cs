@@ -190,14 +190,15 @@ public static class DlgReader
                 var field = OriginalField(bytes, ref cursor, ref skipped, FieldKinds[fieldIndex], records.Count, options);
                 if (field is null) { complete = false; if (fieldIndex > 0) stop = DlgStopReason.IncompleteRecord; break; }
                 fields[fieldIndex] = field;
+                // The original checks these as soon as the field is read, before the next one.
+                if (FieldKinds[fieldIndex] == DlgFieldKind.Iq && field.Length > 0 && Atoi(field.Bytes) == 0) { complete = false; stop = DlgStopReason.ZeroIq; break; }
+                if (FieldKinds[fieldIndex] == DlgFieldKind.Response && field.Length > 0 && field.Bytes[0] == (byte)'#') { complete = false; stop = DlgStopReason.HashResponse; break; }
             }
             if (!complete) break;
 
             var iqField = fields[(int)DlgFieldKind.Iq];
             int? iq = iqField.Length == 0 ? null : Atoi(iqField.Bytes);
-            if (iq == 0) { stop = DlgStopReason.ZeroIq; break; }
             var responseField = fields[(int)DlgFieldKind.Response];
-            if (responseField.Length > 0 && responseField.Bytes[0] == (byte)'#') { stop = DlgStopReason.HashResponse; break; }
             if (records.Count == options.MaxRecordCount)
                 throw new DlgLimitExceededException("DLG record count exceeds MaxRecordCount.", cursor, records.Count);
 
@@ -225,6 +226,10 @@ public static class DlgReader
             var current = bytes[cursor++];
             if (current == (byte)'{') break;
             if (current == 0) throw new DlgFormatException("DLG input contains a NUL byte.", cursor - 1, recordIndex);
+            // The original reads in text mode, so it never sees a CR; a line break or a stray
+            // closing brace leaves its comment-detection state unchanged.
+            if (current is (byte)'\r' or (byte)'\n') continue;
+            if (current == (byte)'}') { skipped++; continue; }
             if (current == (byte)'/' && previous == '/')
             {
                 skipped--; // the first slash was counted before the pair was recognised
@@ -237,7 +242,7 @@ public static class DlgReader
                 cursor++; previous = 0;
                 continue;
             }
-            if (current is not ((byte)' ' or (byte)'\t' or (byte)'\r' or (byte)'\n')) skipped++;
+            if (current is not ((byte)' ' or (byte)'\t' or (byte)'\v' or (byte)'\f')) skipped++;
             previous = current;
         }
         var payloadOffset = cursor;

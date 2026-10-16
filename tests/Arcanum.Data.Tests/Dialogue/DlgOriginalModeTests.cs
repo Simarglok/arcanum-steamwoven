@@ -50,6 +50,18 @@ public sealed class DlgOriginalModeTests
         AssertStop(complete + "{2}{b", DlgStopReason.IncompleteRecord, 1);
         AssertStop(complete + "  // only a comment", DlgStopReason.EndOfInput, 1);
         AssertStop("", DlgStopReason.EndOfInput, 0);
+        AssertStop(complete + "{2}{b}{}{0}", DlgStopReason.ZeroIq, 1);
+        AssertStop(complete + "{2}{b}{}{3}{}{#}", DlgStopReason.HashResponse, 1);
+        AssertStop(complete + "/\r\n/ {2}{b}{}{}{}{}{}", DlgStopReason.EndOfInput, 1);
+        AssertStop(complete + "{2}{b}{}{}{}{}// open comment", DlgStopReason.IncompleteRecord, 1);
+    }
+
+    [TestMethod]
+    public void A_lone_slash_and_stray_closing_braces_are_skipped_text()
+    {
+        var document = DlgReader.Read(Bytes("/x}{1}{}{}{}{}{}{}"), Original);
+        Assert.AreEqual(3, document.SkippedBytes);
+        Assert.AreEqual(1, document.Records.Count);
     }
 
     [TestMethod]
