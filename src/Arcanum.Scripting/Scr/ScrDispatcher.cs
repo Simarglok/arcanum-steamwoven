@@ -98,6 +98,29 @@ public static class ScrDispatcher
         return RunPlaced(ScrSource.Sector, e.Slot, new(e.Player, null, null), host, options, discard: false);
     }
 
+    /// <summary>
+    /// A deferred call firing (ARC-SCRIPT-010, E1 call-in): the named script from its file header (initial local flags
+    /// and counters), at the stored line, as a use event with the stored roles. Missing and trap scripts and a monster
+    /// generator attachee end it as for an object event; nothing is written back, the other effects are returned.
+    /// </summary>
+    public static ScrRunResult RunCall(ScrCallEvent e, IScrHost host, ScrRunOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(e);
+        ArgumentNullException.ThrowIfNull(host);
+        options ??= new();
+        options.Validate();
+        if (e.Line < 0 || e.Triggerer is { Code: null } || e.Attachee is { Code: null }) return Ended(ScrOutcome.SkipDefault, ScrStop.InvalidEvent);
+        if (e.Script == 0) return Ended(ScrOutcome.RunDefault, ScrStop.NoScript);
+        var lookup = host.Script(e.Script);
+        if (Unavailable(lookup) is { } missing) return Ended(ScrOutcome.SkipDefault, missing);
+        var program = lookup.Program!;
+        if (IsTrapScript(e.Script, program)) return Ended(ScrOutcome.SkipDefault, ScrStop.TrapScript);
+        if (e.Attachee is { } attachee && host.IsMonsterGenerator(attachee)) return Ended(ScrOutcome.RunDefault, ScrStop.MonsterGenerator);
+        var run = Execute(program, e.Script, new(e.Script, program.InitialLocalFlags, program.InitialCounters), e.Line, program.FileFlags,
+            new(e.Triggerer, e.Attachee, null), host, options);
+        return run.Refusal is not null ? run.Result : run.With(null, null);
+    }
+
     private static ScrRunResult RunPlaced(ScrSource source, ScrSlot slot, ScrRoles roles, IScrHost host, ScrRunOptions options, bool discard)
     {
         ArgumentNullException.ThrowIfNull(host);
@@ -137,10 +160,11 @@ public static class ScrDispatcher
     internal readonly record struct ScrRoles(ScrObjectRef? Triggerer, ScrObjectRef? Attachee, ScrObjectRef? Extra);
 
     /// <summary>A finished run before its writeback is decided.</summary>
-    internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null)
+    internal sealed record Run(ScrRunResult Result, ScrSlot Slot, ScrRefusal? Refusal, IReadOnlyList<ScrFlagWrite>? Flags = null, int? Story = null, ScrDialogStart? Dialog = null,
+        IReadOnlyList<ScrCallRequest>? Calls = null)
     {
         internal ScrRunResult With(ScrWriteback? writeback, ScrObjectRef? destroy) => new(Result.Outcome, Result.Stop, Result.Script, Result.StopLine, null, Result.Trace,
-            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null ? ScrEffects.None
-                : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog));
+            writeback is null && destroy is null && (Flags?.Count ?? 0) == 0 && Story is null && Dialog is null && (Calls?.Count ?? 0) == 0 ? ScrEffects.None
+                : new ScrEffects(writeback, destroy, Array.AsReadOnly((Flags ?? Array.Empty<ScrFlagWrite>()).ToArray()), Story, Dialog, Calls));
     }
 }

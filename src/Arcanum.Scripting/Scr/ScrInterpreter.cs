@@ -17,6 +17,7 @@ internal sealed class ScrInterpreter
     private readonly IScrHost _host;
     private readonly ScrDispatcher.ScrRoles _roles;
     private ScrDialogStart? _dialog;
+    private readonly List<ScrCallRequest> _calls = new();
     private readonly ScrRunOptions _options;
     private readonly int[] _locals = new int[ScrCatalogue.LocalSlots];
     private readonly SortedDictionary<int, bool> _flags = new();
@@ -81,7 +82,7 @@ internal sealed class ScrInterpreter
         var flags = _flags.Where(p => p.Value != _host.GlobalFlag(p.Key)).Select(p => new ScrFlagWrite(p.Key, p.Value)).ToArray();
         int? story = _story is { } s2 && s2 != _storyBefore ? s2 : null;
         var result = new ScrRunResult(outcome, stop, _number, stopLine, null, Array.AsReadOnly(_trace.ToArray()), ScrEffects.None);
-        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog);
+        return new(result, new ScrSlot(number, _localFlags, _counters), null, flags, story, _dialog, _calls.Count == 0 ? null : Array.AsReadOnly(_calls.ToArray()));
     }
 
     private bool Condition(ScrClause c, int line) => c.Type switch
@@ -104,6 +105,18 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.ReturnSkipDefault: return (Step.ReturnSkip, 0);
             case ScrCatalogue.Action.ReturnRunDefault: return (Step.ReturnRun, 0);
             case ScrCatalogue.Action.Goto: return (Step.Jump, Get(a, 0));
+            case ScrCatalogue.Action.CallScriptIn:
+            {
+                // Script, line, triggerer, attachee, seconds; an absent role is stored as absent, as the original stores a
+                // null handle (TE9: whether it still exists is decided when the call fires).
+                var script = Get(a, 0); var at = Get(a, 1);
+                var triggerer = OptionalObject(a, 2); var attachee = OptionalObject(a, 3);
+                _calls.Add(new(ScrCallKind.Schedule, script, at, triggerer, attachee, CallDelay(Get(a, 4))));
+                return (Step.Next, 0);
+            }
+            case ScrCatalogue.Action.RemoveScriptCall:
+                _calls.Add(new(ScrCallKind.Remove, Get(a, 0), 0, null, OptionalObject(a, 1), 0));
+                return (Step.Next, 0);
             case ScrCatalogue.Action.Dialog:
             {
                 // The conversation starts only for a PC triggerer; the action ends the run with skip default either way.
@@ -194,6 +207,21 @@ internal sealed class ScrInterpreter
         ScrFocusKind.Player => _host.Player(),
         _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
     } ?? throw new MissingObjectStop(line);
+
+    // TE1: the original's 32-bit seconds × 1000 × 8 (Original) or seconds × 8000 without wrapping (Steamwoven); a delay of
+    // 0 fires on the next pass (1 ms), as the original's 0 does.
+    private long CallDelay(int seconds) => Math.Max(1, _options.Rules.CallDelayWraps
+        ? unchecked((uint)(seconds * 1000) * 8u)
+        : Math.Max(0L, seconds) * 8000L);
+
+    private ScrObjectRef? OptionalObject(ScrClause c, int slot) => (ScrFocusKind)c.Kind(slot) switch
+    {
+        ScrFocusKind.Triggerer => _roles.Triggerer,
+        ScrFocusKind.Attachee => _roles.Attachee,
+        ScrFocusKind.ExtraObject => _roles.Extra,
+        ScrFocusKind.Player => _host.Player(),
+        _ => throw new InvalidOperationException("Focus kind outside the interpreter's set."),
+    };
 
     private bool Flag(int index) => _flags.TryGetValue(index, out var value) ? value : _host.GlobalFlag(index);
 

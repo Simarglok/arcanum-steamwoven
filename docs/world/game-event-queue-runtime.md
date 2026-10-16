@@ -87,6 +87,20 @@ that ARC-COMBAT-002 left for the queue. All run on game time, are saved, and kee
 | `life.hero.poison-recovery`, `life.npc.poison-recovery` | hero / NPC | as above | 120 s | while poisoned: the level loses PoisonRecovery; while it stays positive the next tick |
 | `life.npc.resting` | NPC | hit-point damage is written with a positive value | 1 h | a living NPC without a PC leader (free, not following or waiting) heals `HealRate × max(1, elapsed h)` hit points and three times that fatigue; positive writes set their timers again |
 
+**Deferred SCR calls (ARC-SCRIPT-010).** The kind `scr.call` (added to registry version 1 without a new version: the
+life kinds are unchanged, a save without a deferred call is byte-identical, and a build without the kind refuses a save
+that holds one as an unknown kind) is global, game time, saved, any number per key, at most
+`SessionEventKinds.MaxScriptCalls` (1,024) on top of the life timers. Its entities are the triggerer and the attachee
+(an absent role is the marker `-`), its values the game time it was set at, the delay, the script and the line.
+`ScheduleScriptCall(expected, call, delayMs)` (1 ms up to `MaxScriptCallDelayMs`) and `RemoveScriptCall(expected,
+script, attachee)` (the first pending call of that script and attachee in queue order) each move one revision;
+`QueryScriptCalls()` lists the pending ones. In a pass, a call whose objects the host does not report
+(`ISessionScriptWorld.ObjectExists`) is dropped, the others go to `ISessionScriptWorld.RunScriptCall`, which runs the
+[SCR dispatcher](../scripting/scr-dispatcher-runtime.md#deferred-calls-arc-script-010-slice-s5) and applies its effects;
+a host that is only an `ISessionEventWorld` consumes a due call unrun. `SessionEventPassResult.ScriptCalls` reports each.
+A restore checks a saved call as a life timer (set no later than the saved clock, exactly its delay before its deadline)
+and its two roles; whether its objects still exist is decided when it fires.
+
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
 damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that

@@ -37,6 +37,7 @@ public sealed class GameSessionOwner : IDisposable
     // Set only while a pass runs: the host's answers for the timers it fires and the life steps they made.
     private ISessionEventWorld? _passWorld;
     private List<SessionLifeFiring>? _passFirings;
+    private List<SessionScriptCallFiring>? _passCalls;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -839,21 +840,86 @@ public sealed class GameSessionOwner : IDisposable
             return new(GameSessionFailure.InvalidEventPass, null, Array.Empty<SessionLifeFiring>(), new(_identity, _revision));
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var firings = new List<SessionLifeFiring>();
+        var calls = new List<SessionScriptCallFiring>();
         _passWorld = world;
         _passFirings = firings;
+        _passCalls = calls;
         GameEventPassResult pass;
         try
         {
+            // A life timer's NPC must be present with its life record; an object a deferred call names must exist (an
+            // absent role always does).
             pass = _events.ProcessDue(new(new(0, now, 0), _actor.Map.RuntimeMap, budget, entity =>
-                _life.Critters.ContainsKey(entity.Code) && world.CritterFacts(new(entity.Map), entity.Code) is not null));
+                entity.Code == SessionEventKinds.AbsentRole
+                || (_life.Critters.ContainsKey(entity.Code)
+                    ? world.CritterFacts(new(entity.Map), entity.Code) is not null
+                    : world is ISessionScriptWorld scripts && scripts.ObjectExists(new(entity.Map), entity.Code))));
         }
         finally
         {
             _passWorld = null;
             _passFirings = null;
+            _passCalls = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
-            firings.AsReadOnly(), new(_identity, _revision));
+            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly() };
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-010: schedules a deferred SCR call after <paramref name="delayMs"/> (1 ms up to
+    /// <see cref="SessionEventKinds.MaxScriptCallDelayMs"/>) of game time, as a call script in action does. One revision.
+    /// </summary>
+    public GameSessionMutationResult ScheduleScriptCall(GameSessionVersion expected, SessionScriptCall call, long delayMs)
+    {
+        ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(call);
+        if (!ValidRole(call.Triggerer) || !ValidRole(call.Attachee)) return Reject(GameSessionFailure.InvalidEvents);
+        if (delayMs is < 1 or > SessionEventKinds.MaxScriptCallDelayMs) return Reject(GameSessionFailure.InvalidEvents);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        var now = _clock.QueryClockSnapshot().GameTimestampMs;
+        if (_events.QueryPending().Count(e => e.Kind == SessionEventKinds.ScriptCall) >= SessionEventKinds.MaxScriptCalls ||
+            _events.Count >= _events.Limits.MaxPending || now > long.MaxValue - delayMs) return Reject(GameSessionFailure.EventBudgetExceeded);
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        var scheduled = _events.ScheduleAfter(SessionEventKinds.ScriptCall, SessionEventKinds.Payload(call, now, delayMs, _actor.Map.RuntimeMap),
+            delayMs, new(0, now, 0));
+        return scheduled.Disposition == GameEventScheduleDisposition.Added ? Changed() : Reject(GameSessionFailure.EventConflict);
+    }
+
+    /// <summary>
+    /// ARC-SCRIPT-010: removes the first pending deferred call (in queue order) of <paramref name="script"/> whose
+    /// attachee is <paramref name="attachee"/> (an absent attachee matches a call stored without one), as remove script
+    /// call does; <see cref="GameSessionDisposition.NoChange"/> when there is none.
+    /// </summary>
+    public GameSessionMutationResult RemoveScriptCall(GameSessionVersion expected, int script, SessionScriptRole? attachee)
+    {
+        ThrowIfDisposed();
+        if (!ValidRole(attachee)) return Reject(GameSessionFailure.InvalidEvents);
+        if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
+        bool Match(GameEvent e) => SessionEventKinds.Call(e.Payload) is var call && call.Script == script && call.Attachee == attachee;
+        if (!_events.QueryPending().Any(e => e.Kind == SessionEventKinds.ScriptCall && Match(e))) return NoChange();
+        if (_revision == long.MaxValue) return Reject(GameSessionFailure.RevisionExhausted);
+        _events.RemoveFirst(SessionEventKinds.ScriptCall, Match);
+        return Changed();
+    }
+
+    /// <summary>The pending deferred SCR calls in queue order.</summary>
+    public IReadOnlyList<SessionPendingScriptCall> QueryScriptCalls()
+    {
+        ThrowIfDisposed();
+        return Array.AsReadOnly(_events.QueryPending().Where(e => e.Kind == SessionEventKinds.ScriptCall)
+            .Select(e => new SessionPendingScriptCall(e.Sequence, e.DeadlineMs, SessionEventKinds.Call(e.Payload))).ToArray());
+    }
+
+    private static bool ValidRole(SessionScriptRole? role) => role is not { } r ||
+        SessionValidation.Map(r.Map) && SessionValidation.Entity(r.Entity) && r.Entity != SessionEventKinds.AbsentRole;
+
+    // Runs one deferred call through the pass's host; a host that cannot run scripts consumes it unrun.
+    internal GameEventHandlerOutcome FireScriptCall(GameEventFiring firing)
+    {
+        var call = SessionEventKinds.Call(firing.Event.Payload);
+        var ran = _passWorld is ISessionScriptWorld scripts && scripts.RunScriptCall(call);
+        _passCalls?.Add(new(firing.Event, call, ran));
+        return ran ? GameEventHandlerOutcome.Completed : GameEventHandlerOutcome.Refused;
     }
 
     // Runs one life timer (the queue already checked that an NPC's entity exists). Each branch follows the source handler:
@@ -1301,6 +1367,16 @@ public sealed class GameSessionOwner : IDisposable
         {
             if (pending is null || !registry.TryGet(pending.Kind, out var kind) || pending.Entities.IsDefault || pending.Values.IsDefault ||
                 pending.Values.Length != kind.ValueCount) return GameSessionFailure.InvalidEvents;
+            if (pending.Kind == SessionEventKinds.ScriptCall)
+            {
+                // A deferred call: set at a game time no later than the saved clock, exactly its delay before its
+                // deadline, two roles (each a valid entity or the absent marker). Its objects are checked when it fires.
+                if (pending.Entities.Length != 2 || pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    pending.Values[1] is < 1 or > SessionEventKinds.MaxScriptCallDelayMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
+                    !pending.Entities.All(e => e.Map >= 1 && SessionValidation.Entity(e.Code))) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -1313,6 +1389,7 @@ public sealed class GameSessionOwner : IDisposable
             converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, scope, new(pending.Entities, pending.Values)));
         }
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
+        if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)
