@@ -19,21 +19,27 @@ localization other than the declared byte profiles below.
 var load = ObjectDescriptionCatalog.Load(stack);              // ContentStack from ARC-DATA-011
 var name = ObjectDisplayName.Resolve(areaObject, load.Catalog!, CritterRecognition.Recognized);
 if (name.Status == ObjectNameStatus.Resolved)
+{
     var text = MesText.Decode(name.Message!, MesTextProfile.Windows1252);
+}
 ```
 
 - `MesFile.Parse(bytes, MesReaderOptions?)` → `MesParseResult(Status, File, Line, Number)`.
   `MesFile` is immutable, owns a copy of the payload, orders messages by number
   and offers `Find(number)`, `Count` and `LastNumber`. `MesMessage.Bytes` is the
-  stored text field exactly as it is: no decoding, trimming or line-ending change.
+  text field as the original reads it: the stored bytes with each CR LF read as LF,
+  nothing else changed (no decoding or trimming). `MesMessage` equality compares
+  number, line and bytes.
 - `MesText.Decode(bytes | message, MesTextProfile)` → `MesDecodeResult`. Profiles are
   `Ascii`, `Windows1252` and `Windows1251`; the caller always declares one. A byte the
   profile does not define fails with its offset (`UndefinedByte`); nothing is
   replaced.
-- `ObjectDescriptionCatalog.Load(ContentStack, MesReaderOptions?)` reads the winning
-  copies of `mes/description.mes` (required), `mes/gamedesc.mes` and
-  `mes/gamekey.mes` (both optional) and records the `ContentCandidate` each came
-  from. `Create(...)` builds one from parsed tables. `Find(number)` and
+- `ObjectDescriptionCatalog.Load(ContentStack, MesReaderOptions?)` reads
+  `mes/description.mes` (required, first copy in a base source, see below) and the
+  content-stack winners of `mes/gamedesc.mes` and `mes/gamekey.mes` (both optional),
+  and records the `ContentCandidate` each came from. A file without messages counts
+  as not loaded. Read and parse refusals are typed (`ReadFailed` keeps the
+  `ContentReadStatus`). `Create(...)` builds one from parsed tables. `Find(number)` and
   `FindKey(keyId)` return `DescriptionLookup(Status, Number, File, Message)` with
   `Found`, `OutOfRange`, `ModuleFileAbsent` or `NotFound`.
 - `ObjectDisplayName.Resolve(AreaObjectRecord | type + ObjectFieldReader, catalog,
@@ -54,21 +60,29 @@ skips everything up to a `{`, takes the bytes up to the next `}` as the number,
 does the same for the text, and repeats until end of file. Comments are therefore
 simply text outside braces, a stray `}` there is ignored, and the two fields may be
 on different lines. Messages are sorted by number and found by binary search.
+Archive members are opened in text mode, which reads CR LF as LF
+([archive text mode](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c#L476-L493));
+the original Windows executable reads loose files in text mode the same way.
 
 Accepted as the original does: any text outside braces, any order, empty text,
-leading zeros in the number. Refused (typed status), because the original's
-result would be a silent truncation, a warning-only guess or platform-dependent:
+multi-line text (LF kept, CR LF read as LF), leading zeros in the number. Refused
+(typed status), because the original's result would be a silent truncation, depend
+on platform or file origin, keep a shape it warns about, or be arbitrary:
 
 | Status | Shape | Original behaviour |
 | --- | --- | --- |
 | `UnterminatedField` / `MissingText` | a field without `}`, a number without text | parsing stops; earlier messages are kept |
-| `UnsupportedNumber` | anything but 1..10 ASCII digits within int32 | warning, then `atoi` |
+| `UnsupportedNumber` | anything but 1..10 ASCII digits within int32 | `atoi`; a warning only for a leading non-digit, trailing garbage is dropped silently |
 | `BraceInField` | `{` inside a field | warning; the brace is kept |
-| `LineBreakInText` | CR or LF inside text | CR survival depends on how the file is opened (archive or loose, platform) |
+| `LoneCarriageReturn` | a CR not followed by LF | archive text mode drops it and repeats the next character |
 | `TextTooLong` | text over 1,999 bytes | copied into a 2,000-byte buffer; longer text is cut and the terminator overflows |
 | `NulByte` | a NUL byte | the line reader treats it as end of line or file |
-| `EndOfFileByte` | a 0xFF byte | the character reader returns a plain `char`; where `char` is signed, 0xFF equals end of file. Note: 0xFF is `я` in Windows-1251 and `ÿ` in Windows-1252 |
+| `EndOfFileByte` | a 0xFF byte, or 0x1A | the character reader returns a plain `char`; where `char` is signed, 0xFF equals end of file (0xFF is `я` in Windows-1251, `ÿ` in Windows-1252). 0x1A ends a loose file in Windows text mode |
 | `DuplicateNumber` | one number twice | warning; the binary search may return either |
+
+Installed original: 253 of the 254 MES copies in the archives parse; the one
+refusal is the module's `semes/globalflags.mes` (`DuplicateNumber`), which no
+caller here reads.
 
 ## Encoding
 
@@ -82,11 +96,23 @@ Windows-1251 leaves 0x98 undefined; both are strict tables in
 [`MesText`](../../src/Arcanum.Data/Messages/MesText.cs). Which profile a localized
 release needs is the caller's decision and is NOT_VERIFIED here.
 
+**NOT READY for Cyrillic files containing `я`:** that letter is byte 0xFF in
+Windows-1251, so `MesFile.Parse` refuses such a file as `EndOfFileByte`. The
+end-of-file reading is inferred from the pinned CE source (signed `char`);
+whether a localized original executable reads 0xFF differently is NOT_VERIFIED.
+
 ## Description tables
 
 [`description.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c#L38-L165):
 `mes\description.mes` is required at start-up; the module's `mes\gamedesc.mes` and
-`mes\gamekey.mes` are optional. A description number below 30000 is looked up in
+`mes\gamekey.mes` are optional, and a file without messages counts as not loaded
+([`mes_load`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L101-L139)).
+The base file is loaded while only the base sources are mounted (`arcanum*.dat`
+and `data/` over the game folder and `tig.dat`; the module's `.dat`, patches and
+folder come later with the module,
+[start-up](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L1820-L1836))
+and stays loaded, so the catalog takes the first copy in a base source and never
+a module copy. The two module files are the content-stack winners. A description number below 30000 is looked up in
 the base file, from 30000 up in the module file. Any number below 0 or above the
 **accepted maximum** returns nothing. The maximum is the last (highest) number of
 the module file when that file is loaded and has messages, otherwise of the base

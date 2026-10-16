@@ -48,7 +48,10 @@ public sealed class ObjectDisplayNameTests
     {
         var baseFile = Mes("{10}{a}{29000}{b}");
         Assert.AreEqual(29000, ObjectDescriptionCatalog.Create(baseFile).MaxNumber);
-        Assert.AreEqual(29000, ObjectDescriptionCatalog.Create(baseFile, Mes("// empty")).MaxNumber, "An empty module file keeps the base range.");
+        var emptyModule = ObjectDescriptionCatalog.Create(baseFile, Mes("// empty"), Mes(""));
+        Assert.AreEqual(29000, emptyModule.MaxNumber, "An empty module file is not loaded and keeps the base range.");
+        Assert.AreEqual((null, null), (emptyModule.GameDescription, emptyModule.GameKey));
+        Assert.AreEqual(DescriptionLookupStatus.ModuleFileAbsent, emptyModule.FindKey(0).Status);
 
         // A module file whose last number is below a base number cuts the base range short.
         var shortModule = ObjectDescriptionCatalog.Create(Mes("{10}{a}{29000}{b}{31000}{c}"), Mes("{30000}{d}"));
@@ -59,7 +62,7 @@ public sealed class ObjectDisplayNameTests
         var noModule = ObjectDescriptionCatalog.Create(Mes("{10}{a}{31000}{c}"));
         Assert.AreEqual((DescriptionLookupStatus.ModuleFileAbsent, ObjectDescriptionFile.GameDescription), (noModule.Find(30000).Status, noModule.Find(30000).File));
         Assert.AreEqual(DescriptionLookupStatus.ModuleFileAbsent, noModule.FindKey(0).Status);
-        Assert.AreEqual(0, ObjectDescriptionCatalog.Create(Mes("")).MaxNumber);
+        Assert.ThrowsExactly<ArgumentException>(() => ObjectDescriptionCatalog.Create(Mes("")));
     }
 
     [TestMethod]
@@ -137,8 +140,9 @@ public sealed class ObjectDisplayNameTests
 
         Assert.AreEqual(DescriptionCatalogStatus.Ready, loaded.Status);
         var catalog = loaded.Catalog!;
-        Assert.AreEqual(ContentSourceRole.ModuleDirectory, catalog.DescriptionSource!.Source.Role, "The first source in search order wins.");
-        Assert.AreEqual("Module Coat", Text(Name(Wall, new() { [ObjectDisplayName.DescriptionSlot] = 100 }, catalog: catalog)));
+        Assert.AreEqual(ContentSourceRole.DataDirectory, catalog.DescriptionSource!.Source.Role, "The base file is read before any module source is mounted.");
+        Assert.AreEqual("Base Coat", Text(Name(Wall, new() { [ObjectDisplayName.DescriptionSlot] = 100 }, catalog: catalog)));
+        Assert.AreEqual(ContentSourceRole.ModuleDirectory, catalog.GameDescriptionSource!.Source.Role);
         Assert.AreEqual(30000, catalog.MaxNumber);
         Assert.IsNull(catalog.GameKey);
         Assert.IsNull(catalog.GameKeySource);

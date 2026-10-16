@@ -1,8 +1,8 @@
 namespace Arcanum.Data.Messages;
 
-/// <summary>Why a MES payload was or was not accepted. Every refusal names a shape whose
-/// original result is a silent truncation, a warning-only guess or platform-dependent, so it
-/// is refused instead of modelled (docs/formats/mes-reader.md).</summary>
+/// <summary>Why a MES payload was or was not accepted. Refusals cover shapes the original
+/// truncates or silently stops on, reads differently by platform or file origin, keeps only
+/// after a warning, or resolves arbitrarily (docs/formats/mes-reader.md).</summary>
 public enum MesParseStatus
 {
     Parsed,
@@ -10,9 +10,12 @@ public enum MesParseStatus
     TooManyMessages,
     /// <summary>A NUL byte; the original's line reader treats it as the end of the line or file.</summary>
     NulByte,
-    /// <summary>A 0xFF byte; the original's character reader returns a plain <c>char</c>, so
-    /// where <c>char</c> is signed this byte compares equal to end-of-file.</summary>
+    /// <summary>A 0xFF byte, which the original's signed <c>char</c> reader compares equal to
+    /// end of file, or a 0x1A byte, end of file for a loose file read in Windows text mode.</summary>
     EndOfFileByte,
+    /// <summary>A CR not followed by LF; the original's archive text mode drops it and repeats
+    /// the next character.</summary>
+    LoneCarriageReturn,
     /// <summary>A field opened with <c>{</c> that reaches the end of the payload.</summary>
     UnterminatedField,
     /// <summary>A number field with no text field after it.</summary>
@@ -21,10 +24,8 @@ public enum MesParseStatus
     UnsupportedNumber,
     /// <summary>A <c>{</c> inside a field; the original only warns and keeps the brace.</summary>
     BraceInField,
-    /// <summary>CR or LF inside a text field; whether CR survives depends on how the file was opened.</summary>
-    LineBreakInText,
     TextTooLong,
-    /// <summary>Two messages with one number; the original's lookup would return either.</summary>
+    /// <summary>Two messages with one number; the original only warns and its lookup may return either.</summary>
     DuplicateNumber,
 }
 
@@ -44,17 +45,30 @@ public sealed class MesReaderOptions
     }
 }
 
+/// <summary>One message. Equality compares number, line and text bytes.</summary>
 /// <param name="Line">1-based line of the number field's opening brace.</param>
-/// <param name="Bytes">The text field exactly as stored: no decoding, trimming or translation.</param>
-public sealed record MesMessage(int Number, int Line, ReadOnlyMemory<byte> Bytes);
+/// <param name="Bytes">The text as the original reads it: the stored bytes with each CR LF
+/// read as LF (text mode); no decoding, trimming or other change.</param>
+public sealed record MesMessage(int Number, int Line, ReadOnlyMemory<byte> Bytes)
+{
+    public bool Equals(MesMessage? other) =>
+        other is not null && Number == other.Number && Line == other.Line && Bytes.Span.SequenceEqual(other.Bytes.Span);
+
+    public override int GetHashCode()
+    {
+        var hash = new HashCode();
+        hash.Add(Number); hash.Add(Line); hash.AddBytes(Bytes.Span);
+        return hash.ToHashCode();
+    }
+}
 
 /// <param name="Line">Where a refusal was found (1-based), when it has a position.</param>
 /// <param name="Number">The message number involved in <see cref="MesParseStatus.DuplicateNumber"/>.</param>
 public sealed record MesParseResult(MesParseStatus Status, MesFile? File, int? Line = null, int? Number = null);
 
-/// <summary>An immutable, byte-preserving MES message table: <c>{number}{text}</c> pairs in
-/// any order, with anything outside braces ignored, as the original reads it. Messages are
-/// ordered by number for lookup. Text is never decoded here; see <see cref="MesText"/>.</summary>
+/// <summary>An immutable MES message table: <c>{number}{text}</c> pairs in any order, with
+/// anything outside braces ignored, as the original reads it. Messages are ordered by number
+/// for lookup. Text is never decoded here; see <see cref="MesText"/>.</summary>
 public sealed class MesFile
 {
     public const int OriginalMaxTextBytes = 1999;
@@ -84,13 +98,13 @@ public sealed class MesFile
         options ??= new();
         options.Validate();
         if (payload.Length > options.MaxBytes) return new(MesParseStatus.TooLarge, null);
-        var bytes = payload.ToArray();
         var line = 1;
-        for (var i = 0; i < bytes.Length; i++)
+        for (var i = 0; i < payload.Length; i++)
         {
-            if (bytes[i] == 0) return new(MesParseStatus.NulByte, null, line);
-            if (bytes[i] == 0xFF) return new(MesParseStatus.EndOfFileByte, null, line);
-            if (bytes[i] == (byte)'\n') line++;
+            if (payload[i] == 0) return new(MesParseStatus.NulByte, null, line);
+            if (payload[i] is 0xFF or 0x1A) return new(MesParseStatus.EndOfFileByte, null, line);
+            if (payload[i] == (byte)'\r' && (i + 1 == payload.Length || payload[i + 1] != (byte)'\n')) return new(MesParseStatus.LoneCarriageReturn, null, line);
+            if (payload[i] == (byte)'\n') line++;
         }
 
         var messages = new List<MesMessage>();
@@ -98,18 +112,15 @@ public sealed class MesFile
         line = 1;
         while (true)
         {
-            if (!SeekOpen(bytes, ref at, ref line)) break;
+            if (!SeekOpen(payload, ref at, ref line)) break;
             var numberLine = line;
-            var status = ReadField(bytes, ref at, ref line, out var numberStart, out var numberLength);
-            if (status != MesParseStatus.Parsed) return new(status, null, line);
-            if (!TryNumber(bytes.AsSpan(numberStart, numberLength), out var number)) return new(MesParseStatus.UnsupportedNumber, null, numberLine);
-            if (!SeekOpen(bytes, ref at, ref line)) return new(MesParseStatus.MissingText, null, line);
+            var status = ReadField(payload, ref at, ref line, options.MaxTextBytes, out var numberBytes);
+            if (status != MesParseStatus.Parsed) return new(status == MesParseStatus.TextTooLong ? MesParseStatus.UnsupportedNumber : status, null, line);
+            if (!TryNumber(numberBytes, out var number)) return new(MesParseStatus.UnsupportedNumber, null, numberLine);
+            if (!SeekOpen(payload, ref at, ref line)) return new(MesParseStatus.MissingText, null, line);
             var textLine = line;
-            status = ReadField(bytes, ref at, ref line, out var textStart, out var textLength);
-            if (status != MesParseStatus.Parsed) return new(status, null, line);
-            var text = bytes.AsMemory(textStart, textLength);
-            if (text.Span.IndexOfAny((byte)'\r', (byte)'\n') >= 0) return new(MesParseStatus.LineBreakInText, null, textLine);
-            if (textLength > options.MaxTextBytes) return new(MesParseStatus.TextTooLong, null, textLine);
+            status = ReadField(payload, ref at, ref line, options.MaxTextBytes, out var text);
+            if (status != MesParseStatus.Parsed) return new(status, null, status == MesParseStatus.TextTooLong ? textLine : line);
             if (messages.Count == options.MaxMessages) return new(MesParseStatus.TooManyMessages, null, numberLine);
             messages.Add(new(number, numberLine, text));
         }
@@ -121,7 +132,7 @@ public sealed class MesFile
     }
 
     /// <summary>Skips to the next <c>{</c>; everything before it, a stray <c>}</c> included, is ignored.</summary>
-    private static bool SeekOpen(byte[] bytes, ref int at, ref int line)
+    private static bool SeekOpen(ReadOnlySpan<byte> bytes, ref int at, ref int line)
     {
         while (at < bytes.Length && bytes[at] != (byte)'{')
         {
@@ -131,19 +142,25 @@ public sealed class MesFile
         return at < bytes.Length;
     }
 
-    /// <summary>Reads from the <c>{</c> at <paramref name="at"/> to the matching <c>}</c>.</summary>
-    private static MesParseStatus ReadField(byte[] bytes, ref int at, ref int line, out int start, out int length)
+    /// <summary>Reads from the <c>{</c> at <paramref name="at"/> to the matching <c>}</c>, reading
+    /// each CR LF as LF (every CR was checked to precede an LF).</summary>
+    private static MesParseStatus ReadField(ReadOnlySpan<byte> bytes, ref int at, ref int line, int maxBytes, out byte[] field)
     {
-        start = ++at;
+        field = [];
+        var value = new List<byte>();
+        at++;
         while (at < bytes.Length && bytes[at] != (byte)'}')
         {
-            if (bytes[at] == (byte)'{') { length = 0; return MesParseStatus.BraceInField; }
-            if (bytes[at] == (byte)'\n') line++;
-            at++;
+            var b = bytes[at++];
+            if (b == (byte)'{') return MesParseStatus.BraceInField;
+            if (b == (byte)'\r') continue;
+            if (b == (byte)'\n') line++;
+            if (value.Count == maxBytes) return MesParseStatus.TextTooLong;
+            value.Add(b);
         }
-        length = at - start;
         if (at == bytes.Length) return MesParseStatus.UnterminatedField;
         at++;
+        field = value.ToArray();
         return MesParseStatus.Parsed;
     }
 

@@ -52,7 +52,7 @@ public sealed class ObjectDisplayNameRealDataTests
         var held = core.Where(o => o.Type is 15 or 16).SelectMany(o => Handles(o, 56)).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var items = mobiles.Where(o => o.Type is >= 5 and <= 14 && (o.Scope == AreaScope.Core || held.Contains(o.Key.ObjectIdSha256))).ToArray();
         var names = items.Select(o => ObjectDisplayName.Resolve(o, catalog, CritterRecognition.Recognized)).ToArray();
-        Assert.AreEqual(52, items.Length);
+        Assert.AreEqual((52, 15), (items.Length, items.Count(o => held.Contains(o.Key.ObjectIdSha256))), "37 on the ground, 15 held by core NPCs.");
         Assert.IsTrue(names.All(n => n.Status == ObjectNameStatus.Resolved && n.Source == ObjectNameSource.Description));
         Assert.AreEqual(47, names.Count(n => n.Lookup!.File == ObjectDescriptionFile.Description));
         Assert.AreEqual(5, names.Count(n => n.Lookup!.File == ObjectDescriptionFile.GameDescription));
