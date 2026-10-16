@@ -64,7 +64,7 @@ public partial class TerrainCanvas
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
             _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
         }
-        if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands);
+        if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);
         _plan = null; _staticPlan = null;
         _area = plan; _areaFrames = frames; _actorPlan = actor; _areaActorPlacement = placement; _textures = textures;
         UpdateAreaVisible(); QueueRedraw();

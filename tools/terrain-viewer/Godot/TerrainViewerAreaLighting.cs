@@ -29,14 +29,15 @@ public partial class TerrainViewerApp
 
     private long ActiveAreaSector()
     {
-        var cell = AreaGridSession.Cell(_worldActor.Session?.State.CommittedCell ?? AreaGridSession.Spawn);
+        // The lighting source is the exterior's; in the cave the exterior sector last selected stays.
+        var cell = InCave ? AreaGridSession.Cell(AreaGridSession.Spawn) : AreaGridSession.Cell(_worldActor.Session?.State.CommittedCell ?? AreaGridSession.Spawn);
         return AreaAmbientDriver.SectorOf(cell.X, cell.Y);
     }
 
     // FR-LIGHT-007: re-select when the actor commits into another sector, at the same hour.
     private void FollowAreaAmbient()
     {
-        if (_areaAmbient is null) return;
+        if (_areaAmbient is null || InCave) return;
         if (_areaAmbient.Apply(ActiveAreaSector())) { PushAreaAmbient(); GD.Print("ARC-RENDER-010 lighting-sector " + AreaAmbientReceipt()); }
     }
 

@@ -422,6 +422,7 @@ public partial class TerrainViewerApp
     private void AdvanceWorldGrid(Vec2 actor)
     {
         if (_worldActor.Session is not { } session || _readyActorPlan is null || !IsWorldMode(_readyMode)) return;
+        if (ProcessAreaTransition()) return;
         var time = WorldTime;
         var direction = _worldResetPending || _worldReloadPending ? null : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
@@ -469,7 +470,7 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time);
+                if (session is AreaGridSession area) _worldActor.Configure(area.Snapshot, time, chart: area.Chart);
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -513,7 +514,7 @@ public partial class TerrainViewerApp
         if (session is not AreaGridSession area || _readyMode != TerrainViewerMode.CrashSiteArea) return null;
         if (!ReferenceEquals(_worldRouteSession, session))
         {
-            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot));
+            _worldRoute = new RouteFollower(new AreaRouteSource(area.Snapshot, area.Chart));
             _worldRouteSession = session; _worldRouteDiagnostic = "no click yet"; _worldRouteClick = "none";
         }
         return _worldRoute;
@@ -562,6 +563,8 @@ public partial class TerrainViewerApp
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
         var wasModal = WorldModal;
         _worldAdapter.PaletteOpen = WorldModal;
+        // ARC-WORLD-009: a left press on a cave trigger sprite is a use action; other clicks keep their routing.
+        if (TryAreaUse(input)) { GetViewport().SetInputAsHandled(); return; }
         if (input is InputEventKey chordKey)
         {
             // Diagnostics first: a consumed chord key never reaches the shared

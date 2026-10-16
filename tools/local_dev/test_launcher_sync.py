@@ -17,7 +17,10 @@ from tools.local_dev import config, launch
 
 REPO = Path(__file__).resolve().parents[2]
 # Viewer flags the ordinary launcher deliberately never passes (caller-side hash expectations).
-NON_LAUNCHER_FLAGS = {"--expect-module-sha256", "--expect-resource-sha256", "--expect-actor-resource-sha256"}
+NON_LAUNCHER_FLAGS = {"--expect-module-sha256", "--expect-resource-sha256", "--expect-actor-resource-sha256",
+                      # ARC-WORLD-009: optional cave input. Exported AREA builds that predate it reject the flag, so the
+                      # ordinary launcher passes it only once an AREA build with the cave is exported and paired.
+                      "--area-cave-mobile"}
 
 
 class LauncherSyncTests(unittest.TestCase):

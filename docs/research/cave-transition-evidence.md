@@ -178,7 +178,9 @@ which found no other literal teleport.
 
 ## Project policy for the implementation
 
-The following steps are separate PRs under ARC-WORLD-009, in this order:
+The following steps are separate PRs under ARC-WORLD-009, in this order (steps 1
+and 2: PR #87 and #88; steps 3 and 4: the viewer transfer, see the
+[terrain viewer](../rendering/terrain-viewer.md#crash-site-cave-and-return-arc-world-009)):
 
 1. **Cave loader** (Data). A second pinned area profile for catalogue 5078:
    one sector, 4,096 class-0 terrain cells, 125 walls, 13 scenery, the 39

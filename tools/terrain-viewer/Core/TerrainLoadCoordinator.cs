@@ -31,7 +31,12 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     /// <summary>Whole-core T0 step evidence of a crash-site-area load; the bounded cardinal snapshot stays WORLD-only.</summary>
     public AreaStepSnapshot? AreaStepSnapshot { get; init; }
     public AreaLoadResult? Area { get; init; }
+    /// <summary>ARC-WORLD-009: the cave map loaded with the area when its object file is given.</summary>
+    public AreaCaveLoad? Cave { get; init; }
 }
+
+/// <summary>The cave's strict snapshot, scene, frames and step evidence, bound to the same generation.</summary>
+public sealed record AreaCaveLoad(AreaLoadResult Area, AreaStepSnapshot Steps, AreaChart Chart);
 
 /// <summary>
 /// One caller-owned archive/decode operation. A fresh instance owns precisely

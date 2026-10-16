@@ -103,4 +103,22 @@ public sealed class AreaGridSessionTests
         var actor = new DiagnosticGridActor(); actor.Configure(steps, SimulationTime.At(0));
         Assert.IsInstanceOfType<AreaGridSession>(actor.Session); Assert.IsNull(actor.CardinalSession);
     }
+
+    [TestMethod]
+    public void AnotherChartPlacesTheSessionAtItsStartAndMapsCellsThroughItsOrigin()
+    {
+        var steps = Steps();
+        // A chart whose origin is the second core sector (1453,1290): its cell (0,0) is exterior chart cell (64,0).
+        var chart = new AreaChart(1453 * 64, 1290 * 64, new(-58, 1), "TEST_SECOND_SECTOR_CHART");
+        Assert.AreEqual(new AreaStepCell(92928 + 6, 82561), chart.ToWorld(new(-58, 1)));
+        Assert.AreEqual(new CellCoord(-58, 1), chart.ToChart(new(92928 + 6, 82561)));
+        var session = new AreaGridSession(steps, SimulationTime.At(0), StepDuration.Of(8), chart: chart);
+        Assert.AreEqual((new CellCoord(-58, 1), chart), (session.State.CommittedCell, session.Chart));
+        Assert.AreEqual("TEST_SECOND_SECTOR_CHART", session.State.Binding.ChartId);
+        var started = new AreaGridSession(steps, SimulationTime.At(0), StepDuration.Of(8), start: new(7, 1), facing: NeighborDirection.YPlus);
+        Assert.AreEqual((new CellCoord(7, 1), NeighborDirection.YPlus), (started.State.CommittedCell, started.State.Facing));
+        Assert.ThrowsExactly<ArgumentException>(() => new AreaGridSession(steps, SimulationTime.At(0), StepDuration.Of(8), start: new(500, 1)));
+        Assert.ThrowsExactly<ArgumentException>(() => new AreaGridSession(steps, SimulationTime.At(0), StepDuration.Of(8), start: new(-200, 1)));
+        Assert.AreSame(AreaChart.Exterior, new AreaGridSession(steps, SimulationTime.At(0)).Chart);
+    }
 }
