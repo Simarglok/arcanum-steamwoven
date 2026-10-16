@@ -17,7 +17,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 1. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 2. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets) stays with <see cref="GameSessionOwner.Restore"/>.
@@ -27,13 +27,14 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
     private static readonly string[] FlagFields = ["flag", "value"];
     private static readonly string[] ActorFields = ["map", "x", "y", "facing"];
     private static readonly string[] MapFields = ["map", "changes"];
+    private static readonly string[] LightingFields = ["schemeId", "hour"];
     private static readonly string[] SectorChangeFields = ["scope", "sector", "property", "value"];
     private static readonly string[] EntityChangeFields = ["scope", "entity", "property", "value"];
 
@@ -113,6 +114,15 @@ public static class GameSessionSnapshotCodec
                 w.WriteEndObject();
             }
             w.WriteEndArray();
+
+            if (snapshot.Lighting is { } lighting)
+            {
+                w.WriteStartObject("lighting");
+                w.WriteNumber("schemeId", lighting.SchemeId);
+                w.WriteNumber("hour", lighting.Hour);
+                w.WriteEndObject();
+            }
+            else w.WriteNull("lighting");
             w.WriteEndObject();
         }
         return Encoding.UTF8.GetString(buffer.WrittenSpan);
@@ -149,11 +159,19 @@ public static class GameSessionSnapshotCodec
             !schema.TryGetInt64(out var version) || version != GameSessionSnapshot.CurrentSchemaVersion)
             throw new DecodeException(SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         var f = Fields(root, "$", RootFields);
-        Int(f["schemaVersion"], "$.schemaVersion", 1, 1);
+        Int(f["schemaVersion"], "$.schemaVersion", GameSessionSnapshot.CurrentSchemaVersion, GameSessionSnapshot.CurrentSchemaVersion);
         var identity = new GlobalFlagIdentity(new(Guid(f["world"], "$.world")), new(Guid(f["module"], "$.module")));
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
-            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]));
+            Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Lighting(f["lighting"]));
+    }
+
+    private static SessionLightingState? Lighting(JsonElement element)
+    {
+        const string p = "$.lighting";
+        if (element.ValueKind == JsonValueKind.Null) return null;
+        var f = Fields(element, p, LightingFields);
+        return new(Int(f["schemeId"], p + ".schemeId", 1, int.MaxValue), Int(f["hour"], p + ".hour", 0, 23));
     }
 
     private static SessionClockState Clock(JsonElement element)

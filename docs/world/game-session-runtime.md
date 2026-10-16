@@ -30,6 +30,7 @@ and GF owners. There are no locks, events, callbacks, timers, files or Godot typ
 | `Version` / `PlaceActor` / `SetMapChange` / `ClearMapChange` | Actor and map mutations take the expected `GameSessionVersion` (owner identity + revision). Input validation, then version check, then NoChange, then budget, then revision capacity; every refusal leaves state untouched. Each semantic change adds exactly one revision. |
 | `QueryActor` / `QueryMapChange` / `QueryMapChanges` | Current placement; one value or `null` for "at loaded baseline"; a detached, canonically ordered copy of one map's changes. |
 | `QueryClockSnapshot` / `AdvanceGameTime` / `SetPaused` | Forwarded to the session's clock with the clock's own token contract. Clock changes do not move the session revision. |
+| `QueryLighting` / `RecordLighting` | Applied ambient lighting (ARC-WORLD-010, FR-LIGHT-012): `SessionLightingState(SchemeId ≥1, Hour 0..23)` or `null` when none was recorded. `RecordLighting` refuses (`InvalidLighting`) a value whose hour is not the clock's current hour, so a capture never pairs a time with another hour's scheme; the host records again after every clock change that crosses an hour. Equal value is NoChange. It does not move the session revision. |
 | `Flags` / `FlagVersion` | A forwarding `IGlobalFlagOwner` view of the session's GF owner (reads, writes, `GlobalFlagAdapter`; no Dispose or MarkFailed) and its current version. GF changes do not move the session revision. |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
 | `Dispose()` | Idempotent; disposes the clock and GF owner. Every later call except `Dispose` throws `ObjectDisposedException`. |
@@ -73,19 +74,19 @@ Limits (`GameSessionLimits`) can be lowered, never raised: at most 64 maps with
 changes, 4,096 changes per map and 16,384 in total. Updating an existing key is
 allowed at capacity; a new key or map over capacity is `BudgetExceeded`.
 
-## Snapshot schema 1
+## Snapshot schema 2
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
 pause, revision; no owner identity), `Flags` (revision and every admitted flag in
-ascending order, `null` = Unknown), `Actor` and `Maps` (ascending map, each with
-changes in canonical order: scope, sector, entity, property, ordinal). Collections are
-read-only copies.
+ascending order, `null` = Unknown), `Actor`, `Maps` (ascending map, each with
+changes in canonical order: scope, sector, entity, property, ordinal) and `Lighting`
+(applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":1,
+{"format":"arcanum-steamwoven-session","schemaVersion":2,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -94,7 +95,8 @@ read-only copies.
  "actor":{"map":79,"x":100,"y":200,"facing":"XPlus"},
  "maps":[{"map":79,"changes":[
    {"scope":"sector","sector":5,"property":"door.open","value":1},
-   {"scope":"entity","entity":"npc-1","property":"hp","value":12}]}]}
+   {"scope":"entity","entity":"npc-1","property":"hp","value":12}]}],
+ "lighting":{"schemeId":1,"hour":15}}
 ```
 
 (Line breaks added here; the encoder writes no whitespace.) `TryDecode` returns a
@@ -116,8 +118,16 @@ policy, source pin, data/startup fingerprints, start year/hour), whose clock or 
 state the component owners refuse, or that exceeds the caller's limits. A refused
 restore returns no owner and leaves the caller's current session as it was.
 
-There is **no migration**: schema 1 is the only accepted version, and adding a
-domain (inventory, quests, party) needs schema 2 with an explicit migration decision.
+Restore also refuses (`InvalidLighting`) a lighting value outside the ranges or whose
+hour differs from the saved clock's hour. A restored clock keeps its saved pause: a
+snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
+and the host releases or re-applies its modal pause from what is actually open.
+
+There is **no migration**: schema 2 is the only accepted version. Schema 2
+(ARC-WORLD-010) added the required, nullable `lighting` field; schema 1 is refused as
+`UnsupportedSchema` because no schema-1 snapshot was ever stored (there is no save
+file yet). Adding another domain (inventory, quests, party) needs schema 3 with an
+explicit migration decision.
 
 ## Tests
 
@@ -127,6 +137,8 @@ and a literal, independently written canonical JSON text:
 - `SessionOwnerTests`: creation and rejection, leave-and-return across two maps with an
   untouched neighbour sector, version guards and revision counting, key validation,
   budgets, detached capture, clock forwarding, disposal.
+- `SessionLightingTests`: lighting validation and current-hour rule, no revision move,
+  `null` round trip, restore refusing another hour, paused restore with lighting.
 - `SnapshotRestoreTests`: literal canonical encoding, full restore with pause, Unknown
   flag and stale old tokens, refused restores (world, module, profile, budget, epoch,
   clock schema, empty GF domain) leaving the current session unchanged, typed decode
@@ -140,7 +152,8 @@ and a literal, independently written canonical JSON text:
 ## Not implemented / remaining work
 
 - Save/load UI, save slots, files, atomic writes, backups, autosave, thumbnails.
-- Session revision or GF/clock integration with dialog, scripts, lighting or the viewer.
+- GF integration with dialog and scripts. (The viewer's day/night uses the session clock
+  and records applied lighting since ARC-WORLD-010.)
 - Concrete map-change vocabulary (doors, containers, NPC state) and their application
   to rendering or step assessment; original sector-diff and mobile-object formats.
 - Movement mid-step persistence, party, inventory, quests, RNG and other domains.

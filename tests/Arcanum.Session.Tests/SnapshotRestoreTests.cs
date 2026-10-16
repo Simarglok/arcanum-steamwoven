@@ -29,6 +29,7 @@ public sealed class SnapshotRestoreTests
             new(true, PauseReason.TurnBased));
         Assert.AreEqual(ClockMutationDisposition.Changed, paused.Disposition);
         WriteFlag(owner, 3, true);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.RecordLighting(new(1, 16)).Disposition);
         var snapshot = owner.Capture();
 
         using var restored = Restore(Decode(GameSessionSnapshotCodec.Encode(snapshot)));
@@ -46,6 +47,7 @@ public sealed class SnapshotRestoreTests
         Assert.AreEqual(true, ReadFlag(restored, 7));
         Assert.IsNull(ReadFlag(restored, 9), "Unknown stays Unknown, never false");
         Assert.AreEqual(new GlobalFlagVersion(Identity, RestoreEpoch, 1), restored.FlagVersion);
+        Assert.AreEqual(new SessionLightingState(1, 16), restored.QueryLighting());
         Assert.AreEqual(GameSessionSnapshotCodec.Encode(snapshot), GameSessionSnapshotCodec.Encode(restored.Capture()));
 
         // Versions and tokens from the earlier owner do not authorize writes on the restored one.
@@ -118,12 +120,15 @@ public sealed class SnapshotRestoreTests
         Fails("", SnapshotDecodeFailure.MalformedJson, "$");
         Fails(GoldenJson[..^40], SnapshotDecodeFailure.MalformedJson, "$");
         Fails(GoldenJson + "{}", SnapshotDecodeFailure.MalformedJson, "$");
-        Fails(GoldenJson.Replace("}]}]}", "}]}],}"), SnapshotDecodeFailure.MalformedJson, "$");
+        Fails(With("\"hour\":15}}", "\"hour\":15},}"), SnapshotDecodeFailure.MalformedJson, "$");
         Fails("/*x*/" + GoldenJson, SnapshotDecodeFailure.MalformedJson, "$");
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":1,\"world\"", "\"schemaVersion\":2,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":3,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        // Schema 1 (no lighting field) is not migrated.
+        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(LightingTail, "}"),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With("\"revision\":2,", "\"revision\":2,\"extra\":0,"), SnapshotDecodeFailure.UnknownField, "$.extra");
         Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":3,"), SnapshotDecodeFailure.DuplicateField, "$.revision");
         Fails(With("\"revision\":2,", ""), SnapshotDecodeFailure.MissingField, "$.revision");
@@ -163,14 +168,21 @@ public sealed class SnapshotRestoreTests
         Fails(With("\"entity\":\"npc-1\"", "\"entity\":\"\\ud800\\ud800\""), SnapshotDecodeFailure.MalformedJson, "$.maps[0].changes[1].entity");
         Fails(With("\"format\":\"arcanum-steamwoven-session\",", ""), SnapshotDecodeFailure.WrongFormat, "$.format");
 
+        Fails(With(LightingTail, "}"), SnapshotDecodeFailure.MissingField, "$.lighting");
+        Fails(With("\"schemeId\":1", "\"schemeId\":0"), SnapshotDecodeFailure.OutOfRange, "$.lighting.schemeId");
+        Fails(With("\"hour\":15}}", "\"hour\":24}}"), SnapshotDecodeFailure.OutOfRange, "$.lighting.hour");
+        Fails(With("\"hour\":15}}", "\"hour\":15,\"sector\":1}}"), SnapshotDecodeFailure.UnknownField, "$.lighting.sector");
+        Fails(With(LightingTail, ",\"lighting\":[]}"), SnapshotDecodeFailure.WrongType, "$.lighting");
+        Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
+
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":1,\"world\"", "\"schemaVersion\":2,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":3,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":1,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));
-        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]}",
+        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + LightingTail,
             SnapshotDecodeFailure.BudgetExceeded, "$.maps");
         var tooManyFlags = string.Join(",", Enumerable.Range(0, GlobalFlagLimits.MaxFlags + 1).Select(flag => $"{{\"flag\":{flag},\"value\":null}}"));
         Fails(With("\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]", "\"entries\":[" + tooManyFlags + "]"),
@@ -183,7 +195,7 @@ public sealed class SnapshotRestoreTests
         var changes = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxChangesPerMap)
             .Select(sector => $"{{\"scope\":\"sector\",\"sector\":{sector},\"property\":\"p\",\"value\":{sector}}}"));
         var text = GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] +
-            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]}";
+            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + LightingTail;
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionLimits.PolicyMaxChangesPerMap, restored.QueryMapChanges(Exterior).Count);
         Assert.AreEqual(4095, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(4095, "p")));

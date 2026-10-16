@@ -17,14 +17,17 @@ public sealed class GameSessionOwner : IDisposable
     private readonly Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> _maps;
     private readonly GameSessionOwnerIdentity _identity = new();
     private ActorPlacement _actor;
+    private SessionLightingState? _lighting;
     private long _revision;
     private int _totalChanges;
     private bool _disposed;
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
-        ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps)
+        ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps,
+        SessionLightingState? lighting)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
+        _lighting = lighting;
         _totalChanges = maps.Values.Sum(changes => changes.Count);
     }
 
@@ -42,7 +45,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, []),
+        return new(new(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], null),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -61,6 +64,7 @@ public sealed class GameSessionOwner : IDisposable
         if (snapshot.Clock.Profile != options.ExpectedClockProfile) return Rejected(GameSessionFailure.IncompatibleClockProfile);
         if (snapshot.Revision < 0) return Rejected(GameSessionFailure.InvalidSnapshot);
         if (!SessionValidation.Actor(snapshot.Actor)) return Rejected(GameSessionFailure.InvalidActor);
+        if (snapshot.Lighting is { } lighting && !SessionValidation.Lighting(lighting)) return Rejected(GameSessionFailure.InvalidLighting);
         var limits = options.Limits ?? new GameSessionLimits();
         var failure = ImportMaps(snapshot.Maps, limits, out var maps);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -69,6 +73,12 @@ public sealed class GameSessionOwner : IDisposable
         var clock = GameClockOwner.FromDescriptor(new(savedClock.Profile, savedClock.GameTimestampMs,
             savedClock.Pause, 1, savedClock.Revision));
         if (clock.Owner is null) return Rejected(GameSessionFailure.ClockRejected, clock.Failure);
+        // Applied lighting belongs to the saved hour; a mismatch would first show a stale scheme (FR-LIGHT-012).
+        if (snapshot.Lighting is { } applied && applied.Hour != clock.Snapshot!.Value.Hour)
+        {
+            clock.Owner.Dispose();
+            return Rejected(GameSessionFailure.InvalidLighting);
+        }
         var entries = snapshot.Flags.Entries;
         var flags = GlobalFlagOwner.Create(new(snapshot.Identity, options.FlagEpoch, snapshot.Flags.Revision,
             entries.Select(entry => entry.Flag).ToArray(),
@@ -78,7 +88,7 @@ public sealed class GameSessionOwner : IDisposable
             clock.Owner.Dispose();
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
-        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps),
+        return new(new(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, snapshot.Lighting),
             GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -107,6 +117,24 @@ public sealed class GameSessionOwner : IDisposable
     }
 
     public ActorPlacement QueryActor() { ThrowIfDisposed(); return _actor; }
+
+    /// <summary>The last recorded applied lighting, or null when none was recorded.</summary>
+    public SessionLightingState? QueryLighting() { ThrowIfDisposed(); return _lighting; }
+
+    /// <summary>
+    /// Records the lighting the host has just applied. The hour must be the clock's current hour, so a
+    /// capture never pairs a time with another hour's scheme; the host records again after every clock change
+    /// that crosses an hour. Like clock and flag changes, this does not move the session revision.
+    /// </summary>
+    public GameSessionMutationResult RecordLighting(SessionLightingState lighting)
+    {
+        ThrowIfDisposed();
+        if (!SessionValidation.Lighting(lighting) || lighting.Hour != _clock.QueryClockSnapshot().Hour)
+            return Reject(GameSessionFailure.InvalidLighting);
+        if (_lighting == lighting) return NoChange();
+        _lighting = lighting;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, new(_identity, _revision));
+    }
 
     /// <summary>Places the actor, on the same map or across a transition. Map changes stay with their map.</summary>
     public GameSessionMutationResult PlaceActor(GameSessionVersion expected, ActorPlacement placement)
@@ -182,7 +210,7 @@ public sealed class GameSessionOwner : IDisposable
             .Select(pair => new SessionMapState(pair.Key, Sorted(pair.Value))).ToArray();
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
-            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps);
+            new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

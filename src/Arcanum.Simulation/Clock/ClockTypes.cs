@@ -14,7 +14,9 @@ public readonly record struct ClockToken(ClockOwnerIdentity? OwnerIdentity, Prof
     long Generation, long Revision);
 public enum PauseReason { None, User, Menu, TurnBased }
 public readonly record struct PauseDisposition(bool Paused, PauseReason Reason);
-public enum ClockAdvanceReason { OrdinaryAdvance }
+/// <summary>OrdinaryAdvance is world time flowing and stops while paused; ExplicitWait
+/// is a deliberate wait (FR-LIGHT-002) that advances even while paused and keeps the pause disposition.</summary>
+public enum ClockAdvanceReason { OrdinaryAdvance, ExplicitWait }
 public enum ClockBootstrapDisposition { Ready, Rejected }
 public enum ClockMutationDisposition { Changed, NoChange, Rejected }
 public enum ClockFailure

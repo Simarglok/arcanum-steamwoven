@@ -78,8 +78,9 @@ public partial class DiagnosticInputSettingsPanel : CanvasLayer
         _rows.AddChild(new Label { Text = "Reset scene: actor and Follow return to spawn; preferences kept.\nReload: the current source loads again; the scene resets.\nBoth wait for an accepted step to settle.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         AddAction("Reset scene", () => ResetSceneRequested?.Invoke());
         AddAction("Reload current source", () => ReloadRequested?.Invoke());
-        // ARC-RENDER-010: the game clock moves only through this explicit diagnostic action.
-        _rows.AddChild(new Label { Text = "Day/night: game time advances only here, by whole hours.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
+        // ARC-RENDER-010 / ARC-WORLD-010: game time flows by itself and stops while this palette or a dialog is
+        // open; this action is an explicit wait of one hour that also works during that pause.
+        _rows.AddChild(new Label { Text = "Day/night: game time flows by itself and is paused while this palette or a dialog is open.\n+1 hour waits one game hour.", AutowrapMode = TextServer.AutowrapMode.WordSmart });
         AddAction("Game time +1 hour", () => GameHourRequested?.Invoke());
         AddAction("Ambient lighting on/off", () => LightingToggleRequested?.Invoke());
         _lighting = new Label { Name = "PaletteLighting", AutowrapMode = TextServer.AutowrapMode.WordSmart }; _rows.AddChild(_lighting);

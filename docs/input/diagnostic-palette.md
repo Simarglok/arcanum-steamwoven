@@ -39,9 +39,10 @@ its Close button. Contents:
   accepted step settles; a failed reload is shown as a failure and the old scene is not
   republished. Without a loaded source the palette says "Reload unavailable".
 - **Game time +1 hour** and **Ambient lighting on/off** (ARC-RENDER-010,
-  `crash-site-area` only): advance the area game clock by one whole hour or switch the
-  ambient multiplier off/on; a status line shows time, DAY/NIGHT and scheme. Elsewhere
-  they report "unavailable". See [area lighting](../rendering/area-lighting.md).
+  `crash-site-area` only): wait one game hour on the session clock (ARC-WORLD-010; this
+  works while the open palette pauses time) or switch the ambient multiplier off/on; a
+  status line shows time, DAY/NIGHT, whether time flows or is paused, and the scheme.
+  Elsewhere they report "unavailable". See [area lighting](../rendering/area-lighting.md).
 - **Show passability (unavailable)**: a disabled, non-navigable row reserved for
   ARC-RENDER-008. It draws nothing and claims no Open/Blocked state. The seam for
   RENDER-008 is `DiagnosticInputSettingsPanel.BindOverlay(available, on, text)` and the

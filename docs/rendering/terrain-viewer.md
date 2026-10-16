@@ -414,6 +414,9 @@ session, then clicks the entrance from the return cell three cells away, checks 
 ground click cancels that walk-to-use, clicks again and lets the route walk there
 before the use, then in the cave accepts a use and resets before the next frame,
 checking that the reset drops the transfer; it prints `ARC-WORLD-009 native-smoke transition PASS`.
+A clock phase follows (ARC-WORLD-010, [area lighting](area-lighting.md#verification)): the session clock flows to the
+next hour at literal host times, holds while the palette and a dialog are open, waits +1 hour during the pause
+and round-trips through a snapshot; it prints `ARC-WORLD-010 native-smoke clock PASS`.
 `ARC_AREA_TRANSITION_CAPTURE` saves views of both maps. The real-data Core test
 `AreaTransitionOriginalTests` walks to each trigger over the step evidence and
 checks the same transfers. The ordinary launcher passes the cave input only to an

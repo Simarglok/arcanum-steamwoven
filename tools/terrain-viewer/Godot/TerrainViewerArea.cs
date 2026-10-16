@@ -33,6 +33,7 @@ public partial class TerrainViewerApp
         _readyElapsedMilliseconds = result.ElapsedMilliseconds;
         _hud!.SetMode(arguments.Mode); InitializeWorld(); _actorTimeline = null; RetireWorldLifecycle();
         _worldActor.Configure(result.AreaStepSnapshot, WorldTime);
+        StartAreaSession(result);
         StartAreaTransitions(arguments, result);
         StartAreaAmbient(area);
         _worldGridInput = new(); PaletteScenePublished();
@@ -160,6 +161,7 @@ public partial class TerrainViewerApp
         }
         await RunAreaLightingSmokeAsync(area);
         if (_areaTransitions is not null) await RunAreaTransitionSmokeAsync();
+        RunAreaClockSmoke();
         // The caller releases its load result, then runs S5 and quits.
     }
     private bool TryAreaPixel(AreaDrawCommand command, AreaLoadResult area, Image image, out object sample, out AreaPixelDiagnostics diagnostics)

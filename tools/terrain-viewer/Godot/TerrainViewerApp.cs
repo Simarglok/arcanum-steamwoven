@@ -837,6 +837,7 @@ public partial class TerrainViewerApp : Node
     public override void _Process(double delta)
     {
         PaceFrames();
+        TickAreaClock();
         if (IsWorld)
         {
             try { ProcessWorld(delta); }
@@ -917,7 +918,7 @@ public partial class TerrainViewerApp : Node
 
     private void ClearReadyMetrics()
     {
-        StopAreaAmbient(); StopAreaTransitions();
+        StopAreaAmbient(); StopAreaTransitions(); StopAreaSession();
         UnbindAreaConversations();
         _readyArea = null;
         _readySourceId = null;
