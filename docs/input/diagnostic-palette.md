@@ -136,7 +136,7 @@ click-to-move, Followers, quick slots, game screens and called shots remain futu
 ## Owner checklist (ARC-INPUT-002)
 
 Run the exported ARC-INPUT-001 app (`./arcanum area`) on an ordinary Mac keyboard and
-controller, then record the verdict on the ARC-INPUT-002 card.
+controller, then record the verdict in the ARC-INPUT-002 task.
 
 1. **Chord:** Ctrl+Shift+F9 opens and closes the palette exactly once per press, with
    left and right Ctrl/Shift where the keyboard has them (Fn may be needed for F9).

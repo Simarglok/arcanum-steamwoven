@@ -19,7 +19,7 @@ The [integrated WORLD viewer](../rendering/terrain-viewer.md#integrated-world-di
 
 ## Authority and evidence
 
-The [dependency roadmap](roadmap.md) explains sequencing without creating tasks. Hermes board `arcanum-steamwoven` remains authoritative for board work; direct explicit user instructions may authorize bounded Codex work. Operational profiles and model routing belong to conductor-hermes. A component may be implemented while original-runtime parity, human visual inspection or physical device behavior remains unverified.
+The [dependency roadmap](roadmap.md) explains sequencing without creating tasks. Work starts only from explicit owner requests ([task workflow](../workflow/tasks.md)). A component may be implemented while original-runtime parity, human visual inspection or physical device behavior remains unverified.
 
 ## Considered and deferred alternatives
 

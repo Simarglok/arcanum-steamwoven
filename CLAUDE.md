@@ -1,26 +1,25 @@
 # CLAUDE.md — project guide for Claude sessions
 
-This file is for Claude. Codex/Hermes workers read `AGENTS.md` and `.hermes.md`;
-they do not load this file, and nothing here changes their contracts.
+This file is for Claude. The shared agent rules live in `AGENTS.md`; this file
+summarizes the project and points to them.
 
 ## 1. Roles and authority
 
 - **Default role: developer.** Work on the task the owner gives you (a direct
   request, a Claude project thread, or a named `ARC-*` work item) and follow
-  `AGENTS.md` (task authority, card readiness, implementation and evidence,
-  GitHub identity, delivery) and `docs/workflow/toolchain.md`.
-- **Other roles are assigned explicitly.** The Hermes reliability role (diagnose
-  why the Hermes board stalls, configure Hermes via `conductor-hermes`) lives in
-  [`docs/hermes/claude-reliability-role.md`](docs/hermes/claude-reliability-role.md);
-  load it only when the owner assigns that role.
-- **Hermes state is off limits for developer sessions.** Do not touch
-  `~/.hermes` (board, profiles, plugins, cron, logs with secrets) and do not run
-  `hermes`. Work done outside Hermes is reconciled on the board by the owner or the
-  reliability role.
+  `AGENTS.md` (task authority, task readiness, implementation and evidence,
+  GitHub identity, delivery), `docs/workflow/tasks.md` and
+  `docs/workflow/toolchain.md`. Name threads, branches, PRs and commits by the
+  task code ([`docs/workflow/task-naming.md`](docs/workflow/task-naming.md)).
+- **The retired Hermes setup is off limits.** The project no longer uses the
+  Hermes task board; do not touch `~/.hermes` on the owner's Mac (old board,
+  profiles, logs with secrets) and do not run `hermes`.
 - **Pull requests.** Every change goes through a PR from a branch (never push to
   `main`), as GitHub user `Simarglok`. Get an independent review from a fresh
-  subagent on the exact diff first. The owner merges developer PRs (human merge for
-  non-Hermes work) unless the owner says otherwise for the task.
+  subagent on the exact diff first. Once the acceptance criteria, task checks and
+  root checks pass and the review is addressed, merge the PR yourself and report
+  it, unless the owner explicitly asked to review it; then leave it open for the
+  owner (`docs/workflow/tasks.md`).
 - **Stop and ask** when something you need is missing, a fix would change the
   task's contract, or the same failure repeats twice; offer options. Do not guess,
   mock or loop.
@@ -60,14 +59,14 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
 - Hard rules: no original/extracted game content, toolkit archives, secrets or
   personal paths in git (`toolkit/`, `artifacts/`, `local/`, `research-private/`
   are ignored); synthetic fixtures only; no mechanical copying/translation from CE;
-  record provenance; GitHub account `Simarglok` only; human merge for non-Hermes work.
+  record provenance; GitHub account `Simarglok` only; agent merges unless the owner explicitly asked to review.
 - Style: dense, defensive, immutable records; explicit limits/options objects;
   typed failure results instead of exceptions at runtime boundaries; docs state
   scope and "NOT READY" boundaries precisely.
 
 ## 3. Truth hierarchy
 
-1. **Code and git history** (prefer `origin/main` — see §4); for board state, the live Hermes DB.
+1. **Code and git history** (prefer `origin/main` — see §4).
 2. Repo docs: `docs/project/status.md` (component catalogue, audited), contracts
    under `docs/world`, `docs/scripting`, `docs/rendering`, `docs/formats`.
 3. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
@@ -80,8 +79,8 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
   checkout may lag `origin/main` (on 2026-10-13 it sat at `11e8099`/PR #46 vs
   `1f3c036`/PR #58). For current code use a fresh cloud clone, or
   `git show origin/main:<path>` locally (only as fresh as the last fetch).
-- `.worktrees/` (~70 Hermes task worktrees, ignored via `.gitignore`)
-  and many `arcanum-steamwoven/t_<id>-arc-*` branches belong to Hermes runs.
+- `.worktrees/` (~70 task worktrees, ignored via `.gitignore`) and many
+  `arcanum-steamwoven/t_<id>-arc-*` branches are left from the retired task board.
   Don't modify or delete them; they are evidence — except the one worktree your
   task explicitly names (e.g. ARC-GPAD-005: `.worktrees/t_6346b4d1`). Unmerged
   in-flight branches include ARC-DATA-010 and ARC-GPAD-005.
@@ -92,10 +91,11 @@ sector/area profiles, diagnostic viewers). Not a playable game yet.
 
 ## 5. Where the rules live
 
-- `AGENTS.md` — agent rules, card readiness (Definition of Ready), evidence levels.
+- `AGENTS.md` — agent rules, task readiness (Definition of Ready), evidence levels.
+- `docs/workflow/tasks.md` — task authority, Definition of Ready, evidence levels
+  and storage, review and merge rules.
+- `docs/workflow/task-naming.md` — `ARC-TYPE-NNN` codes, type registry, thread,
+  branch, PR and commit naming.
 - `docs/workflow/toolchain.md` — exact SDK/Godot versions, `godot_canonical`,
   lab and export commands.
-- `docs/workflow/hermes.md`, `merge-policy.md`, `task-naming.md`, `readiness.json`
-  — Hermes board workflow (for reading cards and for the reliability role).
 - `docs/project/status.md` — component catalogue; `docs/requirements/coverage.md`.
-- `docs/hermes/` — Hermes failure analysis and remediation history.

@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "kind": "arcanum-steamwoven-hd-recipe",
+  "id": "crash-site-bodies-x4plus-4x-soft",
+  "scale": 4,
+  "slices": [
+    {
+      "name": "crash-site-exterior-bodies",
+      "map": "crash-site-exterior",
+      "kinds": ["player", "critter", "npc", "scenery", "container", "item"]
+    }
+  ],
+  "method": {
+    "kind": "network",
+    "tool": "realesrgan-ncnn-vulkan",
+    "toolVersion": "20220424",
+    "toolSha256": "c1c35d92079085de96b9d547fd7e4464bc8a2e9ccf28d7b8c712d72ade91b7cc",
+    "model": "realesrgan-x4plus",
+    "licence": "BSD-3-Clause",
+    "modelFiles": [
+      { "name": "realesrgan-x4plus.bin", "sha256": "713ee713b0353afaa27976f0563a64a5043bd70b9bd8936c2e26e25ebcdbcddf" },
+      { "name": "realesrgan-x4plus.param", "sha256": "35330ececcea33b6c397a72548e788d5d53becee4734c50b7fada36e89f10a86" }
+    ],
+    "nativeScale": 4,
+    "downscale": "none",
+    "tileSize": 600,
+    "tta": false
+  },
+  "rgb": { "edgeExtend": 8, "fill": "mean" },
+  "alpha": { "mode": "soft", "minIoUPermille": 950 }
+}

@@ -1,7 +1,9 @@
 # HD presentation contract (ARC-RENDER-013)
 
-Status: **contract and synthetic oracle tests only.** No HD pack format, loader,
-renderer path, toggle or setting exists yet. They are ARC-DATA-014 (pack format and
+Status: **contract and synthetic oracle tests, amended by ARC-DATA-014** (see
+[the amendment](#amendment-arc-data-014-2026-10-16)). The pack format, reader, import and
+device budget exist ([HD pack format](../formats/hd-pack.md)); no renderer path, toggle
+or setting exists yet. The parts are ARC-DATA-014 (pack format and
 loader), ARC-RENDER-014 (AREA/WORLD HD path for characters and objects), ARC-UI-006
 (on-the-fly toggle), ARC-DEV-003 (pack build tool), ARC-RENDER-015 (before/after
 review) and ARC-RENDER-016 (terrain). Each of them implements its part of this
@@ -18,18 +20,23 @@ graphics](../architecture/decisions.md). Exact sampling it extends:
 - **Legacy frame**: one decoded original ART frame, `w × h` RGBA, with its frame
   hotspot, mirroring and palette, as the existing Data/AREA/WORLD paths load it.
 - **HD frame**: an RGBA image of exactly `N·w × N·h` made outside the game from one
-  Legacy frame. **N** is a positive integer scale declared by the pack. The first
-  slice accepts only `N = 2` (owner decision 2026-10-16, recorded in
-  [decisions](../architecture/decisions.md)); the rules are written for any
-  integer `N ≥ 2` so a later 3× or 4× pack needs no new contract.
+  Legacy frame. **N** is a positive integer scale declared by the pack. Accepted:
+  `N = 4` (the default recipe) and `N = 2` (owner decisions 2026-10-16, recorded in
+  [decisions](../architecture/decisions.md): first 2×, then "1 + 3" with 4×); the rules
+  are written for any integer `N ≥ 2`.
 - **Frame key**: the identity of a Legacy frame (resource entry, effective palette
   slot, physical group, frame, plus the hashes the existing `AreaFrameKey` carries).
-  An HD frame is bound to exactly one frame key.
+  An HD frame is bound to exactly one frame key. A pack stores only the frame key's
+  install-independent part (ART payload hash, view length, physical group, frame,
+  effective palette) and checks the Legacy size and RGBA hash on each device
+  ([amendment](#amendment-arc-data-014-2026-10-16)).
 - **Visual profile**: `Legacy` or `Hd`, a presentation setting. It selects which
   texture draws a frame key; nothing else.
-- **HD pack**: a local directory outside the repository (`local/hd-packs/<id>/`,
-  ignored by git) with a manifest and HD frames. It is built by the owner on their
-  machine and is not distributed ([decisions](../architecture/decisions.md), HD pack). Pack
+- **HD pack**: a local directory outside the repository with a manifest and HD frames,
+  in a pack collection (the game's pack folder, or `local/hd-packs/<id>/` in a checkout,
+  ignored by git) or in a folder the user chose. It is built by the owner on a device
+  from a recipe, or built on one of their devices and imported on another, and is not
+  distributed ([decisions](../architecture/decisions.md), HD pack). Pack
   frames, screenshots and recordings never enter git, PRs or attachments; tests use
   synthetic sprites and synthetic "HD" only.
 
@@ -101,7 +108,7 @@ sampler; asserted in `HdScaledCropTests`):
 **Limits.** The index rows encode `index + 1` in 16 bits, so `AreaNearestAxis` refuses
 `c + m > 65534`. An HD crop with `N·(c + m) > 65534` cannot be drawn; that frame
 falls back to Legacy (`HdAxisLimit`, below), it never fails the view. At `N = 2` every
-Legacy axis up to 32,767 fits.
+Legacy axis up to 32,767 fits, at `N = 4` up to 16,383.
 
 **Index-row cache.** A row key includes the crop, so Legacy and HD rows of the same
 item have different keys and both stay exact; an HD key keeps the integer-translation
@@ -134,12 +141,16 @@ screen envelope, not on the texture.
   set itself comes from the wall check, which never sees textures.
 - **Light** (ARC-RENDER-010/012) is computed in world coordinates (lattice, ambient,
   wall gradient across the world destination) and is profile-independent.
-- **Alpha.** The default HD alpha is the parent Legacy alpha (nearest, hard edge);
-  with it the per-pixel coverage of HD equals Legacy (consequences 2 and 4). A softer
-  HD alpha is an opt-in pack option whose mask must still pass the ARC-DATA-014 mask
-  check; with it, only pixels inside the unchanged destination may change coverage.
-  No game rule reads sprite alpha; any future sprite-pixel hit test reads the Legacy
-  frame.
+- **Alpha** (as amended by ARC-DATA-014). The default HD alpha is **soft**: the edge is
+  upscaled with the colour instead of copied from the nearest Legacy mask, so the
+  silhouette loses its steps. It must pass the [soft mask check](../formats/hd-pack.md#binding-a-frame-on-this-device):
+  alpha only within one Legacy texel of the Legacy silhouette, and mask IoU at least the
+  recipe's minimum (≥ 0.9). Consequences 1 to 3 still hold (they concern the destination
+  and the selected texel); per-pixel alpha coverage may differ from Legacy, inside the
+  unchanged destination and within one Legacy texel of the edge. The Legacy hard edge
+  (every HD texel takes its parent's alpha) remains a recipe option; with it the per-pixel
+  coverage of HD equals Legacy, and the consequence-4 identity oracle applies to it. No game rule reads
+  sprite alpha; any future sprite-pixel hit test reads the Legacy frame.
 
 ## WORLD path
 
@@ -166,8 +177,9 @@ the pack report (ARC-DEV-003) lists such groups.
 | `NoPack` | Profile `Hd` but no valid pack is loaded |
 | `PackRejected` | The pack's review status is `rejected` |
 | `FrameMissing` | The pack has no entry for this frame key |
-| `SourceMismatch` | The entry was built from different Legacy bytes (mod, other version) |
-| `Invalid` | Size is not exactly `N·w × N·h`, hash or alpha-mask check failed (ARC-DATA-014) |
+| `SourceMismatch` | The entry was built from different Legacy bytes (mod, other version): the pack knows the ART name only from other ART bytes, or the Legacy size or RGBA hash differs |
+| `FrameRejected` | The entry's review status is `rejected` (added by ARC-DATA-014) |
+| `Invalid` | File missing, unreadable or a link, size or hash differs, not the pack PNG profile, not exactly `N·w × N·h`, too large, or the alpha-mask check failed (ARC-DATA-014 reasons) |
 | `HdAxisLimit` | `N·(c + m) > 65534` on an axis |
 | `HdBudget` | The frame does not fit the HD budget for this submission |
 | `Pending` | Not yet decoded/uploaded (preload in progress) |
@@ -180,18 +192,19 @@ per-frame Legacy draw with a reason.
 
 ## Budgets
 
-HD textures live in their own caches, keyed by `(pack identity, N, frame key)`, with
-their own budgets. Loading, replacing or unloading a pack releases every HD texture of
+HD textures live in their own caches, keyed by `(pack identity, N, frame key)` (pack
+identity = id and the SHA-256 of its manifest), with their own budgets. Loading, replacing or unloading a pack releases every HD texture of
 the previous pack, as a map change does. Legacy budgets and behaviour are unchanged. HD at scale `N` costs `N²` bytes
 per Legacy byte, so the HD limits are `N²` times the Legacy ones they shadow (×4 at
-`N = 2`):
+`N = 2`, ×16 at `N = 4`). Since ARC-DATA-014 these are **ceilings**: a per-device budget
+may lower each of them (amendment below).
 
 | Domain | Legacy limit today | HD limit |
 | --- | --- | --- |
 | AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B | same frame count, `N² · 81,853,096` B |
 | AREA retained (left the view) | 512 frames, 32 MiB | 512 frames, `N² · 32` MiB |
-| WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of 256 MiB, not shared with the Legacy 256 MiB |
-| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | none until ARC-RENDER-016 (terrain stays Legacy) |
+| WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of `N²/4 · 256` MiB (256 MiB at 2×, 1 GiB at 4×), not shared with the Legacy 256 MiB |
+| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | none until ARC-RENDER-016 (terrain stays Legacy); reserved ceiling `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB) |
 
 - There is no whole-area HD CPU repository: HD pixels are decoded only for the
   visible set, the preload queue and the retained set, and released with them.
@@ -274,14 +287,59 @@ and a twice-size body at zoom 1); and that the wall-fade column
 nonzero crop starts, while the rejected `N·width` gradient does not. The axis-limit
 test checks the sampler refusal only; the `HdAxisLimit` fallback is ARC-RENDER-014.
 
-Later tasks must add: native HD draws on real viewports (ARC-RENDER-014), the toggle
-and Session-snapshot invariance (ARC-UI-006), pack validation fixtures
-(ARC-DATA-014). Human review of real HD frames is ARC-RENDER-015 and never a merge
+ARC-DATA-014 added the synthetic pack, recipe, PNG, import and budget tests in
+`tests/Arcanum.Data.Tests/Hd` ([format](../formats/hd-pack.md)). Later tasks must add:
+native HD draws on real viewports (ARC-RENDER-014), the toggle and Session-snapshot
+invariance (ARC-UI-006). Human review of real HD frames is ARC-RENDER-015 and never a merge
 gate.
+
+## Amendment ARC-DATA-014 (2026-10-16)
+
+Owner decisions: packs are obtained by building on the device from a recipe or by
+importing a pack built on another device; handhelds are Steam Deck class devices with at
+least 16 GB of shared memory on SteamOS/Linux or Windows; after the measured plain
+upscales were rejected ("1 + 3"), the default is 4× with a soft edge, 2× stays
+supported, and the format must also hold a generative pack. This amendment changes the
+rules above as follows; the [pack format](../formats/hd-pack.md) has the details.
+
+1. **Scale.** `N ∈ {2, 4}` is accepted, 4 is the default recipe. The sampling rule,
+   consequences, wall fade and anchors are unchanged; they were written for any `N`.
+2. **Soft alpha by default** (Anchors, mirroring … Alpha, above), checked per frame
+   against the device's Legacy alpha. The Legacy hard edge is a recipe option.
+3. **Packs built elsewhere.** A pack is portable (PNG + JSON, relative OS-neutral
+   paths, no user, OS or GPU path) and found in a pack collection or a chosen folder.
+   Its entries carry only the install-independent part of the frame key; on each device
+   a frame is bound only if this installation's Legacy frame has the recorded size and
+   RGBA hash, otherwise it draws Legacy (`SourceMismatch`), so a pack built on a Mac
+   works on a handheld for every frame whose Legacy bytes match. Import verifies the
+   integrity of every file and copies the pack atomically; nothing is compared with
+   reference HD hashes, because upscaler output is not shown to be bit-exact across GPUs
+   (ARC-RES-033). A rebuild is a new pack identity; a copy is not.
+4. **Reasons.** `FrameRejected` is added and `SourceMismatch`/`Invalid` are made exact
+   (table above). All remain per-frame Legacy draws.
+5. **Per-device budgets.** The HD limits of the Budgets table are ceilings. Each device
+   has an HD budget (`user://hd_budget_v1.json`, read by `HdDeviceBudgetCodec`) that may
+   lower any of them: AREA visible bytes, AREA retained frames and bytes, WORLD bytes,
+   terrain bytes; 0 turns HD off in that domain. A missing or invalid file means the
+   ceilings; a value above a ceiling is clamped; nothing raises a ceiling except an
+   amendment here. Admission stays deterministic per submission (`HdBudget`), and Legacy
+   budgets are untouched. Sizes for orientation (inference from the ARC-RES-033 census ×
+   N²): the Crash Site's characters and objects are ~30 MiB at 4× and all its 1,975
+   distinct exterior frames ~400 MiB; a 4× terrain chunk is 16 MiB, so the reserved
+   terrain ceiling of 192 chunks is 3 GiB, and a 16 GB handheld would typically lower it
+   (48 chunks = 768 MiB). Real usage is still ARC-RENDER-014/016's to measure.
+6. **Terrain chunks** are a reserved pack entry kind (512-pixel chunk, ≥ 32 px neighbour
+   padding, keyed by chunk and the hashes of the composed tiles). They are never bound
+   until ARC-RENDER-016 amends this contract.
+7. **Method-agnostic.** The contract and the pack never assume a method: networks,
+   algorithms, generative models (base model, adapters such as LoRA, seed, prompt and
+   parameters are recorded) and external pipelines produce the same pack, checked by
+   what it contains. One pack is active at a time.
 
 ## Not ready / out of scope
 
-- No runtime HD path, pack, loader, setting or key exists after this task.
+- No runtime HD path, setting or key exists (the pack format and reader exist since
+  ARC-DATA-014).
 - Terrain tiles, facades and terrain chunks stay Legacy until ARC-RENDER-016; walls,
   roofs, UI and cursors until a later stage.
 - No shader smoothing profile, VRAM compression, mipmaps or box-filtered downsample.

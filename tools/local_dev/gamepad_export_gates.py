@@ -314,7 +314,7 @@ def run_gate(evidence: Path, head: str, name: str, command: list[str]) -> int:
         except (ValueError, OSError) as error:
             binding_failure = str(error)
     receipt: dict = dict(schema='arcanum-gamepad-gate-result-v1', task=TASK, candidateCommit=head,
-        command=command, workspace=str(Path.cwd()), nativeTask=os.environ.get('HERMES_KANBAN_TASK'),
+        command=command, workspace=str(Path.cwd()),
         gate=next(g for g,f in GATES.items() if f==name), log=name, outcome='PASS' if code==0 and not failed_log and binding_failure is None else 'FAIL', exitCode=code,
         engineError=failed_log,
         startedAt=started, finishedAt=datetime.now(timezone.utc).isoformat(), logBytes=len(log), logSha256=hashlib.sha256(log).hexdigest())

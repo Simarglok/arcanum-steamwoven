@@ -7,6 +7,7 @@ public partial class TerrainViewerApp
 {
     private double _pacingLastActivity = double.NegativeInfinity;
     private CameraState? _pacingCamera;
+    private (GamepadLab.Core.Vec2 Anchor, int Facing)? _pacingActor;
     private double _statusAge = double.PositiveInfinity;
     // Engine cap in force, corrected once per second from the measured rate after the
     // target has held for PacingSettleSeconds (the engine's 1 s FPS window then holds
@@ -30,7 +31,11 @@ public partial class TerrainViewerApp
     {
         if (PacingAutomated) { if (Engine.MaxFps != 0) Engine.MaxFps = 0; return; }
         var now = PacingNow(); var camera = _camera?.State;
-        if (camera != _pacingCamera || Godot.Input.IsAnythingPressed()) { _pacingCamera = camera; _pacingLastActivity = now; }
+        // A walking or turning actor (a click route with a still camera) is activity as well:
+        // it raises the frame cap to the display rate and the status refresh to 10 Hz.
+        (GamepadLab.Core.Vec2 Anchor, int Facing)? actor = IsWorld ? (_worldActor.FootAnchor, _worldActor.State.Facing) : null;
+        if (camera != _pacingCamera || actor != _pacingActor || Godot.Input.IsAnythingPressed())
+        { _pacingCamera = camera; _pacingActor = actor; _pacingLastActivity = now; }
         var target = FramePacingPolicy.Target(now - _pacingLastActivity, DisplayServer.ScreenGetRefreshRate(DisplayServer.WindowGetCurrentScreen()));
         if (target != _pacingTarget)
         {
@@ -48,13 +53,15 @@ public partial class TerrainViewerApp
     }
 
     /// <summary>The per-frame status refresh of the WORLD loop, rebuilt at most every
-    /// <see cref="FramePacingPolicy.StatusRefreshSeconds"/> outside automated tests.
+    /// <see cref="FramePacingPolicy.StatusRefreshSeconds"/> (idle:
+    /// <see cref="FramePacingPolicy.IdleStatusRefreshSeconds"/>) outside automated tests.
     /// Event-driven refreshes call <c>RefreshReadyStatus</c> directly.</summary>
     private void RefreshReadyStatusPerFrame(double delta)
     {
         // An invalid frame delta (the quarantine path) refreshes at once.
         _statusAge = double.IsFinite(delta) && delta >= 0 ? _statusAge + delta : double.PositiveInfinity;
-        if (!PacingAutomated && _statusAge < FramePacingPolicy.StatusRefreshSeconds) return;
+        var interval = FramePacingPolicy.Idle(PacingNow() - _pacingLastActivity) ? FramePacingPolicy.IdleStatusRefreshSeconds : FramePacingPolicy.StatusRefreshSeconds;
+        if (!PacingAutomated && _statusAge < interval) return;
         _statusAge = 0; RefreshReadyStatus();
     }
 }
