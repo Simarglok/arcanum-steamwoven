@@ -271,9 +271,9 @@ already authenticated in the same load (L-C, not done).
 
 ## D-A, I-A and M-A results
 
-- **D-A done.** The differential inflate test now uses mostly small streams (two of 100–200 KB per
+- **D-A done.** The differential inflate test now uses mostly small streams (four of 100–200 KB per
   compression level, the rest under 24 KB) with the same 2,160 comparisons and the same
-  pass thresholds; it takes 1.7 s instead of 10.0 s.
+  pass thresholds; it takes about 2 s instead of 10.0 s.
 - **I-A dropped.** With Godot's low-processor mode switched on while idle, the idle view
   still drew about 60 frames per second at the same CPU: something visible changes every
   frame, so there is nothing to skip until that source is found. Idle CPU measured

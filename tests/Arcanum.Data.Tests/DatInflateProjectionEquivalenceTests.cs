@@ -19,7 +19,7 @@ public sealed class DatInflateProjectionEquivalenceTests
         {
             // Mostly small streams keep the bit-serial reference fast; a few large ones per
             // level still span several dynamic blocks and the 32 KiB window.
-            var size = sample switch { 0 => 0, 1 => 1, 2 or 3 => random.Next(100_000, 200_000), _ => random.Next(1, 24_000) };
+            var size = sample switch { 0 => 0, 1 => 1, >= 2 and <= 5 => random.Next(100_000, 200_000), _ => random.Next(1, 24_000) };
             var data = new byte[size];
             var alphabet = random.Next(1, 257);
             var run = random.Next(1, 64);
