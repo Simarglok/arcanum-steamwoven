@@ -29,31 +29,28 @@ public partial class TerrainViewerApp
 
     private bool InCave => _readyArea is not null && _caveLoad is not null && ReferenceEquals(_readyArea, _caveLoad.Area);
 
-    // ARC-WORLD-010: the viewer's one game session exists whenever area lighting is loaded, with or without the
-    // cave: its clock drives day/night and its snapshot carries time and the applied scheme.
-    private void StartAreaSession(TerrainLoadResult result)
-    {
-        StopAreaSession();
-        if (result.Area?.Lighting is not { } lighting) return;
-        // The game-generated object file carries an empty module GUID here, so the session's module id is
-        // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
-        var header = Convert.FromHexString(lighting.Source.ModuleSha256)[..16];
-        var created = AreaTransitionCoordinator.CreateSession(AreaAmbientDriver.ClockProfile(lighting.Source), Guid.NewGuid(), new Guid(header),
-            AreaGridSession.Cell(AreaGridSession.Spawn), result.Area.Snapshot.RuntimeMap);
-        _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
-    }
-
-    private void StopAreaSession() { _areaSession?.Dispose(); _areaSession = null; }
-
+    // ARC-SCRIPT-006: the area's game session exists with or without the cave; dialogs keep their consequences in it.
+    // Its clock profile comes from the area lighting source. A synthetic self-test publication has no lighting and
+    // gets an invented synthetic profile instead (never used for original data).
     private void StartAreaTransitions(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
         StopAreaTransitions();
         _exteriorArea = result.Area; _exteriorSteps = result.AreaStepSnapshot;
-        if (result.Cave is not { } cave || _areaSession is null)
-        { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
+        if (result.Area is not { } area) return;
+        var moduleSha = area.Lighting?.Source.ModuleSha256 ?? area.Snapshot.Inputs.Single(input => input.Key.Role == AreaSourceRole.Module).Sha256;
+        ProfileBinding? clock = area.Lighting is { } lighting
+            ? AreaAmbientDriver.ClockProfile(lighting.Source)
+            : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
+        if (clock is not { } profile) { _areaUseStatus = "cave: not loaded (no session clock)"; return; }
+        // The game-generated object file carries an empty module GUID here, so the session's module id is
+        // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
+        var header = Convert.FromHexString(moduleSha)[..16];
+        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), AreaGridSession.Cell(AreaGridSession.Spawn), area.Snapshot.RuntimeMap);
+        _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+        if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
         _caveLoad = cave;
-        _areaTransitions = new([new(result.Area!.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(cave.Area.Snapshot, cave.Steps, cave.Chart)],
-            result.Area.Snapshot.RuntimeMap, _areaSession);
+        _areaTransitions = new([new(result.Area.Snapshot, result.AreaStepSnapshot!, AreaChart.Exterior), new(cave.Area.Snapshot, cave.Steps, cave.Chart)],
+            area.Snapshot.RuntimeMap, _areaSession);
         _areaUseStatus = "cave: click the entrance within 2 cells";
         GD.Print("ARC-WORLD-009 transition-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Maps = _areaTransitions.Maps, Endpoints = _areaTransitions.Triggers().Select(t => t.Endpoint).ToArray(), CaveWalls = cave.Steps.WallEdges }));
@@ -61,7 +58,7 @@ public partial class TerrainViewerApp
 
     private void StopAreaTransitions()
     {
-        _areaTransitions = null; _areaUseAfterRoute = null;
+        _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded";
     }
 

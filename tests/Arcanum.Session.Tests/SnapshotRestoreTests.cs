@@ -121,13 +121,16 @@ public sealed class SnapshotRestoreTests
         Fails(GoldenJson[..^40], SnapshotDecodeFailure.MalformedJson, "$");
         Fails(GoldenJson + "{}", SnapshotDecodeFailure.MalformedJson, "$");
         Fails(With("\"hour\":15}}", "\"hour\":15},}"), SnapshotDecodeFailure.MalformedJson, "$");
+        Fails(GoldenJson.Replace("\"rumors\":[]},", "\"rumors\":[],},"), SnapshotDecodeFailure.MalformedJson, "$");
         Fails("/*x*/" + GoldenJson, SnapshotDecodeFailure.MalformedJson, "$");
         Fails(new string(' ', GameSessionSnapshotCodec.MaxEncodedCharacters + 1), SnapshotDecodeFailure.TooLarge, "$");
         Fails("[]", SnapshotDecodeFailure.WrongType, "$");
         Fails(With("arcanum-steamwoven-session", "other-save"), SnapshotDecodeFailure.WrongFormat, "$.format");
-        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":3,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        // Schema 1 (no lighting field) is not migrated.
-        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(LightingTail, "}"),
+        Fails(With("\"schemaVersion\":3,\"world\"", "\"schemaVersion\":4,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        // Schema 1 (no story, no lighting) and schema 2 (story without lighting) are refused, not migrated.
+        Fails(With("\"schemaVersion\":3,\"world\"", "\"schemaVersion\":1,\"world\"").Replace(EmptyStory + LightingTail, "}"),
+            SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":3,\"world\"", "\"schemaVersion\":2,\"world\"").Replace(LightingTail, "}"),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
         Fails(With("\"revision\":2,", "\"revision\":2,\"extra\":0,"), SnapshotDecodeFailure.UnknownField, "$.extra");
         Fails(With("\"revision\":2,", "\"revision\":2,\"revision\":3,"), SnapshotDecodeFailure.DuplicateField, "$.revision");
@@ -176,13 +179,13 @@ public sealed class SnapshotRestoreTests
         Fails(With(LightingTail, ",\"lighting\":{\"hour\":15}}"), SnapshotDecodeFailure.MissingField, "$.lighting.schemeId");
 
         // A newer schema with different fields is reported as unsupported, not as damage.
-        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":3,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
+        Fails(With("\"schemaVersion\":3,\"world\"", "\"schemaVersion\":4,\"inventory\":[],\"world\"").Replace("\"revision\":2,", ""),
             SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
-        Fails(With("\"schemaVersion\":2,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
+        Fails(With("\"schemaVersion\":3,\"world\"", "\"schemaVersion\":4294967297,\"world\""), SnapshotDecodeFailure.UnsupportedSchema, "$.schemaVersion");
 
         var tooManyMaps = string.Join(",", Enumerable.Range(1, GameSessionLimits.PolicyMaxMaps + 1)
             .Select(map => $"{{\"map\":{map},\"changes\":[{{\"scope\":\"sector\",\"sector\":1,\"property\":\"p\",\"value\":1}}]}}"));
-        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + LightingTail,
+        Fails(GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] + "\"maps\":[" + tooManyMaps + "]" + EmptyStory + LightingTail,
             SnapshotDecodeFailure.BudgetExceeded, "$.maps");
         var tooManyFlags = string.Join(",", Enumerable.Range(0, GlobalFlagLimits.MaxFlags + 1).Select(flag => $"{{\"flag\":{flag},\"value\":null}}"));
         Fails(With("\"entries\":[{\"flag\":3,\"value\":false},{\"flag\":7,\"value\":true},{\"flag\":9,\"value\":null}]", "\"entries\":[" + tooManyFlags + "]"),
@@ -195,7 +198,7 @@ public sealed class SnapshotRestoreTests
         var changes = string.Join(",", Enumerable.Range(0, GameSessionLimits.PolicyMaxChangesPerMap)
             .Select(sector => $"{{\"scope\":\"sector\",\"sector\":{sector},\"property\":\"p\",\"value\":{sector}}}"));
         var text = GoldenJson[..GoldenJson.IndexOf("\"maps\":[", StringComparison.Ordinal)] +
-            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + LightingTail;
+            "\"maps\":[{\"map\":79,\"changes\":[" + changes + "]}]" + EmptyStory + LightingTail;
         using var restored = Restore(Decode(text));
         Assert.AreEqual(GameSessionLimits.PolicyMaxChangesPerMap, restored.QueryMapChanges(Exterior).Count);
         Assert.AreEqual(4095, restored.QueryMapChange(Exterior, MapChangeKey.ForSector(4095, "p")));
@@ -213,6 +216,10 @@ public sealed class SnapshotRestoreTests
         Rejected(owner.PlaceActor(owner.Version, Start with { Map = Cave }), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
         Rejected(owner.SetMapChange(owner.Version, Exterior, key, 2), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
         Rejected(owner.ClearMapChange(owner.Version, Exterior, key), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Rejected(owner.SetQuestState(owner.Version, 1000, SessionQuestState.Mentioned), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Rejected(owner.LearnRumor(owner.Version, 1000), owner, GameSessionFailure.RevisionExhausted, long.MaxValue);
+        Assert.IsNull(owner.QueryQuest(1000));
+        Assert.IsNull(owner.QueryRumor(1000));
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetMapChange(owner.Version, Exterior, key, 1).Disposition);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.PlaceActor(owner.Version, Start).Disposition);
         Assert.AreEqual(Start, owner.QueryActor());
