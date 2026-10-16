@@ -57,6 +57,19 @@ public sealed class AreaMapPlansTests
         var huge = AreaMapPlans.Limits(256, 10_000_000, 5, 100, 3);
         Assert.AreEqual((long)Math.Ceiling(baseline.MaxManagedBytes * AreaMapPlans.MaxLimitScale), huge.MaxManagedBytes);
         Assert.AreEqual(int.MaxValue, AreaMapPlans.Limits(1, 10, 5, long.MaxValue, 3).MaxAggregateBytes);
+        // Frame budgets are the cap for every whole map.
+        Assert.AreEqual((long)Math.Ceiling(baseline.MaxFrameStoredBytes * AreaMapPlans.MaxLimitScale), small.MaxFrameStoredBytes);
+        Assert.AreEqual(baseline.MaxFrameOperationBytes * 16, small.MaxFrameOperationBytes);
+    }
+
+    [TestMethod]
+    public void Only_whole_map_plans_read_entries_beyond_one_mebibyte()
+    {
+        AreaSourcePlan Plan(AreaSectorSelection selection, bool original) => new(1, 1, new(1, 1), 2, "maps/test", [], []) { Selection = selection, AllowArtTrailingBytes = original };
+        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.TownmapComponent, true)));
+        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.AllSectors, false)));
+        Assert.AreEqual(16L * 1048576, AreaDataOwner.EntryCap(Plan(AreaSectorSelection.AllSectors, true)));
+        Assert.AreEqual(1048576, AreaDataOwner.EntryCap(CaveProfile.Plan()));
     }
 
     [TestMethod]

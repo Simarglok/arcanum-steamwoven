@@ -200,7 +200,7 @@ digest; the rules are appended to the digest only when present):
   mobiles are.
 
 `AreaMapPlan.StartTile` is the map-list arrival tile. On the installed original
-(opt-in `AreaWholeMapStepTests`) every one of the 52 complete interiors builds
+(opt-in `AreaWholeMapStepTests`) every one of the 54 complete interiors builds
 evidence with no Unknown terrain; the generic Crash Site cave reaches the same
 506 tiles from its start as the pinned cave profile; at least 48 interiors are
 walkable from their start (the others list no start tile, or one a walker
