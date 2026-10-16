@@ -11,7 +11,7 @@ public static partial class TerrainViewerSelfTest
     {
         if (DisplayServer.GetName() == "headless") return;
         const string digest = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
-        var synthetic = SyntheticActorFixture.Create(human: true, run: true);
+        var synthetic = SyntheticActorFixture.Create(human: true, area: true);
         var input = synthetic.Arguments.ActorInput!;
         using var cache = new TerrainTextureCache(); cache.UploadActor(synthetic.Result.ActorTextures);
         // Exercise both actual main viewport and a subviewport with identical

@@ -12,6 +12,9 @@ internal sealed class GridSource(params string[] rows) : IRouteStepSource
 {
     public Dictionary<(CellCoord, NeighborDirection), int> Asked { get; } = [];
     public Func<CellCoord, NeighborDirection, RouteStepVerdict?>? Override { get; set; }
+    /// <summary>Extra cost of a step (a window jump), asked for Open steps only.</summary>
+    public Func<CellCoord, NeighborDirection, int>? Extra { get; set; }
+    public int ExtraCost(CellCoord from, NeighborDirection direction) => Extra?.Invoke(from, direction) ?? 0;
     public int OriginX { get; init; }
     public int OriginY { get; init; }
     private char At(CellCoord c)

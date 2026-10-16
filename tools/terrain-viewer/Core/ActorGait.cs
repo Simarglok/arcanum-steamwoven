@@ -24,13 +24,22 @@ public sealed class GaitTiming
     /// <summary>Provenance code a run step's permit carries, so the presentation draws the run ART for it.</summary>
     public const string RunProvenance = "GAIT_RUN";
     public const string WalkProvenance = "GAIT_WALK";
+    /// <summary>ARC-WORLD-021: provenance code of a window-jump step, drawn with the vault ART.</summary>
+    public const string VaultProvenance = "GAIT_VAULT";
     private readonly StepDuration _walkAxis, _walkDiagonal, _runAxis, _runDiagonal;
 
-    public GaitTiming(GaitStride walk, GaitStride run, int speed)
+    /// <param name="vaultFrames">The vault ART's frames; with <paramref name="vaultFramesPerSecond"/> it gives the
+    /// window-jump step one frame per 1000/fps ms, without Speed scaling (research ARC-RES-047 W4). Zero means no
+    /// vault: a window jump then takes the walk or run step time.</param>
+    public GaitTiming(GaitStride walk, GaitStride run, int speed, int vaultFrames = 0, int vaultFramesPerSecond = 0)
     {
         ArgumentNullException.ThrowIfNull(walk); ArgumentNullException.ThrowIfNull(run);
-        if (!walk.IsValid || !run.IsValid || speed < 0) throw new ArgumentException("GAIT_STRIDE_INVALID");
+        if (!walk.IsValid || !run.IsValid || speed < 0 || vaultFrames < 0 || vaultFramesPerSecond < 0
+            || (vaultFrames == 0) != (vaultFramesPerSecond == 0) || vaultFramesPerSecond > 1000) throw new ArgumentException("GAIT_STRIDE_INVALID");
         Walk = walk; Run = run; Speed = speed;
+        // The vault frame time is the ART rate alone (1000 / fps ms, the source's set-animation pause, research W4); the
+        // 30..800 ms clamp belongs to the Speed-scaled move rate (L6) and does not apply.
+        Vault = vaultFrames == 0 ? null : StepDuration.Of(vaultFrames * (long)(1000 / vaultFramesPerSecond), 1000);
         (_walkAxis, _walkDiagonal) = Durations(walk, FramesPerSecond(MovementGait.Walk, speed));
         (_runAxis, _runDiagonal) = Durations(run, FramesPerSecond(MovementGait.Run, speed));
     }
@@ -38,9 +47,12 @@ public sealed class GaitTiming
     public GaitStride Walk { get; }
     public GaitStride Run { get; }
     public int Speed { get; }
+    /// <summary>The window-jump (vault) step duration, or null without a vault.</summary>
+    public StepDuration? Vault { get; }
 
-    /// <summary>The fixed diagnostic human (ARC-RES-047 L7, HumanFixed walk 2668 / run 2671) at base Speed 8.</summary>
-    public static GaitTiming HumanFixed { get; } = new(ActorDiagnosticProfile.HumanFixedRun.Walk.Stride!, ActorDiagnosticProfile.HumanFixedRun.Run!.Stride!, 8);
+    /// <summary>The fixed diagnostic human (ARC-RES-047 L7, HumanFixed walk 2668 / run 2671, vault 2677) at base Speed 8.</summary>
+    public static GaitTiming HumanFixed { get; } = new(ActorDiagnosticProfile.HumanFixedArea.Walk.Stride!, ActorDiagnosticProfile.HumanFixedArea.Run!.Stride!, 8,
+        ActorDiagnosticProfile.HumanFixedArea.Vault!.FramesPerGroup, ActorDiagnosticProfile.HumanFixedArea.Vault.RawFramesPerSecond);
 
     public StepDuration For(MovementGait gait, NeighborDirection direction)
     {

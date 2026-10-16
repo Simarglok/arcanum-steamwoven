@@ -113,9 +113,9 @@ public sealed class AreaStepAssessment
 {
     internal AreaStepAssessment(AreaStepRequest request, AreaStepInputIdentity identity, long epoch, CardinalTraversalCoverage coverage,
         CardinalTraversalDisposition? disposition, string reason, AreaStepTerrainEvidence? terrain,
-        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wallBlocker = null)
+        IEnumerable<AreaStepObjectEvidence> objects, IEnumerable<AreaStepGap> gaps, AreaObjectKey? wallBlocker = null, AreaObjectKey? windowJump = null)
     {
-        WallBlocker = wallBlocker;
+        WallBlocker = wallBlocker; WindowJump = windowJump;
         if ((coverage == CardinalTraversalCoverage.Supported) != disposition.HasValue) throw new ArgumentException("Whole Supported requires disposition.");
         Request = request; InputIdentity = identity; EvidenceEpoch = epoch; Coverage = coverage; Disposition = disposition; ReasonCode = reason;
         DestinationTerrain = terrain; Objects = Array.AsReadOnly(objects.ToArray()); Gaps = Array.AsReadOnly(gaps.ToArray());
@@ -138,12 +138,16 @@ public sealed class AreaStepAssessment
     public IReadOnlyList<AreaStepGap> Gaps { get; }
     /// <summary>The first solid wall whose edge the step crosses, when that decided the result.</summary>
     public AreaObjectKey? WallBlocker { get; }
+    /// <summary>ARC-WORLD-021: the window wall piece this cardinal step crosses (a walker vaults it, research
+    /// ARC-RES-047 W1–W4), whatever the verdict except a wall that blocks the edge; the step is a jump only when it is
+    /// Open. Null when the step crosses no window.</summary>
+    public AreaObjectKey? WindowJump { get; }
 }
 
 /// <summary>How an edge decides a step. <see cref="Legacy"/> is the pinned-profile rule: an opening
 /// piece is Unknown, every other wall blocks. Whole-map evidence (ARC-WORLD-018) states its rule;
-/// <see cref="WindowJump"/> blocks a diagonal leg and is Unknown on a cardinal step, where the
-/// original's walker jumps the window (not modelled).</summary>
+/// <see cref="WindowJump"/> blocks a diagonal leg; on a cardinal step it lets the walker jump the window
+/// (ARC-WORLD-021): the step is Open when nothing else decides it, and names the window.</summary>
 internal enum AreaStepEdgeRule { Legacy, Block, Pass, Unknown, WindowJump }
 
 /// <summary>One wall or portal on one tile edge (odd direction 1, 3, 5, 7).</summary>

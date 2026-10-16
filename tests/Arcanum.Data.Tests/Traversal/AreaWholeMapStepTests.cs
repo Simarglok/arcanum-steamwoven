@@ -49,7 +49,8 @@ public sealed class AreaWholeMapStepTests
     public void Edge_rules_decide_cardinal_and_diagonal_legs()
     {
         // One open 3x3 patch; a single edge on the east side of the centre tile (edge 5 = +X).
-        AreaStepAssessment Step(AreaStepEdgeRule rule, CardinalTraversalDirection direction, (long X, long Y) to)
+        AreaStepAssessment Step(AreaStepEdgeRule rule, CardinalTraversalDirection direction, (long X, long Y) to) => StepFrom(rule, (10, 10), direction, to);
+        AreaStepAssessment StepFrom(AreaStepEdgeRule rule, (long X, long Y) from, CardinalTraversalDirection direction, (long X, long Y) to)
         {
             var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
             for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
@@ -58,7 +59,7 @@ public sealed class AreaWholeMapStepTests
             var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]> { [new(10, 10)] = [new(key, new(10, 10), 5, false, rule, "TEST_EDGE")] };
             var snapshot = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
                 new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
-            return snapshot.Assess(snapshot.Request(new(10, 10), new(to.X, to.Y), direction));
+            return snapshot.Assess(snapshot.Request(new(from.X, from.Y), new(to.X, to.Y), direction));
         }
         Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.Block, CardinalTraversalDirection.XPlus, (11, 10)).ReasonCode);
         Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.Legacy, CardinalTraversalDirection.XPlus, (11, 10)).ReasonCode);
@@ -66,10 +67,47 @@ public sealed class AreaWholeMapStepTests
         var unknown = Step(AreaStepEdgeRule.Unknown, CardinalTraversalDirection.XPlus, (11, 10));
         Assert.AreEqual(CardinalTraversalCoverage.Unknown, unknown.Coverage);
         Assert.AreEqual("TEST_EDGE", unknown.Gaps.Single().ReasonCode);
+        // ARC-WORLD-021: the cardinal step jumps the window, from either side of the edge.
+        var key = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 0, "o", 1);
         var jump = Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.XPlus, (11, 10));
-        Assert.AreEqual("WINDOW_JUMP_UNMODELLED", jump.Gaps.Single().ReasonCode);
+        Assert.AreEqual((CardinalTraversalDisposition.Open, "WINDOW_JUMP", 0), (jump.Disposition!.Value, jump.ReasonCode, jump.Gaps.Count));
+        Assert.AreEqual(key, jump.WindowJump);
+        var back = StepFrom(AreaStepEdgeRule.WindowJump, (11, 10), CardinalTraversalDirection.XMinus, (10, 10));
+        Assert.AreEqual(("WINDOW_JUMP", key), (back.ReasonCode, back.WindowJump));
+        Assert.IsNull(Step(AreaStepEdgeRule.Pass, CardinalTraversalDirection.XPlus, (11, 10)).WindowJump);
         Assert.AreEqual("WALL_EDGE_BLOCKED", Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.XPlusYPlus, (11, 11)).ReasonCode);
         Assert.AreEqual(CardinalTraversalDisposition.Open, Step(AreaStepEdgeRule.WindowJump, CardinalTraversalDirection.YPlus, (10, 11)).Disposition);
+    }
+
+    [TestMethod]
+    public void A_window_step_still_yields_to_its_portal_and_to_the_destination()
+    {
+        // ARC-WORLD-021: a window piece on the +X edge of (10,10), plus a portal on the same edge or a destination blocker.
+        var window = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 0, "window", 1);
+        var portal = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 1, "portal", 1);
+        var crate = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 2, "crate", 1);
+        AreaStepAssessment Step(AreaStepEdgeRule? portalRule, bool terrainBlocked = false, CardinalTraversalDisposition? crateAt = null)
+        {
+            var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+            for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
+                terrain[new(x, y)] = new(new(x, y), 0, CardinalTraversalCoverage.Supported,
+                    terrainBlocked && x == 11 && y == 10 ? CardinalTraversalDisposition.Blocked : CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
+            var edges = new List<AreaStepWallEdge> { new(window, new(10, 10), 5, true, AreaStepEdgeRule.WindowJump, "WINDOW_PIECE_JUMP") };
+            if (portalRule is { } rule) edges.Add(new(portal, new(10, 10), 5, false, rule, "TEST_PORTAL"));
+            var objects = new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>();
+            if (crateAt is { } disposition)
+                objects[new(11, 10)] = [new(crate, new(11, 10), 3, CardinalTraversalCoverage.Supported, CardinalTraversalApplicability.Applicable, disposition, "TEST_CRATE")];
+            var snapshot = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
+                objects, new Dictionary<AreaStepCell, AreaStepWallEdge[]> { [new(10, 10)] = edges.ToArray() });
+            return snapshot.Assess(snapshot.Request(new(10, 10), new(11, 10), CardinalTraversalDirection.XPlus));
+        }
+        Assert.AreEqual(("WALL_EDGE_BLOCKED", (AreaObjectKey?)null), (Step(AreaStepEdgeRule.Block).ReasonCode, Step(AreaStepEdgeRule.Block).WindowJump), "a jammed or held window portal blocks");
+        var unknown = Step(AreaStepEdgeRule.Unknown);
+        Assert.AreEqual((CardinalTraversalCoverage.Unknown, "REQUIRED_EVIDENCE_UNAVAILABLE", (AreaObjectKey?)window), (unknown.Coverage, unknown.ReasonCode, unknown.WindowJump),
+            "an Unknown portal leaves the step Unknown, still naming the window");
+        Assert.AreEqual(("WINDOW_JUMP", (AreaObjectKey?)window), (Step(AreaStepEdgeRule.Pass).ReasonCode, Step(AreaStepEdgeRule.Pass).WindowJump), "an openable window portal lets the jump through");
+        Assert.AreEqual("DESTINATION_TERRAIN_BLOCKED", Step(null, terrainBlocked: true).ReasonCode);
+        Assert.AreEqual("DESTINATION_OBJECT_BLOCKER", Step(null, crateAt: CardinalTraversalDisposition.Blocked).ReasonCode);
     }
 
     [TestMethod]
@@ -90,7 +128,7 @@ public sealed class AreaWholeMapStepTests
         Assert.AreEqual(ContentStackStatus.Ready, opened.Status, opened.Detail);
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);
-        int complete = 0, walkable = 0;
+        int complete = 0, walkable = 0, jumps = 0, jumpMaps = 0;
         foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
             var plan = AreaMapPlans.Create(stack, catalog, map.Name).Plan!;
@@ -101,27 +139,35 @@ public sealed class AreaWholeMapStepTests
             var steps = AreaStepInspector.InspectWholeMap(inspection.Snapshot!, stack, map.AggregatePath, 1);
             Assert.AreEqual(0, steps.TerrainUnknownCells, map.Name);
             if (plan.StartTile is not { } start) continue;
-            var reach = Reach(steps, new(start.X, start.Y));
+            var (reach, windowJumps) = Reach(steps, new(start.X, start.Y));
             if (reach > 1) walkable++;
+            jumps += windowJumps; if (windowJumps > 0) { jumpMaps++; Console.WriteLine($"window jumps: {map.Name} {windowJumps}"); }
             if (map.Name == "crash site cave") Assert.AreEqual(506, reach, "the generic cave walks like the pinned cave profile");
         }
         Assert.AreEqual(54, complete);
         Assert.IsTrue(walkable >= 48, $"{walkable} of {complete} complete interiors walkable from their start");
+        // ARC-WORLD-021: directed Open window-jump steps out of the cells reachable from the starts.
+        Console.WriteLine($"whole-map interiors complete={complete} walkable={walkable} window-jump-steps={jumps} maps-with-jumps={jumpMaps}");
+        Assert.AreEqual((22, 2), (jumps, jumpMaps), "directed window-jump steps out of the reachable cells, and the interiors that have them");
     }
 
-    private static int Reach(AreaStepSnapshot steps, AreaStepCell origin)
+    // Cells reachable from the origin, and the directed Open window-jump steps out of every reached cell.
+    private static (int Cells, int WindowJumps) Reach(AreaStepSnapshot steps, AreaStepCell origin)
     {
         int[] dx = [-1, -1, -1, 0, 1, 1, 1, 0], dy = [-1, 0, 1, 1, 1, 0, -1, -1];
+        var jumps = 0;
         var seen = new HashSet<AreaStepCell> { origin }; var queue = new Queue<AreaStepCell>([origin]);
         while (queue.TryDequeue(out var cell))
             for (var d = 0; d < 8; d++)
             {
                 var next = new AreaStepCell(cell.X + dx[d], cell.Y + dy[d]);
-                if (seen.Contains(next)) continue;
+                if (!steps.IsAdmitted(next)) continue;
                 var step = steps.Assess(steps.Request(cell, next, (CardinalTraversalDirection)d));
-                if (step.Coverage == CardinalTraversalCoverage.Supported && step.Disposition == CardinalTraversalDisposition.Open) { seen.Add(next); queue.Enqueue(next); }
+                if (step.Coverage != CardinalTraversalCoverage.Supported || step.Disposition != CardinalTraversalDisposition.Open) continue;
+                if (step.WindowJump is not null) jumps++;
+                if (seen.Add(next)) queue.Enqueue(next);
             }
-        return seen.Count;
+        return (seen.Count, jumps);
     }
 
     private static (string, AreaStepEdgeRule) Swap((AreaStepEdgeRule Rule, string Reason) value) => (value.Reason, value.Rule);

@@ -41,11 +41,13 @@ interface IRouteStepSource { bool Contains(CellCoord cell); RouteStepVerdict Ass
    cell is `AlreadyAtTarget`.
 2. **Straight attempt:** from each cell step toward the target, diagonally unless the
    minor remaining delta is under half of the major one (`RoutePlanner.Toward`).
-   Every step must be `Open`; the first other verdict ends the attempt with no
-   partial route (`ROUTE_DIRECT` on success).
+   Every step must be `Open` with no extra cost; the first other step ends the attempt
+   with no partial route (`ROUTE_DIRECT` on success).
 3. **Local search:** an eight-direction best-first search in a window of
    `2 × AxisDistance` (64) cells per axis, centred on the source/target box. Step cost
-   10, +1 when the direction changes, estimate 10 × Chebyshev distance, at most
+   10, +1 when the direction changes, plus the step source's extra cost
+   (`IRouteStepSource.ExtraCost`, default 0; a window jump costs 50 as in the source,
+   ARC-WORLD-021), estimate 10 × Chebyshev distance, at most
    `Expansions` (4,096) expanded cells, deterministic tie-break by cell index
    (`ROUTE_LOCAL_SEARCH`). Cells outside the window are never asked about. The search
    is near-shortest: a turn costs a tenth of a step, so a route may be a few steps

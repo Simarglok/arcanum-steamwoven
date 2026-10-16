@@ -156,7 +156,7 @@ public sealed class DiagnosticWorldPolicyTests
         }
         foreach (var delta in new[] { double.NaN, double.NegativeInfinity, -1 }) Assert.AreEqual(DiagnosticMotionStatus.InvalidInput, motion.Update(initial, new(1, 0), delta).Status);
         Assert.AreEqual(DiagnosticMotionStatus.Overflow, motion.Update(initial, new(2, 0), double.MaxValue).Status);
-        foreach (var invalid in new[] { State(-1, 1), State(64, 1), State(double.NaN, 1), State(1, 1, 8), State(1, 1, 0, (ActorDiagnosticAction)3), State(1, 1, 0, ActorDiagnosticAction.Run) })
+        foreach (var invalid in new[] { State(-1, 1), State(64, 1), State(double.NaN, 1), State(1, 1, 8), State(1, 1, 0, (ActorDiagnosticAction)9), State(1, 1, 0, ActorDiagnosticAction.Run), State(1, 1, 0, ActorDiagnosticAction.Vault) })
             Assert.AreEqual(DiagnosticMotionStatus.InvalidState, motion.Update(invalid, new(1, 0), 1).Status);
     }
 

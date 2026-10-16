@@ -6,5 +6,7 @@
   <ItemGroup>
     <PackageReference Include="SharpZipLib" />
     <InternalsVisibleTo Include="Arcanum.Data.Tests" />
+    <!-- ARC-WORLD-021: the viewer tests build a whole-map step snapshot with a window edge. -->
+    <InternalsVisibleTo Include="Arcanum.TerrainViewer.Tests" />
   </ItemGroup>
 </Project>
