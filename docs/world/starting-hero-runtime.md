@@ -148,3 +148,5 @@ The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet 
 ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
 kits), backgrounds and their context effects, skills, spells, tech, hit points and fatigue, item wielding
 (`item_wield_best_all`: the kit is carried, not worn), the PC object and name, the viewer wiring and a hero picker.
+When the viewer starts a hero, its inventory window and insert check must read `QueryHeroKit()` too: the ARC-UI-004 host
+builds the PC list from `QueryPcInventory()` alone.
