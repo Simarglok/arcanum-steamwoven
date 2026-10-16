@@ -58,6 +58,82 @@ DAT_ROOT=/path/to/Arcanum "$DOTNET" test tests/Arcanum.Data.Tests/Arcanum.Data.T
 
 Never put the path, game assets, extracted bytes or screenshots in Git. Interactive smoke remains required: launch the exported app outside the editor, open a synthetic DAT through the native picker, select duplicate ordinals, switch group/frame/palette including the slot-0-absent recovery, use 1:1/zoom/fit/pan, resize twice, enter/exit fullscreen, attempt malformed and over-cap input, then reopen a valid sample. A headless build is not a UI smoke.
 
+## HD before/after review (ARC-RENDER-015)
+
+The viewer reviews any HD pack in the [ARC-DATA-014 format](formats/hd-pack.md) against the
+opened DAT: network, generative, algorithm or external method, 2× or 4×, soft or Legacy
+alpha. It is how the owner rates the output of a method (for example ARC-RES-038) and
+records approve/reject marks; nothing here draws the game (that is ARC-RENDER-014).
+
+- **Open HD pack…** opens one pack directory. The summary line shows id, scale, method
+  kind, tool and model labels, alpha mode and the review counts. The right-hand list holds
+  the pack's sprite frames in manifest order (`✓` approved, `✗` rejected, `·` unreviewed;
+  at most 2,000 rows, N/P reach the rest; **Unreviewed only** filters it). Selecting a row
+  finds the ART in the open DAT by the name hash, checks that the DAT's bytes are the
+  pack's (the next DAT entry of that name is tried; another DAT, a mod or another game
+  version is reported), and shows the frame's group, frame and palette.
+- Every frame the viewer shows, including during playback, is looked up in the pack
+  (ART payload hash, view, group, frame, effective palette; a shorter view of the same
+  bytes is decoded from its own view) on a background task; at most one lookup runs and
+  only the latest pending one follows. Built HD textures are cached (256 frames, 1 GiB),
+  so an animation plays in HD once each frame was seen. The HD texture has the Legacy
+  frame's size override: it takes exactly the Legacy frame's place and shows its detail
+  from zoom N upward.
+- Views: **Legacy**, **HD**, **Flip** (alternates original then HD every *Flip every*
+  seconds, 0.1–60) and **Split** (original left, HD right). The caption on the canvas
+  names the side shown, the pack frame and its mark, and why a frame has no HD:
+  not in the pack, other ART bytes, a palette slot that falls back, an undecodable view,
+  or the pack's refusal (for example `SourceMismatch` or an invalid file). A frame whose
+  recipe alpha check fails is still shown, marked "alpha check failed: the game would draw
+  Legacy". Review marks never hide a frame here, so rejected frames can be looked at again.
+- Marks: **A** approve, **R** reject, **U** unmark the pack frame on screen (with
+  **Next after mark**, the next frame follows; with **Unreviewed only**, the next
+  unreviewed one). Each mark is written at once into the pack's `manifest.json`
+  (`HdPackReview.Save`): only `review` values change, the rewritten manifest is parsed
+  and checked first and then replaces the old one by an atomic rename inside the pack;
+  a manifest changed on disk since the pack was opened, or one that is a link, is never
+  written. A marked pack has a new identity (manifest hash); frame files are untouched.
+  Every mark rewrites the whole manifest, which suits review slices, not a whole-game
+  manifest.
+- Other keys: **N/P** (Page Down/Up) next/previous pack frame, **H** Legacy/HD, **F** flip,
+  **S** split, **F12** capture, **F10** presentation (only the canvas and a short caption,
+  for the demo). Letter keys do nothing while a text or number field has focus.
+
+### Local captures and the demo clip
+
+**F12** writes `<pack id>-e<entry>-<UTC time>-window.png` (the window) and, when the frame
+has HD, `…-pair.png` (Legacy replicated N× nearest, a gap of 4·N pixels, the HD frame;
+transparent background, HD resolution). File names carry no path. The folder is
+`--hd-capture-dir`, otherwise `local/hd-review/` of the checkout when run from source,
+otherwise `user://hd-review` in an exported viewer. Captures, clips and packs are
+original-derived pixels: they stay local and never go into git, a PR or an attachment.
+
+Startup options (after `--`; use absolute paths, Godot runs in the project directory):
+`--dat FILE`, `--hd-pack DIR`, `--hd-entry INDEX`, `--hd-view legacy|hd|flip|split`,
+`--hd-flip-seconds S`, `--hd-capture-dir DIR`, `--presentation`, and
+`--hd-demo SECONDS` (walks the approved frames, or every frame not rejected when none is
+approved, in presentation and flip view, then quits; `--hd-demo-capture` also captures
+each frame once while HD is shown). A clip with on-the-fly switching is recorded with
+Godot's Movie Maker, which works from source and in the exported viewer:
+
+```sh
+godot_canonical --path src/Arcanum.Godot --write-movie "$PWD/local/hd-review/demo.avi" --fixed-fps 30 -- \
+  --dat /path/to/arcanum1.dat --hd-pack "$PWD/local/hd-packs/<pack>" --hd-demo 4 --hd-flip-seconds 1 \
+  --hd-demo-capture --hd-capture-dir "$PWD/local/hd-review"
+```
+
+Movie Maker writes MJPEG AVI (or a PNG sequence when the path ends in `.png`); the
+recording runs at the fixed frame rate regardless of wall time. Without `--hd-demo` the
+same command records a manual session, with H/F/S switching live. Convert the AVI
+locally for players that do not read MJPEG.
+
+The self-test builds a synthetic 2× pack in a temporary directory from the synthetic
+DAT's static ART and checks the lookup by ART hash, stale-result suppression, the cached
+main-thread answer, the flip clock, the HD canvas layer (a new Legacy frame never shows the
+previous HD frame, a failed publication restores it), the pair image and its file name,
+and a manifest mark. The manifest writer, review binding and index have synthetic MSTest
+coverage in `tests/Arcanum.Data.Tests/Hd/HdReviewTests.cs`.
+
 ## Local export
 
 `src/Arcanum.Godot/export_presets.cfg` holds the macOS debug preset. Export only into an ignored configured build root (for example `${ARCANUM_BUILD_ROOT:-artifacts/builds/ARC-RENDER-001/<candidate-id>}`), never into source control:
