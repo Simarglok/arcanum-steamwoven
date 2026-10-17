@@ -6,7 +6,7 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// Stored ranges of the hero's non-stat fields, as the source's stat tables bound them (the stat
-/// minimum and maximum tables, docs/world/starting-hero-runtime.md; ledger XP2 for level, experience and points: level 0..51, experience 0..2,000,000,000, alignment −1000..1000, unspent
+/// minimum and maximum tables; ledger XP2 checks level, experience and points: level 0..51, experience 0..2,000,000,000, alignment −1000..1000, unspent
 /// points 0..56).
 /// </summary>
 public static class SessionHeroLimits
