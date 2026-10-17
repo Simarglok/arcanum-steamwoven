@@ -119,6 +119,7 @@ public static partial class TerrainViewerSelfTest
             await AssertAreaHoverAsync(host);
             await AssertAreaInventoryAsync(host);
             await AssertAreaSheetAsync(host);
+            await AssertAreaLogbookAsync(host);
             await AssertVisualToggleAppAsync(host);
 
             if (DisplayServer.GetName() != "headless")

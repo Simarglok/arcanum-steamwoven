@@ -86,6 +86,7 @@ public partial class TerrainViewerApp
     private void StopAreaTransitions()
     {
         EndSheet(); _sheetStatus = null;
+        EndLogbook(); _logbookStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).

@@ -7,6 +7,7 @@ internal sealed record ConversationLocalFlag(DialogOperationSource Source, int I
 internal sealed record ConversationGlobalFlag(DialogOperationSource Source, int Flag, bool Value) : ConversationOperation(Source);
 internal sealed record ConversationQuest(DialogOperationSource Source, int QuestId, int State) : ConversationOperation(Source);
 internal sealed record ConversationRumor(DialogOperationSource Source, int RumorId) : ConversationOperation(Source);
+internal sealed record ConversationQuellRumor(DialogOperationSource Source, int RumorId) : ConversationOperation(Source);
 internal sealed record ConversationReactionGate(DialogOperationSource Source, int Threshold) : ConversationOperation(Source);
 internal sealed record ConversationRaceGate(DialogOperationSource Source, int Selector) : ConversationOperation(Source);
 internal sealed record ConversationReaction(DialogOperationSource Source, DialogReactionMode Mode, int Value) : ConversationOperation(Source);
@@ -30,8 +31,9 @@ internal enum ConversationField
 /// <list type="bullet">
 /// <item>Player condition: ordered conjunction of LF, GF, RE (signed reaction threshold) and RA (signed race selector);
 /// with a party port also WA 0/1 (the NPC is not / is waiting for the PC).</item>
-/// <item>Actions: LF, GF, QU, RU, RE and AL (unsigned target or lexically signed delta), negative IN (NPC gives
-/// an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with one UW 0 node.</item>
+/// <item>Actions: LF, GF, QU, RU, RQ (quell a rumor, ARC-UI-008), RE and AL (unsigned target or lexically signed delta),
+/// negative IN (NPC gives an item), MM; a Player action may end with one JO 0 node or FL node, and with a party port with
+/// one UW 0 node.</item>
 /// </list>
 /// Without a party port WA and UW stay unadmitted (<see cref="DialogFailureKind.UnsupportedOperation"/>), as before
 /// ARC-WORLD-013.
@@ -66,7 +68,7 @@ internal static class DialogConversationGrammar
             index += 2;
             var admitted = role == ConversationField.PlayerCondition
                 ? opcode is "LF" or "GF" or "RE" or "RA" || party && opcode == "WA"
-                : opcode is "LF" or "GF" or "QU" or "RU" or "RE" or "AL" or "IN" or "MM"
+                : opcode is "LF" or "GF" or "QU" or "RU" or "RQ" or "RE" or "AL" or "IN" or "MM"
                     || role == ConversationField.PlayerAction && (opcode is "JO" or "FL" || party && opcode == "UW");
             if (!admitted)
             {
@@ -111,6 +113,7 @@ internal static class DialogConversationGrammar
                 "GF" when first >= 0 && second is 0 or 1 => new ConversationGlobalFlag(source, first, second == 1),
                 "QU" when first > 0 && second is >= 0 and <= 6 => new ConversationQuest(source, first, second),
                 "RU" when first >= 1000 => new ConversationRumor(source, first),
+                "RQ" when first >= 1000 => new ConversationQuellRumor(source, first),
                 "RE" when !reactionAction && first != int.MinValue => new ConversationReactionGate(source, first),
                 "RE" when reactionAction && sign == '\0' => new ConversationReaction(source, DialogReactionMode.Target, first),
                 "RE" when reactionAction => new ConversationReaction(source, DialogReactionMode.Adjust, first),

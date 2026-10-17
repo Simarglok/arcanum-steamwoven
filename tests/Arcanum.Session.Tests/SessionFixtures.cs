@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":15," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":16," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"a7ff41b300ef712f0e7d088183a3d08957110cdd\"," +
@@ -88,7 +88,8 @@ internal static class SessionFixtures
         "\"maps\":[{\"map\":79,\"changes\":[{\"scope\":\"sector\",\"sector\":5,\"property\":\"door.open\",\"value\":1}," +
         "{\"scope\":\"entity\",\"entity\":\"npc-1\",\"property\":\"hp\",\"value\":12}]}]" + EmptyStory + EmptyParty + NoHero + EmptyInventory + NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoCombatMode + NoEvents + LightingTail;
 
-    internal const string EmptyStory = ",\"story\":{\"quests\":[],\"globalQuests\":[],\"rumors\":[]}";
+    internal const string QuelledRumors = ",\"quelledRumors\":[]";
+    internal const string EmptyStory = ",\"story\":{\"quests\":[],\"globalQuests\":[],\"rumors\":[],\"quelledRumors\":[]}";
     internal const string EmptyParty = ",\"party\":{\"followers\":[],\"others\":[]}";
     internal const string NoHero = ",\"hero\":null";
     internal const string EmptyInventory = ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[]}";
