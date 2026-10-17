@@ -37,6 +37,8 @@ public sealed class AreaStepSnapshot
     public long EvidenceEpoch { get; }
     public CardinalTraversalContext DeclaredContext { get; }
     public IReadOnlyList<(long X, long Y)> AdmittedSectors { get; }
+    /// <summary>Every object evaluation, for checks over a whole snapshot.</summary>
+    internal IEnumerable<AreaStepObjectEvaluation> ObjectEvaluations => _objects.Values.SelectMany(list => list);
     public int AdmittedCells => _terrain.Count;
     public int TerrainBlockedCells { get; }
     public int TerrainUnknownCells { get; }

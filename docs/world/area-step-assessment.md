@@ -86,7 +86,10 @@ digest and epoch.
   out-of-range effect index, a max-HP effect or an interval straddling zero are
   `Unknown`. Portals, PC records, unresolved flags or stats and any
   mobile named by `map.patch` (in either GUID byte order, or when the patch has
-  an unsupported line) are `Unknown`.
+  an unsupported line) are `Unknown` in the pinned profiles; a whole map reads the
+  object as the owner patched it ([map patch](map-patch.md), ARC-DATA-028), and only a
+  change or line the patch model does not cover is `Unknown`
+  (`MAP_PATCH_CHANGE_UNMODELLED`, `MAP_PATCH_LINE_UNSUPPORTED`).
 - **Walls** ([cave research](../research/cave-transition-evidence.md) T7): a
   wall is retained as `NotApplicable` (`WALL_EDGE_COMPONENT`) and registered on
   one tile edge, its art rotation rounded up to odd (1 x−1, 3 y+1, 5 x+1, 7 y−1).
@@ -206,7 +209,8 @@ digest; the rules are appended to the digest only when present):
   held at T0, and only leaving a building passes: always-locked (which disables
   that shortcut) blocks, or is Unknown when an hour bit is set. Doors and windows
   follow the same attempt; a window's wall piece then makes the step a jump.
-  Mobile portals targeted by `map.patch` are Unknown, as other mobiles are;
+  Mobile portals targeted by `map.patch` are Unknown in the pinned profiles, as other
+  mobiles are; a whole map reads the patched portal flags (ARC-DATA-028);
 - since ARC-RES-049 the leaving shortcut is decided per step, as the original
   1.0.7.4 executable does it
   ([ledger LV1–LV5](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)):

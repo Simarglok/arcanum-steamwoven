@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Text;
+using Arcanum.Data.Maps;
 using Arcanum.Data.Objects;
 using Arcanum.Data.StaticObjects;
 using Arcanum.Data.Terrain;
@@ -157,6 +158,14 @@ public sealed partial class AreaDataOwner
         }
         _budget.BeginPhase(AreaBudgetPhase.I4);
         var partitions = new int[4]; var aggregate = new Dictionary<string, Correspondence>(StringComparer.Ordinal);
+        // ARC-DATA-028: the original applies map.patch to the map's mobile objects as they are loaded, before any sector.
+        MapPatchFile? patch = null;
+        if (_plan.MapPatch is not null)
+        {
+            using var patchPayload = new AreaOwnership(_budget);
+            try { patch = MapPatchFile.Parse(ReadFile(new(AreaSourceRole.MapPatch), token, patchPayload)); }
+            catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Aggregate); }
+        }
         if (_streams.ContainsKey(new(AreaSourceRole.NormalGameMobile)))
         {
             using var payload = new AreaOwnership(_budget);
@@ -179,7 +188,8 @@ public sealed partial class AreaDataOwner
                 var scope = x is null or < 0 || y is null or < 0 ? AreaScope.Unknown : core.Contains(new AreaSectorCoordinate(x.Value / 64, y.Value / 64).Packed) ? AreaScope.Core : ring.Contains(new AreaSectorCoordinate(x.Value / 64, y.Value / 64).Packed) ? AreaScope.Context : AreaScope.Outside;
                 partitions[(int)scope]++;
                 if (scope is AreaScope.Core or AreaScope.Context)
-                    AddObject(record, source, null, index, offset, scope, null, definitions, prototypes, objects, visuals, mappings, issues, token, output);
+                    AddObject(record, source, null, index, offset, scope, null, definitions, prototypes, objects, visuals, mappings, issues, token, output,
+                        patch is not null && record.Own.Entity is { Kind: 2 } entity ? patch.For(MapPatchFile.ObjectGuid(entity)) : null);
                 else if (scope == AreaScope.Unknown) issues.Add(new(AreaErrorCode.UnknownLocation, AreaStage.Aggregate, offset, index));
                 offset = checked(offset + record.Length); index++;
             }
@@ -224,7 +234,8 @@ public sealed partial class AreaDataOwner
 
     private void AddObject(ObjectWireRecord record, AreaInputKey input, long? packed, int ordinal, int offset, AreaScope scope, AreaSectorCoordinate? sector,
         Dictionary<int, ObjectWireRecord> definitions, Dictionary<int, ObjectWireRecord> prototypes, List<AreaObjectRecord> objects, List<AreaVisualRecord> visuals,
-        Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, List<AreaIssue> issues, CancellationToken token, AreaOwnership output)
+        Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps, List<AreaIssue> issues, CancellationToken token, AreaOwnership output,
+        IReadOnlyList<MapPatchLine>? patchLines = null)
     {
         if (objects.Count >= _limits.MaxObjects) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Appearance, offset, ordinal);
 
@@ -236,6 +247,13 @@ public sealed partial class AreaDataOwner
             prototypes.Add(number, prototype);
         }
         if (prototype.Type != record.Type) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Prototype, offset, ordinal);
+        // The patched object keeps its raw identity (RawSha256, SemanticSha256); only its fields change.
+        MapPatchApplication? patched = null;
+        if (patchLines is { Count: > 0 })
+        {
+            var result = MapPatchApplier.Apply(record, prototype, patchLines, number => _plan.MapPatch!.ScriptHeaders.GetValueOrDefault(number));
+            record = result.Record; patched = result.Application;
+        }
         using var temporary = new AreaOwnership(_budget);
         temporary.Allocate(checked(4096 + 160L * (prototype.Fields.Count + record.Fields.Count) + maps.Values.SelectMany(m => m.Values).Max(v => v.Length) * 16L));
         var effective = new SortedDictionary<int, ObjectWireValue>(prototype.Fields.ToDictionary(p => p.Key, p => p.Value));
@@ -303,7 +321,7 @@ public sealed partial class AreaDataOwner
         var directFields = CopyFields(record.Fields, record, direct: true, output);
         var effectiveFields = CopyFields(effective, record, direct: false, output);
         objects.Add(new(key, 119, record.Type, number, record.Parent.Sha256, prototype.Own.Sha256, record.Sha256, record.SemanticSha256, scope,
-            directLocation, x, y, disposition, directFields, effectiveFields, ready, x.HasValue && y.HasValue, layersReady));
+            directLocation, x, y, disposition, directFields, effectiveFields, ready, x.HasValue && y.HasValue, layersReady, patched));
     }
     private IReadOnlyList<AreaFieldValue> CopyFields(IReadOnlyDictionary<int, ObjectWireValue> fields, ObjectWireRecord instance, bool direct, AreaOwnership output)
     {

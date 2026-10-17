@@ -168,7 +168,11 @@ public static class AreaStepInspector
         IReadOnlyList<AreaStepRules.PatchTarget> patchTargets = [];
         var patchMalformed = 0;
         if (Resource(PatchPath, false) is { } patch)
-            patchTargets = AreaStepRules.PatchTargets(Encoding.Latin1.GetString(patch), out patchMalformed);
+        {
+            // ARC-DATA-028: a whole-map plan's owner applied the patch to the objects; only lines it could not model are a gap.
+            if (area.MapPatch is { } applied) patchMalformed = applied.HasUnmodelledLines ? 1 : 0;
+            else patchTargets = AreaStepRules.PatchTargets(Encoding.Latin1.GetString(patch), out patchMalformed);
+        }
 
         stage.Current = AreaStepInvocationStage.Terrain;
         var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
@@ -262,6 +266,7 @@ public static class AreaStepInspector
         AreaStepObjectEvaluation Disposed(bool blocks, string reason, long? min = null, long? max = null) => new(o.Key, cell, o.Type, CardinalTraversalCoverage.Supported,
             CardinalTraversalApplicability.Applicable, blocks ? CardinalTraversalDisposition.Blocked : CardinalTraversalDisposition.Open, reason, min, max);
 
+        if (o.MapPatch is { Unmodelled.Count: > 0 }) return Unknown("MAP_PATCH_CHANGE_UNMODELLED");
         if (o.Key.Kind == AreaSourceKind.Mobile)
         {
             // map.patch is applied to mobiles before sectors load; an unmodeled patch on this record is Unknown.
@@ -346,6 +351,7 @@ public static class AreaStepInspector
         IReadOnlyList<AreaStepRules.PatchTarget> patch, int patchMalformed)
     {
         AreaStepObjectEvaluation Unknown(string reason) => new(o.Key, cell, o.Type, CardinalTraversalCoverage.Unknown, CardinalTraversalApplicability.Unknown, null, reason);
+        if (o.MapPatch is { Unmodelled.Count: > 0 }) return Unknown("MAP_PATCH_CHANGE_UNMODELLED");
         if (PatchGap(o, record, patch, patchMalformed) is { } gap) return Unknown(gap);
         if (Number(o, ObjectTypeFlagsSlot) is not { } flags) return Unknown("FLAGS_UNRESOLVED");
         if ((unchecked((uint)flags) & FlagDestroyedOrOff) != 0)

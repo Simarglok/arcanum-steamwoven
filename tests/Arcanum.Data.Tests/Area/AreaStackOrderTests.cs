@@ -167,6 +167,56 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void The_map_patch_changes_the_mobile_object_it_names_for_every_consumer()
+    {
+        // ARC-DATA-028: one mobile scenery object with a GUID in the map's game-generated mobile file, and a map.patch
+        // in the module folder that switches it off; the original applies it when the map opens.
+        var id = Id(2); for (var i = 0; i < 16; i++) id[8 + i] = (byte)(0x10 + i);
+        var guid = new Guid(id.AsSpan(8, 16));
+        var aggregate = (byte[])[.. new byte[16], .. Record(id, location: 70L | (71L << 32))];
+        // The editor's copy of the object in the module archive, which the owner checks the mobile file against.
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art()), ("rules/effect.mes", "{50}{}"u8.ToArray())), moduleExtra: ("maps/test/1.mob", Record(id, location: 70L | (71L << 32))));
+        Loose("modules/Mod/maps/" + WorldCatalog.AggregateName("test"), aggregate);
+        var line = "G_" + guid.ToString("D").ToUpperInvariant().Replace('-', '_');
+        var unknownObjects = 0;
+        AreaSnapshot Load(string? patch)
+        {
+            var path = Path.Combine(_root, "modules", "Mod", "rules", "map.patch");
+            if (patch is null) { if (File.Exists(path)) File.Delete(path); }
+            else Loose("modules/Mod/rules/map.patch", Encoding.ASCII.GetBytes(patch));
+            using var stack = Stack();
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            Assert.AreEqual(patch is not null, result.Plan!.Plan.MapPatch is not null);
+            using var owner = result.Plan.Open();
+            var snapshot = owner.LoadStrict();
+            unknownObjects = Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, result.Plan.Map.AggregatePath, 1).UnknownObjects;
+            return snapshot;
+        }
+        static AreaObjectRecord Mobile(AreaSnapshot snapshot) => snapshot.Objects.Single(o => o.Key.Kind == AreaSourceKind.Mobile);
+
+        var plain = Load(null);
+        Assert.IsNull(Mobile(plain).MapPatch);
+        Assert.AreEqual(1, plain.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Mobile));
+
+        var patched = Load("# switch it off\r\n" + line + ":obj_flag OF_OFF internal_name 77\r\n");
+        var mobile = Mobile(patched);
+        CollectionAssert.AreEqual(new[] { 2 }, mobile.MapPatch!.Lines.ToArray());
+        Assert.AreEqual(2L, mobile.EffectiveFields.Single(f => f.Slot == 18).Number, "OF_OFF over the prototype's flags");
+        Assert.AreEqual((77L, AreaValueOrigin.Instance), (mobile.EffectiveFields.Single(f => f.Slot == 21).Number, mobile.EffectiveFields.Single(f => f.Slot == 21).Origin));
+        Assert.AreEqual(Mobile(plain).RawSha256, mobile.RawSha256, "the raw record is unchanged");
+        Assert.AreEqual(AreaDisposition.BodySuppressedBySerializedState, mobile.Disposition);
+        Assert.AreEqual(0, patched.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Mobile), "an object the patch switches off is not drawn");
+        Assert.AreEqual(0, unknownObjects, "the step evidence reads the patched object instead of leaving it Unknown");
+        Load(line + " without a colon\n");
+        Assert.AreEqual(1, unknownObjects, "a change the original makes differently (here a crash) stays Unknown");
+
+        // A patch line whose effect is not modelled keeps the plan honest about it.
+        var unmodelled = Load("A_0001:faction 1\n" + line + ":obj_flag OF_OFF\n");
+        Assert.IsTrue(unmodelled.MapPatch!.HasUnmodelledLines);
+    }
+
+    [TestMethod]
     public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
     {
         Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);
@@ -305,15 +355,15 @@ public sealed class AreaStackOrderTests
 
     /// <summary>The synthetic installation: tig.dat, the base archives given, module <c>Mod</c>
     /// (one map "test" with one scenery object of prototype 7001) and the prototype as a loose file.</summary>
-    private void Install(byte[] arcanum1, byte[]? arcanum4 = null, byte[]? tig = null, bool prototypeLoose = true)
+    private void Install(byte[] arcanum1, byte[]? arcanum4 = null, byte[]? tig = null, bool prototypeLoose = true, params (string Name, byte[] Payload)[] moduleExtra)
     {
         File.WriteAllBytes(Path.Combine(_root, "tig.dat"), tig ?? Dat());
         File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), arcanum1);
         File.WriteAllBytes(Path.Combine(_root, "arcanum2.dat"), Dat(("rules/other.mes", "{0}{x}"u8.ToArray())));
         if (arcanum4 is not null) File.WriteAllBytes(Path.Combine(_root, "Arcanum4.dat"), arcanum4);
         Directory.CreateDirectory(Path.Combine(_root, "modules"));
-        File.WriteAllBytes(Path.Combine(_root, "modules", "Mod.dat"), Dat(($"maps/test/{Start}.sec", Sector(Record(Id(2, 11)))), ("maps/test/map.prp", Properties()),
-            ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray())));
+        File.WriteAllBytes(Path.Combine(_root, "modules", "Mod.dat"), Dat([.. new[] { ($"maps/test/{Start}.sec", Sector(Record(Id(2, 11)))), ("maps/test/map.prp", Properties()),
+            ("rules/maplist.mes", "{5000}{test, 64, 64}"u8.ToArray()) }.Concat(moduleExtra).OrderBy(e => e.Item1, StringComparer.Ordinal)]));
         if (prototypeLoose) Loose("data/proto/007001 - test.pro", Prototype());
     }
 
