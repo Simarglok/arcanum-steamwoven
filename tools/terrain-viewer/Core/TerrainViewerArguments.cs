@@ -20,6 +20,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// instead of the pinned Crash Site exterior; prototypes come from the content stack, and the area mobile,
     /// effects, patch, cave and prototype folder arguments are refused.</summary>
     public string? AreaMapName { get; init; }
+    /// <summary>ARC-WORLD-027: start the AREA session as this original pre-made hero (<see cref="AreaStartingHero.Premade"/>);
+    /// absent, the session has no hero and dialogs use the diagnostic PC profile.</summary>
+    public AreaPremadeHero? Hero { get; init; }
     /// <summary>Longest <c>--area-map</c> folder name (the launcher's <c>MAX_MAP_NAME</c>).</summary>
     public const int MaxAreaMapName = 128;
     public static TerrainViewerArguments Parse(IReadOnlyList<string> args)
@@ -27,7 +30,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
         ArgumentNullException.ThrowIfNull(args);
         string? module = null, resource = null, sourceId = null, prototypes = null, moduleHash = null, resourceHash = null,
             actorResource = null, actorResourceHash = null, areaMobile = null, areaEffects = null, areaPatch = null, areaCaveMobile = null,
-            gameRoot = null, areaMap = null;
+            gameRoot = null, areaMap = null, hero = null;
         long? actorMapX = null, actorMapY = null, actorOriginX = null, actorOriginY = null;
         int? actorOffsetX = null, actorOffsetY = null, actorScale = null, actorFacing = null, actorFrame = null;
         ActorDiagnosticRenderBranch? actorBranch = null;
@@ -59,6 +62,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 case "--area-cave-mobile": areaCaveMobile = Unique(areaCaveMobile, value); break;
                 case "--game-root": gameRoot = Unique(gameRoot, value); break;
                 case "--area-map": areaMap = Unique(areaMap, value); break;
+                case "--hero": hero = Unique(hero, value); break;
                 case "--expect-actor-resource-sha256": actorResourceHash = Unique(actorResourceHash, ValidateHash(value)); break;
                 case "--actor-map-x": actorMapX = Unique(actorMapX, ParseInt64(value)); break;
                 case "--actor-map-y": actorMapY = Unique(actorMapY, ParseInt64(value)); break;
@@ -91,6 +95,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
                 string.IsNullOrWhiteSpace(actorResource) || areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null || actorSpecified))
             || (areaMap is null && gameRoot is not null)
             || (mode == TerrainViewerMode.CrashSiteArea && areaCaveMobile is not null && string.IsNullOrWhiteSpace(areaCaveMobile))
+            || (hero is not null && (mode != TerrainViewerMode.CrashSiteArea || AreaStartingHero.Find(hero) is null))
             || (mode != TerrainViewerMode.CrashSiteArea && (areaMobile is not null || areaEffects is not null || areaPatch is not null || areaCaveMobile is not null)))
             throw new ArgumentException("Usage");
         ActorDiagnosticPlacementInput? actor = null;
@@ -105,7 +110,7 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
             actor = new(6,1,0,0,0,0,ActorDiagnosticRenderBranch.NormalUncached,100,false,
                 ActorDiagnosticAction.Idle,5,0,0,0,0,0,0,0);
         return new TerrainViewerArguments(mode, module, resource, sourceId, prototypes, moduleHash, resourceHash, actorResource, actorResourceHash, actor) { AreaMobilePath = areaMobile, AreaEffectsPath = areaEffects, AreaPatchPath = areaPatch, AreaCaveMobilePath = areaCaveMobile,
-            GameRoot = gameRoot, AreaMapName = areaMap };
+            GameRoot = gameRoot, AreaMapName = areaMap, Hero = hero is null ? null : AreaStartingHero.Find(hero) };
     }
 
     private static string ValidateHash(string value) => value.Length == 64 && value.All(Uri.IsHexDigit)

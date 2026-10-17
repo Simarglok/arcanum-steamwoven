@@ -55,7 +55,8 @@ public partial class TerrainViewerApp
         // The game-generated object file carries an empty module GUID here, so the session's module id is
         // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
         var header = Convert.FromHexString(moduleSha)[..16];
-        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap);
+        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
+            result.Hero);
         _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         BindAreaInventory(result);
         if (mapMode)

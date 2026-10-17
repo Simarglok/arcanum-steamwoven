@@ -881,6 +881,28 @@ stage; `ARC_AREA_RUN_CAPTURE=PATH.png`). ARC-WORLD-021 adds the window vault (a 
 vault ART); the Crash Site maps have no jumpable window, so the map-mode smoke observes it (`ARC-WORLD-021 native-smoke vault PASS`,
 [gait runtime](../world/gait-runtime.md#window-jump-arc-world-021)).
 
+### Starting hero (ARC-WORLD-027)
+
+`--hero NAME` (crash-site-area, exterior or `--area-map`) starts the area session as one of the twelve original pre-made
+heroes. `NAME` is the project's race-gender name in main-menu order: `halfling-male`, `gnome-male`, `half-elf-male`,
+`half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`, `elf-female`,
+`half-orc-female`, `half-elf-female` (basic prototypes 16067..16078). Without it the session has no hero and dialogs use
+the diagnostic PC profile, as before. The background load reads the hero from the game folder that holds the module
+archive (`<game>/modules/<Name>.dat`, the description tables' rule; no extra argument): the loose `data/proto`
+prototype, `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes` and the hero's flag number from
+`mes\MainMenu.mes` message 551 + index. Any refusal fails the load (`AREA_HERO_<status>`); there is no silent fallback to
+the diagnostic profile.
+
+The session's player character is that hero ([starting hero runtime](../world/starting-hero-runtime.md#viewer-start-arc-world-027)):
+level 1, 5 points unspent, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
+is true. Dialogs gate replies on the hero's own gender, effective intelligence and race (also after F8, which follows the
+loaded save's hero). The inventory window lists the kit first (`(starting kit)`, named from the item's description
+number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K` or `hero: none
+(diagnostic PC profile)`. The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
+race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
+([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
+inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)

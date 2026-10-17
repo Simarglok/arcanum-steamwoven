@@ -42,7 +42,22 @@ internal static class AreaLoadOperation
     internal const long MaxCpuBytes = AreaRepositoryPolicy.MaxCpuBytes;
     internal static TerrainLoadResult Execute(long generation, TerrainViewerArguments arguments, CancellationToken token)
     {
-        if (arguments.AreaMapName is not null) return AreaMapLoadOperation.Execute(generation, arguments, token);
+        // ARC-WORLD-027: the hero is read first (cheap); an explicit --hero that cannot be read fails the load (no silent
+        // diagnostic fallback).
+        AreaHeroLoad? hero = null;
+        if (arguments.Hero is { } premade)
+        {
+            hero = AreaStartingHero.Load(arguments.ModulePath, premade);
+            if (hero.Status != AreaHeroStatus.Ready) throw new InvalidOperationException($"AREA_HERO_{hero.Status} {hero.Detail}");
+            Console.WriteLine($"ARC-WORLD-027 load stage=hero name={premade.Name} prototype={hero.Definition!.Prototype} flag={hero.Flag} gold={hero.Definition.Gold} kit={hero.Definition.Kit.Count} dropped={hero.DroppedChanges}");
+            token.ThrowIfCancellationRequested();
+        }
+        var result = arguments.AreaMapName is not null ? AreaMapLoadOperation.Execute(generation, arguments, token) : ExecuteExterior(generation, arguments, token);
+        return hero is null ? result : result with { Hero = hero };
+    }
+
+    private static TerrainLoadResult ExecuteExterior(long generation, TerrainViewerArguments arguments, CancellationToken token)
+    {
         var started = Environment.TickCount64; var allocated = GC.GetTotalAllocatedBytes();
         token.ThrowIfCancellationRequested();
         using var owner = AreaOriginalValidator.OpenFiles(arguments.ModulePath, arguments.ActorResourcePath!, arguments.ResourcePath,

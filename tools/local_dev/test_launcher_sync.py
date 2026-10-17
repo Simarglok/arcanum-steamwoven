@@ -55,6 +55,7 @@ class LauncherSyncTests(unittest.TestCase):
                 self.assertIn(launch.ROLE_FLAGS[role], argv, f"{task} must pass {role}")
         argv = launch.map_arguments(self.inputs(), "crash site cave")
         passed |= {token for token in argv if token.startswith("--")}
+        passed |= {token for token in launch.terrain_arguments(self.inputs(), "crash-site-area", hero="elf-male") if token.startswith("--")}
         self.assertTrue({launch.ROLE_FLAGS[role] for role in launch.MAP_ROLES} <= set(argv))
         self.assertEqual(viewer, passed | NON_LAUNCHER_FLAGS,
                          "a viewer flag was added or removed: update GAME_ROLES/MODE_ROLES/ROLE_FLAGS and terrain_arguments")
@@ -89,6 +90,25 @@ class LauncherSyncTests(unittest.TestCase):
                 launch.map_arguments(inputs, name)
         with self.assertRaises(ValueError):
             launch.map_arguments({role: path for role, path in inputs.items() if role != "gameRoot"}, "void")
+
+    def test_hero_names_match_the_viewer_and_are_passed_only_to_the_area_mode(self):
+        # ARC-WORLD-027: the launcher's hero names are the viewer's `AreaStartingHero.Premade`, in main-menu order.
+        source = (REPO / "tools/terrain-viewer/Core/AreaStartingHero.cs").read_text()
+        viewer = re.findall(r'new\("([a-z-]+)", (1607\d|1606\d)\)', source)
+        self.assertEqual([name for name, _ in viewer], list(launch.PREMADE_HEROES))
+        self.assertEqual([int(number) for _, number in viewer], list(range(16067, 16079)))
+        inputs = self.inputs()
+        self.assertNotIn("--hero", launch.terrain_arguments(inputs, "crash-site-area"))
+        argv = launch.terrain_arguments(inputs, "crash-site-area", hero="human-female")
+        self.assertEqual(argv[-2:], ["--hero", "human-female"])
+        self.assertEqual(launch.map_arguments(inputs, "crash site cave", "dwarf-male")[-4:], ["--area-map", "crash site cave", "--hero", "dwarf-male"])
+        for bad in ("Human-Female", "16075", "", "ogre-male"):
+            with self.assertRaises(ValueError, msg=bad):
+                launch.terrain_arguments(inputs, "crash-site-area", hero=bad)
+            with self.assertRaises(ValueError, msg=bad):
+                launch.map_arguments(inputs, "void", bad)
+        with self.assertRaises(ValueError):
+            launch.terrain_arguments(inputs, "world-diagnostic", hero="elf-male")
 
     def test_viewer_modes_match_the_launcher_modes(self):
         source = (REPO / "tools/terrain-viewer/Core/TerrainViewerArguments.cs").read_text()

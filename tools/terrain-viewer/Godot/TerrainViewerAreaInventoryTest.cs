@@ -243,7 +243,7 @@ public partial class TerrainViewerApp
             AreaSmokePlace(map, map.Chart.Spawn);
             InventoryKey(Key.I);
             var view = _inventoryPanel!.ViewForSelfTest!;
-            Require(InventoryOpen && view.Pc.Count == start + 2 + looted && view.Pc.All(line => !line.Text.StartsWith('[')), "I lists the named items");
+            Require(InventoryOpen && view.Pc.Count == _areaSession.QueryHeroKit().Count + start + 2 + looted && view.Pc.All(line => !line.Text.StartsWith('[')), "I lists the named items");
             // ARC_AREA_INVENTORY_CAPTURE saves an in-app readback of the open window to the caller's ignored path.
             if (System.Environment.GetEnvironmentVariable("ARC_AREA_INVENTORY_CAPTURE") is { Length: > 0 } capture)
             {
