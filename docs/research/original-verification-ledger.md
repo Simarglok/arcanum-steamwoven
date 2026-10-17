@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); audio in [Audio](#audio-arc-res-052))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -462,6 +462,28 @@ C# multiplication was made 32-bit in a scratch copy. A planted mutant (every fou
 caught. Steamwoven multiplies in 64 bits and `ExperienceTable.Create` admits thresholds up to 2,000,000,000, so a
 table with a step above 2,147,483 shows a different progress. Owner decision 2026-10-17: a rule-mode switch, Original
 wraps and Steamwoven keeps the exact value ([registry](../world/rule-modes.md#registry), not implemented yet).
+
+## Audio (ARC-RES-052)
+
+Source: the [audio study](audio-evidence.md#what-the-original-does), rows SN1–SN33, which keeps the
+full table. Three domains (resources and positional sound, schemes and combat music, voice and
+event sounds) were each read by a first reader and, independently, a second reader that saw only
+the questions (method step 6); the three differences are settled in the study. Every direct
+branch of the functions read stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| SN3 | `gsound_init` (0x41AA30) | soundparams key 12 is the small size's volume (default 40), key 22 the medium's (70); no overwrite. | CE slip |
+| SN4 | `gsound_calc_positional_params` (0x41B420) | The attenuated volume is multiplied by the size's volume % (small 40, medium 70, large 100). | CE slip |
+| SN12 | `gsound_scheme_load` (0x41BE20), `gsound_scheme_parse_entry` (0x41BF70) | A 26th entry in one scheme writes through a null pointer. | Original bug (no installed scheme reaches it; both settings refuse) |
+| SN13 | `gsound_scheme_parse_entry` (0x41BF70) | `/over` wins over `/loop`; a balance-left above 127 clamps to 127. | CE slip |
+| SN14 | `gsound_update` (0x41BAF0) | At most one ambient per slot per tick; hour windows never wrap, so 20 installed night entries never play. | CE slip (one per tick); original bug (windows), switch candidate |
+| SN17 | `gsound_start_combat_music` (0x41C4D0) | An NPC entering combat starts stinger and loop together; the local PC leaving combat restores the latest request. | Original |
+| SN18 | `gsound_save` (0x41B1D0), `gsound_load` (0x41B0F0) | A save made during combat loses the pre-combat schemes. | Original bug, switch candidate |
+| SN22 | `dialog_ui_speech_start` (0x5688D0) | Voice gender is the PC's; closing the dialog does not stop the voice. | Original |
+| SN24 | `sfx_critter_sound` (0x4F0ED0) | The off flag is tested on the local PC, not the sounding critter. | CE slip |
+| SN26 | `AGbeginAnimLoopAnim` (0x42DA50), eye candy (0x431550, 0x431960) | Looping scenery and eye-candy sounds loop; flag bit 0x80; handle test and goal fields as written in the study. | CE slip |
+| SN31 | hot-key equip (0x550000) | Equipping into an empty slot plays the slot number as a sound id. | Original bug, switch candidate |
 
 ## Decisions to revisit
 
