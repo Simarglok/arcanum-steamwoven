@@ -73,6 +73,26 @@ public partial class TerrainViewerApp
                 $"{runSteps} run steps charged {charged} fatigue");
             Require(session.QueryEvents().Any(e => e.Kind == SessionEventKinds.HeroFatigue), "the fatigue recovery is scheduled");
 
+            // A held stick with Num Lock run is one move: its run steps count across frames (the press starts the counter).
+            _numLockRun = true; events.Clear();
+            var beforeStick = session.QueryHeroLife()!.Record.State.FatigueDamage;
+            for (var frames = 0; frames < 40; frames++)
+            {
+                _areaSmokeTime++;
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(new(1, -1)) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+            }
+            for (var frames = 0; frames < 20 && _worldActor.Session!.State.Phase != MovementPhase.Settled; frames++)
+            {
+                _areaSmokeTime++;
+                WorldFrameForSelfTest(new(-1, default), new[] { StickLevel(default) }, .1, true, SimulationTime.At(_areaSmokeTime, 10));
+            }
+            _numLockRun = false;
+            var stickSteps = events.Count(e => e.Kind == MovementEventKind.StepStarted && e.Assessment!.Provenance.Contains(GaitTiming.RunProvenance));
+            var stickCharged = session.QueryHeroLife()!.Record.State.FatigueDamage - beforeStick;
+            Require(stickSteps >= RealTimeCombatRules.RunChargeSteps && stickCharged == stickSteps / RealTimeCombatRules.RunChargeSteps,
+                $"{stickSteps} stick run steps charged {stickCharged} fatigue");
+            charged += stickCharged;
+
             Require(LeaveCombatModeForDialog() && !HeroInCombatMode, "a dialog start left combat mode");
             PressR();
             Require(HeroInCombatMode, "R entered combat mode again");
@@ -83,7 +103,7 @@ public partial class TerrainViewerApp
             var healed = session.Heal(session.Version, SessionLifeTarget.Hero, new LifeHeal { Fatigue = charged });
             Require(healed.Disposition != GameSessionDisposition.Rejected && session.QueryHeroLife()!.Record.State.FatigueDamage == before, "fatigue healed back");
             GD.Print("ARC-COMBAT-004 native-smoke combat-mode PASS " + System.Text.Json.JsonSerializer.Serialize(new {
-                Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far), RunSteps = runSteps, Charged = charged,
+                Start = map.Chart.ToWorld(start), Goal = map.Chart.ToWorld(far), RunSteps = runSteps, StickRunSteps = stickSteps, Charged = charged,
                 Parity = "NOT_VERIFIED (rules from the CE reading and the original executable; no original-runtime run)" }));
         }
         finally

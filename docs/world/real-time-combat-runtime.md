@@ -54,7 +54,8 @@ does not happen; the original would set an out-of-range frame.
 | `SwitchTurnBased(expected, current, requested, world, interruptible)` | The setting's callback: `Store` says whether the host keeps the new value; with the hero in combat mode the round starts or ends. |
 | `ChargeCombatRun(expected, target)` | One run charge for a critter in combat mode (`CombatModeInactive` otherwise): fatigue damage + 1 through the life domain, which schedules the fatigue recovery and ends a subturn on a knockout. |
 
-A death through the life domain leaves combat mode (the source's death notice), in the same revision.
+A death through the life domain leaves combat mode (the source's death notice), in the same revision; the hero's death in
+combat mode during a round also ends the round, as the source's toggle does for the PC with turn-based on.
 
 ## Snapshot schema 15
 
@@ -89,6 +90,8 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 - The turn-based setting in the viewer (Space) and its round world; the session supports both.
 - The event-queue pump in the viewer: fatigue spent running in combat mode does not recover there (quick load resets);
   an unconscious hero still moves (movement does not read life yet).
+- The viewer leaves combat mode before its own dialog-start checks (the source checks the speaker first); a dialog that
+  then fails to start leaves the hero out of combat mode.
 - Encumbrance, fatigue-limiting and fatigue-draining heroes, the stunned-animation activation (a no-op for an inactive
   critter), combat music, the arms-away art, the combat toggle effect, invisibility, multiplayer branches.
 - Original-runtime parity of the cadence: NOT_VERIFIED (static reading only).

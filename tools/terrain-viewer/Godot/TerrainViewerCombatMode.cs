@@ -100,7 +100,7 @@ public partial class TerrainViewerApp
             var session = _areaSession!;
             var result = session.ChargeCombatRun(session.Version, SessionLifeTarget.Hero);
             GD.Print($"ARC-COMBAT-004 run-charge disposition={result.Disposition} failure={result.Failure} fatigue={HeroFatigue()}");
-            if (HeroFatigue() is <= 0) { SetWorldGait(MovementGait.Walk, "out of fatigue"); _combatModeNotice = "out of fatigue: walking"; }
+            if (HeroFatigue() is <= 0) { SetWorldGait(MovementGait.Walk, "out of fatigue", newMove: false); _combatModeNotice = "out of fatigue: walking"; }
         }
     }
 

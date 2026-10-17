@@ -187,6 +187,22 @@ public sealed class CombatModeTests
     }
 
     [TestMethod]
+    public void TheHerosDeathInARoundEndsTheRoundWithItsCombatMode()
+    {
+        using var owner = Owner();
+        Changed(owner.SetCombatMode(owner.Version, Hero, true, new SessionCombatModeContext { TurnBased = true, World = new World() }), owner, true);
+        Assert.IsNotNull(owner.QueryCombatRound());
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        Assert.AreEqual((false, (SessionCombatRound?)null, revision + 1), (owner.QueryCombatMode(Hero), owner.QueryCombatRound(), owner.Version.Revision));
+        // A round the hero is not in combat mode for (started directly) stays.
+        using var direct = Owner();
+        Assert.AreEqual(GameSessionDisposition.Changed, direct.StartCombatRound(direct.Version, new World()).Disposition);
+        Assert.AreEqual(GameSessionDisposition.Changed, direct.Kill(direct.Version, SessionLifeTarget.Hero).Disposition);
+        Assert.IsNotNull(direct.QueryCombatRound());
+    }
+
+    [TestMethod]
     public void SwitchingTurnBasedStartsOrEndsTheRoundOfAHeroInCombatMode()
     {
         using var owner = Owner();

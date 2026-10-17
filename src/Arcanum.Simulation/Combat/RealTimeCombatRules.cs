@@ -252,7 +252,7 @@ public static class RealTimeCombatRules
     /// <summary>
     /// The plan of one attack with no repeat shot and an attacker that keeps acting: every update from the start in real
     /// milliseconds (frame <c>f ≥ 1</c> appears at <c>(f − 1) × pause</c>, the hit with the action frame's display, the end
-    /// one pause after the last frame appears). An action frame at or past the last frame never hits.
+    /// one pause after the last frame appears). An action frame on the last frame still hits; one past it never does.
     /// </summary>
     public static IReadOnlyList<AttackMoment> Schedule(AttackClip clip)
     {

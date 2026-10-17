@@ -291,12 +291,14 @@ public sealed partial class GameSessionOwner
         else _combat.Critters.Remove(combatant.Entity!);
     }
 
-    // The source's death notice leaves combat mode (its toggle skips every refusal for the dead); the life step that killed
-    // the critter commits it with its own revision.
+    // The source's death notice leaves combat mode (its toggle skips every refusal for the dead), and for the PC in combat
+    // mode with turn-based on (an active round) it ends the round; the life step that killed the critter commits it with
+    // its own revision.
     private void LeaveCombatModeOnDeath(SessionLifeTarget target)
     {
-        if (target.IsHero) _combat.HeroCombatMode = false;
-        else _combat.Critters.Remove(target.Entity!);
+        if (!target.IsHero) { _combat.Critters.Remove(target.Entity!); return; }
+        if (_combat.HeroCombatMode && _combat.Round is not null) { _combat.Round = null; _combat.Stall = default; }
+        _combat.HeroCombatMode = false;
     }
 
     private bool CanExit(SessionCombatExit exit)

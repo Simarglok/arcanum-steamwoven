@@ -42,13 +42,16 @@ public partial class TerrainViewerApp
     private void SetObjectApproachGait() => SetWorldGait(MovementGait.Run, "object approach");
 
     /// <summary>The stick (a project input): the default gait, without Ctrl.</summary>
-    private void SetStickGait() => SetWorldGait(EffectiveAlwaysRun(false) ? MovementGait.Run : MovementGait.Walk, "stick");
+    private void SetStickGait() => SetWorldGait(EffectiveAlwaysRun(false) ? MovementGait.Run : MovementGait.Walk, "stick", newMove: !_stickHeld);
 
-    private void SetWorldGait(MovementGait gait, string origin)
+    // ARC-COMBAT-004: the stick is set every frame it is held; only its press starts a new move (the run counter's goal).
+    private bool _stickHeld;
+
+    private void SetWorldGait(MovementGait gait, string origin, bool newMove = true)
     {
         if (_worldGait != gait || _gaitOrigin != origin) GD.Print($"ARC-WORLD-020 gait={gait} via={origin}");
         _worldGait = gait; _gaitOrigin = origin;
-        ResetCombatRunSteps();
+        if (newMove) ResetCombatRunSteps();
     }
 
     /// <summary>Num Lock flips the always-run lock state on a fresh press (its original binding).</summary>
