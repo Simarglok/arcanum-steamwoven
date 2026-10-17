@@ -92,6 +92,8 @@ public static class AreaMapPlans
         (AreaMappingRole.WallStructure, "art/wall/structure.mes"),
         (AreaMappingRole.WallName, "art/wall/wallname.mes"),
         (AreaMappingRole.Portal, "art/portal/portal.mes"),
+        (AreaMappingRole.Roof, "art/roof/roofname.mes"),
+        (AreaMappingRole.RoofShade, "art/roof/roofshade.mes"),
     ];
 
     public static AreaMapPlanResult Create(ContentStack stack, WorldCatalog catalog, string mapName)
@@ -191,8 +193,9 @@ public static class AreaMapPlans
             var winner = ContentPhase.Candidate(stack, path, ContentLoadPhase.GameStart);
             if (winner is null)
             {
-                // Without a mask file the original rebuilds the masks (N3), as the owner does.
-                if (role == AreaMappingRole.MissingPolicy) continue;
+                // Without a mask file the original rebuilds the masks (N3), as the owner does. Without the two roof
+                // tables no roof is read (ARC-RENDER-021), as before them; their read phase is assumed, not exe-checked.
+                if (role is AreaMappingRole.MissingPolicy or AreaMappingRole.Roof or AreaMappingRole.RoofShade) continue;
                 return new(AreaMapPlanStatus.MissingSource, null, path);
             }
             AreaInputKey key;
@@ -265,7 +268,7 @@ public static class AreaMapPlans
         var baseline = new AreaLoaderOptions();
         var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
         long Scale(long value) => (long)Math.Ceiling(value * factor);
-        var visuals = Math.Min(int.MaxValue, checked(sectors * 4096L + objects * 4 + 64));
+        var visuals = Math.Min(int.MaxValue, checked(sectors * (4096L + 256) + objects * 4 + 64));
         // Frame budgets count every decoded frame while the snapshot is built (one per distinct
         // selection on a whole map, ARC-DATA-024); interiors read larger ART per frame than the
         // exterior, so whole maps get the capped budget outright.

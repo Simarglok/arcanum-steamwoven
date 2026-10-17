@@ -533,6 +533,22 @@ gameinit's init (0x4B9BC5) is set, whose meaning was not identified.
 Not checked in the executable: when a light ART file is first opened (CE: when it is drawn, through the ART cache);
 the readers take it from the stack winner, as every ART since ARC-DATA-018.
 
+## Roofs (ARC-RENDER-021)
+
+Source: the [roofs](../rendering/roofs.md) of whole maps and their rules (`AreaRoofGrid`), checked against the
+[first building research](first-building-evidence.md#roofs-fr-scene-010) (ARC-RES-029). One reading by this task
+and a second by its independent reviewer.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RF1 | roof slot (0x4395C0), roof block tile (0x4395E0), roof screen position (0x439640), roof art at a tile (0x4396A0) | The slot of a sector-local tile index is `x/4 + 16·(y/4)`; a block is drawn from its first tile plus 2 on each axis, at that tile's screen origin moved 120 left and 200 up, less the frame's hot spot; the art is read from the sector holding the tile. | Original |
+| RF2 | roof draw (0x439140) | With the roof switch on and the isometric view, each block of the drawn area is visited in steps of 4 tiles; a missing or filled roof is skipped; with hardware drawing the roof is tinted by the outdoor light colour (constant colour blend). A faded roof under the default roof blit mode (constant alpha, `0x100`; without 3D hardware the roof init switches it to stippling, `0x10000`, and a faded roof is stippled) is drawn with its alpha interpolated between four corner values chosen per piece from the three `roofshade.mes` values (opaque, partial, transparent: the table in `AreaRoofGrid.FadeCorners`, read for all 13 pieces); under another roof blit mode that mode is used instead. Roofs are drawn after all objects. | Original |
+| RF3 | roof recalculation (0x439D30) | On a player tile change the block under the tile (no offset) is filled when the piece's band holds the tile's `(y % 4, x % 4)` and unfilled otherwise, read for each of the 13 pieces; only a change starts the flood. | Original |
+| RF4 | roof cover test (0x43A030) | With the roof switch on, a tile counts as covered only when its tile art is of type 0 (the type getter 0x5038C0 returns bit 8 of tile art, bit 25 of facade art and 0 for any other art, so a missing tile also counts), the block holding the tile three further on both axes has a roof, is not filled and its band holds `((y + 3) % 4, (x + 3) % 4)`; a faded roof covers only when the caller counts faded roofs. The band table of all 13 pieces equals the edge bands of the research. | Original |
+| RF5 | roof fill flood (0x43A1A0) | A block whose fill already equals the request stops the flood; otherwise the flood arriving from the east (1) stops at north-west outside, west and south-west outside, from the south (3) at north-west outside, north and north-east outside, from the west (5) at south-east outside, east and north-east outside, from the north (7) at south-west outside, south and south-east outside; else the bit is set and the flood goes to the blocks east, west, south and north. | Original |
+| RF6 | roof fill off and on (0x439EA0, 0x439EC0), fade on and off (0x439EE0, 0x439F20), faded test (0x439FA0) | Fill off and on flood from the block of the tile; fade sets or clears the bit only when it differs (on a tile without a roof fade on still writes the empty slot back and marks the sector as having a roof list, a side effect `AreaRoofGrid` leaves out); a roof is faded when it exists, is not filled and carries the fade bit. | Original |
+| RF7 | frame data of art (0x5031C0, roof branch) | A mirrored roof frame (flag bit 0) is drawn with hot spot x 0 and offset x 0. | Original |
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.

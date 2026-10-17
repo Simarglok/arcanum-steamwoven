@@ -44,7 +44,7 @@ public sealed class AreaMapPlansRealDataTests
         using var stack = opened.Stack!;
         var catalog = WorldCatalog.Open(stack);
 
-        var complete = new List<string>();
+        var complete = new List<string>(); var roofs = new SortedDictionary<string, int>(StringComparer.Ordinal);
         foreach (var map in catalog.Maps.Where(m => m.Name != "arcanum1-024-fixed"))
         {
             var plan = AreaMapPlans.Create(stack, catalog, map.Name);
@@ -54,6 +54,13 @@ public sealed class AreaMapPlansRealDataTests
             var inspection = owner.Inspect();
             Assert.IsNotNull(inspection.Snapshot, map.Name);
             if (inspection.IsComplete) complete.Add(map.Name);
+            // ARC-RENDER-021: the roof blocks of the core sectors, every one admitted, with the installed shades.
+            if (inspection.Snapshot!.Roofs.Count > 0)
+            {
+                roofs.Add(map.Name, inspection.Snapshot.Roofs.Count);
+                Assert.AreEqual(new AreaRoofShades(255, 200, 80), inspection.Snapshot.RoofShades);
+            }
+            Assert.IsFalse(inspection.Issues.Any(i => i.SourceIndex >= 4096 && i.Stage is AreaStage.Appearance or AreaStage.Mapping or AreaStage.Frame), map.Name);
             // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
             if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
             // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once.
@@ -70,6 +77,8 @@ public sealed class AreaMapPlansRealDataTests
             }
         }
         Assert.AreEqual(80, catalog.Maps.Count - 1);
+        Assert.AreEqual("bates mansion lev 2=72, caladon-mafia underground=28, tulla interior=515, tulla interior - battle - air=132, tulla interior - battle - earth=184",
+            string.Join(", ", roofs.Select(p => $"{p.Key}={p.Value}")));
         CollectionAssert.IsSubsetOf(Complete, complete, string.Join(", ", Complete.Except(complete)));
     }
 }
