@@ -38,8 +38,8 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
-/// <see cref="PremadeHeroReader"/> (ARC-WORLD-015) from the game folder that holds the module archive (the description
-/// tables' rule, <see cref="AreaHover.OpenModuleStack"/>): the loose <c>data/proto</c> prototypes, <c>rules\effect.mes</c>,
+/// <see cref="PremadeHeroReader"/> (ARC-WORLD-015) from the game folder that holds the module archive
+/// (<see cref="AreaContentRoot.Discover"/>, the rule of the description tables and scripts): the loose <c>data/proto</c> prototypes, <c>rules\effect.mes</c>,
 /// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>.
 /// Godot-free; a typed status, never an exception for data.
 /// </summary>
@@ -69,20 +69,18 @@ public static class AreaStartingHero
     {
         ArgumentNullException.ThrowIfNull(modulePath);
         ArgumentNullException.ThrowIfNull(hero);
-        var opened = AreaHover.OpenModuleStack(modulePath);
-        if (opened.Status != AreaNamesStatus.Ready)
-            return Refused(opened.Status switch
-            {
-                AreaNamesStatus.MountFailed => AreaHeroStatus.MountFailed, AreaNamesStatus.StackFailed => AreaHeroStatus.StackFailed,
-                _ => AreaHeroStatus.ModuleOutsideGameRoot,
-            }, hero, opened.Detail);
+        var found = AreaContentRoot.Discover(modulePath);
+        if (found.Status != AreaContentRootStatus.Ready)
+            return Refused(found.Status == AreaContentRootStatus.MountFailed ? AreaHeroStatus.MountFailed : AreaHeroStatus.ModuleOutsideGameRoot, hero, found.Detail);
+        var opened = ContentStack.Open(found.Plan!);
+        if (opened.Status != ContentStackStatus.Ready) return Refused(AreaHeroStatus.StackFailed, hero, opened.Status.ToString());
         using var stack = opened.Stack!;
         var effects = Table(stack, EffectsPath, required: true, out var detail);
         var sources = effects is null ? null : Table(stack, SourcesPath, required: true, out detail);
         var buy = sources is null ? null : Table(stack, SourcesBuyPath, required: false, out detail);
         var menu = sources is null || detail is not null ? null : Table(stack, MainMenuPath, required: true, out detail);
         if (effects is null || sources is null || menu is null || detail is not null) return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
-        var read = PremadeHeroReader.Read(new(PremadeHeroReader.DirectoryPrototypes(Path.Combine(opened.Root!, "data", "proto")), effects, sources, buy),
+        var read = PremadeHeroReader.Read(new(PremadeHeroReader.DirectoryPrototypes(Path.Combine(found.Plan!.GameRoot, "data", "proto")), effects, sources, buy),
             hero.BasicPrototype);
         if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
             return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");

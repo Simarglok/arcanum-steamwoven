@@ -145,14 +145,12 @@ the source (`tc.c` reads only mouse messages); the controller menu navigates, co
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
-closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) re-authenticates the
-selected archives on every talk and resumption (`arcanum2.dat` as Script, checked against the area's second
-resource input, and `arcanum3.dat` as Dialog, checked against its first fingerprint; the original
-game opens Virgil's script from `Arcanum4.dat`, which shadows this copy, see
-[content precedence](../research/content-precedence.md#crash-site-impact)), runs SAP_DIALOG through the
+closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
+through the game's content stack (ARC-SCRIPT-011, [script content](script-content.md): the original's name for
+each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s, as the game opens it), runs SAP_DIALOG through the
 [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) (ARC-SCRIPT-009: Following from
 the session, Jilted false, the dialog slot from the session's keys over the loaded attachment), and reads the
-one DLG member whose number is the script's, refusing a node that is not an NPC record.
+DLG named after the script, refusing a node that is not an NPC record.
 
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
@@ -169,9 +167,10 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | Consequence | Where it lives |
 | --- | --- |
 | GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false ([source: 100 words of flags zeroed on init and reset][gf]); flags ≥3200 are not admitted and fail the dialog. |
-| QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's reaction to at least 41, Completed adds 10 (source rule); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
+| QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
-| LF, RE, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `reaction.pc`, `follow.pc`. A value equal to the loaded baseline (attachment flags, initial reaction, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, reaction outside `int`, follow other than 1) is refused when the state is built. |
+| RE | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` adjusts it through the PC's adjustment effects. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
+| LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |
 
 The SCR dispatcher's viewer host (ARC-SCRIPT-009) reads Following and LF from the same session, and also

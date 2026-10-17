@@ -34,15 +34,38 @@ public enum CombatFieldOrigin { Prototype, AreaObject }
 public readonly record struct CombatDamageRange(int Minimum, int Maximum);
 
 /// <summary>Fields every object carries. <see cref="Resistances"/> has five values by <see cref="CombatResistanceIndex"/>;
-/// <see cref="Name"/> is the numeric name class (<c>OBJ_F_NAME</c>), not display text.</summary>
+/// <see cref="Name"/> is the numeric name class (<c>OBJ_F_NAME</c>), not display text. <see cref="CurrentArt"/> is the stored
+/// current art id (<c>OBJ_F_CURRENT_AID</c>); for an item its "destroyed" bit marks a broken item (see <see cref="CombatItemArt"/>).</summary>
 public sealed record CombatObjectFields(int Type, int Prototype, uint Flags, uint SpellFlags, int Name, int Description, int ArmorClass,
-    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances);
+    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances, uint CurrentArt);
 
 /// <summary>Fields every item carries. <see cref="MagickTechComplexity"/> is positive for magickal, negative for
 /// technological items; <see cref="Spells"/> holds the five item spells (10000 is none); <see cref="InventoryLocation"/>
-/// is the inventory slot (1004 wielded weapon, 1006 worn armour).</summary>
+/// is the inventory slot (1004 wielded weapon, 1006 worn armour). <see cref="InventoryArt"/> (<c>OBJ_F_ITEM_INV_AID</c>) carries an
+/// armour item's coverage and <see cref="UseArtFragment"/> (<c>OBJ_F_ITEM_USE_AID_FRAGMENT</c>) the weapon or armour art subtype a
+/// wearer's art takes (see <see cref="CombatItemArt"/>).</summary>
 public sealed record CombatItemFields(uint Flags, int Weight, int Worth, int ManaStore, int MagickTechComplexity, int Discipline,
-    int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction);
+    int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction, uint InventoryArt, uint UseArtFragment);
+
+/// <summary>
+/// The item art id bits the wear rules read (pinned CE <c>first_party/tig/src/art.c</c>; the retail 1.0.7.4 executable decodes the
+/// same bits, ARC-WORLD-028): an art id's type is bits 28..31, and only an item art id (type 6) has the item fields; anything else
+/// reads 0. Coverage is bits 14..16 of the inventory art, the subtype bits 6..9 of the use-art fragment, and bit 10 of the current
+/// art marks a destroyed (broken) item.
+/// </summary>
+public static class CombatItemArt
+{
+    public const uint ItemArtType = 6;
+
+    public static bool IsItemArt(uint art) => art >> 28 == ItemArtType;
+
+    /// <summary>Armour coverage: 0 torso, 1 shield, 2 helmet, 3 gauntlets, 4 boots, 5 ring, 6 medallion.</summary>
+    public static int Coverage(uint art) => IsItemArt(art) ? (int)((art >> 14) & 7) : 0;
+
+    public static int Subtype(uint art) => IsItemArt(art) ? (int)((art >> 6) & 15) : 0;
+
+    public static bool Destroyed(uint art) => IsItemArt(art) && (art & 0x400) != 0;
+}
 
 /// <summary>
 /// Weapon fields as stored, before any wielder scaling: the <c>Magic…</c> values are the item's magic adjustments, which the

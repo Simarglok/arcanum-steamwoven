@@ -228,9 +228,12 @@ public sealed class AreaInventoryHost
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list.
-        var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)"))
-            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)))))
+        // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list; an
+        // item the hero wears (ARC-WORLD-028 session equipment) is marked.
+        var worn = session.QueryEquipment().Worn.Select(item => item.Entity).ToHashSet(StringComparer.Ordinal);
+        string Worn(string entity) => worn.Contains(entity) ? " (worn)" : string.Empty;
+        var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)" + Worn(item.Entity)))
+            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)) + Worn(item.Entity))))
             .ToArray();
         var gold = session.QueryGold();
         if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };

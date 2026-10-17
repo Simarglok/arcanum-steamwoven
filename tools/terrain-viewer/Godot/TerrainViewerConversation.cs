@@ -1,4 +1,5 @@
 using Arcanum.Data;
+using Arcanum.Data.Area;
 using Arcanum.Scripting.Dialog;
 using Arcanum.TerrainViewer.Core;
 using GamepadLab.Core;
@@ -26,17 +27,49 @@ public partial class TerrainViewerApp
     private void BindAreaConversations(TerrainViewerArguments arguments, AreaLoadResult area)
     {
         EndConversation();
+        // The old host may borrow content that is released below; it is never used again.
+        _conversationHost = null;
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
-        _conversationHost = arguments.AreaEffectsPath is { } dialogs && _areaSession is { } session
-            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session, inventory: _inventoryHost, party: true) : null;
+        // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive. Map mode
+        // (--area-map) does not wire dialogs yet (docs/rendering/area-map-mode.md).
+        if (_areaSession is { } session && arguments.AreaMapName is null)
+        {
+            var content = ConversationContent(arguments.ModulePath, area.Snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Module)?.Sha256);
+            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost, party: true,
+                contentDetail: $"{content.Status}: {content.Detail}");
+        }
+        else _conversationHost = null;
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
         }
+    }
+
+    // ARC-SCRIPT-011: the module's script content, opened once per module archive (path and the area's module digest) and
+    // kept for reloads and the cave; a content that saw a file change is opened again at the next publication.
+    private (string Module, string? ModuleSha256, AreaScriptContentLoad Load)? _conversationContent;
+
+    private AreaScriptContentLoad ConversationContent(string module, string? moduleSha256)
+    {
+        if (_conversationContent is { } cached && cached.Module == module && cached.ModuleSha256 == moduleSha256 && cached.Load.Content?.Changed != true)
+            return cached.Load;
+        ReleaseConversationContent();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var load = AreaContentRoot.OpenScripts(module);
+        GD.Print($"ARC-SCRIPT-011 script content status={load.Status} detail={load.Detail} ms={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0}");
+        _conversationContent = (module, moduleSha256, load);
+        return load;
+    }
+
+    /// <summary>Disposes the script content; the caller has dropped the conversation host that borrowed it.</summary>
+    private void ReleaseConversationContent()
+    {
+        _conversationContent?.Load.Content?.Dispose();
+        _conversationContent = null;
     }
 
     private void UnbindAreaConversations()

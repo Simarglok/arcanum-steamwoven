@@ -95,8 +95,9 @@ public sealed class AreaConversationTests
         {
             new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.LocalFlagsProperty), 8),
             new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.FollowProperty), 1),
-            new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.ReactionProperty), 70),
         }, session.QueryMapChanges(entity).ToArray());
+        // ARC-WORLD-026: the reaction is the session reaction domain's, no longer a map change.
+        Assert.AreEqual(new SessionReaction(Speaker0, 70, null), session.QueryReactionRecord(Speaker0));
 
         // The cave trip and back, then save and load: a new state over the restored session sees the same NPC.
         Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(79) }).Disposition);
@@ -177,7 +178,9 @@ public sealed class AreaConversationTests
         using var data = AreaOriginalValidator.OpenFiles(P("modules/Arcanum.dat"), P("arcanum1.dat"), P("arcanum2.dat"), P("modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), P("data/proto"));
         var snapshot = data.LoadStrict();
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session);
+        // ARC-SCRIPT-011: the game's content stack, as the viewer opens it: Virgil's script is Arcanum4.dat's copy.
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session);
         var plan = AreaScenePlan.Create(snapshot);
         var body = plan.Commands.Last(command => command.Identity == host.Speakers[0].Row.Key && !command.Additive);
         Assert.AreSame(host.Speakers[0], host.SpeakerAt(plan.Commands, body.Destination.X + body.Destination.Width / 2.0, body.Destination.Y + body.Destination.Height / 2.0));
@@ -230,7 +233,7 @@ public sealed class AreaConversationTests
         Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(snapshot.RuntimeMap) }).Disposition);
         using var loaded = ConversationSessionFixture.SaveAndLoad(session);
         foreach (var last in written.GroupBy(w => w.Flag).Select(g => g.Last())) Assert.AreEqual(last.Value, Flag(loaded, last.Flag), $"GF {last.Flag}");
-        host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), loaded);
+        host = new AreaConversationHost(snapshot, scripts, loaded);
         Assert.IsTrue(host.State.Follows(0));
 
         // Following now: the SCR picks another entry; that follower dialog needs WA, an explicit frontier.
@@ -241,22 +244,10 @@ public sealed class AreaConversationTests
         Assert.AreEqual(0, again.Conversation.Effects.Count);
         Assert.AreEqual(dialogHash, Fingerprint(P("arcanum3.dat")), "input unchanged");
 
-        // ARC-SCRIPT-009: both archives are authenticated on every talk: a script archive that is not the area's
-        // resource input, and a dialog archive that changed after the first talk, are refused before anything runs.
-        var wrongScripts = new AreaConversationHost(snapshot, P("arcanum3.dat"), P("arcanum3.dat"), loaded);
-        Assert.AreEqual(AreaConversationStartStatus.SourceChanged, wrongScripts.Begin(wrongScripts.Speakers[0]).Status);
-        var directory = Directory.CreateTempSubdirectory("arc-script-009-");
-        try
-        {
-            var copy = Path.Combine(directory.FullName, "dialogs.dat");
-            File.Copy(P("arcanum3.dat"), copy);
-            var moving = new AreaConversationHost(snapshot, P("arcanum2.dat"), copy, loaded);
-            Assert.AreEqual(AreaConversationStartStatus.Started, moving.Begin(moving.Speakers[0]).Status);
-            using (var append = File.Open(copy, FileMode.Append)) append.WriteByte(0);
-            var changed = moving.Begin(moving.Speakers[0]);
-            Assert.AreEqual((AreaConversationStartStatus.SourceChanged, "the dialog archive changed"), (changed.Status, changed.Detail));
-        }
-        finally { directory.Delete(true); }
+        // ARC-SCRIPT-011: without the game's script content nothing runs; the reason is the load's.
+        var none = new AreaConversationHost(snapshot, null, loaded, contentDetail: "ModuleOutsideGameRoot: test");
+        Assert.AreEqual((AreaConversationStartStatus.ContentUnavailable, "ModuleOutsideGameRoot: test"), (none.Begin(none.Speakers[0]).Status, none.Begin(none.Speakers[0]).Detail));
+        Assert.IsFalse(scripts.Changed);
     }
 
     private static AreaConversationState State(GameSessionOwner session, int reaction) =>

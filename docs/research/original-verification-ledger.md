@@ -1,13 +1,14 @@
 # Original verification ledger
 
-Status: **Research**, work item ARC-RES-048 (2026-10-17). One place that records, for every
+Status: **Research**, work item ARC-RES-048 (2026-10-17); later rows from the tasks named in their sections. One place that records, for every
 game-mechanics anomaly and decision input this project took from a CE reading, what the retail
 1.0.7.4 executable does at the same function. It applies the
 [original executable check](original-executable-check.md) to the decisions of the domain studies,
 and its verdicts decide which differences become switches of the two rule settings of owner
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
-The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here
+The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -143,6 +144,51 @@ Source: [AI plan](npc-combat-ai-plan.md#first-pass-ce-anomalies-to-confirm-not-a
 | Wait timer (C12, O3, TE8) | `ai_npc_wait` (0x4AA7A0) | The timer is scheduled when the leader's charisma is **not** extraordinary and the NPC is not mind-controlled, and it carries the NPC's handle. Followers of an ordinary leader time out (0, 15 min, 2 h, 1 d, 7 d, 30 d by wait index); Virgil (index 6) never does. | CE slip |
 | Round order (combat O2) | `object_list_rect` (0x440B40) | Sector by sector; inside a sector the critter most recently added or moved in comes first. | Original |
 
+## Reaction runtime (ARC-WORLD-026)
+
+Source: [reaction](npc-reaction-reputation-evidence.md#findings), contract
+[NPC reaction runtime](../world/npc-reaction-runtime.md). Read for the reaction owner on 2026-10-17 by a first reader
+and, independently, a second reader that saw only the questions (method step 6); both agree on every row, and the
+second reader found R1's difference. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| R1 effects | `reaction_get` core (0x4C0D00), `effect_adjust_reaction` (0x4EAA80) | Enemy list → 0; a non-PC or non-NPC → 50; stored value + the race/beauty/reputation term, then the `reaction` effects of the **PC** (the second argument), then a floor of 50 when this PC mind-controls the NPC. CE passes the NPC to the effect lookup. | CE slip (effect owner); the rest Original |
+| R1 term | `sub_4C1500` (0x4C1500), table 0x5B684C | The race term (row NPC race, column PC race, no bounds check) and the PC's reaction modifier (stat 14) are skipped for an aloof (NPC flag 0x20000) or monstrous NPC; the hostility variant floors them at −49; reputation is always added. The 88 table values equal CE's. | Original |
+| R2 | `reaction_adj` (0x4C0DE0) | No-op for 0, wrong types, an NPC this PC mind-controls, and a negative delta while the PC's charisma is extraordinary and it is the NPC's PC leader. The delta always goes through the PC's good/bad adjustment effects (CE's switch to bypass them for charm, A4, is CE's own addition) and is added to the stored value; a negative delta while the NPC's direct leader is the PC sets "check leader" and "check reaction bad". A network client returns early (not single player). | Original |
+| R3 | `sub_4C12F0`, `sub_4C1290`, `sub_4C1360` (0x4C12F0, 0x4C1290, 0x4C1360) | Reads search slots 0..9 (slot 0 only when asked) with the base as fallback; a write goes to the PC's own slot (slot 0 first), else the first empty slot 1..9, else evicts the slot closest to 50 when it is closer than the new value, else is dropped. | Original |
+| R5, R6 | `sub_4C1020` (0x4C1020), `sub_4C10A0` (0x4C10A0), `reaction_met_before` (0x4C0C40), `reaction_forget` (0x4C0F50) | Start copies the stored value into slot 0 (100 when below 100 and the fate point is spent); end clears slot 0 and writes the value to the PC's slot; met before and forget look at slots 1..9 only. | Original |
+| R4 | `reaction_translate` (0x4C0FC0) | Thresholds 0, 20, 40, 60, 80, 100; love = 0 … hatred = 6. | Original |
+| R2 effects | `effect_adjust_good_bad_reaction` (0x4EAAB0) | Negative: special effect 7 (bad), positive: 8 (good), 0 returns 0. | Original |
+| R8 hit | `ai_attack` (0x4A9650), PC hits NPC | Direct leader is the attacker: a deliberate hit adds parameter 9 (reputation A2, above), then the follow check, which may jilt it. Otherwise accidental −10; deliberate lowers it to parameter 10 when the hostility variant is above it. | Original (A2 an original bug) |
+| R8 quest | `quest_state_set_internal` (0x4C4E60) | Accepted: below 41 → adjust by 41 − effective; completed: +10. | Original |
+
+## Turn-based round (ARC-COMBAT-003)
+
+Source: [combat core](combat-core-evidence.md#turn-order-fr-combat-002) C6–C14 and C30, contract
+[turn-based round runtime](../world/turn-based-round-runtime.md). Read for the round on 2026-10-17 by a first reader
+and, independently, a second reader that saw only the questions (method step 6). Both agree on every row they share; the
+second reader found the merge of a later scan (TB3), the first reader the game-time row (TB15, read once). Every direct
+branch stays inside `.text`; the only jumps out of a function are tail jumps to function entries.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TB1 | `combat_recalc_perception_range` (0x4B7300) | Effective perception (stat 5) of the local PC, halved with signed truncation, + 5, raised to 10. | Original |
+| TB2 | `combat_turn_based_start` (0x4B71E0) | Turn counter 0, animations interrupted, the square `PC ± range` (inclusive) scanned for PCs and NPCs straight into the list, sorted, then begin turn. | Original |
+| TB3 | `combat_turn_based_begin_turn` (0x4B73A0), `object_list_copy` (0x4414E0) | Turn counter + 1; the rescan is **merged** into the list: listed critters stay (out of range or dead too), each new one is put at the head, so newcomers come first in reverse scan order; then the sort, the first participant not skipped, else the local PC when it is active, else the round ends. The stall globals (last actor, last action points, forced flag) are reset. | Original |
+| TB4 | `sub_4B7580` (0x4B7580), `sub_4B7DC0` (0x4B7DC0), `critter_is_active` (0x45D790) | Skipped: not active (destroyed or off, dead, unconscious, stunned or paralysed, stoned), or `OF_DONTDRAW` and not sleeping. | Original |
+| TB5 | `combat_turn_based_whos_turn_set` (0x4B6E70), `sub_4B7010` (0x4B7010) | Action points = effective speed (stat 11), at least 5. An NPC (not during a load) runs its heartbeat script and, on 1, its AI; with no animation started its action points become 0 and the completion check runs. | Original |
+| TB6 | `sub_4B7080` (0x4B7080), `combat_tb_timeevent_process` (0x4B7150) | Any PC keeps its turn while action points > 0. The same actor seen again with unchanged action points sets the forced flag; a new actor only becomes the last actor and the last action points keep the previous actor's value (**A11**). A 2 ms turn event then forces the spend and passes on at ≤ 0. | Original; A11 an original bug |
+| TB7 | `combat_turn_based_next_subturn` (0x4B7690), `combat_turn_based_subturn_end` (0x4B7630) | End script of an NPC, next entry; past the end directly: end turn, no second start; past the end through the skip loop: end turn, then the first subturn starts again (A9). | A9 confirmed (original bug) |
+| TB8 | `combat_turn_based_end_turn` (0x4B7740) | Game and animation time + 1000 ms, then begin turn. | Original |
+| TB9 | `combat_check_action_points` (0x4B7790), `combat_consume_action_points` (0x4B7CD0) | Covered → paid. Else the **local** PC with action points > 0 and current fatigue > 1 takes 2 fatigue damage through `combat_dmg` (no attacker, no blood splotch) and then the action points are set to 0, whoever's turn it now is (**A12**: a knockout in that damage step already passed the turn on); anyone else: 0 and next subturn. | Original; A12 an original bug |
+| TB10 | `combat_move_cost` (0x4B7BA0), `combat_attack_cost` (0x4B7C30), `combat_check_attack` (0x4B78D0), `combat_check_use_obj` (0x4B79A0), `combat_check_pick_item` (0x4B7A20), `combat_check_cast_spell` (0x4B7AA0), `combat_check_use_skill` (0x4B7AE0), `item_weapon_magic_speed` (0x465CF0) | As CE: 2 per step (1 for a PC with always-run), attack 1/2/`max(1, 8 − speed/3)`, reach-1 attack adds the adjacent move, use 2, pick up 1, cast and skill 4; weapon speed = magic adjustment + 5 with apprentice training + speed factor, 10 unarmed. An unreferenced function at 0x4B7B20 (4 + move) is dead code. | Original |
+| TB11 | `combat_turn_based_end_critter_turn` (0x4B7C90), `combat_turn_based_add_critter` (0x4B7E00) | End: action points 0, next subturn. Add: appended (a warning for a hidden awake critter), sorted, the current node unchanged. | Original |
+| TB12 | `combat_save` (0x4B1EA0), `combat_load` (0x4B2020) | Saves setting, active flag, turn counter, then action points, an unused handle, the current actor, the required action points and the last actor. Load restarts the round (fresh scan, counter back to 1), restores the action points and the current actor, resets the required action points; it fails when the actor is not found again. | Original (the session keeps the saved list instead, see the contract) |
+| TB13 | `object_list_rect` (0x440B40), `sector_rect_from_loc_rect` (0x4D0090), `obj_find_node_attach` (0x4E3D30) | Scan order (O2): sector rows by increasing y, sectors by increasing x, inside a sector newest-first (attach prepends; re-attached only on a sector change); destroyed, off and inventory objects excluded. | Original |
+| TB14 | `sub_430FC0` (0x430FC0), `sub_4348E0` (0x4348E0) | Step: walk 2, run 1 with fatigue > 0 (else walk); the run fatigue charge is A4. Gate: false when inactive; true outside a round; false off-turn; an NPC that cannot pay needs `100 × fatigue / max > 35`; a maximum of 0 divides by zero (both rule modes avoid the fault). | Original (A4 a CE slip; the division a fault fixed in both modes) |
+| TB15 | `timeevent_ping` (0x45B370) | In single player game time advances only while no round is active (`combat_turn_based_is_active` 0x4B6D70); animation time always. | Original (first reader only) |
+
 ## Scripts, event queue and randomness (ARC-RES-042, ARC-RES-045, ARC-SCRIPT-007, ARC-RES-046, ARC-WORLD-019)
 
 Source: [dispatcher](scr-event-dispatcher.md#11-anomalies-recorded-not-adopted-s),
@@ -171,6 +217,11 @@ Source: [dispatcher](scr-event-dispatcher.md#11-anomalies-recorded-not-adopted-s
 | OQ2 | type table 0x5B2188, `timeevent_save`, `ai_timeevent_process` (0x4AD200) | The AI tick kind is not saved; a load schedules a new tick per NPC with 0..5000 ms jitter. | Original |
 | OQ3 | `timeevent_save_nodes_to_map` and neighbours | Per-map `TimeEvent.dat` files; events follow their objects across a teleport. | Original |
 | Random (R1–R6) | `random_rand` (0x4CEF50), `random_between` (0x4CEF00), `random_seed_generate` | LCG 1,664,525 / 1,013,904,223, output bits 8..22; modulo ranges, swapped bounds; time seed; no save or load; spawn-inventory and dialog reseeds. All as the contract says. | Original |
+| SN1 (ARC-SCRIPT-011) | `script_name_init` (0x4CEC10), `script_name_mod_load` (0x4CECE0), `script_name_build_scr_name` (0x4CEDC0), `script_name_build_dlg_name` (0x4CEE60) | As CE: the `scr\*.scr` listing maps `atoi(name)` ≥ 1000 at game start and 1..999 at module load, a later name replaces an earlier one with an error message; lookup takes ≥ 1000 from the first table and 1..999 from the second; the DLG name swaps the first and last three characters for `dlg`. | Original |
+| DL1 (ARC-SCRIPT-012) | `dialog_load` (0x412E10), `dialog_parse_field` (0x417C20), `dialog_parse_entry` (0x417860) | As CE and the DLG original read mode: a field is found by skipping to the next `{` (`//` comments skipped), capped at 999 characters; id, IQ and response read with `atoi`; a non-empty IQ that reads 0 and a response starting with `#` end the read; a file with no record is not opened. | Original |
+| DF1 (ARC-DATA-022) | `dialog_load` (0x412E10) over four stone-examination DLGs | Data defect: the only record lacks its effects field, no record is read, the file is not opened and the print line shows nothing. | Original bug (data) |
+| DF2 (ARC-DATA-022) | `dialog_parse_entry` (0x417860), NPC line 315 of `01306benjamin_gershwin.dlg` | Data defect: the line's effects are in its response field, which an NPC line never uses; they are never applied. | Original bug (data) |
+| DF3 (ARC-DATA-022) | `dialog_parse_entry` (0x417860), reply 361 of `01009mayor_blackroot.dlg` | Data defect: the final-line action is in the response field; `atoi` reads 0 and the reply ends the talk. | Original bug (data) |
 
 ## World, movement and data (ARC-RES-047, ARC-RES-029, ARC-RES-034, ARC-DATA-021, clock)
 
@@ -186,7 +237,7 @@ Source: [locomotion](locomotion-evidence.md#anomalies),
 | LA3, L2, L5 | object click near 0x54FB19, `get_always_run` (0x4304C0), `turn_on_running` (0x436AB0) | Object clicks always run; Num Lock is a toggled state seeded from the key; run needs load under 60 % and fatigue above 0. | Original |
 | W1, W2, W7 | `sub_4273B0`, `critter_can_jump_window` (0x45F570), path search `sub_41F9F0` | Window pieces, who can jump, +50 path cost, as the study says. | Original |
 | LA4 (a, b) | `location_rot` (0x4B8D50), `sub_4288A0`, door goals 0x428550–0x428800 | Same tile gives direction 5; the window jump and every door open-attempt goal pass `object_rot(walker, portal)`. | Original |
-| LA4 (c), building U4 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0) | The "opposite direction" branch really **swaps** the portal and far tiles; CE copies the far tile into both, so in CE that branch never counts as leaving. In the original a walker coming from across counts as leaving when its tile is indoor and the portal's tile is not. Side effect: on the portal's own tile (direction 5) a portal of raw rotation 0–2 is tested in reverse, so an outdoor walker there passes as "leaving". | CE slip; the direction-5 side effect is an original bug |
+| LA4 (c), building U4 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0) | The "opposite direction" branch really **swaps** the portal and far tiles; CE copies the far tile into both, so in CE that branch never counts as leaving. In the original a walker coming from across counts as leaving when its tile is indoor and the portal's tile is not. Side effect: on the portal's own tile (direction 5) a portal of raw rotation 0–2 is tested in reverse, so an outdoor walker there passes as "leaving". What this means for a walking step: [LV1–LV5](#leaving-a-building-through-a-locked-portal-arc-res-049). | CE slip; the direction-5 side effect is an original bug |
 | Wilderness A1 | `sector_light_list_load` (0x4F72C0) | Lights move with the object rule (sector × 64 + local tile). | CE slip (confirms the proposed policy) |
 | Wilderness A3, A6 | `terrain_sector_path` (0x4E84C0) | `-1.sec` path; a null name faults. | Original (A6 an original crash bug) |
 | Wilderness A2, A4, A5 | — | Editor encoder and `arcanum2.dat` folder data. | Not checked |
@@ -198,6 +249,72 @@ Source: [locomotion](locomotion-evidence.md#anomalies),
 | Clock current day/month | `datetime_current_day` (0x45AB00), `datetime_current_month` (0x45AB20) | The two getters are exchanged; the ordinary getters are right. Nothing calls them. | Original bug (dead code) |
 | Clock subtraction | `datetime_sub_milliseconds` (0x45A9E0) | The underflow branch computes the same odd expression as CE. | Original bug |
 | Clock start | `gameinit_mod_load` (0x4B9C30) | 1885 and 15:00; hour 0 stored as 1 ms. | Original |
+
+## Leaving a building through a locked portal (ARC-RES-049)
+
+Source: ledger row LA4 (c) above, [locomotion](locomotion-evidence.md#windows-s-o-d) W3 and D3,
+[first building](first-building-evidence.md#door-admission-fr-scene-014) and the whole-map step rule
+of ARC-WORLD-018. Question: when does the walking player pass a closed, locked portal it has no key
+for, by the "leaving a building" shortcut? Two readers (this task's and a fresh second reader that
+did not see these verdicts) read every row below in the executable and agree on every observation;
+only the internals of `object_locked_get`, the key check and `tile_art_id_at` were taken from CE.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LV1 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0), `tig_art_tile_id_type_get` (0x5038C0) | Compares the portal's tile P with Q, the tile one step along the portal's **raw** ART rotation r (the diagonal tile for an even r; false off the map). When the direction argument is r + 3, r + 4 or r + 5 (mod 8) it really exchanges P and Q. Leaving means the first tile is indoor and the second is not; indoor is tile art with bit 8 clear or facade art with bit 25 clear, and any other art counts as indoor. | CE slip (CE copies Q into both); confirms LA4 (c) |
+| LV2 | `ai_attempt_open_portal` (0x4AEB70) | For the player: busted passes; not a critter refuses; the unlock script may refuse; jammed, magically held refuse; unless always-locked, leaving (with the caller's direction, unchanged) passes; not locked passes; otherwise the key decides. | Original |
+| LV3 | `object_calc_traversal_cost_func` (0x43FE00) | A diagonal step is four cardinal legs, all of which must be clear. A closed portal counts on a leg's start tile when its edge (r \| 1) is the leg's direction and on the leg's destination tile when its edge + 4 is; both pass the **leg's direction** to the open attempt, so the leaving test exchanges P and Q exactly when the leg enters P from across. | Original |
+| LV4 | `sub_4272E0` (0x4272E0), `object_traversal_check_blocking_door` (0x440700), door goals 0x428550, 0x428690, 0x428750, window jump `sub_4288A0`, `object_rot` (0x441B20), `location_rot` (0x4B8D50) | Before the step the walk only finds the closed portal from the walker's tile; the open-door and jump goals then repeat the open attempt with the direction from the walker's tile to P (`location_rot`, the exact inverse of `location_in_dir` for neighbours, 5 on the same tile). | Original |
+| LV5 | the walk as a whole | A step passes only when both attempts call it leaving. Out of P: r = 3, 5, 7 when P is indoor and the tile across is not; r = 4, 6 when P is indoor and the diagonal Q is not (the tile across is never read); r = 0, 1, 2 **never** (the traversal wants P indoor and Q outdoor, the goal on P tests the reverse). Into P from across: both attempts exchange, so it passes when Q is indoor and P is not (Q is the tile across for an odd r). | Original; the direction-5 side effect of LA4 (c) never opens a walking step (the traversal refuses it first) |
+
+**Recount (start map, opt-in probes on the owner's install).** The 1,138 window edges give exactly
+the ARC-RES-047 census (locomotion report digest unchanged before the door count was added): 324
+jumpable by day, the 18 rotation-1 windows still refused, now because the two attempts disagree.
+There are 215 closed locked doors the shortcut can apply to (no unlock script; not busted, jammed,
+held, never- or always-locked), all of odd rotation: 150 open when leaving from the portal's tile, as
+before; none from across, because no such door stands on an outdoor tile with an indoor tile across; 4 of rotation 1
+stand on an indoor tile with outdoor beyond and stay shut. The [first house](first-building-evidence.md)
+door is unchanged. On the 54 complete interiors 48 stay walkable from their start with the same 22
+window-jump steps. The step evidence now decides these portals by the step (LV5) instead of leaving
+them Unknown ([area step assessment](../world/area-step-assessment.md#whole-maps-arc-world-018)).
+
+## Rendering: body blends and wading (ARC-RENDER-018)
+
+Source: the [viewer map mode](../rendering/area-map-mode.md#body-blends-and-wading-arc-render-018).
+Both readings (this task's reader and a fresh second reader) agree on every row.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| BL1 | `object_setup_blit` (0x443170) | The body's blend is chosen in this order: frozen (additive with a constant colour), blit additive `0x10`, blit multiply `0x40`, blit constant alpha `0x100`, otherwise the light-derived render flags. Constant alpha replaces the flags with that mode alone and copies the serialized blit alpha into the render alpha only when the incoming blit word carries no alpha mode; on the ordinary body draw that word holds the shadow pass's subtract-and-colour value, so the test passes. The serialized blit alpha is read nowhere else. Multiply and constant-alpha bodies keep no colour or palette-tint mode. | Original |
+| BL2 | `sub_442520` (0x442520) | A body whose blit word has additive, subtract or multiply loses every colour, palette and alpha mode of its render flags and its render palette: it is drawn with the base palette, unlit. | Original |
+| BL3 | `object_draw` (0x43B390), wading branch | Wading (`OF_WADING` without `OF_WATER_WALKING`): an upright body's lowest 15 destination rows are drawn with the alpha modes replaced by constant alpha 92, its other modes kept, then the rest of the body normally; a flat wading body is drawn whole at alpha 92 and not again. | Original |
+| BL4 | `object_draw`, scaled source rectangles | A scaled body's source rectangle is the destination one divided by scale/100 and **rounded to nearest**; CE truncates. The Steamwoven renderer maps whole frames with its own nearest-pixel rule, so nothing depends on it. | CE slip (no consumer) |
+| BL5 | 16-bit blits for constant alpha and multiply (0x50742A, 0x506B87; stretched 0x510F44, 0x5104A6) | Constant alpha is the source's weight per channel (`dst + (src − dst)·alpha / 256`); multiply is the per-channel product of source and destination; index-0 source pixels are skipped. | Original |
+
+## Equipment (ARC-WORLD-028)
+
+Source: [equipment runtime](../world/equipment-runtime.md) and the item requirements
+[FR-ITEM-005..007](../requirements/items-economy.md#fr-item-005). Read on 2026-10-17 by a first reader and, independently,
+a second reader that saw only the questions (method step 6); both agree on every behaviour below, and both found EQ1.
+EQ7 was read the same by both; the second reader adds that `item_is_identified` answers true for complexity ≤ 0, so CE's
+differently written gate has the same effect. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| EQ1 | `sub_464D20` (0x464D20) | The wear check, in order: a critter spell flag of polymorph or a "body of" form → not wieldable; slot 1002 read as 1001; complexity > 0 with background 69 (Magick Allergy) → no magick items; the destroyed bit of the item's current art → broken; `item_location_get` ≠ slot → wrong type. Weapon: two-handed with a fixed hand count → no free hand with a shield, crippled with either arm flag; other weapons crippled only with both arms; then the critter art with the weapon's subtype must exist. Shield: no free hand next to a fixed two-handed weapon; **crippled with either arm flag**; art only for an armour shield. Body armour: the race's size bit, male-only before female-only, unique NPC art, then the art. No minimum-strength test. | Original, except the shield: CE tests only "both arms crippled", a CE slip; both settings refuse a shield with one crippled arm |
+| EQ2 | `sub_465010` (0x465010) | Always allows (the hexed-item refusal is never returned). | Original |
+| EQ3 | `item_check_remove` (0x466DA0) | The no-drop item flag (0x20) refuses first; a worn item then asks EQ2. | Original |
+| EQ4 | `sub_464C80` (0x464C80) | Taking a worn item off: remove check, insert check into the owner, remove, insert at the free grid place; a non-worn item: true, unchanged. | Original |
+| EQ5 | `item_wield_set` (0x464AE0) | Same item in the slot: true. Then the wear check, the item's remove check, the occupant's remove check, both removed, the occupant's insert check (on failure both go back where they were), the occupant into the grid, the item into the slot. Last, for slot 1003 (medallion) only, the animation speed is recalculated **for the item**, not the wearer. | Original; the medallion recalculation is a bug of the original (an item has no running animation, so it does nothing), no session effect, no switch |
+| EQ6 | `item_location_get` (0x4655D0), `item_armor_coverage` (0x465C30), `tig_art_item_id_armor_coverage_get` (0x504570) | Armour by the coverage bits 14..16 of its inventory art (torso 1006, shield 1005, helmet 1000, gauntlets 1007, boots 1008, ring 1001, medallion 1003), a weapon 1004, a generic item with the torch/shield flag 1005, else −1; an art that is not item art reads coverage 0. | Original |
+| EQ7 | `item_armor_ac_adj` (0x465BA0) | Not armour: 0. AC adjustment, plus the magic AC adjustment (scaled with an owner) unless the "unidentified" argument is set for an unidentified magickal item. Combat passes 0, so the magic part always counts. | Original |
+| EQ8 | `object_get_resistance` (0x43D6D0) | Base, then for a critter each worn armour item's adjustment and scaled magic adjustment (same gate), the poison bonus `5 × (CN − 4)` when positive, effects; a monstrous NPC unclamped, else 0..95. | Original |
+| EQ9 | `item_effective_power` (0x4614A0), `item_effective_power_ratio` (0x461540), `item_adjust_magic` (0x461590) | Power `(complexity + aptitude) / 2` with signed truncation, clamped to 0..complexity on the item's side (a non-critter owner gets the complexity); ratio 100 for a neutral item, else `100 × power / complexity`; adjustment `value × power / complexity` (magickal), `value − value × power / complexity` (technological), unchanged (neutral). | Original |
+| EQ10 | `item_weapon_magic_speed` (0x465CF0) | No item 10; the magic speed adjustment scaled for an owner, + 5 at apprentice training in the weapon's skill, + the speed factor. | Original (as TB10) |
+| EQ11 | `item_weapon_range` (0x465E30), `item_weapon_min_strength` (0x465E90) | Not a weapon: 1. Range + scaled magic range. Minimum strength + magic adjustment (scaled with a critter); without the fixed hand count, two-handed with a shield +4, one-handed without one −2. | Original |
+| EQ12 | `item_recalc_light` (0x467E80) | The worn items' light flags, each shifted by its effective power ratio (≤ 25 by 3, ≤ 50 by 2, ≤ 75 by 1), are ORed; the critter keeps **only the largest** size flag. | CE slip (CE sets every size flag); the light drawn is the same (the largest wins in both) |
+| EQ13 | `item_weapon_damage` (0x465F70), unarmed part | Bare-handed melee reads the unarmed bonus of whatever item is in slot 1007, without a type test; normal and fatigue `max(1, bonus − 25) .. bonus + 5`, other types 0; a monstrous critter its own table. | Original |
+| EQ14 | race to armour size table (0x5B32C0) | Human, elf, half-elf, half-orc, dark elf, orc medium; dwarf, gnome, halfling small; half-ogre, ogre large. | Original |
 
 ## Decisions to revisit
 
@@ -217,8 +334,10 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    code.
 4. **Window jump and door "leaving" test** ([locomotion](locomotion-evidence.md#anomalies) LA4/W3/D3,
    [first building](first-building-evidence.md) U4, ARC-WORLD-018 door admission and the research
-   probes): the original swaps the tiles; the 324-window census and door results with an outdoor
-   portal tile need recomputing. The direction-5 side effect is an Original-setting switch candidate.
+   probes): the original swaps the tiles. **Settled by ARC-RES-049** ([rows LV1–LV5](#leaving-a-building-through-a-locked-portal-arc-res-049)):
+   the start-map counts do not change, and the step evidence decides these portals as the original
+   does. The direction-5 side effect never opens a walking step; it stays a switch candidate only
+   where a goal attempt runs without the traversal (using a door directly, not traced).
 5. **SCR S2 choices** ([census](scr-census.md#anomalies-for-s1-s)): X7 (quotient, not sum) and X8
    (masked counters) are settled by the original, so neither is an Original-setting option; X10 stays a
    switch candidate. Implemented by ARC-SCRIPT-008 ([dispatcher core](../scripting/scr-dispatcher-runtime.md)):

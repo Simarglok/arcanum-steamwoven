@@ -69,16 +69,9 @@ profiles and every exterior smoke stay as they were.
 Opt-in `RealData` tests (`tests/Arcanum.TerrainViewer.Tests/AreaMapLoadOriginalTests.cs`,
 `DAT_ROOT` = the game folder): four interiors load with a drawable plan, step
 evidence and a session the walker can leave (the cave spawns on the pinned
-cave's arrival 2087,2018); of the 54 interiors whose strict snapshot is
-complete, 49 load in the viewer. The other five stop at
-`AREA_UNSUPPORTED_BODY_STATE`, because the scene plan does not yet draw these
-original blend states (follow-up ARC-RENDER-018):
-
-| Map | Bodies | State |
-| --- | ---: | --- |
-| `caladons sewers`, `tarant sewers-02` | 122 | wading (`OF_WADING`): the lower 15 px drawn at alpha 92 |
-| `void - arronax's interior`, `void-kerghans castle` | 54 | multiply blend (blit `0x40`) |
-| `bessietoonesmine-fixed` | 1 | constant alpha (blit `0x100`, alpha 95) |
+cave's arrival 2087,2018); all 54 interiors whose strict snapshot is
+complete load in the viewer (49 before ARC-RENDER-018, which draws the
+[body blends and wading](#body-blends-and-wading-arc-render-018) of the other five).
 
 Native smoke (`--native-smoke`, macOS, Godot 4.7.2 .NET, 1280×800): the map
 draws, a left click through the production ground-click seam sets a route goal
@@ -93,18 +86,84 @@ require evictions in the sweep; every per-view budget and the ownership balance
 still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
 mode, because a small map's repository (the cave's is 1.5 MB) is below the
-heap's ordinary noise; the retired generation must still be collected.
+heap's ordinary noise, and since ARC-RENDER-018 a second floor of 4 % of the heap
+before the reload, because a large map's heap (about 450 MB for the 64-sector
+`tarant sewers-02`) varied between runs from −63 to +26 MB in a single post-GC
+sample. The baseline and the retained size are each the least of three post-GC samples
+a frame apart (exterior and maps); the retired generation must still be collected.
+**Known flake:** on `tarant sewers-02` the heap after the reload stays 8–24 MB
+larger in a stable way (samples within one measurement differ by under 1 MB),
+so about one run in four still exceeds the 4 % floor; what grows (a one-time
+cache or a retention) is not yet known and is left to its own investigation.
+
+## Body blends and wading (ARC-RENDER-018)
+
+The scene plan draws three more serialized body states, by rules read in CE and
+checked in the retail executable
+([ledger BL1–BL5](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)).
+They are general rules of every body, not of these maps.
+
+- **Blend choice.** Blit additive `0x10` wins over multiply `0x40`, which wins
+  over constant alpha `0x100`. The serialized blit alpha (0–255) is used only by
+  constant alpha; any other blit alpha than 255, any other blit bit (subtract,
+  the alpha and palette modes) and a non-white blit colour stay
+  `AREA_UNSUPPORTED_BODY_STATE`, as does a frozen body (`OF_FROZEN`, drawn
+  additive with a constant colour before any blit blend); `OF_TRANSLUCENT` stays
+  `AREA_UNSUPPORTED_TRANSLUCENCY`.
+- **Multiply.** Each opaque source pixel multiplies the colour beneath it;
+  transparent pixels leave it unchanged (`AreaDrawCommand.Multiply`, a
+  `blend_mul` shader whose output alpha is 1).
+- **Constant alpha.** The body is drawn at its blit alpha (`Alpha`, the source's
+  weight; the shader divides by 255 where the original divides by 256, at most
+  1/255 apart).
+- **Unlit.** Multiply and constant-alpha bodies are drawn with the base palette,
+  without ambient or stationary light (`Unlit`, the `Unlit` ambient channel), and
+  a wall among them never fades.
+- **Wading.** A body with `OF_WADING` and without `OF_WATER_WALKING`, as
+  serialized at T0, draws its lowest 15 destination rows (after scale) at alpha
+  92, which replaces every other alpha of those rows; a flat wading body is
+  drawn whole at alpha 92 (`WadeRows`, relative to the destination, so a moved
+  command keeps its water line). Light still applies. An additive or multiply
+  body keeps its blend over the whole frame: the wading pass leaves those modes
+  set beside the wading alpha, and CE's blitter (`tig art.c`) tests additive and
+  multiply before constant alpha. That dispatch is a CE reading, not checked in
+  the executable, and no installed body has the combination.
+
+On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
+and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
+multiply scenery bodies in `void - arronax's interior` and
+`void-kerghans castle`, and one constant-alpha critter (alpha 95) in
+`bessietoonesmine-fixed`.
+
+The map native smoke observes each kind the map has (`ARC-RENDER-018
+native-smoke blend PASS`, or `NONE`), after the walk and its screenshot: for one
+opaque, uncovered pixel of an unscaled body that is not a wall, where the result
+differs from both inputs, the colour beneath (the body left out) and the drawn
+colour must match the original's formula within 3/255: multiply `s·d/255`,
+constant alpha and wading rows `d + (s − d)·a/255`; an upright wading body's rows
+above the water line must show the source itself where it differs from the
+colour beneath. The tolerance does not tell alpha 92 from 95. Lighting is off
+during the map smoke. Observed on all
+five maps (multiply on both void maps, alpha 95 in the mine, wading in both
+sewers).
+
+Not covered: wading is the T0 flag only (CE recomputes it from the tile when
+an object moves, not checked in the executable; the walking actor never wades);
+shadows (CE also darkens a wading body's shadow); frozen, stoned, `OF_DONTLIGHT` and
+animated-dead tints. Additive bodies keep the earlier lit rule, although the
+original draws them unlit too (BL2); changing it touches the pinned Crash Site
+lighting and is left to its own task.
 
 ## Not yet
 
-- The five maps above; eye-candy overlays and the remaining critter poses; the
+- Eye-candy overlays and the remaining critter poses; the
   original's missing-art fallback; K'na Tha's frame budget (streaming).
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).
-- The door and window step rule of ARC-WORLD-018 is being recounted against the
-  original executable (its inside-to-outside exit check swaps the cells), so
-  door passability in map mode is not final.
+- Door passability follows the step evidence: a locked door the player has no key
+  for opens only for a step leaving a building, as the original executable decides
+  it (ARC-RES-049); doors are not opened or animated.
 - Map transitions (ARC-RES-035), the main world map (ARC-RES-034), door
   runtime, dialogs and companions on these maps.
 - Original-executable parity is NOT_VERIFIED.

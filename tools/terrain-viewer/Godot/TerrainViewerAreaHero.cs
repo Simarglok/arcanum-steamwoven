@@ -40,7 +40,7 @@ public partial class TerrainViewerApp
         {
             var view = _inventoryHost.View(session, _hoverNames?.Catalog, _readyArea!.Snapshot.RuntimeMap);
             var kit = view.Pc.Take(definition.Kit.Count).ToArray();
-            Require(kit.Length == definition.Kit.Count && kit.All(line => line.Entity.StartsWith("kit:", StringComparison.Ordinal) && line.Text.EndsWith("(starting kit)", StringComparison.Ordinal)),
+            Require(kit.Length == definition.Kit.Count && kit.All(line => line.Entity.StartsWith("kit:", StringComparison.Ordinal) && line.Text.Contains("(starting kit)", StringComparison.Ordinal)),
                 "window kit lines");
             Require(view.Gold == definition.Gold, "window gold " + view.Gold);
         }

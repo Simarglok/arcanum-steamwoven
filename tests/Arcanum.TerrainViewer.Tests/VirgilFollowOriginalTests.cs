@@ -33,7 +33,8 @@ public sealed class VirgilFollowOriginalTests
         var area = result.Area!.Snapshot;
 
         using var session = ConversationSessionFixture.Create(area.RuntimeMap);
-        var host = new AreaConversationHost(area, Required("ARC_AREA_RESOURCE2"), Required("ARC_AREA_EFFECTS"), session, party: true);
+        using var scripts = AreaContentRoot.OpenScripts(Required("ARC_AREA_MODULE")).Content ?? throw new InvalidOperationException("SCRIPT_CONTENT");
+        var host = new AreaConversationHost(area, scripts, session, party: true);
         var speaker = host.Speakers.Single();
         Assert.AreSame(AreaCompanionRoster.Virgil, AreaCompanionRoster.For(speaker), "the only speaker is Virgil (prototype 17102, script 1324)");
         var templates = AreaCompanionTemplate.From(host.Speakers, result.Area.Plan, area.Visuals, AreaChart.Exterior, new(area.RuntimeMap));

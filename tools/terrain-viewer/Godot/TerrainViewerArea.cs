@@ -103,7 +103,7 @@ public partial class TerrainViewerApp
             .Select(group => group.Reverse().ToArray()).ToList();
         var objects = area.Snapshot.Objects.ToDictionary(body => body.Key);
         var visuals = area.Snapshot.Visuals.ToDictionary(visual => visual.Key);
-        var bodySamples = area.Plan.Commands.Where(command => command.Identity is not null && !command.Additive)
+        var bodySamples = area.Plan.Commands.Where(command => command.Identity is not null && !command.Blended)
             .GroupBy(command => (objects[command.Identity!.Value].Type, ArtClass: visuals[command.Visual].RawArt >> 28))
             .Select(group => group.OrderByDescending(command => (long)command.Destination.Width * command.Destination.Height).ToArray()).ToList();
         var groups = terrainSamples.Concat(bodySamples).ToArray();

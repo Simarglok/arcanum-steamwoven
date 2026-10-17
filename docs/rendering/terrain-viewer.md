@@ -897,7 +897,7 @@ The session's player character is that hero ([starting hero runtime](../world/st
 level 1, 5 points unspent, its race and gender effects, gold and starting kit, and its main-menu global flag (2350..2361)
 is true. Dialogs gate replies on the hero's own gender, effective intelligence and race (also after F8, which follows the
 loaded save's hero). The inventory window lists the kit first (`(starting kit)`, named from the item's description
-number) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K` or `hero: none
+number; an item the session's equipment wears is marked `(worn)`) and shows the gold; the HUD adds `hero: NAME level 1 (5 points unspent), gold G, kit K` or `hero: none
 (diagnostic PC profile)`. The actor is still drawn with the fixed human body of the AREA profile, not the hero's own
 race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --hero HERO`
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the

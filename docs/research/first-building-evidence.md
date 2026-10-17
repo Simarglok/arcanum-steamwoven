@@ -194,7 +194,13 @@ portals, the by-day bit outside hours 7..21 and the by-night bit inside them
 for a walker coming from across the edge the source swaps the two tiles through a
 self-assignment, so that side always compares one tile with itself and never counts
 as leaving (U4). The leaving check steps by the raw ART rotation, not `r|1`; for this
-door both are 3. When a walk reaches a closed door the move goal pushes an open-door
+door both are 3. **Original (ARC-RES-049):** the executable really exchanges the two
+tiles, the step's traversal and the door goal both run the attempt, and a step passes
+the lock only when both call it leaving: out of an indoor portal tile (raw rotation
+3..7) whose tile along the rotation is not indoor, or into an outdoor portal tile
+from across when that tile along the rotation is indoor (for an odd rotation, the
+tile the walker comes from)
+([ledger LV1–LV5](original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)). When a walk reaches a closed door the move goal pushes an open-door
 goal that animates it open
 ([move node 8](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L418),
 [open-door goals](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L565-L611));
@@ -346,7 +352,7 @@ Each slice needs its own synthetic fixtures; none may reuse real record bytes.
 
 ## Unknowns
 
-**Original check (ARC-RES-048):** U4 is answered: the original swaps the portal and far tiles (no self-assignment), so the statement of the [door admission](#door-admission-fr-scene-014) that a walker from across never counts as leaving holds only for CE; the house door's result does not change. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** U4 is answered: the original swaps the portal and far tiles (no self-assignment), so the statement of the [door admission](#door-admission-fr-scene-014) that a walker from across never counts as leaving holds only for CE; the house door's result does not change (rechecked by ARC-RES-049 with the original's test in the probe). The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
 
 - **U1** Whether the house lies on or near the route a new player takes towards the
   town; next check: a route survey from the start point to townmap 3.

@@ -18,25 +18,25 @@ public sealed class CombatFieldReaderTests
 
     private static Dictionary<int, int> Map(params int[] values) => values.Select((v, i) => (v, i)).Where(p => p.v != 0).ToDictionary(p => p.i, p => p.v);
 
-    // Common block: flags 18, spell flags 19, name 21, description 22, AC 25, HP 26..28, material 29, resistances 30.
+    // Common block: current art 0, flags 18, spell flags 19, name 21, description 22, AC 25, HP 26..28, material 29, resistances 30.
     private static Dictionary<int, object> Common(Dictionary<int, object>? extra = null)
     {
         var values = new Dictionary<int, object>
         {
-            [18] = 0x1000, [19] = 0x40, [21] = 2010, [22] = 6290, [25] = 7, [26] = 20, [27] = -3, [28] = 4, [29] = 5,
+            [0] = 0x60000400, [18] = 0x1000, [19] = 0x40, [21] = 2010, [22] = 6290, [25] = 7, [26] = 20, [27] = -3, [28] = 4, [29] = 5,
             [30] = Map(10, 20, 30, 40, 50),
         };
         foreach (var (slot, value) in extra ?? []) values[slot] = value;
         return values;
     }
 
-    // Item block 36..58: flags 36, weight 38, worth 40, mana 41, location 43, complexity 45, discipline 46, spells 49..53,
-    // spell mana 54, AI action 55.
+    // Item block 36..58: flags 36, weight 38, worth 40, mana 41, inventory art 42, location 43, use-art fragment 44, complexity 45,
+    // discipline 46, spells 49..53, spell mana 54, AI action 55.
     private static Dictionary<int, object> Item(int complexity = -5, Dictionary<int, object>? extra = null)
     {
         var values = Common(new()
         {
-            [36] = 0x2, [38] = 23, [40] = 11, [41] = 3, [43] = 1004, [45] = complexity, [46] = 2,
+            [36] = 0x2, [38] = 23, [40] = 11, [41] = 3, [42] = unchecked((int)0x60014000), [43] = 1004, [44] = 0x60000140, [45] = complexity, [46] = 2,
             [49] = 10000, [50] = 31, [51] = 10000, [52] = 10000, [53] = 10000, [54] = 12, [55] = 4,
         });
         foreach (var (slot, value) in extra ?? []) values[slot] = value;
@@ -104,6 +104,23 @@ public sealed class CombatFieldReaderTests
         CollectionAssert.AreEqual(new CombatDamageRange[] { new(3, 7), new(0, 0), new(1, 5), new(0, 0), new(4, 8) }, w.Damage.ToArray());
         CollectionAssert.AreEqual(new[] { 1, 0, 0, 2, 0 }, w.MagicDamageAdjustment.ToArray());
         Assert.IsNull(fields.Ammo); Assert.IsNull(fields.Armor); Assert.IsNull(fields.Critter); Assert.IsNull(fields.Npc);
+    }
+
+    [TestMethod]
+    public void ItemsReadTheArtTheWearRulesDecode()
+    {
+        // ARC-WORLD-028: current art (destroyed bit 10), inventory art (coverage bits 14..16), use-art fragment (subtype bits 6..9).
+        var fields = Read(8104, Armor, Item(extra: new() { [59] = 0x2 }));
+        Assert.AreEqual(0x60000400u, fields.Object.CurrentArt);
+        Assert.AreEqual((0x60014000u, 0x60000140u), (fields.Item!.InventoryArt, fields.Item.UseArtFragment));
+        Assert.IsTrue(CombatItemArt.Destroyed(fields.Object.CurrentArt));
+        Assert.AreEqual(5, CombatItemArt.Coverage(fields.Item.InventoryArt), "ring");
+        Assert.AreEqual(5, CombatItemArt.Subtype(fields.Item.UseArtFragment));
+        // Only item art (type 6 in bits 28..31) carries these bits.
+        Assert.IsFalse(CombatItemArt.Destroyed(0x20000400u));
+        Assert.AreEqual(0, CombatItemArt.Coverage(0x20014000u));
+        Assert.AreEqual(0, CombatItemArt.Subtype(0x70000140u));
+        Assert.IsFalse(CombatItemArt.Destroyed(0x60000000u));
     }
 
     [TestMethod]

@@ -1,11 +1,13 @@
-using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.NpcDialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -37,10 +39,12 @@ public enum AreaConversationStartStatus
     ScriptEnded,
     /// <summary>ARC-SCRIPT-009: the session refused the script's effects.</summary>
     ScriptEffectsRejected,
-    /// <summary>ARC-SCRIPT-009: the script or dialog archive differs from the one the area was loaded and first talked with.</summary>
+    /// <summary>ARC-SCRIPT-011: a script or dialog file changed since the content first read it; nothing is applied.</summary>
     SourceChanged,
     /// <summary>ARC-SCRIPT-009: a resumption found no script in the slot (it removed itself); nothing ran.</summary>
     ScriptRemoved,
+    /// <summary>ARC-SCRIPT-011: the game's script content could not be loaded for this area; nothing ran.</summary>
+    ContentUnavailable,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -52,15 +56,16 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR dispatcher (ARC-SCRIPT-009) →
 /// DLG member of the dialog action → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
 /// <see cref="GameSessionOwner"/> (ARC-SCRIPT-006), so they persist across talks, map changes and snapshots.
-/// The host does not own the session. Synchronous, single-threaded; Begin and Resume authenticate and read the selected archives every time.
+/// The host owns neither the session nor the script content. Scripts and dialogs come from the game's universal content
+/// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
+/// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
 /// </summary>
 public sealed class AreaConversationHost
 {
     private readonly AreaSnapshot _snapshot;
     private readonly GameSessionOwner _session;
-    private readonly string _scriptArchive;
-    private readonly string _dialogArchive;
-    private (long Length, string Sha256)? _dialogIdentity;
+    private readonly ScriptContent? _content;
+    private readonly string _contentDetail;
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
     private readonly AreaConversationProfile _baseProfile;
@@ -70,13 +75,16 @@ public sealed class AreaConversationHost
     /// <param name="party">ARC-WORLD-016: a speaker listed by <see cref="AreaCompanionRoster"/> talks with the session party
     /// port (JO, WA, UW through <see cref="SessionDialogPartyPort"/> with its measured facts), and its "following" is the
     /// session party standing; other speakers keep the diagnostic follow key.</param>
-    public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, GameSessionOwner session,
-        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false)
+    /// <param name="content">The game's script content (<see cref="AreaContentRoot.OpenScripts"/>), borrowed; null when it
+    /// could not be loaded, and then every talk is <see cref="AreaConversationStartStatus.ContentUnavailable"/> with
+    /// <paramref name="contentDetail"/>.</param>
+    public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content")
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
-        _scriptArchive = scriptArchive ?? throw new ArgumentNullException(nameof(scriptArchive));
-        _dialogArchive = dialogArchive ?? throw new ArgumentNullException(nameof(dialogArchive));
+        _content = content;
+        _contentDetail = contentDetail ?? throw new ArgumentNullException(nameof(contentDetail));
         // ARC-WORLD-027: a session with a hero talks with the hero's own gender, intelligence and race (DLG gates);
         // the given profile keeps the names, reaction and reach. Rebind applies the same rule to the new session.
         _baseProfile = profile ?? AreaConversationProfile.Diagnostic;
@@ -87,18 +95,18 @@ public sealed class AreaConversationHost
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => AreaCompanionRoster.For(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
-        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, scriptArchive);
+        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content);
     }
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
     public bool PartyWired => _party;
 
     /// <summary>
-    /// A host over another session (a quick load replaced the area session): same area, archives and given profile; the
+    /// A host over another session (a quick load replaced the area session): same area, content and given profile; the
     /// PC facts follow the new session's hero (ARC-WORLD-027).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, _baseProfile, _inventory, _party);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -184,22 +192,28 @@ public sealed class AreaConversationHost
     private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        // As before ARC-SCRIPT-009: the script archive must be the area's second resource input, and the dialog
-        // archive the file first seen here, both by full SHA-256, on every talk and resumption.
-        var scriptIdentity = _snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Resource2);
-        if (scriptIdentity is null || Fingerprint(_scriptArchive) != (scriptIdentity.Length, scriptIdentity.Sha256))
-            return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the script archive is not the area's resource input");
-        var dialogIdentity = Fingerprint(_dialogArchive);
-        _dialogIdentity ??= dialogIdentity;
-        if (dialogIdentity != _dialogIdentity) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the dialog archive changed");
-        token.ThrowIfCancellationRequested();
+        if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
+        // ARC-SCRIPT-011: one content never mixes two versions of a file; every file read before is checked again, and once
+        // one changed nothing more runs from it.
+        if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
         LastRun = result;
+        if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, $"script {result.Script}: a script file changed since it was first read");
         if (result.Outcome == ScrOutcome.Refused)
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
                 $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
+        // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
+        // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
+        (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");
+        if (result.Effects.Dialog is { } requested)
+        {
+            // ARC-DATA-022: the session's current rules choose the data fixes, read at this decision.
+            loaded = AreaScriptHost.LoadDialog(_content, requested.Script, requested.Node, _session.Rules.Data);
+            if (loaded.Status == AreaConversationStartStatus.SourceChanged) return new(loaded.Status, null, speaker, loaded.Detail);
+        }
+        token.ThrowIfCancellationRequested();
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
         if (result.Effects.Dialog is not { } dialog)
@@ -208,10 +222,8 @@ public sealed class AreaConversationHost
                 : result.Outcome == ScrOutcome.RunDefault
                 ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
-        token.ThrowIfCancellationRequested();
-
-        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_dialogArchive, dialog.Script, dialog.Node);
-        if (dialogStatus != AreaConversationStartStatus.Started) return new(dialogStatus, null, speaker, dialogDetail);
+        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
+        var document = loaded.Document;
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);
@@ -234,31 +246,30 @@ public sealed class AreaConversationHost
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
         npc.Value - 1000 is var index && index >= 0 && index < Speakers.Count ? AreaConversationState.EntityId(Speakers[(int)index].Row) : null;
-
-    private static (long, string) Fingerprint(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return (stream.Length, Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant());
-    }
 }
 
 /// <summary>
 /// Dialog state ports over a <see cref="GameSessionOwner"/> (ARC-SCRIPT-006). Session-owned and therefore kept across
 /// talks, map changes and snapshots: global flags (through the conversation's GF port), PC quest states and known
-/// rumors (the session story domain), and, per speaker, the attachment local flags, the NPC→PC reaction and the
+/// rumors (the session story domain), the NPC→PC reaction (the session reaction domain, ARC-WORLD-026: the speaker's
+/// record, else the profile's initial reaction as its base), and, per speaker, the attachment local flags and the
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
-/// from the area, the profile's initial reaction, not following). Still PROJECT diagnostic, in memory only and
+/// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
+/// profile's initial reaction as base; the PC is the session hero when there is one, else a human with reaction modifier
+/// 0 and no reputation or effects. The viewer does not open or close the reaction conversation slot yet, so every change
+/// lands in the remembered slot. Still PROJECT diagnostic, in memory only and
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
 /// and areas marked (MM); they wait for their own owners.
 /// </summary>
 public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort
 {
     public const string LocalFlagsProperty = "dialog.lf";
-    public const string ReactionProperty = "reaction.pc";
     public const string FollowProperty = "follow.pc";
     /// <summary>Source floor for the NPC's reaction when the PC accepts its quest, and the bonus on completion.</summary>
-    public const int AcceptedQuestReaction = 41;
-    public const int CompletedQuestReactionBonus = 10;
+    public const int AcceptedQuestReaction = ReactionRules.AcceptedQuestReaction;
+    public const int CompletedQuestReactionBonus = ReactionRules.CompletedQuestBonus;
+    /// <summary>The PC's reaction facts in a session without a hero (diagnostic).</summary>
+    public static ReactionPcFacts DiagnosticPc { get; } = new(CharacterRace.Human, 0, 0, [], [], [], false);
     public static readonly DialogParticipantId PcParticipant = new(1);
 
     private readonly GameSessionOwner _session;
@@ -282,15 +293,15 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         ArgumentNullException.ThrowIfNull(speakerEntities);
         _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
         _party = partySpeakers?.ToHashSet() ?? [];
+        if (!ReactionRules.IsValid(NpcFacts())) throw new ArgumentOutOfRangeException(nameof(initialReaction));
         // A restored session may carry any long under these keys; refuse values this port cannot read.
         foreach (var entity in _entities)
         {
             var lf = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
-            var reaction = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, ReactionProperty));
             var follow = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, FollowProperty));
             var counters = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.CountersProperty));
             var script = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.ScriptProperty));
-            if (lf is < 0 or > uint.MaxValue || reaction is < int.MinValue or > int.MaxValue || follow is not (null or 1)
+            if (lf is < 0 or > uint.MaxValue || follow is not (null or 1)
                 || counters is < 0 or > uint.MaxValue || script is < int.MinValue or > int.MaxValue)
                 throw new ArgumentException("AREA_SESSION_DIALOG_STATE_INVALID", nameof(session));
         }
@@ -312,7 +323,14 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public bool Follows(int speaker) => _party.Contains(speaker)
         ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
-    public int Reaction(int speaker) => Read(speaker, ReactionProperty) is { } value ? checked((int)value) : _initialReaction;
+    public int Reaction(int speaker) =>
+        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFacts).View?.Effective ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
+
+    /// <summary>The diagnostic NPC side of every speaker's reaction.</summary>
+    public ReactionNpcFacts NpcFacts() => new(_initialReaction, CharacterRace.Human, false, false);
+
+    /// <summary>The PC side: the session hero's facts, else <see cref="DiagnosticPc"/>.</summary>
+    public ReactionPcFacts PcFacts => _session.QueryHeroReactionFacts() ?? DiagnosticPc;
 
     /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
     internal void Bind(int speaker, uint loadedFlags) => _baseline[speaker] = loadedFlags;
@@ -358,16 +376,17 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         if (!Enum.IsDefined((SessionQuestState)command.State)) return DialogCommandResult.Rejected;
         var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State);
         if (result.Disposition != GameSessionDisposition.Changed) return Result(result);
-        var reaction = Reaction(speaker);
-        var target = _session.QueryQuest(command.QuestId)!.Value.Effective switch
+        var entity = _entities[speaker];
+        // Source quest rules: accepted raises the effective reaction to at least 41 (a delta), completed adds 10.
+        var written = _session.QueryQuest(command.QuestId)!.Value.Effective switch
         {
-            SessionQuestState.Accepted when reaction < AcceptedQuestReaction => AcceptedQuestReaction,
-            SessionQuestState.Completed => checked(reaction + CompletedQuestReactionBonus),
-            _ => reaction,
+            SessionQuestState.Accepted when Reaction(speaker) < AcceptedQuestReaction =>
+                _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, AcceptedQuestReaction),
+            SessionQuestState.Completed => _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, CompletedQuestReactionBonus),
+            _ => null,
         };
         // The quest change is already committed: a refused reaction write is a partial effect, reported as indeterminate.
-        if (Write(speaker, ReactionProperty, target, _initialReaction).Disposition == GameSessionDisposition.Rejected)
-            throw new InvalidOperationException("AREA_SESSION_QUEST_REACTION_REJECTED");
+        if (written?.Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_SESSION_QUEST_REACTION_REJECTED");
         return DialogCommandResult.Applied;
     }
 
@@ -377,9 +396,11 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     public DialogCommandResult Execute(ReactionCommand command)
     {
-        var speaker = Speaker(command.Npc);
-        var value = command.Mode == DialogReactionMode.Target ? command.Value : checked(Reaction(speaker) + command.Value);
-        return Result(Write(speaker, ReactionProperty, value, _initialReaction));
+        var entity = _entities[Speaker(command.Npc)];
+        var result = command.Mode == DialogReactionMode.Target
+            ? _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value)
+            : _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value);
+        return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
 
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }

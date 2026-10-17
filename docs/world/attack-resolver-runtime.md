@@ -159,7 +159,9 @@ flags after a critical miss retargets the attack to the attacker.
   AI reaction to the attack, experience and weapon wear.
 - Critical-effect tables (FR-COMBAT-009) beyond the injected hook; effects
   are additive stand-ins, not the effect engine.
-- Skill levels, AC, resistances and weapon data come from the caller; no
+- Skill levels, AC, resistances and weapon data come from the caller (for the hero, the worn part of AC and resistances,
+  its light and the `CombatWeapon` it strikes with come from `QueryHeroEquipmentCombat`, [equipment](equipment-runtime.md),
+  ARC-WORLD-028); no
   prototype data is read (research O6).
 - Body of Air, traps, explosions and the source's forced-hit path.
 

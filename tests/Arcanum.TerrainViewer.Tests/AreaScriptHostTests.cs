@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Fixes;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
@@ -29,7 +30,7 @@ public sealed class AreaScriptHostTests
         var session = ConversationSessionFixture.Create(area.RuntimeMap);
         var map = new SessionMapId(area.RuntimeMap);
         var state = new AreaConversationState(session, map, [AreaConversationState.EntityId(speaker.Row)], 50);
-        return new(session, map, speaker, state, new AreaScriptHost(session, map, [speaker], state, "unused.dat"));
+        return new(session, map, speaker, state, new AreaScriptHost(session, map, [speaker], state, null));
     }
 
     [TestMethod]
@@ -127,34 +128,106 @@ public sealed class AreaScriptHostTests
     }
 
     [TestMethod]
-    public void Scripts_and_dialogs_are_found_by_number_once_and_a_dialog_needs_an_npc_node()
+    public void The_dialog_read_applies_the_data_fixes_of_the_rules_it_is_given()
     {
-        var directory = Directory.CreateTempSubdirectory("arc-script-009-");
+        var root = Directory.CreateTempSubdirectory("arc-data-022-");
         try
         {
-            var program = Program.SetFlag(0).Lines.Count == 2 ? ProgramBytes() : throw new InvalidOperationException();
-            var scripts = Path.Combine(directory.FullName, "scripts.dat");
-            File.WriteAllBytes(scripts, AreaOwnerFixture.Dat(("scr\\00777Test.scr", program), ("scr\\00778Twice.scr", program), ("scr\\00778Again.scr", program), ("scr\\x.scr", program)));
-            using var f = Create();
-            var host = new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, scripts);
-            Assert.AreEqual(ScrScriptStatus.Found, host.Script(777).Status);
-            Assert.AreEqual(ScrScriptStatus.Unreadable, host.Script(778).Status, "two members for one number");
-            Assert.AreEqual(ScrScriptStatus.Missing, host.Script(779).Status);
-            Assert.AreEqual(ScrScriptStatus.Missing, host.Script(0).Status);
-            var dialogs = Path.Combine(directory.FullName, "dialogs.dat");
-            var dlg = System.Text.Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}{2}{Bye.}{}{1}{}{0}{}");
-            File.WriteAllBytes(dialogs, AreaOwnerFixture.Dat(("dlg\\00777Test.dlg", dlg), ("dlg\\00778A.dlg", dlg), ("dlg\\00778B.dlg", dlg)));
-            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(dialogs, 777, 1).Status);
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(dialogs, 777, 2).Status, "node 2 is a PC reply");
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(dialogs, 777, 9).Status);
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(dialogs, 778, 1).Status, "two members for one number");
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(dialogs, 779, 1).Status);
+            var dlg = System.Text.Encoding.Latin1.GetBytes("{1}{Six fields.}{}{}{}{}");
+            File.WriteAllBytes(Path.Combine(root.FullName, "tig.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            File.WriteAllBytes(Path.Combine(root.FullName, "modules", "Syn.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "scr")); Directory.CreateDirectory(Path.Combine(root.FullName, "dlg"));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00790stone.scr"), new byte[64]);
+            File.WriteAllBytes(Path.Combine(root.FullName, "dlg", "00790stone.dlg"), dlg);
+            var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(dlg)).ToLowerInvariant();
+            var catalogue = new DlgDataFixCatalogue([new("DF1", "dlg/00790stone.dlg", sha, DlgFixOperation.CompleteLastRecord)]);
+            using var content = ScriptContent.Open(Arcanum.Data.Content.ContentMountPlan.Discover(root.FullName, "Syn").Plan!, fixes: catalogue).Content!;
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Original).Status);
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Original).Status,
+                "the mode is read at each call");
         }
-        finally { directory.Delete(true); }
+        finally { root.Delete(true); }
+    }
 
-        static byte[] ProgramBytes()
+    [TestMethod]
+    public void Scripts_and_dialogs_come_from_the_game_content_stack_by_the_original_names()
+    {
+        var root = Directory.CreateTempSubdirectory("arc-script-011-");
+        try
+        {
+            void Write(string relative, byte[] bytes)
+            {
+                var path = Path.Combine(root.FullName, relative);
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+            }
+            var program = ProgramBytes();
+            var dlg = System.Text.Encoding.Latin1.GetBytes("{1}{Hello.}{}{}{}{}{}{2}{Bye.}{}{1}{}{0}{}");
+            Write("tig.dat", AreaOwnerFixture.Dat());
+            // The module archive's copy wins over the game folder's; the DLG is the script's name in dlg\.
+            Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777test.dlg", dlg), ("scr\\00777test.scr", program)));
+            Write("scr/00777test.scr", new byte[3]);
+            Write("scr/00778twice.scr", program); Write("scr/00778again.scr", program);
+            Write("dlg/00778again.dlg", dlg); Write("dlg/00778twice.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{nul\0}{}{}{}{}{}"));
+            Write("scr/00782empty.scr", program); Write("dlg/00782empty.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Six fields.}{}{}{}{}"));
+            Write("scr/00783spaced.scr", program); Write("dlg/00783spaced.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Hello.} {}{}{}{}{}\r\n\t{2}{Bye.}{}{1}{}{0}{}"));
+            Write("scr/00779named.scr", program); Write("dlg/00779named.dlg", dlg);
+            Write("dlg/00781other.dlg", dlg); Write("scr/00781other2.scr", program);
+
+            Assert.AreEqual(AreaContentRootStatus.ModuleOutsideGameRoot, AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "Syn.dat")).Status);
+            Assert.AreEqual(AreaContentRootStatus.MountFailed, AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Absent.dat")).Status);
+            var load = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat"));
+            Assert.AreEqual((AreaContentRootStatus.Ready, "6 script numbers"), (load.Status, load.Detail));
+            using var content = load.Content!;
+            using var f = Create();
+            var host = new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, content);
+            Assert.AreEqual(ScrScriptStatus.Found, host.Script(777).Status, "the module copy, not the game folder's three bytes");
+            Assert.AreEqual(ScrScriptStatus.Found, host.Script(778).Status, "the last listed name wins, as in the original");
+            Assert.AreEqual(ScrScriptStatus.Missing, host.Script(780).Status);
+            Assert.AreEqual(ScrScriptStatus.Missing, host.Script(0).Status);
+            Assert.AreEqual(ScrScriptStatus.Missing, f.Host.Script(777).Status, "a host without content has no script");
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 777, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 2, DataFixProfile.Steamwoven).Status, "node 2 is a PC reply");
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 9, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogUnreadable, AreaScriptHost.LoadDialog(content, 778, 1, DataFixProfile.Steamwoven).Status, "00778twice.dlg, the winning name's");
+            // ARC-SCRIPT-012: the game opens no DLG without records; one with a space between fields reads.
+            Assert.AreEqual((AreaConversationStartStatus.DialogResourceMismatch, "dialog 782: dlg/00782empty.dlg: no record the original keeps (IncompleteRecord)"),
+                (AreaScriptHost.LoadDialog(content, 782, 1, DataFixProfile.Steamwoven).Status, AreaScriptHost.LoadDialog(content, 782, 1, DataFixProfile.Steamwoven).Detail));
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 783, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 781, 1, DataFixProfile.Steamwoven).Status, "00781other.dlg is not script 781's name");
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 780, 1, DataFixProfile.Steamwoven).Status);
+
+            // A file that changes after its first read is never mixed in: the script is unreadable, the dialog and every
+            // later talk of a conversation host over that content report SourceChanged.
+            Write("scr/00778twice.scr", ProgramBytes(flags: 1));
+            Assert.AreEqual(ScrScriptStatus.Unreadable, host.Script(778).Status);
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 779, 1, DataFixProfile.Steamwoven).Status, "first read");
+            Write("dlg/00779named.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Changed.}{}{}{}{}{}"));
+            Assert.AreEqual(AreaConversationStartStatus.SourceChanged, AreaScriptHost.LoadDialog(content, 779, 1, DataFixProfile.Steamwoven).Status);
+            using var source = new AreaOwnerFixture(motionBodies: true);
+            var conversations = new AreaConversationHost(source.Owner.LoadStrict(), content, f.Session);
+            var talk = conversations.Begin(f.Speaker);
+            Assert.AreEqual((AreaConversationStartStatus.SourceChanged, "a script or dialog file changed since it was first read"), (talk.Status, talk.Detail));
+            Assert.IsNull(conversations.LastRun, "nothing ran");
+            Assert.AreEqual(AreaConversationStartStatus.ContentUnavailable, new AreaConversationHost(source.Owner.LoadStrict(), null, f.Session).Begin(f.Speaker).Status);
+
+            // A file read by an earlier talk is checked again before the next one runs, without being read by it.
+            using var fresh = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
+            Assert.AreEqual(ScrScriptStatus.Found, new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, fresh).Script(779).Status);
+            var later = new AreaConversationHost(source.Owner.LoadStrict(), fresh, f.Session);
+            Assert.AreNotEqual(AreaConversationStartStatus.SourceChanged, later.Begin(f.Speaker).Status);
+            Write("scr/00779named.scr", ProgramBytes(flags: 2));
+            Assert.AreEqual(AreaConversationStartStatus.SourceChanged, later.Begin(f.Speaker).Status);
+            Assert.IsTrue(fresh.Changed);
+        }
+        finally { root.Delete(true); }
+
+        static byte[] ProgramBytes(uint flags = 0)
         {
             var bytes = new byte[64 + 132];
+            System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(bytes, flags);
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(52), 1);
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(56), 1);
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(bytes.AsSpan(64 + 44), ScrCatalogue.Action.ReturnRunDefault);

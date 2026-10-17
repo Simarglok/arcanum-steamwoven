@@ -216,13 +216,13 @@
 
 ## Сводное покрытие на Steamwoven baseline
 
-Статусы относятся только к текущему Steamwoven source snapshot: для этих доменов нет игрового data model или UI integration; правила одной атаки есть только как неподключённый [резолвер](../world/attack-resolver-runtime.md) (ARC-COMBAT-001). `Нет` не оценивает наличие соответствующей ветви в CE; CE source inspection — исследование, а не выполнение acceptance scenario. Ограниченный общий animation playback и диагностические/UI лаборатории не считаются combat/magic-tech покрытием.
+Статусы относятся только к текущему Steamwoven source snapshot: для этих доменов нет игрового data model или UI integration; правила одной атаки есть только как неподключённый [резолвер](../world/attack-resolver-runtime.md) (ARC-COMBAT-001), пошаговый раунд — как домен сессии без хоста ([раунд](../world/turn-based-round-runtime.md), ARC-COMBAT-003). `Нет` не оценивает наличие соответствующей ветви в CE; CE source inspection — исследование, а не выполнение acceptance scenario. Ограниченный общий animation playback и диагностические/UI лаборатории не считаются combat/magic-tech покрытием.
 
 | ID | Данные | Правила | Интеграция | Проверка |
 | --- | --- | --- | --- | --- |
-| FR-COMBAT-001 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-002 | Нет | Нет | Нет | Нет |
-| FR-COMBAT-003 | Нет | Нет | Нет | Нет |
+| FR-COMBAT-001 | Нет | Частично | Частично | Частично |
+| FR-COMBAT-002 | Нет | Частично | Частично | Частично |
+| FR-COMBAT-003 | Нет | Частично | Частично | Частично |
 | FR-COMBAT-004 | Нет | Частично | Нет | Частично |
 | FR-COMBAT-005 | Нет | Частично | Нет | Частично |
 | FR-COMBAT-006 | Нет | Нет | Нет | Нет |

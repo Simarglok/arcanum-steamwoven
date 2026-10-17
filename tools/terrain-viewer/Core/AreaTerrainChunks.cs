@@ -43,7 +43,7 @@ public sealed class AreaTerrainChunks
         var checkedCrops = new HashSet<(AreaFrameKey, TerrainRect)>();
         foreach (var command in terrain)
         {
-            if (command.Phase is not (0 or 1) || command.Alpha != 255 || command.Additive || command.FlipY
+            if (command.Phase is not (0 or 1) || command.Blended || command.FlipY
                 || command.Source.Width != command.Destination.Width || command.Source.Height != command.Destination.Height
                 || command.Source.Width <= 0 || command.Source.Height <= 0
                 || !frames.TryGetValue(command.Frame, out var frame)

@@ -131,7 +131,7 @@ public sealed class StartingHeroTests
     private static string[] Walk(DlgDocument document, AreaSnapshot snapshot, string root, GameSessionOwner session)
     {
         // ARC-WORLD-027: the host takes the PC facts from the session's hero itself.
-        var host = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session);
+        var host = new AreaConversationHost(snapshot, null, session);
         Assert.AreEqual(session.QueryHeroDialogFacts(), host.Profile.Pc);
         var talk = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(1),
