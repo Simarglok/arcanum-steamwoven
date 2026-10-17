@@ -119,6 +119,8 @@ public partial class TerrainViewerApp : Node
                         // collectable; this frame may not keep it reachable.
                         result = null;
                         await RunAreaResourcesAsync();
+                        // ARC-WORLD-031: last, because a transfer to another map publishes a new scene.
+                        if (_readyMapName is not null) await RunAreaMapTransferSmokeAsync();
                         GetTree().Quit(0);
                     }
                     else await RunNativeSmokeAsync(result);

@@ -39,6 +39,11 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public AreaCaveLoad? Cave { get; init; }
     /// <summary>ARC-WORLD-027: the pre-made hero the session starts as (ready), when <c>--hero</c> is given.</summary>
     public AreaHeroLoad? Hero { get; init; }
+    /// <summary>ARC-WORLD-031 (map mode): the map's transitions (ARC-DATA-025) and the maps map mode can open, by runtime
+    /// number; null with <see cref="MapTransitionsFailure"/> when the map list does not list the map.</summary>
+    public Arcanum.Data.Maps.MapTransitionSet? MapTransitions { get; init; }
+    public IReadOnlyDictionary<int, AreaMapDestination>? MapDestinations { get; init; }
+    public string? MapTransitionsFailure { get; init; }
 }
 
 /// <summary>The cave's strict snapshot, scene, frames and step evidence, bound to the same generation.</summary>

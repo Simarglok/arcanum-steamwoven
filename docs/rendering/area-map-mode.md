@@ -61,8 +61,9 @@ profiles and every exterior smoke stay as they were.
   runtime number.
 - **Inventory.** With a session, ground pickup, looting and the inventory window
   work on the map as on the exterior (the map's T0 items seed the session).
-- **Not in map mode.** Map transitions, NPC dialogs, companions and F7/F8 quick
-  save (the Crash Site slot is never touched); the HUD says so.
+- **Transitions.** See [map transitions](#map-transitions-arc-world-031) below.
+- **Not in map mode.** NPC dialogs, companions and F7/F8 quick save (the Crash
+  Site slot is never touched); the HUD says so.
 
 ## Coverage on the installed original
 
@@ -170,6 +171,57 @@ animated-dead tints. Additive bodies keep the earlier lit rule, although the
 original draws them unlit too (BL2); changing it touches the pinned Crash Site
 lighting and is left to its own task.
 
+## Map transitions (ARC-WORLD-031)
+
+Map mode moves the player between maps by the map's own data: the
+[map transitions](../world/map-transitions.md) (ARC-DATA-025) read from the
+content stack when the map loads, so every map works the same way and nothing
+is bound to a location. Only unconditional transitions run; a guarded one (a
+quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
+
+- **Triggers.** A left click on an object with an unconditional use teleport
+  (scenery or a portal) is a use: accepted within Chebyshev distance 2 by the
+  ARC-WORLD-009 use rule (`AreaUseRule`, now shared with the Crash Site pair),
+  otherwise the click route first walks to the nearest cell from which the rule
+  accepts the use, and the use is asked on arrival. Entering a jump point's tile
+  or an unconditional tile script's tile fires it, the jump point first
+  (ledger TR3). One transfer is pending at a time; the stick, clicks and hover
+  actions wait while it is, and a reset or reload drops it.
+- **Destinations.** A transfer applies once the actor is settled. On the same
+  map the actor moves to the authored arrival. Another map must be one map mode
+  can open: listed in the map list with 1 to 256 sector files (78 of the 79
+  installed map folders; the 2000 × 2000 start map is the one it cannot open, so
+  every exit to it is refused with `DESTINATION_NOT_OPENED_IN_MAP_MODE 5000` and
+  the HUD says so). The destination is loaded through the ordinary load path
+  with the authored arrival (`AreaMapArrival`, never a command-line option): the
+  actor starts exactly there when the step evidence admits the tile (the
+  original places the player without a passability check, W9), otherwise at the
+  map-list arrival rule. A palette reload afterwards reloads the arrival map.
+- **Session.** The game session is carried over: when the new map is
+  published, its actor placement moves to the new map and arrival in one
+  session step, and the new map's T0 items are attached beside those of the maps
+  already visited. A map without lighting keeps the carried session. If the
+  destination does not load, the origin map is loaded again with the actor where
+  the use was and the same session (this fallback is not observed by the
+  smoke).
+- **Not covered.** A teleport into another jump point does not chain (the
+  original nests up to 9). Tile scripts fire for the player only (the original
+  runs them for any critter). No fade, sound, movie or time advance of a
+  fade-and-teleport. Companions do not travel and dialogs stay off in map mode
+  (ARC-WORLD-032).
+
+Opt-in tests (`tests/Arcanum.TerrainViewer.Tests/AreaMapTransfersOriginalTests.cs`):
+`crematorium-lev 1` has its two exits; the way down is accepted and loads
+`crematorium-lev 2` at its arrival, which leads back up and further down; the
+way out to the start map is refused; the 17 jump-point tiles of `tulla
+interior` move the player on the same map. Native smoke (map mode, after the
+resource stages): `ARC-WORLD-031 native-smoke transfer PASS` (a use through the
+production click seam, the destination load, the arrival and the carried
+session; observed `crematorium-lev 1` → `crematorium-lev 2`, script 2369,
+arrival 116,112) and `ARC-WORLD-031 native-smoke jump PASS` (a ground click
+walks onto a jump point; observed in `tulla interior`, 437,214 → 304,219), or
+`NO-EXIT`/`NONE` when the map has no such trigger reachable from its start.
+
 ## Not yet
 
 - K'na Tha's native smoke is not green: the ARC-RENDER-018 blend check of its
@@ -184,6 +236,6 @@ lighting and is left to its own task.
 - Door passability follows the step evidence: a locked door the player has no key
   for opens only for a step leaving a building, as the original executable decides
   it (ARC-RES-049); doors are not opened or animated.
-- Map transitions (ARC-RES-035), the main world map (ARC-RES-034), door
-  runtime, dialogs and companions on these maps.
+- The main world map (ARC-RES-034) and therefore every exit to it, conditional
+  transitions, door runtime, dialogs and companions on these maps.
 - Original-executable parity is NOT_VERIFIED.
