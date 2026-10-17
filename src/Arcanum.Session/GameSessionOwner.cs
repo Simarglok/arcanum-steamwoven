@@ -655,7 +655,7 @@ public sealed partial class GameSessionOwner : IDisposable
     public SessionMapInventory? QueryMapInventory(SessionMapId map)
     {
         ThrowIfDisposed();
-        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed) : null;
+        return _inventory.Seeds.TryGetValue(map, out var seed) ? _inventory.View(map, seed, KilledNpc) : null;
     }
 
     /// <summary>Detached copy of the items the PC took from the world, in the order they entered its list. The hero's
@@ -682,8 +682,8 @@ public sealed partial class GameSessionOwner : IDisposable
 
     /// <summary>
     /// Loot (a click on a dead critter opens it as a container; the moved item runs <c>item_transfer</c> to the PC): an item
-    /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead
-    /// is lootable here: chests (generated on first open) are not. Refused before any effect, beyond the item rules of
+    /// still in the list of a dead NPC on the actor's map goes to the end of the PC's list. Only an NPC the seed marks dead, or one
+    /// that died in this session (ARC-COMBAT-005, <see cref="QueryNpcKilled"/>), is lootable here: chests (generated on first open) are not. Refused before any effect, beyond the item rules of
     /// <see cref="PickUpItem"/>: a holder with a <c>SAP_USE</c> script, an item in a worn slot (unequip effects), and an item
     /// <c>SAP_REMOVE_ITEM</c> script. The PC's own <c>SAP_TRANSFER</c> attachment is not modelled (the session has no PC
     /// object).
@@ -696,7 +696,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!IsCurrent(expected)) return RejectItem(GameSessionFailure.StaleVersion);
         if (!_inventory.Seeds.TryGetValue(_actor.Map, out var seed)) return RejectItem(GameSessionFailure.InventoryUnavailable);
         if (!seed.Holders.TryGetValue(holder, out var row)) return RejectItem(GameSessionFailure.UnknownHolder);
-        if (row.Kind != SessionHolderKind.Npc || !row.Dead) return RejectItem(GameSessionFailure.HolderNotLootable);
+        if (row.Kind != SessionHolderKind.Npc || !row.Dead && !KilledNpc(holder)) return RejectItem(GameSessionFailure.HolderNotLootable);
         if (row.ScriptPoints.Contains(SessionScriptPoint.Use)) return RejectItem(GameSessionFailure.HolderScriptUnsupported);
         if (!seed.HolderOf.TryGetValue(item, out var of) || of != holder || _inventory.Taken.Contains(item))
             return RejectItem(GameSessionFailure.ItemNotAvailable);
