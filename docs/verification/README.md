@@ -1,0 +1,64 @@
+# Function verification
+
+Status: **Implemented bounded component**, ARC-DEV-008. Steamwoven keeps one registry of the retail 1.0.7.4 functions
+it implements, marks the implementing methods in code, keeps the receipts of the function oracle, and counts the lines
+that still cite the reconstruction it is moving away from ([plan](../research/original-oracle-research.md#plan)). Root
+tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
+
+## Registry
+
+[`functions.csv`](functions.csv), one row per executable address, sorted by address:
+
+| Column | Content |
+| --- | --- |
+| `address` | `0x` and upper-case hex, as in the executable |
+| `name` | Steamwoven's own name for the function: plain lower-case words, never a reconstruction's identifier |
+| `domain` | the area (experience, combat, ...) |
+| `status` | `full`, `partial`, `not implemented` or `out of scope` |
+| `reason` | what is left out and why; required unless the status is `full` |
+| `level` | evidence level F0–F4 of the [original executable check](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4) |
+| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2, the receipt for F3 |
+| `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
+
+The first rows are the experience functions of ARC-WORLD-030: three full at F3 (oracle; progress since its XP3 switch,
+ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), five partial at F2 (two readings,
+[ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030)). Other domains add their
+rows when they are migrated; the audio rows (ARC-DATA-040, F2, [audio study](../research/audio-evidence.md)) mark
+methods of `Arcanum.Data`, which declares its own attribute.
+
+## OriginalFunction attribute
+
+`[OriginalFunction(address, OriginalFunctionScope.Full | Partial)]` (`Arcanum.Simulation.OriginalFunctionAttribute`) marks
+the method that implements a function. An assembly that cannot reference `Arcanum.Simulation` declares its own attribute
+of the same name and shape. The root test loads `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting` and
+`Arcanum.Session`, and reads the tracked C# sources under `src/`, `tools/` and `experiments/` for marks in other assemblies.
+It fails when a marked method has no row, a different scope or method name, a mark lies in an assembly it does not load,
+or a `full` or `partial` row has no marked method.
+
+## Oracle receipts
+
+`./arcanum oracle` ([function oracle](../workflow/toolchain.md#function-oracle)) has each `OriginalExe` test write
+`receipts/<ADDR>.json`: function, name, method, seed, inputs, mutants planted and caught, unexpected differences, the
+other rule mode's differences (Steamwoven progress: only on XP3 inputs) with their counts, result, executable SHA-256, the method's IL hash and the build configuration.
+The IL hash is a SHA-256 of the IL of the method and of every method of the same assembly it reaches (callees, accessors,
+lambdas, local functions and state machines), with every metadata token replaced by the name it refers to and the
+ordinals of compiler-generated names dropped (`tests/Shared/MethodIlHash.cs`): it changes with that code and not with
+unrelated members; a static field read brings in its type's initializer. Virtual and interface calls reach only the
+declaration, not the implementations behind it. Methods of other assemblies (the runtime) are named, not hashed, and a runtime or SDK change that
+renames them invalidates every receipt. The root test
+fails when an F3 row has no passing receipt or when the method's IL hash differs from its receipt: a changed function
+needs a new oracle run and its receipt committed. A receipt from another build configuration leaves the test
+inconclusive (root checks build Debug, like `./arcanum oracle`).
+
+## Rule-mode switches
+
+Every boolean switch of a profile composed in `GameRules` needs a row with a ledger ID (letters and a number) in the
+[rule-mode registry](../world/rule-modes.md#registry), and every row there a switch in code.
+
+## Reconstruction references
+
+[`ce-references.csv`](ce-references.csv) records, per area (`AGENTS.md`, `CLAUDE.md`, `docs`, `src`, `tests`,
+`tools`), how many lines of tracked text files name the reconstruction: its repository name, its pinned commit, the word CE (also
+as an identifier prefix such as `CE_`) or a Markdown reference label `[ce]`. The root test counts them again and fails
+when an area differs from its baseline: more lines are refused, fewer must lower the baseline in the same PR (a ratchet).
+Two PRs that each pass can still fail together, so rebase onto `main` before merging. Lock files and binary files are not counted.

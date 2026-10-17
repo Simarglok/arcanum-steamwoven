@@ -60,9 +60,11 @@ public sealed record AreaMapPlanResult(AreaMapPlanStatus Status, AreaMapPlan? Pl
 /// time (no pinned values); ART files with bytes after their last frame are read as the original
 /// reads them. ARC-DATA-018: resources resolve in content-stack order: every stack source that
 /// wins a name under <c>art/</c> is an input of the plan's <see cref="AreaSourcePlan.ResourceOrder"/>
-/// (an archive, or each loose file such a folder wins), the name tables are the stack's winners, and
-/// prototypes and the mobile aggregate are read from whichever source wins them. Sector and editor
-/// mobile files must be the module archive's own.</summary>
+/// (an archive, or each loose file such a folder wins), and
+/// the mobile aggregate is read from whichever source wins it. ARC-DATA-026: prototypes are the
+/// base-source files the original reads at game start (<see cref="ContentPrototypes"/>), and so are
+/// the name tables and the mask file (ARC-DATA-027, <see cref="ContentLoadPhase.GameStart"/>). Sector and
+/// editor mobile files must be the module archive's own.</summary>
 public static class AreaMapPlans
 {
     /// <summary>Largest map a whole-map plan loads at once (the largest interior has 79 sector
@@ -171,29 +173,37 @@ public static class AreaMapPlans
             if (Member(stack, new(AreaSourceRole.NormalGameMobile), winner, files, identities, MaxMemberBytes, "the mobile aggregate") is { } failure) return failure;
             aggregateBytes = winner.Length;
         }
+        // Prototypes are the files the original reads at game start, from the base sources only (ARC-DATA-026).
         foreach (var number in prototypes)
         {
-            var path = catalog.PrototypePath(number);
-            var winner = path is null ? null : stack.Resolve(path).Winner;
-            if (winner is null) return new(AreaMapPlanStatus.MissingSource, null, $"prototype {number}");
+            var winner = catalog.Prototypes.Candidate(number);
+            if (winner is null)
+                return new(AreaMapPlanStatus.MissingSource, null, catalog.Prototypes.IsAmbiguous(number) ? $"prototype {number} is held by two files" : $"prototype {number}");
             if (Member(stack, new(AreaSourceRole.Prototype, number), winner, files, identities, 1048576, $"prototype {number}") is { } failure) return failure;
         }
 
         var mappings = new List<AreaMappingBinding>();
+        // ARC-DATA-027: the name tables and the mask file are read by the original's Name init, before the module is
+        // mounted (exe-checked), so each comes from the first base source. Its source must be one of the plan's inputs:
+        // an archive of the resource order, or the loose file the order lists for that name.
         foreach (var (role, path) in MappingPaths)
         {
-            var winner = stack.Resolve(path).Winner;
+            var winner = ContentPhase.Candidate(stack, path, ContentLoadPhase.GameStart);
             if (winner is null)
             {
                 // Without a mask file the original rebuilds the masks (N3), as the owner does.
                 if (role == AreaMappingRole.MissingPolicy) continue;
                 return new(AreaMapPlanStatus.MissingSource, null, path);
             }
+            AreaInputKey key;
+            if (winner.Entry is not null) { if (!keys.TryGetValue(winner.Source, out key)) return new(AreaMapPlanStatus.UnsupportedSource, null, $"{path} is read from a source outside the resource order"); }
+            else if (order.SingleOrDefault(s => s.Path == path) is { } listed && files.Single(f => f.Key == listed.Key).Path == winner.FilePath) key = listed.Key;
+            else return new(AreaMapPlanStatus.UnsupportedSource, null, $"{path} is read from a source outside the resource order");
             var read = stack.Read(winner);
             if (read.Status != ContentReadStatus.Read) return new(AreaMapPlanStatus.Unreadable, null, path);
             var entry = winner.Entry is { } member
-                ? new AreaEntryIdentity(keys[winner.Source], member.Ordinal, member.Flags, member.StoredSize, member.DeclaredOutputSize, member.Offset, Hash(member.RawNameBytes.ToArray()))
-                : AreaDataOwner.LooseIdentity(order.Single(s => s.Path == path).Key, path, winner.Length);
+                ? new AreaEntryIdentity(key, member.Ordinal, member.Flags, member.StoredSize, member.DeclaredOutputSize, member.Offset, Hash(member.RawNameBytes.ToArray()))
+                : AreaDataOwner.LooseIdentity(key, path, winner.Length);
             mappings.Add(new(role, entry, Hash(read.Bytes!)));
         }
 

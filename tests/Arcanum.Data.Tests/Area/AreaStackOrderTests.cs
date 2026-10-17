@@ -81,6 +81,92 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void A_module_copy_of_a_prototype_is_ignored_and_a_module_only_prototype_is_missing()
+    {
+        // ARC-DATA-026: the original reads prototypes before it mounts the module.
+        var changed = Prototype(); changed[^1] ^= 1;
+        Install(arcanum1: Base());
+        Loose("modules/Mod/proto/007001 - test.pro", changed);
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            var prototype = result.Plan!.Files.Single(f => f.Key == new AreaInputKey(AreaSourceRole.Prototype, 7001));
+            Assert.IsTrue(prototype.Path.EndsWith(Path.Combine("data", "proto", "007001 - test.pro"), StringComparison.Ordinal), prototype.Path);
+            Assert.AreEqual(Hash(Prototype()), result.Plan.Plan.Identities.Single(i => i.Key == prototype.Key).Sha256);
+        }
+        File.Delete(Path.Combine(_root, "data", "proto", "007001 - test.pro"));
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001"), (result.Status, result.Detail));
+        }
+        Loose("data/proto/007001 - a.pro", Prototype());
+        Loose("data/proto/007001 - b.pro", Prototype());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001 is held by two files"), (result.Status, result.Detail));
+        }
+    }
+
+    [TestMethod]
+    public void Name_tables_come_from_the_base_and_step_rules_from_their_load_phase()
+    {
+        // ARC-DATA-027: name tables, tile names and effects are read at game start, so a module copy is ignored (the
+        // module's broken effect table would refuse the steps if read); the module's game effects at module load.
+        var effects = "{50}{}"u8.ToArray();
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art()), ("rules/effect.mes", effects)));
+        Loose("modules/Mod/art/scenery/scenery.mes", "{0}{other.art}"u8.ToArray());
+        Loose("modules/Mod/rules/effect.mes", "{x}{y}"u8.ToArray());
+        Loose("modules/Mod/rules/gameeffect.mes", "{0}{}"u8.ToArray());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            Assert.AreEqual(new AreaInputKey(AreaSourceRole.Resource1), result.Plan!.Plan.Mappings.Single(m => m.Role == AreaMappingRole.Scenery).Entry.Source);
+            using var owner = result.Plan.Open();
+            var snapshot = owner.LoadStrict();
+            Assert.AreEqual(1, snapshot.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Static), "the base table names fixture.art");
+            var steps = Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, null, 1);
+            var sources = steps.InputIdentity.Sources;
+            Assert.IsTrue(sources.Any(r => r.Role == "rules/effect.mes" && r.Length == effects.Length), "base effects");
+            Assert.IsTrue(sources.Any(r => r.Role == "rules/gameeffect.mes" && r.Length == 5), "module game effects, a loose file");
+        }
+        // A base copy shadowed by a module copy that is not an input of the plan cannot be bound.
+        Loose("data/art/scenery/scenery.mes", Scenery);
+        using (var stack = Stack())
+            Assert.AreEqual(AreaMapPlanStatus.UnsupportedSource, AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test").Status);
+    }
+
+    [TestMethod]
+    public void A_base_table_outside_the_resource_order_and_a_module_only_rule_are_refused()
+    {
+        // Arcanum4.dat holds only a scenery table that a module copy shadows: it wins no art name, so it is no plan input.
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("art/scenery/scenery.mes", Scenery)));
+        Loose("modules/Mod/art/scenery/scenery.mes", Scenery);
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.UnsupportedSource, result.Status);
+            StringAssert.Contains(result.Detail, "art/scenery/scenery.mes");
+        }
+        File.Delete(Path.Combine(_root, "Arcanum4.dat"));
+        Directory.Delete(Path.Combine(_root, "modules", "Mod"), recursive: true);
+        // Effects are read at game start: a copy only the module holds is not read, so the steps have no effect table.
+        Loose("modules/Mod/rules/effect.mes", "{50}{}"u8.ToArray());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            using var owner = result.Plan!.Open();
+            var snapshot = owner.LoadStrict();
+            var error = Throws<Arcanum.Data.Traversal.AreaStepInvocationException>(() => Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, null, 1));
+            Assert.AreEqual(Arcanum.Data.Traversal.AreaStepInvocationCode.InvalidSelection, error.Code);
+        }
+    }
+
+    [TestMethod]
     public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
     {
         Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);

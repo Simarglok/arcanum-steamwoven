@@ -8,4 +8,8 @@
     <PackageReference Include="MSTest.TestFramework" />
     <PackageReference Include="MSTest.TestAdapter" />
   </ItemGroup>
+  <ItemGroup>
+    <!-- ARC-DEV-008: the IL hash of oracle receipts, shared by the test that writes them and the test that checks them. -->
+    <Compile Include="../Shared/MethodIlHash.cs" Link="Shared/MethodIlHash.cs" />
+  </ItemGroup>
 </Project>

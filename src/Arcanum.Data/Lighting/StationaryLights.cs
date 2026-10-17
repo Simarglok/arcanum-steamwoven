@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Arcanum.Data.Area;
+using Arcanum.Data.Content;
 
 namespace Arcanum.Data.Lighting;
 
@@ -89,8 +90,12 @@ public sealed record StationaryLightReadResult(LightingFailure Failure, AreaStat
 
 /// <summary>
 /// FR-LIGHT-008 reader (ARC-RENDER-012). Decodes the raw light words the strict area snapshot retained
-/// for each core sector and resolves each light ART number through <c>art/light/light.mes</c> in the
-/// ART resource archive (the snapshot's Resource2, which the caller re-verifies afterwards).
+/// for each core sector and resolves each light ART number through <c>art/light/light.mes</c>.
+/// <see cref="Read(ContentStack, AreaSnapshot, CancellationToken)"/> (ARC-DATA-027) reads as the original:
+/// <c>art/light/light.mes</c> at game start, so from the first base source (<see cref="ContentLoadPhase.GameStart"/>,
+/// exe-checked), each light ART when it is drawn, so the content stack's winner. The pinned profiles'
+/// <see cref="Read(DatArchive, AreaSnapshot, CancellationToken)"/> reads both from one ART resource archive (the
+/// snapshot's Resource2, which the caller re-verifies afterwards).
 /// Fail-closed policy: an owner word other than 0 (an object light), a location outside the record's own
 /// sector, an unknown flag bit, an ART id that is not a plain light (type 9, frame/rotation/flags 0), an
 /// animated or multi-group light ART, a missing or ambiguous resource, and every cap are typed failures.
@@ -106,10 +111,23 @@ public static class StationaryLightReader
     public const int MaxOffset = 16384;
     public const StationaryLightFlags KnownFlags = StationaryLightFlags.Off | StationaryLightFlags.Dark | StationaryLightFlags.Indoor | StationaryLightFlags.Outdoor;
 
+    /// <summary>The pinned profiles' read: the name table and every light ART from <paramref name="artResource"/> alone.</summary>
     public static StationaryLightReadResult Read(DatArchive artResource, AreaSnapshot snapshot, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(artResource); ArgumentNullException.ThrowIfNull(snapshot);
-        var failure = ReadCore(artResource, snapshot, token, out var source);
+        return Read(new AreaLightingReader.ArchiveFiles(artResource, "art/light/"), snapshot, token);
+    }
+
+    /// <summary>ARC-DATA-027: the name table and the light ART through <paramref name="stack"/> in the phase the original reads them.</summary>
+    public static StationaryLightReadResult Read(ContentStack stack, AreaSnapshot snapshot, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(snapshot);
+        return Read(new AreaLightingReader.StackFiles(stack), snapshot, token);
+    }
+
+    private static StationaryLightReadResult Read(AreaLightingReader.ILightingFiles files, AreaSnapshot snapshot, CancellationToken token)
+    {
+        var failure = ReadCore(files, snapshot, token, out var source);
         return new(failure, failure == LightingFailure.None ? source : null);
     }
 
@@ -134,7 +152,7 @@ public static class StationaryLightReader
         return LightingFailure.None;
     }
 
-    private static LightingFailure ReadCore(DatArchive resource, AreaSnapshot snapshot, CancellationToken token, out AreaStationaryLightSource? source)
+    private static LightingFailure ReadCore(AreaLightingReader.ILightingFiles files, AreaSnapshot snapshot, CancellationToken token, out AreaStationaryLightSource? source)
     {
         source = null;
         if (!snapshot.StrictlyPublished) return LightingFailure.SnapshotNotStrict;
@@ -155,22 +173,8 @@ public static class StationaryLightReader
         string? namesSha256 = null;
         if (lights.Count > 0)
         {
-            var index = new Dictionary<string, List<DatEntry>>(StringComparer.Ordinal);
-            foreach (var entry in resource.Entries)
-            {
-                var name = AreaLightingReader.Name(entry);
-                if (name is null || !name.StartsWith("art/light/", StringComparison.Ordinal)) continue;
-                if (!index.TryGetValue(name, out var list)) index.Add(name, list = new List<DatEntry>(1));
-                list.Add(entry);
-            }
-            LightingFailure Resource(string path, out byte[] bytes)
-            {
-                bytes = Array.Empty<byte>();
-                if (!index.TryGetValue(path, out var found)) return LightingFailure.MissingResource;
-                if (found.Count != 1) return LightingFailure.AmbiguousResource;
-                return AreaLightingReader.ReadEntry(resource, found[0], out bytes);
-            }
-            var failure = Resource("art/light/light.mes", out var namesBytes);
+            // The name table is read at game start (a_name_light_init); a light ART when it is first drawn.
+            var failure = files.Read("art/light/light.mes", ContentLoadPhase.GameStart, out var namesBytes);
             if (failure != LightingFailure.None) return failure;
             failure = LightingMes.TryParse(namesBytes, out var names);
             if (failure != LightingFailure.None) return failure;
@@ -183,7 +187,7 @@ public static class StationaryLightReader
                 var file = AreaLightingReader.SafeName(raw);
                 if (file is null) return LightingFailure.UnsafeResourceName;
                 var name = "art/light/" + file.ToLowerInvariant() + ".art";
-                failure = Resource(name, out var artBytes);
+                failure = files.Read(name, ContentLoadPhase.ModuleLoaded, out var artBytes);
                 if (failure != LightingFailure.None) return failure;
                 failure = DecodeFrame(number, name, artBytes, out var frame);
                 if (failure != LightingFailure.None) return failure;

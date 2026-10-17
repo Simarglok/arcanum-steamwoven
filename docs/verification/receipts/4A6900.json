@@ -1,0 +1,22 @@
+{
+  "format": 1,
+  "function": "0x4A6900",
+  "name": "experience-progress",
+  "method": "Arcanum.Simulation.Character.ExperienceRules.Progress",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 4,
+  "mutantsCaught": 4,
+  "differences": 0,
+  "otherMode": {
+    "mode": "steamwoven",
+    "ledger": "XP3",
+    "ledgerInputs": 1766,
+    "differ": 1748,
+    "outsideLedger": 0
+  },
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "39d0946d30f9f54290f9be9920bcf6e3429df1dbae88814e396a22914fa33cff",
+  "configuration": "Debug"
+}

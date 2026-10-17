@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Arcanum.Data.Fixes;
 using Arcanum.Scripting.Scr;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Reaction;
@@ -29,7 +30,7 @@ public enum RuleMode
 public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
-        ReactionRuleProfile reaction, DataFixProfile data)
+        ReactionRuleProfile reaction, DataFixProfile data, ExperienceRuleProfile experience)
     {
         Mode = mode;
         Combat = combat;
@@ -37,6 +38,7 @@ public sealed class GameRules
         Scripts = scripts;
         Reaction = reaction;
         Data = data;
+        Experience = experience;
     }
 
     public RuleMode Mode { get; }
@@ -59,13 +61,16 @@ public sealed class GameRules
     /// <summary>Game data fixes (ARC-DATA-022): DF1..DF3, DLG defects that make the retail game lose content.</summary>
     public DataFixProfile Data { get; }
 
+    /// <summary>Experience and levels (ARC-WORLD-033): XP3, the progress product wraps in 32 bits.</summary>
+    public ExperienceRuleProfile Experience { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven, ExperienceRuleProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original, DataFixProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original, ExperienceRuleProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];

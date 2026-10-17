@@ -19,8 +19,13 @@ experience data and a dialog's quest completion are wired (ARC-UI-007, [Not read
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers; rows XP1–XP12 in the
   [verification ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030). The original
-  differs from CE in two places, both **CE reconstruction slips**, so **no rule-mode switch**: both modes follow the
-  original.
+  differs from CE in two places, both **CE reconstruction slips**, which need no rule-mode switch: both modes follow the
+  original. A third difference, found later by the oracle trial of
+  [ARC-RES-051](../research/original-oracle-research.md), is a bug of the original: progress computes `1000 × remaining`
+  in 32 bits and wraps above 2,147,483 remaining (XP3), never reached with the installed table. Owner decision
+  2026-10-17: a rule-mode switch, `ExperienceRuleProfile.ProgressProductWraps` (ARC-WORLD-033): Original wraps,
+  Steamwoven keeps the exact value; `ExperienceRules.Progress` takes the profile and `QueryHeroExperience` passes the
+  session's current rules.
   - **Hard difficulty takes a quarter of an award away**, not half (XP1).
   - **At the last level the original writes the level-50 threshold** back as the experience (CE: level 51's, which
     re-enters the recalculation without end). The PC never passes level 50 and the game never hangs (XP5, as the earlier

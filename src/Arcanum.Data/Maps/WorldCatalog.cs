@@ -23,24 +23,26 @@ public sealed class WorldCatalog
     private readonly ContentStack _stack;
     private readonly WorldLoaderOptions _options;
     private readonly IReadOnlyDictionary<string, WorldMap> _byName;
-    private readonly IReadOnlyDictionary<int, string> _prototypePaths;
 
-    private WorldCatalog(ContentStack stack, WorldLoaderOptions options, IReadOnlyList<WorldMap> maps, IReadOnlyDictionary<int, string> prototypes, IReadOnlyList<WorldIssue> issues)
+    private WorldCatalog(ContentStack stack, WorldLoaderOptions options, IReadOnlyList<WorldMap> maps, ContentPrototypes prototypes, IReadOnlyList<WorldIssue> issues)
     {
-        _stack = stack; _options = options; Maps = maps; _prototypePaths = prototypes; Issues = issues;
+        _stack = stack; _options = options; Maps = maps; Prototypes = prototypes; Issues = issues;
         _byName = maps.ToDictionary(m => m.Name, StringComparer.Ordinal);
     }
 
     /// <summary>Maps in folder-name order.</summary>
     public IReadOnlyList<WorldMap> Maps { get; }
-    /// <summary>Catalogue-level refusals: map folders without usable properties, duplicate prototypes.</summary>
+    /// <summary>Catalogue-level refusals: map folders without usable properties, duplicate, unrecognised or ignored
+    /// module prototypes.</summary>
     public IReadOnlyList<WorldIssue> Issues { get; }
-    public IReadOnlyCollection<int> PrototypeNumbers => _prototypePaths.Keys.ToArray();
+    /// <summary>ARC-DATA-026: the prototype files the original reads (base sources only, see <see cref="ContentPrototypes"/>).</summary>
+    public ContentPrototypes Prototypes { get; }
+    public IReadOnlyCollection<int> PrototypeNumbers => Prototypes.Numbers;
 
     public WorldMap? Find(string name) => _byName.GetValueOrDefault(ContentMountPlan.AsciiLower(name));
 
-    /// <summary>The virtual path of a prototype by number, or null when the stack has none.</summary>
-    public string? PrototypePath(int number) => _prototypePaths.GetValueOrDefault(number);
+    /// <summary>The virtual path of a prototype by number, or null when the base sources hold none or two.</summary>
+    public string? PrototypePath(int number) => Prototypes.Path(number);
 
     /// <summary>Lists every map folder of the stack and reads its small files (properties,
     /// terrain header, start location, map info, jump points). The stack stays owned by the caller
@@ -66,17 +68,14 @@ public sealed class WorldCatalog
             maps.Add(map);
         }
 
-        var prototypes = new SortedDictionary<int, string>();
-        foreach (var key in stack.Keys("proto/"))
-        {
-            var name = key[6..];
-            if (key.Count(c => c == '/') != 1 || !name.EndsWith(".pro", StringComparison.Ordinal)) continue;
-            // The original loads every proto/*.pro whatever its name; only the canonical
-            // "NNNNNN - label.pro" form is addressable here, so others are reported, not dropped.
-            if (!TryPrototypeNumber(name, out var number)) { issues.Add(new(WorldIssueCode.UnrecognisedFile, key)); continue; }
-            if (!prototypes.TryAdd(number, key)) issues.Add(new(WorldIssueCode.Malformed, key, number, "duplicate prototype number"));
-        }
-        return new(stack, options, maps.AsReadOnly(), new ReadOnlyDictionary<int, string>(prototypes), issues.AsReadOnly());
+        // The original loads every proto/*.pro whatever its name; only the canonical
+        // "NNNNNN - label.pro" form is addressable here, so others are reported, not dropped.
+        var prototypes = ContentPrototypes.Open(stack);
+        foreach (var key in prototypes.UnrecognisedKeys) issues.Add(new(WorldIssueCode.UnrecognisedFile, key));
+        foreach (var key in prototypes.AmbiguousKeys)
+            issues.Add(new(WorldIssueCode.Malformed, key, TryPrototypeNumber(key[6..], out var number) ? number : null, "duplicate prototype number"));
+        foreach (var key in prototypes.IgnoredModuleKeys) issues.Add(new(WorldIssueCode.IgnoredModuleCopy, key));
+        return new(stack, options, maps.AsReadOnly(), prototypes, issues.AsReadOnly());
     }
 
     /// <summary>Reads one sector file. A sector without a file is <see cref="WorldSectorStatus.NoFile"/>;
@@ -204,10 +203,13 @@ public sealed class WorldCatalog
         return new(new(header, words), null);
     }
 
+    /// <summary>Reads the prototype the original reads (<see cref="Prototypes"/>); an ambiguous number is
+    /// <see cref="WorldIssueCode.Malformed"/>, a number without a base file <see cref="WorldIssueCode.Missing"/>.</summary>
     public WorldPrototypeResult ReadPrototype(int number)
     {
-        if (!_prototypePaths.TryGetValue(number, out var path)) return new(null, new(WorldIssueCode.Missing, $"proto/{number:D6}"));
-        var bytes = new Reader(_stack, _options).Bytes(path, _options.Wire.MaxPrototypeBytes, out var issue);
+        if (Prototypes.IsAmbiguous(number)) return new(null, new(WorldIssueCode.Malformed, $"proto/{number:D6}", null, "duplicate prototype number"));
+        if (Prototypes.Path(number) is not { } path || Prototypes.Candidate(number) is not { } candidate) return new(null, new(WorldIssueCode.Missing, $"proto/{number:D6}"));
+        var bytes = new Reader(_stack, _options).Bytes(path, candidate, _options.Wire.MaxPrototypeBytes, out var issue);
         if (bytes is null) return new(null, issue);
         try
         {
@@ -253,12 +255,7 @@ public sealed class WorldCatalog
         return negative ? -value : value;
     }
 
-    internal static bool TryPrototypeNumber(string fileName, out int number)
-    {
-        number = 0;
-        if (fileName.Length < 14 || !fileName.EndsWith(".pro", StringComparison.Ordinal) || fileName[6..9] != " - ") return false;
-        return int.TryParse(fileName.AsSpan(0, 6), NumberStyles.None, CultureInfo.InvariantCulture, out number);
-    }
+    internal static bool TryPrototypeNumber(string fileName, out int number) => ContentPrototypes.TryNumber(fileName, out number);
 
     private static IReadOnlyList<IReadOnlyList<int>> Words(byte[] bytes, TerrainByteRange range, int width)
     {
@@ -293,9 +290,15 @@ public sealed class WorldCatalog
     {
         internal byte[]? Bytes(string path, long limit, out WorldIssue? issue)
         {
-            issue = null;
             var resolved = stack.Resolve(path);
             if (resolved.Winner is not { } winner) { issue = new(WorldIssueCode.Missing, path); return null; }
+            return Bytes(path, winner, limit, out issue);
+        }
+
+        /// <summary>Reads one given candidate of <paramref name="path"/> (not necessarily the stack winner).</summary>
+        internal byte[]? Bytes(string path, ContentCandidate winner, long limit, out WorldIssue? issue)
+        {
+            issue = null;
             if (winner.Length > limit) { issue = new(WorldIssueCode.LimitExceeded, path); return null; }
             var read = stack.Read(winner);
             if (read.Status != ContentReadStatus.Read) { issue = new(read.Status == ContentReadStatus.TooLarge ? WorldIssueCode.LimitExceeded : WorldIssueCode.Unreadable, path); return null; }

@@ -67,14 +67,14 @@ internal static class AreaMapLoadOperation
         if (checked(area.CpuRgbaBytes + actor.CheckedRgbaBytes) > TerrainCachePolicy.MaxRgbaBytes)
             throw new AreaException(new(AreaErrorCode.BudgetExceeded, AreaStage.Frame));
         // Day/night and stationary lights when the map's sources admit them; otherwise the map is drawn unlit and
-        // says why. The three viewer archives read outside the owner are re-verified against the snapshot's identities
+        // says why. ARC-DATA-027: the lighting files come from the content stack in the phase the original reads
+        // them. The three viewer archives read outside the owner are re-verified against the snapshot's identities
         // below; the step evidence's rule payloads from other stack sources are not (it is labelled structural).
-        var lighting = AreaLightingReader.Read(module, snapshot, token);
+        var lighting = AreaLightingReader.Read(stack, snapshot, token);
         AreaLightingPlan? lit = null; var lightsFailure = LightingFailure.None;
         if (lighting.Failure == LightingFailure.None)
         {
-            using var artResource = DatArchive.Open(arguments.ResourcePath, ViewerArchiveOptions);
-            var lights = StationaryLightReader.Read(artResource, snapshot, token);
+            var lights = StationaryLightReader.Read(stack, snapshot, token);
             lightsFailure = lights.Failure;
             lit = new(lighting.Source!, AreaAmbientPolicy.Channels(snapshot, plan))
             { Local = lights.Failure == LightingFailure.None ? AreaLocalLighting.Create(snapshot, plan.Chart, lights.Source!) : null };

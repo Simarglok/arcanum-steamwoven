@@ -42,6 +42,9 @@ public enum WorldIssueCode
     UnrecognisedFile,
     /// <summary>A required file is missing.</summary>
     Missing,
+    /// <summary>ARC-DATA-026: a prototype file in the module archive, a module patch or the module folder. The original
+    /// reads prototypes before it mounts the module, so this copy is never read (a base copy of the same name is).</summary>
+    IgnoredModuleCopy,
 }
 
 /// <summary>One record-level refusal. <see cref="Path"/> is the virtual path (never a local

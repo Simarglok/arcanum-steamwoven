@@ -23,15 +23,22 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
 - **Inputs:** the module archive, every resource source of the content stack
   (see [stack order](#resources-in-content-stack-order) below), the map's mobile
   aggregate and every prototype the map's objects name (from the catalogue's own
-  reads), each hashed when the plan is made. No hash is pinned. The aggregate and
-  a prototype are read from whichever stack source wins them: a loose file is
+  reads), each hashed when the plan is made. No hash is pinned. The aggregate is
+  read from whichever stack source wins it, a prototype from the base source the
+  original reads it from (`WorldCatalog.Prototypes`, ARC-DATA-026: a module copy
+  is never read, a prototype only a module holds is `MissingSource`): a loose file is
   opened as itself, an archive member is read into memory when the plan opens
   (`AreaMapPlanInput.Member` is its entry ordinal; at most 1 MiB for a prototype,
   64 MiB for the aggregate) and the owner authenticates those bytes against the
   plan. A sector or editor mobile (`.mob`) file overridden outside the module
   archive is refused, because the owner reads both from the module archive.
-- **Mappings:** the ten MES/policy files the pinned profiles bind, each the
-  stack's winner for its name. `art/missing.dat` is optional: without it the
+- **Mappings:** the ten MES/policy files the pinned profiles bind. The original
+  reads all of them in Name's init, before the module is mounted (ARC-DATA-027,
+  exe-checked), so each is the first base source's copy: a module copy is never
+  read, and a base copy that is not an input of the plan (a loose base file a
+  module copy shadows, or an archive outside the resource order) is
+  `UnsupportedSource`. The owner parses them in the original MES grammar
+  (`MesFile`). `art/missing.dat` is optional: without it the
   owner rebuilds the masks, as the original does (N3).
 - **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
   missing number (at most 200), as the original does; runtime = catalogue − 4999;
@@ -203,7 +210,9 @@ shift, see the portal facts); five complete maps still stop at blend states the
 scene plan does not draw yet.
 
 Sector and editor mobile files must be the module archive's own (an override
-elsewhere is refused, not read), and the viewer still reads its actor and light
+elsewhere is refused, not read; lifting it needs per-file sector and `.mob`
+inputs in the owner, which reads both from the module archive's index, so
+ARC-DATA-026 leaves it), and the viewer still reads its actor and light
 ART from `arcanum1.dat` and `arcanum2.dat` outside the owner, so it refuses a
 plan in which either wins nothing under `art/` (`AREA_MAP_SOURCES_MISMATCH`). The main map is not covered (its sectors are generated from the terrain grid,
 ARC-RES-034). Original-executable parity is NOT_VERIFIED.

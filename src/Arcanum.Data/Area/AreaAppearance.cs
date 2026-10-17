@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
+using Arcanum.Data.Messages;
 using Arcanum.Data.Objects;
 using Arcanum.Data.Terrain;
 
@@ -8,6 +9,8 @@ namespace Arcanum.Data.Area;
 
 public sealed partial class AreaDataOwner
 {
+    private static readonly MesReaderOptions MappingMesOptions = new() { MaxBytes = 16 * 1048576, MaxMessages = 8192 };
+
     private Dictionary<AreaMappingRole, SortedDictionary<int, string>> ReadMappings(CancellationToken token, AreaOwnership ownership)
     {
         var result = new Dictionary<AreaMappingRole, SortedDictionary<int, string>>();
@@ -19,27 +22,11 @@ public sealed partial class AreaDataOwner
             if (ObjectWireReader.Hash(bytes) != binding.PayloadSha256) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Mapping);
             if (binding.Role == AreaMappingRole.MissingPolicy) continue;
             ownership.Allocate(checked(bytes.Length * 16L + 65536));
-            var text = Encoding.ASCII.GetString(bytes);
-            if (bytes.Any(b => b > 127)) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
-            // MES paired braces with unbraced annotations. No atoi/truncation,
-            // duplicate key, nested brace or unpaired-token convenience recovery.
-            var table = new SortedDictionary<int, string>(); var at = 0;
-            while (at < text.Length)
-            {
-                var open = text.IndexOf('{', at); var stray = text.IndexOf('}', at);
-                if (open < 0) { if (stray >= 0) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); break; }
-                if (stray >= 0 && stray < open) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
-                var close = text.IndexOf('}', open + 1);
-                if (close < 0 || text.AsSpan(open + 1, close - open - 1).Contains('{') || !int.TryParse(text.AsSpan(open + 1, close - open - 1), NumberStyles.Integer, CultureInfo.InvariantCulture, out var key))
-                    throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
-                at = close + 1; while (at < text.Length && char.IsWhiteSpace(text[at])) at++;
-                if (at == text.Length || text[at] != '{') throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
-                close = text.IndexOf('}', at + 1);
-                if (close < 0 || text.AsSpan(at + 1, close - at - 1).Contains('{') || close - at > 1048576) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
-                if (!table.TryAdd(key, text[(at + 1)..close])) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
-                if (table.Count > 8192) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Mapping);
-                at = close + 1;
-            }
+            // ARC-DATA-027: the original MES grammar (MesTable); a duplicate number is ambiguous, a limit a budget refusal.
+            var status = MesTable.Read(bytes, MappingMesOptions, out var table);
+            if (status != MesParseStatus.Parsed)
+                throw Fail(status == MesParseStatus.DuplicateNumber ? AreaErrorCode.AmbiguousSource
+                    : MesTable.IsLimit(status) ? AreaErrorCode.BudgetExceeded : AreaErrorCode.MalformedRecord, AreaStage.Mapping);
             if (table.Count == 0) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
             result.Add(binding.Role, table);
         }

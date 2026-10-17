@@ -54,6 +54,12 @@ be raised above 1,999.
 
 ## MES grammar as the original reads it
 
+ARC-DATA-027: this is the one MES grammar of the data readers. Besides the description
+tables, `MesTable` (number → text, Latin-1 characters of the stored bytes) feeds the lighting
+rules and scheme files, the terrain tile and facade name tables (`TerrainLoader`,
+`TerrainObstructionInspector`), the T0 step rules (tile names, effects, game effects) and the area
+owner's name tables; each keeps its own limits and failure type.
+
 The original loader ([load](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L455-L509),
 [entry and field](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L516-L618),
 [character reader](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c#L647-L665),

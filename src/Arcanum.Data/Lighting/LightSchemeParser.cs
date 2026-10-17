@@ -1,65 +1,28 @@
 using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
+using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Lighting;
 
-/// <summary>Bounded MES subset for the lighting and startup rule files: <c>{key}{value}</c> pairs,
-/// whitespace, <c>//</c> comments (whole-line or trailing) and the bare 1..12 AM/PM hour notes
-/// observed after hourly rows. Whitespace is ASCII space, tab, CR and LF only. Anything else fails;
-/// there is no universal MES implementation here. A row of only spaces/tabs counts as empty.</summary>
+/// <summary>The lighting readers' MES access. ARC-DATA-027: the files are read with the original grammar
+/// (<see cref="MesFile"/>: text outside braces is ignored, multi-line text is kept, the shapes the original
+/// truncates or resolves arbitrarily are refused), so a file the game reads is not refused for its comments or
+/// notes. A refused shape is <see cref="LightingFailure.MesGrammar"/>, a limit <see cref="LightingFailure.LimitExceeded"/>.
+/// Text is kept as Latin-1 characters of the stored bytes; callers parse numbers and names from it.</summary>
 internal static class LightingMes
 {
     internal const int MaxPayloadBytes = 1 << 20;
     internal const int MaxRecords = 8192;
-    internal const int MaxValueChars = 4096;
+    private static readonly MesReaderOptions Options = new() { MaxBytes = MaxPayloadBytes, MaxMessages = MaxRecords };
 
     internal static LightingFailure TryParse(ReadOnlySpan<byte> payload, out SortedDictionary<int, string> records)
     {
         records = new SortedDictionary<int, string>();
         if (payload.Length > MaxPayloadBytes) return LightingFailure.LimitExceeded;
-        var text = Encoding.Latin1.GetString(payload); var at = 0;
-        while (at < text.Length)
-        {
-            var c = text[at];
-            if (c is ' ' or '\t' or '\r' or '\n') { at++; continue; }
-            if (c == '/' && at + 1 < text.Length && text[at + 1] == '/') { at = LineEnd(text, at); continue; }
-            if (c != '{') return LightingFailure.MesGrammar;
-            var keyEnd = text.IndexOf('}', at + 1);
-            if (keyEnd < 0 || keyEnd == at + 1 || keyEnd - at - 1 > 9) return LightingFailure.MesGrammar;
-            for (var i = at + 1; i < keyEnd; i++) if (!char.IsAsciiDigit(text[i])) return LightingFailure.MesGrammar;
-            var key = int.Parse(text.AsSpan(at + 1, keyEnd - at - 1), NumberStyles.None, CultureInfo.InvariantCulture);
-            at = keyEnd + 1;
-            while (at < text.Length && text[at] is ' ' or '\t') at++;
-            if (at == text.Length || text[at] != '{') return LightingFailure.MesGrammar;
-            var valueEnd = text.IndexOf('}', at + 1);
-            if (valueEnd < 0) return LightingFailure.MesGrammar;
-            if (valueEnd - at - 1 > MaxValueChars) return LightingFailure.LimitExceeded;
-            var value = text[(at + 1)..valueEnd];
-            if (value.Contains('{') || value.Contains('\n') || value.Contains('\r')) return LightingFailure.MesGrammar;
-            if (records.Count == MaxRecords) return LightingFailure.LimitExceeded;
-            if (!records.TryAdd(key, value)) return LightingFailure.MesGrammar;
-            at = valueEnd + 1;
-            while (at < text.Length && text[at] is ' ' or '\t') at++;
-            if (at < text.Length && char.IsAsciiDigit(text[at]))
-            {
-                var end = at; while (end < text.Length && text[end] is not (' ' or '\t' or '\r' or '\n')) end++;
-                if (!IsHourNote(text.AsSpan(at, end - at))) return LightingFailure.MesGrammar;
-                at = end;
-            }
-        }
-        return LightingFailure.None;
+        var status = MesTable.Read(payload, Options, out records);
+        return status == MesParseStatus.Parsed ? LightingFailure.None : MesTable.IsLimit(status) ? LightingFailure.LimitExceeded : LightingFailure.MesGrammar;
     }
-
-    private static int LineEnd(string text, int at)
-    {
-        var end = text.IndexOf('\n', at); return end < 0 ? text.Length : end + 1;
-    }
-
-    private static bool IsHourNote(ReadOnlySpan<char> token) =>
-        token.Length is 3 or 4 && (token.EndsWith("AM", StringComparison.Ordinal) || token.EndsWith("PM", StringComparison.Ordinal)) &&
-        int.TryParse(token[..^2], NumberStyles.None, CultureInfo.InvariantCulture, out var hour) && hour is >= 1 and <= 12 &&
-        token[0] != '0';
 
     internal static bool TryInteger(string value, out int result) =>
         int.TryParse(value.Trim(' ', '\t'), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out result);

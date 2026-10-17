@@ -174,10 +174,15 @@ object (2093,2019).
 
 `AreaStepInspector.InspectWholeMap(area, stack, aggregatePath, epoch)` builds
 the same evidence for a strictly published whole-map snapshot
-([whole-map plans](whole-map-plans.md)): the module archive and the rule
-resources (tile names, effects, the module's game effects, `map.patch`) come
-from the archives that win them in the content stack (each must be an archive
-member), the mobiles from the map's aggregate. Only for such snapshots, walls
+([whole-map plans](whole-map-plans.md)): the sectors from the module archive,
+the rule resources through the content stack in the phase the original reads
+them (ARC-DATA-027, exe-checked: tile names and effects at game start, so the
+first base source and never a module copy; the module's game effects at module
+load and `map.patch` when a map opens, so the stack winners; a loose file is
+read like an archive member), the mobiles from the map's aggregate. The rule
+MES files (tile names, effects, game effects) are read in the original grammar
+(`MesFile`; a signed or spaced key is refused); `map.patch` is not MES and is
+still read as Latin-1 lines. Only for such snapshots, walls
 and portals state their edge rule (pinned evidence keeps the earlier rule and
 digest; the rules are appended to the digest only when present):
 
