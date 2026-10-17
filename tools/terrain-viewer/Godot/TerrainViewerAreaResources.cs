@@ -136,7 +136,7 @@ public partial class TerrainViewerApp
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         // A small whole map's repository (the cave's is 1.5 MB) is below the heap's ordinary noise, so map mode bounds the
-        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, ~450 MB heap, ±12 MB between runs)
+        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, ~450 MB heap, up to +26 MB in one sample)
         // by at least 4 % of the heap before the reload (ARC-RENDER-018); the retired generation itself is proven
         // collected above.
         Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2
