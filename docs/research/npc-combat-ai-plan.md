@@ -229,7 +229,7 @@ Codes are allocated when each task is created (D6).
 
 | Stage | Code | Scope (source units) | Output |
 | --- | --- | --- | --- |
-| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; the census gets its own code on creation | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: data aggregates and first real fight candidates. |
+| A0 | ARC-RES-040 (allocated 2026-10-16 with the task, D7) for the CE half; ARC-RES-041 for the census | What the original and CE load and run for combat, AI, skills, magic and technology: init order, every data file and prototype field these modules read, when and how, and which module owns it at runtime; original data census on the Mac (absorbs A9). | CE half: [load map](combat-domain-load-map.md); census: [data census](combat-data-census.md) with data aggregates and first real fight candidates. |
 | A1 | on creation | Core loop: S1–S5. Parameter semantics, tick cadence, pipeline order, danger state machine with every flag and script, turn-based and real-time entry points. | State diagram, transition table, cadence formula, parameter dictionary. |
 | A2 | on creation | Awareness: S6–S9. See/hear formulas, loudness, line of fire, witnesses. | Pure-function specs with worked numbers; closes combat O4. |
 | A3 | on creation | Hostility and targeting: S10–S13. | KOS/protect/upset decision tables, target scan order, enemy-list lifecycle. |
@@ -238,7 +238,7 @@ Codes are allocated when each task is created (D6).
 | A6 | on creation | Execution: S19 and the `anim.c` attack, approach, flee and run goals. | How an intention becomes movement and attacks in both modes; closes companion O5. |
 | A7 | on creation | Followers in combat and orders: S20. | Order effects, follower join rules, post-fight cleanup. |
 | A8 | on creation | Script and dialog surface: S21. | Every SAP event and SCR action that reads or writes AI state. |
-| A9 | in A0 | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight. |
+| A9 | in A0 (ARC-RES-041) | Data census: `ai_params.mes`/`gameai.mes` rows, spell `AI_*` fields, item AI action field, KOS/no-flee/guard/AI-row of the Crash Site and cave NPCs and creatures. | Local aggregates only, like ARC-RES-028 L3; picks the first real fight: [data census](combat-data-census.md#7-first-fight-candidates-plan-slice-i10). |
 
 A0 comes first (D7), then A1; A2–A5 can run in parallel after it, with A5 reusing the
 line-of-fire and protect definitions of A2 and A3; A6–A8 after A3.

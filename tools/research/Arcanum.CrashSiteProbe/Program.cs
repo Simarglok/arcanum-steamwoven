@@ -54,6 +54,8 @@ internal static partial class Program
             if (args.SequenceEqual(["--locomotion-self-test"])) { LocomotionSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--data-census") return ProbeDataCensus(args[1..]);
             if (args.SequenceEqual(["--data-census-self-test"])) { DataCensusSelfTest(); return 0; }
+            if (args.FirstOrDefault() == "--combat-census") return ProbeCombatCensus(args[1..]);
+            if (args.SequenceEqual(["--combat-census-self-test"])) { CombatCensusSelfTest(); return 0; }
             if (args.FirstOrDefault() == "--time-lighting") return TimeLightingProbe.Run(args[1..]);
             if (args.SequenceEqual(["--time-lighting-self-test"])) { TimeLightingProbe.SelfTest(); return 0; }
             if (args.FirstOrDefault() == "--area-passability-closure") return ProbeAreaPassabilityClosure(args[1..]);
@@ -109,6 +111,8 @@ internal static partial class Program
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("WORLD_", StringComparison.Ordinal) && exception.Message.All(c => c is '_' || char.IsAsciiLetterUpper(c) || char.IsAsciiDigit(c)) || exception.Message.StartsWith("world self-test failed: ", StringComparison.Ordinal) ? exception.Message : "WORLD_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--companion-consent", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("CONSENT_", StringComparison.Ordinal) || exception.Message.StartsWith("consent self-test failed: ", StringComparison.Ordinal) ? exception.Message : "CONSENT_INVOCATION_FAILED")}"
+                : args.Any(a => a.StartsWith("--combat-census", StringComparison.Ordinal))
+                ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("COMBAT_CENSUS_", StringComparison.Ordinal) || exception.Message.StartsWith("combat-census self-test failed: ", StringComparison.Ordinal) ? exception.Message : "COMBAT_CENSUS_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--script-census", StringComparison.Ordinal))
                 ? $"crash-site-probe: FAIL: {exception.GetType().Name}: {(exception.Message.StartsWith("SCRIPT_CENSUS_", StringComparison.Ordinal) || exception.Message.StartsWith("script-census self-test failed: ", StringComparison.Ordinal) ? exception.Message : "SCRIPT_CENSUS_INVOCATION_FAILED")}"
                 : args.Any(a => a.StartsWith("--script-attachments", StringComparison.Ordinal))
