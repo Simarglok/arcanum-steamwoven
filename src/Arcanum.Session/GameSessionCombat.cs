@@ -336,7 +336,7 @@ public sealed partial class GameSessionOwner
 
     /// <summary>
     /// The current participant's actions all completed (the source's animations-complete check and its 2 ms turn-based
-    /// event, as one step): the hero keeps its subturn while it has action points. Otherwise an actor checked twice in a row
+    /// event, as one step): an active hero keeps its subturn while it has action points. Otherwise an actor checked twice in a row
     /// with unchanged action points is forced to spend the rest (with A11 of the Original mode the reference of the second
     /// check is the previous actor's action points), and an actor without action points passes to the next subturn. The
     /// stalled-actor check is not saved; it starts empty every round and after a restore.
@@ -582,7 +582,7 @@ public sealed partial class GameSessionOwner
     // A life step that knocks out or stuns the participant whose subturn it is ends that subturn (the source's fatigue
     // write and its stunned animation goal): its action points drop to 0 here and the host's next completion check passes
     // the turn on.
-    private void EndSubturnOnKnockout(SessionLifeTarget target, LifeOutcome outcome)
+    private void EndSubturnOnIncapacitation(SessionLifeTarget target, LifeOutcome outcome)
     {
         if ((outcome.Events & (LifeEvents.LostConsciousness | LifeEvents.Stunned)) == 0 || _combat.Round is not { } round) return;
         var combatant = target.IsHero ? SessionCombatant.Hero : SessionCombatant.Critter(target.Entity!);

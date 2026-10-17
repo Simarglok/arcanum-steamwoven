@@ -39,7 +39,7 @@ attack animation and the viewer are not part of it ([Not ready](#not-ready)).
 | Charge | paid when the action points cover it; else the local PC with action points > 0 and fatigue > 1 **overexerts**: action points 0 and 2 fatigue damage less `¾ × normal resistance` percent; anyone else is refused: action points 0, next subturn |
 | Preview | the same test without the charge |
 | NPC gate | an NPC may start an action it cannot pay while `100 × fatigue / max fatigue > 35` |
-| Stalled actor | after the current actor's actions complete, the hero keeps its subturn while it has action points; an actor checked twice in a row with unchanged action points is forced to spend the rest; an actor without action points passes on |
+| Stalled actor | after the current actor's actions complete, an active hero keeps its subturn while it has action points; an actor checked twice in a row with unchanged action points is forced to spend the rest; an actor without action points passes on |
 | End of round | after the last subturn the clock moves 1000 game ms and the next round begins; while a round is active ordinary game time does not flow |
 | Nobody can act | the active hero takes the subturn; with an inactive hero the round ends |
 
@@ -69,8 +69,8 @@ call), refuses before any effect, and adds one revision when the saved round cha
 when a round ends). Results list what happened in order: `RoundBegan(turn)`, `SubturnStarted(combatant, action points)`
 (for an NPC the host then runs its heartbeat script and AI), `SubturnEnded(combatant)` (for an NPC its end-of-combat
 script) and `RoundEnded`. A life step that knocks out or stuns the participant whose subturn it is sets its action points
-to 0; the host's next `CompleteCombatActions` passes the turn on (the source does it inside the fatigue write and when the
-stunned animation starts). An overexertion decides the rest of its step with the hero's state after the damage, so a
+to 0; the host's next `CompleteCombatActions` passes the turn on (the source does it inside the fatigue write,
+`critter_fatigue_damage_set`, and when the stunned animation goal starts, `anim_goal_animate_stunned`). An overexertion decides the rest of its step with the hero's state after the damage, so a
 knockout that leaves nobody able to act ends the round. The hero holds its subturn with action points left only while
 it is active: a hero killed on its own subturn (the original ends the game then) passes on at the next completion check.
 The hero is never hidden from drawing, so only its activity decides whether it is skipped.
@@ -81,7 +81,7 @@ still advances.
 
 ## Rule modes
 
-`CombatAnomalyProfile` (read from `GameSessionOwner.Rules` at each call) gains three switches; Steamwoven fixes, Original
+`CombatAnomalyProfile` (read from `GameSessionOwner.Rules` once per round call) gains three switches; Steamwoven fixes, Original
 keeps the bug of the original game ([rule modes](rule-modes.md#registry)):
 
 | Switch | Ledger ID | Original behaviour | Steamwoven |
@@ -117,8 +117,9 @@ saved required action points (reset on load) and the unused second actor handle 
   NPC gate at 35 % and a zero maximum, the stalled-actor check in both modes.
 - `Arcanum.Session.Tests/CombatRoundTests`: the square and order with a follower, start refusals, skips (dead, hidden,
   gone, hidden sleeper), nobody able to act, paid and refused charges, the end of a round with the clock and the merge
-  of a later scan, newcomers in front, A9/A11/A12 in both modes, overexertion with its timer and revision, a knockout
-  by a life step, the gate and the preview, a joining NPC, stopped game time, a world that calls back, the canonical
+  of a later scan, newcomers in front, A9/A11/A12 in both modes, overexertion with its timer and revision, a round
+  ended by an overexertion knockout, a knockout and a stun by a life step, a hero killed on its subturn, the stall reset
+  at every round, the gate and the preview, a joining NPC, stopped game time, a world that calls back, the canonical
   text and restore, and the restore and decode refusals.
 
 ## Not ready

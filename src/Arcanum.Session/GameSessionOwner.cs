@@ -1303,7 +1303,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision));
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
-        EndSubturnOnKnockout(target, outcome);
+        EndSubturnOnIncapacitation(target, outcome);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }
