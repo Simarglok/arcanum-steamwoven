@@ -107,15 +107,18 @@ under `docs/research`. Details: `docs/project/status.md`.
    task), `docs/requirements/coverage.md`, contracts under `docs/world`,
    `docs/scripting`, `docs/rendering`, `docs/formats`, research under
    `docs/research`, owner decisions in `docs/architecture/decisions.md`.
-3. For how the **original game** behaves, the retail executable outranks CE:
-   CE is read first, but it is a reconstruction with its own slips, and the
-   executable settles any doubt. Check a CE branch against
-   the original 1.0.7.4 `Arcanum.exe` at the function address CE gives
+3. For how the **original game** behaves, the retail executable is the only
+   reference. CE is a reconstruction with its own slips; it is still read first
+   in domains not yet migrated, but it is being phased out of the process and the
+   documents (owner decision 2026-10-17, [plan](docs/research/original-oracle-research.md)).
+   Check behaviour in the original 1.0.7.4 `Arcanum.exe`
    ([original executable check](docs/research/original-executable-check.md)):
-   read-only `llvm-objdump`, behaviour in prose, no bytes or listings in git.
-   Use it in every part of the game whenever a task needs original behaviour
-   or an anomaly must be classified (CE-only slip vs bug of the game, which
-   decides the D8 "Original"/"Steamwoven" settings).
+   read it with `llvm-objdump` or headless Ghidra, or run a single function in the
+   emulator oracle (allowed by the owner; tool ARC-DEV-007, not merged yet);
+   behaviour in prose, no bytes, listings or oracle outputs in git. Use it in every
+   part of the game whenever a task needs original behaviour or an anomaly must be
+   classified (CE-only slip vs bug of the game, which decides the D8
+   "Original"/"Steamwoven" settings). Only free tools with free licences.
 4. Obsidian vault "Arcanum Steamwoven" — Russian research/decision notes from
    2026-09-19..21. **Stale**: it predates all code. Use for intent/decisions
    (DEC-001..020, provenance policy), never for implementation status.
