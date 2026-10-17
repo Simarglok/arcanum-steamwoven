@@ -6,6 +6,8 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.NpcDialog;
 using Arcanum.Scripting.Scr;
 using Arcanum.Session;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.TerrainViewer.Core;
 
@@ -243,20 +245,25 @@ public sealed class AreaConversationHost
 /// <summary>
 /// Dialog state ports over a <see cref="GameSessionOwner"/> (ARC-SCRIPT-006). Session-owned and therefore kept across
 /// talks, map changes and snapshots: global flags (through the conversation's GF port), PC quest states and known
-/// rumors (the session story domain), and, per speaker, the attachment local flags, the NPC→PC reaction and the
+/// rumors (the session story domain), the NPC→PC reaction (the session reaction domain, ARC-WORLD-026: the speaker's
+/// record, else the profile's initial reaction as its base), and, per speaker, the attachment local flags and the
 /// follow consent as map-local entity changes on the speaker's map (absent = loaded baseline: attachment flags
-/// from the area, the profile's initial reaction, not following). Still PROJECT diagnostic, in memory only and
+/// from the area, not following). Reaction facts are diagnostic: every speaker is a human, not aloof NPC with the
+/// profile's initial reaction as base; the PC is the session hero when there is one, else a human with reaction modifier
+/// 0 and no reputation or effects. The viewer does not open or close the reaction conversation slot yet, so every change
+/// lands in the remembered slot. Still PROJECT diagnostic, in memory only and
 /// lost with this object: PC alignment, items given (IN) when the host has no session inventory (ARC-UI-004 wires it),
 /// and areas marked (MM); they wait for their own owners.
 /// </summary>
 public sealed class AreaConversationState : IDialogStateQueryPort, IDialogCommandPort, IDialogWorldPort
 {
     public const string LocalFlagsProperty = "dialog.lf";
-    public const string ReactionProperty = "reaction.pc";
     public const string FollowProperty = "follow.pc";
     /// <summary>Source floor for the NPC's reaction when the PC accepts its quest, and the bonus on completion.</summary>
-    public const int AcceptedQuestReaction = 41;
-    public const int CompletedQuestReactionBonus = 10;
+    public const int AcceptedQuestReaction = ReactionRules.AcceptedQuestReaction;
+    public const int CompletedQuestReactionBonus = ReactionRules.CompletedQuestBonus;
+    /// <summary>The PC's reaction facts in a session without a hero (diagnostic).</summary>
+    public static ReactionPcFacts DiagnosticPc { get; } = new(CharacterRace.Human, 0, 0, [], [], [], false);
     public static readonly DialogParticipantId PcParticipant = new(1);
 
     private readonly GameSessionOwner _session;
@@ -280,15 +287,15 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         ArgumentNullException.ThrowIfNull(speakerEntities);
         _map = map; _entities = speakerEntities.ToArray(); _initialReaction = initialReaction;
         _party = partySpeakers?.ToHashSet() ?? [];
+        if (!ReactionRules.IsValid(NpcFacts())) throw new ArgumentOutOfRangeException(nameof(initialReaction));
         // A restored session may carry any long under these keys; refuse values this port cannot read.
         foreach (var entity in _entities)
         {
             var lf = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, LocalFlagsProperty));
-            var reaction = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, ReactionProperty));
             var follow = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, FollowProperty));
             var counters = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.CountersProperty));
             var script = session.QueryMapChange(map, MapChangeKey.ForEntity(entity, AreaScriptHost.ScriptProperty));
-            if (lf is < 0 or > uint.MaxValue || reaction is < int.MinValue or > int.MaxValue || follow is not (null or 1)
+            if (lf is < 0 or > uint.MaxValue || follow is not (null or 1)
                 || counters is < 0 or > uint.MaxValue || script is < int.MinValue or > int.MaxValue)
                 throw new ArgumentException("AREA_SESSION_DIALOG_STATE_INVALID", nameof(session));
         }
@@ -310,7 +317,14 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
     public bool Follows(int speaker) => _party.Contains(speaker)
         ? _session.QueryCompanion(_entities[speaker]).LedByPc : Read(speaker, FollowProperty) == 1;
     public bool LocalFlag(int speaker, int bit) => (LocalFlags(speaker) & (1u << bit)) != 0;
-    public int Reaction(int speaker) => Read(speaker, ReactionProperty) is { } value ? checked((int)value) : _initialReaction;
+    public int Reaction(int speaker) =>
+        _session.QueryReaction(_entities[speaker], NpcFacts(), PcFacts).View?.Effective ?? throw new InvalidOperationException("AREA_SESSION_REACTION_INVALID");
+
+    /// <summary>The diagnostic NPC side of every speaker's reaction.</summary>
+    public ReactionNpcFacts NpcFacts() => new(_initialReaction, CharacterRace.Human, false, false);
+
+    /// <summary>The PC side: the session hero's facts, else <see cref="DiagnosticPc"/>.</summary>
+    public ReactionPcFacts PcFacts => _session.QueryHeroReactionFacts() ?? DiagnosticPc;
 
     /// <summary>Records the loaded effective SAP_DIALOG attachment flags as the speaker's baseline.</summary>
     internal void Bind(int speaker, uint loadedFlags) => _baseline[speaker] = loadedFlags;
@@ -356,16 +370,17 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
         if (!Enum.IsDefined((SessionQuestState)command.State)) return DialogCommandResult.Rejected;
         var result = _session.SetQuestState(_session.Version, command.QuestId, (SessionQuestState)command.State);
         if (result.Disposition != GameSessionDisposition.Changed) return Result(result);
-        var reaction = Reaction(speaker);
-        var target = _session.QueryQuest(command.QuestId)!.Value.Effective switch
+        var entity = _entities[speaker];
+        // Source quest rules: accepted raises the effective reaction to at least 41 (a delta), completed adds 10.
+        var written = _session.QueryQuest(command.QuestId)!.Value.Effective switch
         {
-            SessionQuestState.Accepted when reaction < AcceptedQuestReaction => AcceptedQuestReaction,
-            SessionQuestState.Completed => checked(reaction + CompletedQuestReactionBonus),
-            _ => reaction,
+            SessionQuestState.Accepted when Reaction(speaker) < AcceptedQuestReaction =>
+                _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, AcceptedQuestReaction),
+            SessionQuestState.Completed => _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, CompletedQuestReactionBonus),
+            _ => null,
         };
         // The quest change is already committed: a refused reaction write is a partial effect, reported as indeterminate.
-        if (Write(speaker, ReactionProperty, target, _initialReaction).Disposition == GameSessionDisposition.Rejected)
-            throw new InvalidOperationException("AREA_SESSION_QUEST_REACTION_REJECTED");
+        if (written?.Disposition == GameSessionDisposition.Rejected) throw new InvalidOperationException("AREA_SESSION_QUEST_REACTION_REJECTED");
         return DialogCommandResult.Applied;
     }
 
@@ -375,9 +390,11 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     public DialogCommandResult Execute(ReactionCommand command)
     {
-        var speaker = Speaker(command.Npc);
-        var value = command.Mode == DialogReactionMode.Target ? command.Value : checked(Reaction(speaker) + command.Value);
-        return Result(Write(speaker, ReactionProperty, value, _initialReaction));
+        var entity = _entities[Speaker(command.Npc)];
+        var result = command.Mode == DialogReactionMode.Target
+            ? _session.SetReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value)
+            : _session.AdjustReaction(_session.Version, entity, NpcFacts(), PcFacts, command.Value);
+        return result.Disposition == GameSessionDisposition.Rejected ? DialogCommandResult.Rejected : DialogCommandResult.Applied;
     }
 
     public DialogCommandResult Execute(GiveItemCommand command) { _items.Add(command.ItemName); return DialogCommandResult.Applied; }

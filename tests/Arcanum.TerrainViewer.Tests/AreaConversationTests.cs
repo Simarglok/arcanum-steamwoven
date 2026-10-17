@@ -95,8 +95,9 @@ public sealed class AreaConversationTests
         {
             new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.LocalFlagsProperty), 8),
             new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.FollowProperty), 1),
-            new MapChange(MapChangeKey.ForEntity(Speaker0, AreaConversationState.ReactionProperty), 70),
         }, session.QueryMapChanges(entity).ToArray());
+        // ARC-WORLD-026: the reaction is the session reaction domain's, no longer a map change.
+        Assert.AreEqual(new SessionReaction(Speaker0, 70, null), session.QueryReactionRecord(Speaker0));
 
         // The cave trip and back, then save and load: a new state over the restored session sees the same NPC.
         Assert.AreEqual(GameSessionDisposition.Changed, session.PlaceActor(session.Version, session.QueryActor() with { Map = new(79) }).Disposition);

@@ -9,6 +9,7 @@ using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
+using Arcanum.Simulation.Reaction;
 
 namespace Arcanum.Session;
 
@@ -22,7 +23,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 9. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 10. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -33,7 +34,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "reactions", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -61,6 +62,8 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] LifeFields = ["hero", "critters"];
     private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
     private static readonly string[] CritterLifeFields = ["entity", "hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
+    private static readonly string[] ReactionsFields = ["records"];
+    private static readonly string[] ReactionFields = ["entity", "remembered", "conversation"];
     private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
@@ -270,6 +273,21 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartObject("reactions");
+            w.WriteStartArray("records");
+            foreach (var record in snapshot.Reactions.Records)
+            {
+                w.WriteStartObject();
+                w.WriteString("entity", record.Entity);
+                if (record.Remembered is { } remembered) w.WriteNumber("remembered", remembered);
+                else w.WriteNull("remembered");
+                if (record.Conversation is { } conversation) w.WriteNumber("conversation", conversation);
+                else w.WriteNull("conversation");
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             w.WriteStartObject("events");
             w.WriteNumber("registry", snapshot.Events.Registry);
             w.WriteNumber("nextSequence", snapshot.Events.NextSequence);
@@ -383,7 +401,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Events(f["events"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Events(f["events"]), Lighting(f["lighting"]));
     }
 
     // Ranges and canonical spelling; the hero's presence, death times against the clock and budgets are Restore's.
@@ -428,6 +446,28 @@ public static class GameSessionSnapshotCodec
                 Int(f["poison"], path + ".poison", 0, LifeLimits.MaxPoisonLevel), conditions,
                 Int(f["scars"], path + ".scars", 0, LifeLimits.MaxScars)),
             death.ValueKind == JsonValueKind.Null ? null : Long(death, path + ".deathTimeMs", 0, long.MaxValue));
+    }
+
+    // Ranges, ordinal order and no baseline record; the budget is Restore's.
+    private static SessionReactionState Reactions(JsonElement element)
+    {
+        const string p = "$.reactions";
+        var f = Fields(element, p, ReactionsFields);
+        var items = Array(f["records"], p + ".records", GameSessionLimits.PolicyMaxReactionRecords);
+        var records = new SessionReaction[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.records[{i}]";
+            var item = Fields(items[i], path, ReactionFields);
+            var entity = Entity(item["entity"], path + ".entity");
+            if (i > 0 && string.CompareOrdinal(records[i - 1].Entity, entity) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            int? Slot(string name) => item[name].ValueKind == JsonValueKind.Null
+                ? null : Int(item[name], $"{path}.{name}", -ReactionLimits.MaxMagnitude, ReactionLimits.MaxMagnitude);
+            records[i] = new(entity, Slot("remembered"), Slot("conversation"));
+            if (records[i].IsBaseline) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path);
+        }
+        return new(records);
     }
 
     // Shapes and ranges only: kinds, sequence order, deadlines against the clock and the NPCs' records are Restore's.

@@ -157,7 +157,7 @@ public sealed class LifeStateTests
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"life\":{\"hero\":{\"hpDamage\":4,\"fatigueDamage\":6,\"poison\":0,\"conditions\":[],\"scars\":0,\"deathTimeMs\":null}," +
             "\"critters\":[{\"entity\":\"oid:adder\",\"hpDamage\":0,\"fatigueDamage\":0,\"poison\":40,\"conditions\":[\"Stunned\",\"Blinded\"],\"scars\":0,\"deathTimeMs\":null}," +
-            "{\"entity\":\"oid:wolf\",\"hpDamage\":32000,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[\"CrippledLegsBoth\"],\"scars\":1,\"deathTimeMs\":54005000}]},\"events\":");
+            "{\"entity\":\"oid:wolf\",\"hpDamage\":32000,\"fatigueDamage\":0,\"poison\":0,\"conditions\":[\"CrippledLegsBoth\"],\"scars\":1,\"deathTimeMs\":54005000}]},\"reactions\":");
         using var restored = Restore(Decode(text));
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Assert.AreEqual(owner.QueryHeroLife(), restored.QueryHeroLife());
@@ -353,7 +353,7 @@ public sealed class LifeStateTests
         Fails("\"entity\":\"oid:wolf\"", "\"entity\":\"oid wolf\"", SnapshotDecodeFailure.OutOfRange, "$.life.critters[0].entity");
         Fails(critter, critter + "," + critter, SnapshotDecodeFailure.NotCanonical, "$.life.critters[1].entity");
         Fails("\"critters\":[", "\"critters\":[],\"x\":[", SnapshotDecodeFailure.UnknownField, "$.life.x");
-        var life = text[text.IndexOf(",\"life\":", StringComparison.Ordinal)..text.IndexOf(",\"events\":", StringComparison.Ordinal)];
+        var life = text[text.IndexOf(",\"life\":", StringComparison.Ordinal)..text.IndexOf(",\"reactions\":", StringComparison.Ordinal)];
         Fails(life, ",\"life\":[]", SnapshotDecodeFailure.WrongType, "$.life");
         Fails(life, ",\"life\":null", SnapshotDecodeFailure.WrongType, "$.life");
 

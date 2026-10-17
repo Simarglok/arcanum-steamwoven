@@ -76,7 +76,8 @@ only when the step runs to the end; a refusal draws nothing. As in the source, a
 ## Snapshot schema 8
 
 `life` is encoded between `random` and `lighting` (since schema 9 `events` follows it,
-[event queue](game-event-queue-runtime.md#snapshot-schema-9)):
+[event queue](game-event-queue-runtime.md#snapshot-schema-9), and since schema 10 `reactions` comes between them,
+[NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)):
 
 ```json
 "life":{"hero":{"hpDamage":4,"fatigueDamage":6,"poison":0,"conditions":[],"scars":0,"deathTimeMs":null},
