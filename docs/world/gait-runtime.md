@@ -83,11 +83,10 @@ keyboards have no Num Lock key; the palette option works everywhere.
   example `./arcanum map "fal'kins maze"` or `"vendigroth underground"`: the two complete
   interiors with window-jump steps reachable from their starts (22 directed steps). The
   Crash Site exterior and cave have none (the windows near the start are jammed,
-  research D3–D4). The jump's
-  own leaving test (research LA4) is not modelled: the evidence uses the portal's door
-  rule, where a plain lock stays Unknown. The original-executable check found that the
-  original really swaps the two tiles in that test (CE does not), so LA4 and the
-  start-map count are being redone in a separate task.
+  research D3–D4). The window portal's lock follows the portal's door rule, which since
+  ARC-RES-049 lets a locked window through only for a step leaving a building as the
+  original's traversal and jump goal both see it (research W3, ledger LV1–LV5); the
+  recount left the start-map census and the 22 interior steps unchanged.
 
 ## Not implemented
 

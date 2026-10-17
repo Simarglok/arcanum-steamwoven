@@ -147,12 +147,16 @@ public sealed class AreaStepAssessment
 /// <summary>How an edge decides a step. <see cref="Legacy"/> is the pinned-profile rule: an opening
 /// piece is Unknown, every other wall blocks. Whole-map evidence (ARC-WORLD-018) states its rule;
 /// <see cref="WindowJump"/> blocks a diagonal leg; on a cardinal step it lets the walker jump the window
-/// (ARC-WORLD-021): the step is Open when nothing else decides it, and names the window.</summary>
-internal enum AreaStepEdgeRule { Legacy, Block, Pass, Unknown, WindowJump }
+/// (ARC-WORLD-021): the step is Open when nothing else decides it, and names the window.
+/// <see cref="Leaving"/> (ARC-RES-049) is a closed locked portal that opens only for a step leaving a
+/// building as the original's two open attempts see it; any other step is blocked (a plain lock) or
+/// Unknown (a lock that depends on the hour).</summary>
+internal enum AreaStepEdgeRule { Legacy, Block, Pass, Unknown, WindowJump, Leaving }
 
-/// <summary>One wall or portal on one tile edge (odd direction 1, 3, 5, 7).</summary>
+/// <summary>One wall or portal on one tile edge (odd direction 1, 3, 5, 7). A <see cref="AreaStepEdgeRule.Leaving"/>
+/// portal keeps its raw ART rotation 0..7, which its leaving test steps by.</summary>
 internal sealed record AreaStepWallEdge(AreaObjectKey Key, AreaStepCell Cell, int Edge, bool Opening,
-    AreaStepEdgeRule Rule = AreaStepEdgeRule.Legacy, string? Reason = null);
+    AreaStepEdgeRule Rule = AreaStepEdgeRule.Legacy, string? Reason = null, int RawRotation = -1);
 
 internal sealed record AreaStepObjectEvaluation(AreaObjectKey Key, AreaStepCell Cell, int ObjectType, CardinalTraversalCoverage Coverage,
     CardinalTraversalApplicability Applicability, CardinalTraversalDisposition? Disposition, string Reason, long? HpMinimum = null, long? HpMaximum = null);

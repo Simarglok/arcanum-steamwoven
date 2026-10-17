@@ -38,11 +38,62 @@ public sealed class AreaWholeMapStepTests
         Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0x40));
         Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door, 0));
         Assert.AreEqual(("PORTAL_UNLOCKED_OPENS_ON_WALK", AreaStepEdgeRule.Pass), Rule(Door & ~(1u << 10), 0));
-        // Locked: the hour may unlock it; always-locked removes the leaving shortcut; a plain lock leaves only.
-        Assert.AreEqual(("PORTAL_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x41));
+        // Locked: the hour may unlock it; always-locked removes the leaving shortcut; otherwise the step decides (ARC-RES-049).
+        Assert.AreEqual(("PORTAL_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Leaving), Rule(Door, 0x41));
         Assert.AreEqual(("PORTAL_LOCK_DEPENDS_ON_HOUR", AreaStepEdgeRule.Unknown), Rule(Door, 0x21 | 0x10));
         Assert.AreEqual(("PORTAL_ALWAYS_LOCKED_NO_KEY", AreaStepEdgeRule.Block), Rule(Door, 0x11));
-        Assert.AreEqual(("PORTAL_LOCKED_LEAVING_ONLY", AreaStepEdgeRule.Unknown), Rule(Door, 0x1));
+        Assert.AreEqual(("PORTAL_LOCKED_LEAVING_ONLY", AreaStepEdgeRule.Leaving), Rule(Door, 0x1));
+    }
+
+    [TestMethod]
+    public void A_locked_portal_opens_only_for_a_step_both_open_attempts_call_leaving()
+    {
+        // ARC-RES-049 (original 1.0.7.4): x <= 10 is indoor, x >= 11 outdoor, unless a cell is listed as the other kind.
+        const uint IndoorTile = 0, OutdoorTile = 1u << 8;
+        var portal = new AreaObjectKey("s", 1, AreaSourceKind.Static, 0, 0, 0, "portal", 1);
+        AreaStepAssessment Step((long X, long Y) at, int rawRotation, (long X, long Y) from, CardinalTraversalDirection direction, (long X, long Y) to,
+            string reason = "PORTAL_LOCKED_LEAVING_ONLY", (long X, long Y)[]? flipped = null)
+        {
+            var terrain = new Dictionary<AreaStepCell, AreaStepTerrainEvidence>();
+            for (var x = 0; x < 64; x++) for (var y = 0; y < 64; y++)
+            {
+                var indoor = x <= 10 ^ (flipped ?? []).Contains((x, y));
+                terrain[new(x, y)] = new(new(x, y), indoor ? IndoorTile : OutdoorTile, CardinalTraversalCoverage.Supported, CardinalTraversalDisposition.Open, AreaStepTerrainSource.TileName, "TEST");
+            }
+            var walls = new Dictionary<AreaStepCell, AreaStepWallEdge[]>
+            { [new(at.X, at.Y)] = [new(portal, new(at.X, at.Y), rawRotation | 1, false, AreaStepEdgeRule.Leaving, reason, rawRotation)] };
+            var snapshot = new AreaStepSnapshot(new(AreaStepInputKind.Structural, "arc-data-019-whole-map-original-rules-v1", [], "d"), 1, [(0, 0)], terrain,
+                new Dictionary<AreaStepCell, AreaStepObjectEvaluation[]>(), walls);
+            return snapshot.Assess(snapshot.Request(new(from.X, from.Y), new(to.X, to.Y), direction));
+        }
+        string Verdict(AreaStepAssessment a) => a.Coverage != CardinalTraversalCoverage.Supported ? "Unknown:" + a.Gaps.Single().ReasonCode
+            : a.Disposition == CardinalTraversalDisposition.Open ? "Open" : a.ReasonCode;
+        const CardinalTraversalDirection East = CardinalTraversalDirection.XPlus, West = CardinalTraversalDirection.XMinus;
+
+        // Portal on the indoor tile, edge 5 to the outdoor tile: leaving from its own tile opens, entering is locked.
+        Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), East, (11, 10))));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 5, (11, 10), West, (10, 10))));
+        // Portal on the outdoor tile facing in (rotation 1): the original exchanges the tiles for a walker from across,
+        // so leaving the building through it opens (CE never counts that side as leaving); entering stays locked
+        // although the goal on the portal's own tile tests rotation 1 in reverse (the traversal refuses first).
+        Assert.AreEqual("Open", Verdict(Step((11, 10), 1, (10, 10), East, (11, 10))));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((11, 10), 1, (11, 10), West, (10, 10))));
+        // Raw rotation 0..2 on its own indoor tile: the traversal calls it leaving, the goal (direction 5) does not.
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 1, (10, 10), West, (9, 10), flipped: [(9, 10)])));
+        Assert.AreEqual("Open", Verdict(Step((10, 10), 3, (10, 10), CardinalTraversalDirection.YPlus, (10, 11), flipped: [(10, 11)])));
+        // An even raw rotation tests the diagonal tile it points at, not the tile across the edge.
+        Assert.AreEqual("Open", Verdict(Step((10, 10), 4, (10, 10), East, (11, 10), flipped: [(11, 10)])));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 4, (10, 10), East, (11, 10), flipped: [(11, 11)])));
+        // Diagonal steps: each leg across the edge decides from its own side.
+        Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), CardinalTraversalDirection.XPlusYPlus, (11, 11))));
+        Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 5, (11, 11), CardinalTraversalDirection.XMinusYMinus, (10, 10))));
+        // The goal looks from the step's source, not the leg's: diagonal direction 6 to the portal also exchanges.
+        Assert.AreEqual("Open", Verdict(Step((11, 10), 1, (10, 11), CardinalTraversalDirection.XPlusYMinus, (11, 10))));
+        // A lock that depends on the hour opens for a leaving step and is Unknown otherwise.
+        Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), East, (11, 10), "PORTAL_LOCK_DEPENDS_ON_HOUR")));
+        Assert.AreEqual("Unknown:PORTAL_LOCK_DEPENDS_ON_HOUR", Verdict(Step((10, 10), 5, (11, 10), West, (10, 10), "PORTAL_LOCK_DEPENDS_ON_HOUR")));
+        // The tile the rotation points at lies outside the evidence.
+        Assert.AreEqual("Unknown:PORTAL_LEAVING_TILE_UNRESOLVED", Verdict(Step((62, 63), 4, (62, 63), East, (63, 63))));
     }
 
     [TestMethod]
