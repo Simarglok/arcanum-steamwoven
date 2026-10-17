@@ -116,8 +116,9 @@ AREA smoke passes over the stack.
   fields over 4 KiB and NUL bytes are refused, not cut. Field text keeps CR LF as
   stored; a consumer that shows it must turn it into LF, as the game's text-mode
   read does.
-- In three cases (six installed DLGs) the game itself loses content (data bugs,
-  read as the game reads them): see [the analysis of the 38 strict refusals](../formats/dlg-reader.md#the-38-strict-refusals-arc-script-012).
+- In three cases (six installed DLGs) the game itself loses content (data bugs);
+  `Dialog(number, rules)` fixes them under the Steamwoven rules ([data fixes](../formats/data-fixes.md),
+  ARC-DATA-022) and reads them as the game does without rules or under Original: see [the analysis of the 38 strict refusals](../formats/dlg-reader.md#the-38-strict-refusals-arc-script-012).
 - Item, trap and sector scripts read through the same API, but the viewer binds
   only the dialog point of a map's speakers ([dispatcher](scr-dispatcher-runtime.md)).
 

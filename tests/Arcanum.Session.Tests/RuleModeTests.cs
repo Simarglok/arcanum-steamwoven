@@ -36,6 +36,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Scripts, ScrRuleProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Reaction.Name);
             Assert.AreSame(rules.Reaction, ReactionRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Data.Name);
+            Assert.AreSame(rules.Data, Arcanum.Data.Fixes.DataFixProfile.FromName(rules.Name));
         }
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }
