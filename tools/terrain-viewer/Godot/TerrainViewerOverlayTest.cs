@@ -27,8 +27,8 @@ public partial class TerrainViewerApp
     {
         RequireExplicitTest();
         // The matrix sets world focus itself (WorldFocusForSelfTest) and owns it like the other GUI
-        // self-tests: a native window focus-out during its awaits (a test window the OS never keeps
-        // in front) must not drop the world focus and quarantine the controller frames it sends next.
+        // self-tests: a native focus-out during its awaits (a background-launched test window macOS
+        // does not keep in front) must not quarantine the controller frames it sends next.
         var simulatedFocus = _worldFocusSimulationForSelfTest;
         _worldFocusSimulationForSelfTest = true;
         try { await WorldPassabilityOverlayMatrixScriptAsync(blocked, open, outside, mode); }
