@@ -18,6 +18,8 @@ public sealed partial class AreaDataOwner : IDisposable
     private readonly Dictionary<AreaInputKey, Dictionary<string, DatEntry[]>> _indexes = [];
     private readonly Dictionary<(AreaInputKey, int), AreaEntryIdentity> _entryIdentities = [];
     private readonly Dictionary<DatEntry, string> _names = [];
+    // Loose resource inputs by the virtual path each holds (ARC-DATA-018).
+    private readonly Dictionary<string, AreaInputKey> _loose = new(StringComparer.Ordinal);
     private readonly object _identity = new();
     private bool _disposed;
     // Set when Open has just authenticated every input; the first Inspect uses that as its
@@ -47,12 +49,19 @@ public sealed partial class AreaDataOwner : IDisposable
             // Bound the source graph before sorting, wrapping or authenticating
             // any input. Four non-prototype roles plus the admitted prototypes
             // define this loader's source-count envelope, not a heap estimate.
-            if (inputs.Inputs.Count > 4L + limits.MaxPrototypes ||
-                plan.Identities.Count > 4L + limits.MaxPrototypes ||
+            // ARC-DATA-018 adds the plan's own resource archives and loose resource files.
+            if (inputs.Inputs.Count > 4L + limits.MaxPrototypes + limits.MaxResourceInputs ||
+                plan.Identities.Count > 4L + limits.MaxPrototypes + limits.MaxResourceInputs ||
                 plan.Identities.Count(i => i.Key.Role == AreaSourceRole.Prototype) > limits.MaxPrototypes ||
+                plan.Identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose) > limits.MaxResourceInputs ||
                 plan.Mappings.Count > Enum.GetValues<AreaMappingRole>().Length || plan.ArtBindings.Count > limits.MaxVisuals)
                 throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
             if (plan.Identities.Any(i => !Enum.IsDefined(i.Key.Role)))
+                throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
+            // A stack order is the whole resource search: every archive or loose input is in it,
+            // and a pinned profile keeps its own archive rule.
+            if (plan.Original && plan.ResourceOrder.Count > 0 ||
+                plan.Identities.Any(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose && !plan.ResourceOrder.Any(s => s.Key == i.Key)))
                 throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
             budget.Retain(checked(65536 + inputs.Inputs.Count * 1024L));
             owner = new AreaDataOwner(inputs, plan, limits, budget);
@@ -63,7 +72,8 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (!input.Stream.CanRead || !input.Stream.CanSeek) throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
                 if (identity.Key.Role == AreaSourceRole.Prototype && identity.Length > 1048576 ||
                     identity.Key.Role == AreaSourceRole.NormalGameMobile && identity.Length > limits.MaxAggregateBytes ||
-                    identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 && identity.Length > 536870912)
+                    identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 or AreaSourceRole.Archive && identity.Length > 536870912 ||
+                    identity.Key.Role == AreaSourceRole.Loose && identity.Length > EntryCap(plan))
                     throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
                 // AreaPathStream's caller-created FileStream can lazily allocate
                 // its single 64 KiB read buffer on our first small read. It stays
@@ -72,7 +82,13 @@ public sealed partial class AreaDataOwner : IDisposable
                 var stream = new BudgetStream(input.Stream, owner._budget);
                 owner._streams.Add(identity.Key, stream);
                 owner.Authenticate(identity, default);
-                if (identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2)
+                if (identity.Key.Role == AreaSourceRole.Loose)
+                {
+                    var path = plan.ResourceOrder.Single(s => s.Key == identity.Key).Path!;
+                    owner._loose.Add(path, identity.Key);
+                    owner._entryIdentities.Add((identity.Key, 0), LooseIdentity(identity.Key, path, identity.Length));
+                }
+                if (identity.Key.Role is AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 or AreaSourceRole.Archive)
                 {
                     owner.ReserveArchive(stream);
                     owner._archives.Add(identity.Key, DatArchive.Open(stream, new DatReaderOptions
@@ -238,7 +254,7 @@ public sealed partial class AreaDataOwner : IDisposable
             _disposed = true; _lease?.Revoke(); _lease = null; _batch?.Revoke(); _batch = null; EndEntryMemo();
             _budget.Release(_leaseBytes); _leaseBytes = 0;
             foreach (var archive in _archives.Values) archive.Dispose();
-            _archives.Clear(); _indexes.Clear(); _entryIdentities.Clear(); _names.Clear(); _streams.Clear(); _published = null;
+            _archives.Clear(); _indexes.Clear(); _entryIdentities.Clear(); _names.Clear(); _loose.Clear(); _streams.Clear(); _published = null;
             _budget.Release(_publishedBytes); _publishedBytes = 0;
             // Empty dictionary capacity is still owned by this disposed object;
             // don't claim GC reclamation or refund the persistent index bound.
@@ -369,6 +385,7 @@ public sealed partial class AreaDataOwner : IDisposable
     private byte[] ReadEntry(AreaEntryIdentity identity, CancellationToken token = default, AreaOwnership? ownership = null)
     {
         _budget.Context = new(AreaBudgetCallsite.Entry, identity.Source, identity.Ordinal, identity.Offset);
+        if (identity.Source.Role == AreaSourceRole.Loose) return ReadLoose(identity, token, ownership);
         var archive = Archive(identity.Source);
         if (identity.Ordinal < 0 || identity.Ordinal >= archive.Entries.Count) throw Fail(AreaErrorCode.InvalidSelection, AreaStage.Input);
         var entry = archive.Entries[identity.Ordinal];
@@ -378,6 +395,24 @@ public sealed partial class AreaDataOwner : IDisposable
         // then the full structure-dependent inflate envelope before decoding.
         return archive.ReadEntry(entry, (IDatEntryAdmission?)ownership ?? _budget, token);
     }
+    /// <summary>A loose resource is one whole input; its entry identity is fixed at Open
+    /// (<see cref="LooseIdentity"/>) and its bytes must hash to the input's identity.</summary>
+    private byte[] ReadLoose(AreaEntryIdentity identity, CancellationToken token, AreaOwnership? ownership)
+    {
+        if (!_entryIdentities.TryGetValue((identity.Source, 0), out var known)) throw Fail(AreaErrorCode.MissingSource, AreaStage.Input);
+        if (known != identity) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Input);
+        var input = Identity(identity.Source); token.ThrowIfCancellationRequested();
+        if (input.Length > EntryCap(_plan)) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Input);
+        ((IDatEntryAdmission?)ownership ?? _budget).Admit(checked(input.Length + 1024));
+        var buffer = new byte[checked((int)input.Length)];
+        var stream = _streams[identity.Source]; stream.Position = 0; stream.ReadExactly(buffer);
+        if (Objects.ObjectWireReader.Hash(buffer) != input.Sha256) throw Fail(AreaErrorCode.InputChangedDuringRead, AreaStage.Input);
+        return buffer;
+    }
+    /// <summary>The entry identity of a loose resource: ordinal, flags and offset 0, stored and decoded
+    /// size its length, name digest the SHA-256 of its virtual path's ASCII bytes.</summary>
+    internal static AreaEntryIdentity LooseIdentity(AreaInputKey key, string path, long length) =>
+        new(key, 0, 0, checked((uint)length), checked((uint)length), 0, Objects.ObjectWireReader.Hash(System.Text.Encoding.ASCII.GetBytes(path)));
     private byte[] ReadFile(AreaInputKey key, CancellationToken token, AreaOwnership ownership)
     {
         _budget.Context = new(AreaBudgetCallsite.File, key);

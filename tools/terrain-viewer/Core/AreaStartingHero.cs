@@ -28,19 +28,25 @@ public enum AreaHeroStatus
     HeroRefused,
     /// <summary>The hero's main-menu flag message is absent or not a decimal flag number of the new-game flag domain.</summary>
     FlagInvalid,
+    /// <summary>ARC-UI-007: an experience table entry is not a number, or the level table is not strictly increasing from 0
+    /// (<see cref="AreaHeroLoad.Detail"/> names it).</summary>
+    ExperienceInvalid,
 }
 
 /// <param name="Definition">The session's hero, or null unless <see cref="AreaHeroStatus.Ready"/>.</param>
 /// <param name="Flag">The hero's global flag (<c>MainMenu.mes</c> 551 + index), set true at the start; null unless ready.</param>
 /// <param name="DroppedChanges">Effect changes on attributes the character owner does not model (see <see cref="AreaStartingHero.Definition"/>).</param>
+/// <param name="Experience">ARC-UI-007: the session's experience data (<c>rules\xp_level.mes</c>, <c>rules\xp_quest.mes</c>,
+/// <c>rules\gamequest.mes</c>), or null unless ready.</param>
 public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, SessionHeroDefinition? Definition, int? Flag,
-    int DroppedChanges, PremadeHeroRead? Read, string Detail);
+    int DroppedChanges, PremadeHeroRead? Read, string Detail, SessionExperienceRules? Experience = null);
 
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
 /// <see cref="PremadeHeroReader"/> (ARC-WORLD-015) from the game folder that holds the module archive
 /// (<see cref="AreaContentRoot.Discover"/>, the rule of the description tables and scripts): the loose <c>data/proto</c> prototypes, <c>rules\effect.mes</c>,
-/// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>.
+/// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>; since ARC-UI-007
+/// also the experience tables the session awards with and the character sheet reads the next level from (ARC-WORLD-030).
 /// Godot-free; a typed status, never an exception for data.
 /// </summary>
 public static class AreaStartingHero
@@ -50,7 +56,8 @@ public static class AreaStartingHero
     /// <c>mainmenu_ui_pregen_char_execute</c>, 0x545B60, checked in the executable).</summary>
     public const int FirstFlagMessage = 551;
     public const string EffectsPath = "rules/effect.mes", SourcesPath = "rules/InvenSource.mes", SourcesBuyPath = "rules/InvenSourceBuy.mes",
-        MainMenuPath = "mes/MainMenu.mes";
+        MainMenuPath = "mes/MainMenu.mes", LevelsPath = "rules/xp_level.mes", QuestExperiencePath = "rules/xp_quest.mes",
+        QuestLevelsPath = "rules/gamequest.mes";
 
     /// <summary>The twelve heroes in main-menu order. Keep in step with <c>PREMADE_HEROES</c> in
     /// <c>tools/local_dev/launch.py</c> (tools/local_dev/test_launcher_sync.py fails on any drift).</summary>
@@ -79,13 +86,36 @@ public static class AreaStartingHero
         var sources = effects is null ? null : Table(stack, SourcesPath, required: true, out detail);
         var buy = sources is null ? null : Table(stack, SourcesBuyPath, required: false, out detail);
         var menu = sources is null || detail is not null ? null : Table(stack, MainMenuPath, required: true, out detail);
-        if (effects is null || sources is null || menu is null || detail is not null) return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
+        var levels = menu is null ? null : Table(stack, LevelsPath, required: true, out detail);
+        var quests = levels is null ? null : Table(stack, QuestExperiencePath, required: true, out detail);
+        var questLevels = quests is null ? null : Table(stack, QuestLevelsPath, required: true, out detail);
+        if (effects is null || sources is null || menu is null || questLevels is null || detail is not null)
+            return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
+        if (Experience(levels!, quests!, questLevels, out detail) is not { } experience) return Refused(AreaHeroStatus.ExperienceInvalid, hero, detail!);
         var read = PremadeHeroReader.Read(new(PremadeHeroReader.DirectoryPrototypes(Path.Combine(found.Plan!.GameRoot, "data", "proto")), effects, sources, buy),
             hero.BasicPrototype);
         if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
             return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");
         if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
-        return new(AreaHeroStatus.Ready, hero, Definition(read.Hero, out var dropped), flag, dropped, read, "hero ready");
+        return new(AreaHeroStatus.Ready, hero, Definition(read.Hero, out var dropped), flag, dropped, read, "hero ready", experience);
+    }
+
+    /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>
+    public static SessionExperienceRules? Experience(MesFile levels, MesFile questExperience, MesFile questLevels, out string? detail)
+    {
+        ArgumentNullException.ThrowIfNull(levels);
+        ArgumentNullException.ThrowIfNull(questExperience);
+        ArgumentNullException.ThrowIfNull(questLevels);
+        var thresholds = ExperienceTables.ReadLevels(levels);
+        var quest = ExperienceTables.ReadValues(questExperience);
+        var questLevel = ExperienceTables.ReadQuestLevels(questLevels);
+        detail = thresholds.Status != ExperienceTableStatus.Read ? $"{LevelsPath} {thresholds.Status} {thresholds.Number}"
+            : quest.Status != ExperienceTableStatus.Read ? $"{QuestExperiencePath} {quest.Status} {quest.Number}"
+            : questLevel.Status != ExperienceTableStatus.Read ? $"{QuestLevelsPath} {questLevel.Status} {questLevel.Number}" : null;
+        if (detail is not null) return null;
+        var rules = SessionExperienceRules.Create(ExperienceTable.Create(thresholds.Thresholds), quest.Values, questLevel.Values);
+        if (rules is null) detail = $"{LevelsPath} not strictly increasing from 0, or a quest value or number out of range";
+        return rules;
     }
 
     /// <summary>The original new-game flags (0..3199 known false, ARC-SCRIPT-006) with the chosen hero's flag set true, as the
@@ -193,7 +223,14 @@ public static class AreaStartingHero
     {
         ArgumentNullException.ThrowIfNull(session);
         if (session.QueryHero() is not { } hero) return "hero: none (diagnostic PC profile)";
-        var name = Premade.FirstOrDefault(p => p.BasicPrototype + PremadeHeroReader.PrototypeOffset == hero.Prototype)?.Name ?? $"prototype {hero.Prototype}";
-        return $"hero: {name} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}";
+        return $"hero: {Name(hero)} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}";
+    }
+
+    /// <summary>The project's name of a session hero (the pre-made hero whose prototype it has), else its prototype number.
+    /// The session holds no player name.</summary>
+    public static string Name(SessionHeroState hero)
+    {
+        ArgumentNullException.ThrowIfNull(hero);
+        return Premade.FirstOrDefault(p => p.BasicPrototype + PremadeHeroReader.PrototypeOffset == hero.Prototype)?.Name ?? $"prototype {hero.Prototype}";
     }
 }

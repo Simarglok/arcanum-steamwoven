@@ -73,7 +73,7 @@ public sealed class AreaMapPlansTests
     }
 
     [TestMethod]
-    public void A_whole_map_refuses_a_resource_held_by_both_base_archives()
+    public void A_whole_map_without_a_stack_order_refuses_a_resource_held_by_both_base_archives()
     {
         var resources = new (string, byte[])[] { ("tile.mes", "{0}{stone/}{100}{stone/}{200}{stone/}{300}{stone/}{400}{end/}"u8.ToArray()),
             ("facade.mes", "{0}{fixture}"u8.ToArray()), ("scenery.mes", "{0}{fixture.art}"u8.ToArray()), ("art/tile/stonebse0a.art", Art()), ("art/scenery/fixture.art", Art()) };

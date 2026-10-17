@@ -7,8 +7,8 @@ Experience and the NPC records are saved (snapshot schema 14). Requirements:
 [FR-CHAR-013](../requirements/characters-skills.md#fr-char-013) (experience and level thresholds),
 [FR-CHAR-014](../requirements/characters-skills.md#fr-char-014) (points for a level), the experience part of
 [FR-CHAR-026](../requirements/characters-skills.md#fr-char-026) (a dead PC gets none) and the experience part of
-[FR-SCRIPT-004](../requirements/story-social-ai.md#fr-script-004) (a completed quest pays). Not wired into the viewer
-([Not ready](#not-ready)).
+[FR-SCRIPT-004](../requirements/story-social-ai.md#fr-script-004) (a completed quest pays). In the viewer only the
+experience data and a dialog's quest completion are wired (ARC-UI-007, [Not ready](#not-ready)).
 
 ## Evidence
 
@@ -103,8 +103,10 @@ refused, not migrated.
 
 ## Not ready
 
-- No host: the viewer's dialog `XP` action, its quest completion (`AreaConversation` keeps the session without experience
-  data), combat damage and kills are not wired, and there is no level-up message or character sheet.
+- Viewer host, partial (ARC-UI-007): with `--hero` the AREA session gets the three tables (`AreaStartingHero.Experience`,
+  kept over F8), so a dialog's quest completion gives quest experience and the
+  [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) shows the experience to the next level. Not
+  wired: the dialog `XP` action, combat damage and kills, a level-up message, spending the points.
 - The hero's auto-level scheme (pre-made heroes have one, ARC-RES-027) is not run: level points stay unspent until the scheme
   runtime ([FR-CHAR-021](../requirements/characters-skills.md#fr-char-021)) or point purchases exist.
 - NPC levels are not session state: the followers' level step is reported, not applied; the Educator background and the

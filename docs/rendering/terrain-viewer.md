@@ -916,6 +916,51 @@ mode the original's left click attacks a living NPC; that click belongs to the a
 still talks and the dialog leaves combat mode. Native smoke with `--hero` (after the run stage):
 `ARC-COMBAT-004 native-smoke combat-mode PASS`.
 
+### Character sheet (ARC-UI-007)
+
+The original Character sheet key `C` (logical key down) toggles a read-only diagnostic sheet of the session's hero in
+crash-site-area (exterior, cave and `--area-map`). It shows what the original sheet of the PC shows
+(`charedit` in active mode, checked in the original executable, ledger rows
+[CS1–CS7](../research/original-verification-ledger.md#character-sheet-arc-ui-007)), every value a session query:
+
+- the hero's project name (no PC name in the session), race and gender;
+- level, experience still needed for the next level (`last level` at 51; `next level unknown` without experience data),
+  unspent points, and the experience itself (a project addition: the original sheet does not print it);
+- the hero's stored alignment divided by ten (truncated toward zero), the magick/tech aptitude split into a magick and a
+  tech value (a positive aptitude is magick, a negative one tech, the other side 0). **Partial:** a dialog's `AL` action
+  still writes the conversation host's own alignment value, not the session hero's, so the sheet does not follow it; the
+  aptitude has no sector adjustment (not modelled);
+- hit points and fatigue against their maxima;
+- the eight primary stats at their effective value, in the sheet's order, marked "raised by effects" or "lowered by
+  effects" when the base value adjusted by the effects that are not innate (race, background, class, gender) differs
+  from the base value, as the original draws them green or red;
+- the eight derived stats (carry weight, damage bonus, AC adjustment, speed, heal rate, poison recovery, reaction
+  modifier, max followers) at their effective value;
+- the five resistances (normal, magick, fire, poison, electrical) clamped to 0..95: worn armour and the constitution
+  bonus to poison `5 × (CN − 4)` only. **Partial:** the session has no base resistance field, effect changes of
+  resistances (a half-orc's +10 poison, a half-ogre's +10 normal) are inert in the session, and every worn item counts as
+  identified.
+
+The sheet opens from the world only (no palette, dialog, inventory window or UI focus), never for a dead hero (the
+original refuses it) and only with `--hero` (without a hero the status line says so). Like the inventory window it is
+modal: the actor gate closes, the clock pauses, a walk stops (the original interrupts the PC's animation when the sheet
+opens; it does not pause the world, the viewer's modal windows do). While it is open it owns every key: `C`, `Escape` or
+a controller cancel closes it, the close button is the only control. It rebuilds whenever the session changes and closes
+when the session ends or its hero dies. The HUD adds `C character sheet` and the last refusal.
+
+With a hero the load now also reads `rules\xp_level.mes`, `rules\xp_quest.mes` and `rules\gamequest.mes` and gives the
+session its [experience data](../world/experience-runtime.md) (kept over F8): the sheet knows the next level, and a
+dialog that completes a quest now gives the quest's experience as the original does (the dialog `XP` action is still not
+wired). A table that is missing or
+not admitted fails the load (`AREA_HERO_TableUnavailable`, `AREA_HERO_ExperienceInvalid`).
+
+**Not implemented:** spending unspent points on stats, hit points or fatigue (the original's +/− buttons and their
+errors), skills, tech disciplines, spells and schematics panels, age (not session state), the portrait and PC lens,
+followers' sheets (passive mode from dialog or the follower menu), switching straight from one window to another by
+key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refusal, `C`/close/`Escape`, keys owned
+while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
+`ARC-UI-007 native-smoke character sheet PASS`.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
