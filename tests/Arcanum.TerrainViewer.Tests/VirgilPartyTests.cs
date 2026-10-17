@@ -34,7 +34,8 @@ public sealed class VirgilPartyTests
         var document = VirgilDialog(P("arcanum3.dat"));
 
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session);
         var speaker = host.Speakers.Single();
         var entity = AreaConversationState.EntityId(speaker.Row);
         // Begin binds the speaker's attachment flags; its own conversation is closed before any reply runs.
@@ -90,7 +91,8 @@ public sealed class VirgilPartyTests
         var snapshot = data.LoadStrict();
         var document = VirgilDialog(P("arcanum3.dat"));
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session);
         var speaker = host.Speakers.Single();
         var entity = AreaConversationState.EntityId(speaker.Row);
         Assert.IsTrue(host.Begin(host.Nearest(speaker.WorldX, speaker.WorldY)).Conversation!.Close());

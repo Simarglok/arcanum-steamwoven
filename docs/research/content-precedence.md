@@ -79,6 +79,16 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
 - A script's file name comes from listing `scr\*.scr` across all sources; the sorted,
   de-duplicated list maps each number to a name, and a later name with the same number
   replaces an earlier one ([`script_name.c` 40–80, 112–135](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L40-L80)).
+  Numbers from 1000 up are listed at game start, before the module is mounted, so only
+  names held by `tig.dat`, the game folder, `arcanum*.dat` and `data/` count for them;
+  1..999 are listed at module load, over every source. Checked in the 1.0.7.4 executable
+  (ARC-SCRIPT-011): `script_name_init` 0x4CEC10 keeps numbers ≥ 1000, `script_name_mod_load`
+  0x4CECE0 keeps 1..999, both replace an earlier name and report the duplicate, and
+  `script_name_build_scr_name` 0x4CEDC0 looks up ≥ 1000 in the first table and 1..999 in
+  the second. The mount timing is CE's (not re-read in the executable): `gamelib_init`
+  loads the base data ([`gamelib.c` 330](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L330)) before it runs the init functions
+  ([381](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L381)), and `gamelib_mod_load` mounts the module ([662–673](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L662-L673)) before
+  it runs the module-load functions ([710](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L710)).
   The dialog name is the script name with `scr` swapped for `dlg`
   ([`script_name.c` 185–209](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L185-L209)); the `dlg\*.dlg`
   listing in [`dialog.c` 2968](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2968) is a debug check only. Both
@@ -182,7 +192,7 @@ over both base copies; its `rules/map.patch` exists nowhere else.
 | --- | --- | --- | --- |
 | Area loader (exterior and cave, ARC-DATA-009 / ARC-WORLD-009) | sectors and maps from `modules/Arcanum.dat`; ART and the 18 pinned name/rule tables from `arcanum1.dat`/`arcanum2.dat` by ordinal | the same members: nothing in `arcanum1.dat` is shadowed, `arcanum2.dat` loses only `scr/` and `sound/` members, the module loses only the two PATCH0 files | **Not affected.** Checked per binding by the real-data test. |
 | Area prototypes and game-generated mobiles | `data/proto/*.pro`, `modules/Arcanum/maps/*` loose files | the same loose files, one copy each | **Not affected.** |
-| Virgil conversation (ARC-SCRIPT-005) | `scr\01324Virgil.scr` from `arcanum2.dat` #8973 (6,268 B) | `Arcanum4.dat` #86 (6,532 B, different payload) | **Affected: the viewer reads a shadowed script.** `dlg\01324Virgil.dlg` (`arcanum3.dat` #160) has one copy and is correct. |
+| Virgil conversation (ARC-SCRIPT-005) | until ARC-SCRIPT-011: `scr\01324Virgil.scr` from `arcanum2.dat` #8973 (6,268 B) | `Arcanum4.dat` #86 (6,532 B, different payload) | **Fixed by ARC-SCRIPT-011:** the viewer now reads scripts and dialogs through the stack ([script content](../scripting/script-content.md)) and gets the `Arcanum4.dat` copy (49 lines; the first 25 equal the shadowed 47-line copy, so Virgil's talk entries did not change). `dlg\01324Virgil.dlg` (`arcanum3.dat` #160) has one copy. |
 | Passability closure (`map.patch`) | `Arcanum.PATCH0` `rules/map.patch` | the same member, one copy | Not affected. |
 
 Three more Virgil scripts (`01708`, `02023`, `02033`) are also replaced by
@@ -193,10 +203,9 @@ matter to future item, character and audio work. This settles the open question 
 [character creation](character-creation-evidence.md) (ARC-RES-025): the `Arcanum4.dat`
 copies of `rules/backgrnd.mes` and `mes/mainmenu.mes` are the ones the game reads.
 
-**Follow-up (not done here):** move the NPC conversation's script and dialog lookup onto
-`ContentStack` (or at least select `Arcanum4.dat` for the script) and re-check
-Virgil's first-talk entry with the patched script. Future loaders should resolve names
-through the stack instead of fixed archive roles.
+The follow-up named here is done: ARC-SCRIPT-011 moved the conversation's script and
+dialog lookup onto `ContentStack` and re-checked Virgil's talk with the patched script.
+Future loaders should resolve names through the stack instead of fixed archive roles.
 
 ## Reproduce
 

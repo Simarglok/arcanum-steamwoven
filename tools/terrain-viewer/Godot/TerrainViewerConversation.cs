@@ -29,14 +29,42 @@ public partial class TerrainViewerApp
         _conversationNotice = null; _talkAfterRoute = null;
         // ARC-SCRIPT-006: dialog consequences live in the area session, which outlives map changes.
         // ARC-WORLD-016: Virgil's JO/WA/UW go through the session party with his measured follow inputs.
-        _conversationHost = arguments.AreaEffectsPath is { } dialogs && _areaSession is { } session
-            ? new AreaConversationHost(area.Snapshot, arguments.ResourcePath, dialogs, session, inventory: _inventoryHost, party: true) : null;
+        // ARC-SCRIPT-011: scripts and dialogs come from the game's content stack, found from the module archive. Map mode
+        // (--area-map) does not wire dialogs yet (docs/rendering/area-map-mode.md).
+        if (_areaSession is { } session && arguments.AreaMapName is null)
+        {
+            var content = ConversationContent(arguments.ModulePath);
+            _conversationHost = new AreaConversationHost(area.Snapshot, content.Content, session, inventory: _inventoryHost, party: true,
+                contentDetail: $"{content.Status}: {content.Detail}");
+        }
+        else _conversationHost = null;
         if (_conversationPanel is null)
         {
             _conversationPanel = new AreaConversationPanel(); AddChild(_conversationPanel);
             // Only the player's close resumes the dialog script; teardown, reset and map changes just close.
             _conversationPanel.CloseRequested += () => EndConversation(resume: true);
         }
+    }
+
+    // ARC-SCRIPT-011: the module's script content, opened once per module archive and kept for reloads and the cave.
+    private (string Module, AreaScriptContentLoad Load)? _conversationContent;
+
+    private AreaScriptContentLoad ConversationContent(string module)
+    {
+        if (_conversationContent is { } cached && cached.Module == module) return cached.Load;
+        ReleaseConversationContent();
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var load = AreaContentRoot.OpenScripts(module);
+        GD.Print($"ARC-SCRIPT-011 script content status={load.Status} detail={load.Detail} ms={System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:0}");
+        _conversationContent = (module, load);
+        return load;
+    }
+
+    /// <summary>Disposes the script content; the conversation host borrowing it is unbound first.</summary>
+    private void ReleaseConversationContent()
+    {
+        _conversationContent?.Load.Content?.Dispose();
+        _conversationContent = null;
     }
 
     private void UnbindAreaConversations()

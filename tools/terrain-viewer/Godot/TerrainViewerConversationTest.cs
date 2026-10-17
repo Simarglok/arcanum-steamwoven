@@ -103,7 +103,8 @@ public static partial class TerrainViewerSelfTest
             Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "modules/Arcanum/maps/qrmvs-420-1zjcnpgn"), Path.Combine(root, "data/proto"));
         var snapshot = data.LoadStrict();
         using var session = ConversationSessionFixture.Create(snapshot.RuntimeMap);
-        var conversations = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var conversations = new AreaConversationHost(snapshot, scripts, session);
         var start = conversations.Begin(conversations.Speakers.FirstOrDefault());
         GD.Print($"ARC-SCRIPT-005 original speakers={conversations.Speakers.Count} status={start.Status} detail={start.Detail}");
         if (start.Conversation is not { } conversation) throw new InvalidOperationException("ORIGINAL_CONVERSATION_NOT_STARTED");
@@ -164,15 +165,16 @@ public partial class TerrainViewerApp
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal && _conversationHost.Speakers.Count == 0, "closed at publication; the synthetic core has no dialog NPC");
             Click(GetViewport().GetVisibleRect().Size / 2); Press(Key.T);
             TerrainViewerSelfTest.Require(!ConversationOpen && !WorldModal, "LMB off a dialog NPC and the reserved T key do not open a dialog");
-            // A row standing in for a speaker; the synthetic area has no script resource input and its archive paths do
-            // not exist (ARC-SCRIPT-009: the archive check refuses first), so the start is a typed status.
+            // A row standing in for a speaker; the synthetic module is not inside a game folder, so there is no script
+            // content (ARC-SCRIPT-011) and the start is a typed status.
             var row = _readyArea.Snapshot.Objects[0];
             BeginConversation(new AreaSpeaker(0, row, 1, row.WorldX ?? 0, row.WorldY ?? 0));
             TerrainViewerSelfTest.Require(ConversationOpen && WorldModal && !_worldGate.IsOpen && _conversationPanel!.Conversation is null
                 && (_conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryError))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.EntryNotAdmitted))
                     || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.GenericGreeting))
-                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))), "the modal panel opens with the typed start status");
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.SourceChanged))
+                    || _conversationPanel.OutcomeForSelfTest.Contains(nameof(AreaConversationStartStatus.ContentUnavailable))), "the modal panel opens with the typed start status");
             foreach (var key in new[] { Key.Escape, Key.Key1, Key.Enter, Key.T }) Press(key);
             TerrainViewerSelfTest.Require(ConversationOpen, "keyboard key events are not redirected to dialog actions");
             // Polled keyboard levels too: full simulated frames with held Escape/Enter/Down-equivalent levels.

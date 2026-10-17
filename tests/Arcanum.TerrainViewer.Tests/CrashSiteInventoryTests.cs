@@ -65,7 +65,8 @@ public sealed class CrashSiteInventoryTests
         // Virgil's first talk through the viewer's conversation host (ARC-UI-004 wiring): the DLG node 1 entry action
         // IN -2804 hands over the ring through the session inventory port.
         VirgilDialog(P("arcanum3.dat"));
-        var host = new AreaConversationHost(snapshot, P("arcanum2.dat"), P("arcanum3.dat"), session, inventory: viewer);
+        using var scripts = ConversationSessionFixture.Scripts(root);
+        var host = new AreaConversationHost(snapshot, scripts, session, inventory: viewer);
         Assert.IsTrue(host.InventoryWired);
         var speaker = host.Speakers.Single();
         var virgil = AreaConversationState.EntityId(speaker.Row);

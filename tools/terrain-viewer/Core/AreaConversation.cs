@@ -1,6 +1,6 @@
-using System.Security.Cryptography;
 using Arcanum.Data;
 using Arcanum.Data.Area;
+using Arcanum.Data.Scripts;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.NpcDialog;
@@ -37,10 +37,12 @@ public enum AreaConversationStartStatus
     ScriptEnded,
     /// <summary>ARC-SCRIPT-009: the session refused the script's effects.</summary>
     ScriptEffectsRejected,
-    /// <summary>ARC-SCRIPT-009: the script or dialog archive differs from the one the area was loaded and first talked with.</summary>
+    /// <summary>ARC-SCRIPT-011: a script or dialog file changed since the content first read it; nothing is applied.</summary>
     SourceChanged,
     /// <summary>ARC-SCRIPT-009: a resumption found no script in the slot (it removed itself); nothing ran.</summary>
     ScriptRemoved,
+    /// <summary>ARC-SCRIPT-011: the game's script content could not be loaded for this area; nothing ran.</summary>
+    ContentUnavailable,
 }
 
 /// <param name="Party">ARC-WORLD-016: the session party port of a roster companion's conversation (its
@@ -52,15 +54,16 @@ public sealed record AreaConversationStart(AreaConversationStartStatus Status, D
 /// Opens a bounded conversation with an area NPC: effective SAP_DIALOG → SCR dispatcher (ARC-SCRIPT-009) →
 /// DLG member of the dialog action → <see cref="DialogConversation"/>. Dialog consequences live in the caller's
 /// <see cref="GameSessionOwner"/> (ARC-SCRIPT-006), so they persist across talks, map changes and snapshots.
-/// The host does not own the session. Synchronous, single-threaded; Begin and Resume authenticate and read the selected archives every time.
+/// The host owns neither the session nor the script content. Scripts and dialogs come from the game's universal content
+/// stack (ARC-SCRIPT-011, <see cref="ScriptContent"/>): the original's name for each script number and the winning copy,
+/// the same for every map. Synchronous, single-threaded; Begin and Resume read the files every time.
 /// </summary>
 public sealed class AreaConversationHost
 {
     private readonly AreaSnapshot _snapshot;
     private readonly GameSessionOwner _session;
-    private readonly string _scriptArchive;
-    private readonly string _dialogArchive;
-    private (long Length, string Sha256)? _dialogIdentity;
+    private readonly ScriptContent? _content;
+    private readonly string _contentDetail;
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
 
@@ -69,13 +72,16 @@ public sealed class AreaConversationHost
     /// <param name="party">ARC-WORLD-016: a speaker listed by <see cref="AreaCompanionRoster"/> talks with the session party
     /// port (JO, WA, UW through <see cref="SessionDialogPartyPort"/> with its measured facts), and its "following" is the
     /// session party standing; other speakers keep the diagnostic follow key.</param>
-    public AreaConversationHost(AreaSnapshot snapshot, string scriptArchive, string dialogArchive, GameSessionOwner session,
-        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false)
+    /// <param name="content">The game's script content (<see cref="AreaContentRoot.OpenScripts"/>), borrowed; null when it
+    /// could not be loaded, and then every talk is <see cref="AreaConversationStartStatus.ContentUnavailable"/> with
+    /// <paramref name="contentDetail"/>.</param>
+    public AreaConversationHost(AreaSnapshot snapshot, ScriptContent? content, GameSessionOwner session,
+        AreaConversationProfile? profile = null, AreaInventoryHost? inventory = null, bool party = false, string contentDetail = "no script content")
     {
         _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         _session = session ?? throw new ArgumentNullException(nameof(session));
-        _scriptArchive = scriptArchive ?? throw new ArgumentNullException(nameof(scriptArchive));
-        _dialogArchive = dialogArchive ?? throw new ArgumentNullException(nameof(dialogArchive));
+        _content = content;
+        _contentDetail = contentDetail ?? throw new ArgumentNullException(nameof(contentDetail));
         Profile = profile ?? AreaConversationProfile.Diagnostic;
         _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
         Speakers = FindSpeakers(snapshot);
@@ -83,17 +89,17 @@ public sealed class AreaConversationHost
         State = new AreaConversationState(session, new SessionMapId(snapshot.RuntimeMap),
             Speakers.Select(speaker => AreaConversationState.EntityId(speaker.Row)).ToArray(), Profile.InitialReaction,
             party ? Speakers.Where(speaker => AreaCompanionRoster.For(speaker) is not null).Select(speaker => speaker.Index).ToHashSet() : null);
-        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, scriptArchive);
+        Scripts = new AreaScriptHost(session, new SessionMapId(snapshot.RuntimeMap), Speakers, State, content);
     }
 
     /// <summary>True when roster speakers talk through the session party (ARC-WORLD-016).</summary>
     public bool PartyWired => _party;
 
     /// <summary>
-    /// A host over another session (a quick load replaced the area session): same area, archives and profile.
+    /// A host over another session (a quick load replaced the area session): same area, content and profile.
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _scriptArchive, _dialogArchive, session, Profile, _inventory, _party);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, Profile, _inventory, _party, _contentDetail);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;
@@ -179,19 +185,14 @@ public sealed class AreaConversationHost
     private AreaConversationStart Run(AreaSpeaker speaker, int line, CancellationToken token)
     {
         token.ThrowIfCancellationRequested();
-        // As before ARC-SCRIPT-009: the script archive must be the area's second resource input, and the dialog
-        // archive the file first seen here, both by full SHA-256, on every talk and resumption.
-        var scriptIdentity = _snapshot.Inputs.SingleOrDefault(input => input.Key.Role == AreaSourceRole.Resource2);
-        if (scriptIdentity is null || Fingerprint(_scriptArchive) != (scriptIdentity.Length, scriptIdentity.Sha256))
-            return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the script archive is not the area's resource input");
-        var dialogIdentity = Fingerprint(_dialogArchive);
-        _dialogIdentity ??= dialogIdentity;
-        if (dialogIdentity != _dialogIdentity) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "the dialog archive changed");
-        token.ThrowIfCancellationRequested();
+        if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
+        // ARC-SCRIPT-011: one content never mixes two versions of a file; once one changed, nothing more runs from it.
+        if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
         LastRun = result;
+        if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, $"script {result.Script}: a script file changed since it was first read");
         if (result.Outcome == ScrOutcome.Refused)
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
                 $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
@@ -205,7 +206,7 @@ public sealed class AreaConversationHost
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
         token.ThrowIfCancellationRequested();
 
-        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_dialogArchive, dialog.Script, dialog.Node);
+        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node);
         if (dialogStatus != AreaConversationStartStatus.Started) return new(dialogStatus, null, speaker, dialogDetail);
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
@@ -229,12 +230,6 @@ public sealed class AreaConversationHost
 
     private string? SpeakerEntity(DialogParticipantId npc) =>
         npc.Value - 1000 is var index && index >= 0 && index < Speakers.Count ? AreaConversationState.EntityId(Speakers[(int)index].Row) : null;
-
-    private static (long, string) Fingerprint(string path)
-    {
-        using var stream = File.OpenRead(path);
-        return (stream.Length, Convert.ToHexString(SHA256.HashData(stream)).ToLowerInvariant());
-    }
 }
 
 /// <summary>
