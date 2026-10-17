@@ -289,7 +289,7 @@ public partial class TerrainCanvas
             (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
             // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
             // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
-            item.WallFade = isActor || command.Additive || command.Multiply || command.Alpha != 255 ? AreaWallFade.None : AreaWallFadeOf(command);
+            item.WallFade = isActor || command.Additive || command.Unlit ? AreaWallFade.None : AreaWallFadeOf(command);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }

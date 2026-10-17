@@ -70,13 +70,15 @@ public partial class TerrainViewerApp
             if (_worldActor.Session is AreaGridSession walked)
                 ConfigureAreaActor(new AreaMapRuntime(area.Snapshot, result.AreaStepSnapshot!, chart), walked.State.CommittedCell, walked.State.Facing);
         }
-        await RunAreaBlendSmokeAsync(area);
         RefreshAreaStatus();
         if (_nativeSmokeScreenshot is not null)
         {
             using var image = GetViewport().GetTexture().GetImage();
             if (image.SavePng(_nativeSmokeScreenshot) != Error.Ok) throw new InvalidOperationException("AREA_CAPTURE_FAILED");
         }
+        await RunAreaBlendSmokeAsync(area);
+        _camera!.ResetWorld(WorldAnchor, WorldViewport, 1);
+        await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         GD.Print("ARC-RENDER-017 native-smoke map PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = _readyMapName, area.Snapshot.CatalogueMap, area.Snapshot.RuntimeMap, area.Snapshot.Profile,
             Sectors = area.Snapshot.Reconciliation.CoreSectors, area.Snapshot.Reconciliation.CoreTerrain, Bodies = area.Plan.DrawableBodies,

@@ -99,13 +99,15 @@ They are general rules of every body, not of these maps.
   over constant alpha `0x100`. The serialized blit alpha (0–255) is used only by
   constant alpha; any other blit alpha than 255, any other blit bit (subtract,
   the alpha and palette modes) and a non-white blit colour stay
-  `AREA_UNSUPPORTED_BODY_STATE`, and `OF_TRANSLUCENT` stays
+  `AREA_UNSUPPORTED_BODY_STATE`, as does a frozen body (`OF_FROZEN`, drawn
+  additive with a constant colour before any blit blend); `OF_TRANSLUCENT` stays
   `AREA_UNSUPPORTED_TRANSLUCENCY`.
 - **Multiply.** Each opaque source pixel multiplies the colour beneath it;
   transparent pixels leave it unchanged (`AreaDrawCommand.Multiply`, a
   `blend_mul` shader whose output alpha is 1).
 - **Constant alpha.** The body is drawn at its blit alpha (`Alpha`, the source's
-  weight).
+  weight; the shader divides by 255 where the original divides by 256, at most
+  1/255 apart).
 - **Unlit.** Multiply and constant-alpha bodies are drawn with the base palette,
   without ambient or stationary light (`Unlit`, the `Unlit` ambient channel), and
   a wall among them never fades.
@@ -114,8 +116,10 @@ They are general rules of every body, not of these maps.
   92, which replaces every other alpha of those rows; a flat wading body is
   drawn whole at alpha 92 (`WadeRows`, relative to the destination, so a moved
   command keeps its water line). Light still applies. An additive or multiply
-  body keeps its blend over the whole frame, as in the original, where the
-  blit's additive and multiply modes win over the wading alpha.
+  body keeps its blend over the whole frame: the wading pass leaves those modes
+  set beside the wading alpha, and CE's blitter (`tig art.c`) tests additive and
+  multiply before constant alpha. That dispatch is a CE reading, not checked in
+  the executable, and no installed body has the combination.
 
 On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
 and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
@@ -124,11 +128,14 @@ multiply scenery bodies in `void - arronax's interior` and
 `bessietoonesmine-fixed`.
 
 The map native smoke observes each kind the map has (`ARC-RENDER-018
-native-smoke blend PASS`, or `NONE`): for one opaque, uncovered pixel of an
-unscaled body, the colour beneath (the body left out) and the drawn colour must
-match the original's formula within 3/255: multiply `s·d/255`, constant alpha
-and wading rows `d + (s − d)·a/255`; a wading body's rows above the water line
-must be the source itself. Lighting is off during the map smoke. Observed on all
+native-smoke blend PASS`, or `NONE`), after the walk and its screenshot: for one
+opaque, uncovered pixel of an unscaled body that is not a wall, where the result
+differs from both inputs, the colour beneath (the body left out) and the drawn
+colour must match the original's formula within 3/255: multiply `s·d/255`,
+constant alpha and wading rows `d + (s − d)·a/255`; an upright wading body's rows
+above the water line must show the source itself where it differs from the
+colour beneath. The tolerance does not tell alpha 92 from 95. Lighting is off
+during the map smoke. Observed on all
 five maps (multiply on both void maps, alpha 95 in the mine, wading in both
 sewers).
 

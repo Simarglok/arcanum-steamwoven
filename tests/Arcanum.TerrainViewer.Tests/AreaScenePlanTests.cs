@@ -116,6 +116,8 @@ public sealed class AreaScenePlanTests
         // Subtract, other alpha modes, an alpha the drawn branch never reads and an out-of-range alpha stay refused.
         foreach (var (blit, alpha) in new[] { (0x20L, 255L), (0x200L, 255L), (0x400L, 255L), (0x40L, 95L), (0x150L, 95L), (0x140L, 95L), (0L, 95L), (0x100L, 256L), (0x100L, -1L) })
             Assert.ThrowsExactly<InvalidOperationException>(() => Drawn(With(body, (8, blit), (10, alpha))), $"blit 0x{blit:X} alpha {alpha}");
+        // A frozen body takes the original's frozen tint before any blit blend; it is not drawn as an ordinary body.
+        Assert.ThrowsExactly<InvalidOperationException>(() => Drawn(Body(0, flags: 0x10000000)));
     }
     [TestMethod]
     public void WadingBodiesDrawTheirLowerFifteenDestinationRowsOrAFlatBodyWhole()

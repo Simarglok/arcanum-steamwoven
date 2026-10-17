@@ -200,8 +200,10 @@ public sealed class AreaScenePlan
         if (scale is <= 0 or > 200 || (blit & ~0x153u) != 0 || Field(9) != 0xFFFFFF
             || (constant ? blitAlpha is < 0 or > 255 : blitAlpha != 255))
             throw new InvalidOperationException("AREA_UNSUPPORTED_BODY_STATE");
-        // Never silently approximate an unsupported source blend.
+        // Never silently approximate an unsupported source blend; a frozen body (OF_FROZEN) is drawn additive with a
+        // constant colour before any blit blend is considered.
         if ((flags & 0x40) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_TRANSLUCENCY");
+        if ((flags & 0x10000000) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_BODY_STATE");
         // Wading (OF_WADING without OF_WATER_WALKING) as serialized at T0. The wading rows replace only the alpha
         // modes, so an additive or multiply body keeps its blend over the whole frame and does not wade.
         var wading = (flags & 0x20000) != 0 && (flags & 0x40000) == 0 && !additive && !multiply;
