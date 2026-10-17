@@ -14,7 +14,7 @@ public static class TerrainCachePolicy
 {
     public const int MaxDistinctKeys = 4096;
     public const int MaxStaticDistinctKeys = 5;
-    public const int MaxActorDistinctKeys = 184;
+    public const int MaxActorDistinctKeys = 195;
     public const int MaxHumanDistinctKeys = 55;
     // Standalone modes retain their exclusive extension caps. WORLD explicitly
     // reserves all three domains; the legacy overload remains actor-only.

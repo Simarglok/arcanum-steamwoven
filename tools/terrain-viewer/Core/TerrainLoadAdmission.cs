@@ -39,13 +39,13 @@ internal class TerrainLoadAdmission
 
 // Tests may LOWER a budget to exercise the exact before-retention boundaries
 // with tiny real frames. They cannot raise the production count or byte caps.
-internal sealed record TerrainLoadBudget(int Terrain = 4096, int Statics = 5, int Actor = 184, int Total = 4285, long Bytes = 268435456)
+internal sealed record TerrainLoadBudget(int Terrain = 4096, int Statics = 5, int Actor = 195, int Total = 4296, long Bytes = 268435456)
 {
     internal static TerrainLoadBudget Default { get; } = new();
     internal void Validate()
     {
-        if (Terrain is < 0 or > 4096 || Statics is < 0 or > 5 || Actor is < 0 or > 184
-            || Total is < 0 or > 4285 || Bytes is < 0 or > 268435456)
+        if (Terrain is < 0 or > 4096 || Statics is < 0 or > 5 || Actor is < 0 or > 195
+            || Total is < 0 or > 4296 || Bytes is < 0 or > 268435456)
             throw new ArgumentOutOfRangeException(nameof(TerrainLoadBudget));
     }
     internal long Add(long bytes, int total, int domainCount, int domainLimit, int width, int height, TerrainViewerMode mode,

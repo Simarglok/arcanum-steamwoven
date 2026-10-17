@@ -48,7 +48,7 @@ public sealed class ProductionWorldLoadTests
             fixture.AssertDisposed(lastCount>=7?3:2);
         }
         using var extra=new SyntheticWorldSourceFixture();
-        Assert.Throws<ArgumentOutOfRangeException>(()=>extra.Operation(new(Total:4286)));
+        Assert.Throws<ArgumentOutOfRangeException>(()=>extra.Operation(new(Total:4297)));
         Assert.Throws<ArgumentOutOfRangeException>(()=>extra.Operation(new(Bytes:268435457)));
     }
 

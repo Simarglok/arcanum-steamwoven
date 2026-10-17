@@ -87,7 +87,9 @@ internal static class AreaMapLoadOperation
                 checked((int)(command.MapY - plan.Chart.OriginY)), command.FlipX ? 0xC1u : 0u, command.Source.Width, command.Source.Height,
                 new(TerrainDiagnosticMode.EditorDiagnostic, command.Phase, command.MapY, command.MapX))));
         var elapsed = Environment.TickCount64 - started;
-        area = area with { Lighting = lit, UnlitReason = lit is null ? lighting.Failure : null,
+        area = area with { ArtSources = mapPlan.Files.Where(f => f.Member is null && f.Key.Role is not (AreaSourceRole.Loose or AreaSourceRole.Module or AreaSourceRole.Prototype or AreaSourceRole.NormalGameMobile))
+                .GroupBy(f => f.Key).ToDictionary(g => g.Key, g => g.First().Path),
+            Lighting = lit, UnlitReason = lit is null ? lighting.Failure : null,
             UnlitLightsReason = lit is not null && lightsFailure != LightingFailure.None ? lightsFailure : null, FinalUsage = owner.Usage, ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);
         token.ThrowIfCancellationRequested();
