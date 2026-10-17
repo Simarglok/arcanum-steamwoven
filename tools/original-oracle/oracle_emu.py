@@ -5,7 +5,8 @@ caller with the stack balanced and the callee-saved registers kept, and it fails
 
 - "call": an instruction outside the allowed code ranges that is not a stub (any callee nobody allowed);
 - "stub": a stub that rejects its arguments;
-- "read": a data read inside the image outside the allowed globals (state the world model does not define);
+- "read": a data read outside the stack frame of the call (return address and arguments included) and the allowed
+  ranges (image globals or world-model data on the heap that the call names), i.e. state the model does not define;
 - "write": a write anywhere but the stack;
 - "fault": an unmapped or invalid access, or an invalid instruction;
 - "no-return": the instruction limit is reached first;
@@ -99,7 +100,8 @@ class Emulator:
 
     def call(self, function: int, arguments: Sequence[int], *, code: Iterable[Range], stubs: dict[int, Stub] | None = None,
              readable: Iterable[Range] = ()) -> int:
-        """Call `function` (cdecl) with 32-bit `arguments`; returns EAX as a signed 32-bit value."""
+        """Call `function` (cdecl) with 32-bit `arguments`; returns EAX as a signed 32-bit value. `readable` names the image
+        globals and heap data the function may read; stack reads above its arguments fail too."""
         code = tuple(code)
         readable = tuple(readable)
         stubs = dict(stubs or {})
@@ -114,6 +116,7 @@ class Emulator:
         esp -= 4
         mu.mem_write(esp, struct.pack("<I", SENTINEL))
         mu.reg_write(UC_X86_REG_ESP, esp)
+        frame_end = esp + 4 + 4 * len(arguments)  # return address and arguments; nothing above them is defined
         saved = {"ebx": 0x0B0B0B0B, "esi": 0x05050505, "edi": 0x0D0D0D0D, "ebp": 0x0E0E0E0E}
         for name, register in CALLEE_SAVED.items():
             mu.reg_write(register, saved[name])
@@ -152,9 +155,9 @@ class Emulator:
                 fail("call", f"execution reached {address:#x}, outside the allowed code and stubs")
 
         def on_read(uc: Uc, access: int, address: int, size: int, value: int, _: object) -> None:
-            if failure or address in self.stack or address in self.heap:
+            if failure or (address in self.stack and address + size <= frame_end):
                 return
-            if address in self.image_range and any(address in r and address + size <= r.end for r in readable):
+            if any(address in r and address + size <= r.end for r in readable):
                 return
             fail("read", f"read of {size} bytes at {address:#x} outside the world model")
 

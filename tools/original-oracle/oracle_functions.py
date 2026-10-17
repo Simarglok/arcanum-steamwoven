@@ -145,7 +145,8 @@ def run(spec: FunctionSpec, emulator, seed: int, count: int, *, exe_sha256: str,
             state.update(level=level, experience=experience)
             emulator.set_global(XP_TABLE_POINTER, addresses[index])
             result = emulator.call(spec.address, HANDLE, code=code, stubs={STAT_GETTER: stat},
-                                   readable=(Range(XP_TABLE_POINTER, XP_TABLE_POINTER + 4),))
+                                   readable=(Range(XP_TABLE_POINTER, XP_TABLE_POINTER + 4),
+                                             Range(addresses[index], addresses[index] + 4 * MAX_LEVEL)))
             cases.append([index, level, experience, result])
             if progress and case % 1000 == 0:
                 progress(case)

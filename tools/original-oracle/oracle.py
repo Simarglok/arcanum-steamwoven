@@ -60,17 +60,26 @@ def _unicorn_ready() -> bool:
     return getattr(unicorn, "__version__", None) == UNICORN_VERSION
 
 
+def replaceable_venv(environment: Path) -> bool:
+    """Only an absent folder or an existing virtual environment may be (re)created with clear=True."""
+    return not environment.exists() and not environment.is_symlink() or (environment / "pyvenv.cfg").is_file()
+
+
 def ensure_unicorn(argv: list[str]) -> None:
-    """Continue when the pinned Unicorn is importable, else (re)create the private venv from the lock and re-run there."""
-    if _unicorn_ready():
-        return
+    """Continue inside the private venv with the locked Unicorn, else (re)create that venv from the lock and re-run there.
+
+    A Unicorn installed in the host interpreter is never used, so the lock's hashes always apply."""
     if os.environ.get(IN_VENV):
+        if _unicorn_ready():
+            return
         raise SystemExit(f"oracle: Unicorn {UNICORN_VERSION} is not importable in {sys.prefix}")
     environment = Path(os.environ.get("ARCANUM_ORACLE_VENV") or REPO / "local" / "original-oracle" / "venv")
     python = environment / "bin" / "python3"
     stamp = environment / "lock.sha256"
     lock_sha = hashlib.sha256(LOCK.read_bytes()).hexdigest()
     if not python.exists() or not stamp.exists() or stamp.read_text().strip() != lock_sha:
+        if not replaceable_venv(environment):
+            raise SystemExit(f"oracle: {environment} exists and is not a virtual environment; refusing to replace it")
         print(f"oracle: installing Unicorn {UNICORN_VERSION} from {LOCK.relative_to(REPO)} into {environment}", file=sys.stderr)
         venv.EnvBuilder(clear=True, with_pip=True).create(environment)
         install = [str(python), "-m", "pip", "install", "--quiet", "--disable-pip-version-check", "--no-input",
@@ -92,8 +101,8 @@ def generate(args: argparse.Namespace) -> int:
     if not exe:
         raise ValueError("set ARCANUM_EXE or pass --exe (the installed Arcanum.exe)")
     out = checked_out_dir(Path(args.out) if args.out else default_out())
-    image = oracle_pe.load(Path(exe))
     addresses = list(oracle_functions.FUNCTIONS) if args.all or not args.function else [oracle_functions.parse_address(a) for a in args.function]
+    image = oracle_pe.load(Path(exe))
     out.mkdir(parents=True, exist_ok=True)
     for address in addresses:
         spec = oracle_functions.FUNCTIONS[address]
@@ -110,7 +119,12 @@ def generate(args: argparse.Namespace) -> int:
             return 1
         target = out / f"{spec.key}.json"
         with tempfile.NamedTemporaryFile("w", dir=out, delete=False, suffix=".tmp") as stream:
-            json.dump(document, stream, separators=(",", ":"))
+            try:
+                json.dump(document, stream, separators=(",", ":"))
+            except BaseException:
+                stream.close()
+                os.unlink(stream.name)
+                raise
         os.replace(stream.name, target)
         print(f"oracle: 0x{spec.key} {spec.name}: {args.count} inputs, seed {args.seed}, exe {image.sha256}, "
               f"{time.monotonic() - started:.1f} s -> {target}")

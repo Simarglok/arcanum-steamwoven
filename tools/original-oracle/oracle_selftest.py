@@ -17,7 +17,7 @@ import unittest
 import oracle
 import oracle_functions
 import oracle_pe
-from oracle_emu import Emulator, Range, RunFailure, StubRejected
+from oracle_emu import HEAP_BASE, Emulator, Range, RunFailure, StubRejected
 
 BASE = 0x00400000
 TEXT = BASE + 0x1000
@@ -40,6 +40,8 @@ FAULT = TEXT + 0x60  # reads unmapped memory
 READS_OTHER = TEXT + 0x70  # reads a global outside the model
 WRITES = TEXT + 0x80  # writes the model's global
 CLOBBERS = TEXT + 0x90  # does not restore ebx
+READS_HEAP = TEXT + 0xA0  # reads the first heap word
+SECOND_ARGUMENT = TEXT + 0xB0  # returns its second argument
 CODE = {
     SUM: bytes.fromhex("8b442404" "8b4c2408" "8d0448" "c3"),  # mov eax,[esp+4]; mov ecx,[esp+8]; lea eax,[eax+ecx*2]; ret
     STAT: bytes.fromhex("6a11" "ff74240c" "ff74240c") + b"\xe8" + rel32(STAT + 10, 5, STUB)  # push 0x11; push hi; push lo; call STUB
@@ -50,6 +52,8 @@ CODE = {
     READS_OTHER: b"\xa1" + struct.pack("<I", OTHER) + b"\xc3",                                # mov eax,[OTHER]; ret
     WRITES: b"\xa3" + struct.pack("<I", GLOBAL) + b"\xc3",                                    # mov [GLOBAL],eax; ret
     CLOBBERS: bytes.fromhex("31db" "c3"),                                                     # xor ebx,ebx; ret
+    READS_HEAP: b"\xa1" + struct.pack("<I", HEAP_BASE) + b"\xc3",                             # mov eax,[HEAP_BASE]; ret
+    SECOND_ARGUMENT: bytes.fromhex("8b442408" "c3"),                                          # mov eax,[esp+8]; ret
     STUB: b"\xcc",                                                                            # int3
 }
 
@@ -157,6 +161,28 @@ class OracleSelfTest(unittest.TestCase):
         self.assertEqual(self.failure(STAT, (1, 2), code=own(STAT), stubs={STUB: stub}).kind, "read")
         self.assertEqual(self.failure(READS_OTHER, code=own(READS_OTHER), readable=(Range(GLOBAL, GLOBAL + 4),)).kind, "read")
         self.assertEqual(self.failure(WRITES, code=own(WRITES), readable=(Range(GLOBAL, GLOBAL + 4),)).kind, "write")
+
+    def test_heap_data_and_arguments_are_readable_only_where_the_call_defines_them(self):
+        emulator = self.emulator()
+        emulator.write_heap(struct.pack("<I", 1234))
+        self.assertEqual(emulator.call(READS_HEAP, (), code=own(READS_HEAP), readable=(Range(HEAP_BASE, HEAP_BASE + 4),)), 1234)
+        with self.assertRaises(RunFailure) as caught:
+            emulator.call(READS_HEAP, (), code=own(READS_HEAP), readable=(Range(HEAP_BASE + 4, HEAP_BASE + 8),))
+        self.assertEqual(caught.exception.kind, "read")
+        self.assertEqual(emulator.call(SECOND_ARGUMENT, (1, 77), code=own(SECOND_ARGUMENT)), 77)
+        with self.assertRaises(RunFailure) as caught:  # a function given fewer arguments than it reads
+            emulator.call(SECOND_ARGUMENT, (1,), code=own(SECOND_ARGUMENT))
+        self.assertEqual(caught.exception.kind, "read")
+
+    def test_only_an_absent_folder_or_a_venv_is_replaced(self):
+        root = Path(self.temp.name)
+        self.assertTrue(oracle.replaceable_venv(root / "absent"))
+        (root / "plain").mkdir()
+        (root / "plain" / "keep.txt").write_text("x")
+        self.assertFalse(oracle.replaceable_venv(root / "plain"))
+        (root / "env").mkdir()
+        (root / "env" / "pyvenv.cfg").write_text("home = /usr\n")
+        self.assertTrue(oracle.replaceable_venv(root / "env"))
 
     def test_a_fault_a_missing_return_and_a_clobbered_register_fail(self):
         self.assertEqual(self.failure(FAULT, code=own(FAULT)).kind, "fault")

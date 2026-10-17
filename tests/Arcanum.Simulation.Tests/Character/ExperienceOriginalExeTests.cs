@@ -46,6 +46,20 @@ public sealed class ExperienceOriginalExeTests
             new("fallback when the next level is just reached", c => c.Level is >= 1 and < ExperienceRules.MaxLevel
                 && ExperienceRules.ToNextLevel(c.Table!, c.Level, c.Experience) == 0 ? ExperienceRules.ProgressFallback : Real(c)),
             new("level 0 answers 0", c => c.Level == 0 ? 0 : Real(c)));
+        // Not failed by the comparison above, but not unchecked either: on every XP3 input the original must give the
+        // progress with a wrapping 32-bit 1000 × remaining (the ledger's description), from the C# remainder and step.
+        var xp3 = file.Cases.Where(IsXp3).ToList();
+        var unexplained = xp3.Where(c => WrappedProgress(c) != c.Result).ToList();
+        TestContext.WriteLine($"  XP3 inputs explained by the 32-bit product: {xp3.Count - unexplained.Count}/{xp3.Count}");
+        Assert.AreEqual(0, unexplained.Count, unexplained.Count == 0 ? "" :
+            $"XP3 input not explained by the 32-bit product: {unexplained[0].Describe()} original {unexplained[0].Result}");
+    }
+
+    private static int WrappedProgress(OracleCase c)
+    {
+        var remaining = ExperienceRules.ToNextLevel(c.Table!, c.Level, c.Experience);
+        var step = c.Table!.Threshold(c.Level + 1) - c.Table.Threshold(c.Level);
+        return unchecked(1000 - unchecked(1000 * remaining) / step);
     }
 
     [TestMethod, TestCategory(Category)]

@@ -126,8 +126,9 @@ ARCANUM_EXE=/path/to/Arcanum.exe ./arcanum oracle         # every function: gene
 
 `ARCANUM_EXE` is the installed retail executable (SHA-256 `9bd80511…3678d52`, the
 [pinned 1.0.7.4 file](../research/original-executable-check.md#inputs)); `./arcanum oracle` also takes `--exe` or
-finds `Arcanum.exe` in the configured game folder. Generated files go to `research-private/oracle/` (or
-`ARCANUM_ORACLE_DIR`) and never into git. `./arcanum oracle` sets `ARCANUM_ORACLE_REQUIRED=1`, so a missing file fails
+finds `Arcanum.exe` in the configured game folder. Generated files go to `research-private/oracle/` of the
+checkout (`oracle.py generate` also takes `--out` or `ARCANUM_ORACLE_DIR`; the tests read `ARCANUM_ORACLE_DIR`) and
+never into git. `./arcanum oracle` sets `ARCANUM_ORACLE_REQUIRED=1`, so a missing file fails
 the tests instead of leaving them inconclusive.
 
 ## Opt-in original data
