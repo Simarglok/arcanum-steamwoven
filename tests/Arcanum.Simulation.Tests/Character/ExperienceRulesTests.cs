@@ -36,6 +36,30 @@ public sealed class ExperienceRulesTests
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => Table().Threshold(52));
     }
 
+    // ARC-WORLD-033, ledger XP3. Level 2 needs 3,000,000, so at level 1 the step is 3,000,000 and 1000 × remaining stops fitting
+    // in 32 bits above 2,147,483 remaining.
+    [TestMethod]
+    public void OriginalWrapsTheProgressProductAboveTheXp3BoundAndSteamwovenDoesNot()
+    {
+        var table = ExperienceTable.Create([0, .. Enumerable.Range(0, ExperienceRules.MaxLevel - 1).Select(i => 3_000_000 + 1000 * i)])!;
+        int Progress(int remaining, ExperienceRuleProfile rules) => ExperienceRules.Progress(table, 1, 3_000_000 - remaining, rules);
+        // Below the bound (1000 − 666) and at it (1000 × 2,147,483 = 2,147,483,000 fits; 1000 − 715), in both modes.
+        Assert.AreEqual(334, Progress(2_000_000, ExperienceRuleProfile.Steamwoven));
+        Assert.AreEqual(334, Progress(2_000_000, ExperienceRuleProfile.Original));
+        Assert.AreEqual(285, Progress(2_147_483, ExperienceRuleProfile.Steamwoven));
+        Assert.AreEqual(285, Progress(2_147_483, ExperienceRuleProfile.Original));
+        // Just above: 2,147,484,000 wraps to −2,147,483,296; −2,147,483,296 / 3,000,000 = −715, so the original shows 1715.
+        Assert.AreEqual(285, Progress(2_147_484, ExperienceRuleProfile.Steamwoven));
+        Assert.AreEqual(1715, Progress(2_147_484, ExperienceRuleProfile.Original));
+        // Far above (nothing earned yet): 3,000,000,000 wraps to −1,294,967,296, / 3,000,000 = −431, so 1431 against 0.
+        Assert.AreEqual(0, Progress(3_000_000, ExperienceRuleProfile.Steamwoven));
+        Assert.AreEqual(1431, Progress(3_000_000, ExperienceRuleProfile.Original));
+        Assert.IsTrue(ExperienceRuleProfile.Original.ProgressProductWraps);
+        Assert.IsFalse(ExperienceRuleProfile.Steamwoven.ProgressProductWraps);
+        Assert.AreSame(ExperienceRuleProfile.Original, ExperienceRuleProfile.FromName("original"));
+        Assert.IsNull(ExperienceRuleProfile.FromName("Original"));
+    }
+
     [TestMethod]
     public void ToNextLevelAndProgressFollowTheSourceFormulas()
     {
@@ -46,14 +70,19 @@ public sealed class ExperienceRulesTests
         Assert.AreEqual(-7, ExperienceRules.ToNextLevel(table, 0, 7));
         Assert.AreEqual(ExperienceRules.NoNextLevel, ExperienceRules.ToNextLevel(table, 51, 0));
 
-        // Level 2 → 3 is a step of 1030; at 1600 the PC still needs 440: 1000 − 440 000 / 1030 = 1000 − 427.
-        Assert.AreEqual(573, ExperienceRules.Progress(table, 2, 1600));
-        Assert.AreEqual(0, ExperienceRules.Progress(table, 2, 1010));
-        Assert.AreEqual(1000, ExperienceRules.Progress(table, 2, 2040));
-        Assert.AreEqual(ExperienceRules.ProgressFallback, ExperienceRules.Progress(table, 2, 2041));
-        Assert.AreEqual(ExperienceRules.ProgressFallback, ExperienceRules.Progress(table, 0, 0));
-        Assert.AreEqual(0, ExperienceRules.Progress(table, 51, 0));
-        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ExperienceRules.Progress(table, 52, 0));
+        // Level 2 → 3 is a step of 1030; at 1600 the PC still needs 440: 1000 − 440 000 / 1030 = 1000 − 427. Both modes agree
+        // on every table step below the XP3 bound.
+        foreach (var rules in ExperienceRuleProfile.All)
+        {
+            Assert.AreEqual(573, ExperienceRules.Progress(table, 2, 1600, rules));
+            Assert.AreEqual(0, ExperienceRules.Progress(table, 2, 1010, rules));
+            Assert.AreEqual(1000, ExperienceRules.Progress(table, 2, 2040, rules));
+            Assert.AreEqual(ExperienceRules.ProgressFallback, ExperienceRules.Progress(table, 2, 2041, rules));
+            Assert.AreEqual(ExperienceRules.ProgressFallback, ExperienceRules.Progress(table, 0, 0, rules));
+            Assert.AreEqual(0, ExperienceRules.Progress(table, 51, 0, rules));
+            Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ExperienceRules.Progress(table, 52, 0, rules));
+        }
+        Assert.ThrowsExactly<ArgumentNullException>(() => ExperienceRules.Progress(table, 2, 1600, null!));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ExperienceRules.ToNextLevel(table, -1, 0));
     }
 

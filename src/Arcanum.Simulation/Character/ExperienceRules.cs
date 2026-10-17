@@ -79,18 +79,22 @@ public static class ExperienceRules
     /// <summary>
     /// Progress toward the next level in thousandths (<c>level_progress_towards_next_level</c>, 0x4A6900):
     /// <c>1000 − 1000 × remaining / step</c>, truncated; 0 at or above the maximum; <see cref="ProgressFallback"/> for level 0
-    /// or when the next level is already reached.
+    /// or when the next level is already reached. The product is exact unless <paramref name="rules"/> has
+    /// <see cref="ExperienceRuleProfile.ProgressProductWraps"/> (Original, ledger XP3): then it is a wrapping 32-bit product,
+    /// and so is the final subtraction, as in the original.
     /// </summary>
-    [OriginalFunction(0x4A6900, OriginalFunctionScope.Partial)]
-    public static int Progress(ExperienceTable table, int level, int experience)
+    [OriginalFunction(0x4A6900, OriginalFunctionScope.Full)]
+    public static int Progress(ExperienceTable table, int level, int experience, ExperienceRuleProfile rules)
     {
         ArgumentNullException.ThrowIfNull(table);
+        ArgumentNullException.ThrowIfNull(rules);
         ValidateLevel(level);
         if (level >= MaxLevel) return 0;
         if (level == 0) return ProgressFallback;
         var remaining = ToNextLevel(table, level, experience);
         if (remaining < 0) return ProgressFallback;
-        return 1000 - (int)(1000L * remaining / (table.Thresholds[level] - table.Thresholds[level - 1]));
+        var step = table.Thresholds[level] - table.Thresholds[level - 1];
+        return rules.ProgressProductWraps ? unchecked(1000 - unchecked(1000 * remaining) / step) : 1000 - (int)(1000L * remaining / step);
     }
 
     /// <summary>Character points for the levels after <paramref name="from"/> up to <paramref name="to"/>

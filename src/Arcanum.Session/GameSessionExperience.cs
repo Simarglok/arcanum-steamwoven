@@ -145,7 +145,7 @@ public sealed partial class GameSessionOwner
         var table = _experience.Rules?.Levels;
         return new(hero.Level, hero.Experience, hero.UnspentPoints,
             table is null ? null : Simulation.Character.ExperienceRules.ToNextLevel(table, hero.Level, hero.Experience),
-            table is null ? null : Simulation.Character.ExperienceRules.Progress(table, hero.Level, hero.Experience));
+            table is null ? null : Simulation.Character.ExperienceRules.Progress(table, hero.Level, hero.Experience, _rules.Experience));
     }
 
     /// <summary>An NPC's saved experience record, or null while the session never changed it. An invalid entity id throws.</summary>

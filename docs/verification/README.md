@@ -20,9 +20,8 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 | `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2, the receipt for F3 |
 | `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
 
-The first rows are the experience functions of ARC-WORLD-030: three at F3 (oracle; progress is `partial` because the XP3
-wrap is not implemented yet: a known difference keeps a row from `full` even when the oracle records it), five partial
-at F2 (two readings,
+The first rows are the experience functions of ARC-WORLD-030: three full at F3 (oracle; progress since its XP3 switch,
+ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), five partial at F2 (two readings,
 [ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030)). Other domains add their
 rows when they are migrated.
 
@@ -39,7 +38,7 @@ or a `full` or `partial` row has no marked method.
 
 `./arcanum oracle` ([function oracle](../workflow/toolchain.md#function-oracle)) has each `OriginalExe` test write
 `receipts/<ADDR>.json`: function, name, method, seed, inputs, mutants planted and caught, unexpected differences, the
-recorded difference (XP3) with its counts, result, executable SHA-256, the method's IL hash and the build configuration.
+other rule mode's differences (Steamwoven progress: only on XP3 inputs) with their counts, result, executable SHA-256, the method's IL hash and the build configuration.
 The IL hash is a SHA-256 of the IL of the method and of every method of the same assembly it reaches (callees, accessors,
 lambdas, local functions and state machines), with every metadata token replaced by the name it refers to and the
 ordinals of compiler-generated names dropped (`tests/Shared/MethodIlHash.cs`): it changes with that code and not with

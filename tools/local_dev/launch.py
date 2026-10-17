@@ -60,7 +60,7 @@ ORACLE_TEST_CLASS = "tests/Arcanum.Simulation.Tests/Character/ExperienceOriginal
 ORACLE_RECEIPTS = "docs/verification/receipts"
 ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4A68B0": "ToNextLevelMatchesTheOriginal",
-    "0x4A6900": "ProgressMatchesTheOriginalExceptTheXp3Wrap",
+    "0x4A6900": "ProgressMatchesTheOriginal",
     "0x4A6980": "BonusPointsMatchTheOriginal",
 }
 
