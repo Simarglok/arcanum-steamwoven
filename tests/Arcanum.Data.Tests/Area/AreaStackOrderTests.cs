@@ -81,6 +81,36 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void A_module_copy_of_a_prototype_is_ignored_and_a_module_only_prototype_is_missing()
+    {
+        // ARC-DATA-026: the original reads prototypes before it mounts the module.
+        var changed = Prototype(); changed[^1] ^= 1;
+        Install(arcanum1: Base());
+        Loose("modules/Mod/proto/007001 - test.pro", changed);
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            var prototype = result.Plan!.Files.Single(f => f.Key == new AreaInputKey(AreaSourceRole.Prototype, 7001));
+            Assert.IsTrue(prototype.Path.EndsWith(Path.Combine("data", "proto", "007001 - test.pro"), StringComparison.Ordinal), prototype.Path);
+            Assert.AreEqual(Hash(Prototype()), result.Plan.Plan.Identities.Single(i => i.Key == prototype.Key).Sha256);
+        }
+        File.Delete(Path.Combine(_root, "data", "proto", "007001 - test.pro"));
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001"), (result.Status, result.Detail));
+        }
+        Loose("data/proto/007001 - a.pro", Prototype());
+        Loose("data/proto/007001 - b.pro", Prototype());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001 is held by two files"), (result.Status, result.Detail));
+        }
+    }
+
+    [TestMethod]
     public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
     {
         Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);

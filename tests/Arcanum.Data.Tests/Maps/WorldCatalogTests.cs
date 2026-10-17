@@ -107,14 +107,19 @@ public sealed class WorldCatalogTests
     {
         StandardMap("alpha");
         StandardMap("beta");
-        Write("proto/007001 - Other.pro", AreaIdentityTests.Prototype());
-        Write("proto/7002.pro", AreaIdentityTests.Prototype());
+        WriteBase("proto/007001 - Other.pro", AreaIdentityTests.Prototype());
+        WriteBase("proto/7002.pro", AreaIdentityTests.Prototype());
+        Write("proto/007003 - Module.pro", AreaIdentityTests.Prototype());
         using var stack = Stack();
 
         var catalog = WorldCatalog.Open(stack, new WorldLoaderOptions { MaxMaps = 1 });
         Assert.AreEqual(1, catalog.Maps.Count);
-        CollectionAssert.AreEquivalent(new[] { "LimitExceeded maps/beta", "Malformed proto/007001 - thing.pro", "UnrecognisedFile proto/7002.pro" },
-            catalog.Issues.Select(i => $"{i.Code} {i.Path}").ToArray());
+        // ARC-DATA-026: a number with two files is read from neither; a module copy is never read.
+        CollectionAssert.AreEquivalent(new[] { "LimitExceeded maps/beta", "Malformed proto/007001 - other.pro", "Malformed proto/007001 - thing.pro",
+            "UnrecognisedFile proto/7002.pro", "IgnoredModuleCopy proto/007003 - module.pro" }, catalog.Issues.Select(i => $"{i.Code} {i.Path}").ToArray());
+        Assert.AreEqual(0, catalog.PrototypeNumbers.Count);
+        Assert.AreEqual("duplicate prototype number", catalog.ReadPrototype(7001).Issue!.Detail);
+        Assert.AreEqual(WorldIssueCode.Missing, catalog.ReadPrototype(7003).Issue!.Code);
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorldCatalog.Open(stack, new WorldLoaderOptions { MaxTerrainSectors = long.MaxValue }));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => WorldCatalog.Open(stack, new WorldLoaderOptions { MaxJumpPoints = int.MaxValue }));
     }
@@ -290,9 +295,14 @@ public sealed class WorldCatalogTests
         return opened.Stack!;
     }
 
-    private void Write(string relative, byte[] bytes)
+    private void Write(string relative, byte[] bytes) => WriteAt(Path.Combine("modules", "Mod"), relative, bytes);
+
+    /// <summary>A file of the installation's <c>data</c> folder: prototypes are read from the base sources only.</summary>
+    private void WriteBase(string relative, byte[] bytes) => WriteAt("data", relative, bytes);
+
+    private void WriteAt(string folder, string relative, byte[] bytes)
     {
-        var path = Path.Combine(_root, "modules", "Mod", relative.Replace('/', Path.DirectorySeparatorChar));
+        var path = Path.Combine(_root, folder, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.WriteAllBytes(path, bytes);
     }
@@ -314,7 +324,7 @@ public sealed class WorldCatalogTests
         Write($"maps/{name}/map.jmp", jmp);
         Write($"maps/{name}/0.sec", AreaIdentityTests.Sector(AreaIdentityTests.Record(AreaIdentityTests.Id(2, 1), location: 5L | (6L << 32))));
         Write($"maps/{name}/1.mob", AreaIdentityTests.Record(AreaIdentityTests.Id(2, 2)));
-        Write("proto/007001 - Thing.pro", AreaIdentityTests.Prototype());
+        WriteBase("proto/007001 - Thing.pro", AreaIdentityTests.Prototype());
     }
 
     private static byte[] Properties()

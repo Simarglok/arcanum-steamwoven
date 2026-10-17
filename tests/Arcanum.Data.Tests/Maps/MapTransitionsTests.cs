@@ -221,7 +221,10 @@ public sealed class MapTransitionsTests
         var tdf = new byte[32 + 8];
         BinaryPrimitives.WriteSingleLittleEndian(tdf, 1.2f); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(8), 2); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(16), 2);
         foreach (var name in new[] { "alpha", "beta" }) { Write($"maps/{name}/map.prp", Properties()); Write($"maps/{name}/terrain.tdf", tdf); }
-        Write("proto/007001 - Thing.pro", AreaIdentityTests.Prototype());
+        // Prototypes are read from the base sources only (ARC-DATA-026).
+        var proto = Path.Combine(_root, "data", "proto");
+        Directory.CreateDirectory(proto);
+        File.WriteAllBytes(Path.Combine(proto, "007001 - Thing.pro"), AreaIdentityTests.Prototype());
     }
 
     private static Clause Teleport(byte focus, int map, int x, int y) => Clause.Of(44, (focus, 0), N(map), N(x), N(y));

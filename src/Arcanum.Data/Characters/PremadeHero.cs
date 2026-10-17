@@ -165,8 +165,10 @@ public static class PremadeHeroReader
     }
 
     /// <summary>
-    /// A lookup over one loose prototype directory (the installation's <c>data/proto</c>): file <c>NNNNNN - *.pro</c> by
-    /// number, ASCII case-insensitive on the extension. More than one match is <see cref="PrototypeFileStatus.Ambiguous"/>.
+    /// A lookup over one loose prototype directory: file <c>NNNNNN - *.pro</c> by number, ASCII case-insensitive on the
+    /// extension. More than one match is <see cref="PrototypeFileStatus.Ambiguous"/>. For synthetic fixtures only: it sees
+    /// no archive and no other folder, so game code reads prototypes through <see cref="Content.ContentPrototypes"/>
+    /// (ARC-DATA-026), the files the original reads.
     /// </summary>
     public static Func<int, PrototypeFile> DirectoryPrototypes(string directory)
     {

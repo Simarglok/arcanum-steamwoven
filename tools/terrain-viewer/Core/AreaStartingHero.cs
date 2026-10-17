@@ -44,7 +44,8 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
 /// <see cref="PremadeHeroReader"/> (ARC-WORLD-015) from the game folder that holds the module archive
-/// (<see cref="AreaContentRoot.Discover"/>, the rule of the description tables and scripts): the loose <c>data/proto</c> prototypes, <c>rules\effect.mes</c>,
+/// (<see cref="AreaContentRoot.Discover"/>, the rule of the description tables and scripts): the prototypes the original reads
+/// (<see cref="ContentPrototypes"/>, ARC-DATA-026), <c>rules\effect.mes</c>,
 /// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>; since ARC-UI-007
 /// also the experience tables the session awards with and the character sheet reads the next level from (ARC-WORLD-030).
 /// Godot-free; a typed status, never an exception for data.
@@ -92,8 +93,8 @@ public static class AreaStartingHero
         if (effects is null || sources is null || menu is null || questLevels is null || detail is not null)
             return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
         if (Experience(levels!, quests!, questLevels, out detail) is not { } experience) return Refused(AreaHeroStatus.ExperienceInvalid, hero, detail!);
-        var read = PremadeHeroReader.Read(new(PremadeHeroReader.DirectoryPrototypes(Path.Combine(found.Plan!.GameRoot, "data", "proto")), effects, sources, buy),
-            hero.BasicPrototype);
+        // ARC-DATA-026: prototypes from the content stack's base sources, as the original reads them.
+        var read = PremadeHeroReader.Read(new(ContentPrototypes.Open(stack).Read, effects, sources, buy), hero.BasicPrototype);
         if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
             return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");
         if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
