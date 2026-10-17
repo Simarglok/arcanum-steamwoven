@@ -544,6 +544,7 @@ public partial class TerrainViewerApp
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
+        NoteMapEntries(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;

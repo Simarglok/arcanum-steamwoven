@@ -250,6 +250,7 @@ public partial class TerrainViewerApp : Node
     /// <summary>Sole failure publication route for normal loads and self-test injection.</summary>
     private void PublishFailure(TerrainViewerMode mode, TerrainViewerError error)
     {
+        _lastPublishedFailure = $"{error.Stage}/{error.Code}";
         if (IsWorldMode(mode))
         {
             _worldGate.Close(); _worldReducer.Quarantine();

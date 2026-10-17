@@ -183,10 +183,16 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
   (scenery or a portal) is a use: accepted within Chebyshev distance 2 by the
   ARC-WORLD-009 use rule (`AreaUseRule`, now shared with the Crash Site pair),
   otherwise the click route first walks to the nearest cell from which the rule
-  accepts the use, and the use is asked on arrival. Entering a jump point's tile
-  or an unconditional tile script's tile fires it, the jump point first
-  (ledger TR3). One transfer is pending at a time; the stick, clicks and hover
-  actions wait while it is, and a reset or reload drops it.
+  accepts the use, and the use is asked on arrival; an exit to a map that map
+  mode cannot open is refused at once, without the walk. Every tile the actor
+  steps into is checked in step order, also when one frame completes several
+  steps: a jump point or an unconditional tile script there fires, the jump
+  point first (ledger TR3), and stops the click route (the actor may stand a
+  step further when the frame had already started it). Sector scripts are read
+  but none of the installed ones teleports, so they are not wired. One transfer
+  is pending at a time; the stick, clicks and hover actions wait while it is,
+  and a reset or reload drops it; a reset puts the actor on its start without
+  firing the start tile, as a load does.
 - **Destinations.** A transfer applies once the actor is settled. On the same
   map the actor moves to the authored arrival. Another map must be one map mode
   can open: listed in the map list with 1 to 256 sector files (78 of the 79
@@ -197,13 +203,20 @@ quest flag, a held item, a dialog) is not a trigger here (SCRIPT slice S4).
   actor starts exactly there when the step evidence admits the tile (the
   original places the player without a passability check, W9), otherwise at the
   map-list arrival rule. A palette reload afterwards reloads the arrival map.
-- **Session.** The game session is carried over: when the new map is
+- **Session.** A transfer leaves combat mode, as the original's teleport does
+  (ARC-COMBAT-004). The game session is carried over: when the new map is
   published, its actor placement moves to the new map and arrival in one
   session step, and the new map's T0 items are attached beside those of the maps
-  already visited. A map without lighting keeps the carried session. If the
-  destination does not load, the origin map is loaded again with the actor where
-  the use was and the same session (this fallback is not observed by the
-  smoke).
+  already visited (the session holds the seeds of at most 64 maps, and two maps
+  listing one object id refuse the second seed; then the inventory is
+  unavailable on that map). A map without lighting keeps the carried session. If
+  the destination's load fails before the scene is published, the origin map is
+  loaded again with the actor where the transfer started and the same session,
+  and the HUD names the failure (this fallback is not observed by the smoke); a
+  failure after publication (a visible upload) is shown like any load failure.
+  Reading a map's transitions adds a second pass over its sector files to each
+  load: about 0.3 s for K'na Tha, under 0.1 s for the other large maps, all of
+  it transient.
 - **Not covered.** A teleport into another jump point does not chain (the
   original nests up to 9). Tile scripts fire for the player only (the original
   runs them for any critter). No fade, sound, movie or time advance of a

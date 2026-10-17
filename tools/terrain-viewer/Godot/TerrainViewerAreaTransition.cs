@@ -90,7 +90,7 @@ public partial class TerrainViewerApp
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
         if (!ReferenceEquals(_areaSession, _mapHandoff?.Session)) _areaSession?.Dispose();
-        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapLastCell = null;
+        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear();
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
     }
 

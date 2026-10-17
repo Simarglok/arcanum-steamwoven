@@ -19,12 +19,18 @@ public partial class TerrainViewerApp
 {
     private AreaMapTransfers? _mapTransfers;
     private MapTransferHandoff? _mapHandoff;
-    private AreaStepCell? _mapLastCell;
+    // Tiles the actor stepped into since the last frame, in order (a frame can complete several steps; ledger TR3 fires on each).
+    private readonly Queue<AreaStepCell> _mapEntered = new();
+    private string? _lastPublishedFailure;
 
     /// <summary>A transfer to another map in progress: the session it carries (null on an unlit map without one), the
-    /// transfer, the facing, and the origin map and cell to fall back to.</summary>
+    /// transfer, the facing, and the origin map and cell to fall back to. <see cref="Loading"/> is the map being loaded:
+    /// the destination, or the origin again after the destination failed (<see cref="Failure"/>).</summary>
     private sealed record MapTransferHandoff(GameSessionOwner? Session, AreaMapTransfer Transfer, NeighborDirection Facing,
-        TerrainViewerArguments Origin, AreaStepCell OriginCell, bool Fallback = false);
+        TerrainViewerArguments Origin, AreaStepCell OriginCell, string Loading, string? Failure = null)
+    {
+        public bool Fallback => Failure is not null;
+    }
 
     private bool AreaTransferPending => _areaTransitions?.Pending is not null || _mapTransfers?.Pending is not null || _mapHandoff is not null;
 
@@ -34,15 +40,17 @@ public partial class TerrainViewerApp
     /// <summary>The session the arriving map adopts: the carried one of a transfer to this map, else null.</summary>
     private GameSessionOwner? AdoptHandoffSession(TerrainViewerArguments arguments)
     {
-        if (_mapHandoff is not { } handoff || !string.Equals(handoff.Transfer.To.Name, arguments.AreaMapName, StringComparison.Ordinal)) return null;
+        if (_mapHandoff is not { } handoff || !string.Equals(handoff.Loading, arguments.AreaMapName, StringComparison.Ordinal)) return null;
         return handoff.Session;
     }
 
     private void StartMapTransfers(TerrainViewerArguments arguments, TerrainLoadResult result)
     {
-        _mapTransfers = null; _mapLastCell = null;
+        _mapTransfers = null; _mapEntered.Clear();
         var area = result.Area!; var steps = result.AreaStepSnapshot!; var chart = area.Plan.Chart;
         var handoff = _mapHandoff; _mapHandoff = null;
+        // A carried session that this map did not adopt (another load published meanwhile) is released.
+        if (handoff?.Session is { } stray && !ReferenceEquals(stray, _areaSession)) { stray.Dispose(); handoff = null; }
         if (handoff is not null && _areaSession is { } session)
         {
             // The carried session records the actor on the arrival map in one step.
@@ -52,6 +60,7 @@ public partial class TerrainViewerApp
             GD.Print("ARC-WORLD-031 transfer arrived " + System.Text.Json.JsonSerializer.Serialize(new {
                 From = handoff.Transfer.FromMap, To = area.Snapshot.RuntimeMap, Arrival = arrival, handoff.Fallback,
                 Session = placed.Disposition.ToString(), placed.Failure, Revision = session.Version.Revision }));
+            if (placed.Disposition == GameSessionDisposition.Rejected) handoff = handoff with { Failure = handoff.Failure ?? $"session refused the arrival ({placed.Failure})" };
         }
         if (result.MapTransitions is not { } transitions || result.MapDestinations is not { } destinations)
         {
@@ -59,8 +68,8 @@ public partial class TerrainViewerApp
             return;
         }
         _mapTransfers = new(new(area.Snapshot, steps, chart), transitions, destinations);
-        _mapLastCell = chart.ToWorld(chart.Spawn);
-        var arrived = handoff is null ? "" : handoff.Fallback ? $"; transfer to '{handoff.Transfer.To.Name}' failed, back where the use was" : $"; arrived from map {handoff.Transfer.FromMap}";
+        var arrived = handoff is null ? "" : handoff.Fallback ? $"; transfer to '{handoff.Transfer.To.Name}' failed ({handoff.Failure}), back where it started"
+            : $"; arrived from map {handoff.Transfer.FromMap}";
         _areaUseStatus = $"map {arguments.AreaMapName}: {_mapTransfers.Triggers.Count} exit objects, {_mapTransfers.TriggerCells.Count} exit tiles{arrived}";
         GD.Print("ARC-WORLD-031 transfers-ready " + System.Text.Json.JsonSerializer.Serialize(new {
             Map = arguments.AreaMapName, area.Snapshot.RuntimeMap, _mapTransfers.Exits, Objects = _mapTransfers.Triggers.Count,
@@ -73,6 +82,13 @@ public partial class TerrainViewerApp
         if (_mapTransfers is null || _worldActor.Session is not AreaGridSession session || AreaObjectAtScreen(screen) is not { } hit || _mapTransfers.Site(hit) is null) return false;
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         CancelTalkApproach("a use click replaced it"); CancelInventoryApproach("a use click replaced it");
+        // An exit map mode cannot take is refused at once, without walking there.
+        if (_mapTransfers.Refusal(_mapTransfers.Site(hit)!) is { } refusal)
+        {
+            _areaUseAfterRoute = null;
+            _areaUseStatus = $"use refused: {AreaUseOutcome.DestinationUnavailable} {refusal}"; RefreshAreaStatus();
+            return true;
+        }
         var result = _mapTransfers.RequestUse(hit, actor);
         _areaUseAfterRoute = null;
         if (result.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_USE");
@@ -119,7 +135,8 @@ public partial class TerrainViewerApp
         {
             CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
             if (_mapTransfers.Clear() is { } dropped) { _areaUseStatus = $"transfer to '{dropped.To.Name}' cancelled by reset/reload"; RefreshAreaStatus(); }
-            _mapLastCell = null;
+            // A reset puts the actor back on its spawn without entering it, as a load does.
+            _mapEntered.Clear();
             return false;
         }
         if (_worldActor.Session is not AreaGridSession session) return false;
@@ -133,22 +150,20 @@ public partial class TerrainViewerApp
             else _areaUseStatus = "walk to use stopped: " + (route.StopReason ?? route.Status.ToString());
             RefreshAreaStatus();
         }
-        // The original fires a jump point or tile script on every tile the player enters (ledger TR3).
-        var cell = session.Chart.ToWorld(session.State.CommittedCell);
-        if (_mapLastCell != cell)
+        // The original fires a jump point or tile script on every tile the player enters (ledger TR3), in step order.
+        while (_mapEntered.TryDequeue(out var cell))
         {
-            _mapLastCell = cell;
-            if (_mapTransfers.Enter(cell) is { } entered)
-            {
-                if (entered.Outcome == AreaUseOutcome.Accepted) StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER");
-                _areaUseStatus = (entered.Site!.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint ? "jump point: " : "tile script: ") + DescribeMapUse(entered);
-                GD.Print("ARC-WORLD-031 enter " + System.Text.Json.JsonSerializer.Serialize(new { Trigger = entered.Site.Trigger.ToString(), Cell = cell,
-                    Outcome = entered.Outcome.ToString(), entered.Reason }));
-                RefreshAreaStatus();
-            }
+            if (_mapTransfers.Enter(cell) is not { } entered) continue;
+            _areaUseStatus = (entered.Site!.Trigger == Arcanum.Data.Maps.MapTransitionTrigger.JumpPoint ? "jump point: " : "tile script: ") + DescribeMapUse(entered);
+            GD.Print("ARC-WORLD-031 enter " + System.Text.Json.JsonSerializer.Serialize(new { Trigger = entered.Site.Trigger.ToString(), Cell = cell,
+                Outcome = entered.Outcome.ToString(), entered.Reason }));
+            RefreshAreaStatus();
+            if (entered.Outcome == AreaUseOutcome.Accepted) { StopWorldRoute("ROUTE_REPLACED_BY_TRANSFER"); _mapEntered.Clear(); }
         }
         if (_mapTransfers.Pending is not { } transfer || WorldModal || session.State.Phase != MovementPhase.Settled) return false;
         _mapTransfers.Clear();
+        // A map change leaves combat mode, as the source's teleport does (ARC-COMBAT-004).
+        LeaveCombatModeForMapChange();
         if (transfer.SameMap)
         {
             var map = _mapTransfers.Map;
@@ -163,7 +178,7 @@ public partial class TerrainViewerApp
                 }
             }
             ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
-            _mapLastCell = transfer.Arrival;
+            _mapEntered.Clear();
             _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
             PublishWorldSelection();
             _areaUseStatus = $"moved on this map to ({transfer.Arrival.X},{transfer.Arrival.Y})";
@@ -178,7 +193,7 @@ public partial class TerrainViewerApp
     private void BeginMapLoadTransfer(AreaMapTransfer transfer, AreaGridSession session)
     {
         var origin = _arguments!;
-        _mapHandoff = new(_areaSession, transfer, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell));
+        _mapHandoff = new(_areaSession, transfer, session.State.Facing, origin, session.Chart.ToWorld(session.State.CommittedCell), transfer.To.Name);
         var next = origin with { AreaMapName = transfer.To.Name, AreaMapArrival = new(transfer.Arrival.X, transfer.Arrival.Y) };
         _areaUseStatus = $"loading '{transfer.To.Name}' ({transfer.To.Catalogue})";
         GD.Print("ARC-WORLD-031 transfer load " + System.Text.Json.JsonSerializer.Serialize(new { transfer.FromMap, To = transfer.To, transfer.Arrival, Trigger = transfer.Site.Trigger.ToString() }));
@@ -187,22 +202,34 @@ public partial class TerrainViewerApp
 
     private async Task LoadTransferAsync(TerrainViewerArguments next)
     {
-        _arguments = next;
+        _arguments = next; _lastPublishedFailure = null;
         await StartLoadAsync(next, false);
-        if (_exiting || _mapHandoff is not { } handoff) return;
-        // The destination did not publish: the origin map is loaded again with the actor where the use was.
-        if (handoff.Fallback)
+        if (_mapHandoff is not { } handoff) return;
+        if (_exiting || handoff.Fallback)
         {
-            GD.Print("ARC-WORLD-031 transfer fallback failed");
+            // Exiting, or the origin did not load again either: the carried session ends here.
+            if (handoff.Fallback) GD.Print("ARC-WORLD-031 transfer fallback failed " + _lastPublishedFailure);
             _mapHandoff = null; handoff.Session?.Dispose();
             return;
         }
-        GD.Print("ARC-WORLD-031 transfer failed to=" + handoff.Transfer.To.Name + "; reloading the origin");
+        // The destination did not publish: the origin map is loaded again with the actor where the transfer started.
+        var failure = _lastPublishedFailure ?? "not published";
+        GD.Print($"ARC-WORLD-031 transfer failed to={handoff.Transfer.To.Name} failure={failure}; reloading the origin");
         var origin = handoff.Origin with { AreaMapArrival = new(handoff.OriginCell.X, handoff.OriginCell.Y) };
-        _mapHandoff = handoff with { Fallback = true, Transfer = handoff.Transfer with { To = new(handoff.Transfer.FromMap, 0, handoff.Origin.AreaMapName!) } };
+        _mapHandoff = handoff with { Loading = handoff.Origin.AreaMapName!, Failure = failure };
         _arguments = origin;
         await StartLoadAsync(origin, false);
         if (_mapHandoff is { } failed) { _mapHandoff = null; failed.Session?.Dispose(); }
+    }
+
+    /// <summary>Per advance in map mode: every step the actor started into a tile, in order, for the jump point and tile
+    /// script check of the next frame.</summary>
+    private void NoteMapEntries(GridAdvance advance)
+    {
+        if (_mapTransfers is null) return;
+        foreach (var evidence in advance.AreaEvidence)
+            if ((evidence.Live?.Disposition ?? evidence.Assessment.Disposition) == Arcanum.Data.Traversal.CardinalTraversalDisposition.Open)
+                _mapEntered.Enqueue(_mapTransfers.Map.Chart.ToWorld(evidence.Key.To));
     }
 
     // Native observation (ARC-WORLD-031, map mode, after the resource stages): stand next to an exit object whose
@@ -293,7 +320,6 @@ public partial class TerrainViewerApp
         for (var back = 0; back < 6 && seen[near] != near; back++) near = seen[near];
         AreaSmokePlace(map, near);
         session = (AreaGridSession)_worldActor.Session!;
-        _mapLastCell = map.Chart.ToWorld(near);
         var site = transfers.CellSite(map.Chart.ToWorld(jump))!;
         if (WorldRoute(session) is not { } route) throw new InvalidOperationException("AREA_MAP_JUMP_NO_ROUTE");
         route.SetTarget(jump, WorldTime);
