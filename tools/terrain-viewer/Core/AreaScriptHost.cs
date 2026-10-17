@@ -9,8 +9,8 @@ namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>
 /// The SCR dispatcher's host for the AREA viewer's dialog NPCs (ARC-SCRIPT-009): it reads a speaker's dialog slot
-/// (the area's effective attachment, overridden by the session's map changes), the selected script archive, the
-/// session's global flags and the follower standing, and it applies a run's effects to the session. Only the dialog
+/// (the area's effective attachment, overridden by the session's map changes), the game's script content (ARC-SCRIPT-011:
+/// the universal content stack, as for every map), the session's global flags and the follower standing, and it applies a run's effects to the session. Only the dialog
 /// point of the map's speakers is modelled; everything the viewer does not model answers "no" (no generator, no trap,
 /// alive and free, not jilted).
 /// </summary>
@@ -33,11 +33,13 @@ public sealed class AreaScriptHost : IScrHost
     private readonly SessionMapId _map;
     private readonly IReadOnlyList<AreaSpeaker> _speakers;
     private readonly AreaConversationState _state;
-    private readonly string _scriptArchive;
+    private readonly ScriptContent? _content;
 
-    public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, string scriptArchive)
+    /// <param name="content">The game's scripts; null when they could not be loaded, and then every script is missing.
+    /// The host borrows it.</param>
+    public AreaScriptHost(GameSessionOwner session, SessionMapId map, IReadOnlyList<AreaSpeaker> speakers, AreaConversationState state, ScriptContent? content)
     {
-        _session = session; _map = map; _speakers = speakers; _state = state; _scriptArchive = scriptArchive;
+        _session = session; _map = map; _speakers = speakers; _state = state; _content = content;
         Pc = new ScrObjectRef(map.RuntimeMap, PcCode);
     }
 
@@ -67,52 +69,39 @@ public sealed class AreaScriptHost : IScrHost
             Read(CountersProperty) is { } counters ? checked((uint)counters) : loaded.Counters);
     }
 
-    /// <summary>The archive member <c>scr\NNNNN*.scr</c> whose leading digits are the number; two candidates are unreadable.</summary>
+    /// <summary>The script the original names for the number (<see cref="ScriptNameIndex"/>), read from the stack's
+    /// winning copy. A copy that cannot be framed, or that changed since this content first read it, is unreadable.</summary>
     public ScrScriptLookup Script(int number)
     {
-        if (number <= 0 || number > ScrCatalogue.MaxScriptNumber) return ScrScriptLookup.Missing;
-        using var archive = DatArchive.Open(_scriptArchive, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
-        var matches = archive.Entries.Where(entry => ScriptNumber(entry) == number).Take(2).ToArray();
-        if (matches.Length == 0) return ScrScriptLookup.Missing;
-        if (matches.Length > 1) return ScrScriptLookup.Unreadable;
-        var read = ScrProgram.Read(archive.ReadEntry(matches[0]));
-        return read.Status == ScrReadStatus.Read ? ScrScriptLookup.Of(read.Program!) : ScrScriptLookup.Unreadable;
-    }
-
-    /// <summary>The script number of an archive member named <c>scr\</c> + digits + anything + <c>.scr</c>, else null.</summary>
-    public static int? ScriptNumber(DatEntry entry)
-    {
-        var name = System.Text.Encoding.Latin1.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0');
-        if (!name.StartsWith("scr\\", StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".scr", StringComparison.OrdinalIgnoreCase) || name.IndexOf('\\', 4) >= 0) return null;
-        var digits = name[4..].TakeWhile(char.IsAsciiDigit).ToArray();
-        return digits.Length is > 0 and <= 5 ? int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) : null;
-    }
-
-    /// <summary>The dialog number of an archive member named <c>dlg\</c> + digits + anything + <c>.dlg</c>, else null.</summary>
-    public static int? DialogNumber(DatEntry entry)
-    {
-        var name = System.Text.Encoding.Latin1.GetString(entry.RawNameBytes.ToArray()).TrimEnd('\0');
-        if (!name.StartsWith("dlg\\", StringComparison.OrdinalIgnoreCase) || !name.EndsWith(".dlg", StringComparison.OrdinalIgnoreCase) || name.IndexOf('\\', 4) >= 0) return null;
-        var digits = name[4..].TakeWhile(char.IsAsciiDigit).ToArray();
-        return digits.Length is > 0 and <= 5 ? int.Parse(digits, System.Globalization.CultureInfo.InvariantCulture) : null;
+        if (_content is null || number <= 0 || number > ScrCatalogue.MaxScriptNumber) return ScrScriptLookup.Missing;
+        var read = _content.Script(number);
+        return read.Status switch
+        {
+            ScriptContentStatus.Read => ScrScriptLookup.Of(read.Program!),
+            ScriptContentStatus.NoName or ScriptContentStatus.NotFound => ScrScriptLookup.Missing,
+            _ => ScrScriptLookup.Unreadable,
+        };
     }
 
     /// <summary>
-    /// The DLG a dialog action names: exactly one archive member <c>dlg\NNNNN*.dlg</c>, read strictly, whose
-    /// <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/> with the document,
-    /// or the typed reason.
+    /// The DLG a dialog action names: the script's name with the <c>dlg</c> folder and extension (as the original
+    /// derives it), read strictly, whose <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/>
+    /// with the document, or the typed reason.
     /// </summary>
-    public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(string dialogArchive, int script, int node)
+    public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(ScriptContent content, int script, int node)
     {
-        using var archive = DatArchive.Open(dialogArchive, new DatReaderOptions { MaxArchiveBytes = 536870912, MaxStoredEntryBytes = 1048576, MaxDecodedEntryBytes = 1048576 });
-        var members = archive.Entries.Where(entry => DialogNumber(entry) == script).Take(2).ToArray();
-        if (members.Length != 1) return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {members.Length} archive members");
-        DlgDocument document;
-        try { document = DlgReader.Read(archive.ReadEntry(members[0])); }
-        catch (DlgException exception) { return (AreaConversationStartStatus.DialogUnreadable, null, exception.GetType().Name); }
-        if (!document.TryGetRecord(node, out var record) || record!.Role != DlgRecordRole.Npc)
+        ArgumentNullException.ThrowIfNull(content);
+        var read = content.Dialog(script);
+        switch (read.Status)
+        {
+            case ScriptContentStatus.Read: break;
+            case ScriptContentStatus.Changed: return (AreaConversationStartStatus.SourceChanged, null, read.Detail);
+            case ScriptContentStatus.Invalid or ScriptContentStatus.Unreadable: return (AreaConversationStartStatus.DialogUnreadable, null, read.Detail);
+            default: return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {read.Detail}");
+        }
+        if (!read.Document!.TryGetRecord(node, out var record) || record!.Role != DlgRecordRole.Npc)
             return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script} has no NPC node {node}");
-        return (AreaConversationStartStatus.Started, document, string.Empty);
+        return (AreaConversationStartStatus.Started, read.Document, string.Empty);
     }
 
     public bool GlobalFlag(int index)

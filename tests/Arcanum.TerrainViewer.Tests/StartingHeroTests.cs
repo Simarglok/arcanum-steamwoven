@@ -98,7 +98,7 @@ public sealed class StartingHeroTests
     // Each node with its offered replies; the first unblocked Direct reply is chosen, else the first unblocked one.
     private static string[] Walk(DlgDocument document, AreaSnapshot snapshot, string root, GameSessionOwner session)
     {
-        var host = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session,
+        var host = new AreaConversationHost(snapshot, null, session,
             AreaConversationProfile.Diagnostic with { Pc = session.QueryHeroDialogFacts()! });
         var talk = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(1),

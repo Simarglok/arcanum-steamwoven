@@ -166,12 +166,13 @@ status, not modelled); a skip default without a dialog action ends the talk; a
 refusal is `EntryNotAdmitted` with the line, code and type. The session applies
 global flags and the slot as separate steps (it has no transaction across its
 flag owner and its map changes); a refused step stops the later ones and is
-reported as `ScriptEffectsRejected`. Before every talk and resumption the host
-checks the script archive against the area's second resource input and the
-dialog archive against its first fingerprint by full SHA-256 (`SourceChanged`),
-as the old resolver path did; a resumption that finds no script in the slot
-(it removed itself) is `ScriptRemoved`. The DLG is the one archive member whose
-number is the script's (`dlg\NNNNN*.dlg`) and its node must be an NPC record.
+reported as `ScriptEffectsRejected`. Since ARC-SCRIPT-011 the scripts and the
+DLG come from the game's content stack ([script content](script-content.md)):
+the original's name for each script number, the winning copy, the DLG by the
+script's name; `SourceChanged` is a file that changed after its first read, and
+`ContentUnavailable` a content that could not be opened. A resumption that finds
+no script in the slot (it removed itself) is `ScriptRemoved`. The DLG node must
+be an NPC record.
 In the Godot viewer only the player's close of a finished conversation resumes
 the script; a reset, reload or map change closes the panel without resuming.
 

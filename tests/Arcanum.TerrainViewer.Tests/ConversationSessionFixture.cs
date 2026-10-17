@@ -25,4 +25,11 @@ internal static class ConversationSessionFixture
         var restored = GameSessionOwner.Restore(snapshot, new(snapshot.Identity, snapshot.Clock.Profile, new OwnerEpoch(Guid.NewGuid())));
         return restored.Owner ?? throw new InvalidOperationException("RESTORE_" + restored.Failure);
     }
+
+    /// <summary>ARC-SCRIPT-011: the installed game's script content (module Arcanum), as the viewer opens it.</summary>
+    internal static Arcanum.Data.Scripts.ScriptContent Scripts(string gameRoot)
+    {
+        var load = AreaContentRoot.OpenScripts(Path.Combine(gameRoot, "modules", "Arcanum.dat"));
+        return load.Content ?? throw new InvalidOperationException($"SCRIPT_CONTENT_{load.Status} {load.Detail}");
+    }
 }

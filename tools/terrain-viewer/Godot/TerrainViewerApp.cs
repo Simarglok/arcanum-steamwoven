@@ -1004,6 +1004,7 @@ public partial class TerrainViewerApp : Node
         _coordinator.Dispose();
         cancellation?.Dispose();
         _canvas?.ReleaseHd(); _hdSource?.Dispose();
+        _conversationHost = null; ReleaseConversationContent();
         _cache.Dispose();
     }
 }

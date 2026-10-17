@@ -145,14 +145,12 @@ the source (`tc.c` reads only mouse messages); the controller menu navigates, co
 cancels. Keyboard keys are not redirected to dialog actions: the WORLD keyboard route keeps
 them reserved for their original actions ([palette and keyboard route](../input/diagnostic-palette.md)),
 so `T`, digits, `Esc` and `Enter` do nothing in the dialog. A diagnostic **Leave** button
-closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) re-authenticates the
-selected archives on every talk and resumption (`arcanum2.dat` as Script, checked against the area's second
-resource input, and `arcanum3.dat` as Dialog, checked against its first fingerprint; the original
-game opens Virgil's script from `Arcanum4.dat`, which shadows this copy, see
-[content precedence](../research/content-precedence.md#crash-site-impact)), runs SAP_DIALOG through the
+closes an awaiting dialog without a reply. The panel is modal, so the actor gate stays closed. `AreaConversationHost` (viewer Core) reads scripts and dialogs
+through the game's content stack (ARC-SCRIPT-011, [script content](script-content.md): the original's name for
+each script number and the winning copy, so Virgil's script is `Arcanum4.dat`'s, as the game opens it), runs SAP_DIALOG through the
 [SCR dispatcher](scr-dispatcher-runtime.md#dialogue-arc-script-009-slice-s3) (ARC-SCRIPT-009: Following from
 the session, Jilted false, the dialog slot from the session's keys over the loaded attachment), and reads the
-one DLG member whose number is the script's, refusing a node that is not an NPC record.
+DLG named after the script, refusing a node that is not an NPC record.
 
 `AreaConversationProfile.Diagnostic` is a **project diagnostic, not original state**: male
 human PC, intelligence 8, not dumb, alignment 0, initial NPC→PC reaction 50, names
