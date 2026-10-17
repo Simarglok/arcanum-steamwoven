@@ -124,7 +124,8 @@ tests: `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1/2`, `ARC_AREA_MOBILE`,
   refused as `TypeUnsupported`. 148 generic items carry the generic block.
 
 These are reader acceptance checks, not the combat census: per-field
-distributions, AI rows, flags and first-fight candidates stay with ARC-RES-041.
+distributions, AI rows, flags and first-fight candidates are in the
+[combat-domain data census](../research/combat-data-census.md) (ARC-RES-041).
 
 [obj-h]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L11-L324
 [damage-h]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/damage_type.h#L6-L13

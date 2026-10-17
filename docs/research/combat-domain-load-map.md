@@ -521,10 +521,10 @@ in the plan's [anomaly decisions](npc-combat-ai-plan.md#anomaly-decisions).
 ## 10. Original data census (next task)
 
 Stage A9 and the "first fight candidates" output of A0 need the owner's data.
-The follow-up task (a new research code, allocated on creation) runs the
-census probe on the Mac through the module content stack and records local
-aggregates only, as [ARC-RES-036](data-census.md) and
-[ARC-RES-028](npc-reaction-reputation-evidence.md) did:
+The follow-up task, ARC-RES-041 ([combat-domain data census](combat-data-census.md),
+probe `--combat-census`), ran the census on the Mac through the module content
+stack and recorded local aggregates only, as [ARC-RES-036](data-census.md) and
+[ARC-RES-028](npc-reaction-reputation-evidence.md) did. It counted:
 
 - which layer (base archive, patch, module, loose) holds each file of
   section 3, and whether a module file exists at all;
