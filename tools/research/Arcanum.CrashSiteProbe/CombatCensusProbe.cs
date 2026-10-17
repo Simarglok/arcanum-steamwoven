@@ -76,7 +76,7 @@ internal static partial class Program
     ];
 
     /// <summary>The stat key table <c>Resist:</c> names are matched against (case-insensitive); entries 21 and 22 hold the
-    /// poison-level and age keys (LM17, an original bug per ARC-RES-048) and the last five entries are empty.</summary>
+    /// poison-level and age keys (LM17, an original bug per ARC-RES-048); the source's last five entries are null and left out.</summary>
     internal static readonly string[] CcStatKeys =
     [
         "stat_strength", "stat_dexterity", "stat_constitution", "stat_beauty", "stat_intelligence", "stat_perception", "stat_willpower",
@@ -484,7 +484,8 @@ internal static partial class Program
             var op = tokens[i];
             if (op.Equals("min", StringComparison.OrdinalIgnoreCase) || op.Equals("max", StringComparison.OrdinalIgnoreCase))
             {
-                operators.Add(op.ToLowerInvariant() + (op[1] == 'i' || op[1] == 'a' ? "" : "_uppercase_second_letter"));
+                // The source tells min from max by a lowercase second letter 'i', so "MIN" acts as max (ledger LM9 row).
+                operators.Add(op[1] == 'i' ? "min" : op[1] is 'a' or 'A' ? "max" : "min_acting_as_max");
                 i++;
             }
             else operators.Add(op[0] switch
@@ -672,7 +673,8 @@ internal static partial class Program
                 {
                     var skills = weapons.Select(w => w.Fields.Weapon!.Skill).Distinct().Count();
                     lm1.Add(skills == 1 ? CcLm1(weapons.Select(w => w.Fields.Weapon!.Damage).ToArray()) : "mixed_skills");
-                    if (weapons.Count(w => w.Fields.Weapon!.Range > 1) >= 1) lm2Candidates++;
+                    // Beyond melee reach LM2 can only change the choice between two or more weapons in range.
+                    if (weapons.Count(w => w.Fields.Weapon!.Range > 1) >= 2) lm2Candidates++;
                 }
             }
         }
@@ -683,7 +685,7 @@ internal static partial class Program
             factions_distinct = factions.Count, factions_top = factions.OrderByDescending(f => f.Value).ThenBy(f => f.Key).Take(12).ToDictionary(f => f.Key, f => f.Value),
             with_college_levels = withColleges, with_monster_damage = withMonsterDamage,
             carried_weapons_per_npc = weaponsPerNpc, with_wielded_weapon = wielded,
-            lm1_with_two_or_more_weapons = lm1.Snapshot(), lm2_two_or_more_weapons_one_ranged = lm2Candidates,
+            lm1_with_two_or_more_weapons = lm1.Snapshot(), lm2_two_or_more_weapons_with_range_above_1 = lm2Candidates,
         };
     }
 
@@ -696,12 +698,16 @@ internal static partial class Program
             var name = rows.FirstOrDefault(r => r.Catalogue == catalogue)?.Name;
             var map = name is null ? null : catalog.Find(name);
             if (map?.AggregatePath is not { } aggregate || stack.Resolve(aggregate).Winner?.FilePath is not { } mobile) return new { available = false, reason = "aggregate" };
-            var module = stack.Plan.SearchOrder.Single(s => s.Role == ContentSourceRole.ModuleArchive).Path;
-            string Base(string file) => stack.Plan.SearchOrder.Single(s => s.Role == ContentSourceRole.BaseArchive && Path.GetFileName(s.Path).Equals(file, StringComparison.OrdinalIgnoreCase)).Path;
-            var prototypes = Path.Combine(stack.Plan.SearchOrder.Single(s => s.Role == ContentSourceRole.DataDirectory).Path, "proto");
+            var order = stack.Plan.SearchOrder;
+            var module = order.Where(s => s.Role == ContentSourceRole.ModuleArchive).ToArray();
+            var resource1 = order.Where(s => s.Role == ContentSourceRole.BaseArchive && Path.GetFileName(s.Path).Equals("arcanum1.dat", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var resource2 = order.Where(s => s.Role == ContentSourceRole.BaseArchive && Path.GetFileName(s.Path).Equals("arcanum2.dat", StringComparison.OrdinalIgnoreCase)).ToArray();
+            var data = order.Where(s => s.Role == ContentSourceRole.DataDirectory).ToArray();
+            if (module.Length != 1 || resource1.Length != 1 || resource2.Length != 1 || data.Length != 1) return new { available = false, reason = "sources" };
+            var prototypes = Path.Combine(data[0].Path, "proto");
             using var owner = cave
-                ? AreaOriginalValidator.OpenCaveFiles(module, Base("arcanum1.dat"), Base("arcanum2.dat"), mobile, prototypes)
-                : AreaOriginalValidator.OpenFiles(module, Base("arcanum1.dat"), Base("arcanum2.dat"), mobile, prototypes);
+                ? AreaOriginalValidator.OpenCaveFiles(module[0].Path, resource1[0].Path, resource2[0].Path, mobile, prototypes)
+                : AreaOriginalValidator.OpenFiles(module[0].Path, resource1[0].Path, resource2[0].Path, mobile, prototypes);
             var snapshot = owner.LoadStrict();
             var read = CombatFieldReader.ReadArea(snapshot);
             if (read.Objects is null) return new { available = false, reason = $"combat_{read.Failure}" };
@@ -774,7 +780,8 @@ internal static partial class Program
         // Effects: operators by shape, min/max consume a value, unknown symbols stop the entry.
         var effect = CcEffectTokens("st +1, dx -2%, carry *2 melee /3 maxhps min 5 ac MAX 4");
         Check(effect.Pairs == 6 && effect.MaxPerCollection == 4 && !effect.InvalidSymbol, "effect pairs");
-        Check(effect.Operators.SequenceEqual(["add", "percent", "multiply", "divide", "min", "max_uppercase_second_letter"]), "effect operators");
+        Check(effect.Operators.SequenceEqual(["add", "percent", "multiply", "divide", "min", "max"]), "effect operators");
+        Check(CcEffectTokens("st MIN 3").Operators.SequenceEqual(["min_acting_as_max"]), "MIN acts as max");
         Check(CcEffectTokens("st +1 nothing +2").InvalidSymbol, "invalid symbol");
 
         // Ranges and art types (LM15), layer labels, effective fields and the LM1 estimate.

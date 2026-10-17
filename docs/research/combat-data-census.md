@@ -40,7 +40,7 @@ dotnet run --project tools/research/Arcanum.CrashSiteProbe -- --combat-census-se
 ```
 
 The report is deterministic JSON. On the owner's installation two runs gave
-the same SHA-256 `9e869f7b411694c6dddaed3fcb86355188e2d3bde9cc881e1da05e63fca4140b`
+the same SHA-256 `5de5b853c42339096fe51af3ea940b0f8767cdb7149d7248bb74c7c0e93870cf`
 in about 5 s. The self-test checks every parser on synthetic fixtures (AI rows
 across a numbering gap, the named-key cursor with skipped, unknown and fatal
 keys, spell numbering, effect operators, prototype ranges, art types, layer
@@ -75,10 +75,12 @@ effect operator shapes.
 3. **Spells: every record is present and nothing is unknown or out of order
    (local observation).** All 223 records have lines +0 and +1; 105 have an
    AI line +4. No record uses `IQ:`, so the willpower minimum is always the
-   default {6, 9, 12, 15, 18}[n mod 5] for records below 80 (LM6 changes no
-   value). `Resist:` uses constitution (22), willpower (12), dexterity (2) and
-   strength (1); the two LM17 keys never occur. No key is skipped for its
-   order, none is unknown, and no line would end the original's process.
+   default {6, 9, 12, 15, 18}[n mod 5] for records below 80 (no record
+   overrides the default; LM6's question, which stat that value gates, stays
+   with stage A5). `Resist:` uses constitution (22), willpower (12), dexterity
+   (2) and strength (1); the two LM17 keys never occur. On lines +1 and +4,
+   the only lines the probe parses, no key is skipped for its order, none is
+   unknown, and no line would end the original's process.
 4. **Effects: five entries use `*` or `/`, none overflows (local
    observation).** `rules\effect.mes` has 309 entries (50..358): 587 add, 40
    percent, 11 min, 7 max, 5 multiply and 1 divide operators. Entries 91, 97,
@@ -95,9 +97,11 @@ effect operator shapes.
    right; the `proto.c` comments are the slip.
 6. **The first fight: an exterior creature of prototype 28359 (proposal).**
    The Crash Site exterior holds 25 creatures and 18 humans, the cave 6
-   creatures and one dead human. Every creature is kill-on-sight, faction 19,
-   fights with its own damage table and carries nothing; no NPC there holds
-   more than one weapon, so neither LM1 nor LM2 can change a weapon choice.
+   creatures and one dead human. Every creature is kill-on-sight and faction
+   19 (except two instances of 28339, faction 9); all but one (27359, which
+   wields a weapon) fight with their own damage table and carry nothing. No
+   NPC there holds more than one weapon, so neither LM1 nor LM2 can change a
+   weapon choice.
    [Section 7](#7-first-fight-candidates-plan-slice-i10) ranks three
    candidates.
 
@@ -144,7 +148,7 @@ reading):
 
 | Column | Plan reading | Min | Max | Distinct | Values (count) |
 | ---: | --- | ---: | ---: | ---: | --- |
-| 0 | flee at own HP% | 0 | 100 | 7 | 0 (31), 5, 10 (4), 20, 30, 50, 100 (2) |
+| 0 | flee at own HP% | 0 | 100 | 7 | 0 (31), 5 (1), 10 (4), 20 (1), 30 (1), 50 (1), 100 (2) |
 | 1 | flee when the other party is larger by | 0 | 1000 | 8 | 1000 (27), 10 (4), 0, 7, 20, 100 (2 each), 5, 16 |
 | 2 | flee when the other party's level sum is higher by | 0 | 1000 | 6 | 1000 (28), 100 (7), 0 (3), 3, 5, 10 |
 | 3 | never flee while the target's HP% is below | 0 | 101 | 4 | 20 (27), 101 (8), 15 (4), 0 (2) |
@@ -186,7 +190,7 @@ would show as a difference (none does).
 | `Resist:` with an LM17 key (poison level, age) or no match | 0 |
 | `Info:` aggressive / friendly / neutral / may be aggressive | 82 / 75 / 0 / 0 |
 | `Disabled:`, `No_Resist:`, `No_Reflect:` | 0, 2 (tech), 2 (college) |
-| Keys skipped for their order, unknown keys, fatal lines | 0, 0, 0 |
+| Keys skipped for their order, unknown keys, fatal lines (lines +1 and +4 only) | 0, 0, 0 |
 
 Line +1 keys by record range (college 0..79 / other magic 80..139 / tech
 140..222), which answers part of the magic research's open question
@@ -195,8 +199,9 @@ Line +1 keys by record range (college 0..79 / other magic 80..139 / tech
 `DurationTriggerCount:` 2/3/6, `Resist:` 26/6/5, `Range:` 0/8/42,
 `ChargesFromCells:` 0/0/3, `ChargeBeginCost:` 1/0/1, `Info:` 37/43/77.
 
-AI action lists (spell number: value, highest first; the defensive list also
-carries its second value):
+AI action lists (spell number: value, highest first; a run of numbers shares
+the value after the last one; the defensive list's second value is shown as
+`@1` and is 0 elsewhere):
 
 | Action | Set | Spells |
 | --- | ---: | --- |
@@ -219,15 +224,17 @@ seven slots ([size][effect-size]).
 | --- | ---: | ---: |
 | Entries (numbers) | 309 (50..358) | 1 (0) |
 | Pairs per entry: 0 / 1 / 2 / 3 / 4 / 5 / 6..7 / 8..11 | 3 / 183 / 45 / 16 / 30 / 11 / 13 / 8 | 5 pairs in its one entry |
-| Most pairs in one collection | 7 | 5 |
+| Most pairs in one collection | 7 | 4 |
 | Operators: add / percent / min / max / multiply / divide | 587 / 40 / 11 / 7 / 5 / 1 | 5 adds |
 | Entries with `*` or `/` | 91, 97, 213, 214, 218 | none |
-| `MIN`/`MAX` with an upper-case second letter (acts as max) | 0 | 0 |
+| `min` with a non-lowercase `i` (acts as max) | 0 | 0 |
 | Production `EffectRules`: parsed / refused | 304 / 5 (the `*`/`/` entries) | 1 / 0 |
 
 ## 5. Prototypes
 
-Every one of the 20 description ranges of [`proto.c`][proto-ranges] is full
+Ranges here are description numbers; a prototype number (as in the tables
+below and in section 7) is its description number + 20. Every one of the 20
+description ranges of [`proto.c`][proto-ranges] is full
 (1,423 files: 8 walls, 15 portals, 38 containers, 45 scenery, 1 projectile,
 150 weapons, 4 ammunition, 251 armour, 1 gold, 88 food, 84 scrolls, 3 keys, 1
 key ring, 68 written, 148 generic, 13 PCs, 250 + 85 + 162 NPCs, 8 traps), so the
@@ -288,14 +295,17 @@ effective fields (instance field, else the prototype's):
   1,103, two or more 73; 742 NPCs wield one.
 
 **LM1 and LM2 (estimate).** Source fact: the original adds the five damage
-averages and stores the best in-range weapon (ledger: both are CE slips), and
-the first eligible weapon always wins because the search starts below any
-score ([wield][wield]). So only NPCs with two or more eligible weapons can be
-affected: 73 in the module. For the 31 whose weapons share one skill,
+averages and stores the best in-range weapon (ledger: both are CE slips). The
+search starts below any score, so the first eligible weapon is always taken
+and a later one replaces it only on a higher score, or an equal score with a
+higher handle ([wield][wield]). So only NPCs with two or more eligible weapons
+can be affected: 73 in the module. For the 31 whose weapons share one skill,
 comparing stored damage alone, CE's fatigue-only score picks the same weapon
 for 19 and another for 1; 11 involve a tie that the runtime handle decides; 42 mix skills
-and are not estimated. LM2 needs a target and its distance; 45 of the 73 hold
-a weapon with range above 1.
+and are not estimated. LM2 needs a target and its distance: next to the
+target every weapon is in range, so it can touch all 73; farther away it needs
+two or more weapons in range, and 6 of the 73 hold two or more weapons with
+range above 1.
 
 **Crash Site exterior (pinned Area profile).** 43 NPCs:
 
@@ -327,28 +337,41 @@ Rows used here (columns 0..16): row 19 `0 1000 1000 101 1 20 1001 1000 2 0 0
 
 ## 7. First-fight candidates (plan slice I10)
 
-Proposal, ranked. All three need only slices I1 (row), I4 (KOS and faction),
-the awareness and approach of A2/A6 and the existing attack resolver with an
-NPC damage table; none needs weapon choice, spells, items or grenades.
+Proposal, ranked. All three need slices I1 (row), I4 (KOS and faction), the
+awareness and approach of A2/A6 and the existing attack resolver with an NPC
+damage table; none needs weapon choice, spells, items or grenades. All three
+also meet the back-off a kill starts: when the PC kills an NPC, every NPC
+within 3 tiles of the PC that shares the victim's faction, lacks `NO_FLEE` and
+is focused on the PC gets the backing-off flag ([kill hook][ai-killed]), and a
+backing-off NPC runs away before anything else, to 5 cells when column 15 is
+at most 1 ([perform][ai-perform], [back off][ai-backoff]). No creature here
+has `NO_FLEE`, so a fight against two or more of them needs back-off (S15, A4)
+or must record it as a known deferral.
 
 1. **One exterior creature of prototype 28359** (any of the 10 core
    instances). Row 19 never flees by the plan's reading (column 0 is 0,
-   columns 1 and 2 are 1000, column 3 is 101), never keeps distance (column 15
-   is 0) and never opens portals (column 16 is 0); KOS with faction 19; level
+   columns 1 and 2 are 1000, column 3 is 101), never starts keeping distance on
+   its own (column 15 is 0) and never opens portals (column 16 is 0); KOS with
+   faction 19; level
    1, normal damage 1–3 from its own table; no weapon, item or college. It is
    the smallest decision surface in the area and the most common creature of
-   the start (13 instances, plus 3 of the similar 28447 on the same row).
+   the start (13 instances, plus 3 of the similar 28447 on the same row). A
+   single opponent avoids the kill back-off; one picked near other faction-19
+   creatures does not.
 2. **The cave pack: six of prototype 28373.** The same row, faction and damage
    as candidate 1 in a closed interior that already loads through the cave
    profile (ARC-WORLD-017), with several hostile actors at once: turn order
    with more than one AI critter (ARC-COMBAT-003), enemy lists and Virgil
-   joining the fight. The natural second step after candidate 1.
-3. **One of the three exterior creatures of prototype 27356.** Row 14 adds a
-   reachable morale input (flee when the other party is larger by 10, which
-   no Crash Site party reaches, and no flee while the target is below 15 %
-   HP), a level-3 creature with damage 3–8 and the monster rather than animal
-   flag. It checks that a second row and a harder opponent work before any
-   weapon or spell slice.
+   joining the fight. Killing one of the pack makes the others nearby back
+   off, so this candidate needs back-off. The natural second step after
+   candidate 1.
+3. **One of the three exterior creatures of prototype 27356.** Row 14 has
+   other morale values (flee when the other party is larger by 10, which no
+   Crash Site party reaches, and no flee while the target is below 15 % HP),
+   may open portals (column 16 is 1) and still backs off to 5 cells after a
+   kill nearby (column 15 is 1); a level-3 creature with damage 3–8 and the
+   monster rather than animal flag. It checks that a second row and a harder
+   opponent work before any weapon or spell slice.
 
 Not first: **27359** (level 12, row 15 with a 5-cell back-off, a wielded
 weapon, `CHECK_WIELD` and a magick college) needs back-off, weapon wielding
@@ -370,8 +393,9 @@ dead humans have row 0 and no kill-on-sight flag.
 4. **The Steamwoven content snapshot can keep reading init files from the
    base** (load-map policy 1): only `rules\unique.txt` has a module copy, and
    it is unused while every prototype exists.
-5. **I10 can start with candidate 1** once I1 and I4 exist; LM1 and LM2 need
-   no decision before I10, because no Crash Site NPC holds two weapons.
+5. **I10 can start with candidate 1** once I1 and I4 exist (back-off waits
+   until a fight has two or more creatures); LM1 and LM2 need no decision
+   before I10, because no Crash Site NPC holds two weapons.
 
 ## Unknowns
 
@@ -400,4 +424,7 @@ dead humans have row 0 and no kill-on-sight flag.
 [proto-gen]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16098-L16108
 [desc-header]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/descriptions.h#L1036-L1039
 [mt-actions]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.h#L6-L17
+[ai-killed]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L1248-L1281
+[ai-perform]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2316-L2322
+[ai-backoff]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c#L2498-L2533
 [wield]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L2850-L2961
