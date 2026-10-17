@@ -35,14 +35,23 @@ public sealed class AreaMapPlan
     public AreaDataOwner Open()
     {
         var inputs = new List<AreaInput>();
+        var archives = new Dictionary<string, DatArchive>(StringComparer.Ordinal);
         try
         {
             foreach (var file in Files)
-                inputs.Add(file.Member is { } ordinal ? new AreaInput(file.Key, new MemoryStream(AreaMapPlans.ReadMember(file.Path, ordinal), writable: false)) : AreaInput.FromFile(file.Key, file.Path));
+                inputs.Add(file.Member is { } ordinal ? new AreaInput(file.Key, new MemoryStream(AreaMapPlans.ReadMember(archives, file.Path, ordinal), writable: false)) : AreaInput.FromFile(file.Key, file.Path));
+            foreach (var archive in archives.Values) archive.Dispose();
+            archives.Clear();
             return AreaDataOwner.Open(new(inputs), Plan, Limits);
         }
-        catch (AreaException) { throw; }
-        catch { foreach (var input in inputs) input.Stream.Dispose(); throw; }
+        catch (AreaException) { foreach (var archive in archives.Values) archive.Dispose(); foreach (var input in inputs) input.Stream.Dispose(); throw; }
+        catch (Exception error) when (error is DatException or IOException or UnauthorizedAccessException)
+        {
+            // An archive holding a member input that cannot be read again since planning.
+            foreach (var archive in archives.Values) archive.Dispose(); foreach (var input in inputs) input.Stream.Dispose();
+            throw new AreaException(new(error is DatException ? AreaErrorCode.MalformedRecord : AreaErrorCode.MissingSource, AreaStage.Input));
+        }
+        catch { foreach (var archive in archives.Values) archive.Dispose(); foreach (var input in inputs) input.Stream.Dispose(); throw; }
     }
 }
 
@@ -123,7 +132,10 @@ public static class AreaMapPlans
 
         // Resource sources in search order: each archive that wins a name under art/, and each
         // loose file a folder wins there. Every resource name's winner is then a listed source.
-        var winners = stack.Keys(ResourcePrefix).Select(key => (Key: key, Winner: stack.Resolve(key).Winner!)).ToArray();
+        // A loose name that is no valid virtual path (a backslash in a file name, say) cannot be
+        // resolved, so nothing reads it; it is left out.
+        var winners = stack.Keys(ResourcePrefix).Where(AreaSourcePlan.LoosePath).Select(key => (Key: key, Winner: stack.Resolve(key).Winner))
+            .Where(w => w.Winner is not null).Select(w => (w.Key, Winner: w.Winner!)).ToArray();
         var keys = new Dictionary<ContentSource, AreaInputKey> { [module] = new(AreaSourceRole.Module) };
         var order = new List<AreaResourceSource>();
         var files = new List<AreaMapPlanInput> { new(new(AreaSourceRole.Module), module.Path) };
@@ -228,10 +240,11 @@ public static class AreaMapPlans
         return null;
     }
 
-    /// <summary>One member of an archive, read for <see cref="AreaMapPlan.Open"/>.</summary>
-    internal static byte[] ReadMember(string archivePath, int ordinal)
+    /// <summary>One member of an archive, read for <see cref="AreaMapPlan.Open"/>; each archive is
+    /// indexed once per open.</summary>
+    internal static byte[] ReadMember(Dictionary<string, DatArchive> archives, string archivePath, int ordinal)
     {
-        using var archive = DatArchive.Open(archivePath);
+        if (!archives.TryGetValue(archivePath, out var archive)) archives.Add(archivePath, archive = DatArchive.Open(archivePath));
         if (ordinal < 0 || ordinal >= archive.Entries.Count) throw new AreaException(new(AreaErrorCode.MissingSource, AreaStage.Input));
         return archive.ReadEntry(archive.Entries[ordinal]);
     }

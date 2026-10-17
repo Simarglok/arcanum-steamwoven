@@ -158,6 +158,15 @@ seen, and a name two base archives hold is no longer ambiguous.
 - The owner refuses a plan whose order omits an `Archive` or `Loose` input, and
   the order on a pinned profile, which keeps its own archive rule. A plan without
   an order keeps the earlier rule (one holder among the two base archives).
+- Each extra archive adds its index to the owner's retained budget, which
+  `Limits` does not scale for it; an installation with large patch archives can
+  fail with a typed `BudgetExceeded`. The snapshot's `Profile` is the same with
+  or without an order; its `Inputs` list shows which sources were read.
+- An archive member input (a prototype or aggregate) that cannot be read again
+  when the plan opens is a typed `AreaException` (`MalformedRecord` for a
+  damaged archive, `MissingSource` for an I/O failure); one that changed is
+  `InputIdentityMismatch`. A loose name under `art/` that is no valid virtual
+  path (a backslash in a file name) cannot be resolved and is left out.
 - On the installed game the order is `Arcanum4.dat`, `arcanum2.dat`,
   `arcanum1.dat`, `tig.dat` (the others hold nothing under `art/`; no loose
   file is there), and all 80 interiors publish the same visuals, objects and
@@ -195,5 +204,6 @@ scene plan does not draw yet.
 
 Sector and editor mobile files must be the module archive's own (an override
 elsewhere is refused, not read), and the viewer still reads its actor and light
-ART from `arcanum1.dat` and `arcanum2.dat` outside the owner. The main map is not covered (its sectors are generated from the terrain grid,
+ART from `arcanum1.dat` and `arcanum2.dat` outside the owner, so it refuses a
+plan in which either wins nothing under `art/` (`AREA_MAP_SOURCES_MISMATCH`). The main map is not covered (its sectors are generated from the terrain grid,
 ARC-RES-034). Original-executable parity is NOT_VERIFIED.

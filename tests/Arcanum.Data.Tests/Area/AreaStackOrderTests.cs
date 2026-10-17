@@ -81,6 +81,20 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
+    {
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);
+        using var stack = Stack();
+        var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+        Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+        var changed = Prototype(); changed[^1] ^= 1;
+        File.WriteAllBytes(Path.Combine(_root, "Arcanum4.dat"), Dat(("proto/007001 - test.pro", changed)));
+        Assert.AreEqual(AreaErrorCode.InputIdentityMismatch, Throws<AreaException>(() => result.Plan!.Open().Dispose()).Issue.Code);
+        File.WriteAllBytes(Path.Combine(_root, "Arcanum4.dat"), [1, 2, 3]);
+        Assert.AreEqual(AreaErrorCode.MalformedRecord, Throws<AreaException>(() => result.Plan!.Open().Dispose()).Issue.Code);
+    }
+
+    [TestMethod]
     public void A_sector_or_editor_mobile_overridden_outside_the_module_archive_is_refused()
     {
         foreach (var file in new[] { $"maps/test/{Start}.sec", "maps/test/0.mob" })
@@ -121,6 +135,16 @@ public sealed class AreaStackOrderTests
         using var reversed = new OrderFixture([new(new(AreaSourceRole.Resource1)), new(new(AreaSourceRole.Archive, 3))],
             (new(AreaSourceRole.Archive, 3), FlaggedDat(("art/scenery/fixture.art", upper, 1))));
         Assert.AreEqual(new AreaInputKey(AreaSourceRole.Resource1), reversed.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static).Entry.Source);
+    }
+
+    [TestMethod]
+    public void An_archive_holding_the_first_copy_twice_is_ambiguous()
+    {
+        using var f = new OrderFixture([new(new(AreaSourceRole.Archive, 3)), new(new(AreaSourceRole.Resource1))],
+            (new(AreaSourceRole.Archive, 3), FlaggedDat(("art/scenery/fixture.art", Art(), 1), ("art/scenery/fixture.art", Art(), 1))));
+        var report = f.Owner.Inspect();
+        Assert.IsFalse(report.IsComplete);
+        Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.AmbiguousSource && i.Stage == AreaStage.Appearance));
     }
 
     [TestMethod]
