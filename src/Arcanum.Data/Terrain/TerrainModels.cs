@@ -3,7 +3,7 @@ using System.Collections.ObjectModel;
 namespace Arcanum.Data.Terrain;
 
 public enum TerrainKind { Tile, Facade }
-public enum TerrainPathProfile { CeNonWindowsMacOs }
+public enum TerrainPathProfile { NonWindowsMacOs }
 public enum TerrainDiagnosticMode { EditorDiagnostic }
 public enum TerrainErrorCode
 {
@@ -89,7 +89,7 @@ public sealed record TerrainResourceSource
             throw new ArgumentException("Source ID must be a non-path ASCII label.", nameof(sourceId));
         TerrainSectorSelector.ValidateAscii(tileMesEntryPath, nameof(tileMesEntryPath));
         TerrainSectorSelector.ValidateAscii(facadeMesEntryPath, nameof(facadeMesEntryPath));
-        if (pathProfile != TerrainPathProfile.CeNonWindowsMacOs) throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the CE non-Windows/macOS path profile is supported.");
+        if (pathProfile != TerrainPathProfile.NonWindowsMacOs) throw new TerrainUnsupportedException(TerrainErrorCode.UnsupportedProfile, "Only the non-Windows/macOS path profile is supported.");
         SourceId = sourceId; TileMesEntryPath = tileMesEntryPath; FacadeMesEntryPath = facadeMesEntryPath; PathProfile = pathProfile;
     }
     public DatArchive Archive { get; }

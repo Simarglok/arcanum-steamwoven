@@ -61,7 +61,7 @@ public sealed class CardinalTraversalBindingTests
         using var f = new CardinalTraversalFixture([Record()]);
         var real = StaticObjectLoader.InspectForObstruction(f.Source, f.Prototypes, new StaticObjectLoaderOptions());
         var ordinary = StaticObstructionInspector.Create(real, 0, "MODULE", "PROTOTYPES", null);
-        var terrain = TerrainObstructionInspector.InspectSector(f.Module, "MODULE", f.Selector, new(f.Resource, "RESOURCE", NamePath, TerrainPathProfile.CeNonWindowsMacOs));
+        var terrain = TerrainObstructionInspector.InspectSector(f.Module, "MODULE", f.Selector, new(f.Resource, "RESOURCE", NamePath, TerrainPathProfile.NonWindowsMacOs));
         var row = real.TraversalRecords[0];
         foreach (var inspection in new[] {
             new StaticObjectInspection(StaticObjectCensusStatus.Complete, 1, real.Records, []),

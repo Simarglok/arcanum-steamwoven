@@ -10,7 +10,7 @@ namespace Arcanum.TerrainViewer.Core;
 public enum AreaAmbientChannel { Outdoor, Indoor, Unlit }
 
 /// <summary>
-/// ART-type rule of the pinned CE palette callback (light.c, ambient tint per art type): tiles and
+/// ART-type rule of the source's palette callback (ambient tint per art type, docs/rendering/area-lighting.md): tiles and
 /// facades take indoor when their type bit is 0 and outdoor otherwise; wall, critter, portal,
 /// scenery, container, roof, monster and unique-NPC take outdoor; items only in ground disposition;
 /// interface, misc, light and eye-candy are not tinted. Independently written; parity NOT_VERIFIED.

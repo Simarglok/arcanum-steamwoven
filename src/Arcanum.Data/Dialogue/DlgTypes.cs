@@ -27,7 +27,7 @@ public enum DlgReadMode
 {
     /// <summary>Records of seven adjacent brace fields, strict decimal numbers, unique ids.</summary>
     Strict,
-    /// <summary>As the pinned CE <c>dialog_parse_field</c>/<c>dialog_parse_entry</c>: every byte
+    /// <summary>As the original's DLG field and entry parsers 0x417C20/0x417860: every byte
     /// between fields is skipped (a <c>//</c> comment to the end of its line), fields flow
     /// regardless of lines, numbers are read like C <c>atoi</c>, and reading stops at the first
     /// record the original stops at, keeping the records before it.</summary>

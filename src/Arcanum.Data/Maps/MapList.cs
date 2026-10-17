@@ -17,8 +17,8 @@ public enum MapListStatus { Read, Missing, Unreadable, Malformed }
 
 /// <summary>
 /// The module's map list (<c>rules/maplist.mes</c>, the content stack's winner): rows numbered from 5000
-/// without gaps, at most <see cref="MaxEntries"/> (pinned CE <c>map_list_info_load</c> stops at the first
-/// missing number). Scripts name maps by catalogue number, jump points and the session by runtime number.
+/// without gaps, at most <see cref="MaxEntries"/> (the source's map list loader 0x4125C0 stops at
+/// the first missing number). Scripts name maps by catalogue number, jump points and the session by runtime number.
 /// A list that cannot be read is empty with a typed status; nothing is thrown.
 /// </summary>
 public sealed class MapList
@@ -43,6 +43,7 @@ public sealed class MapList
 
     public MapListEntry? ByRuntime(int runtime) => ByCatalogue(runtime + FirstCatalogue - 1);
 
+    [OriginalFunction(0x4125C0, OriginalFunctionScope.Partial)]
     public static MapList Read(ContentStack stack)
     {
         ArgumentNullException.ThrowIfNull(stack);

@@ -21,7 +21,7 @@ public sealed class TerrainLoaderTests
             ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
             ("ART/TILE/AAABSE0A.ART", art), ("ART/FACADE/ZERO.ART", art))), leaveOpen: true);
         var selector = new TerrainSectorSelector("maps\\fixture\\1.sec", "fixture", 0, 0, 1, 100, 200, 64, 64);
-        var source = new TerrainResourceSource(resource, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        var source = new TerrainResourceSource(resource, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs);
 
         var report = TerrainLoader.Inspect(module, selector, source);
         var complete = TerrainLoader.Load(module, selector, source);
@@ -49,7 +49,7 @@ public sealed class TerrainLoaderTests
             ("art\\tile\\tilename.mes", Ascii("{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}")),
             ("art\\facade\\facadename.mes", Ascii("{0}{zero}")))), leaveOpen: true);
         var selector = new TerrainSectorSelector("maps\\fixture\\1.sec", "fixture", 0, 0, 1, 0, 0, 64, 64);
-        var source = new TerrainResourceSource(resource, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        var source = new TerrainResourceSource(resource, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs);
         var report = TerrainLoader.Inspect(module, selector, source);
         Assert.IsFalse(report.IsComplete); Assert.AreEqual(4096, report.Issues.Count); Assert.AreEqual(TerrainIssueCode.MissingResource, report.Issues[0].Code);
         TerrainIncompleteException? exception = null;
@@ -209,10 +209,10 @@ public sealed class TerrainLoaderTests
     {
         using var resource = Resource();
 
-        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "/Users/name/game/arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs));
-        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "C:\\Games\\Arcanum\\arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "/Users/name/game/arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs));
+        AssertThrows<ArgumentException>(() => _ = new TerrainResourceSource(resource, "C:\\Games\\Arcanum\\arcanum2.dat", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs));
 
-        var source = new TerrainResourceSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        var source = new TerrainResourceSource(resource, "arcanum2-base", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs);
         Assert.AreEqual("arcanum2-base", source.SourceId);
     }
 
@@ -677,7 +677,7 @@ public sealed class TerrainLoaderTests
         using var module = DatArchive.Open(modulePath!); using var resource = DatArchive.Open(resourcePath!);
         var report = TerrainLoader.Inspect(module,
             new TerrainSectorSelector("maps\\Arcanum1-024-fixed\\86570436012.sec", "Arcanum1-024-fixed", 1452, 1290, 86570436012, 92928, 82560, 64, 64, new TerrainEntryExpectation(463, 2, 47291)),
-            new TerrainResourceSource(resource, "real-data", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainResourceSource(resource, "real-data", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs));
         Assert.IsTrue(report.IsComplete); Assert.AreEqual(4096, report.Outcomes.Count); Assert.AreEqual(4096, report.ResolvedRecords.Count); Assert.AreEqual(0, report.Issues.Count);
         Assert.AreEqual(3033, report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Tile)); Assert.AreEqual(1063, report.ResolvedRecords.Count(record => record.Kind == TerrainKind.Facade));
         Assert.AreEqual(1, report.ResolvedRecords.Select(record => record.ResourceIdentity.SourceId).Distinct().Count());
@@ -727,7 +727,7 @@ public sealed class TerrainLoaderTests
         public TerrainInspectExecution Inspect(Arguments arguments) => new(report, selector, arguments.SourceId!, new InputFingerprint(1, "module-fingerprint"), new InputFingerprint(1, "resource-fingerprint"));
     }
 
-    private static TerrainResourceSource Source(DatArchive archive) => new(archive, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+    private static TerrainResourceSource Source(DatArchive archive) => new(archive, "fixture-source", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs);
     private static DatArchive Resource(params (string Name, byte[] Bytes)[] artEntries)
     {
         var entries = new List<(string Name, byte[] Bytes)>

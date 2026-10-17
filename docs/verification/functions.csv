@@ -1,4 +1,6 @@
 address,name,domain,status,reason,level,evidence,method
+0x411830,map name obfuscation,maps,full,,F0,docs/research/world-transitions.md,Arcanum.Data.Maps.WorldCatalog.AggregateName
+0x4125C0,map list load,maps,partial,only the rows and their numbering; the map properties are read by the map catalogue,F0,docs/formats/maps.md,Arcanum.Data.Maps.MapList.Read
 0x4189C0,voice identity of a line,audio,full,,F2,docs/research/audio-evidence.md#dialogue-voice-event-sounds-scripts-and-interface,Arcanum.Data.Audio.SoundCatalog.SpeechIdentity
 0x41A940,sound id lookup,audio,partial,the path it builds is checked as a virtual path (too long or non-ASCII or rooted or with .. is refused) where the original builds it unchecked,F2,docs/research/audio-evidence.md#resources-settings-and-positional-sound,Arcanum.Data.Audio.SoundCatalog.ResolveSfx
 0x41AA30,sound init,audio,partial,only the files it loads (by load phase) and the positional parameters; the listener and channel volumes belong to the player (ARC-UI-040); a missing or unreadable or malformed table or scheme file and an empty or non-ASCII table name refuse the catalogue (project policy) where the original only checks that the index has entries,F2,docs/research/audio-evidence.md#resources-settings-and-positional-sound,Arcanum.Data.Audio.SoundCatalog.Open
@@ -35,9 +37,11 @@ address,name,domain,status,reason,level,evidence,method
 0x464D20,item wear check,items,partial,"without the art lookups, which the caller answers",F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.CheckWear
 0x4655D0,item wear location,items,full,,F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.WearSlot
 0x465CF0,weapon speed,items,partial,only a wielded weapon with an owner,F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.WeaponSpeed
+0x465D80,weapon skill of an item,combat,full,,F0,docs/formats/combat-fields.md,Arcanum.Data.Combat.CombatFieldReader.WeaponSkill
 0x465E90,weapon minimum strength,items,full,,F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.MinimumStrength
 0x466DA0,item remove check,items,full,,F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.CheckRemove
 0x467E80,item light,items,full,,F2,docs/research/original-verification-ledger.md#equipment-arc-world-028,Arcanum.Simulation.Equipment.EquipmentRules.Light
+0x4A6620,experience table load,experience,partial,project admission: an entry that is not a number is refused instead of read with atoi,F2,docs/research/original-verification-ledger.md#experience-and-levels-arc-world-030,Arcanum.Data.Characters.ExperienceTables.ReadLevels
 0x4A68B0,experience to next level,experience,full,,F3,docs/verification/receipts/4A68B0.json,Arcanum.Simulation.Character.ExperienceRules.ToNextLevel
 0x4A6900,experience progress,experience,full,,F3,docs/verification/receipts/4A6900.json,Arcanum.Simulation.Character.ExperienceRules.Progress
 0x4A6980,level bonus points,experience,full,,F3,docs/verification/receipts/4A6980.json,Arcanum.Simulation.Character.ExperienceRules.BonusPoints

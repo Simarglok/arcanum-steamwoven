@@ -10,7 +10,7 @@ public static class StaticObstructionInspector
 {
     private const int OriginX = 92928;
     private const int OriginY = 82560;
-    private const string SpecificationId = "CE-a7ff41b300ef712f0e7d088183a3d08957110cdd";
+    private const string SpecificationId = "docs/world/static-obstruction-components.md";
 
     /// <summary>
     /// Caller-owned structural inspection. The caller explicitly selects sources and
@@ -56,7 +56,7 @@ public static class StaticObstructionInspector
         var provenance = new List<StaticObstructionProvenance>
         {
             new(StaticObstructionProvenanceKind.SerializedInstance, moduleId, ordinal),
-            new(StaticObstructionProvenanceKind.PinnedCeSpecification, SpecificationId)
+            new(StaticObstructionProvenanceKind.PinnedSpecification, SpecificationId)
         };
         if (identity is not null) provenance.Add(new(StaticObstructionProvenanceKind.OriginalDataIdentity, identity.Module.Sha256, ordinal));
         var records = inspection.Records.Select(record => Assess(record, ordinal, moduleId, prototypeId, identity)).ToArray();
@@ -72,7 +72,7 @@ public static class StaticObstructionInspector
         var provenance = new List<StaticObstructionProvenance>
         {
             new(StaticObstructionProvenanceKind.SerializedInstance, moduleId, ordinal, record.SourceIndex),
-            new(StaticObstructionProvenanceKind.PinnedCeSpecification, SpecificationId)
+            new(StaticObstructionProvenanceKind.PinnedSpecification, SpecificationId)
         };
         if (flagsSource == StaticObstructionFlagsSource.Prototype)
             provenance.Add(new(StaticObstructionProvenanceKind.PrototypeDefault, prototypeId, PrototypeAid: record.PrototypeAid));

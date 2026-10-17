@@ -20,8 +20,8 @@ public sealed record ScriptName(int Number, string ScriptPath, string DialogPath
 /// </summary>
 public sealed class ScriptNameIndex
 {
-    /// <summary>The first number the original lists at game start (<c>script_name_init</c> 0x4CEC10); lower numbers are
-    /// listed at module load (<c>script_name_mod_load</c> 0x4CECE0).</summary>
+    /// <summary>The first number the original lists at game start (0x4CEC10); lower numbers are
+    /// listed at module load (0x4CECE0).</summary>
     public const int FirstSystemNumber = 1000;
     private const string Folder = "scr/", Extension = ".scr";
     private readonly IReadOnlyDictionary<int, ScriptName> _names;

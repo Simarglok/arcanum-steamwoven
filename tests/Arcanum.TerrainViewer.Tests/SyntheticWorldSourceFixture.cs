@@ -85,7 +85,7 @@ internal sealed class SyntheticWorldSourceFixture : IDisposable
             => StaticObjectLoader.InspectSelectedResources(new(module, SectorPath, resource), new(_fixture.PrototypesPath));
         internal override CardinalTraversalSnapshot InspectTraversal(TerrainViewerArguments args, DatArchive module, DatArchive resource, long epoch) =>
             CardinalTraversalInspector.InspectSector(new(module, SectorPath, resource), new(_fixture.PrototypesPath),
-                "MODULE", "RESOURCE", "PROTOTYPES", Selector, new(resource, "RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs), epoch);
+                "MODULE", "RESOURCE", "PROTOTYPES", Selector, new(resource, "RESOURCE", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs), epoch);
         internal override bool AcceptTraversalIdentity(CardinalTraversalSnapshot snapshot, InputFingerprint module, InputFingerprint resource) =>
             snapshot.InputIdentity.Kind == CardinalTraversalInputKind.Structural && module == Module && resource == Resource &&
             snapshot.InputIdentity.Sector.SectorX == 1452 && snapshot.InputIdentity.Sector.SectorY == 1290;

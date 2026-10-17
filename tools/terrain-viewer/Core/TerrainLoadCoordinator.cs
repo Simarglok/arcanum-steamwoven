@@ -233,7 +233,7 @@ public sealed class TerrainLoadCoordinator : IDisposable
                 _resource = _admission.OpenArchive(arguments.ResourcePath);
                 cancellationToken.ThrowIfCancellationRequested();
                 var source = new TerrainResourceSource(_resource, arguments.SourceId, CrashSiteProfile.TileMesEntry, CrashSiteProfile.FacadeMesEntry,
-                    TerrainPathProfile.CeNonWindowsMacOs);
+                    TerrainPathProfile.NonWindowsMacOs);
                 report = TerrainLoader.Inspect(_module, _admission.Selector, source);
                 cancellationToken.ThrowIfCancellationRequested();
                 if (!report.IsComplete || report.Outcomes.Count != CrashSiteProfile.CellCount)

@@ -92,7 +92,7 @@ internal static partial class Program
     private static object AreaSectors(DatArchive module, DatArchive resource, string prototypeRoot, string prefix = "maps/Arcanum1-024-fixed/", bool cave = false)
     {
         var rows = new List<object>(); var selected = new List<object>();
-        var source = new TerrainResourceSource(resource, "resource2", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        var source = new TerrainResourceSource(resource, "resource2", "art\\tile\\tilename.mes", "art\\facade\\facadename.mes", TerrainPathProfile.NonWindowsMacOs);
         var coordinates = new HashSet<long>(); var members = new List<(int X, int Y)>();
         var entries = module.Entries.Where(e => AreaName(e).StartsWith(prefix, StringComparison.Ordinal) && AreaName(e).EndsWith(".sec", StringComparison.Ordinal)).OrderBy(e => e.Ordinal).ToArray();
         if (cave && entries.Length != 1) throw new InvalidDataException("CAVE_SCOPE_CHANGED");

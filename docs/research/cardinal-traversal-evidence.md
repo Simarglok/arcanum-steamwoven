@@ -45,7 +45,7 @@ or uploaded. No original executable, toolkit program or CE build was run.
 | Base selector | `maps\\Arcanum1-024-fixed\\86570436012.sec`; ordinal463; flag2; decoded47291 |
 | Sector / origin / size | 1452,1290 / 92928,82560 / 64×64 |
 | Tile array / block bytes | tile array starts4; block span16628..17140,128 little-endian words |
-| Explicit name entry | `art\\tile\\tilename.mes`, resource ordinal5353, `CeNonWindowsMacOs` profile |
+| Explicit name entry | `art\\tile\\tilename.mes`, resource ordinal5353, `NonWindowsMacOs` profile |
 | Prototype4026 | length414 / `1378ddb05e981098eca7816b22a366e6733c9df7c580ccc3f19345f782319874` |
 | Prototype4028 | length414 / `c2442deca958715bc49f5f0504066f951a7d549e5787be41dcded2257e23d6e3` |
 | Prototype4030 | length406 / `f15e7b0ed999ac9eeabcafa1bcddbd55b96dcbba9b2d71a7d485024c06f9c310` |

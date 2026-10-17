@@ -41,7 +41,7 @@ public sealed record AreaNamesLoad(AreaNamesStatus Status, ObjectDescriptionCata
 
 /// <summary>
 /// Hover picking and shown names for one published area map. The pick follows the original's screen target rule
-/// (CE <c>sub_43D9F0</c>): the frontmost drawn body with an opaque pixel under the pointer, skipping bodies flagged
+/// (the source's 0x43D9F0): the frontmost drawn body with an opaque pixel under the pointer, skipping bodies flagged
 /// <c>OF_CLICK_THROUGH</c>. Names come from <see cref="ObjectDisplayName"/>; walls and projectiles are picked but
 /// show no text, as in the original's message window.
 /// </summary>

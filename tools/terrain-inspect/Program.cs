@@ -121,7 +121,7 @@ internal sealed class ProductionRuntime : ITerrainInspectRuntime
         using var module = DatArchive.Open(arguments.Module!, Program.BoundedDatOptions());
         using var resource = DatArchive.Open(arguments.Resource!, Program.BoundedDatOptions());
         var selector = new TerrainSectorSelector(Program.ModuleEntry, "Arcanum1-024-fixed", 1452, 1290, 86570436012, 92928, 82560, 64, 64, new TerrainEntryExpectation(463, 2, 47291));
-        var source = new TerrainResourceSource(resource, arguments.SourceId!, Program.TileMes, Program.FacadeMes, TerrainPathProfile.CeNonWindowsMacOs);
+        var source = new TerrainResourceSource(resource, arguments.SourceId!, Program.TileMes, Program.FacadeMes, TerrainPathProfile.NonWindowsMacOs);
         var report = TerrainLoader.Inspect(module, selector, source);
         var moduleAfter = Program.Fingerprint(arguments.Module!);
         var resourceAfter = Program.Fingerprint(arguments.Resource!);

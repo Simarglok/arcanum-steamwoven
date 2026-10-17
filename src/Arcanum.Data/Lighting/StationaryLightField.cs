@@ -31,9 +31,8 @@ public sealed class StationaryLightLattice
 }
 
 /// <summary>
-/// FR-LIGHT-008 composition of stationary lights in one map chart (ARC-RENDER-012), following the pinned
-/// CE renderer seams (light.c light_get_rect_internal, light_render_internal, sub_4D89E0, sub_4DA360 and
-/// the TIG colour helpers). Independently written; parity of TIG rounding, blit LERP and palettes is
+/// FR-LIGHT-008 composition of stationary lights in one map chart (ARC-RENDER-012), following the source's
+/// light rectangle and render functions and the TIG colour helpers (docs/rendering/area-lighting.md, F0). Independently written; parity of TIG rounding, blit LERP and palettes is
 /// NOT_VERIFIED. A light covers the rectangle of its ART frame anchored like a body (tile screen
 /// position + offset + (40, 20) − hotspot). Its contribution at a screen point is the frame pixel there,
 /// multiplied by its tint (c * t / 255, truncated) unless the tint is white; keyed-out pixels and OFF

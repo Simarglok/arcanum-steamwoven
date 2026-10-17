@@ -45,7 +45,7 @@ No public production models/parsers, Godot, input, movement or route search chan
 decoded47291. The module/resource/six prototype identities in the evidence document
 are mandatory, authenticated before and after use. No PATCH, `.dif`, loose-file
 precedence search, fallback or alternate resource profile is admitted. Tile names
-come from the explicit resource with `CeNonWindowsMacOs` path normalization.
+come from the explicit resource with `NonWindowsMacOs` path normalization.
 
 **Project policy**, not recovered original actor facts: one immutable context
 `ISOLATED_PC_CRITTER_ART_NONPOLYMORPH`, non-null diagnostic actor kind `OBJ_TYPE_PC`
