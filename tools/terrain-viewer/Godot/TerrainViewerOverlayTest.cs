@@ -26,6 +26,16 @@ public partial class TerrainViewerApp
     internal async Task WorldPassabilityOverlayMatrixForSelfTestAsync(CellCoord blocked, CellCoord open, CellCoord outside, string mode)
     {
         RequireExplicitTest();
+        // The matrix sets world focus itself (WorldFocusForSelfTest) and owns it like the other GUI
+        // self-tests: a native focus-out during its awaits (a background-launched test window macOS
+        // does not keep in front) must not quarantine the controller frames it sends next.
+        var simulatedFocus = _worldFocusSimulationForSelfTest;
+        _worldFocusSimulationForSelfTest = true;
+        try { await WorldPassabilityOverlayMatrixScriptAsync(blocked, open, outside, mode); }
+        finally { _worldFocusSimulationForSelfTest = simulatedFocus; }
+    }
+    private async Task WorldPassabilityOverlayMatrixScriptAsync(CellCoord blocked, CellCoord open, CellCoord outside, string mode)
+    {
         static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-RENDER-008 overlay: " + why); }
         var none = new RawInputFrame(-1, default);
         void Frame(params RawInputFrame[] pads) => WorldFrameForSelfTest(none, pads.Length == 0 ? new[] { SimulatedPadLevel() } : pads, .1);
