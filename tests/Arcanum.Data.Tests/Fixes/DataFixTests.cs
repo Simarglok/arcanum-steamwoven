@@ -27,6 +27,7 @@ public sealed class DataFixTests
             Assert.IsFalse(DataFixProfile.Original.Applies(id), id);
         }
         Assert.IsFalse(DataFixProfile.Steamwoven.Applies("DF9"));
+        CollectionAssert.AreEquivalent(new[] { "DF1", "DF2", "DF3" }, DataFixProfile.Rows.ToArray(), "every switch row, and only those");
         Assert.AreSame(DataFixProfile.Original, DataFixProfile.FromName("original"));
         Assert.IsNull(DataFixProfile.FromName("Original"));
         Assert.IsFalse((DataFixProfile.Steamwoven with { Name = "mix", NpcLineEffectsInResponseLost = true }).Applies("DF2"));

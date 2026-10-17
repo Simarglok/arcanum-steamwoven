@@ -93,6 +93,7 @@ public sealed class AreaScriptHost : IScrHost
         Arcanum.Data.Fixes.DataFixProfile rules)
     {
         ArgumentNullException.ThrowIfNull(content);
+        ArgumentNullException.ThrowIfNull(rules);
         var read = content.Dialog(script, rules);
         switch (read.Status)
         {

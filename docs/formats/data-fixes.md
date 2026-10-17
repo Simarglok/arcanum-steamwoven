@@ -25,7 +25,8 @@ the Original mode keeps them, and the fix mechanism serves later data fixes too.
   empty field to a file whose only record lacks its effects field.
   `MoveResponseToActions` moves a record's response field, when it starts (after
   white space) with a letter, so that the game's `atoi` reads 0, to the end of its
-  effects field; a response with leading digits is a real jump and is never moved. The moved text is copied
+  effects field; a response with leading digits is a real jump and is never moved (other
+  characters that `atoi` also reads as 0, such as `$`, are refused too until an entry needs them). The moved text is copied
   verbatim (a line break inside it would stay, which the conversation grammar
   refuses; no installed case has one). It goes after `, ` when
   the effects field is not empty, and the response is left empty. Each operation
