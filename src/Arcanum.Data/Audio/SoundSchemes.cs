@@ -76,6 +76,7 @@ public static class SoundSchemeParser
     internal const int RawMax = 127;
 
     /// <summary>Parses one SchemeList record. Returns false (with a reason) for a record the original cannot read safely.</summary>
+    [OriginalFunction(0x41BF70, OriginalFunctionScope.Partial)]
     public static bool TryParseEntry(int listNumber, ReadOnlySpan<byte> record, Func<int, (SfxStatus Status, SoundFile? File)> sfx,
         Func<string, SoundFile> file, out SoundSchemeEntry? entry, out string? failure)
     {
@@ -135,9 +136,10 @@ public static class SoundSchemeParser
     }
 
     /// <summary>The original's percent → raw conversion: <c>127 × v</c> in 32 bits (it wraps for |v| above 16,909,320),
-    /// divided by 100 truncating toward zero, then clamped to 0–127 (a balance-left above 127 clamps to 127, not 0 as in CE).</summary>
+    /// divided by 100 truncating toward zero, then clamped to 0–127 (a balance-left above 127 clamps to 127 as well).</summary>
     internal static int Raw(int percent) => Math.Clamp(unchecked(RawMax * percent) / 100, 0, RawMax);
 
+    [OriginalFunction(0x41C290, OriginalFunctionScope.Full)]
     private static bool Param(string options, string key, ref int first, ref int second, bool hasSecond, out string? failure)
     {
         failure = null;
@@ -179,6 +181,7 @@ public static class SoundSchemeParser
     }
 
     /// <summary>Reads one scheme as the original's load does.</summary>
+    [OriginalFunction(0x41BE20, OriginalFunctionScope.Partial)]
     internal static SoundScheme Load(int id, MesFile index, MesFile list, Func<int, (SfxStatus, SoundFile?)> sfx, Func<string, SoundFile> file)
     {
         if (id == 0) return new(id, SoundSchemeStatus.None, null, null, Array.Empty<SoundSchemeEntry>());

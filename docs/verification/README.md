@@ -23,7 +23,8 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 The first rows are the experience functions of ARC-WORLD-030: three full at F3 (oracle; progress since its XP3 switch,
 ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), five partial at F2 (two readings,
 [ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030)). Other domains add their
-rows when they are migrated.
+rows when they are migrated; the audio rows (ARC-DATA-040, F2, [audio study](../research/audio-evidence.md)) mark
+methods of `Arcanum.Data`, which declares its own attribute.
 
 ## OriginalFunction attribute
 

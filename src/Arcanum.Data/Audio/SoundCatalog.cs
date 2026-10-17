@@ -61,6 +61,7 @@ public sealed class SoundCatalog
     public IReadOnlyList<int> SchemeIds { get; }
     public IReadOnlyList<SoundIssue> Issues { get; }
 
+    [OriginalFunction(0x41AA30, OriginalFunctionScope.Partial)]
     public static SoundCatalogResult Open(ContentStack stack, SoundCatalogOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
@@ -105,6 +106,7 @@ public sealed class SoundCatalog
 
     /// <summary>The original's SFX lookup (SN1): the first index table holding the id wins, even with an empty record;
     /// only when none does, the user table is searched.</summary>
+    [OriginalFunction(0x41A940, OriginalFunctionScope.Full)]
     public SfxResolution ResolveSfx(int id)
     {
         foreach (var table in Tables.Append(UserTable))
@@ -146,6 +148,7 @@ public sealed class SoundCatalog
 
     /// <summary>The dialogue voice of a line (SN22): <c>sound/speech/NNNNN/vL_g.mp3</c> with the PC's gender; a female PC
     /// falls back to the male file, a male PC never to the female one.</summary>
+    [OriginalFunction(0x5688D0, OriginalFunctionScope.Partial)]
     public SpeechResolution ResolveSpeech(int identity, SpeechGender pcGender)
     {
         if (identity == -1) return new(identity, SpeechStatus.NoVoice, 0, 0, Array.Empty<SoundFile>(), null);
@@ -163,6 +166,7 @@ public sealed class SoundCatalog
     /// <summary>The voice identity of an NPC line (SN21): <c>(script number &amp; 0x7FFF) &lt;&lt; 16 | (number in the line's
     /// condition field &amp; 0xFFFF)</c>, read with C <c>atoi</c>; −1 when the script number is 0 or the line has no such
     /// field (<paramref name="conditionField"/> null).</summary>
+    [OriginalFunction(0x4189C0, OriginalFunctionScope.Full)]
     public static int SpeechIdentity(int scriptNumber, string? conditionField)
     {
         if (scriptNumber == 0 || conditionField is null) return -1;
