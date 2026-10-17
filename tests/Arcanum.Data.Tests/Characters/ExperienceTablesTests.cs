@@ -43,11 +43,11 @@ public sealed class ExperienceTablesTests
     [TestMethod]
     public void ValueTablesKeepEveryEntry()
     {
-        var read = ExperienceTables.ReadValues(Mes("{0}{10}\n{1}{160}\n{50}{-3}\n"));
+        var read = ExperienceTables.ReadValues(Mes("{0}{15}\n{1}{170}\n{50}{-3}\n"));
         Assert.AreEqual(ExperienceTableStatus.Read, read.Status);
         CollectionAssert.AreEquivalent(new[] { 0, 1, 50 }, read.Values!.Keys.ToArray());
-        Assert.AreEqual((10, 160, -3), (read.Values[0], read.Values[1], read.Values[50]));
-        var refused = ExperienceTables.ReadValues(Mes("{0}{10}\n{7}{x}\n"));
+        Assert.AreEqual((15, 170, -3), (read.Values[0], read.Values[1], read.Values[50]));
+        var refused = ExperienceTables.ReadValues(Mes("{0}{15}\n{7}{x}\n"));
         Assert.AreEqual((ExperienceTableStatus.InvalidNumber, 7), (refused.Status, refused.Number));
     }
 

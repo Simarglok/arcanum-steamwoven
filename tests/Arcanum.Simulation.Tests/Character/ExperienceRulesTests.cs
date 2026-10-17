@@ -133,7 +133,7 @@ public sealed class ExperienceRulesTests
     [TestMethod]
     public void KillsPayAFifthAndHitsTheirShareOfThePool()
     {
-        Assert.AreEqual(340, ExperienceRules.KillAward(1700));
+        Assert.AreEqual(380, ExperienceRules.KillAward(1900));
         Assert.AreEqual(1, ExperienceRules.KillAward(7));
         Assert.AreEqual(0, ExperienceRules.KillAward(4));
 

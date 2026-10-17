@@ -46,7 +46,7 @@ Experience and the NPC records are saved (snapshot schema 14). Requirements:
 
 `ReadLevels` (`rules\xp_level.mes`: 51 thresholds, the source's missing-is-0 and level-1-is-0), `ReadValues`
 (`rules\xp_quest.mes` and `rules\xp_critter.mes`: every entry by number) and `ReadQuestLevels` (`rules\gamequest.mes`: the
-first number of quests 1000..1999). Each entry must be one number (optional spaces and sign, 1..10 digits in the int32 range),
+first number of quests 1000..1999). Each entry it reads must be one number (optional spaces and sign, 1..10 digits in the int32 range),
 or the table is refused with the entry's number (`InvalidNumber`; a quest entry with no first number is `MissingField`):
 the source's `atoi` would read a prefix or 0. `xp_critter.mes` is for the host that places new NPCs (their worth and pool
 by level, `critter_xp_worth`); the session never reads it.
