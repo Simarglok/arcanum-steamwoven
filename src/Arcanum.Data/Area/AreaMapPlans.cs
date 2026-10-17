@@ -1,9 +1,6 @@
-using System.Globalization;
 using System.Security.Cryptography;
-using System.Text;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
-using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Area;
 
@@ -287,27 +284,8 @@ public static class AreaMapPlans
 
     /// <summary>The map list entry: catalogue and runtime numbers and the start tile (the entry's
     /// second and third values read like C strtoll; null when the entry has fewer values).</summary>
-    internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName)
-    {
-        var winner = stack.Resolve("rules/maplist.mes").Winner;
-        if (winner is null) return (0, 0, null);
-        var read = stack.Read(winner);
-        if (read.Status != ContentReadStatus.Read) return (0, 0, null);
-        var parsed = MesFile.Parse(read.Bytes!);
-        if (parsed.Status != MesParseStatus.Parsed) return (0, 0, null);
-        for (var number = 5000; number < 5200; number++)
-        {
-            if (parsed.File!.Find(number) is not { } message) break;
-            var values = Encoding.Latin1.GetString(message.Bytes.Span).Split(',');
-            if (!string.Equals(values[0].Trim(), mapName, StringComparison.OrdinalIgnoreCase)) continue;
-            // Read like C strtoll (leading digits, else 0), as the original's value parser does; a
-            // negative coordinate is not a tile, so it is treated as absent.
-            WorldLocation? start = null;
-            if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
-            return (number, number - 4999, start);
-        }
-        return (0, 0, null);
-    }
+    internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName) =>
+        MapList.Read(stack).Find(mapName) is { } entry ? (entry.Catalogue, entry.Runtime, entry.Start) : (0, 0, null);
 
     private static AreaInputIdentity Identity(AreaInputKey key, string path)
     {

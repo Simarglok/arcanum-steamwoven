@@ -379,6 +379,21 @@ reader and the earlier LM11 and A1 readings did. Several functions begin with a 
 | XP11 | call sites of `critter_give_xp` and `quest_get_xp` | Dialog action XP (0x415BA0) and the script action that gives quest experience (0x447220) both give `quest_get_xp(value)`; quest completion (XP8); kill (XP9); pool (XP10); a cheat key gives the experience still needed. | Original |
 | XP12 | data (`DAT_ROOT`) | The winning `rules\xp_level.mes` (the `Arcanum4.dat` copy) has 51 strictly increasing entries, so XP5's re-entered call returns; `xp_quest.mes` has levels 1..50, `xp_critter.mes` 0..50, every quest level in `gamequest.mes` has quest experience, and one effect rule uses `xpgain`. | Data |
 
+## Map transitions (ARC-DATA-025)
+
+Source: the [map transitions](../world/map-transitions.md) reader, which decodes these actions and
+triggers as data; the [transition research](world-transitions.md) read them in CE (W3, W4, W6, W9).
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TR1 | `script_execute_action` (0x447220), teleport case (0x4481A1, jump table entry 43) | Object from operand 0, then map, x and y from operands 1–3 as values; the location packs x low and y high; the map is the value − 4999; flags 0; then `teleport_do`. | Original |
+| TR2 | the same, fade-and-teleport case (0x449A85, entry 101) | Skipped in a network game. Fade out and in, then time, sound and movie from operands 0–2 (each sets its flag when positive), object from operand 3, map − 4999, x and y from operands 4–6. | Original |
+| TR3 | object location change (0x444270), `map_process_jumppoint` (0x4101D0), `tile_script_exec` (0x4C0980) | After a move, for any PC (`player_is_pc_obj` 0x40DA20; roof, wall check and scroll only for the local one) the jump point at the new tile teleports it with flags 0, while fewer than 9 jump teleports are nested; then for an object of type 15 or 16 (PC or NPC) the tile script runs. | Original |
+| TR4 | `teleport_do` (0x4D3380), `teleport_process` (0x4D3460) | A request while a teleport of the local PC is pending is refused; any other pending request is replaced. A pending map of −1 becomes the current map when it is processed. | Original |
+
+So a script's catalogue 4998 and a jump point's −1 both keep the current map. What a teleport
+then does to followers and the destination map (W9) is not read here.
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.
@@ -464,5 +479,5 @@ Details the second reading added or sharpened:
   are answered by the [combat-domain data census](combat-data-census.md): the description header's
   labels match the art, and no shipped `Resist:` uses an LM17 key.)
 - Code left for later: wilderness A2 (editor only); locomotion W4 and the frame-time clamp;
-  companion C2, C4, C10, C13 frequency; world-transition jump points and teleports; reputation A6
+  companion C2, C4, C10, C13 frequency; what a teleport does after it is processed (followers, the destination map, W9); reputation A6
   and A7; the first-tick marker after a load (OQ2, H1).
