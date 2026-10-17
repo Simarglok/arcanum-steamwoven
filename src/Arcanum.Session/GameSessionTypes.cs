@@ -1,5 +1,6 @@
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Clock;
+using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Movement;
 
 namespace Arcanum.Session;
@@ -60,10 +61,13 @@ public sealed class GameSessionLimits
     public const int PolicyMaxLifeRecords = 4096;
     /// <summary>NPC reaction records (ARC-WORLD-026): NPCs whose reaction memory toward the PC the session changed.</summary>
     public const int PolicyMaxReactionRecords = 4096;
+    /// <summary>NPC experience records (ARC-WORLD-030): NPCs whose experience worth or pool the session changed.</summary>
+    public const int PolicyMaxExperienceRecords = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
-        int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords)
+        int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords,
+        int maxExperienceRecords = PolicyMaxExperienceRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -72,9 +76,10 @@ public sealed class GameSessionLimits
         if (maxPcItems is < 1 or > PolicyMaxPcItems) throw new ArgumentOutOfRangeException(nameof(maxPcItems));
         if (maxLifeRecords is < 1 or > PolicyMaxLifeRecords) throw new ArgumentOutOfRangeException(nameof(maxLifeRecords));
         if (maxReactionRecords is < 1 or > PolicyMaxReactionRecords) throw new ArgumentOutOfRangeException(nameof(maxReactionRecords));
+        if (maxExperienceRecords is < 1 or > PolicyMaxExperienceRecords) throw new ArgumentOutOfRangeException(nameof(maxExperienceRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
-        MaxReactionRecords = maxReactionRecords;
+        MaxReactionRecords = maxReactionRecords; MaxExperienceRecords = maxExperienceRecords;
     }
 
     public int MaxMaps { get; }
@@ -84,6 +89,7 @@ public sealed class GameSessionLimits
     public int MaxPcItems { get; }
     public int MaxLifeRecords { get; }
     public int MaxReactionRecords { get; }
+    public int MaxExperienceRecords { get; }
 }
 
 /// <summary>
@@ -93,19 +99,23 @@ public sealed class GameSessionLimits
 /// owner never reads a clock or OS entropy, so a host that wants a new sequence per game passes a new seed, and the
 /// default 0 gives every such session the same rolls. <paramref name="Rules"/> (ARC-WORLD-023) is the starting rule mode,
 /// normally the player's saved setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>.
+/// <paramref name="Experience"/> (ARC-WORLD-030) is the experience data the host read (level thresholds, quest experience);
+/// without it the session awards no experience. <paramref name="Difficulty"/> is the starting game difficulty, the player's
+/// setting; an undefined value is <see cref="GameSessionFailure.InvalidDescriptor"/>.
 /// </summary>
 public sealed record GameSessionDescriptor(ProfileBinding Clock, GlobalFlagOwnerDescriptor? Flags,
     ActorPlacement Actor, GameSessionLimits? Limits = null, SessionHeroDefinition? Hero = null, ulong RandomSeed = 0,
-    RuleMode Rules = RuleMode.Steamwoven);
+    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal);
 
 /// <summary>
 /// Restore expectations, checked before any component is built. <paramref name="FlagEpoch"/> is the
 /// new process-local GF epoch; saved epochs are not persisted. <paramref name="Rules"/> (ARC-WORLD-023) is the rule
-/// mode to continue under: a snapshot never records one, so any save loads under either mode (D4).
+/// mode to continue under: a snapshot never records one, so any save loads under either mode (D4). <paramref name="Experience"/>
+/// and <paramref name="Difficulty"/> (ARC-WORLD-030) are data and a setting, never saved, as in the descriptor.
 /// </summary>
 public sealed record GameSessionRestoreOptions(GlobalFlagIdentity ExpectedIdentity,
     ProfileBinding ExpectedClockProfile, OwnerEpoch FlagEpoch, GameSessionLimits? Limits = null,
-    RuleMode Rules = RuleMode.Steamwoven);
+    RuleMode Rules = RuleMode.Steamwoven, SessionExperienceRules? Experience = null, GameDifficulty Difficulty = GameDifficulty.Normal);
 
 public enum GameSessionFailure
 {
@@ -134,6 +144,8 @@ public enum GameSessionFailure
     EquipmentUnavailable, ItemEffectUnsupported, WearRefused, InvalidEquipment,
     // Durable effects (ARC-WORLD-029).
     EffectsUnavailable, InvalidEffect, EffectMismatch, InnateEffect, EffectCapacityExceeded, UnknownTimedEffect,
+    // Experience (ARC-WORLD-030).
+    ExperienceUnavailable, InvalidExperience, InvalidExperienceTarget,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -237,19 +249,20 @@ public sealed class GameSessionSnapshot
     /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 added <see cref="Events"/> (ARC-WORLD-024);
     /// schema 10 added <see cref="Reactions"/> (ARC-WORLD-026), which replaced the viewer's per-NPC <c>reaction.pc</c> map
     /// change; schema 11 added <see cref="Combat"/> (ARC-COMBAT-003); schema 12 added <see cref="Equipment"/> (ARC-WORLD-028);
-    /// schema 13 adds <see cref="Effects"/> (ARC-WORLD-029). Schemas 1..12 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 13;
+    /// schema 13 added <see cref="Effects"/> (ARC-WORLD-029); schema 14 adds the hero's experience and
+    /// <see cref="Experience"/> (ARC-WORLD-030). Schemas 1..13 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 14;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment,
-        SessionEffectState effects, SessionRandomState random,
+        SessionEffectState effects, SessionExperienceState experience, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionEventState events,
         SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Random = random; Life = life; Reactions = reactions; Combat = combat; Events = events; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Effects = effects; Experience = experience; Random = random; Life = life; Reactions = reactions; Combat = combat; Events = events; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -268,6 +281,9 @@ public sealed class GameSessionSnapshot
     public SessionEquipmentState Equipment { get; }
     /// <summary>The hero's durable effects (ARC-WORLD-029); their timed ENDs are in <see cref="Events"/>.</summary>
     public SessionEffectState Effects { get; }
+    /// <summary>The experience worth and pool of the NPCs the session changed (ARC-WORLD-030); the hero's experience is in
+    /// <see cref="Hero"/>.</summary>
+    public SessionExperienceState Experience { get; }
     /// <summary>The gameplay generator's seed and position (ARC-WORLD-019).</summary>
     public SessionRandomState Random { get; }
     /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>

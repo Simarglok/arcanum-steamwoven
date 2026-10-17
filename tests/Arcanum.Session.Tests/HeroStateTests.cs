@@ -195,7 +195,7 @@ public sealed class HeroStateTests
     internal const string HeroJson =
         ",\"hero\":{\"prototype\":16089,\"race\":\"HalfElf\",\"gender\":\"Female\"," +
         "\"stats\":{\"strength\":8,\"dexterity\":8,\"constitution\":8,\"beauty\":8,\"intelligence\":8,\"perception\":8," +
-        "\"willpower\":8,\"charisma\":8,\"magickPoints\":0,\"techPoints\":0},\"level\":1,\"unspentPoints\":5,\"alignment\":0," +
+        "\"willpower\":8,\"charisma\":8,\"magickPoints\":0,\"techPoints\":0},\"level\":1,\"experience\":0,\"unspentPoints\":5,\"alignment\":0," +
         "\"raceEffect\":{\"effect\":67,\"modifiers\":[{\"stat\":\"Dexterity\",\"operator\":\"Add\",\"value\":1}," +
         "{\"stat\":\"Beauty\",\"operator\":\"Add\",\"value\":1},{\"stat\":\"Constitution\",\"operator\":\"Add\",\"value\":-1}," +
         "{\"stat\":\"MagickPoints\",\"operator\":\"Add\",\"value\":1}]}," +

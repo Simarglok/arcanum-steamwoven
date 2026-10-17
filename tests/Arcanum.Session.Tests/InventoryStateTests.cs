@@ -267,7 +267,7 @@ public sealed class InventoryStateTests
         StringAssert.Contains(text, NoHero + ",\"inventory\":{\"gold\":0,\"kit\":[],\"pc\":[" +
             "{\"entity\":\"ring\",\"map\":79,\"type\":\"Armor\",\"prototype\":3804,\"name\":2804,\"description\":32804}," +
             "{\"entity\":\"apple\",\"map\":79,\"type\":\"Food\",\"prototype\":4600,\"name\":3600,\"description\":33600}]}" +
-            NoEquipment + NoEffects + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + ",\"lighting\":null}");
+            NoEquipment + NoEffects + NoExperience + FreshRandom + NoLife + NoReactions + NoCombat + NoEvents + ",\"lighting\":null}");
 
         using var restored = Restore(Decode(text));
         CollectionAssert.AreEqual(owner.QueryPcInventory().ToArray(), restored.QueryPcInventory().ToArray());

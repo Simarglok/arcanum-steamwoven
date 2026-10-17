@@ -92,7 +92,7 @@ public sealed record SessionEffectResult(GameSessionDisposition Disposition, Gam
 public sealed record SessionEffectFiring(GameEvent Event, SessionEffectResult Result);
 
 // The special changes the session models (indices of the effect rules' special collection).
-internal enum EffectSpecial { MaxHitPoints = 0, MaxFatigue = 1, Reaction = 2, BadReaction = 7, GoodReaction = 8 }
+internal enum EffectSpecial { MaxHitPoints = 0, MaxFatigue = 1, Reaction = 2, BadReaction = 7, GoodReaction = 8, XpGain = 9 }
 
 /// <summary>The durable effects of one owner: the hero's entries after its innate ones, the character owner's id of each
 /// entry with modelled stat changes, and the rule of each number in use.</summary>
@@ -369,7 +369,7 @@ public sealed partial class GameSessionOwner
     {
         var hero = _hero!;
         var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
-            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect)!;
+            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience)!;
         var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions);
         if (added is not null) definitions[added.Number] = added;
         var entries = new List<SessionEffect>(_effects.Entries);

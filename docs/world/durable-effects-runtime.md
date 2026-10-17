@@ -92,7 +92,9 @@ points), the maximum hit points and maximum fatigue (`LifeFacts.MaxHitPointEffec
 reaction, good and bad reaction adjustments (`QueryHeroReactionFacts`, which the [NPC reaction](npc-reaction-runtime.md)
 rules read). Admitted: numbers 0..399 (the source's tables; a larger one would read past them), at most seven changes per
 collection, each naming an attribute of its collection with nine digits at most, every modelled change within ±1000.
-Inert until their owners exist: skills, tech skills, resistances, tech disciplines, the critical-hit and XP specials,
+The `xpgain` special changes every experience award after the difficulty (ARC-WORLD-030,
+[experience](experience-runtime.md)); its changes are modelled since then (±1000; the one installed rule, 339, is +10 %).
+Inert until their owners exist: skills, tech skills, resistances, tech disciplines, the critical-hit specials,
 level, age, gender, race, alignment, poison level.
 
 ## Simulation (`Arcanum.Simulation`)

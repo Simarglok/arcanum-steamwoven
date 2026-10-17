@@ -124,11 +124,14 @@ rules ([quest state set][quest-set], [quest reset][quest-reset], [rumor known][r
   and `Completed`/`OtherCompleted` set the shared state to `Completed`, `Botched` to
   `Botched`; once the shared state left `Accepted`, the request becomes `OtherCompleted`
   (shared `Completed`) or `Botched`. `Botched` keeps the stored state and sets the mark.
-  The record is stamped with the session clock's current game time.
+  The record is stamped with the session clock's current game time. A `Completed` request
+  that passes these checks first gives the hero the quest's experience when the session has
+  experience data and a hero, in the same revision ([experience](experience-runtime.md),
+  ARC-WORLD-030); the overload with `out SessionExperienceAward?` returns it.
 - **Rumors** are numbered 1000..2999. `LearnRumor` records the current game time once;
   learning a known rumor is `NoChange` and keeps the first time.
-- Experience, quest alignment adjustments, logbook and sound are **not** applied: they
-  need quest data and their own owners. The AREA viewer applies the reaction rule of the
+- Quest alignment adjustments, logbook and sound are **not** applied: they need quest data
+  and their own owners. The AREA viewer applies the reaction rule of the
   source (accepting lifts the NPC's reaction to 41, completing adds 10) in its own port.
 
 Invalid numbers or states are `InvalidQuest`, `InvalidQuestState` or `InvalidRumor`.
@@ -142,7 +145,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 13
+## Snapshot schema 14
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -155,6 +158,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Inventory` (the PC's gold, the starting kit and the taken items in list order; [inventory runtime](inventory-runtime.md#snapshot-schema-5)),
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
+`Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
@@ -241,7 +245,8 @@ field; each was briefly schema 2 on its own while they landed together, so that 
 format was schema 3. A quick-save file of schema 1..11 (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
-dialog. Adding another domain needs schema 13 with its own explicit migration decision.
+dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
+Adding another domain needs schema 15 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 
@@ -308,7 +313,8 @@ and a literal, independently written canonical JSON text:
   sector-diff and mobile-object formats.
 - Movement mid-step persistence, follower movement and the cross-map group, the inventory beyond the PC's kit and taken
   items (stacks, drop, chests, barter; see [inventory runtime](inventory-runtime.md)), changes to the hero after the start
-  (alignment, purchases, levels), the quest logbook, experience and quest data, gameplay rolls by any host, life timers
+  (alignment, purchases; levels and experience since ARC-WORLD-030, [experience](experience-runtime.md)), the quest logbook
+  and quest data beyond the experience level, gameplay rolls by any host, life timers
   and their consequences for other owners (see [life state](life-state-runtime.md#not-implemented)), and other
   domains.
 - Schema migration and compatibility with original saves.
