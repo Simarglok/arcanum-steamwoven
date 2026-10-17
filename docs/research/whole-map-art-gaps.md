@@ -10,7 +10,7 @@ No code changes; the slices below implement it.
 
 ## Scope
 
-After ARC-DATA-020, PR #164 and ARC-RENDER-018, 54 of the 80 interiors publish a
+After ARC-DATA-020, the whole-map read budgets (PR #164) and ARC-RENDER-018, 54 of the 80 interiors publish a
 complete [whole-map snapshot](../world/whole-map-plans.md) and load in the viewer's
 [map mode](../rendering/area-map-mode.md). This study says what stops each of the
 other 26, how the original game names and falls back for the art involved, and
@@ -63,24 +63,24 @@ terrain, sectors, prototypes and mappings of all 26 maps are complete.
 | void | 1 | unique NPC without standing art |
 | wheel clan | 8 | 6 concealed monsters, 2 unique NPC without standing art |
 
-### Concealed monsters (132 objects, 14 maps)
+### Concealed monsters (132 objects, 13 maps)
 
 Monster critters (art class 12) whose art id holds animation 5, the original's
-"conceal fidget" (letter `f`), unarmed, on the last frame of the animation: the
+"conceal fidget" (letter `f`), with no weapon (weapon 0, letter `A`), on the last frame of the animation: the
 lurking pose. Species 3 (`ert`), 5 (`ls1`), 6 (`lz1`), 7 (`lm1`) and 10 (`msp`)
 occur; each has `…uwxaf.art` in `arcanum1.dat`, and every frame index used (4, 5,
 10, 11, 12) is that file's last frame (5, 6, 11, 12 and 13 frames). The owner
 admits only animations 0 (stand) and 7 (fall down), so these are refused as an
 unsupported state although their art exists.
 
-### Critters without standing art (111 objects, 12 maps)
+### Critters without standing art (111 objects, 11 maps)
 
 110 objects of unique NPC 20 (`dgnuw` in `art/unique_npc/unique_npc.mes`) and one
-monster of species 28 (`AIR`) stand unarmed (animation 0, weapon 0). Neither has a
+monster of species 28 (`AIR`) stand with no weapon (animation 0, weapon 0, letter `A`). Neither has a
 `…xaa.art`: `dgnuw` ships only `xab`, `xah`, `xai`, `xba` and `xbu`. The owner
-requires the standing unarmed file, so the object fails with a missing source. The
+requires the standing no-weapon file, so the object fails with a missing source. The
 original never asks for that file: its missing-art table marks it absent and the
-name rule switches the weapon to "unarmed", giving `dgnuwxba.art` and
+name rule switches the weapon to 1, "unarmed" (letter `B`), giving `dgnuwxba.art` and
 `airuwxba.art`, which exist (14 and 16 frames; frame 0 is drawn).
 
 ### Damaged wall (1 object, dernholm pits)
@@ -88,7 +88,7 @@ name rule switches the weapon to "unarmed", giving `dgnuwxba.art` and
 A wall (class 1) with damage bit `0x400` at rotation 7. The owner refuses both
 damage bits (`0x480`). The original names damaged walls with the letters `L`/`R`
 instead of `U` (rule N6 below); here the rotation swaps the bit to `0x80` and the
-piece is the base piece, giving the `R` file.
+piece is 0 (`bse`), giving the `R` file.
 
 ### Tile art on a scenery object (1 object, caladon-panarrii temple)
 
@@ -100,13 +100,14 @@ path; the name is the tile's file name (rule N7).
 
 77 sectors, 43,219 objects, 315,390 terrain cells, but only **260 distinct art ids**
 among the objects. The owner decodes and hashes a frame for every object visual
-(terrain selections are already shared), so after 28,091 object visuals the
-cumulative encoded-frame budget (150 MiB, the 16× cap) is spent and 15,367 objects
+(terrain selections are already shared), so after 28,091 frame requests (shared terrain selections and object visuals) the
+cumulative encoded-frame budget (150,138,368 bytes, the 16× cap) is spent and 15,367 objects
 fail with `BudgetExceeded`. At that point the owner had reserved 3.6 GB of managed
 memory, 1.19 GB retained and read 960 MB of entries. The seven other issues (four
 unsupported states, three missing sources) cannot be attributed while the budget
-failures share their source indices; among the failed objects are a damaged wall
-and walls and scenery that may need the missing-art fallback. Streaming is not
+failures share their source indices; two of them are terrain cells (315,390 of
+77 × 4,096 = 315,392 cells are published), and the failed objects include a damaged
+wall and walls and scenery that may need the missing-art fallback. Streaming is not
 needed first: decoding each distinct selection once per map, as terrain already
 does, removes the repeated work (slice 2).
 
@@ -119,13 +120,15 @@ question only for animated effects at run time (spells, `animfx`).
 
 ## How the original names critter art and falls back
 
-These rules come from CE `name.c`, `a_name.c` and tig `art.c`; N1–N4 and N6 are
-checked in the retail executable, N5 and N7 are CE readings (ledger rows in
+These rules come from CE `name.c`, `a_name.c` and tig `art.c`; N1–N3, N6 and the
+load fallback of N4 are checked in the retail executable, N5, N7 and N4's frame
+lookup are CE readings (ledger rows in
 brackets).
 
 - **N1 Normalize before naming** (MA2, MA3). `name_resolve_path` (0x41DAE0)
   normalizes every art id (`name_normalize_aid`, 0x41D510) before building the file
-  name, and the art cache keys on that name. For critters (class 2), monsters (12)
+  name, and the art cache keys on that name. Weapon 0 is "no weapon" (letter `A`),
+  weapon 1 "unarmed" (letter `B`). For critters (class 2), monsters (12)
   and unique NPCs (13) the normalized id has frame, rotation and palette 0 (they
   select inside the file) and is built in this order:
   1. critters only: an elf female is drawn with the human body; plate armour (4 or
@@ -160,8 +163,9 @@ brackets).
   slip, no effect on this data).
 - **N4 Bad art** (MA5). When the cache cannot load the resolved file, the original
   loads `art\badart.art` in its place under the same art id and draws it; only if
-  that fails too is nothing drawn. `badart.art` is one rotation, one frame. A frame
-  other than 0 indexes past its frame table in the original (undefined), so only
+  that fails too is nothing drawn. `badart.art` is one rotation, one frame. In CE the
+  frame lookup that follows does not check the frame number, so a frame other than
+  0 would read past the table (CE reading, not checked in the executable); only
   frame 0 is defined.
 - **N5 Single-rotation files** (MA6). A one-rotation ART serves every rotation
   (already the whole-map rule since ARC-DATA-016).
@@ -177,15 +181,17 @@ brackets).
 
 With N1–N2 the 132 concealed monsters and the 111 critters without standing art
 resolve to existing files; N6 and N7 cover the wall and the tile scenery. N4 is
-needed for the walls and scenery K'na Tha cannot resolve (and for any other
-module's missing files), not for the 245 counted above.
+not needed for the 245 counted above; it may be for some of K'na Tha's walls and
+scenery and for any other module's missing files.
 
 ## Slices
 
-1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans with the
-   original's ART rules: the full N1 normalization for classes 2, 12 and 13 (every
+1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
+   read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the
+   code `_plan.Original` means the pinned profiles instead): the full N1 normalization for classes 2, 12 and 13 (every
    animation, the weapon/shield rules), N2 from `art/missing.dat` with N3's header
-   check (masks rebuilt from the content index when the header does not match),
+   check (the pinned profiles already read it, as a fixed 332-byte file with header
+   4,601 that refuses bit 8; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),
    N6 damaged walls, N7 tile-art bodies, N4 `badart.art` frame 0 for a resolved
    name no archive holds, recorded on the visual as a fallback policy. Pinned
    profiles unchanged. Expected: the 25 maps other than K'na Tha publish complete

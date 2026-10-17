@@ -97,9 +97,9 @@ budget of K'na Tha. No eye-candy overlay is active at T0 in any interior.
 | Cause | Objects | Next |
 | --- | ---: | --- |
 | Concealed monsters (animation 5, art present) | 132 | the original's name rules (ARC-DATA-023) |
-| Unique NPC `dgnuw` and the `AIR` monster standing unarmed without that file | 111 | the original's missing-art repair (ARC-DATA-023) |
+| Unique NPC `dgnuw` and the `AIR` monster standing with no weapon without that file | 111 | the original's missing-art repair (ARC-DATA-023) |
 | A damaged wall; a scenery object with tile art | 2 | damaged wall names, tile-art bodies (ARC-DATA-023) |
-| K'na Tha: encoded-frame budget after 28,091 object frames (260 distinct art ids among 43,219 objects) | 15,367 + 7 | decode each distinct frame once (ARC-DATA-024) |
+| K'na Tha: encoded-frame budget after 28,091 frame requests (260 distinct art ids among 43,219 objects) | 15,367 + 7 | decode each distinct frame once (ARC-DATA-024) |
 
 Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
 19 maps were complete; those added 2,568 objects of the types the owner did not
