@@ -76,6 +76,21 @@ public static class EffectRules
         return status == EffectRuleStatus.Parsed ? new(status, new(number, true, changes)) : new(status, null);
     }
 
+    /// <summary>
+    /// Reads effect <paramref name="number"/> as the source's tables hold it after the module is loaded (ARC-WORLD-035): 0..49
+    /// from the module's <c>rules\gameeffect.mes</c> (<paramref name="module"/>; null when the module has none), 50..399 from
+    /// <paramref name="effects"/>. A number with no entry has no changes, as in the source.
+    /// </summary>
+    public static EffectRuleRead ReadAny(MesFile effects, MesFile? module, int number)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        if (number is < 0 or > LastNumber) return new(EffectRuleStatus.OutOfRange, null);
+        if (number >= FirstNumber) return Read(effects, number);
+        if (module?.Find(number) is not { } message) return new(EffectRuleStatus.Parsed, new(number, false, []));
+        var status = Parse(message.Bytes.Span, out var changes);
+        return status == EffectRuleStatus.Parsed ? new(status, new(number, true, changes)) : new(status, null);
+    }
+
     /// <summary>Parses one entry's text (the bytes of a MES message).</summary>
     public static EffectRuleStatus Parse(ReadOnlySpan<byte> text, out IReadOnlyList<EffectChange> changes)
     {

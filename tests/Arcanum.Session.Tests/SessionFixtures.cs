@@ -76,7 +76,7 @@ internal static class SessionFixtures
     // and recorded lighting (scheme 1 at 15:00), with an empty party and inventory, no hero, no roll from seed 0 and no life record.
     internal const string LightingTail = ",\"lighting\":{\"schemeId\":1,\"hour\":15}}";
     internal const string GoldenJson =
-        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":15," +
+        "{\"format\":\"arcanum-steamwoven-session\",\"schemaVersion\":16," +
         "\"world\":\"11111111-1111-1111-1111-111111111111\",\"module\":\"22222222-2222-2222-2222-222222222222\",\"revision\":2," +
         "\"clock\":{\"schemaVersion\":1,\"policyId\":\"steamwoven-normalized-clock-v1\"," +
         "\"sourceRevision\":\"a7ff41b300ef712f0e7d088183a3d08957110cdd\"," +
@@ -98,7 +98,7 @@ internal static class SessionFixtures
     internal const string NoCombat = ",\"combat\":null";
     internal const string NoCombatMode = ",\"combatMode\":{\"hero\":false,\"critters\":[]}";
     internal const string NoEquipment = ",\"equipment\":[]";
-    internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[]}";
+    internal const string NoEffects = ",\"effects\":{\"hero\":[],\"definitions\":[],\"blessings\":[],\"curses\":[]}";
     internal const string NoExperience = ",\"experience\":{\"npcs\":[]}";
     internal const string NoEvents = ",\"events\":{\"registry\":1,\"nextSequence\":1,\"pending\":[]}";
 

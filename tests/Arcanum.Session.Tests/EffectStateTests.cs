@@ -307,7 +307,7 @@ public sealed class EffectStateTests
         ",\"effects\":{\"hero\":[{\"effect\":120,\"cause\":\"Item\"},{\"effect\":122,\"cause\":\"Spell\"},{\"effect\":120,\"cause\":\"Spell\"}]," +
         "\"definitions\":[{\"effect\":120,\"changes\":[{\"kind\":\"Stat\",\"attribute\":0,\"operator\":\"Add\",\"value\":2}]}," +
         "{\"effect\":122,\"changes\":[{\"kind\":\"Special\",\"attribute\":0,\"operator\":\"Add\",\"value\":10}," +
-        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}]}";
+        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}],\"blessings\":[],\"curses\":[]}";
 
     private static GameSessionOwner Saved()
     {
@@ -367,7 +367,7 @@ public sealed class EffectStateTests
         Refused("{\"effect\":120,\"changes\"", "{\"effect\":67,\"changes\"", GameSessionFailure.InvalidEffect);
         var heroless = GameSessionSnapshotCodec.Encode(Owner(hero: false).Capture());
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(heroless.Replace(
-            ",\"effects\":{\"hero\":[],\"definitions\":[]}", EffectsJson, StringComparison.Ordinal)), RestoreOptions()).Failure);
+            NoEffects, EffectsJson, StringComparison.Ordinal)), RestoreOptions()).Failure);
         // An END without a hero, of an innate number, or one whose deadline is not its duration after its start.
         var endJson = $"{{\"sequence\":1,\"kind\":\"effect.hero.end\",\"deadlineMs\":{T0 + 8000},\"entities\":[],\"values\":[{T0},8000,120,1]}}";
         Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(heroless.Replace(

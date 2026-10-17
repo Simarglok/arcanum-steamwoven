@@ -18,6 +18,9 @@ public static class SessionEffectLimits
     /// <summary>Pending timed effects (their END events) a session holds: as many as durable entries, though an END can
     /// outlive the entries it would remove.</summary>
     public const int MaxTimedEffects = 64;
+    /// <summary>Entries of the hero's blessing list, and of its curse list (ARC-WORLD-035): each adds one effect entry, so no
+    /// more than the durable entries.</summary>
+    public const int MaxBlessings = MaxHeroEffects;
     /// <summary>The longest duration: int.MaxValue real seconds at the game rate (8 game ms per real ms).</summary>
     public const long MaxDurationMs = int.MaxValue * 8000L;
     /// <summary>The largest magnitude of a change the hero's character owner, reaction and life rules admit.</summary>
@@ -69,17 +72,34 @@ public sealed record SessionHeroEffectsView(IReadOnlyList<SessionEffect> Innate,
 /// they use, by ascending number. Both are empty for a session without a hero.</summary>
 public sealed class SessionEffectState
 {
-    internal SessionEffectState(SessionEffect[] hero, SessionEffectDefinition[] definitions)
+    internal SessionEffectState(SessionEffect[] hero, SessionEffectDefinition[] definitions, SessionBlessing[] blessings,
+        SessionBlessing[] curses)
     {
         Hero = Array.AsReadOnly(hero);
         Definitions = Array.AsReadOnly(definitions);
+        Blessings = Array.AsReadOnly(blessings);
+        Curses = Array.AsReadOnly(curses);
     }
 
-    public static SessionEffectState Empty { get; } = new([], []);
+    public static SessionEffectState Empty { get; } = new([], [], [], []);
 
     public IReadOnlyList<SessionEffect> Hero { get; }
     public IReadOnlyList<SessionEffectDefinition> Definitions { get; }
+    /// <summary>The hero's blessings in list order (snapshot schema 16, ARC-WORLD-035).</summary>
+    public IReadOnlyList<SessionBlessing> Blessings { get; }
+    /// <summary>The hero's curses in list order (snapshot schema 16, ARC-WORLD-035).</summary>
+    public IReadOnlyList<SessionBlessing> Curses { get; }
 }
+
+/// <summary>A blessing or a curse (ARC-WORLD-035): the source's two PC lists, each with its own effect cause.</summary>
+public enum SessionBlessingKind { Blessing, Curse }
+
+/// <summary>
+/// One entry of the hero's blessing or curse list (ARC-WORLD-035): its number, the game time it was received at (the
+/// logbook's date) and the effect number it added, which its removal removes again (the source reads the same table entry
+/// both times, so the session keeps the number it was given).
+/// </summary>
+public readonly record struct SessionBlessing(int Number, int Effect, long TimeMs);
 
 /// <summary>
 /// An effect change: how many entries it added or removed, the hero's life record when the change of a maximum moved its
@@ -102,7 +122,13 @@ internal sealed class EffectDomain
     internal List<AppliedEffectId?> Applied { get; } = [];
     internal Dictionary<int, SessionEffectDefinition> Definitions { get; } = [];
 
-    internal SessionEffectState Capture() => new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)]);
+    internal List<SessionBlessing> Blessings { get; } = [];
+    internal List<SessionBlessing> Curses { get; } = [];
+
+    internal List<SessionBlessing> List(SessionBlessingKind kind) => kind == SessionBlessingKind.Blessing ? Blessings : Curses;
+
+    internal SessionEffectState Capture() =>
+        new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)], [.. Blessings], [.. Curses]);
 
     internal ImmutableArray<EffectModifier> Maximum(EffectSpecial special) => Modifiers(Entries, Definitions, special);
 
@@ -308,6 +334,54 @@ public sealed partial class GameSessionOwner
         return result;
     }
 
+    /// <summary>The hero's blessings or curses in list order (ARC-WORLD-035), or null for a session without a hero.</summary>
+    public IReadOnlyList<SessionBlessing>? QueryHeroBlessings(SessionBlessingKind kind)
+    {
+        ThrowIfDisposed();
+        if (!Enum.IsDefined(kind)) throw new ArgumentOutOfRangeException(nameof(kind));
+        return _hero is null ? null : Array.AsReadOnly(_effects.List(kind).ToArray());
+    }
+
+    /// <summary>
+    /// <c>bless_add</c> / <c>curse_add</c> (ARC-WORLD-035; a script's add-blessing and add-curse actions): after the hero and
+    /// version checks, NoChange when the hero already holds <paramref name="number"/> (the effect is not looked at, as in the
+    /// source), <see cref="GameSessionFailure.EffectCapacityExceeded"/> at <see cref="SessionEffectLimits.MaxBlessings"/>; otherwise the number and the current game time are appended to the list and
+    /// <paramref name="effect"/> is added with the bless or curse cause, as <see cref="AddHeroEffect"/> adds it (its refusals
+    /// apply; nothing is written then). <paramref name="effect"/> is the rule of the number's effect entry, which the host
+    /// reads with <c>BlessingRules.EffectOf</c> (a number below 50, a missing entry or a text without a number give effect 0,
+    /// the module's <c>gameeffect.mes</c> effect 0, as in the original). The host shows the "received" message (entry 1000)
+    /// and marks the logbook on a change. One revision.
+    /// </summary>
+    public SessionEffectResult AddHeroBlessing(GameSessionVersion expected, SessionBlessingKind kind, int number, SessionEffectDefinition effect)
+    {
+        ThrowIfDisposed();
+        if (!Enum.IsDefined(kind)) return RejectEffect(GameSessionFailure.InvalidEffect);
+        if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
+        if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
+        var list = _effects.List(kind);
+        if (list.Any(b => b.Number == number)) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
+        if (list.Count >= SessionEffectLimits.MaxBlessings) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
+        var cause = kind == SessionBlessingKind.Blessing ? EffectCause.Bless : EffectCause.Curse;
+        return AddEffects(expected, effect, cause, 1, null, now => list.Add(new(number, effect.Number, now)));
+    }
+
+    /// <summary>
+    /// <c>bless_remove</c> / <c>curse_remove</c>: NoChange when the hero does not hold <paramref name="number"/>; otherwise its
+    /// first entry leaves the list (the later ones move up) and the first effect entry of the number it added is removed, as
+    /// <see cref="RemoveHeroEffect"/> removes it (whatever caused that entry, as in the source; none may be left). One revision.
+    /// </summary>
+    public SessionEffectResult RemoveHeroBlessing(GameSessionVersion expected, SessionBlessingKind kind, int number)
+    {
+        ThrowIfDisposed();
+        if (!Enum.IsDefined(kind)) return RejectEffect(GameSessionFailure.InvalidEffect);
+        if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
+        if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
+        var list = _effects.List(kind);
+        var index = list.FindIndex(b => b.Number == number);
+        if (index < 0) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
+        return RemoveEffects(expected, list[index].Effect, 1, null, apply: _ => list.RemoveAt(index));
+    }
+
     // An END that came due: its removals, without a version check, as any timer's step.
     internal GameEventHandlerOutcome FireEffectEnd(GameEventFiring firing)
     {
@@ -324,7 +398,7 @@ public sealed partial class GameSessionOwner
         .ToArray());
 
     private SessionEffectResult AddEffects(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause, int count,
-        long? durationMs)
+        long? durationMs, Action<long>? apply = null)
     {
         if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
         if (!EffectDomain.IsValid(definition) || !EffectDomain.OwnCause(cause) || count < 1) return RejectEffect(GameSessionFailure.InvalidEffect);
@@ -337,13 +411,14 @@ public sealed partial class GameSessionOwner
         if (!EffectDomain.Bounded([.. _effects.Entries, .. Enumerable.Repeat(new SessionEffect(definition.Number, cause), count)], definitions))
             return RejectEffect(GameSessionFailure.InvalidEffect);
         var steps = Enumerable.Repeat(new EffectStep(new SessionEffect(definition.Number, cause), -1), count).ToArray();
-        return Commit(steps, definition, durationMs is { } d ? (definition.Number, count, d) : null, null);
+        return Commit(steps, definition, durationMs is { } d ? (definition.Number, count, d) : null, null, apply);
     }
 
     // The first matches by number or cause, up to count of them, as the source's loops find them: each removal shifts the
     // later entries up. An innate entry ahead of the durable ones would be the first match of its number, so a typed removal
     // of an innate number is refused (no durable entry or timed END can have one).
-    private SessionEffectResult RemoveEffects(GameSessionVersion expected, int? number, int count, EffectCause? cause, GameEvent? cancel = null)
+    private SessionEffectResult RemoveEffects(GameSessionVersion expected, int? number, int count, EffectCause? cause, GameEvent? cancel = null,
+        Action<long>? apply = null)
     {
         if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
         if (number is { } n && EffectDomain.IsInnate(_hero.State, n)) return RejectEffect(GameSessionFailure.InnateEffect);
@@ -358,14 +433,14 @@ public sealed partial class GameSessionOwner
             shifted++;
         }
         var steps = indices.Select(index => new EffectStep(null, index)).ToArray();
-        if (steps.Length == 0 && cancel is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
-        return Commit(steps, null, null, cancel);
+        if (steps.Length == 0 && cancel is null && apply is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
+        return Commit(steps, null, null, cancel, apply);
     }
 
     // Every change: the steps on a trial character owner, each moving the damage by the change of a maximum, then the
     // admission of the life facts, the timers and the revision; nothing is written before every check passed.
     private SessionEffectResult Commit(EffectStep[] steps, SessionEffectDefinition? added, (int Number, int Count, long Duration)? timed,
-        GameEvent? cancel)
+        GameEvent? cancel, Action<long>? apply = null)
     {
         var hero = _hero!;
         var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
@@ -446,6 +521,7 @@ public sealed partial class GameSessionOwner
             sequence = scheduled.Event!.Sequence;
         }
         if (cancel is not null) _events.RemoveFirst(cancel.Kind, e => e.Sequence == cancel.Sequence);
+        apply?.Invoke(now);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Length, lifeChanged ? _life.Hero : null, sequence,
             new(_identity, _revision));
@@ -479,10 +555,25 @@ public sealed partial class GameSessionOwner
 
     // Saved effects: only with a hero; every entry of an own cause with a rule of its number, every rule admitted and in use,
     // by ascending number; the entries applied in order to the restored hero, whose life facts must stay valid.
-    private static GameSessionFailure ImportEffects(SessionEffectState saved, HeroDomain? hero, LifeDomain life, out EffectDomain effects)
+    private static GameSessionFailure ImportEffects(SessionEffectState saved, HeroDomain? hero, LifeDomain life, long clockMs, out EffectDomain effects)
     {
         effects = new();
-        if (hero is null) return saved.Hero.Count == 0 && saved.Definitions.Count == 0 ? GameSessionFailure.None : GameSessionFailure.InvalidSnapshot;
+        if (hero is null)
+            return saved.Hero.Count == 0 && saved.Definitions.Count == 0 && saved.Blessings.Count == 0 && saved.Curses.Count == 0
+                ? GameSessionFailure.None : GameSessionFailure.InvalidSnapshot;
+        // ARC-WORLD-035: each list holds a number once, received no later than the saved clock, with an effect number of the
+        // tables that no innate entry has (its add would have been refused).
+        foreach (var (list, into) in new[] { (saved.Blessings, effects.Blessings), (saved.Curses, effects.Curses) })
+        {
+            if (list.Count > SessionEffectLimits.MaxBlessings) return GameSessionFailure.EffectCapacityExceeded;
+            foreach (var entry in list)
+            {
+                if (entry.TimeMs < 0 || entry.TimeMs > clockMs || into.Any(b => b.Number == entry.Number) ||
+                    entry.Effect is < SessionEffectLimits.FirstNumber or > SessionEffectLimits.LastNumber ||
+                    EffectDomain.IsInnate(hero.State, entry.Effect)) return GameSessionFailure.InvalidEffect;
+                into.Add(entry);
+            }
+        }
         if (saved.Hero.Count > SessionEffectLimits.MaxHeroEffects) return GameSessionFailure.EffectCapacityExceeded;
         var previous = int.MinValue;
         foreach (var definition in saved.Definitions)
