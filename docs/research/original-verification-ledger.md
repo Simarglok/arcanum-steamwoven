@@ -134,7 +134,7 @@ Source: [AI plan](npc-combat-ai-plan.md#first-pass-ce-anomalies-to-confirm-not-a
 | LM8 | `combat_load` (0x4B2020) | Required action points read, then set to 0. | Original |
 | LM12 | `background_is_legal` (0x4C2B50), `sub_4C1500` | 8-entry race code table and 11×8 reaction table unchecked. Latent. | Original bug (latent) |
 | LM13 | `invensource_get_id_list` (0x4BF5D0) | Accepts `id ≤ count`: the last set is reachable. | CE slip |
-| LM15 | prototype range labels | Comments and labels only; the data census decides. | Not checked |
+| LM15 | prototype range labels | Comments and labels only; the [data census](combat-data-census.md#5-prototypes) found the description header's labels match the art (27309.. unique NPCs, 28310.. monsters). | Not checked in the executable |
 | LM18 | `script_unlock` (0x44C450) | Returns early only **in** editor mode; unlocks in the game. | CE slip |
 | Reputation P1 (D1) | `reputation_parse` (0x4C1730) | The skip between numbers passes digits **and** `-`/`+`, so a signed effect keeps its written origin and faction. | CE slip |
 | Reputation A2 | `ai_attack` (0x4A9650), `reaction_adj` | A deliberate hit on the PC's follower **adds** parameter 9: the reaction rises. | Original bug (likely; owner decided 2026-10-17: Steamwoven lowers, Original switch keeps the rise) |
@@ -394,8 +394,10 @@ Details the second reading added or sharpened:
 
 ## Not checked
 
-- Data questions: LM15 labels, wilderness A4/A5, P7's label in `ai_params.mes`, `xp_level.mes`
-  entries 50/51 behind A1, how often shipped scripts reach SK1, which data uses the LM17 keys.
+- Data questions: wilderness A4/A5, P7's label in `ai_params.mes`, `xp_level.mes`
+  entries 50/51 behind A1, how often shipped scripts reach SK1. (LM15 labels and the LM17 keys
+  are answered by the [combat-domain data census](combat-data-census.md): the description header's
+  labels match the art, and no shipped `Resist:` uses an LM17 key.)
 - Code left for later: wilderness A2 (editor only); locomotion W4 and the frame-time clamp;
   companion C2, C4, C10, C13 frequency; world-transition jump points and teleports; reputation A6
   and A7; the first-tick marker after a load (OQ2, H1).
