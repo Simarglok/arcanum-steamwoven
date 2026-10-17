@@ -2,7 +2,7 @@
 
 Status: **Implemented bounded component**, ARC-WORLD-008; story domain ARC-SCRIPT-006; party ARC-WORLD-013;
 inventory ARC-WORLD-014; player character ARC-WORLD-015; randomness ARC-WORLD-019; life state ARC-COMBAT-002;
-event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026.
+event queue ARC-WORLD-024; NPC reaction ARC-WORLD-026; turn-based round ARC-COMBAT-003.
 A Godot-free C# owner in the `Arcanum.Session` assembly that holds one game session: the
 [game clock](game-clock-runtime.md), the [global flags](../scripting/global-flag-state-runtime.md),
 the actor's placement, map-local changes and the story domain (PC quest states, shared
@@ -12,7 +12,8 @@ took from the world ([inventory](inventory-runtime.md): pickup, loot, negative d
 generator with labelled rolls ([session randomness](session-random-runtime.md)), the life of the hero and the NPCs it
 changed ([life state](life-state-runtime.md): hit points, fatigue, poison, injuries, knockout, death), the game event
 queue of their timers ([event queue](game-event-queue-runtime.md#session-wiring-arc-world-024)), the NPCs' reaction
-memory toward the PC ([NPC reaction](npc-reaction-runtime.md)), plus a
+memory toward the PC ([NPC reaction](npc-reaction-runtime.md)), the active turn-based combat round
+([turn-based round](turn-based-round-runtime.md)), plus a
 versioned snapshot schema with a strict JSON codec.
 The AREA viewer keeps every [dialog consequence](../scripting/dialog-conversation-runtime.md#area-viewer-integration-project-diagnostic)
 it can store here. It covers the state boundary of
@@ -57,6 +58,7 @@ during an event pass, which must not call back into the owner (a `PlaceActor` or
 | `Roll` / `QueryRandom` / `CombatRolls` | Session randomness (ARC-WORLD-019): one labelled uniform roll in an inclusive range, the generator's seed and position, and the generator as the attack resolver's roll source. A roll takes no expected version and does not move the revision. See [session randomness](session-random-runtime.md). |
 | `QueryHeroLife` / `QueryLife` / `QueryLifeRecord` / `ApplyDamage` / `Kill` / `Heal` / `RecoverFatigue` / `RestHeal` / `PoisonDamageTick` / `PoisonRecoveryTick` / `ClearStun` | Life domain (ARC-COMBAT-002): the hero, or an NPC with the host's facts and loaded state; mutations take the expected version, refuse before any roll, add one revision per change and draw their knockout and second-arm rolls from the session generator. See [life state runtime](life-state-runtime.md). |
 | `QueryHeroReactionFacts` / `QueryReaction` / `QueryReactionRecord` / `QueryReactions` / `AdjustReaction` / `SetReaction` / `ReactToPcHit` / `BeginReactionConversation` / `EndReactionConversation` / `ForgetReaction` | Reaction domain (ARC-WORLD-026): an NPC's effective reaction to the PC under the caller's facts, and its remembered and conversation slots; mutations take the expected version, refuse before any change and add one revision per changed record. See [NPC reaction runtime](npc-reaction-runtime.md). |
+| `QueryCombatRound` / `StartCombatRound` / `EndCombatRound` / `ConsumeActionPoints` / `EndCombatTurn` / `CompleteCombatActions` / `AddCombatant` / `QueryActionPointCheck` / `QueryCombatActionGate` | Turn-based round (ARC-COMBAT-003): participants from the host's `ISessionCombatWorld` scan, action points, charges with the hero's overexertion, subturns and the end of a round one game second later; mutations take the expected version, decide the step on a copy, refuse before any effect and add one revision when the round changes. While a round is active an ordinary `AdvanceGameTime` is NoChange. See [turn-based round runtime](turn-based-round-runtime.md). |
 | `Rules` / `SelectRules(mode)` | Rule mode (ARC-WORLD-023, [contract](rule-modes.md)): the active `GameRules` (Steamwoven or Original) every domain reads at its decision, and an immediate switch (`Changed`, `NoChange`, `Rejected` for an undefined mode). Starts from `GameSessionDescriptor.Rules` or `GameSessionRestoreOptions.Rules` (default Steamwoven). A setting, not state: no revision, not in the snapshot. |
 | `QueryEvents` / `ProcessEvents(world, budget)` | Event queue (ARC-WORLD-024): the pending timers in queue order, and one pass at the session's game time on the actor's map with the host's `ISessionEventWorld` for NPC facts. Life steps set their timers in the same step (`EventBudgetExceeded` when they do not fit); `PlaceActor` and `ApplyChanges` to another map move the followers' timers (`EventConflict` on a collision). See [session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
@@ -135,7 +137,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 10
+## Snapshot schema 11
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -149,13 +151,14 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
+`Combat` (the active round or `null`; [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)),
 `Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":10,
+{"format":"arcanum-steamwoven-session","schemaVersion":11,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -174,6 +177,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "random":{"seed":"0000000000000000","draws":0},
  "life":{"hero":null,"critters":[]},
  "reactions":{"records":[]},
+ "combat":null,
  "events":{"registry":1,"nextSequence":1,"pending":[]},
  "lighting":{"schemeId":1,"hour":15}}
 ```
@@ -204,7 +208,9 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 10 is the only accepted version. ARC-WORLD-026 added the
+**Migration decision: none.** Schema 11 is the only accepted version. ARC-COMBAT-003 added the
+required, nullable `combat` section; schema 10 is refused like the earlier ones (see
+[turn-based round](turn-based-round-runtime.md#snapshot-schema-11)). ARC-WORLD-026 had added the
 required `reactions` section, which replaces the viewer's `reaction.pc` map changes; schema 9 is refused like the
 earlier ones (see [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)). ARC-WORLD-024 had added the
 required `events` section and refused schema 8 (see
@@ -221,10 +227,10 @@ required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of schema 1..9 (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of schema 1..10 (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
-dialog. Adding another domain needs schema 11 with its own explicit migration decision.
+dialog. Adding another domain needs schema 12 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

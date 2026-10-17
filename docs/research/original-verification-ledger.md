@@ -7,7 +7,8 @@ game-mechanics anomaly and decision input this project took from a CE reading, w
 and its verdicts decide which differences become switches of the two rule settings of owner
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
-The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here
+The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
+[Turn-based round](#turn-based-round-arc-combat-003))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -160,6 +161,32 @@ second reader found R1's difference. Every direct branch stays inside `.text`.
 | R2 effects | `effect_adjust_good_bad_reaction` (0x4EAAB0) | Negative: special effect 7 (bad), positive: 8 (good), 0 returns 0. | Original |
 | R8 hit | `ai_attack` (0x4A9650), PC hits NPC | Direct leader is the attacker: a deliberate hit adds parameter 9 (reputation A2, above), then the follow check, which may jilt it. Otherwise accidental −10; deliberate lowers it to parameter 10 when the hostility variant is above it. | Original (A2 an original bug) |
 | R8 quest | `quest_state_set_internal` (0x4C4E60) | Accepted: below 41 → adjust by 41 − effective; completed: +10. | Original |
+
+## Turn-based round (ARC-COMBAT-003)
+
+Source: [combat core](combat-core-evidence.md#turn-order-fr-combat-002) C6–C14 and C30, contract
+[turn-based round runtime](../world/turn-based-round-runtime.md). Read for the round on 2026-10-17 by a first reader
+and, independently, a second reader that saw only the questions (method step 6). Both agree on every row they share; the
+second reader found the merge of a later scan (TB3), the first reader the game-time row (TB15, read once). Every direct
+branch stays inside `.text`; the only jumps out of a function are tail jumps to function entries.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TB1 | `combat_recalc_perception_range` (0x4B7300) | Effective perception (stat 5) of the local PC, halved with signed truncation, + 5, raised to 10. | Original |
+| TB2 | `combat_turn_based_start` (0x4B71E0) | Turn counter 0, animations interrupted, the square `PC ± range` (inclusive) scanned for PCs and NPCs straight into the list, sorted, then begin turn. | Original |
+| TB3 | `combat_turn_based_begin_turn` (0x4B73A0), `object_list_copy` (0x4414E0) | Turn counter + 1; the rescan is **merged** into the list: listed critters stay (out of range or dead too), each new one is put at the head, so newcomers come first in reverse scan order; then the sort, the first participant not skipped, else the local PC when it is active, else the round ends. The stall globals (last actor, last action points, forced flag) are reset. | Original |
+| TB4 | `sub_4B7580` (0x4B7580), `sub_4B7DC0` (0x4B7DC0), `critter_is_active` (0x45D790) | Skipped: not active (destroyed or off, dead, unconscious, stunned or paralysed, stoned), or `OF_DONTDRAW` and not sleeping. | Original |
+| TB5 | `combat_turn_based_whos_turn_set` (0x4B6E70), `sub_4B7010` (0x4B7010) | Action points = effective speed (stat 11), at least 5. An NPC (not during a load) runs its heartbeat script and, on 1, its AI; with no animation started its action points become 0 and the completion check runs. | Original |
+| TB6 | `sub_4B7080` (0x4B7080), `combat_tb_timeevent_process` (0x4B7150) | Any PC keeps its turn while action points > 0. The same actor seen again with unchanged action points sets the forced flag; a new actor only becomes the last actor and the last action points keep the previous actor's value (**A11**). A 2 ms turn event then forces the spend and passes on at ≤ 0. | Original; A11 an original bug |
+| TB7 | `combat_turn_based_next_subturn` (0x4B7690), `combat_turn_based_subturn_end` (0x4B7630) | End script of an NPC, next entry; past the end directly: end turn, no second start; past the end through the skip loop: end turn, then the first subturn starts again (A9). | A9 confirmed (original bug) |
+| TB8 | `combat_turn_based_end_turn` (0x4B7740) | Game and animation time + 1000 ms, then begin turn. | Original |
+| TB9 | `combat_check_action_points` (0x4B7790), `combat_consume_action_points` (0x4B7CD0) | Covered → paid. Else the **local** PC with action points > 0 and current fatigue > 1 takes 2 fatigue damage through `combat_dmg` (no attacker, no blood splotch) and then the action points are set to 0, whoever's turn it now is (**A12**: a knockout in that damage step already passed the turn on); anyone else: 0 and next subturn. | Original; A12 an original bug |
+| TB10 | `combat_move_cost` (0x4B7BA0), `combat_attack_cost` (0x4B7C30), `combat_check_attack` (0x4B78D0), `combat_check_use_obj` (0x4B79A0), `combat_check_pick_item` (0x4B7A20), `combat_check_cast_spell` (0x4B7AA0), `combat_check_use_skill` (0x4B7AE0), `item_weapon_magic_speed` (0x465CF0) | As CE: 2 per step (1 for a PC with always-run), attack 1/2/`max(1, 8 − speed/3)`, reach-1 attack adds the adjacent move, use 2, pick up 1, cast and skill 4; weapon speed = magic adjustment + 5 with apprentice training + speed factor, 10 unarmed. An unreferenced function at 0x4B7B20 (4 + move) is dead code. | Original |
+| TB11 | `combat_turn_based_end_critter_turn` (0x4B7C90), `combat_turn_based_add_critter` (0x4B7E00) | End: action points 0, next subturn. Add: appended (a warning for a hidden awake critter), sorted, the current node unchanged. | Original |
+| TB12 | `combat_save` (0x4B1EA0), `combat_load` (0x4B2020) | Saves setting, active flag, turn counter, then action points, an unused handle, the current actor, the required action points and the last actor. Load restarts the round (fresh scan, counter back to 1), restores the action points and the current actor, resets the required action points; it fails when the actor is not found again. | Original (the session keeps the saved list instead, see the contract) |
+| TB13 | `object_list_rect` (0x440B40), `sector_rect_from_loc_rect` (0x4D0090), `obj_find_node_attach` (0x4E3D30) | Scan order (O2): sector rows by increasing y, sectors by increasing x, inside a sector newest-first (attach prepends; re-attached only on a sector change); destroyed, off and inventory objects excluded. | Original |
+| TB14 | `sub_430FC0` (0x430FC0), `sub_4348E0` (0x4348E0) | Step: walk 2, run 1 with fatigue > 0 (else walk); the run fatigue charge is A4. Gate: false when inactive; true outside a round; false off-turn; an NPC that cannot pay needs `100 × fatigue / max > 35`; a maximum of 0 divides by zero (both rule modes avoid the fault). | Original (A4 a CE slip; the division a fault fixed in both modes) |
+| TB15 | `timeevent_ping` (0x45B370) | In single player game time advances only while no round is active (`combat_turn_based_is_active` 0x4B6D70); animation time always. | Original (first reader only) |
 
 ## Scripts, event queue and randomness (ARC-RES-042, ARC-RES-045, ARC-SCRIPT-007, ARC-RES-046, ARC-WORLD-019)
 

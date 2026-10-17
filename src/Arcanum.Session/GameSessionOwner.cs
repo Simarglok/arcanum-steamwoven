@@ -34,6 +34,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly HeroDomain? _hero;
     private readonly LifeDomain _life;
     private readonly ReactionDomain _reactions;
+    private readonly CombatDomain _combat;
     private readonly GameEventQueue _events;
     // Set only while a pass runs: the host's answers for the timers it fires and the life steps they made.
     private ISessionEventWorld? _passWorld;
@@ -53,10 +54,11 @@ public sealed partial class GameSessionOwner : IDisposable
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
         PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, LifeDomain life, ReactionDomain reactions,
-        SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
+        CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
         _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _life = life; _reactions = reactions;
+        _combat = combat;
         _lighting = lighting;
         _events = events;
         sink.Owner = this;
@@ -103,7 +105,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(descriptor.RandomSeed), life, new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
+            new(descriptor.RandomSeed), life, new(), new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -138,6 +140,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportReactions(snapshot.Reactions, limits, out var reactions);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportCombat(snapshot.Combat, hero is not null, out var combat);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero is not null, life, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
@@ -163,7 +167,7 @@ public sealed partial class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, snapshot.Lighting, sink, events!)
+            hero, inventory, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat, snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -181,10 +185,19 @@ public sealed partial class GameSessionOwner : IDisposable
     public ClockSnapshot QueryClockSnapshot() { ThrowIfDisposed(); return _clock.QueryClockSnapshot(); }
 
     /// <summary>Forwarded to the clock. An advance that leaves the hour of the recorded lighting clears it, so a
-    /// capture never pairs a time with another hour's scheme; the host records the new hour's lighting.</summary>
+    /// capture never pairs a time with another hour's scheme; the host records the new hour's lighting. While a turn-based
+    /// round is active (ARC-COMBAT-003) an ordinary advance is NoChange after the clock's own checks: game time then moves
+    /// only by the round's one second, as in the source; an explicit wait still advances.</summary>
     public ClockMutationResult AdvanceGameTime(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
     {
         ThrowIfDisposed();
+        if (_combat.Round is not null && reason == ClockAdvanceReason.OrdinaryAdvance && durationGameMs > 0)
+            return _clock.AdvanceGameTime(token, 0, reason);
+        return AdvanceClock(token, durationGameMs, reason);
+    }
+
+    private ClockMutationResult AdvanceClock(ClockToken token, long durationGameMs, ClockAdvanceReason reason)
+    {
         var result = _clock.AdvanceGameTime(token, durationGameMs, reason);
         if (result.Disposition == ClockMutationDisposition.Changed && _lighting is { } lighting && lighting.Hour != result.Snapshot.Hour)
             _lighting = null;
@@ -1052,7 +1065,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), CaptureEvents(), _lighting);
+            _inventory.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1290,6 +1303,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (!changed) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, outcome, new(_identity, _revision));
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
+        EndSubturnOnKnockout(target, outcome);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }
