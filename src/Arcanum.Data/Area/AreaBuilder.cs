@@ -70,6 +70,10 @@ public sealed partial class AreaDataOwner
         catch (TerrainException) { throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); }
         var tileSource = MappingSource(AreaMappingRole.Tile); var facadeSource = MappingSource(AreaMappingRole.Facade);
         var sectors = new List<AreaSectorRecord>(); var terrain = new List<AreaTerrainRecord>(); var objects = new List<AreaObjectRecord>();
+        var roofs = new List<AreaRoofRecord>();
+        // ARC-RENDER-021: roof names by position in roofname.mes, as the original indexes them (entry 0 must exist).
+        IReadOnlyList<string>? roofNames = RoofsAdmitted && mappings.TryGetValue(AreaMappingRole.Roof, out var roofTable)
+            ? roofTable.ContainsKey(0) ? roofTable.Values.ToArray() : throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping) : null;
         var visuals = new List<AreaVisualRecord>(); var terrainSelections = new Dictionary<(AreaEntryIdentity, int, int, int), AreaVisualKey>();
         var terrainEntries = new Dictionary<uint, AreaEntryIdentity>();
         var definitions = ReadPrototypes(token, construction);
@@ -133,6 +137,8 @@ public sealed partial class AreaDataOwner
                 catch (AreaException error) { _budget.EndFrame(); issues.Add(error.Issue with { SourceIndex = ordinal }); }
                 catch (TerrainException) { issues.Add(new(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Mapping, SourceIndex: ordinal)); }
             }
+            if (roofNames is not null && scope == AreaScope.Core && framing.RoofDiscriminator == 0)
+                AddRoofs(bytes, framing[TerrainSection.Roof], sectorKey, coordinate, roofNames, visuals, roofs, issues, output, token);
             var start = framing.ObjectWindow.Range.Offset; var end = framing.ObjectWindow.Range.End;
             for (var ordinal = 0; ordinal < framing.ObjectWindow.TerminalObjectCount; ordinal++)
             {
@@ -211,7 +217,8 @@ public sealed partial class AreaDataOwner
             OriginalAreaMap.CrashSiteCave => CaveProfile.Endpoints(objects),
             _ => [],
         };
-        var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, endpoints);
+        var snapshot = new AreaSnapshot(_identity, _generation + 1, _plan, sectors.OrderBy(s => s.Key.Packed), terrain, objects, visuals, reconciliation, endpoints,
+            roofs, roofs.Count > 0 ? RoofShades(mappings[AreaMappingRole.RoofShade]) : null);
         return new(snapshot, issues, _budget.Usage);
     }
 
@@ -402,6 +409,55 @@ public sealed partial class AreaDataOwner
         if (matches.Length != 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
         return _entryIdentities[(source, matches[0].Ordinal)];
     }
+    /// <summary>ARC-RENDER-021: the roof list of one core sector of a whole map (256 roof art words after the list's own
+    /// word, sector slot <c>x/4 + 16·(y/4)</c>; <c>0xFFFFFFFF</c> is no roof). A roof art is class 10 with the number in
+    /// bits 19–27 (the position of its name in <c>roofname.mes</c>), the frame in 14–18 (0–8), the fill bit 13, the fade
+    /// bit 12, the palette in 4–5 and the mirror flag in bit 0 (pieces 9–12 are frames 0–3 mirrored); a word with other
+    /// bits, a frame above 8 or a mirrored frame above 3 is refused for its slot alone.</summary>
+    private void AddRoofs(byte[] bytes, TerrainByteRange range, AreaSectorKey sector, AreaSectorCoordinate coordinate, IReadOnlyList<string> names,
+        List<AreaVisualRecord> visuals, List<AreaRoofRecord> roofs, List<AreaIssue> issues, AreaOwnership output, CancellationToken token)
+    {
+        if (range.Length != 4 + 256 * 4) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Sector, range.Offset);
+        for (var slot = 0; slot < 256; slot++)
+        {
+            token.ThrowIfCancellationRequested();
+            var raw = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(range.Offset + 4 + 4 * slot));
+            if (raw == uint.MaxValue) continue;
+            var index = 4096 + slot;
+            try
+            {
+                var frame = (int)((raw >> 14) & 31); var mirrored = (raw & 1) != 0;
+                if (raw >> 28 != 10 || (raw & 0xFCEU) != 0 || frame > 8 || (mirrored && frame > 3))
+                    throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance, index: index);
+                var number = (int)((raw >> 19) & 511);
+                if (number >= names.Count) throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping, index: index);
+                var entry = Resolve(MappingSource(AreaMappingRole.Roof), "art/roof/" + Safe(names[number]) + ".art");
+                var key = new AreaVisualKey(AreaSourceKind.Terrain, sector, index, string.Empty, AreaLayerKind.Roof);
+                AdmitVisual(visuals); output.Allocate(2048);
+                // The fill and fade bits are state, not appearance: the visual's lookup leaves them out.
+                AddVisual(visuals, MakeVisual(key, raw, raw & ~0x3000U, entry, 0, 0, frame, (int)((raw >> 4) & 3), mirrored, 0, 0, 100, null, token));
+                roofs.Add(new(sector, slot, checked(coordinate.OriginX + 4 * (slot & 15)), checked(coordinate.OriginY + 4 * (slot >> 4)), raw,
+                    frame + (mirrored ? 9 : 0), (raw & 0x2000) != 0, (raw & 0x1000) != 0, key));
+            }
+            catch (AreaException error) { _budget.EndFrame(); issues.Add(error.Issue with { SourceIndex = index }); }
+        }
+    }
+    /// <summary>The three roof shade values (entries 0, 1 and 2 read like C <c>atoi</c>, kept as the byte the original stores).</summary>
+    private static AreaRoofShades RoofShades(SortedDictionary<int, string> table)
+    {
+        byte Value(int key) => table.TryGetValue(key, out var text) ? unchecked((byte)Atoi(text)) : throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping);
+        return new(Value(0), Value(1), Value(2));
+    }
+    private static int Atoi(string text)
+    {
+        var i = 0; while (i < text.Length && text[i] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r') i++;
+        var negative = i < text.Length && text[i] == '-'; if (i < text.Length && text[i] is '+' or '-') i++;
+        long value = 0;
+        for (; i < text.Length && char.IsAsciiDigit(text[i]) && value <= int.MaxValue; i++) value = value * 10 + (text[i] - '0');
+        return unchecked((int)(negative ? -value : value));
+    }
+    private bool RoofsAdmitted => _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original
+        && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Roof) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.RoofShade);
     private void AdmitVisual(List<AreaVisualRecord> visuals)
     { if (visuals.Count >= _limits.MaxVisuals) throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Frame); }
     private static void AddVisual(List<AreaVisualRecord> visuals, AreaVisualRecord visual) => visuals.Add(visual);

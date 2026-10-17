@@ -10,7 +10,7 @@ public readonly record struct AreaInputKey(AreaSourceRole Role, int Number = 0);
 public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha256);
 public enum AreaScope { Core, Context, Outside, Unknown }
 public enum AreaSourceKind { Terrain, Static, Mobile }
-public enum AreaLayerKind { Body, Foreground, Background, Underlay }
+public enum AreaLayerKind { Body, Foreground, Background, Underlay, Roof }
 public enum AreaPresence { Absent, Null, Value, Empty, Array }
 public enum AreaValueOrigin { Instance, Prototype }
 public enum AreaDisposition { BodyEligibleConditionally, ExteriorSectorInsertionRefusedByInventory, BodySuppressedBySerializedState, ContextOnly, MissingMandatoryFact }
@@ -64,6 +64,13 @@ public sealed record AreaSectorRecord(AreaSectorKey Key, AreaSectorCoordinate Co
 public sealed record AreaTerrainRecord(AreaVisualKey Key, int LocalX, int LocalY, long WorldX, long WorldY, uint RawArt, uint LookupArt, AreaScope Scope, AreaVisualKey SelectedVisual);
 public sealed record AreaObjectRecord(AreaObjectKey Key, int Version, int Type, int PrototypeNumber, string PrototypeReferenceSha256, string PrototypeOwnSha256, string RawSha256, string SemanticSha256, AreaScope Scope, long? SerializedLocation, long? WorldX, long? WorldY, AreaDisposition Disposition, IReadOnlyList<AreaFieldValue> DirectFields, IReadOnlyList<AreaFieldValue> EffectiveFields, bool SchemaReady, bool PlacementReady, bool RequiredLayersReady);
 public sealed record AreaVisualRecord(AreaVisualKey Key, uint RawArt, uint LookupArt, AreaEntryIdentity Entry, string PayloadSha256, int ViewLength, int NominalFacing, int SourceGroup, int PhysicalGroup, int Frame, int RequestedPalette, int EffectivePalette, bool Mirrored, int Width, int Height, int HotX, int HotY, int ArtOffsetX, int ArtOffsetY, int ObjectOffsetX, int ObjectOffsetY, int Scale, int EncodedBytes, int RgbaBytes, string RgbaSha256, string Policy);
+/// <summary>ARC-RENDER-021: one roof block of a whole map: the sector's slot (block <c>x/4 + 16·(y/4)</c> of its local
+/// tiles), the block's first tile, the roof art as the sector stores it, its piece (0–12; 9–12 are pieces 0–3 drawn
+/// mirrored with palette 1), the fill and fade bits at T0, and the visual of its frame.</summary>
+public sealed record AreaRoofRecord(AreaSectorKey Sector, int Slot, long BlockX, long BlockY, uint RawArt, int Piece, bool Fill, bool Fade, AreaVisualKey Visual);
+/// <summary>The three <c>art/roof/roofshade.mes</c> values a faded roof's corners take (entries 0, 1 and 2, read like C
+/// <c>atoi</c> into a byte).</summary>
+public sealed record AreaRoofShades(byte Opaque, byte Partial, byte Transparent);
 public sealed record AreaEndpoint(long Sector, int Ordinal, int Prototype, int Sap, int Script, int CatalogueDestination, int RuntimeDestination, long ArrivalX, long ArrivalY, string SourceObjectIdSha256);
 public sealed record AreaReconciliation(int Survey, int CoreSectors, int ContextPresent, int ContextMissing, int CoreTerrain, int ContextTerrain, int Statics, int Aggregate, int CoreMobiles, int ContextMobiles, int OutsideMobiles, int UnknownMobiles, int EditorCorrespondence, int Prototypes, int Visuals);
 public sealed record AreaBudgetUsage(long ReadReserved, long ReadActual, long ManagedReserved, long PhaseReserved, long RetainedReserved, long FrameRequests, long FrameStored, long FrameDecoded, long FrameRgba, long FrameEncoded, long ConsumerCopyBytes);
@@ -71,8 +78,10 @@ public sealed record AreaBudgetUsage(long ReadReserved, long ReadActual, long Ma
 public sealed class AreaSnapshot
 {
     internal AreaSnapshot(object owner, int generation, AreaSourcePlan plan, IEnumerable<AreaSectorRecord> sectors, IEnumerable<AreaTerrainRecord> terrain,
-        IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals, AreaReconciliation counts, IEnumerable<AreaEndpoint> endpoints)
+        IEnumerable<AreaObjectRecord> objects, IEnumerable<AreaVisualRecord> visuals, AreaReconciliation counts, IEnumerable<AreaEndpoint> endpoints,
+        IEnumerable<AreaRoofRecord>? roofs = null, AreaRoofShades? roofShades = null)
     {
+        Roofs = Array.AsReadOnly((roofs ?? []).ToArray()); RoofShades = roofShades;
         Owner = owner; Generation = generation; CatalogueMap = plan.CatalogueMap; RuntimeMap = plan.RuntimeMap; Profile = plan.Profile;
         Inputs = Array.AsReadOnly(plan.Identities.ToArray());
         Sectors = Array.AsReadOnly(sectors.ToArray()); Terrain = Array.AsReadOnly(terrain.ToArray()); Objects = Array.AsReadOnly(objects.ToArray());
@@ -92,6 +101,10 @@ public sealed class AreaSnapshot
     public IReadOnlyList<AreaObjectRecord> Objects { get; }
     public IReadOnlyList<AreaVisualRecord> Visuals { get; }
     public IReadOnlyList<AreaEndpoint> Endpoints { get; }
+    /// <summary>ARC-RENDER-021: the roof blocks of a whole map's core sectors (none for a pinned profile).</summary>
+    public IReadOnlyList<AreaRoofRecord> Roofs { get; }
+    /// <summary>The roof shade values, when the plan binds <c>art/roof/roofshade.mes</c> and the map has roofs.</summary>
+    public AreaRoofShades? RoofShades { get; }
     public AreaReconciliation Reconciliation { get; }
     public bool RendererExecutionVerified => false;
     public bool GameplayVerified => false;
@@ -132,7 +145,7 @@ public sealed class AreaInputSet
     }
     internal IReadOnlyList<AreaInput> Inputs { get; }
 }
-public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal }
+public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal, Roof, RoofShade }
 public sealed record AreaMappingBinding(AreaMappingRole Role, AreaEntryIdentity Entry, string PayloadSha256);
 public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 /// <summary>One resource source in content-stack search order (ARC-DATA-018): an archive input

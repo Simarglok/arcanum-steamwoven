@@ -39,6 +39,45 @@ public sealed class AreaWholeMapTests
     }
 
     [TestMethod]
+    public void A_whole_map_reads_its_roof_blocks_with_their_pieces_state_and_frames()
+    {
+        // Slot 0: roof 0, piece 0. Slot 17 (block x 4..7, y 4..7): roof 1, frame 0 mirrored (piece 9), filled and faded.
+        var words = Enumerable.Repeat(uint.MaxValue, 256).ToArray();
+        words[0] = 10u << 28; words[17] = (10u << 28) | (1u << 19) | 0x2000 | 0x1000 | 1;
+        var snapshot = Complete(Roofed(words));
+        Assert.AreEqual(2, snapshot.Roofs.Count);
+        var first = snapshot.Roofs.Single(r => r.Slot == 0);
+        Assert.AreEqual((64L, 64L, 0, false, false), (first.BlockX, first.BlockY, first.Piece, first.Fill, first.Fade));
+        var second = snapshot.Roofs.Single(r => r.Slot == 17);
+        Assert.AreEqual((68L, 68L, 9, true, true), (second.BlockX, second.BlockY, second.Piece, second.Fill, second.Fade));
+        var visual = snapshot.Visuals.Single(v => v.Key == second.Visual);
+        Assert.AreEqual((AreaLayerKind.Roof, 4096 + 17, true, 0, words[17] & ~0x3000U), (visual.Key.Layer, visual.Key.SourceIndex, visual.Mirrored, visual.Frame, visual.LookupArt));
+        Assert.AreEqual(new AreaRoofShades(255, 200, 80), snapshot.RoofShades);
+        // A pinned-style plan keeps refusing a roof list, whatever the mappings.
+        Assert.IsFalse(Roofed(words, AreaSectorSelection.TownmapComponent).Owner.Inspect().IsComplete);
+    }
+
+    [TestMethod]
+    public void A_roof_word_outside_the_admitted_shape_is_refused_for_its_slot()
+    {
+        foreach (var bad in new[] { 9u << 28, (10u << 28) | (9u << 14), (10u << 28) | (4u << 14) | 1, (10u << 28) | 0x40, (10u << 28) | (7u << 19) })
+        {
+            var words = Enumerable.Repeat(uint.MaxValue, 256).ToArray(); words[5] = bad;
+            var report = Roofed(words).Owner.Inspect();
+            Assert.IsTrue(report.Issues.Any(i => i.SourceIndex == 4096 + 5), bad.ToString("x"));
+        }
+    }
+
+    private static Fixture Roofed(uint[] words, AreaSectorSelection selection = AreaSectorSelection.AllSectors)
+    {
+        var resources = new (string, byte[])[] { ("tile.mes", Tile), ("facade.mes", Facade), ("scenery.mes", Scenery),
+            ("roofname.mes", "{0}{r0}{1}{r1}"u8.ToArray()), ("roofshade.mes", "{0}{255}{1}{ 200x}{2}{80}"u8.ToArray()),
+            ("art/tile/stonebse0a.art", Art()), ("art/roof/r0.art", Art()), ("art/roof/r1.art", Art()) };
+        return new Fixture([(Start, [])], moduleBytes: Dat(("maps/test/67108865.sec", RoofedSector(words))), resourceEntries: resources,
+            mappingRoles: [AreaMappingRole.Tile, AreaMappingRole.Facade, AreaMappingRole.Scenery, AreaMappingRole.Roof, AreaMappingRole.RoofShade], selection: selection);
+    }
+
+    [TestMethod]
     public void Art_with_a_tail_is_read_only_when_the_plan_allows_it()
     {
         var tailed = Resources(Art(), [.. Art(), 0]);
@@ -180,9 +219,11 @@ public sealed class AreaWholeMapTests
         [("tile.mes", Tile), ("facade.mes", Facade), ("scenery.mes", Scenery), ("art/tile/stonebse0a.art", tile ?? Art()), ("art/scenery/fixture.art", scenery ?? Art())];
 
     /// <summary>As <see cref="AreaIdentityTests.Sector"/> (format 3, townmap 2, no objects) with a roof list.</summary>
-    private static byte[] RoofedSector()
+    private static byte[] RoofedSector(uint[]? words = null)
     {
-        using var s = new MemoryStream(); I32(s, 0); s.Write(new byte[16384]); I32(s, 0); s.Write(new byte[1024]); I32(s, 0xAA0003);
+        using var s = new MemoryStream(); I32(s, 0); s.Write(new byte[16384]); I32(s, 0);
+        foreach (var word in words ?? new uint[256]) I32(s, unchecked((int)word));
+        I32(s, 0xAA0003);
         I32(s, 0); s.Write(new byte[12]); I32(s, 2); s.Write(new byte[20]); I32(s, 0); return s.ToArray();
     }
 }

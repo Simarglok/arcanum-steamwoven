@@ -32,7 +32,7 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   64 MiB for the aggregate) and the owner authenticates those bytes against the
   plan. A sector or editor mobile (`.mob`) file overridden outside the module
   archive is refused, because the owner reads both from the module archive.
-- **Mappings:** the ten MES/policy files the pinned profiles bind. The original
+- **Mappings:** the ten MES/policy files the pinned profiles bind, and the two roof tables (ARC-RENDER-021, optional). The original
   reads all of them in Name's init, before the module is mounted (ARC-DATA-027,
   exe-checked), so each is the first base source's copy: a module copy is never
   read, and a base copy that is not an input of the plan (a loose base file a
@@ -78,7 +78,10 @@ A whole-map plan also:
 - looks a resource up in content-stack order (ARC-DATA-018, below), not only
   in the archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without
-  failing the map: roofs are not drawn yet;
+  failing the map, and since ARC-RENDER-021 reads the roof blocks of every core
+  sector, with the `Roof` (`art/roof/roofname.mes`) and `RoofShade`
+  (`art/roof/roofshade.mes`) mappings, into `AreaSnapshot.Roofs` and roof
+  visuals ([roofs](../rendering/roofs.md));
 - draws doors and windows (ARC-DATA-020): with the `Portal` mapping
   (`art/portal/portal.mes`) a type-1 object's ART is the entry's first word for
   its number (+1001 for a window), the busted bit turns the name's
