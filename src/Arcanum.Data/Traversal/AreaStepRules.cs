@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Traversal;
 
@@ -28,25 +29,17 @@ internal static class AreaStepRules
     internal sealed record Critter(int[] StatBase, IReadOnlyList<int> EffectIndices, long HpPoints, long HpAdjustment, long HpDamage);
     internal enum Life { Alive, Dead, Unknown }
 
-    /// <summary>Bounded braced-record reader. Text between records is ignored; duplicates and broken braces fail.</summary>
+    private static readonly MesReaderOptions MesOptions = new() { MaxBytes = MaxMesBytes, MaxMessages = MaxMesRecords };
+
+    /// <summary>A rule MES table in the original grammar (<see cref="MesTable"/>, ARC-DATA-027). Refusals are
+    /// <see cref="AreaStepInvocationCode.MalformedSource"/>, limits <see cref="AreaStepInvocationCode.LimitExceeded"/>.</summary>
     internal static SortedDictionary<int, string> ParseMes(ReadOnlySpan<byte> bytes)
     {
         if (bytes.Length > MaxMesBytes) throw new AreaStepInvocationException(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
-        var text = Encoding.Latin1.GetString(bytes); var result = new SortedDictionary<int, string>(); var cursor = 0;
-        while ((cursor = text.IndexOf('{', cursor)) >= 0)
-        {
-            var keyEnd = text.IndexOf('}', cursor + 1);
-            if (keyEnd < 0 || !int.TryParse(text.AsSpan(cursor + 1, keyEnd - cursor - 1), NumberStyles.AllowLeadingSign, CultureInfo.InvariantCulture, out var key))
-                throw Malformed();
-            cursor = keyEnd + 1; while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
-            if (cursor == text.Length || text[cursor] != '{') throw Malformed();
-            var valueEnd = text.IndexOf('}', cursor + 1);
-            if (valueEnd < 0 || text.IndexOf('{', cursor + 1, valueEnd - cursor - 1) >= 0 || !result.TryAdd(key, text[(cursor + 1)..valueEnd])) throw Malformed();
-            if (result.Count > MaxMesRecords) throw new AreaStepInvocationException(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
-            cursor = valueEnd + 1;
-        }
-        return result;
-        static AreaStepInvocationException Malformed() => new(AreaStepInvocationCode.MalformedSource, AreaStepInvocationStage.Rules);
+        var status = MesTable.Read(bytes, MesOptions, out var table);
+        if (status == MesParseStatus.Parsed) return table;
+        throw new AreaStepInvocationException(MesTable.IsLimit(status) ? AreaStepInvocationCode.LimitExceeded : AreaStepInvocationCode.MalformedSource,
+            AreaStepInvocationStage.Rules);
     }
 
     /// <summary>Flags run from the first '/' to the first space; 'b'/'f' block; other characters are ignored.

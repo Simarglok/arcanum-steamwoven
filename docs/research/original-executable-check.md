@@ -128,8 +128,8 @@ function with the original's outputs to `research-private/oracle/`, then runs th
 mutants per function ([toolchain](../workflow/toolchain.md#function-oracle)). A
 function gains an oracle with its own world model, test and launcher row. First
 functions: experience to next level (0x4A68B0), progress (0x4A6900) and bonus points
-(0x4A6980), at F3; the progress run reports the XP3 inputs until their rule-mode
-switch exists. Each run writes a receipt (seed, inputs, mutants, result, executable
+(0x4A6980), at F3; progress is compared in Original mode, and its Steamwoven mode
+may differ only on the XP3 inputs (ARC-WORLD-033). Each run writes a receipt (seed, inputs, mutants, result, executable
 SHA-256 and the method's IL hash) to `docs/verification/receipts/`, and the
 [function registry](../verification/README.md) (ARC-DEV-008) lists every implemented
 function with its status and evidence level; a root test fails when an F3 function's

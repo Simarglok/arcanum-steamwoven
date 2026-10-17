@@ -1,5 +1,6 @@
 using System.Buffers.Binary;
 using System.Text;
+using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Terrain;
 
@@ -17,8 +18,8 @@ public static class TerrainLoader
         if (module.DeclaredOutputSize > limits.MaxSectorDecodedEntryBytes) throw new TerrainLimitExceededException("The selected sector exceeds the decoded byte limit.");
         var sectorBytes = moduleArchive.ReadEntry(module);
         var parsed = ParseSector(sectorBytes, limits);
-        var tileNames = TileNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.TileMesEntryPath, "tile MES", limits.MaxMesDecodedEntryBytes), limits, allowObservedTileInterstitialText: true));
-        var facadeNames = FacadeNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.FacadeMesEntryPath, "facade MES", limits.MaxMesDecodedEntryBytes), limits, allowObservedTileInterstitialText: false));
+        var tileNames = TileNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.TileMesEntryPath, "tile MES", limits.MaxMesDecodedEntryBytes), limits));
+        var facadeNames = FacadeNames.Parse(ParseMes(ReadSelected(resourceSource.Archive, resourceSource.FacadeMesEntryPath, "facade MES", limits.MaxMesDecodedEntryBytes), limits));
         var resourceIndex = resourceSource.Archive.Entries
             .Select(entry => (Entry: entry, Name: NormalizeEntry(entry)))
             .Where(item => item.Name is not null)
@@ -95,6 +96,10 @@ public static class TerrainLoader
         {
             return Issue(ordinal, kind == TerrainKind.Tile ? TerrainIssueCode.InvalidTileSelector : TerrainIssueCode.InvalidFacadeSelector, exception.Message);
         }
+        // ARC-DATA-027: name tables are read in the original grammar, so a name may hold any byte; a path that is not
+        // ASCII names no archive entry here and is never folded onto '?'.
+        if (logicalPath.Any(c => c > 0x7f))
+            return Issue(ordinal, kind == TerrainKind.Tile ? TerrainIssueCode.InvalidTileSelector : TerrainIssueCode.InvalidFacadeSelector, "The logical terrain path is not ASCII.");
         var normalizedPath = NormalizePath(Encoding.ASCII.GetBytes(logicalPath));
         if (!index.TryGetValue(normalizedPath, out var candidates) || candidates.Length == 0) return Issue(ordinal, TerrainIssueCode.MissingResource, "No selected resource entry matches the logical terrain path.", normalizedPath);
         if (candidates.Length != 1) return Issue(ordinal, TerrainIssueCode.AmbiguousResource, "Multiple selected resource entries match the logical terrain path.", normalizedPath);
@@ -103,8 +108,13 @@ public static class TerrainLoader
         {
             try
             {
-                var rawPath = NormalizePath(Encoding.ASCII.GetBytes(TilePath(tiles, rawId).Path));
-                wasNormalizationRecovered = rawPath != normalizedPath && !index.ContainsKey(rawPath);
+                // A non-ASCII raw path names no entry and makes no recovery claim (never folded onto '?').
+                var raw = TilePath(tiles, rawId).Path;
+                if (raw.All(c => c <= 0x7f))
+                {
+                    var rawPath = NormalizePath(Encoding.ASCII.GetBytes(raw));
+                    wasNormalizationRecovered = rawPath != normalizedPath && !index.ContainsKey(rawPath);
+                }
             }
             catch (TerrainSelectionException)
             {
@@ -225,64 +235,22 @@ public static class TerrainLoader
         }
     }
 
-    internal static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits, bool allowObservedTileInterstitialText)
+    /// <summary>A tile or facade name table in the original MES grammar (<see cref="MesTable"/>, ARC-DATA-027): text outside
+    /// braces, comments and notes between records are ignored as by the original; a refused shape is
+    /// <see cref="TerrainErrorCode.InvalidFraming"/>, a limit a <see cref="TerrainLimitExceededException"/>, and a table
+    /// without entries is refused.</summary>
+    internal static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits)
     {
         if (bytes.Length > limits.MaxMesDecodedEntryBytes) throw new TerrainLimitExceededException("MES input exceeds the decoded byte limit.");
-        if (bytes.Any(value => value > 0x7f)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains non-ASCII bytes.");
-        var text = Encoding.ASCII.GetString(bytes); var result = new SortedDictionary<int, string>(); var cursor = 0; int? previousKey = null;
-        while (cursor < text.Length)
-        {
-            if (text[cursor] == '\0') { if (text[cursor..].Any(c => c != '\0' && !char.IsWhiteSpace(c))) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has content after terminal NUL."); break; }
-            if (text[cursor] == ';' || (cursor + 1 < text.Length && text[cursor] == '/' && text[cursor + 1] == '/')) { var end = text.IndexOf('\n', cursor); cursor = end < 0 ? text.Length : end + 1; continue; }
-            if (text[cursor] != '{')
-            {
-                var nextRecord = text.IndexOf('{', cursor + 1);
-                if (nextRecord >= 0 && allowObservedTileInterstitialText && IsObservedTileInterstitialText(text, cursor, nextRecord, previousKey))
-                {
-                    cursor = nextRecord;
-                }
-                else if (char.IsWhiteSpace(text[cursor]))
-                {
-                    var whitespaceEnd = cursor;
-                    while (whitespaceEnd < text.Length && char.IsWhiteSpace(text[whitespaceEnd])) whitespaceEnd++;
-                    if (whitespaceEnd == text.Length || text[whitespaceEnd] is '{' or '\0' or ';' || (text[whitespaceEnd] == '/' && whitespaceEnd + 1 < text.Length && text[whitespaceEnd + 1] == '/'))
-                    {
-                        cursor = whitespaceEnd;
-                        continue;
-                    }
-                    throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has unsupported syntax.");
-                }
-                else
-                {
-                    throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES has unsupported syntax.");
-                }
-            }
-            var keyEnd = text.IndexOf('}', cursor + 1); if (keyEnd < 0 || !int.TryParse(text.AsSpan(cursor + 1, keyEnd - cursor - 1), out var key)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES key is malformed.");
-            cursor = keyEnd + 1; while (cursor < text.Length && char.IsWhiteSpace(text[cursor])) cursor++;
-            if (cursor == text.Length || text[cursor] != '{') throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES value is missing.");
-            var valueEnd = text.IndexOf('}', cursor + 1); if (valueEnd < 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES value is unterminated.");
-            var value = text[(cursor + 1)..valueEnd]; if (value.Length > limits.MaxMesValueBytes) throw new TerrainLimitExceededException("MES value exceeds the configured limit.");
-            if (!result.TryAdd(key, value)) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains a duplicate key.");
-            if (result.Count > limits.MaxMesEntries) throw new TerrainLimitExceededException("MES entry count exceeds the configured limit."); previousKey = key; cursor = valueEnd + 1;
-        }
-        if (result.Count == 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains no supported entries."); return result;
-    }
-
-    private static bool IsObservedTileInterstitialText(string text, int start, int end, int? previousKey)
-    {
-        if (previousKey is null || end <= start || text[end - 1] != '\n') return false;
-        var nextKeyEnd = text.IndexOf('}', end + 1);
-        if (nextKeyEnd < 0 || !int.TryParse(text.AsSpan(end + 1, nextKeyEnd - end - 1), out var nextKey)
-            || (nextKey != (long)previousKey.Value + 1 && nextKey is not 100 and not 200 and not 300 and not 400)) return false;
-        var span = text.AsSpan(start, end - start);
-        for (var index = 0; index < span.Length; index++)
-        {
-            var value = span[index];
-            if (value == '\n') continue;
-            if (value == '\r' && index + 1 < span.Length && span[index + 1] == '\n') continue;
-            if (value is < ' ' or > '~' or '{' or '}') return false;
-        }
-        return true;
+        // The reader's field limit also bounds number fields, so the value limit is checked on the values themselves.
+        var options = new MesReaderOptions { MaxBytes = limits.MaxMesDecodedEntryBytes, MaxMessages = limits.MaxMesEntries };
+        var status = MesTable.Read(bytes, options, out var result);
+        if (MesTable.IsLimit(status)) throw new TerrainLimitExceededException($"MES input exceeds a configured limit ({status}).");
+        if (status == MesParseStatus.DuplicateNumber) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains a duplicate key.");
+        if (status != MesParseStatus.Parsed) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"MES has unsupported syntax ({status}).");
+        if (result.Count == 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains no supported entries.");
+        if (result.Values.Any(value => value.Length > limits.MaxMesValueBytes)) throw new TerrainLimitExceededException("MES value exceeds the configured limit.");
+        return result;
     }
 
     internal static (string Path, string Branch) TilePath(TileNames table, uint id)

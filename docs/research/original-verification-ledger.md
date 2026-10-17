@@ -483,7 +483,8 @@ every input; progress differed on 269 inputs, all with to-next above 2,147,483, 
 C# multiplication was made 32-bit in a scratch copy. A planted mutant (every fourth level instead of every fifth) was
 caught. Steamwoven multiplies in 64 bits and `ExperienceTable.Create` admits thresholds up to 2,000,000,000, so a
 table with a step above 2,147,483 shows a different progress. Owner decision 2026-10-17: a rule-mode switch, Original
-wraps and Steamwoven keeps the exact value ([registry](../world/rule-modes.md#registry), not implemented yet).
+wraps and Steamwoven keeps the exact value ([registry](../world/rule-modes.md#registry), implemented by ARC-WORLD-033;
+the function oracle of ARC-DEV-007 finds no difference in Original mode).
 
 ## Audio (ARC-RES-052)
 
@@ -526,6 +527,8 @@ gameinit's init (0x4B9BC5) is set, whose meaning was not identified.
 | LP2 | `mainmenu_ui_init` (0x540930) | An init function of the UI library, which `main` runs before `gamelib_mod_load`; it loads `mes\mainmenu.mes` into the main menu's handle unless that handle is already loaded. The same init also loads it into a second handle through 0x585BC0 (the name cache returns the loaded copy; CE omits this call); a third load site (0x5443E0) has the same guard and no reference (dead code). So no load after the module is mounted can replace the init-time copy. | Original: base sources only |
 | LP3 | `gameinit_mod_load` (0x4B9C30), `map_mod_load` (0x40ED10) with `map_list_info_load` (0x4125C0), `light_scheme_mod_load` (0x4A7C90), `quest_mod_load` (0x4C4670) | Module-load functions (gameinit entry 61, Map 17, LightScheme 18, Quest 31) load `rules\gameinit.mes`, `Rules\MapList.mes`, `Rules\Lighting Schemes.mes` and `rules\gamequest.mes` after the module is mounted. | Original: every source |
 | LP4 | `light_scheme_set` (0x4A7DD0), `map_load_extension` (0x4115D0) | A scheme file is loaded when a scheme is set, by the name the scheme catalogue gives (`Rules\%s.mes`); `mapinfo.txt` is opened from the map's base path when the map opens. | Original: every source |
+| LP5 | `name_init` (0x41CA40) with the tile, facade, wall, portal and item name loaders (0x4EAC80, 0x4EC370, 0x4EC9B0, 0x4EC5A0, 0x4EC190), `name_missing_art_init` (0x41CE60) and `name_missing_art_load` (0x41D1F0) | Name's init (gamelib entry 6: no reset, module-load or module-unload function; it returns at once when already initialised) loads `scenery.mes`, `unique_npc.mes`, `monster.mes` and `container.mes` itself and the tile, facade, wall-name, wall-structure, portal and item-ground tables through loaders it calls once; each path has one code reference and the tables stay loaded until exit. `art\missing.dat` is read only from the missing-art init that Name's init calls (when it cannot be read, the art is probed and the file written); there is no later re-initialisation (the missing-art lookups return at once while it is not initialised). (ARC-DATA-027 part 2) | Original: base sources only |
+| LP6 | `map_load_mobile` (0x410D10), called from `map_open` (0x40F4E0) | `Rules\map.patch` is checked, opened and applied line by line each time a map opens (outside the editor) and closed; only the patched objects remain. (ARC-DATA-027 part 2; the multiplayer caller of `map_open` was not examined) | Original: every source |
 
 Not checked in the executable: when a light ART file is first opened (CE: when it is drawn, through the ART cache);
 the readers take it from the stack winner, as every ART since ARC-DATA-018.

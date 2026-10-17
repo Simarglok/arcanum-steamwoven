@@ -174,7 +174,8 @@ public sealed class CardinalTraversalInspectorTests
         { using var f = new CardinalTraversalFixture([bytes]); var e = Throws<CardinalTraversalInvocationException>(() => f.Inspect()); Assert.AreEqual("CARDINAL_INVOCATION_FAILED", e.Message); Assert.IsNull(e.InnerException); Assert.IsFalse(e.ToString().Contains(f.PrototypeRoot)); Assert.AreEqual(CardinalTraversalInvocationCode.MalformedSource, e.Code); Assert.AreEqual(1, f.Module.Entries.Count); }
         foreach (var mes in new[] { "{0}{aaa}{0}{bbb}", "{0}{aaa" }) { using var f = new CardinalTraversalFixture(names: mes); Throws<CardinalTraversalInvocationException>(() => f.Inspect()); }
         using (var f = new CardinalTraversalFixture(names: "{0}{a\u0001a}")) { var s = f.Inspect(); Result(s.Assess(Request(s)), "Unknown", null, false); }
-        using (var f = new CardinalTraversalFixture()) { f.ResourceBytes[4] = 0x80; Throws<CardinalTraversalInvocationException>(() => f.Inspect()); }
+        // ARC-DATA-027: a name table is read in the original MES grammar, which refuses a 0xFF byte (end of file to its reader).
+        using (var f = new CardinalTraversalFixture()) { f.ResourceBytes[4] = 0xFF; Throws<CardinalTraversalInvocationException>(() => f.Inspect()); }
         using var capped = new CardinalTraversalFixture([Record(), Record()]);
         foreach (var options in new[] { new StaticObjectLoaderOptions { MaxRecords = 1 }, new StaticObjectLoaderOptions { MaxSectorBytes = 1 }, new StaticObjectLoaderOptions { MaxFields = 1 } }) Assert.AreEqual(CardinalTraversalInvocationCode.LimitExceeded, Throws<CardinalTraversalInvocationException>(() => capped.Inspect(objects: options)).Code);
         Assert.AreEqual(CardinalTraversalInvocationCode.LimitExceeded, Throws<CardinalTraversalInvocationException>(() => capped.Inspect(terrain: new TerrainLoaderOptions { MaxMesDecodedEntryBytes = 1 })).Code);

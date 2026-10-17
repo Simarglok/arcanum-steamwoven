@@ -55,6 +55,25 @@ public sealed class ExperienceStateTests
         return (view.Level, view.Experience, view.UnspentPoints);
     }
 
+    // ARC-WORLD-033: the hero's progress reads the session's rules when it is asked for (ledger XP3), with no revision.
+    [TestMethod]
+    public void HeroProgressFollowsTheRuleModeAtTheMomentItIsRead()
+    {
+        var wide = SessionExperienceRules.Create(
+            ExperienceTable.Create([0, .. Enumerable.Range(0, 50).Select(i => 3_000_000 + 1000 * i)]),
+            new Dictionary<int, int>(), new Dictionary<int, int>())!;
+        var result = GameSessionOwner.Create(Descriptor() with { Hero = AtLevel(1, 0), Experience = wide });
+        Assert.AreEqual(GameSessionFailure.None, result.Failure);
+        var owner = result.Owner!;
+        var revision = owner.Version.Revision;
+        Assert.AreEqual(0, owner.QueryHeroExperience()!.Progress);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SelectRules(RuleMode.Original));
+        Assert.AreEqual(1431, owner.QueryHeroExperience()!.Progress);
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.SelectRules(RuleMode.Steamwoven));
+        Assert.AreEqual(0, owner.QueryHeroExperience()!.Progress);
+        Assert.AreEqual(revision, owner.Version.Revision);
+    }
+
     [TestMethod]
     public void AnAwardAddsExperienceAndWritesEveryLevelReached()
     {

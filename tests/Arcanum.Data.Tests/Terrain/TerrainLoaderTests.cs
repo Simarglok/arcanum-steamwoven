@@ -117,10 +117,22 @@ public sealed class TerrainLoaderTests
             ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
 
         AssertThrows<TerrainFormatException>(() => TerrainLoader.Inspect(module, Selector("maps\\fixture\\ascii.sec"), Source(resource)));
+
+        // ARC-DATA-027: 0xFF above is end of file to the original's MES reader. A Latin-1 byte inside a name is read as
+        // the original reads it, and the name then selects no entry instead of being folded onto '?'.
+        var latin = Ascii("{0}{aa?}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}");
+        latin[Array.IndexOf(latin, (byte)'?')] = 0xe9;
+        using var latinResource = DatArchive.Open(new MemoryStream(Dat(
+            ("art\\tile\\tilename.mes", latin),
+            ("art\\facade\\facadename.mes", Ascii("{0}{zero}")),
+            ("ART/TILE/AA?BSE0A.ART", Art()))), leaveOpen: true);
+        var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\ascii.sec"), Source(latinResource));
+        Assert.IsFalse(report.IsComplete);
+        Assert.IsTrue(report.Issues.All(issue => issue.Code == TerrainIssueCode.InvalidTileSelector), "refused as not ASCII, never folded onto the '?' entry");
     }
 
     [TestMethod]
-    public void Mes_accepts_only_observed_bounded_interstitial_text()
+    public void Mes_is_read_in_the_original_grammar()
     {
         var sector = Sector(Enumerable.Repeat(0x000001C0u, 4096).ToArray());
         var tileMes = "{0}{aaa}\ninterstitial text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}";
@@ -139,16 +151,30 @@ public sealed class TerrainLoaderTests
             ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
         Assert.IsTrue(TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(crLfResource)).IsComplete);
 
-        foreach (var malformed in new[]
+        // ARC-DATA-027: the original MES grammar ignores any text outside braces (comments, notes, leading or trailing
+        // text, in tile and facade tables alike) and refuses the shapes its loader truncates or stops on.
+        foreach (var accepted in new[]
         {
             "leading text\n" + tileMes,
             "{0}{aaa}\nunsupported text\n{50}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
-            "{0}{aaa}\ninterstitial\0text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
             "{0}{aaa}\ninterstitial\x01text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
             "{0}{aaa}\tinterstitial text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
+            tileMes + "trailing",
+        })
+        {
+            using var admitted = DatArchive.Open(new MemoryStream(Dat(
+                ("art\\tile\\tilename.mes", Ascii(accepted)),
+                ("art\\facade\\facadename.mes", Ascii("{0}{zero}\ninterstitial text\n{1}{one}")),
+                ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
+            Assert.IsTrue(TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(admitted)).IsComplete, accepted);
+        }
+        foreach (var malformed in new[]
+        {
+            "{0}{aaa}\ninterstitial\0text\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
             "{0}{aaa}\ninterstitial\rtext\n{1}{unused}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}",
             "{0}{aaa}{100}{bbb}{200}{ccc}{300}{ddd}{400}{000000}{2147483647}{unused}\ninterstitial text\n{-2147483648}{unused}",
-            tileMes + "trailing"
+            tileMes + "{0}{again}",
+            tileMes + "{500}{a{b}",
         })
         {
             using var invalid = DatArchive.Open(new MemoryStream(Dat(
@@ -157,12 +183,6 @@ public sealed class TerrainLoaderTests
                 ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
             AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(invalid)));
         }
-
-        using var facadeInterstitial = DatArchive.Open(new MemoryStream(Dat(
-            ("art\\tile\\tilename.mes", Ascii(tileMes)),
-            ("art\\facade\\facadename.mes", Ascii("{0}{zero}\ninterstitial text\n{1}{one}")),
-            ("ART/TILE/AAABSE0A.ART", Art()))), leaveOpen: true);
-        AssertTerrainFormat(TerrainErrorCode.InvalidFraming, () => TerrainLoader.Inspect(module, Selector("maps\\fixture\\interstitial.sec"), Source(facadeInterstitial)));
     }
 
     [TestMethod]

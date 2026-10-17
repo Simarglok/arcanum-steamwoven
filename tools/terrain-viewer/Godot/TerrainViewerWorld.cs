@@ -464,7 +464,7 @@ public partial class TerrainViewerApp
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
-        var direction = _worldResetPending || _worldReloadPending || _areaTransitions?.Pending is not null || WorldModal ? null
+        var direction = _worldResetPending || _worldReloadPending || AreaTransferPending || WorldModal ? null
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is null) _stickHeld = false;
@@ -547,6 +547,7 @@ public partial class TerrainViewerApp
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
         ObserveCombatRunSteps(advance);
+        NoteMapEntries(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
@@ -619,7 +620,7 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (input quarantined/modal/lifecycle)";
             RefreshReadyStatus(); return;
         }
-        if (_areaTransitions?.Pending is not null)
+        if (AreaTransferPending)
         {
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;

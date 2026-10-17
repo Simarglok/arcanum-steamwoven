@@ -59,7 +59,7 @@ public partial class TerrainViewerApp
     {
         if (_worldActor.Session is not AreaGridSession || _readyArea is null) return QuickBusy.NoActor;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending) return QuickBusy.Lifecycle;
-        if (_areaTransitions?.Pending is not null) return QuickBusy.TransferPending;
+        if (AreaTransferPending) return QuickBusy.TransferPending;
         return QuickBusy.None;
     }
 

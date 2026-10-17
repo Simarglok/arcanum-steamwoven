@@ -120,7 +120,7 @@ public partial class TerrainViewerApp
         // A modal surface or lost focus hides the tooltip; the other click guards (closed gate, lifecycle, pending
         // transfer) keep the name but show no action, as the click would be ignored.
         var visible = overWorld && IsWorld && _worldInitialized && _worldFocused && !WorldModal;
-        var open = visible && WorldClickInputOpen && _areaTransitions?.Pending is null;
+        var open = visible && WorldClickInputOpen && !AreaTransferPending;
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
@@ -154,7 +154,7 @@ public partial class TerrainViewerApp
             }
             if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit && SpeakerPresent(s)) is { } speaker)
                 return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
-            if (_areaTransitions is not null && _areaTransitions.Triggers().Any(t => t.Trigger.Key == hit))
+            if (IsAreaTrigger(hit))
             {
                 var row = _hoverIndex!.Row(hit);
                 var distance = Math.Max(Math.Abs(row.WorldX!.Value - actor.X), Math.Abs(row.WorldY!.Value - actor.Y));

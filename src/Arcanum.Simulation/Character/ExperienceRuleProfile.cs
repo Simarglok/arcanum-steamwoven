@@ -1,0 +1,35 @@
+namespace Arcanum.Simulation.Character;
+
+/// <summary>
+/// The two experience rule settings of owner decision D8 (contract docs/world/rule-modes.md): <see cref="Steamwoven"/> (the
+/// original with the recorded fixes, the default) and <see cref="Original"/> (the retail 1.0.7.4 behaviour). Each switch is
+/// a bug of the original game confirmed in its executable (verification ledger). The profile holds no state, so it may
+/// change between any two experience decisions.
+/// </summary>
+public sealed record ExperienceRuleProfile
+{
+    /// <summary>Stable setting name, <c>steamwoven</c> or <c>original</c>; a profile changed with <c>with</c> is a custom mix
+    /// and should get its own name.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>
+    /// Ledger XP3: the progress toward the next level multiplies <c>1000 × experience still needed</c> in 32 bits, which
+    /// wraps when more than 2,147,483 experience is still needed (only a table with such a step; the installed one never
+    /// has it), as the retail executable does (0x4A6900; found by the function oracle of ARC-RES-051, checked on 10,000
+    /// inputs by ARC-DEV-007). Steamwoven keeps the exact product (owner decision 2026-10-17).
+    /// </summary>
+    public bool ProgressProductWraps { get; init; }
+
+    /// <summary>The original with every recorded fix; the default setting.</summary>
+    public static readonly ExperienceRuleProfile Steamwoven = new() { Name = "steamwoven" };
+
+    /// <summary>The retail 1.0.7.4 behaviour.</summary>
+    public static readonly ExperienceRuleProfile Original = new() { Name = "original", ProgressProductWraps = true };
+
+    /// <summary>Both settings, default first.</summary>
+    public static IReadOnlyList<ExperienceRuleProfile> All { get; } = new[] { Steamwoven, Original };
+
+    /// <summary>The setting with this name, or null when there is none.</summary>
+    public static ExperienceRuleProfile? FromName(string? name) =>
+        All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
+}

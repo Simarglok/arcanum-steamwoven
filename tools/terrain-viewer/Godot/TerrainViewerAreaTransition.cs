@@ -47,22 +47,29 @@ public partial class TerrainViewerApp
         ProfileBinding? clock = area.Lighting is { } lighting
             ? AreaAmbientDriver.ClockProfile(lighting.Source)
             : SelfTestBootstrap ? new(1, AreaAmbientDriver.ClockPolicy, AreaAmbientDriver.ClockSourceRevision, moduleSha, moduleSha, 1885, 15) : null;
-        if (clock is not { } profile)
+        // ARC-WORLD-031: a map reached by a transfer keeps the game session it carried.
+        var carried = mapMode ? AdoptHandoffSession(arguments) : null;
+        if (carried is null && clock is null)
         {
-            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock" : "cave: not loaded (no session clock)";
+            if (mapMode) StartMapTransfers(arguments, result);
+            _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock; " + _areaUseStatus : "cave: not loaded (no session clock)";
             return;
         }
-        // The game-generated object file carries an empty module GUID here, so the session's module id is
-        // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
-        var header = Convert.FromHexString(moduleSha)[..16];
-        var created = AreaTransitionCoordinator.CreateSession(profile, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
-            result.Hero);
-        _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+        if (carried is not null) _areaSession = carried;
+        else
+        {
+            // The game-generated object file carries an empty module GUID here, so the session's module id is
+            // project-defined: the first 16 bytes of the authenticated module SHA-256. The world id is this session's.
+            var header = Convert.FromHexString(moduleSha)[..16];
+            var created = AreaTransitionCoordinator.CreateSession(clock!.Value, Guid.NewGuid(), new Guid(header), area.Plan.Chart.ToWorld(area.Plan.Chart.Spawn), area.Snapshot.RuntimeMap,
+                result.Hero);
+            _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
+        }
         BindAreaInventory(result);
         if (mapMode)
         {
-            _areaUseStatus = $"map {arguments.AreaMapName}: transitions not wired (ARC-RES-035 / M3)"
-                + (area.UnlitLightsReason is { } lights ? $"; stationary lights not drawn ({lights})" : "");
+            StartMapTransfers(arguments, result);
+            if (area.UnlitLightsReason is { } lights) _areaUseStatus += $"; stationary lights not drawn ({lights})";
             return;
         }
         if (result.Cave is not { } cave) { _areaUseStatus = "cave: not loaded (no --area-cave-mobile)"; return; }
@@ -81,7 +88,9 @@ public partial class TerrainViewerApp
         EndSheet(); _sheetStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
-        _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
+        // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
+        if (!ReferenceEquals(_areaSession, _mapHandoff?.Session)) _areaSession?.Dispose();
+        _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear();
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
     }
 
@@ -89,6 +98,7 @@ public partial class TerrainViewerApp
     /// Returns true when the click was a use.</summary>
     private bool TryAreaUse(Vector2 screen)
     {
+        if (_mapTransfers is not null) return TryAreaMapUse(screen);
         if (_areaTransitions is null || _readyArea is null || _worldActor.Session is not AreaGridSession session) return false;
         var hit = AreaTriggerAt(screen);
         if (hit is null) return false;
@@ -122,8 +132,8 @@ public partial class TerrainViewerApp
     /// <summary>The trigger object that is the frontmost pickable object under the screen point, if any (ARC-UI-005 pick).</summary>
     private AreaObjectKey? AreaTriggerAt(Vector2 screen)
     {
-        if (_areaTransitions is null || AreaObjectAtScreen(screen) is not { } hit) return null;
-        return _areaTransitions.Triggers().Any(t => t.Trigger.Key == hit) ? hit : null;
+        if ((_areaTransitions is null && _mapTransfers is null) || AreaObjectAtScreen(screen) is not { } hit) return null;
+        return IsAreaTrigger(hit) ? hit : null;
     }
 
     /// <summary>A standable cell within use range of the trigger, nearest the actor: admitted, and entered Open from
@@ -136,7 +146,7 @@ public partial class TerrainViewerApp
 
     /// <summary>A standable cell within <paramref name="range"/> of a world cell, nearest the target then the actor
     /// (shared by walk-to-use and ARC-SCRIPT-005 walk-to-talk).</summary>
-    private static CellCoord? ApproachCell(AreaGridSession session, long worldX, long worldY, int range)
+    private static CellCoord? ApproachCell(AreaGridSession session, long worldX, long worldY, int range, Func<CellCoord, bool>? accept = null)
     {
         var steps = session.Snapshot; var chart = session.Chart; var actor = session.State.CommittedCell;
         var center = chart.ToChart(new(worldX, worldY));
@@ -149,7 +159,7 @@ public partial class TerrainViewerApp
         {
             if (!chart.Contains(cell)) continue;
             var world = chart.ToWorld(cell);
-            if (!steps.IsAdmitted(world)) continue;
+            if (!steps.IsAdmitted(world) || accept?.Invoke(cell) == false) continue;
             foreach (var direction in Enum.GetValues<Arcanum.Data.Traversal.CardinalTraversalDirection>())
             {
                 var (ox, oy) = direction switch
@@ -178,6 +188,7 @@ public partial class TerrainViewerApp
     /// A reset or reload in progress drops both first. Returns true when the map changed.</summary>
     private bool ProcessAreaTransition()
     {
+        if (_mapTransfers is not null || _mapHandoff is not null) return ProcessAreaMapTransfer();
         if (_areaTransitions is null) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {

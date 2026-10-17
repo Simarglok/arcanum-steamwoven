@@ -200,8 +200,8 @@
 | FR-UI-008 | Нет: no game mode state | Нет: no simulation pause/menu | Нет: inspector playback only | Нет: game pause flow absent |
 | FR-MEDIA-001 | Нет: no game video assets/runtime | Нет: no movie path | Нет: no decoder integration | Нет: no media playback verification |
 | FR-MEDIA-002 | Нет: no game slide/voice data | Нет: no story slides | Нет: no presentation path | Нет: no sequence checks |
-| FR-MEDIA-003 | Нет: no game sound resources | Нет: no game audio rules | Нет: no mixer/game adapter | Нет: no audible/device check |
-| FR-MEDIA-004 | Нет: no sector audio records | Нет: no spatial/event rules | Нет: no audio-world integration | Нет: no audio transition check |
+| FR-MEDIA-003 | Частично: [каталог звука](../audio/sound-catalog.md) (ARC-DATA-040) через стек контента: таблицы SFX, схемы, позиционные параметры, пути голоса и фиксированной музыки; допуск всех 3 410 файлов WAV/MP3 (ARC-DATA-041); файлы не декодируются | Нет: no game audio rules | Нет: no mixer/game adapter | Нет: no audible/device check |
+| FR-MEDIA-004 | Частично: схема карты, звуковая запись сектора и схемы по грамматике оригинала в [каталоге звука](../audio/sound-catalog.md) (ARC-DATA-040) | Нет: no spatial/event rules | Нет: no audio-world integration | Нет: no audio transition check |
 | FR-LIFECYCLE-001 | Нет: no game module/session state | Нет: no game bootstrap | Нет: viewer archive lifecycle only | Нет: no launch/continue flow |
 | FR-LIFECYCLE-002 | Частично: session snapshot payload, no metadata/preview | Частично: one quick-save slot (F7/F8), no list/delete | Частично: [atomic slot file](../world/game-session-runtime.md#save-slot-arc-world-011), area viewer HUD status (ARC-WORLD-011) | Частично: synthetic tests and real-data native smoke |
 | FR-LIFECYCLE-003 | Частично: [session snapshot schema 3](../world/game-session-runtime.md) | Частично: identity/profile checks before restore; quick load also checks loaded map and cell first | Частично: atomic quick-save slot (ARC-WORLD-011), no save UI | Частично: synthetic decode/restore/slot tests, damaged-slot native smoke |

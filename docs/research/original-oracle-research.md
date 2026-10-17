@@ -70,7 +70,7 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
    the three experience functions of the trial. Done for the oracle tool, the `OriginalExe` category and `./arcanum oracle`;
    the registry, attribute, receipts and CE counter are ARC-DEV-008 ([function verification](../verification/README.md)).
 3. **Experience XP3 switch**: the progress overflow as a rule-mode switch (owner decision 2026-10-17), with the oracle
-   expecting the difference in Steamwoven mode only.
+   expecting the difference in Steamwoven mode only. Done as ARC-WORLD-033.
 4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace CE references
    with executable addresses in the same PR. Until its domain is migrated, new work cites CE only for the function it
    checks.

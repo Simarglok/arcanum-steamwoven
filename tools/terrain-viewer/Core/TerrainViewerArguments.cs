@@ -20,6 +20,9 @@ public sealed record TerrainViewerArguments(TerrainViewerMode Mode, string Modul
     /// instead of the pinned Crash Site exterior; prototypes come from the content stack, and the area mobile,
     /// effects, patch, cave and prototype folder arguments are refused.</summary>
     public string? AreaMapName { get; init; }
+    /// <summary>ARC-WORLD-031: the tile a map transfer arrives on (never a command-line option). The actor starts there when
+    /// the map's step evidence admits it, otherwise where a map-list arrival would.</summary>
+    public Arcanum.Data.Maps.WorldLocation? AreaMapArrival { get; init; }
     /// <summary>ARC-WORLD-027: start the AREA session as this original pre-made hero (<see cref="AreaStartingHero.Premade"/>);
     /// absent, the session has no hero and dialogs use the diagnostic PC profile.</summary>
     public AreaPremadeHero? Hero { get; init; }

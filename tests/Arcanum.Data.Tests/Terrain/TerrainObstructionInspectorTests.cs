@@ -300,7 +300,8 @@ public sealed class TerrainObstructionInspectorTests
             ("abc/ 0", TerrainObstructionDisposition.NoBlock), ("abc/s +12", TerrainObstructionDisposition.NoBlock), ("abc/n -19", TerrainObstructionDisposition.NoBlock),
             ("abc/p 123456789012345678901234567890", TerrainObstructionDisposition.NoBlock), ("abc", TerrainObstructionDisposition.NoBlock) })
             Assert.AreEqual(disposition, TileResult(value).Disposition, value);
-        foreach (var value in new[] { "", "a", "ab", "abcd", "abc/q", "abc/b//", "abc/b 1x", "abc/ +", "abc/ -", "abc/0x", "abc/{x", "abc/\u0001", "abc/\0", "abc/é" })
+        // A brace or NUL inside a value refuses the whole table (Structural_mes_..., ARC-DATA-027), so it is not a component case.
+        foreach (var value in new[] { "", "a", "ab", "abcd", "abc/q", "abc/b//", "abc/b 1x", "abc/ +", "abc/ -", "abc/0x", "abc/\u0001", "abc/é" })
         {
             var result = TileResult(value);
             Assert.AreEqual(TerrainObstructionSupportedness.Unknown, result.Supportedness, value);
@@ -311,9 +312,13 @@ public sealed class TerrainObstructionInspectorTests
     [TestMethod]
     public void Structural_mes_and_limit_failures_are_typed_and_do_not_leak_private_input()
     {
-        foreach (var mes in new[] { "{bogus}{abc}", "{0}", "{0}{abc", "{0}{abc}}", "{0}{abc}{0}{def}", "{0}{abc}\u0001" })
+        // ARC-DATA-027: the original MES grammar refuses these shapes; text outside braces (a stray brace, a control
+        // character) and a non-ASCII byte in a text are read as the original reads them.
+        foreach (var mes in new[] { "{bogus}{abc}", "{0}", "{0}{abc", "{0}{a{b}", "{0}{abc}{0}{def}", "{0}{abc}\r", "{0}{ab\0c}", "{-1}{abc}", "" })
             AssertSanitizedTerrainFailure(TerrainErrorCode.InvalidFraming, () => InspectRawMes(mes));
-        AssertSanitizedTerrainFailure(TerrainErrorCode.InvalidFraming, () => InspectRawMesBytes([(byte)'{', (byte)'0', (byte)'}', (byte)'{', 0x80, (byte)'}']));
+        AssertSanitizedTerrainFailure(TerrainErrorCode.InvalidFraming, () => InspectRawMesBytes([(byte)'{', (byte)'0', (byte)'}', (byte)'{', 0xFF, (byte)'}']));
+        foreach (var mes in new[] { "{0}{abc}}", "{0}{abc}\u0001", "// note\n{0}{abc} trailing" }) InspectRawMes(mes);
+        InspectRawMesBytes([(byte)'{', (byte)'0', (byte)'}', (byte)'{', 0x80, (byte)'}']);
         AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abc}", new TerrainLoaderOptions { MaxMesDecodedEntryBytes = 1 }));
         AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abcdef}", new TerrainLoaderOptions { MaxMesValueBytes = 3 }));
         AssertSanitizedTerrainFailure(TerrainErrorCode.LimitExceeded, () => InspectRawMes("{0}{abc}{1}{abc}", new TerrainLoaderOptions { MaxMesEntries = 1 }));
