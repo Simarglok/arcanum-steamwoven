@@ -24,10 +24,11 @@ public static class CombatFieldReader
     public const int DamageTypes = 5, Resistances = 5, ItemSpells = 5, BaseStats = 28, BasicSkills = 12, TechSkills = 4, SpellTech = 25;
 
     // Common block.
-    private const int FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
+    private const int CurrentArtSlot = 0, FlagsSlot = 18, SpellFlagsSlot = 19, NameSlot = 21, DescriptionSlot = 22, AcSlot = 25, HpSlot = 26, HpAdjustmentSlot = 27,
         HpDamageSlot = 28, MaterialSlot = 29, ResistanceSlot = 30;
     // Item block (36..58).
-    private const int ItemFlagsSlot = 36, WeightSlot = 38, WorthSlot = 40, ManaStoreSlot = 41, InventoryLocationSlot = 43, ComplexitySlot = 45,
+    private const int ItemFlagsSlot = 36, WeightSlot = 38, WorthSlot = 40, ManaStoreSlot = 41, InventoryArtSlot = 42, InventoryLocationSlot = 43,
+        UseArtFragmentSlot = 44, ComplexitySlot = 45,
         DisciplineSlot = 46, FirstSpellSlot = 49, SpellManaStoreSlot = 54, AiActionSlot = 55;
     // Weapon block (59..85).
     private const int WeaponFlagsSlot = 59, BonusToHitSlot = 61, MagicHitSlot = 62, DamageLowerSlot = 63, DamageUpperSlot = 64, MagicDamageSlot = 65,
@@ -141,7 +142,7 @@ public static class CombatFieldReader
             System.Array.AsReadOnly(Enumerable.Range(0, DamageTypes).Select(i => new CombatDamageRange(lower[i], upper[i])).ToArray());
 
         var common = new CombatObjectFields(type, prototype, Flags(FlagsSlot), Flags(SpellFlagsSlot), Int(NameSlot), Int(DescriptionSlot), Int(AcSlot),
-            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Array(ResistanceSlot, Resistances));
+            Int(HpSlot), Int(HpAdjustmentSlot), Int(HpDamageSlot), Int(MaterialSlot), Array(ResistanceSlot, Resistances), Flags(CurrentArtSlot));
         if (type is PcType or NpcType)
         {
             var critter = new CombatCritterFields(Flags(CritterFlagsSlot), Flags(CritterFlags2Slot), Array(StatSlot, BaseStats),
@@ -161,7 +162,8 @@ public static class CombatFieldReader
 
         var item = new CombatItemFields(Flags(ItemFlagsSlot), Int(WeightSlot), Int(WorthSlot), Int(ManaStoreSlot), Int(ComplexitySlot),
             Int(DisciplineSlot), Int(InventoryLocationSlot),
-            System.Array.AsReadOnly(Enumerable.Range(FirstSpellSlot, ItemSpells).Select(Int).ToArray()), Int(SpellManaStoreSlot), Int(AiActionSlot));
+            System.Array.AsReadOnly(Enumerable.Range(FirstSpellSlot, ItemSpells).Select(Int).ToArray()), Int(SpellManaStoreSlot), Int(AiActionSlot),
+            Flags(InventoryArtSlot), Flags(UseArtFragmentSlot));
         CombatWeaponFields? weapon = null;
         CombatAmmoFields? ammo = null;
         CombatArmorFields? armor = null;

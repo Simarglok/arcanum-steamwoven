@@ -32,7 +32,8 @@ repeated after every restore.
 (`SessionKitItem`: `kit:1`, `kit:2`, … with no origin map; `QueryHeroKit`; [starting hero](starting-hero-runtime.md)),
 which precedes the taken items in the PC's inventory and counts toward `MaxPcItems`. A taken item is hidden from its
 seed's ground and holder lists (`QueryMapInventory`). The PC object, its
-attachments, worn slots and gold pickup are not session state yet.
+attachments and gold pickup are not session state yet; the hero's worn slots are ([equipment](equipment-runtime.md),
+ARC-WORLD-028; a worn item stays in its list).
 
 All entity ids follow the session rule (ASCII letters, digits and `. _ : -`, 1..128 characters); the AREA host uses
 `oid:<SHA-256 of the raw 24-byte object ID>`, the id the conversation host already uses.

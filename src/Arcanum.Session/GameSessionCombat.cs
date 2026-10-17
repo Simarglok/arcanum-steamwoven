@@ -291,7 +291,7 @@ public sealed partial class GameSessionOwner
         // Overexertion: the damage step first (it can refuse), then the round; the knockout is known before either commits,
         // as a fatigue-only packet draws no roll.
         var heroState = _life.Hero!.Value.State;
-        var heroFacts = LifeDomain.HeroFacts(_hero!, heroState);
+        var heroFacts = LifeDomain.HeroFacts(_hero!, heroState, HeroNormalResistance());
         var damage = new LifeDamage { Fatigue = TurnBasedRules.OverexertionFatigueDamage(heroFacts.NormalResistance) };
         var predicted = LifeRules.ApplyDamage(heroState, heroFacts, damage, NoCombatRolls.Instance);
         var knockedOut = predicted.Events.HasFlag(LifeEvents.LostConsciousness);
@@ -563,7 +563,7 @@ public sealed partial class GameSessionOwner
     private LifeStatus HeroStatus(CombatPlan? plan = null)
     {
         var state = plan?.Hero ?? _life.Hero!.Value.State;
-        return LifeRules.Evaluate(state, LifeDomain.HeroFacts(_hero!, state));
+        return LifeRules.Evaluate(state, LifeDomain.HeroFacts(_hero!, state, HeroNormalResistance()));
     }
 
     private int HeroStat(CharacterStat stat)

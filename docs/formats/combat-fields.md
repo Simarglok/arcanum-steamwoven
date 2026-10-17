@@ -48,8 +48,8 @@ layout of the StaticObjects loader, in the source's field order
 
 | Block | Slots | Fields |
 | --- | --- | --- |
-| Object | 18..30 | flags, spell flags, name class, description, AC, HP points, adjustment and damage, material, five resistances |
-| Item | 36..55 | item flags, weight, worth, mana store, inventory location, magick/tech complexity, discipline, five spells, spell mana store, AI action |
+| Object | 0, 18..30 | current art (slot 0, ARC-WORLD-028), flags, spell flags, name class, description, AC, HP points, adjustment and damage, material, five resistances |
+| Item | 36..55 | item flags, weight, worth, mana store, inventory art (42), inventory location, use-art fragment (44), magick/tech complexity, discipline, five spells, spell mana store, AI action |
 | Weapon | 59..81 | weapon flags, to-hit bonus and magic adjustment, damage lower and upper (five types), magic damage adjustment, speed factor, range, minimum strength (each with its magic adjustment), ammunition type and consumption, critical hit and miss charts with magic chance and effect; derived skill |
 | Ammunition | 59..61 | flags, quantity, ammunition type |
 | Armour | 59..67 | armour flags, AC adjustment and magic adjustment, resistance adjustments and magic adjustments (five each), silent-move adjustment and magic adjustment, unarmed bonus damage |
@@ -76,6 +76,13 @@ The weapon skill follows [`item_weapon_skill`][weapon-skill]: a boomerang
 throws; a technological weapon (complexity below 0) with range at least 3 and
 bullets, power cells or fuel is a firearm; an arrow weapon is a bow; anything
 else is melee.
+
+**Item art (ARC-WORLD-028).** `CombatItemArt` decodes the three art ids the wear rules need, as the source's tig art
+helpers do (checked in the retail executable, ledger EQ1 and EQ6): only an item art id (type 6 in bits 28..31) has item
+bits; the inventory art's bits 14..16 are the armour coverage (torso, shield, helmet, gauntlets, boots, ring, medallion),
+the use-art fragment's bits 6..9 the art subtype a wearer's art takes, and bit 10 of the current art marks a destroyed
+(broken) item. The [equipment runtime](../world/equipment-runtime.md) turns these fields into wear values
+(`SessionEquipmentFacts.FromCombatFields`).
 
 ## Boundaries
 

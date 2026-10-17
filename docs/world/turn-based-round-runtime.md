@@ -131,7 +131,9 @@ saved required action points (reset on load) and the unused second actor handle 
   there is no SCR heartbeat dispatch or AI yet (RES-039 I6/I7). With A9 the host runs them twice.
 - **Movement and attacks do not charge yet.** The step, attack and use costs are rules; the movement runtime and the
   attack resolver do not call `ConsumeActionPoints` until a host wires them. Get up (A3) is the cost and the own-subturn
-  gate; the get-up animation is the host's.
+  gate; the get-up animation is the host's. The hero's weapon speed and attack cost come from its worn items
+  (`QueryHeroEquipmentCombat`, [equipment](equipment-runtime.md), ARC-WORLD-028), and its worn normal resistance enters the
+  overexertion damage.
 - **Map changes.** A round is on the actor's map; the host ends it before a map change. The session does not refuse a
   map change during a round.
 - **Fast turn-based mode** (several steps per goal) and the turn-based UI callbacks are not modelled.
