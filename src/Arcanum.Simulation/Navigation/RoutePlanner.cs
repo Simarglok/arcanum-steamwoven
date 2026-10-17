@@ -3,7 +3,7 @@ using Arcanum.Simulation.Movement;
 namespace Arcanum.Simulation.Navigation;
 
 /// <summary>
-/// Bounded local route to a clicked cell (Project policy after the pinned CE structure, parity NOT_VERIFIED):
+/// Bounded local route to a clicked cell (project policy after the source's route structure, docs/world/click-route-runtime.md, parity NOT_VERIFIED):
 /// a straight attempt first, then an eight-direction cost search inside a fixed window around source and target.
 /// No global search, navmesh, smoothing or promotion of Blocked/Unknown/Unsupported evidence to Open.
 /// </summary>

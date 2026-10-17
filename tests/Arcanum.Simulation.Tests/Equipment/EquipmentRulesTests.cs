@@ -114,7 +114,7 @@ public sealed class EquipmentRulesTests
         var shield = Armor(ArmorCoverage.Shield);
         Assert.AreEqual(EquipmentRefusal.NoFreeHand, EquipmentRules.CheckWear(shield, EquipmentSlot.Shield, Human, great));
         Assert.AreEqual(EquipmentRefusal.NoFreeHand, EquipmentRules.CheckWear(Torch, EquipmentSlot.Shield, Human, great));
-        // The original refuses a shield with one crippled arm too (CE reads only "both arms").
+        // The original refuses a shield with one crippled arm too (ledger EQ1).
         Assert.AreEqual(EquipmentRefusal.Crippled, EquipmentRules.CheckWear(shield, EquipmentSlot.Shield, Human with { CrippledArmOne = true }, Nothing));
         Assert.AreEqual(EquipmentRefusal.Crippled, EquipmentRules.CheckWear(Torch, EquipmentSlot.Shield, Human with { CrippledArmsBoth = true }, Nothing));
         Assert.AreEqual(EquipmentRefusal.None, EquipmentRules.CheckWear(shield, EquipmentSlot.Shield, Human,

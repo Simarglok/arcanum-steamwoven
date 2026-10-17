@@ -9,8 +9,8 @@ namespace Arcanum.Simulation.Party;
 public enum FollowAction { Hold, Walk, Run, Jump, Separate }
 
 /// <summary>
-/// Follow distances of one companion (ARC-RES-024 C7–C10, source claims read in CE at
-/// <see cref="FollowConsentRules.SourceRevision"/>; parity NOT_VERIFIED). Distances are Chebyshev cell distances.
+/// Follow distances of one companion (ARC-RES-024 C7–C10, docs/world/companion-follow-runtime.md,
+/// F0; parity NOT_VERIFIED). Distances are Chebyshev cell distances.
 /// A follower starts approaching when the leader is more than <see cref="StartDistance"/> cells away
 /// (<see cref="SpreadOutStartDistance"/> when spread out), stops once within <see cref="Range"/>
 /// (<see cref="SpreadOutRange"/>), runs beyond range + <see cref="WalkSlack"/>, is moved onto the leader's cell beyond

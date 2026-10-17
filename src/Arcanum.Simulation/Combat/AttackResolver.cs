@@ -5,9 +5,9 @@ namespace Arcanum.Simulation.Combat;
 /// source, the critical-effect tables and the anomaly profile: hit location, technology failure, magick cancellation,
 /// the attack roll, dodge, fate, the critical miss that turns the attack on the attacker, and the typed damage packet
 /// with immunities and resistances. The combat rolls are made at the same points and in the same order as in the
-/// source (CE at <see cref="AttackRules.SourceRevision"/>), except where a recorded D2 fix removes one; CE also draws
+/// source (docs/world/attack-resolver-runtime.md, F0), except where a recorded D2 fix removes one; the source also draws
 /// from the same generator outside combat (AI reaction, sounds, the effect tables' stat checks), so a seeded run matches
-/// a CE run only once those draws are modelled too. Ammunition, approach and
+/// the source's sequence only once those draws are modelled too. Ammunition, approach and
 /// line of fire, projectile flight, scripts and applying the damage to vital state stay with the caller.
 /// </summary>
 public static class AttackResolver
@@ -438,7 +438,7 @@ public static class AttackResolver
     {
         var attacker = request.Attacker;
         var weapon = request.Weapon;
-        // A8: CE leaves this chance unassigned when the weapon's magic was cancelled; the original uses 0, as here.
+        // A8: the original uses 0 for this chance when the weapon's magic was cancelled, as here.
         var chance = (weapon.Kind == WeaponKind.Weapon && !magicCancelled ? weapon.MagicCriticalEffectChance : 0)
             + attacker.CriticalEffectChanceAdjustment + (aimed ? 10 : 0);
         var npcHitsPc = recipient.IsPc && !attacker.IsPc;

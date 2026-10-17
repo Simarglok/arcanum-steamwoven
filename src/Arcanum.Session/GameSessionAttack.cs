@@ -80,7 +80,7 @@ public sealed class SessionCritterCombat
     public SessionLifeTarget Target { get; }
     /// <summary>The experience worth and pool the map data stores.</summary>
     public SessionNpcExperience Experience { get; }
-    /// <summary>Mechanical, monster, animal or undead (the source's <c>critter_is_monstrous</c>).</summary>
+    /// <summary>Mechanical, monster, animal or undead (the source's 0x45F730).</summary>
     public bool Monstrous { get; }
     public int Level { get; }
 
@@ -310,7 +310,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// The hero attacks an NPC once (ARC-COMBAT-005; the source's hit step of the attack goal, then <c>combat_dmg</c>): the attack is
+    /// The hero attacks an NPC once (ARC-COMBAT-005; the source's hit step of the attack goal, then 0x4B4390): the attack is
     /// resolved (<see cref="AttackResolver.Resolve"/>, under the active rules and difficulty, rolls from the session generator as
     /// <c>combat.*</c>), its damage applied to the target, or to the hero on a critical self-hit (<see cref="ApplyDamage"/>), then an
     /// NPC's hit-point damage takes its share of the experience pool for the hero unless the NPC is stoned

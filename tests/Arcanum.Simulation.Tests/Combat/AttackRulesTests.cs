@@ -51,7 +51,7 @@ public sealed class AttackRulesTests
     [TestMethod]
     public void DodgeEffectivenessIsTwiceTheLevelAsInTheOriginal()
     {
-        // The retail 1.0.7.4 executable computes 2L (ARC-RES-048); CE's 5L is a reconstruction slip.
+        // The retail 1.0.7.4 executable computes 2L (ARC-RES-048).
         Assert.AreEqual(0, AttackRules.DodgeEffectiveness(0, false, false, GameDifficulty.Normal));
         Assert.AreEqual(20, AttackRules.DodgeEffectiveness(10, false, false, GameDifficulty.Normal));
         Assert.AreEqual(40, AttackRules.DodgeEffectiveness(20, false, false, GameDifficulty.Normal));

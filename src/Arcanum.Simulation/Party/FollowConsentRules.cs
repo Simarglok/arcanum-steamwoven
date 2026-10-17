@@ -59,12 +59,11 @@ public sealed record FollowConsentInput(
     bool IgnoreCharismaLimit);
 
 /// <summary>
-/// The source follow check (ARC-RES-024 C2–C4) as a pure function. Numbers and order are source claims read in CE at
-/// <see cref="SourceRevision"/>; original executable parity is NOT_VERIFIED.
+/// The source follow check (ARC-RES-024 C2–C4) as a pure function. Numbers and order are the claims of
+/// docs/world/party-runtime.md (F0); original executable parity is NOT_VERIFIED.
 /// </summary>
 public static class FollowConsentRules
 {
-    public const string SourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     /// <summary>Charisma from which an unforced leave is refused (the source's extraordinary threshold).</summary>
     public const int ExtraordinaryCharisma = 20;
     public const int MinMaxFollowers = 1;

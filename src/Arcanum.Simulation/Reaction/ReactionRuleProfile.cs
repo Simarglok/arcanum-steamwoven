@@ -14,7 +14,7 @@ public sealed record ReactionRuleProfile
 
     /// <summary>
     /// Reputation A2: a deliberate hit by the PC on its own follower <b>adds</b> AI parameter 9 to the follower's reaction, as
-    /// the retail executable does (<c>ai_attack</c> 0x4A9650). The field's own description (how much the hit lowers the
+    /// the retail executable does (0x4A9650). The field's own description (how much the hit lowers the
     /// reaction) is the evidence for intent; Steamwoven lowers it by parameter 9 (owner decision 2026-10-17).
     /// </summary>
     public bool FollowerHitRaisesReaction { get; init; }

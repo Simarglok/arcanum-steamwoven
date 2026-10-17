@@ -4,7 +4,7 @@ using static Arcanum.Simulation.Tests.Character.CharacterFixtures;
 
 namespace Arcanum.Simulation.Tests.Character;
 
-/// <summary>ARC-COMBAT-002: poison and crippled legs adjust base values before effects, as CE <c>stat_level_get</c> does.</summary>
+/// <summary>ARC-COMBAT-002: poison and crippled legs adjust base values before effects, as the stat getter 0x4B0490 does.</summary>
 [TestClass]
 public sealed class ConditionContextTests
 {

@@ -35,7 +35,7 @@ public readonly record struct CombatModeFacts(bool Dead, bool Active, bool Stone
 /// <summary>
 /// What the real-time attack repeat reads (the source's auto-attack check at the end of every attack): the attacker in
 /// combat mode and a PC, the <c>auto_attack</c> setting, no turn-based round, the target neither destroyed nor switched
-/// off nor dead nor busted, the attack run not flagged to stop (the run flag 0x800, unnamed in CE), the attacker not
+/// off nor dead nor busted, the attack run not flagged to stop (the run flag 0x800), the attacker not
 /// flagged non-lethal and no boomerang of its in flight.
 /// </summary>
 public readonly record struct AutoAttackFacts(bool AttackerInCombatMode, bool AttackerIsPc, bool AutoAttackSetting, bool RoundActive,
@@ -93,8 +93,8 @@ public readonly record struct AttackMoment(long AtMs, AttackUpdateKind Kind, int
 /// Real-time combat (ARC-COMBAT-004; the source's combat mode and attack animation, ARC-RES-030 C1–C5) as pure functions:
 /// entering and leaving combat mode and the PC's exit gate, the frame rate and pause of an attack animation from the
 /// attacker's Speed and weapon, the attack goal's frame-by-frame playback with the action-frame hit and the pistol, rifle
-/// and bow repeat, the auto-attack repeat, and the fatigue charge of running in combat mode. Numbers are the CE reading
-/// at <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c>, checked in the original 1.0.7.4 executable (ledger rows RT1–RT12,
+/// and bow repeat, the auto-attack repeat, and the fatigue charge of running in combat mode. Numbers are checked in the
+/// original 1.0.7.4 executable (ledger rows RT1–RT12,
 /// docs/world/real-time-combat-runtime.md). Every function validates its inputs (<see cref="ArgumentException"/>).
 /// </summary>
 public static class RealTimeCombatRules
@@ -113,10 +113,10 @@ public static class RealTimeCombatRules
     /// <summary>Run steps between two fatigue charges of a runner in combat mode, before the fatigue-limiting and
     /// fatigue-draining factors.</summary>
     public const int RunChargeSteps = 5;
-    /// <summary>Fatigue damage each run charge adds (the original; CE writes the unchanged value back, anomaly A4).</summary>
+    /// <summary>Fatigue damage each run charge adds (the original, anomaly A4).</summary>
     public const int RunChargeFatigue = 1;
 
-    /// <summary>The <c>auto attack</c> setting's registered default in the original: on (CE registers off; ledger RT6). A
+    /// <summary>The <c>auto attack</c> setting's registered default in the original: on (ledger RT6). A
     /// value already in the player's configuration wins.</summary>
     public const bool AutoAttackDefault = true;
     /// <summary>The <c>turn-based</c> setting's registered default: off.</summary>
@@ -146,10 +146,11 @@ public static class RealTimeCombatRules
 
     /// <summary>
     /// The exit gate of the PC's combat-mode key, a dialog, sleep and the world map (the source's
-    /// <c>combat_can_exit_combat_mode</c>): always true out of combat mode or when not active; false while an attack is
+    /// 0x4B3D90): always true out of combat mode or when not active; false while an attack is
     /// being attempted; false when an active, fighting NPC on screen has the critter or one of its followers as combat
     /// focus (<paramref name="threatened"/>).
     /// </summary>
+    [OriginalFunction(0x4B3D90, OriginalFunctionScope.Partial)]
     public static bool CanExitCombatMode(bool inCombatMode, bool active, bool attemptingAttack, bool threatened) =>
         !inCombatMode || !active || !attemptingAttack && !threatened;
 
