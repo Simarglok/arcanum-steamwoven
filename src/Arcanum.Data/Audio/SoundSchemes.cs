@@ -92,23 +92,23 @@ public static class SoundSchemeParser
         int frequency = 5, start = 0, end = 23, volumeMin = 100, volumeMax = 100, left = 50, right = 50;
         if (options is not null)
         {
-            if (!Param(options, "/vol:", ref volumeMin, ref volumeMax, true, out failure)) return false;
+            Param(options, "/vol:", ref volumeMin, ref volumeMax, true);
             var over = options.Contains("/over", StringComparison.Ordinal);
             var loop = options.Contains("/loop", StringComparison.Ordinal);
             if (over || loop || options.Contains("/anchor", StringComparison.Ordinal))
             {
                 if (over) kind = SoundSchemeEntryKind.TransitionSong;
-                else if (loop) { kind = SoundSchemeEntryKind.LoopSong; if (!Param(options, "/time:", ref start, ref end, true, out failure)) return false; }
+                else if (loop) { kind = SoundSchemeEntryKind.LoopSong; Param(options, "/time:", ref start, ref end, true); }
                 else kind = SoundSchemeEntryKind.AnchorSong;
             }
             else
             {
                 var unused = 0;
-                if (!Param(options, "/freq:", ref frequency, ref unused, false, out failure)
-                    || !Param(options, "/time:", ref start, ref end, true, out failure)
-                    || !Param(options, "/bal:", ref left, ref right, true, out failure)) return false;
+                Param(options, "/freq:", ref frequency, ref unused, false);
+                Param(options, "/time:", ref start, ref end, true);
+                Param(options, "/bal:", ref left, ref right, true);
                 int scatter = -1, scatterSecond = -1;
-                if (!Param(options, "/scatter:", ref scatter, ref scatterSecond, true, out failure)) return false;
+                Param(options, "/scatter:", ref scatter, ref scatterSecond, true);
                 if (scatter >= 0)
                 {
                     volumeMax = 100; volumeMin = unchecked(100 - scatter);
@@ -140,22 +140,19 @@ public static class SoundSchemeParser
     internal static int Raw(int percent) => Math.Clamp(unchecked(RawMax * percent) / 100, 0, RawMax);
 
     [OriginalFunction(0x41C290, OriginalFunctionScope.Full)]
-    private static bool Param(string options, string key, ref int first, ref int second, bool hasSecond, out string? failure)
+    private static void Param(string options, string key, ref int first, ref int second, bool hasSecond)
     {
-        failure = null;
         var at = options.IndexOf(key, StringComparison.Ordinal);
-        if (at < 0) return true;
+        if (at < 0) return;
         var token = options[(at + key.Length)..];
         var space = token.IndexOf(' ');
         if (space >= 0) token = token[..space];
         var value = Atoi(token);
         first = value;
-        if (!hasSecond) return true;
+        if (!hasSecond) return;
         var separator = token.IndexOf(',');
         if (separator < 0) separator = token.IndexOf('-');
-        if (separator < 0) { second = value; return true; }
-        second = Atoi(token.AsSpan(separator + 1));
-        return true;
+        second = separator < 0 ? value : Atoi(token.AsSpan(separator + 1));
     }
 
     /// <summary>The executable's C <c>atoi</c>: leading ASCII white space, an optional sign, digits up to the first other

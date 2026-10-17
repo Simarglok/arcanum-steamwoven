@@ -106,7 +106,7 @@ public sealed class SoundCatalog
 
     /// <summary>The original's SFX lookup (SN1): the first index table holding the id wins, even with an empty record;
     /// only when none does, the user table is searched.</summary>
-    [OriginalFunction(0x41A940, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x41A940, OriginalFunctionScope.Partial)]
     public SfxResolution ResolveSfx(int id)
     {
         foreach (var table in Tables.Append(UserTable))
