@@ -195,11 +195,13 @@ public sealed class AreaWholeMapStepTests
             jumps += windowJumps; if (windowJumps > 0) { jumpMaps++; Console.WriteLine($"window jumps: {map.Name} {windowJumps}"); }
             if (map.Name == "crash site cave") Assert.AreEqual(506, reach, "the generic cave walks like the pinned cave profile");
         }
-        Assert.AreEqual(54, complete);
+        // All 80 interiors publish complete snapshots since ARC-DATA-024 (the 54 and (22, 2) here were stale; measured
+        // unchanged on origin/main and with ARC-DATA-027).
+        Assert.AreEqual(80, complete);
         Assert.IsTrue(walkable >= 48, $"{walkable} of {complete} complete interiors walkable from their start");
         // ARC-WORLD-021: directed Open window-jump steps out of the cells reachable from the starts.
         Console.WriteLine($"whole-map interiors complete={complete} walkable={walkable} window-jump-steps={jumps} maps-with-jumps={jumpMaps}");
-        Assert.AreEqual((22, 2), (jumps, jumpMaps), "directed window-jump steps out of the reachable cells, and the interiors that have them");
+        Assert.AreEqual((46, 4), (jumps, jumpMaps), "directed window-jump steps out of the reachable cells, and the interiors that have them");
     }
 
     // Cells reachable from the origin, and the directed Open window-jump steps out of every reached cell.

@@ -101,8 +101,8 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
 - The same holds for every file an init function reads and keeps: the original reads it from
   the first base source, and a module copy is never read; a file read at module load or later
   is the stack's winner. `ContentPhase`/`ContentLoadPhase` (ARC-DATA-027) applies this in the
-  prototype source, the description catalogue, the lighting readers and the starting hero's tables
-  (the whole-map step rules and name tables follow in the second ARC-DATA-027 change); the
+  prototype source, the description catalogue, the lighting readers, the starting hero's tables,
+  the whole-map step rules and the whole-map plans' name tables; the
   files checked so far are in the ledger's
   [load phases](original-verification-ledger.md#load-phases-arc-data-027) (effect, level and
   quest experience, inventory sources, main-menu and light/tile name tables at game start;
