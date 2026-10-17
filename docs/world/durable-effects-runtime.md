@@ -47,8 +47,9 @@ write, the fatigue setter the 80-second recovery on a non-zero one; the faint co
 makes the critter unconscious, which a shift that keeps the current value never does (EF7, EF10).
 
 The aggregation (`effect_adjust_func`, 0x4EA6C0, EF6) sums the percent changes, multiplies the multiply and divide factors,
-sums the adds, takes the highest minimum and the lowest maximum, and applies them in that order; its "ignore innate"
-variant skips race, background, class and gender. Maximum hit points and maximum fatigue apply their effects to the whole
+sums the adds, takes the highest minimum and the lowest maximum, and applies them in that order; −1 is the "unset" mark of
+both bounds, so a bound of −1 is never applied and a −1 met after a lower minimum or a higher maximum clears it (no
+installed rule uses −1); its "ignore innate" variant skips race, background, class and gender. Maximum hit points and maximum fatigue apply their effects to the whole
 sum of points, adjustment and stat part (`object_hp_max` 0x43D5A0, `critter_fatigue_max` 0x45D670, EF8).
 
 A timed spell is a magick or tech run, not a timed effect: its Effect component (0x451F20, EF9) adds `Count` entries
@@ -66,12 +67,18 @@ every pre-made hero's prototype does (ARC-RES-027 SH-03); their stat changes are
 | Entry | Contract |
 | --- | --- |
 | `QueryHeroEffects()` | The innate entries, the durable entries, the rule of each number in use and the pending timed effects; `Count(number)` counts the whole list. Null without a hero. |
-| `AddHeroEffect(expected, definition, cause, count = 1)` | `effect_add` `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); maxima the life rules refuse (`InvalidEffect`); the event budget and revision. One revision. |
+| `AddHeroEffect(expected, definition, cause, count = 1)` | `effect_add` `count` times. Refusals in order: no hero (`EffectsUnavailable`); a rule the session does not admit, a cause of the race and gender setters or the life domain's scars (injury), a count below 1 (`InvalidEffect`); an innate number (`InnateEffect`: its typed removal would meet the innate entry first); a number in use with other changes (`EffectMismatch`); the version; more than 64 durable entries (`EffectCapacityExceeded`); entries that could leave the consumers' bounds once some of them are removed (`InvalidEffect`, below); the event budget and revision. One revision. |
 | `AddHeroTimedEffect(expected, definition, cause, count, durationMs)` | The same, and an END event (`effect.hero.end`) after 1 ms up to `int.MaxValue × 8000` ms of game time (a `Duration:` in real seconds × 8000); at most 64 pending ENDs. The result's `TimedEffect` is its queue sequence. |
 | `RemoveHeroEffect(expected, number, count = 1)` | `effect_remove_one_typed` `count` times; an innate number is `InnateEffect`; NoChange when nothing matches. |
 | `RemoveAllHeroEffects(expected, number)`, `RemoveHeroEffectsCausedBy(expected, cause, all)` | The other three removals; race, gender and injury causes are `InvalidEffect`. |
 | `EndHeroTimedEffect(expected, sequence)` | The run interrupted (a dispel, a stop, the death of its caster or target): its END now and its event cancelled; `UnknownTimedEffect` when none is pending. |
 | `ProcessEvents` | A due END removes its entries without a version check, one revision; `SessionEventPassResult.Effects` reports it. |
+
+**Bounds that no removal can break.** An add is admitted only when every subset of the resulting entries stays within the
+bounds of their consumers: at most 64 changes of each reaction value (the reaction rules' limit), and each maximum below
+32 000 in either direction even if the minimum and maximum changes that hold it and the changes that pull it the other way
+were removed (a hero's maximum before effects is at most 406: no pools, every stat and the level at their life limits).
+So a removal or a due END never meets a refusal, and an END is never dropped unrun. Real data is far inside these bounds.
 
 Each change runs its steps on a trial character owner first; for each step the hero's life facts are rebuilt and each
 maximum's difference moves its damage (clamped at 0, saturating at the life limit), then the fatigue recovery timer is
@@ -90,7 +97,8 @@ level, age, gender, race, alignment, poison level.
 
 ## Simulation (`Arcanum.Simulation`)
 
-`EffectModifier(Operator, Value)` and `EffectModifiers.Apply` are the aggregation for a single value. `LifeFacts` gains
+`EffectModifier(Operator, Value)` and `EffectModifiers.Apply` are the aggregation for a single value, with the −1 mark;
+the character owner's stats and the reaction effects now aggregate through it too, so the three cannot drift. `LifeFacts` gains
 `MaxHitPointEffects` and `MaxFatigueEffects` (empty by default); `LifeRules.MaxHitPoints` and `MaxFatigue` apply them to
 the whole sum, and `LifeRules.IsValid` refuses facts whose maxima reach 32 000 (the pinned death damage) in either
 direction, so a pinned corpse still reads as dead.
@@ -116,12 +124,14 @@ effect).
 
 ## Tests
 
-- `Arcanum.Simulation.Tests/Character/EffectModifiersTests`: the order, the bounds, truncation, validity.
+- `Arcanum.Simulation.Tests/Character/EffectModifiersTests`: the order, the bounds and their −1 mark, truncation, validity.
 - `Arcanum.Simulation.Tests/Combat/LifeRulesTests`: effects over the whole maximum, under poison, the 32 000 bound.
 - `Arcanum.Session.Tests/EffectStateTests`: list order and the four removals whatever the cause, the damage shift of each
   maximum (an unharmed hero who grows stronger keeps 30 of 34 hit points), step-by-step removal, a timed END on the queue
-  that takes an item's entry first, an interrupted END, every refusal, the reaction effects, the canonical text with an END
-  that fires after a restore, decode and restore refusals.
+  that takes an item's entry first, an interrupted END, every refusal, the bounds no removal can break (a capped maximum, 64
+  reaction changes), a hero left without hit points by an effect with no death step (EF10; removing the effect adds the
+  maximum back to the damage, so the hero stays at none), the reaction effects, the canonical text with an END that fires
+  after a restore, decode and restore refusals.
 - Real data (opt-in `RealData`, `DAT_ROOT`): `EffectRealDataTests`. Of the 309 `effect.mes` entries and the module's one,
   305 parse and 5 use `*` or `/`, which the effect reader refuses (ARC-RES-027 SH-07, decision 7 of the ledger still
   open); all 305 but the fixture half-elf's race effect 67 are added and removed; 191 change a modelled stat, 7 the maximum

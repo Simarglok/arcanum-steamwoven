@@ -88,5 +88,7 @@ public sealed class EffectRealDataTests
         // 191 rules change a stat the character owner models; 7 the maximum hit points, 7 the maximum fatigue, 5 the reaction,
         // 4 the bad and 3 the good reaction adjustment.
         Assert.AreEqual((191, 7, 7, 5, 4, 3), (modelled, specials.MaxHp, specials.MaxFatigue, specials.Reaction, specials.Bad, specials.Good));
+        // No rule uses −1 as a minimum or maximum, the aggregation's "unset" mark (EF6).
+        Assert.AreEqual(0, rules.Sum(r => r.Changes.Count(c => c.Operator is EffectChangeOperator.Minimum or EffectChangeOperator.Maximum && c.Value == -1)));
     }
 }

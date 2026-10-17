@@ -115,6 +115,38 @@ internal sealed class EffectDomain
             .Where(c => c.Kind == EffectAttributeKind.Special && c.Attribute == (int)special)
             .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
 
+    /// <summary>
+    /// Whether the entries keep the hero within the bounds of its consumers whatever subset of them stays, so no later removal
+    /// can be refused: at most <see cref="ReactionLimits.MaxModifiers"/> changes of each reaction value, and maxima below the
+    /// pinned death damage in either direction even when the bounds that hold them and the changes that pull the other way
+    /// are removed (a hero's maximum before effects is between 0 and <see cref="HeroMaximumCeiling"/>).
+    /// </summary>
+    internal static bool Bounded(IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        foreach (var special in new[] { EffectSpecial.Reaction, EffectSpecial.GoodReaction, EffectSpecial.BadReaction })
+            if (Modifiers(entries, definitions, special).Length > ReactionLimits.MaxModifiers) return false;
+        foreach (var special in new[] { EffectSpecial.MaxHitPoints, EffectSpecial.MaxFatigue })
+        {
+            var modifiers = Modifiers(entries, definitions, special);
+            long Sum(StatModifierOperator op, bool positive) =>
+                modifiers.Where(m => m.Operator == op && m.Value > 0 == positive).Sum(m => (long)m.Value);
+            var highest = HeroMaximumCeiling * (100 + Sum(StatModifierOperator.Percent, true)) / 100 + Sum(StatModifierOperator.Add, true);
+            var fall = 100 + Sum(StatModifierOperator.Percent, false);
+            var lowest = (fall < 0 ? HeroMaximumCeiling * fall / 100 : 0) + Sum(StatModifierOperator.Add, false);
+            foreach (var m in modifiers)
+            {
+                if (m.Operator == StatModifierOperator.Minimum) highest = Math.Max(highest, m.Value);
+                if (m.Operator == StatModifierOperator.Maximum) lowest = Math.Min(lowest, m.Value);
+            }
+            if (highest >= LifeLimits.DeathHitPointDamage || lowest <= -LifeLimits.DeathHitPointDamage) return false;
+        }
+        return true;
+    }
+
+    /// <summary>The largest maximum hit points or fatigue a hero has before effects: no pools, every stat and the level at
+    /// their life limits (<c>WP + 2 × (ST + level) + 4</c>, <c>2 × (level + CN) + WP + 4</c>).</summary>
+    internal const long HeroMaximumCeiling = 3 * LifeLimits.MaxStat + 2 * LifeLimits.MaxLevel + 4;
+
     /// <summary>The stat changes of a rule the character owner models, or null when it has none.</summary>
     internal static StatEffectDefinition? Stats(SessionEffectDefinition definition)
     {
@@ -200,12 +232,13 @@ public sealed partial class GameSessionOwner
     /// Adds <paramref name="count"/> entries of an effect with <paramref name="cause"/> to the end of the hero's list, one at a
     /// time, as <c>effect_add</c> does for each (a script's add-effect action, an Effect component that adds). Each entry that
     /// changes a maximum moves the damage by the same amount, so current hit points and fatigue stay, clamped at no damage.
-    /// Refused: no hero (<see cref="GameSessionFailure.EffectsUnavailable"/>); a rule the session does not admit, a count below
-    /// 1, a cause of the race and gender setters or of the life domain's scars, or maxima the life rules refuse
-    /// (<see cref="GameSessionFailure.InvalidEffect"/>); a number in use with other changes
-    /// (<see cref="GameSessionFailure.EffectMismatch"/>); the number of one of the hero's innate effects
-    /// (<see cref="GameSessionFailure.InnateEffect"/>: its typed removal would reach the innate entry); more than
-    /// <see cref="SessionEffectLimits.MaxHeroEffects"/> entries (<see cref="GameSessionFailure.EffectCapacityExceeded"/>). One revision.
+    /// Refused, in order: no hero (<see cref="GameSessionFailure.EffectsUnavailable"/>); a rule the session does not admit, a cause
+    /// of the race and gender setters or of the life domain's scars, or a count below 1 (<see cref="GameSessionFailure.InvalidEffect"/>);
+    /// the number of one of the hero's innate effects (<see cref="GameSessionFailure.InnateEffect"/>: its typed removal would reach
+    /// the innate entry); a number in use with other changes (<see cref="GameSessionFailure.EffectMismatch"/>); the version; more
+    /// than <see cref="SessionEffectLimits.MaxHeroEffects"/> entries (<see cref="GameSessionFailure.EffectCapacityExceeded"/>);
+    /// entries that could leave the hero's maxima or reaction effects beyond their consumers' bounds once some are removed
+    /// (<see cref="GameSessionFailure.InvalidEffect"/>), so no removal or END is ever refused for them; the event budget and the revision. One revision.
     /// </summary>
     public SessionEffectResult AddHeroEffect(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause, int count = 1)
     {
@@ -300,6 +333,9 @@ public sealed partial class GameSessionOwner
             return RejectEffect(GameSessionFailure.EffectMismatch);
         if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
         if (count > SessionEffectLimits.MaxHeroEffects - _effects.Entries.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
+        var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions) { [definition.Number] = definition };
+        if (!EffectDomain.Bounded([.. _effects.Entries, .. Enumerable.Repeat(new SessionEffect(definition.Number, cause), count)], definitions))
+            return RejectEffect(GameSessionFailure.InvalidEffect);
         var steps = Enumerable.Repeat(new EffectStep(new SessionEffect(definition.Number, cause), -1), count).ToArray();
         return Commit(steps, definition, durationMs is { } d ? (definition.Number, count, d) : null, null);
     }
@@ -463,6 +499,7 @@ public sealed partial class GameSessionOwner
             try { effects.Applied.Add(ApplyStats(hero.Stats, entry, effects.Definitions)); }
             catch (InvalidOperationException) { return GameSessionFailure.InvalidEffect; }
         }
+        if (!EffectDomain.Bounded(effects.Entries, effects.Definitions)) return GameSessionFailure.InvalidEffect;
         var used = effects.Entries.Select(e => e.Number).ToHashSet();
         if (effects.Definitions.Keys.Any(number => !used.Contains(number))) return GameSessionFailure.InvalidEffect;
         // The stats and maxima under every saved entry: the life rules must admit the hero's facts at its saved state.

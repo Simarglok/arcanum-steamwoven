@@ -251,6 +251,46 @@ public sealed class EffectStateTests
     }
 
     [TestMethod]
+    public void AnAddIsRefusedWhenARemovalCouldLeaveTheBounds()
+    {
+        using var owner = Owner();
+        // A cap of 100 hit points holds 31 entries of +1000 at 100; removing the cap would give 31,030 + … and with a 32nd
+        // entry 32,030, beyond the pinned death damage, so the 32nd is refused before the cap could ever be removed.
+        var cap = new SessionEffectDefinition(130, [Change(EffectAttributeKind.Special, 0, 100, EffectChangeOperator.Maximum)]);
+        var boost = new SessionEffectDefinition(131, [Change(EffectAttributeKind.Special, 0, 1000)]);
+        var timed = Ok(owner.AddHeroTimedEffect(owner.Version, cap, EffectCause.Spell, 1, 1000), owner, 1).TimedEffect!.Value;
+        Ok(owner.AddHeroEffect(owner.Version, boost, EffectCause.Item, 31), owner, 31);
+        Refused(owner.AddHeroEffect(owner.Version, boost, EffectCause.Item), owner, GameSessionFailure.InvalidEffect);
+        Assert.AreEqual(100, Life(owner).MaxHitPoints);
+        // The cap's END can always run.
+        Ok(owner.EndHeroTimedEffect(owner.Version, timed), owner, 1);
+        Assert.AreEqual(31 * 1000 + 30, Life(owner).MaxHitPoints);
+
+        // At most 64 changes of a reaction value (the reaction rules' limit): nine entries of seven are 63, a tenth is refused.
+        var charm = new SessionEffectDefinition(132, [.. Enumerable.Repeat(Change(EffectAttributeKind.Special, 2, 1), 7)]);
+        using var other = Owner();
+        Ok(other.AddHeroEffect(other.Version, charm, EffectCause.Spell, 9), other, 9);
+        Refused(other.AddHeroEffect(other.Version, charm, EffectCause.Spell), other, GameSessionFailure.InvalidEffect);
+        Assert.AreEqual(63, other.QueryHeroReactionFacts()!.ReactionEffects.Count);
+    }
+
+    [TestMethod]
+    public void AnEffectCanLeaveTheHeroWithoutHitPointsAndNoDeathStep()
+    {
+        // EF10: the original kills nothing in effect_add; the maximum falls to 0 and the damage cannot go below none.
+        using var owner = Owner();
+        var wither = new SessionEffectDefinition(133, [Change(EffectAttributeKind.Special, 0, -100, EffectChangeOperator.Percent)]);
+        var result = Ok(owner.AddHeroEffect(owner.Version, wither, EffectCause.Curse), owner, 1);
+        Assert.AreEqual((0, 0, true), (Life(owner).MaxHitPoints, Life(owner).HitPoints, Life(owner).IsDead));
+        // The damage stayed at none (so the life record did not change) and no death time was stamped.
+        Assert.AreEqual(((SessionLifeRecord?)null, 0, (long?)null), (result.Life, owner.QueryHeroLife()!.Record.State.HitPointDamage,
+            owner.QueryHeroLife()!.Record.DeathTimeMs));
+        // Removing it adds the 30 points of the maximum to the damage again: the hero stays at no hit points.
+        Ok(owner.RemoveHeroEffect(owner.Version, 133), owner, 1);
+        Assert.AreEqual((30, 30, true), (Life(owner).MaxHitPoints, owner.QueryHeroLife()!.Record.State.HitPointDamage, Life(owner).IsDead));
+    }
+
+    [TestMethod]
     public void ReactionEffectsReachTheHerosReactionFacts()
     {
         using var owner = Owner();
@@ -328,7 +368,10 @@ public sealed class EffectStateTests
         var heroless = GameSessionSnapshotCodec.Encode(Owner(hero: false).Capture());
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(heroless.Replace(
             ",\"effects\":{\"hero\":[],\"definitions\":[]}", EffectsJson, StringComparison.Ordinal)), RestoreOptions()).Failure);
-        // An END of an innate number, or one whose deadline is not its duration after its start.
+        // An END without a hero, of an innate number, or one whose deadline is not its duration after its start.
+        var endJson = $"{{\"sequence\":1,\"kind\":\"effect.hero.end\",\"deadlineMs\":{T0 + 8000},\"entities\":[],\"values\":[{T0},8000,120,1]}}";
+        Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(heroless.Replace(
+            "\"nextSequence\":1,\"pending\":[]", "\"nextSequence\":2,\"pending\":[" + endJson + "]", StringComparison.Ordinal)), RestoreOptions()).Failure);
         Refused($"\"values\":[{T0},8000,120,1]", $"\"values\":[{T0},8000,67,1]", GameSessionFailure.InvalidEvents);
         Refused($"\"values\":[{T0},8000,120,1]", $"\"values\":[{T0},8001,120,1]", GameSessionFailure.InvalidEvents);
         Refused($"\"values\":[{T0},8000,120,1]", $"\"values\":[{T0},8000,120,0]", GameSessionFailure.InvalidEvents);

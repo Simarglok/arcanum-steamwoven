@@ -29,13 +29,14 @@ public static class LifeRules
     }
 
     /// <summary>Maximum hit points: <c>4 × points + adjustment + WP + 2 × (ST + level) + 4</c>, then the maximum's effects over
-    /// that whole sum (ARC-WORLD-029; <c>object_hp_max</c>, checked in the original executable at 0x43D5A0).</summary>
+    /// that whole sum (ARC-WORLD-029; <c>object_hp_max</c>, checked in the original executable at 0x43D5A0). Facts that fail
+    /// <see cref="IsValid(LifeFacts)"/> may throw <see cref="ArgumentOutOfRangeException"/> (an undefined operator, a divide by 0).</summary>
     public static int MaxHitPoints(LifeFacts facts, int poisonLevel) => EffectModifiers.Apply(
         4L * facts.HitPointPoints + facts.HitPointAdjustment + facts.Willpower + 2 * (StrengthAt(facts, poisonLevel) + facts.Level) + 4,
         facts.MaxHitPointEffects.IsDefault ? [] : facts.MaxHitPointEffects);
 
     /// <summary>Maximum fatigue: <c>4 × points + adjustment + 2 × (level + CN) + WP + 4</c>, then the maximum's effects over that
-    /// whole sum (<c>critter_fatigue_max</c>, 0x45D670).</summary>
+    /// whole sum (<c>critter_fatigue_max</c>, 0x45D670); the same exceptions.</summary>
     public static int MaxFatigue(LifeFacts facts) => EffectModifiers.Apply(
         4L * facts.FatiguePoints + facts.FatigueAdjustment + 2 * (facts.Level + facts.Constitution) + facts.Willpower + 4,
         facts.MaxFatigueEffects.IsDefault ? [] : facts.MaxFatigueEffects);

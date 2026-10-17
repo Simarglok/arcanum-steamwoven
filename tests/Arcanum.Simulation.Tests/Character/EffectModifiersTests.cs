@@ -21,6 +21,12 @@ public sealed class EffectModifiersTests
         Assert.AreEqual(12, EffectModifiers.Apply(30, [M(StatModifierOperator.Maximum, 20), M(StatModifierOperator.Maximum, 12)]));
         Assert.AreEqual(40, EffectModifiers.Apply(30, [M(StatModifierOperator.Minimum, 50), M(StatModifierOperator.Maximum, 40)]),
             "the maximum is tested last, so it wins over a higher minimum");
+        // −1 is the bounds' "unset" mark (EF6): never applied, and it clears a lower minimum or a higher maximum met before it.
+        Assert.AreEqual(30, EffectModifiers.Apply(30, [M(StatModifierOperator.Maximum, -1)]));
+        Assert.AreEqual(30, EffectModifiers.Apply(30, [M(StatModifierOperator.Maximum, 5), M(StatModifierOperator.Maximum, -1)]));
+        Assert.AreEqual(-5, EffectModifiers.Apply(-5, [M(StatModifierOperator.Minimum, -3), M(StatModifierOperator.Minimum, -1)]));
+        Assert.AreEqual(5, EffectModifiers.Apply(30, [M(StatModifierOperator.Maximum, -1), M(StatModifierOperator.Maximum, 5)]));
+        Assert.AreEqual(-3, EffectModifiers.Apply(-5, [M(StatModifierOperator.Minimum, -3)]));
         // Truncation toward zero, and no change without modifiers.
         Assert.AreEqual(-7, EffectModifiers.Apply(-15, [M(StatModifierOperator.Divide, 2)]));
         Assert.AreEqual(30, EffectModifiers.Apply(30, []));

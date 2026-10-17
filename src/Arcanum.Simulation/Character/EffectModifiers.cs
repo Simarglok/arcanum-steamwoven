@@ -9,19 +9,21 @@ public readonly record struct EffectModifier(StatModifierOperator Operator, int 
 /// <summary>
 /// The source's effect aggregation for one value (<c>effect_adjust_func</c>, checked in the original executable at 0x4EA6C0):
 /// the percent changes summed, then the products of the multiply and divide changes, then the sum of the adds, then the highest
-/// minimum and the lowest maximum. Integer division truncates toward zero; intermediates saturate at ±1e9 (original overflow
-/// is NOT_VERIFIED). The same order as the character stats and the reaction effects.
+/// minimum and the lowest maximum. As in the original, −1 is the "unset" mark of both bounds: a bound of −1 is never applied,
+/// and a −1 met after a lower minimum or a higher maximum clears it (ledger EF6). Integer division truncates toward zero;
+/// intermediates saturate at ±1e9 (original overflow is NOT_VERIFIED). The character stats and the reaction effects use it too.
 /// </summary>
 public static class EffectModifiers
 {
     private const long Saturation = 1_000_000_000;
+    private const int Unset = -1;
 
     /// <summary>Applies <paramref name="modifiers"/> to <paramref name="value"/>; a divide change of 0 or an undefined operator throws.</summary>
     public static int Apply(long value, IReadOnlyList<EffectModifier> modifiers)
     {
         ArgumentNullException.ThrowIfNull(modifiers);
         long percents = 0, adds = 0, multiply = 1, divide = 1;
-        int? minimum = null, maximum = null;
+        int minimum = Unset, maximum = Unset;
         foreach (var modifier in modifiers)
         {
             switch (modifier.Operator)
@@ -33,8 +35,8 @@ public static class EffectModifiers
                     if (modifier.Value == 0) throw new ArgumentOutOfRangeException(nameof(modifiers), "divisor 0");
                     divide = Saturate(divide * modifier.Value);
                     break;
-                case StatModifierOperator.Minimum: minimum = minimum is { } low ? Math.Max(low, modifier.Value) : modifier.Value; break;
-                case StatModifierOperator.Maximum: maximum = maximum is { } high ? Math.Min(high, modifier.Value) : modifier.Value; break;
+                case StatModifierOperator.Minimum: if (minimum == Unset || minimum < modifier.Value) minimum = modifier.Value; break;
+                case StatModifierOperator.Maximum: if (maximum == Unset || maximum > modifier.Value) maximum = modifier.Value; break;
                 default: throw new ArgumentOutOfRangeException(nameof(modifiers));
             }
         }
@@ -43,8 +45,8 @@ public static class EffectModifiers
         result = Saturate(result * multiply);
         result /= divide;
         result = Saturate(result + adds);
-        if (minimum is { } min && result < min) result = min;
-        if (maximum is { } max && result > max) result = max;
+        if (minimum != Unset && result < minimum) result = minimum;
+        if (maximum != Unset && result > maximum) result = maximum;
         return (int)result;
     }
 
