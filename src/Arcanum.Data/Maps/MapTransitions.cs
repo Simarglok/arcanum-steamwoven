@@ -33,6 +33,9 @@ public enum MapTransitionGuard
     ContainerOpenCheck = 1 << 7,
     /// <summary>The destination catalogue number is not a row of the map list.</summary>
     UnlistedDestination = 1 << 8,
+    /// <summary>A use click on an object that is not a portal, container or scenery runs another action first (a critter
+    /// talks, an item is picked up), not its use script.</summary>
+    UseRunsOtherAction = 1 << 9,
 }
 
 /// <summary>The object a use click starts from: its sector and window ordinal (null sector for a mobile, whose
@@ -47,7 +50,7 @@ public sealed record MapTransitionObject(WorldSectorCoordinate? Sector, int Inde
 /// runtime −1 keep the current map. <see cref="Script"/> is the attached script (0 for a jump point),
 /// <see cref="Chain"/> the scripts from it to the teleport, <see cref="Line"/> the teleport's line in the last
 /// one. <see cref="OneShot"/>: the attached script removes or replaces itself, or is auto-removing, so the
-/// trigger works once.
+/// trigger works once; never for a tile entry, whose script changes the original does not keep (ledger X3).
 /// </summary>
 public sealed record MapTransitionSite(MapTransitionTrigger Trigger, WorldLocation Location, MapTransitionObject? Object, int Script,
     IReadOnlyList<int> Chain, int Line, bool Fade, bool OneShot, int DestinationCatalogue, int DestinationRuntime, WorldLocation Arrival,
@@ -56,8 +59,9 @@ public sealed record MapTransitionSite(MapTransitionTrigger Trigger, WorldLocati
     public bool Unconditional => Guards == MapTransitionGuard.None;
 }
 
-/// <summary>The transitions of one map and the reads that failed (a refused sector, mobile file, prototype or
-/// script drops only what depends on it).</summary>
+/// <summary>The transitions of one map and the reads that failed (a refused map file, sector, mobile file, prototype or
+/// script drops only what depends on it; a call graph over <see cref="MapTransitions.MaxVisits"/> is a
+/// <see cref="WorldIssueCode.LimitExceeded"/> for its script).</summary>
 public sealed class MapTransitionSet
 {
     internal MapTransitionSet(WorldMap map, MapListEntry? entry, IReadOnlyList<MapTransitionSite> sites, IReadOnlyList<WorldIssue> issues)
@@ -84,8 +88,10 @@ public static class MapTransitions
 {
     /// <summary>Calls followed from the attached script, as in the research census.</summary>
     public const int MaxCallDepth = 6;
+    /// <summary>Script entries visited per attached script before its paths are refused as too large.</summary>
+    public const int MaxVisits = 4096;
     private const int UseSlot = 1, ScriptsField = 31, FlagsField = 18, LocationField = 1;
-    private const int ContainerType = 2;
+    private const int PortalType = 1, ContainerType = 2, SceneryType = 3;
     private const uint GoneFlags = 0x1 | 0x2, UnclickableFlags = 0x100 | 0x200 | 0x800;
     private const uint TrapFlags = ScrCatalogue.FileFlag.NonmagicalTrap | ScrCatalogue.FileFlag.MagicalTrap;
 
@@ -97,9 +103,13 @@ public static class MapTransitions
         var issues = new List<WorldIssue>();
         var sites = new List<MapTransitionSite>();
         var reader = new ScriptGraph(scripts, issues);
+        issues.AddRange(map.Issues);
 
+        // The original takes the first jump point of a tile (jumppoint_get), so a later one on the same tile never fires.
+        var jumpTiles = new HashSet<WorldLocation>();
         foreach (var jump in map.JumpPoints)
         {
+            if (!jumpTiles.Add(jump.Location)) continue;
             var runtime = jump.DestinationMap == -1 ? entry?.Runtime ?? -1 : jump.DestinationMap;
             var destination = list.ByRuntime(runtime);
             sites.Add(new(MapTransitionTrigger.JumpPoint, jump.Location, null, 0, [], 0, false, false, destination?.Catalogue ?? 0, runtime, jump.Destination,
@@ -125,6 +135,7 @@ public static class MapTransitions
                     if ((objectFlags & GoneFlags) != 0) guards |= MapTransitionGuard.ObjectOffOrDestroyed;
                     if ((objectFlags & UnclickableFlags) != 0) guards |= MapTransitionGuard.ObjectNotClickable;
                     if (owner.Type == ContainerType) guards |= MapTransitionGuard.ContainerOpenCheck;
+                    else if (owner.Type is not (PortalType or SceneryType)) guards |= MapTransitionGuard.UseRunsOtherAction;
                 }
                 if ((reader.Program(script)!.FileFlags & TrapFlags) != 0) guards |= MapTransitionGuard.TrapScript;
                 var site = path.Site;
@@ -132,14 +143,14 @@ public static class MapTransitions
                 if (runtime == -1) runtime = entry?.Runtime ?? -1;
                 var destination = site.Literal ? list.ByRuntime(runtime) : null;
                 if (site.Literal && destination is null) guards |= MapTransitionGuard.UnlistedDestination;
-                sites.Add(new(trigger, location, owner, script, path.Chain, site.Line, site.Fade, reader.OneShot(script), destination?.Catalogue ?? 0,
+                sites.Add(new(trigger, location, owner, script, path.Chain, site.Line, site.Fade, trigger != MapTransitionTrigger.TileEntry && reader.OneShot(script), destination?.Catalogue ?? 0,
                     site.Literal ? runtime : 0, new(site.X, site.Y), guards));
             }
         }
         void Object(WorldObject instance, WorldSectorCoordinate? sector, int index)
         {
+            // An unresolved prototype (reported) leaves the instance's own fields.
             var prototype = instance.PrototypeNumber is { } number ? Prototype(number) : null;
-            if (instance.PrototypeNumber is not null && prototype is null) return;
             WorldFieldValue? Effective(int slot) => instance.Fields.TryGetValue(slot, out var own) ? own : prototype?.Fields.GetValueOrDefault(slot);
             if (Effective(ScriptsField) is not { } field || field.Elements.SingleOrDefault(e => e.Key == UseSlot) is not { Words.Count: 3 } use) return;
             if (instance.Fields.GetValueOrDefault(LocationField)?.Number is not { } packed) return;
@@ -184,6 +195,13 @@ public static class MapTransitions
         private readonly Dictionary<int, ScrProgram?> _programs = new();
         private readonly Dictionary<(int, int), Flow> _flows = new();
         private readonly Dictionary<int, IReadOnlyList<PathRow>> _paths = new();
+        private readonly Dictionary<int, (IReadOnlyList<Site> Sites, IReadOnlyList<Call> Calls)> _edges = new();
+
+        private (IReadOnlyList<Site> Sites, IReadOnlyList<Call> Calls) Edges(int number, ScrProgram program)
+        {
+            if (!_edges.TryGetValue(number, out var edges)) _edges[number] = edges = (Sites(program).ToArray(), Calls(program).ToArray());
+            return edges;
+        }
 
         public ScrProgram? Program(int number)
         {
@@ -216,13 +234,16 @@ public static class MapTransitions
         {
             if (_paths.TryGetValue(root, out var known)) return known;
             var rows = new List<PathRow>();
+            var visits = 0;
             void Visit(int number, int entry, Reach reach, MapTransitionGuard guards, List<int> chain, HashSet<(int, int)> active)
             {
                 if (Program(number) is not { } program || chain.Count > MaxCallDepth) return;
+                if (++visits > MaxVisits) return;
                 var flow = FlowOf(number, entry);
+                var (sites, calls) = Edges(number, program);
                 Reach At(int line, bool branch) => branch ? flow.True[line] : flow.False[line];
                 MapTransitionGuard Reached(Reach r) => r == Reach.Always ? MapTransitionGuard.None : MapTransitionGuard.ConditionalPath;
-                foreach (var site in Sites(program))
+                foreach (var site in sites)
                 {
                     var here = At(site.Line, site.Branch);
                     if (here == Reach.Unreached) continue;
@@ -231,7 +252,9 @@ public static class MapTransitions
                     if (site.Focus is not (ScrFocusKind.Triggerer or ScrFocusKind.Player)) g |= MapTransitionGuard.MovesOtherObject;
                     rows.Add(new(site, chain.ToArray(), g));
                 }
-                foreach (var call in Calls(program))
+                // Calls that reach the same callee entry with the same reach and guards are followed once.
+                var followed = new HashSet<(int, int, Reach, MapTransitionGuard)>();
+                foreach (var call in calls)
                 {
                     var here = At(call.Line, call.Branch);
                     if (here == Reach.Unreached || call.Target is not { } target || call.Entry is not { } line || active.Contains((target, line))) continue;
@@ -242,10 +265,16 @@ public static class MapTransitions
                     var group = call.AttacheeFocus is not ((byte)ScrFocusKind.Triggerer or (byte)ScrFocusKind.Attachee or (byte)ScrFocusKind.Player);
                     var trap = !deferred && Program(target) is { } callee && (callee.FileFlags & TrapFlags) != 0;
                     var next = (Reach)Math.Min((int)reach, (int)(deferred || group || trap ? Reach.Conditional : here));
+                    if (!followed.Add((target, line, next, g))) continue;
                     Visit(target, line, next, g, [.. chain, target], [.. active, (target, line)]);
                 }
             }
             Visit(root, 0, Reach.Always, MapTransitionGuard.None, [root], [(root, 0)]);
+            if (visits > MaxVisits)
+            {
+                issues.Add(new(WorldIssueCode.LimitExceeded, content.Names.Find(root)?.ScriptPath ?? $"scr/{root:D5}", root, "call graph"));
+                return _paths[root] = [];
+            }
             // One row per teleport and chain: the row with the fewest guards.
             var result = rows.GroupBy(r => (r.Site, string.Join(',', r.Chain)))
                 .Select(g => g.OrderBy(r => System.Numerics.BitOperations.PopCount((uint)r.Guards)).ThenBy(r => (int)r.Guards).First()).ToArray();

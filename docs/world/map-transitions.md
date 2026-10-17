@@ -42,13 +42,15 @@ A site holds:
   object's local location rebased onto its sector; for a sector entry the
   sector's origin). `Object`: for a use click, the sector and window ordinal
   (null sector and the record ordinal for a mobile), the SHA-256 of the
-  object's own id (the key the area owner gives the same object), its type and
-  prototype.
+  object's own id, its type and prototype. Sector objects carry a null id, so
+  their digests are equal: the sector and ordinal identify one, as the area
+  owner keys it; a mobile's id is its own.
 - `Script`, `Chain` and `Line`: the attached script, the scripts from it to the
   teleport through literal calls, and the teleport's line. `Fade`: a
   fade-and-teleport. `OneShot`: the attached script removes or replaces itself
   on a reached branch, or carries the auto-removing file flag, so the trigger
-  works once.
+  works once; never a tile entry, whose own changes the original throws away
+  (ledger X3, TR5).
 - `DestinationCatalogue`, `DestinationRuntime` and `Arrival`: the destination
   map and tile. A jump point's runtime −1 and a script's runtime −1 (catalogue
   4998) keep the current map; a computed destination has runtime 0.
@@ -58,19 +60,26 @@ A site holds:
   `ComputedDestination`, `MovesOtherObject` (not the triggerer or the player),
   `CallChangesTriggerer`, `ObjectOffOrDestroyed`, `ObjectNotClickable`
   (don't-draw, invisible or click-through), `TrapScript`, `ContainerOpenCheck`
-  (a container opens before its use script runs) and `UnlistedDestination`.
+  (a container opens before its use script runs), `UseRunsOtherAction` (a use
+  click on anything but a portal, container or scenery) and
+  `UnlistedDestination`.
 
 The effective script array and flags of an object are its own serialized field
 when present (an explicit null included), else its prototype's. Call depth is
 at most 6 (`MapTransitions.MaxCallDepth`); a call cycle at the same entry line
-is followed once. Script numbers resolve through the original's
-[script names](../scripting/script-content.md).
+is followed once, and calls reaching the same callee entry with the same
+guards once; an attached script whose call graph needs more than 4,096 visits
+(`MapTransitions.MaxVisits`) gives no site and a `LimitExceeded` issue. A
+tile's first jump point is the only one read, as the original reads it. An
+instance whose prototype cannot be read keeps its own fields (the prototype
+is reported). The map's own file issues are part of `Issues`. Script numbers
+resolve through the original's [script names](../scripting/script-content.md).
 
 ## Installed original
 
 The opt-in test (`tests/Arcanum.Data.Tests/Maps/MapTransitionsRealDataTests.cs`,
 `DAT_ROOT` = the game folder, about 1 s) reads all 79 listed map folders
-without an issue and gives the numbers of the research census: 45 jump points
+with no issue but the editor's two side files and gives the numbers of the research census: 45 jump points
 (7 leave their map), 281 use paths on scenery and portals (241 unconditional),
 5 container paths (none), 421 tile paths (9 unconditional), no sector-script
 path; 151 unconditional cross-map paths (144 scenery, 2 portals, 5 tiles), two
@@ -81,10 +90,11 @@ profiles state, with the same arrival tiles.
 ## Original check
 
 The decoded facts were checked in the retail executable
-([ledger TR1–TR4](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
+([ledger TR1–TR5](../research/original-verification-ledger.md#map-transitions-arc-data-025)):
 the teleport and fade-and-teleport operands and their map − 4999, a jump
 point firing for any PC, a tile script for any critter, one pending player
-teleport, and −1 as the current map. The unconditional/conditional split is
+teleport, −1 as the current map, the first jump point of a tile, and a tile
+script that never keeps its own changes. The unconditional/conditional split is
 the project's policy, not a rule of the original.
 
 ## Not covered

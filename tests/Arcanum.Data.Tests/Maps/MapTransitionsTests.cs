@@ -129,16 +129,22 @@ public sealed class MapTransitionsTests
     {
         Maps();
         Script(10, Lines((Always, Teleport(0, 5001, 7, 8), Nothing)));
-        Write("maps/alpha/67108865.sec", Sector([(65 + 64 * 3, 10)], 10));
+        Script(11, Lines((Always, Teleport(0, 5001, 7, 8), Nothing), (Always, Clause.Of(5), Nothing)));      // removes itself
+        Write("maps/alpha/67108865.sec", Sector([(65 + 64 * 3, 10), (2, 11)], 10, Scenery(41, 5, 6, 0, 11)));
         Write($"maps/{WorldCatalog.AggregateName("alpha")}", [.. new byte[16], .. Scenery(31, 100, 200, 0, 10)]);
 
         var set = Read("alpha");
         Assert.AreEqual(0, set.Issues.Count, string.Join("; ", set.Issues));
-        var tile = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.TileEntry);
+        var tile = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.TileEntry && s.Script == 10);
         Assert.AreEqual((new WorldLocation(65, 68), (MapTransitionObject?)null, true), (tile.Location, tile.Object, tile.Unconditional));
+        // A tile script's own changes are not kept by the original (ledger X3), so it never works only once.
+        var removing = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.TileEntry && s.Script == 11);
+        Assert.AreEqual((new WorldLocation(66, 64), false), (removing.Location, removing.OneShot));
         var sector = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.SectorEntry);
         Assert.AreEqual(new WorldLocation(64, 64), sector.Location);
-        var mobile = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.Use);
+        var placed = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.Use && s.Object!.Sector is not null);
+        Assert.AreEqual((new WorldLocation(69, 70), new WorldSectorCoordinate(1, 1), true), (placed.Location, placed.Object!.Sector, placed.OneShot));
+        var mobile = set.Sites.Single(s => s.Trigger == MapTransitionTrigger.Use && s.Object!.Sector is null);
         Assert.AreEqual((new WorldLocation(100, 200), (WorldSectorCoordinate?)null, 0), (mobile.Location, mobile.Object!.Sector, mobile.Object.Index));
     }
 
@@ -153,6 +159,47 @@ public sealed class MapTransitionsTests
         Assert.IsNull(set.Entry);
         Assert.AreEqual(MapTransitionGuard.UnlistedDestination, set.Sites.Single().Guards);
         Assert.AreEqual((0, 10), (set.Sites.Single().DestinationCatalogue, set.Sites.Single().DestinationRuntime));
+    }
+
+    [TestMethod]
+    public void Calls_object_kinds_prototypes_and_jump_tiles_follow_the_policy()
+    {
+        Maps();
+        Write("maps/alpha/map.jmp", Jumps((new(10, 20), 2, new(30, 40)), (new(10, 20), 1, new(31, 41))));
+        Write("maps/alpha/notes.sbf", [1]);
+        Script(10, Lines((Always, Teleport(0, 5001, 7, 8), Nothing)));
+        Script(21, Lines((Always, Clause.Of(7, N(10), N(0), (1, 0), (1, 0)), Nothing)));                // the attachee triggers the callee
+        Script(22, ScriptBytes(ScrCatalogue.FileFlag.AutoRemoving, (Always, Teleport(0, 5001, 7, 8), Nothing)));
+        Script(23, Lines((Always, Clause.Of(99, (1, 0), (1, 0), N(10)), Nothing)));                   // change script: a later run
+        Script(24, Lines((Always, Clause.Of(7, N(24), N(0), (0, 0), (1, 0)), Nothing), (Always, Teleport(0, 5001, 7, 8), Nothing))); // calls itself
+        Script(25, Lines((Always, Clause.Of(3, (4, 1)), Nothing), (Always, Teleport(0, 5001, 7, 8), Nothing)));   // computed goto
+        Write("maps/alpha/0.sec", Sector([], null, Scenery(1, 1, 1, 0, 10, type: 0), Scenery(2, 1, 1, 0, 21), Scenery(3, 1, 1, 0, 22),
+            Scenery(4, 1, 1, 0, 23), Scenery(5, 1, 1, 0, 24), Scenery(6, 1, 1, 0, 25), Scenery(7, 1, 1, 0, 10, prototype: 7002)));
+
+        var set = Read("alpha");
+        var use = set.Sites.Where(s => s.Trigger == MapTransitionTrigger.Use).GroupBy(s => s.Object!.Index + 1).ToDictionary(g => g.Key, g => g.ToArray());
+        Assert.AreEqual(MapTransitionGuard.UseRunsOtherAction, use[1].Single().Guards);
+        Assert.AreEqual(MapTransitionGuard.CallChangesTriggerer, use[2].Single().Guards);
+        Assert.IsTrue(use[3].Single().Unconditional && use[3].Single().OneShot);
+        Assert.AreEqual(MapTransitionGuard.ConditionalPath, use[4].Single().Guards);
+        Assert.IsTrue(use[5].Single().Unconditional);
+        CollectionAssert.AreEqual(new[] { 24 }, use[5].Single().Chain.ToArray(), "the self call at the same entry is a cycle");
+        Assert.IsFalse(use.ContainsKey(6), "a computed goto ends the walk");
+        Assert.IsTrue(use[7].Single().Unconditional, "an instance with its own scripts keeps them without its prototype");
+        Assert.AreEqual(1, set.Sites.Count(s => s.Trigger == MapTransitionTrigger.JumpPoint), "the original takes the first jump point of a tile");
+        CollectionAssert.AreEquivalent(new[] { "UnrecognisedFile maps/alpha/notes.sbf", "Missing proto/007002" }, set.Issues.Select(i => $"{i.Code} {i.Path}").ToArray());
+    }
+
+    [TestMethod]
+    public void A_call_graph_over_the_visit_limit_is_refused_for_its_script()
+    {
+        Maps();
+        for (var level = 30; level < 35; level++)
+            Script(level, Enumerable.Range(0, 20).Select(line => (Always, level == 34 ? Teleport(0, 5001, 7, 8) : Clause.Of(7, N(level + 1), N(line), (0, 0), (1, 0)), Nothing)).ToArray());
+        Write("maps/alpha/0.sec", Sector([], null, Scenery(1, 1, 1, 0, 30)));
+        var set = Read("alpha");
+        Assert.AreEqual(0, set.Sites.Count);
+        Assert.AreEqual((WorldIssueCode.LimitExceeded, 30), (set.Issues.Single().Code, set.Issues.Single().Index));
     }
 
     private MapTransitionSet Read(string name)
@@ -171,7 +218,9 @@ public sealed class MapTransitionsTests
     private void Maps()
     {
         Write("rules/maplist.mes", "{5000}{alpha,1,2}\n{5001}{beta,3,4}\n"u8.ToArray());
-        foreach (var name in new[] { "alpha", "beta" }) Write($"maps/{name}/map.prp", Properties());
+        var tdf = new byte[32 + 8];
+        BinaryPrimitives.WriteSingleLittleEndian(tdf, 1.2f); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(8), 2); BinaryPrimitives.WriteInt64LittleEndian(tdf.AsSpan(16), 2);
+        foreach (var name in new[] { "alpha", "beta" }) { Write($"maps/{name}/map.prp", Properties()); Write($"maps/{name}/terrain.tdf", tdf); }
         Write("proto/007001 - Thing.pro", AreaIdentityTests.Prototype());
     }
 
@@ -183,10 +232,10 @@ public sealed class MapTransitionsTests
 
     /// <summary>A v119 instance of prototype 7001: location (slot 1), flags (18), spell flags (19) and, with a
     /// script number, a script array (31) holding the use slot only.</summary>
-    private static byte[] Scenery(int own, long x, long y, uint flags, int? use, int type = 3)
+    private static byte[] Scenery(int own, long x, long y, uint flags, int? use, int type = 3, int prototype = 7001)
     {
         using var s = new MemoryStream();
-        AreaIdentityTests.I32(s, 119); s.Write(AreaIdentityTests.Id(1, 7001)); s.Write(AreaIdentityTests.Id(2, own)); AreaIdentityTests.I32(s, type);
+        AreaIdentityTests.I32(s, 119); s.Write(AreaIdentityTests.Id(1, prototype)); s.Write(AreaIdentityTests.Id(2, own)); AreaIdentityTests.I32(s, type);
         var mask = (1u << 1) | (1u << 18) | (1u << 19) | (use is null ? 0 : 1u << 31);
         Span<byte> word = stackalloc byte[4];
         BinaryPrimitives.WriteInt16LittleEndian(word, (short)BitOperations.PopCount(mask)); s.Write(word[..2]);

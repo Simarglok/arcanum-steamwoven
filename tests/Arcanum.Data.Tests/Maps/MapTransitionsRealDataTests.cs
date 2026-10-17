@@ -26,7 +26,10 @@ public sealed class MapTransitionsRealDataTests
 
         var sets = catalog.Maps.Where(m => list.Find(m.Name) is not null).Select(m => MapTransitions.Read(catalog, list, m, scripts)).ToArray();
         Assert.AreEqual(79, sets.Length);
-        Assert.IsTrue(sets.All(s => s.Issues.Count == 0), string.Join("; ", sets.SelectMany(s => s.Issues)));
+        // Only the editor's two side files (as the map catalogue reports them); no sector, object, prototype or script refusal.
+        var issues = sets.SelectMany(s => s.Issues).ToArray();
+        Assert.AreEqual(2, issues.Length, string.Join("; ", issues.Select(i => i.ToString())));
+        Assert.IsTrue(issues.All(i => i.Code == WorldIssueCode.UnrecognisedFile), string.Join("; ", issues.Select(i => i.ToString())));
         var sites = sets.SelectMany(s => s.Sites.Select(site => (From: s.Entry!, Site: site))).ToArray();
 
         var jumps = sites.Where(p => p.Site.Trigger == MapTransitionTrigger.JumpPoint).ToArray();
