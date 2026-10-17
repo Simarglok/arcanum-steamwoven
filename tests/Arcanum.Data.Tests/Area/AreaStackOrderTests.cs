@@ -211,9 +211,39 @@ public sealed class AreaStackOrderTests
         Load(line + " without a colon\n");
         Assert.AreEqual(1, unknownObjects, "a change the original makes differently (here a crash) stays Unknown");
 
-        // A patch line whose effect is not modelled keeps the plan honest about it.
+        // A patch line whose effect is not modelled keeps the plan and the step evidence honest about it.
         var unmodelled = Load("A_0001:faction 1\n" + line + ":obj_flag OF_OFF\n");
         Assert.IsTrue(unmodelled.MapPatch!.HasUnmodelledLines);
+        Assert.AreEqual(1, unknownObjects, "MAP_PATCH_LINE_UNSUPPORTED");
+
+        // script: the script file named by number (module scripts 1..999 from every source), its 8-byte header and the number.
+        Loose("modules/Mod/scr/00042Fixture.scr", [7, 0, 0, 0, 9, 0, 0, 0, 0xFF]);
+        var scripted = Mobile(Load(line + ":script 9 42 script 10 43\n"));
+        var scripts = scripted.EffectiveFields.Single(f => f.Slot == 31);
+        CollectionAssert.AreEqual(new long[] { 7, 9, 42 }, scripts.Elements.Single(e => e.Key == 9).Words.ToArray());
+        Assert.IsFalse(scripts.Elements.Any(e => e.Key == 10), "script 43 names no file: nothing is attached");
+    }
+
+    [TestMethod]
+    public void The_owner_takes_a_map_patch_input_exactly_when_the_plan_binds_one()
+    {
+        // ARC-DATA-028: an input without a binding, a binding without an input, a numbered input, or a binding that does not
+        // match the authenticated file is refused.
+        AreaMapPatchBinding Binding(bool unmodelled = false, params int[] scripts) =>
+            new(scripts.ToDictionary(n => n, n => (Arcanum.Data.Maps.MapPatchScriptHeader?)null), unmodelled);
+        var patch = (new AreaInputKey(AreaSourceRole.MapPatch), "# none\n"u8.ToArray());
+        AreaResourceSource[] order = [new(new(AreaSourceRole.Resource1))];
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Throws<AreaException>(() => new OrderFixture(order, 0, null, patch).Dispose()).Issue.Code);
+        Assert.AreEqual(AreaErrorCode.InvalidSelection, Throws<AreaException>(() => new OrderFixture(order, 0, Binding()).Dispose()).Issue.Code);
+        Assert.AreEqual(AreaErrorCode.InvalidSelection,
+            Throws<AreaException>(() => new OrderFixture(order, 0, Binding(), (new AreaInputKey(AreaSourceRole.MapPatch, 1), patch.Item2)).Dispose()).Issue.Code);
+        using (var accepted = new OrderFixture(order, 0, Binding(), patch)) Assert.IsNotNull(accepted.Owner.LoadStrict().MapPatch);
+        using (var lying = new OrderFixture(order, 0, Binding(unmodelled: true), patch))
+            Assert.IsTrue(lying.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch));
+        var scripted = (patch.Item1, "G_01234567_89AB_CDEF_0123_456789ABCDEF:script 1 42\n"u8.ToArray());
+        using (var missing = new OrderFixture(order, 0, Binding(), scripted))
+            Assert.IsTrue(missing.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.InputIdentityMismatch));
+        using (var decided = new OrderFixture(order, 0, Binding(false, 42), scripted)) decided.Owner.LoadStrict();
     }
 
     [TestMethod]
@@ -332,7 +362,8 @@ public sealed class AreaStackOrderTests
     private sealed class OrderFixture : IDisposable
     {
         internal OrderFixture(AreaResourceSource[] order, params (AreaInputKey Key, byte[] Bytes)[] extra) : this(order, extra.Length, extra) { }
-        internal OrderFixture(AreaResourceSource[] order, int maxResources, params (AreaInputKey Key, byte[] Bytes)[] extra)
+        internal OrderFixture(AreaResourceSource[] order, int maxResources, params (AreaInputKey Key, byte[] Bytes)[] extra) : this(order, maxResources, null, extra) { }
+        internal OrderFixture(AreaResourceSource[] order, int maxResources, AreaMapPatchBinding? mapPatch, params (AreaInputKey Key, byte[] Bytes)[] extra)
         {
             var resource = Dat(("art/tile/tilename.mes", Tile), ("art/facade/facadename.mes", Table), ("art/scenery/scenery.mes", Scenery),
                 ("art/tile/stonebse0a.art", Art()), ("art/scenery/fixture.art", Art()));
@@ -346,7 +377,7 @@ public sealed class AreaStackOrderTests
                 return new AreaMappingBinding(role, new(new(AreaSourceRole.Resource1), i, 1, e.StoredSize, e.DeclaredOutputSize, e.Offset, Hash(e.RawNameBytes.ToArray())), Hash(archive.ReadEntry(e)));
             }).ToArray();
             var plan = new AreaSourcePlan(1, 1, new(1, 1), 2, "maps/test", files.Select(f => new AreaInputIdentity(f.Key, f.Bytes.Length, Hash(f.Bytes))), mappings)
-            { Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order };
+            { Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order, MapPatch = mapPatch };
             Owner = AreaDataOwner.Open(new(files.Select(f => new AreaInput(f.Key, new MemoryStream(f.Bytes)))), plan, new() { MaxResourceInputs = maxResources });
         }
         internal AreaDataOwner Owner { get; }

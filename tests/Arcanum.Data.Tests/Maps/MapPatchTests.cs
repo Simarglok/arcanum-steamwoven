@@ -47,6 +47,11 @@ public sealed class MapPatchTests
             Assert.AreEqual(MapPatchIssueCode.UnsupportedByte, Parse(odd).Issues.Single().Code, odd);
         Assert.AreEqual(MapPatchIssueCode.MalformedObjectId, Parse(Id.Replace('F', 'G') + ":x\n").Issues.Single().Code);
         Assert.AreEqual(0, Parse("").Lines.Count);
+        // A one-character final line is empty after the cut: malformed, not an error.
+        Assert.AreEqual((MapPatchIssueCode.MalformedObjectId, 2), (Parse(Id + ":x\n ").Issues.Single().Code, Parse(Id + ":x\n ").Issues.Single().Line));
+        // The last two groups are read in two-digit units, which cannot hold "0x".
+        Assert.AreEqual(MapPatchIssueCode.MalformedObjectId, Parse("G_01234567_89AB_CDEF_0x23_456789ABCDEF:x\n").Issues.Single().Code);
+        Assert.AreEqual(MapPatchIssueCode.MalformedObjectId, Parse("G_01234567_89AB_CDEF_0123_0x6789ABCDEF:x\n").Issues.Single().Code);
     }
 
     // ---- application ----
@@ -127,6 +132,8 @@ public sealed class MapPatchTests
         StringAssert.Contains(noColon.Unmodelled.Single(), "line 4");
         StringAssert.Contains(Apply(Record(Npc), proto, "faction 99999999999").Application.Unmodelled.Single(), "outside int32");
         StringAssert.Contains(Apply(Record(15), Record(15), "alignment 5").Application.Unmodelled.Single(), "player alignment");
+        StringAssert.Contains(Apply(Record(Npc), proto, "script -1 7", _ => new MapPatchScriptHeader(0, 0)).Application.Unmodelled.Single(), "attachment -1");
+        StringAssert.Contains(Apply(Record(Npc), proto, "daystand 99999999999999999999 1").Application.Unmodelled.Single(), "outside int64");
         Assert.AreEqual(0, Apply(Record(Weapon), Record(Weapon), "training st_expert bs_dodge").Application.Unmodelled.Count, "no skills to train on an item");
         // An unknown tier word leaves the skill name to be read as a key, which stops the line.
         var notTier = Apply(Record(Npc), proto, "training expert faction 3");

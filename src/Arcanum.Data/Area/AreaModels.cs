@@ -158,13 +158,24 @@ public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
 /// (lower-case printable ASCII, <c>/</c> separators).</summary>
 public sealed record AreaResourceSource(AreaInputKey Key, string? Path = null);
 
-/// <summary>Version-one explicit FILE-effective source plan. Constructor plans are structural,
-/// not proof that caller inputs are authentic original data. The original validator uses its own pinned profile.</summary>
 /// <summary>ARC-DATA-028: how a plan applies <c>Rules\map.patch</c>: the 8-byte header of each script a <c>script</c>
 /// attribute names (null when the original cannot load it, so it sets nothing), resolved through the content stack when
-/// the plan is made, and whether the file holds lines whose effect is not modelled.</summary>
-public sealed record AreaMapPatchBinding(IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> ScriptHeaders, bool HasUnmodelledLines);
+/// the plan is made, and whether the file holds lines whose effect is not modelled.
+/// The script headers are resolved from the stack when the plan is made and are not authenticated inputs of the owner.</summary>
+public sealed record AreaMapPatchBinding
+{
+    public AreaMapPatchBinding(IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> scriptHeaders, bool hasUnmodelledLines)
+    {
+        ArgumentNullException.ThrowIfNull(scriptHeaders);
+        ScriptHeaders = new System.Collections.ObjectModel.ReadOnlyDictionary<int, Maps.MapPatchScriptHeader?>(new Dictionary<int, Maps.MapPatchScriptHeader?>(scriptHeaders));
+        HasUnmodelledLines = hasUnmodelledLines;
+    }
+    public IReadOnlyDictionary<int, Maps.MapPatchScriptHeader?> ScriptHeaders { get; }
+    public bool HasUnmodelledLines { get; }
+}
 
+/// <summary>Version-one explicit FILE-effective source plan. Constructor plans are structural,
+/// not proof that caller inputs are authentic original data. The original validator uses its own pinned profile.</summary>
 public sealed class AreaSourcePlan
 {
     public AreaSourcePlan(int catalogueMap, int runtimeMap, AreaSectorCoordinate start, int townmap,

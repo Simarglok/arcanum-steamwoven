@@ -83,6 +83,8 @@ public sealed class MapPatchFile
             // (A line without a newline before the end would stop the file as too long, but only a read of the full
             // buffer can lack one, and that read has already overrun the storage above.)
             line = line[..^1];
+            // A one-character final line is empty after the cut: no ID kind, a malformed line to the original.
+            if (line.Length == 0) { issues.Add(new(MapPatchIssueCode.MalformedObjectId, number)); continue; }
             switch (line[0])
             {
                 case 'G':
@@ -96,10 +98,10 @@ public sealed class MapPatchFile
         return new(lines.AsReadOnly(), issues.AsReadOnly());
     }
 
-    // G_XXXXXXXX_XXXX_XXXX_XXXX_XXXXXXXXXXXX: each group is read by strtoul in base 16 over exactly its width, after a
-    // check of its first character only, so "0x" may open a group of three or more characters; the first three groups
-    // are stored as a 32-bit and two 16-bit numbers (Windows memory layout), the rest byte by byte. Text after the GUID is
-    // not checked.
+    // G_XXXXXXXX_XXXX_XXXX_XXXX_XXXXXXXXXXXX: the 8- and 4-digit groups are each one unit and the last two groups
+    // two-digit units, each read by strtoul in base 16 over exactly its width after a check of its first character only,
+    // so "0x" may open an 8- or 4-character unit (a two-character unit cannot hold it); the first three groups are stored
+    // as a 32-bit and two 16-bit numbers (Windows memory layout), the rest byte by byte. Text after the GUID is not checked.
     private static bool TryGuid(string line, out Guid guid)
     {
         guid = default;
@@ -109,7 +111,7 @@ public sealed class MapPatchFile
         for (var g = 0; g < groups.Length; g++)
         {
             if (g > 0) { if (at >= line.Length || line[at] != '_') return false; at++; }
-            if (at + groups[g] > line.Length || !HexGroup(line.Substring(at, groups[g]), out var hexText)) return false;
+            if (at + groups[g] > line.Length || !HexGroup(line.Substring(at, groups[g]), prefixed: g <= 2, out var hexText)) return false;
             var hex = hexText.AsSpan(); at += groups[g];
             if (g == 0) { BinaryPrimitives.WriteUInt32LittleEndian(bytes, uint.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture)); written = 4; }
             else if (g is 1 or 2) { BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(written), ushort.Parse(hex, NumberStyles.HexNumber, CultureInfo.InvariantCulture)); written += 2; }
@@ -119,11 +121,11 @@ public sealed class MapPatchFile
         return true;
     }
 
-    private static bool HexGroup(string group, out string digits)
+    private static bool HexGroup(string group, bool prefixed, out string digits)
     {
         digits = group;
         if (!char.IsAsciiHexDigit(group[0])) return false;
-        if (group.Length >= 3 && group[0] == '0' && group[1] is 'x' or 'X') digits = group[2..].PadLeft(group.Length, '0');
+        if (prefixed && group[0] == '0' && group[1] is 'x' or 'X') digits = group[2..].PadLeft(group.Length, '0');
         return digits.All(char.IsAsciiHexDigit);
     }
 
@@ -287,7 +289,9 @@ internal static class MapPatchApplier
                 }
                 void Stand(int slot)
                 {
+                    // _atoi64 wraps where this reader saturates: a value at either 64-bit end is not modelled.
                     var x = StrToLong(Value()); var y = StrToLong(Value());
+                    if (x is long.MaxValue or long.MinValue || y is long.MaxValue or long.MinValue) unmodelled.Add($"line {line.Line}: {key} value outside int64");
                     if (type == NpcType) fields[slot] = new(ObjectWirePresence.Value, unchecked(x | (y << 32)), []);
                 }
             }

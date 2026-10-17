@@ -25,7 +25,10 @@ over the map's own mobile file only.
   opens, so every source counts) as the `AreaSourceRole.MapPatch` input and resolves, through
   the script name table and the stack, the 8-byte header of every script a `script`
   attribute names (`AreaSourcePlan.MapPatch`, `AreaMapPatchBinding`). Pinned profiles take
-  none.
+  none. The headers are read when the plan is made and are not authenticated inputs of the
+  owner; the owner checks the binding against its own parse of the authenticated file (the
+  same unmodelled state, a header decision for every script named), else
+  `InputIdentityMismatch`.
 - The area owner parses the authenticated input and applies the lines to each mobile object
   with a GUID before it builds the object; `AreaObjectRecord.MapPatch` lists the lines applied
   and any change not modelled, `AreaSnapshot.MapPatch` the binding. The raw identities
@@ -42,8 +45,9 @@ Text mode (CR LF as LF). Each read takes up to 4,195 characters; the original st
 modelled (`LineOverflowsBuffer`). A line starting with `#` or empty is skipped; the line's last
 character is cut (a final line without a newline loses its last real character). The object ID
 kind is the first character, upper case: a `G_` GUID is parsed in the Windows memory layout,
-which is how object files store it (each group read in base 16 after a check of its first
-character only, so `0x` may open a group); `A`, `B`, `N` and `P` IDs are accepted by the
+which is how object files store it (each unit read in base 16 after a check of its first
+character only, so `0x` may open the 8- or 4-digit groups; the last two groups are read in
+two-digit units); `A`, `B`, `N` and `P` IDs are accepted by the
 original but their lookups are not modelled (`UnsupportedObjectId`, the file is then not
 modelled); other lines are skipped (`MalformedObjectId`). A NUL, a lone CR or 0x1A, which the
 original's readers treat by source, make the file not modelled.

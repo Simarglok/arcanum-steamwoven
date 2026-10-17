@@ -165,6 +165,9 @@ public sealed partial class AreaDataOwner
             using var patchPayload = new AreaOwnership(_budget);
             try { patch = MapPatchFile.Parse(ReadFile(new(AreaSourceRole.MapPatch), token, patchPayload)); }
             catch (ArgumentOutOfRangeException) { throw Fail(AreaErrorCode.BudgetExceeded, AreaStage.Aggregate); }
+            // The binding was made from this file: the same unmodelled state, and a header decision for every script it names.
+            if (patch.HasUnmodelledLines != _plan.MapPatch.HasUnmodelledLines || patch.ScriptNumbers().Any(n => !_plan.MapPatch.ScriptHeaders.ContainsKey(n)))
+                throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Aggregate);
         }
         if (_streams.ContainsKey(new(AreaSourceRole.NormalGameMobile)))
         {
