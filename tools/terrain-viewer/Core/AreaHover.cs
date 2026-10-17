@@ -206,29 +206,40 @@ public static class AreaHover
     /// takes no separate game-folder argument.</summary>
     public static AreaNamesLoad LoadNames(string modulePath)
     {
-        ArgumentNullException.ThrowIfNull(modulePath);
-        string full;
-        try { full = Path.GetFullPath(modulePath); }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
-        { return new(AreaNamesStatus.ModuleOutsideGameRoot, null, exception.GetType().Name); }
-        var folder = Path.GetDirectoryName(full);
-        var root = folder is null ? null : Path.GetDirectoryName(folder);
-        if (root is null || !string.Equals(Path.GetFileName(folder), "modules", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(Path.GetExtension(full), ".dat", StringComparison.OrdinalIgnoreCase))
-            return new(AreaNamesStatus.ModuleOutsideGameRoot, null, "module archive is not <game>/modules/<Name>.dat");
-        var discovery = ContentMountPlan.Discover(root, Path.GetFileNameWithoutExtension(full));
-        // Details name statuses only: mount and stack details carry absolute paths, which logs never print.
-        if (discovery.Status != ContentMountStatus.Ready) return new(AreaNamesStatus.MountFailed, null, discovery.Status.ToString());
-        var module = discovery.Plan!.SearchOrder.SingleOrDefault(source => source.Role == ContentSourceRole.ModuleArchive);
-        // Discovery refuses names that differ only in case, so a case-insensitive comparison names one file.
-        if (module is null || !string.Equals(Path.GetFullPath(module.Path), full, StringComparison.OrdinalIgnoreCase))
-            return new(AreaNamesStatus.ModuleOutsideGameRoot, null, "the mounted module archive is not the area's module file");
-        var opened = ContentStack.Open(discovery.Plan);
-        if (opened.Status != ContentStackStatus.Ready) return new(AreaNamesStatus.StackFailed, null, opened.Status.ToString());
+        var opened = OpenModuleStack(modulePath);
+        if (opened.Status != AreaNamesStatus.Ready) return new(opened.Status, null, opened.Detail);
         using var stack = opened.Stack!;
         var loaded = ObjectDescriptionCatalog.Load(stack);
         return loaded.Status == DescriptionCatalogStatus.Ready
             ? new(AreaNamesStatus.Ready, loaded.Catalog, "description tables loaded")
             : new(AreaNamesStatus.CatalogFailed, null, $"{loaded.Status} {loaded.File} {loaded.Parse?.Status} {loaded.Read}");
+    }
+
+    /// <summary>The module content stack of the game folder that holds <paramref name="modulePath"/> as
+    /// <c>&lt;game&gt;/modules/&lt;Name&gt;.dat</c> (the rule of <see cref="LoadNames"/>; ARC-WORLD-027 reads the starting
+    /// hero's rule tables through it too). On <see cref="AreaNamesStatus.Ready"/> the caller owns <c>Stack</c>; details
+    /// name statuses only, never paths.</summary>
+    public static (AreaNamesStatus Status, ContentStack? Stack, string? Root, string Detail) OpenModuleStack(string modulePath)
+    {
+        ArgumentNullException.ThrowIfNull(modulePath);
+        string full;
+        try { full = Path.GetFullPath(modulePath); }
+        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException or System.Security.SecurityException)
+        { return (AreaNamesStatus.ModuleOutsideGameRoot, null, null, exception.GetType().Name); }
+        var folder = Path.GetDirectoryName(full);
+        var root = folder is null ? null : Path.GetDirectoryName(folder);
+        if (root is null || !string.Equals(Path.GetFileName(folder), "modules", StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(Path.GetExtension(full), ".dat", StringComparison.OrdinalIgnoreCase))
+            return (AreaNamesStatus.ModuleOutsideGameRoot, null, null, "module archive is not <game>/modules/<Name>.dat");
+        var discovery = ContentMountPlan.Discover(root, Path.GetFileNameWithoutExtension(full));
+        // Details name statuses only: mount and stack details carry absolute paths, which logs never print.
+        if (discovery.Status != ContentMountStatus.Ready) return (AreaNamesStatus.MountFailed, null, null, discovery.Status.ToString());
+        var module = discovery.Plan!.SearchOrder.SingleOrDefault(source => source.Role == ContentSourceRole.ModuleArchive);
+        // Discovery refuses names that differ only in case, so a case-insensitive comparison names one file.
+        if (module is null || !string.Equals(Path.GetFullPath(module.Path), full, StringComparison.OrdinalIgnoreCase))
+            return (AreaNamesStatus.ModuleOutsideGameRoot, null, null, "the mounted module archive is not the area's module file");
+        var opened = ContentStack.Open(discovery.Plan);
+        return opened.Status != ContentStackStatus.Ready ? (AreaNamesStatus.StackFailed, null, null, opened.Status.ToString())
+            : (AreaNamesStatus.Ready, opened.Stack!, root, "stack ready");
     }
 }

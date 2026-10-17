@@ -89,7 +89,7 @@ public partial class AreaInventoryPanel : CanvasLayer
         foreach (var button in _buttons) { _loot.RemoveChild(button); button.QueueFree(); }
         _buttons.Clear();
         _view = view;
-        _header.Text = $"Inventory | PC items {view.Pc.Count}" + (view.Holder is null ? string.Empty : " | looting a dead NPC");
+        _header.Text = $"Inventory | PC items {view.Pc.Count} | gold {view.Gold}" + (view.Holder is null ? string.Empty : " | looting a dead NPC");
         _pc.Text = view.Pc.Count == 0 ? "(nothing taken yet)" : string.Join("\n", view.Pc.Select((line, index) => $"{index + 1}. {line.Text}"));
         var looting = view.Holder is not null;
         _lootHeader.Visible = looting; _loot.Visible = looting; _takeAll.Visible = looting;

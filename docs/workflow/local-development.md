@@ -8,9 +8,9 @@
 every identity, artifact-authority and ordinary-launch check stays there.
 
     ./arcanum setup [--game-root /Applications/Arcanum]   # verify the game, write every input role, register artifacts/world-builds as root "world"
-    ./arcanum area [--dry-run]                            # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
+    ./arcanum area [--hero NAME] [--dry-run]              # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
-    ./arcanum map NAME [--dry-run]                        # one whole interior (a maps/ folder name) in crash-site-area map mode, ARC-RENDER-008 build only
+    ./arcanum map NAME [--hero NAME] [--dry-run]          # one whole interior (a maps/ folder name) in crash-site-area map mode, ARC-RENDER-008 build only
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
@@ -31,7 +31,14 @@ folder itself (map mode reads its module content stack).
 accepts it only for an ARC-RENDER-008 build; a build exported before map mode
 refuses the arguments, so `map` needs an ARC-RENDER-008 export made after this
 change. An existing configuration lacks `gameRoot` until `./arcanum setup` runs
-again. **Rule:** a change that adds
+again. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer.md#starting-hero-arc-world-027)) starts
+`area` or `map` as one of the twelve pre-made heroes (`PREMADE_HEROES` in `tools/local_dev/launch.py`: `halfling-male`,
+`gnome-male`, `half-elf-male`, `half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`,
+`elf-female`, `half-orc-female`, `half-elf-female`; `./arcanum status` lists them); without it the viewer keeps the
+diagnostic PC profile. It needs no new input role (the viewer reads the hero from the module archive's game folder) and
+is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it only for an
+ARC-RENDER-008 build, like map mode: a build exported before ARC-WORLD-027 refuses the argument, so `--hero` needs a new
+export. **Rule:** a change that adds
 or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
 `MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
 adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when

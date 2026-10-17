@@ -9,8 +9,8 @@ A Godot-free reader in `Arcanum.Data` turns one original pre-made PC prototype i
 [FR-CHAR-007](../requirements/characters-skills.md#fr-char-007), the session wiring of
 [FR-CHAR-008/009](../requirements/characters-skills.md#fr-char-008) and the explicit start-character input of
 [FR-CONTENT-003](../requirements/content-product.md#fr-content-003).
-**The AREA viewer is not wired to it yet** (`tools/terrain-viewer` is reserved by another task): it still starts a
-session without a hero and talks with its PROJECT diagnostic PC profile.
+The AREA viewer starts a pre-made hero on request since ARC-WORLD-027 ([viewer start](#viewer-start-arc-world-027));
+without `--hero` it starts a session without a hero and talks with its project diagnostic PC profile.
 
 Categories as in the research: source claims (S) are read from `alexbatalov/arcanum-ce` at
 `a7ff41b300ef712f0e7d088183a3d08957110cdd` (Sustainable Use License, not MIT); nothing is copied. Data claims (D) are
@@ -137,19 +137,48 @@ so nothing is lost.
   16070 (half-ogre man) has intelligence 4; 16075 (human woman) has ST 7, CN 9 and 300 gold. Virgil's original first
   talk offers the half-elf replies 4 and 7 at node 1 and walks the 13-node path of the viewer test; the half-ogre gets
   only reply 5 and walks the low-intelligence path 1, 9, 220, 222, 225, 228, 74; the woman gets reply 26 at node 24 and
-  replies 37 and 45 at node 35. A save and load keep the hero, gold and kit.
+  replies 37 and 45 at node 35. A save and load keep the hero, gold and kit. Since ARC-WORLD-027 the conversation host
+  takes those facts from the session itself, and the viewer's `AreaStartingHero.Load` reads all twelve heroes from the
+  installed game folder with flags 2350..2361 in order, the table's gold and kit sizes and their genders; the half-ogre's
+  session has intelligence 4 and flag 2353 true.
+- Viewer (ARC-WORLD-027): [AreaStartingHeroTests](../../tests/Arcanum.TerrainViewer.Tests/AreaStartingHeroTests.cs)
+  (the hero list, `--hero` parsing, the flags, a session with the hero's flag through a save and load, refused loads,
+  the window's kit lines and gold, the HUD line); native smoke `ARC-WORLD-027 native-smoke hero PASS` with `--hero`.
+
+## Viewer start (ARC-WORLD-027)
+
+`AreaStartingHero` (`tools/terrain-viewer/Core/AreaStartingHero.cs`) is the AREA host of this contract. `--hero NAME`
+names one of the twelve heroes by race and gender (main-menu order, basic prototypes 16067..16078; the list is shared
+with the launcher and checked by `test_launcher_sync.py`). During the background load it opens the module content stack
+of the game folder that holds the module archive (the description tables' rule), reads the hero with
+`PremadeHeroReader` over that folder's `data/proto` and the three rule tables, and maps it with
+`AreaStartingHero.Definition` (the mapping above, moved out of the real-data test). Refusals are typed
+(`AreaHeroStatus`: module outside a game folder, mount or stack failure, a table absent or invalid, a reader refusal,
+an invalid flag message) and fail the viewer's load.
+
+**Pre-made hero flag** (S, and checked in the original executable): picking a hero, `mainmenu_ui_pregen_char_execute`
+(0x545B60) reads `MainMenu.mes` messages 551 + i for each hero index i, turns each into a flag number with `atoi` and
+writes 1 for the chosen hero and 0 for the others ([ledger](../research/original-verification-ledger.md#skills-levels-and-character-arc-res-044-arc-res-031-arc-res-027)).
+The viewer starts from the original new-game flags (all 0..3199 known false, so the 0 writes change nothing) with the
+chosen hero's flag true (`AreaStartingHero.NewGameFlags`); on the installed original that is flag 2350 + i (CC-07).
+Project admission: the chosen message must be one to five ASCII digits (space-padded allowed) naming a flag below 3,200;
+anything else is `FlagInvalid` instead of `atoi`'s partial or zero value. The original writes any non-negative result, flag
+0 included; CE's `> 0` test is a reconstruction slip. Whether Crash Site scripts read these flags stays the open
+ARC-RES-025 question. The main menu's gate on prototype 16075 and its ART, which makes the four female heroes selectable, is not evaluated
+(it is open on the pinned installation, SH-04).
+
+The session is created with that hero (`AreaTransitionCoordinator.CreateSession(…, hero)`); the snapshot schema is
+unchanged (hero and flags are already saved). The conversation host takes its PC facts from the session's hero
+(`QueryHeroDialogFacts()`), also when F8 rebinds it to a loaded session; a session without a hero keeps the given
+profile's facts. The inventory window lists `QueryHeroKit()` before `QueryPcInventory()` with the description number's
+text and shows `QueryGold()`; the HUD's PC count includes the kit. Not done: the hero's own body ART (the actor keeps the
+AREA profile's fixed human body), the PC's name, wielding the kit, and the new-character path.
 
 ## Not implemented
-
-The pre-made hero global flags: the main menu sets flags 2350..2361 (`MainMenu.mes` 551..562) so that the chosen hero's
-flag is true and the others false (ARC-RES-025 CC-07). Neither the reader nor the session sets them; a host that starts
-a hero must set the chosen flag in the session's GF descriptor (the real-data test starts from the plain new-game flags,
-and whether Crash Site scripts read them is an open ARC-RES-025 question).
 
 The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet is **not** the original level-1 sheet;
 ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
 kits), backgrounds and their context effects, skills, spells, tech, hit-point and fatigue pools (the hero's life state is
 [ARC-COMBAT-002](life-state-runtime.md), with pools 0 as every pre-made prototype stores them), item wielding
-(`item_wield_best_all`: the kit is carried, not worn), the PC object and name, the viewer wiring and a hero picker.
-When the viewer starts a hero, its inventory window and insert check must read `QueryHeroKit()` too: the ARC-UI-004 host
-builds the PC list from `QueryPcInventory()` alone.
+(`item_wield_best_all`: the kit is carried, not worn), the PC object and name, and the hero's body ART in the viewer.
+The viewer's insert check accepts everything (ARC-UI-004), so the kit's weight is not checked there either.

@@ -43,6 +43,11 @@ TASK_MODES: dict[str, str] = {"ARC-WORLD-009": "crash-site-area", "ARC-RENDER-00
 # content stack, so it takes these roles (no prototype folder, Crash Site mobile, effects, patch or cave).
 MAP_ROLES: tuple[str, ...] = ("module", "terrainResource", "actorResource", "gameRoot")
 MAX_MAP_NAME = 128
+# ARC-WORLD-027: `--hero NAME` starts the AREA session as one original pre-made hero (main-menu order, basic prototypes
+# 16067..16078). Keep in step with `AreaStartingHero.Premade` in tools/terrain-viewer/Core/AreaStartingHero.cs
+# (tools/local_dev/test_launcher_sync.py fails on any drift). Only AREA builds exported with ARC-WORLD-027 accept it.
+PREMADE_HEROES: tuple[str, ...] = ("halfling-male", "gnome-male", "half-elf-male", "half-ogre-male", "elf-male", "human-male",
+                                   "half-orc-male", "dwarf-male", "human-female", "elf-female", "half-orc-female", "half-elf-female")
 
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
@@ -99,7 +104,16 @@ def _actor_preview(overrides: dict[str, Any] | None) -> dict[str, str]:
     return values
 
 
-def map_arguments(inputs: dict[str, Any], name: str) -> list[str]:
+def hero_arguments(hero: str | None) -> list[str]:
+    """ARC-WORLD-027: the optional `--hero NAME` pair; None keeps the diagnostic PC profile."""
+    if hero is None:
+        return []
+    if hero not in PREMADE_HEROES:
+        raise ValueError("unknown hero (choose one of: " + ", ".join(PREMADE_HEROES) + ")")
+    return ["--hero", hero]
+
+
+def map_arguments(inputs: dict[str, Any], name: str, hero: str | None = None) -> list[str]:
     """ARC-RENDER-017: the explicit argument set for one interior in crash-site-area map mode."""
     if not isinstance(name, str) or not name.strip() or len(name) > MAX_MAP_NAME or any(
             character in "/\\" or not character.isprintable() for character in name):
@@ -112,7 +126,7 @@ def map_arguments(inputs: dict[str, Any], name: str) -> list[str]:
                          + "; run ./arcanum setup again)")
     arguments = ["--mode", "crash-site-area", "--module", _local(inputs, "module"), "--resource", _local(inputs, "terrainResource"),
                  "--source-id", _source_id(inputs), "--actor-resource", _local(inputs, "actorResource"),
-                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name]
+                 "--game-root", _local(inputs, "gameRoot", directory=True), "--area-map", name, *hero_arguments(hero)]
     assert_ordinary(arguments)
     return arguments
 
@@ -131,7 +145,8 @@ def _local(inputs: dict[str, Any], role: str, *, directory: bool = False) -> str
     return str(path.resolve(strict=True))
 
 
-def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None) -> list[str]:
+def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, Any] | None = None, *, task: str | None = None,
+                      hero: str | None = None) -> list[str]:
     """Build the complete, explicit ordinary terrain diagnostic argument set.
 
     Inputs are revalidated on every launch because local configuration is not a
@@ -140,6 +155,8 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
     """
     if mode not in MODE_ROLES:
         raise ValueError("unsupported terrain diagnostic mode")
+    if hero is not None and mode != "crash-site-area":
+        raise ValueError("--hero applies to crash-site-area only")
     if mode in {"world-diagnostic", "crash-site-area"} and any(value is not None for value in (overrides or {}).values()):
         raise ValueError("world diagnostic rejects actor preview overrides")
     task_roles = TASK_ROLES.get(task, ()) if isinstance(task, str) and TASK_MODES.get(task) == mode else ()
@@ -165,6 +182,7 @@ def terrain_arguments(inputs: dict[str, Any], mode: str, overrides: dict[str, An
             arguments.extend((ROLE_FLAGS[role], local_file(role)))
     for role in task_roles:
         arguments.extend((ROLE_FLAGS[role], local_file(role)))
+    arguments.extend(hero_arguments(hero))
     if mode == "actor-diagnostic":
         actor = _actor_preview(overrides)
         arguments.extend((

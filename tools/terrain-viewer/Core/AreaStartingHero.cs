@@ -1,0 +1,201 @@
+using Arcanum.Data.Characters;
+using Arcanum.Data.Content;
+using Arcanum.Data.Messages;
+using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Session;
+using Arcanum.Simulation.Character;
+
+namespace Arcanum.TerrainViewer.Core;
+
+/// <summary>One of the twelve pre-made heroes the original main menu offers: the project's own name (race and gender,
+/// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, table of CE's built-in PC prototypes).
+/// <see cref="Index"/> is the main menu's hero index minus one, which picks its global flag.</summary>
+public sealed record AreaPremadeHero(string Name, int BasicPrototype)
+{
+    public int Index => BasicPrototype - AreaStartingHero.FirstPremadePrototype;
+}
+
+public enum AreaHeroStatus
+{
+    Ready,
+    /// <summary>The module archive is not <c>&lt;game&gt;/modules/&lt;Name&gt;.dat</c>, or the stack does not mount it.</summary>
+    ModuleOutsideGameRoot,
+    MountFailed,
+    StackFailed,
+    /// <summary>A rule or menu table is absent, unreadable or not a valid MES file (<see cref="AreaHeroLoad.Detail"/> names it).</summary>
+    TableUnavailable,
+    /// <summary>The pre-made hero reader refused the prototype (<see cref="AreaHeroLoad.Read"/>).</summary>
+    HeroRefused,
+    /// <summary>The hero's main-menu flag message is absent or not a decimal flag number of the new-game flag domain.</summary>
+    FlagInvalid,
+}
+
+/// <param name="Definition">The session's hero, or null unless <see cref="AreaHeroStatus.Ready"/>.</param>
+/// <param name="Flag">The hero's global flag (<c>MainMenu.mes</c> 551 + index), set true at the start; null unless ready.</param>
+/// <param name="DroppedChanges">Effect changes on attributes the character owner does not model (see <see cref="AreaStartingHero.Definition"/>).</param>
+public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, SessionHeroDefinition? Definition, int? Flag,
+    int DroppedChanges, PremadeHeroRead? Read, string Detail);
+
+/// <summary>
+/// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
+/// <see cref="PremadeHeroReader"/> (ARC-WORLD-015) from the game folder that holds the module archive (the description
+/// tables' rule, <see cref="AreaHover.OpenModuleStack"/>): the loose <c>data/proto</c> prototypes, <c>rules\effect.mes</c>,
+/// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>.
+/// Godot-free; a typed status, never an exception for data.
+/// </summary>
+public static class AreaStartingHero
+{
+    public const int FirstPremadePrototype = 16067;
+    /// <summary>Main-menu message of the first hero's global flag; hero <c>i</c> reads message <c>551 + i</c> (the original
+    /// <c>mainmenu_ui_pregen_char_execute</c>, 0x545B60, checked in the executable).</summary>
+    public const int FirstFlagMessage = 551;
+    public const string EffectsPath = "rules/effect.mes", SourcesPath = "rules/InvenSource.mes", SourcesBuyPath = "rules/InvenSourceBuy.mes",
+        MainMenuPath = "mes/MainMenu.mes";
+
+    /// <summary>The twelve heroes in main-menu order. Keep in step with <c>PREMADE_HEROES</c> in
+    /// <c>tools/local_dev/launch.py</c> (tools/local_dev/test_launcher_sync.py fails on any drift).</summary>
+    public static IReadOnlyList<AreaPremadeHero> Premade { get; } = Array.AsReadOnly(new AreaPremadeHero[]
+    {
+        new("halfling-male", 16067), new("gnome-male", 16068), new("half-elf-male", 16069), new("half-ogre-male", 16070),
+        new("elf-male", 16071), new("human-male", 16072), new("half-orc-male", 16073), new("dwarf-male", 16074),
+        new("human-female", 16075), new("elf-female", 16076), new("half-orc-female", 16077), new("half-elf-female", 16078),
+    });
+
+    /// <summary>The hero of that name (ordinal, exact), or null.</summary>
+    public static AreaPremadeHero? Find(string name) => Premade.FirstOrDefault(hero => string.Equals(hero.Name, name, StringComparison.Ordinal));
+
+    /// <summary>Reads <paramref name="hero"/> from the game folder of <paramref name="modulePath"/> and maps it to the session.</summary>
+    public static AreaHeroLoad Load(string modulePath, AreaPremadeHero hero)
+    {
+        ArgumentNullException.ThrowIfNull(modulePath);
+        ArgumentNullException.ThrowIfNull(hero);
+        var opened = AreaHover.OpenModuleStack(modulePath);
+        if (opened.Status != AreaNamesStatus.Ready)
+            return Refused(opened.Status switch
+            {
+                AreaNamesStatus.MountFailed => AreaHeroStatus.MountFailed, AreaNamesStatus.StackFailed => AreaHeroStatus.StackFailed,
+                _ => AreaHeroStatus.ModuleOutsideGameRoot,
+            }, hero, opened.Detail);
+        using var stack = opened.Stack!;
+        var effects = Table(stack, EffectsPath, required: true, out var detail);
+        var sources = effects is null ? null : Table(stack, SourcesPath, required: true, out detail);
+        var buy = sources is null ? null : Table(stack, SourcesBuyPath, required: false, out detail);
+        var menu = sources is null || detail is not null ? null : Table(stack, MainMenuPath, required: true, out detail);
+        if (effects is null || sources is null || menu is null || detail is not null) return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
+        var read = PremadeHeroReader.Read(new(PremadeHeroReader.DirectoryPrototypes(Path.Combine(opened.Root!, "data", "proto")), effects, sources, buy),
+            hero.BasicPrototype);
+        if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
+            return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");
+        if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
+        return new(AreaHeroStatus.Ready, hero, Definition(read.Hero, out var dropped), flag, dropped, read, "hero ready");
+    }
+
+    /// <summary>The original new-game flags (0..3199 known false, ARC-SCRIPT-006) with the chosen hero's flag set true, as the
+    /// main menu does before the game starts (it also writes 0 to the other heroes' flags, which a new game already holds).</summary>
+    public static GlobalFlagOwnerDescriptor NewGameFlags(GlobalFlagIdentity identity, OwnerEpoch epoch, int? heroFlag)
+    {
+        var flags = OriginalGlobalFlags.NewGame(identity, epoch);
+        if (heroFlag is not { } chosen) return flags;
+        if (chosen is < 0 or >= OriginalGlobalFlags.Count) throw new ArgumentOutOfRangeException(nameof(heroFlag));
+        return flags with { Bootstrap = Array.AsReadOnly(flags.Bootstrap.Select(value => value.Flag.Value == chosen ? value with { Value = true } : value).ToArray()) };
+    }
+
+    // The original reads the message with atoi and writes any result that is not negative (flag 0 included; CE's `> 0`
+    // is a reconstruction slip). Project admission: one to five ASCII digits, optionally space-padded, inside the
+    // new-game domain; an absent or other message is refused instead of atoi's partial or zero value.
+    private static int? Flag(MesFile menu, AreaPremadeHero hero)
+    {
+        if (menu.Find(FirstFlagMessage + hero.Index) is not { } message) return null;
+        var text = message.Bytes.Span.Trim((byte)' ');
+        if (text.Length is 0 or > 5) return null;
+        var value = 0;
+        foreach (var b in text)
+        {
+            if (b is < (byte)'0' or > (byte)'9') return null;
+            value = value * 10 + (b - '0');
+        }
+        return value < OriginalGlobalFlags.Count ? value : null;
+    }
+
+    private static MesFile? Table(ContentStack stack, string path, bool required, out string? detail)
+    {
+        detail = null;
+        var resolution = stack.Resolve(path);
+        if (resolution.Status != ContentResolutionStatus.Resolved || resolution.Winner is not { } winner)
+        {
+            if (required) detail = $"{path} {resolution.Status}";
+            return null;
+        }
+        var bytes = stack.Read(winner);
+        if (bytes.Status != ContentReadStatus.Read || bytes.Bytes is null) { detail = $"{path} {bytes.Status}"; return null; }
+        var parsed = MesFile.Parse(bytes.Bytes);
+        if (parsed.Status != MesParseStatus.Parsed || parsed.File is null) { detail = $"{path} {parsed.Status}"; return null; }
+        return parsed.File;
+    }
+
+    private static AreaHeroLoad Refused(AreaHeroStatus status, AreaPremadeHero hero, string detail) => new(status, hero, null, null, 0, null, detail);
+
+    private static readonly CharacterRace[] Races =
+    [
+        CharacterRace.Human, CharacterRace.Dwarf, CharacterRace.Elf, CharacterRace.HalfElf, CharacterRace.Gnome, CharacterRace.Halfling,
+        CharacterRace.HalfOrc, CharacterRace.HalfOgre, CharacterRace.DarkElf, CharacterRace.Ogre, CharacterRace.Orc,
+    ];
+
+    // Source stat index → owner stat: 0..7 primary, 8..16 derived, 22 magick points, 23 tech points.
+    private static CharacterStat? Stat(int source) => source switch
+    {
+        0 => CharacterStat.Strength, 1 => CharacterStat.Dexterity, 2 => CharacterStat.Constitution, 3 => CharacterStat.Beauty,
+        4 => CharacterStat.Intelligence, 5 => CharacterStat.Perception, 6 => CharacterStat.Willpower, 7 => CharacterStat.Charisma,
+        8 => CharacterStat.CarryWeight, 9 => CharacterStat.DamageBonus, 10 => CharacterStat.AcAdjustment, 11 => CharacterStat.Speed,
+        12 => CharacterStat.HealRate, 13 => CharacterStat.PoisonRecovery, 14 => CharacterStat.ReactionModifier,
+        15 => CharacterStat.MaxFollowers, 16 => CharacterStat.MagickTechAptitude, 22 => CharacterStat.MagickPoints,
+        23 => CharacterStat.TechPoints, _ => null,
+    };
+
+    /// <summary>
+    /// The host mapping from a pre-made hero (Arcanum.Data) to the session's hero definition (moved here from the
+    /// ARC-WORLD-015 real-data test). Level-1 defaults per <see cref="PremadeHero"/>; effect changes on stats the character
+    /// owner models (primary, derived, magick and tech points) are kept, the others (skills, resistances, tech
+    /// disciplines, special values, level, alignment, age …) are dropped and counted in <paramref name="dropped"/>.
+    /// </summary>
+    public static SessionHeroDefinition Definition(PremadeHero hero, out int dropped)
+    {
+        ArgumentNullException.ThrowIfNull(hero);
+        var count = 0;
+        StatEffectDefinition? Effect(EffectRule? rule)
+        {
+            if (rule is null) return null;
+            var modifiers = new List<StatModifier>();
+            foreach (var change in rule.Changes)
+            {
+                if (change.Kind != EffectAttributeKind.Stat || Stat(change.Attribute) is not { } stat)
+                {
+                    count++;
+                    continue;
+                }
+                modifiers.Add(new(stat, change.Operator switch
+                {
+                    EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
+                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, _ => StatModifierOperator.Maximum,
+                }, change.Value));
+            }
+            return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);
+        }
+        var raceEffect = Effect(hero.RaceEffect);
+        var genderEffect = Effect(hero.GenderEffect);
+        dropped = count;
+        return new(hero.Prototype, Races[hero.Race], hero.Gender == 0 ? CharacterGender.Female : CharacterGender.Male,
+            [.. Enumerable.Repeat(PremadeHero.StartPrimaryStat, 8), 0, 0], PremadeHero.StartLevel, PremadeHero.StartUnspentPoints, hero.Alignment,
+            raceEffect, genderEffect, hero.Gold,
+            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))]);
+    }
+
+    /// <summary>A one-line HUD summary of the session's hero (no original text), or "diagnostic PC" without one.</summary>
+    public static string Summary(GameSessionOwner session)
+    {
+        ArgumentNullException.ThrowIfNull(session);
+        if (session.QueryHero() is not { } hero) return "hero: none (diagnostic PC profile)";
+        var name = Premade.FirstOrDefault(p => p.BasicPrototype + PremadeHeroReader.PrototypeOffset == hero.Prototype)?.Name ?? $"prototype {hero.Prototype}";
+        return $"hero: {name} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}";
+    }
+}

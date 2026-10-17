@@ -125,7 +125,11 @@ public sealed record AreaInventoryTarget(AreaInventoryTargetKind Kind, string En
 public sealed record AreaInventoryLine(string Entity, string Text);
 
 /// <summary>What the inventory window shows: the PC's list and, when looting, the dead NPC's current list.</summary>
-public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot);
+public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, string? Holder, string? HolderTitle, IReadOnlyList<AreaInventoryLine> Loot)
+{
+    /// <summary>ARC-WORLD-027: the PC's gold (the hero's coins; 0 without a hero).</summary>
+    public int Gold { get; init; }
+}
 
 /// <summary>
 /// ARC-UI-004: the AREA viewer's side of the session inventory. It attaches the loaded maps' seeds to a session (again
@@ -224,12 +228,28 @@ public sealed class AreaInventoryHost
     public AreaInventoryView View(GameSessionOwner session, ObjectDescriptionCatalog? catalog, int runtimeMap, string? holder = null)
     {
         ArgumentNullException.ThrowIfNull(session);
-        var pc = session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)))).ToArray();
-        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>());
+        // ARC-WORLD-027: the hero's starting kit precedes the items taken from the world, as in the session's PC list.
+        var pc = session.QueryHeroKit().Select(item => new AreaInventoryLine(item.Entity, Line(KitName(item, catalog), item.Kind.Type, null) + " (starting kit)"))
+            .Concat(session.QueryPcInventory().Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Kind.Type, Weight(item.Entity)))))
+            .ToArray();
+        var gold = session.QueryGold();
+        if (holder is null) return new(Array.AsReadOnly(pc), null, null, Array.Empty<AreaInventoryLine>()) { Gold = gold };
         var list = session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(h => h.Entity == holder)?.Items ?? [];
         var loot = list.Select(item => new AreaInventoryLine(item.Entity, Line(Name(item.Entity, catalog), item.Facts.Kind.Type, item.Facts.Weight)
             + (item.Facts.Worn ? " (worn)" : string.Empty))).ToArray();
-        return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot));
+        return new(Array.AsReadOnly(pc), holder, Name(holder, catalog), Array.AsReadOnly(loot)) { Gold = gold };
+    }
+
+    /// <summary>A kit item's shown name: the text of its prototype's description number (the identified name; the kit's
+    /// identification state is not modelled). No catalog, an absent or undecodable text gives a bracketed label.</summary>
+    public static string KitName(SessionKitItem item, ObjectDescriptionCatalog? catalog)
+    {
+        var type = AreaHoverIndex.TypeName((int)item.Kind.Type);
+        if (catalog is null) return $"[{type}: name unavailable]";
+        var found = catalog.Find(item.Kind.Description);
+        if (found.Status != DescriptionLookupStatus.Found || found.Message is null) return $"[{type}: unnamed]";
+        return MesText.Decode(found.Message, AreaHoverIndex.TextProfile) is { Status: MesDecodeStatus.Decoded, Text: { Length: > 0 } decoded }
+            ? decoded : $"[{type}: name not decodable]";
     }
 
     private int? Weight(string entity)

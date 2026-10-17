@@ -152,11 +152,16 @@ public sealed class AreaTransitionCoordinator
     /// <summary>A new-game session for the viewer: the clock profile of the area lighting source, the original
     /// new-game global flags (0..3199 known false, ARC-SCRIPT-006) that dialogs read and write, an empty story
     /// domain and the actor at the given exterior cell. The cave's story scripts are out of scope
-    /// (docs/research/cave-transition-evidence.md T9).</summary>
-    public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap)
+    /// (docs/research/cave-transition-evidence.md T9). ARC-WORLD-027: with a ready pre-made <paramref name="hero"/> the
+    /// session's player character is that hero and its main-menu flag starts true.</summary>
+    public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
+        AreaHeroLoad? hero = null)
     {
+        if (hero is not null && (hero.Status != AreaHeroStatus.Ready || hero.Definition is null || hero.Flag is null))
+            throw new ArgumentException("AREA_HERO_NOT_READY", nameof(hero));
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
-        var flags = OriginalGlobalFlags.NewGame(identity, new OwnerEpoch(Guid.NewGuid()));
-        return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus)));
+        var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
+        return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
+            Hero: hero?.Definition));
     }
 }

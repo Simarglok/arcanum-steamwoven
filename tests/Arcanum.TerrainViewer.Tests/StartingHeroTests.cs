@@ -17,8 +17,8 @@ namespace Arcanum.TerrainViewer.Tests;
 
 /// <summary>
 /// ARC-WORLD-015: an original pre-made hero becomes the session's player character and decides which of Virgil's original
-/// DLG replies are offered. The viewer still talks with its diagnostic profile; this checks the Data → Session → Scripting
-/// seam on real data, with the conversation host given the hero's facts. Opt-in: ARC_AREA_CONVERSATION_GAME_ROOT names the
+/// DLG replies are offered. This checks the Data → Session → Scripting seam on real data; since ARC-WORLD-027 the viewer's
+/// conversation host takes the hero's facts from the session and the viewer starts a hero with <c>--hero</c>. Opt-in: ARC_AREA_CONVERSATION_GAME_ROOT names the
 /// user-owned installation (read-only). Structural identifiers only; no original text is asserted or printed.
 /// </summary>
 [TestClass]
@@ -81,6 +81,33 @@ public sealed class StartingHeroTests
         CollectionAssert.AreEqual(halfElf.QueryHeroKit().ToArray(), loaded.QueryHeroKit().ToArray());
     }
 
+    [TestMethod, TestCategory("RealData")]
+    public void The_viewer_loads_every_pre_made_hero_with_its_main_menu_flag()
+    {
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
+        var module = Path.Combine(root, "modules", "Arcanum.dat");
+        // ARC-RES-027 table: gold and kit size per hero; CC-07: MainMenu.mes 551..562 are flags 2350..2361 in order.
+        int[] gold = [385, 385, 385, 385, 385, 370, 385, 385, 300, 370, 385, 385];
+        int[] kit = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3];
+        foreach (var premade in AreaStartingHero.Premade)
+        {
+            var load = AreaStartingHero.Load(module, premade);
+            Assert.AreEqual(AreaHeroStatus.Ready, load.Status, $"{premade.Name} {load.Detail}");
+            Assert.AreEqual(2350 + premade.Index, load.Flag, premade.Name);
+            Assert.AreEqual(premade.BasicPrototype + 20, load.Definition!.Prototype);
+            Assert.AreEqual((gold[premade.Index], kit[premade.Index]), (load.Definition.Gold, load.Definition.Kit.Count), premade.Name);
+            Assert.AreEqual(premade.Name.EndsWith("-female", StringComparison.Ordinal) ? CharacterGender.Female : CharacterGender.Male, load.Definition.Gender);
+        }
+        var halfOgre = AreaStartingHero.Load(module, AreaStartingHero.Find("half-ogre-male")!);
+        using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+            AreaGridSession.Cell(AreaGridSession.Spawn), 1, halfOgre).Owner!;
+        Assert.AreEqual(new DialogPcFacts(DialogPcGender.Male, 4, false, 7), session.QueryHeroDialogFacts());
+        var flags = session.Flags;
+        Assert.AreEqual(true, flags.Read(new(new(Guid.NewGuid()), flags.Version, new FlagId(2353))).Value);
+        Assert.AreEqual(AreaHeroStatus.ModuleOutsideGameRoot, AreaStartingHero.Load(Path.Combine(root, "arcanum1.dat"), halfOgre.Hero).Status);
+    }
+
     /// <summary>A new session at the area spawn with the pre-made hero <paramref name="basic"/> (fresh identities, the
     /// viewer's synthetic clock, the original 3,200 new-game flags).</summary>
     private static GameSessionOwner Start(PremadeHeroSources sources, int basic, int runtimeMap, out int dropped)
@@ -90,7 +117,7 @@ public sealed class StartingHeroTests
         var identity = new GlobalFlagIdentity(new WorldId(Guid.NewGuid()), new ModuleId(Guid.NewGuid()));
         var spawn = AreaGridSession.Cell(AreaGridSession.Spawn);
         var created = GameSessionOwner.Create(new(ConversationSessionFixture.Clock, OriginalGlobalFlags.NewGame(identity, new OwnerEpoch(Guid.NewGuid())),
-            new(new(runtimeMap), new(checked((int)spawn.X), checked((int)spawn.Y)), NeighborDirection.XPlus), Hero: StartingHeroMapping.Definition(read.Hero!, out dropped)));
+            new(new(runtimeMap), new(checked((int)spawn.X), checked((int)spawn.Y)), NeighborDirection.XPlus), Hero: AreaStartingHero.Definition(read.Hero!, out dropped)));
         Assert.AreEqual(GameSessionFailure.None, created.Failure);
         return created.Owner!;
     }
@@ -98,8 +125,9 @@ public sealed class StartingHeroTests
     // Each node with its offered replies; the first unblocked Direct reply is chosen, else the first unblocked one.
     private static string[] Walk(DlgDocument document, AreaSnapshot snapshot, string root, GameSessionOwner session)
     {
-        var host = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session,
-            AreaConversationProfile.Diagnostic with { Pc = session.QueryHeroDialogFacts()! });
+        // ARC-WORLD-027: the host takes the PC facts from the session's hero itself.
+        var host = new AreaConversationHost(snapshot, Path.Combine(root, "arcanum2.dat"), Path.Combine(root, "arcanum3.dat"), session);
+        Assert.AreEqual(session.QueryHeroDialogFacts(), host.Profile.Pc);
         var talk = DialogConversation.Start(document,
             new DialogConversationRequest(new DialogNodeId(1),
                 new DialogParticipants(new DialogId(1324), AreaConversationState.PcParticipant, AreaConversationState.Npc(0)),
@@ -146,62 +174,5 @@ public sealed class StartingHeroTests
         var hash = Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
         Assert.IsTrue(hash.StartsWith("34a49a2c", StringComparison.Ordinal) && hash.EndsWith("5e53a", StringComparison.Ordinal), "pinned Virgil DLG");
         return DlgReader.Read(bytes);
-    }
-}
-
-/// <summary>
-/// The host mapping from a pre-made hero (Arcanum.Data) to the session's hero definition, kept with the tests until the
-/// viewer is wired (as the ARC-WORLD-014 seed mapping is). Level-1 defaults per <see cref="PremadeHero"/>; effect changes
-/// on stats the character owner models (primary, derived, magick and tech points) are kept, the others (skills,
-/// resistances, tech disciplines, special values, level, alignment, age …) are dropped and counted.
-/// </summary>
-internal static class StartingHeroMapping
-{
-    private static readonly CharacterRace[] Races =
-    [
-        CharacterRace.Human, CharacterRace.Dwarf, CharacterRace.Elf, CharacterRace.HalfElf, CharacterRace.Gnome, CharacterRace.Halfling,
-        CharacterRace.HalfOrc, CharacterRace.HalfOgre, CharacterRace.DarkElf, CharacterRace.Ogre, CharacterRace.Orc,
-    ];
-
-    // Source stat index → owner stat: 0..7 primary, 8..16 derived, 22 magick points, 23 tech points.
-    private static CharacterStat? Stat(int source) => source switch
-    {
-        0 => CharacterStat.Strength, 1 => CharacterStat.Dexterity, 2 => CharacterStat.Constitution, 3 => CharacterStat.Beauty,
-        4 => CharacterStat.Intelligence, 5 => CharacterStat.Perception, 6 => CharacterStat.Willpower, 7 => CharacterStat.Charisma,
-        8 => CharacterStat.CarryWeight, 9 => CharacterStat.DamageBonus, 10 => CharacterStat.AcAdjustment, 11 => CharacterStat.Speed,
-        12 => CharacterStat.HealRate, 13 => CharacterStat.PoisonRecovery, 14 => CharacterStat.ReactionModifier,
-        15 => CharacterStat.MaxFollowers, 16 => CharacterStat.MagickTechAptitude, 22 => CharacterStat.MagickPoints,
-        23 => CharacterStat.TechPoints, _ => null,
-    };
-
-    internal static SessionHeroDefinition Definition(PremadeHero hero, out int dropped)
-    {
-        var count = 0;
-        StatEffectDefinition? Effect(EffectRule? rule)
-        {
-            if (rule is null) return null;
-            var modifiers = new List<StatModifier>();
-            foreach (var change in rule.Changes)
-            {
-                if (change.Kind != EffectAttributeKind.Stat || Stat(change.Attribute) is not { } stat)
-                {
-                    count++;
-                    continue;
-                }
-                modifiers.Add(new(stat, change.Operator switch
-                {
-                    EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, _ => StatModifierOperator.Maximum,
-                }, change.Value));
-            }
-            return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);
-        }
-        var raceEffect = Effect(hero.RaceEffect);
-        var genderEffect = Effect(hero.GenderEffect);
-        dropped = count;
-        return new(hero.Prototype, Races[hero.Race], hero.Gender == 0 ? CharacterGender.Female : CharacterGender.Male,
-            [.. Enumerable.Repeat(PremadeHero.StartPrimaryStat, 8), 0, 0], PremadeHero.StartLevel, PremadeHero.StartUnspentPoints, hero.Alignment,
-            raceEffect, genderEffect, hero.Gold,
-            [.. hero.Items.Select(item => new SessionHeroKitItem(new((SessionItemType)item.Type, item.Prototype, item.Name, item.Description)))]);
     }
 }

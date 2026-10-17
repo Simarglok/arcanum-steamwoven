@@ -236,7 +236,8 @@ public partial class TerrainViewerApp
         else if (intent.Confirm) _inventoryPanel!.Confirm();
     }
 
-    // The status line is rebuilt every frame: the PC's count is read once per session revision.
+    // The status line is rebuilt every frame: the PC's count (ARC-WORLD-027: starting kit included) is read once per
+    // session revision.
     private (GameSessionOwner Session, long Revision, int Count)? _inventoryCount;
 
     private string AreaInventoryStatus()
@@ -245,7 +246,7 @@ public partial class TerrainViewerApp
         if (InventoryOpen) return " | inventory open: I or Escape closes";
         var session = _areaSession!;
         if (_inventoryCount is not { } cached || !ReferenceEquals(cached.Session, session) || cached.Revision != session.Version.Revision)
-            _inventoryCount = cached = (session, session.Version.Revision, session.QueryPcInventory().Count);
+            _inventoryCount = cached = (session, session.Version.Revision, session.QueryHeroKit().Count + session.QueryPcInventory().Count);
         return $" | PC items {cached.Count} | {_inventoryStatus}";
     }
 }
