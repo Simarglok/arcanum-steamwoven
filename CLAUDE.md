@@ -57,7 +57,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   `TreatWarningsAsErrors`, central package versions + lock files
   (`restore --locked-mode`), MSTest. Godot **4.7.2 .NET**, `godot_canonical`
   wrapper and paths in `docs/workflow/toolchain.md`.
-- Root checks: `dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"` and `python3 -B tools/research/dat_probe.py --self-test`.
+- Root checks: `dotnet restore Arcanum.Steamwoven.sln --locked-mode && dotnet build --no-restore && dotnet test --no-build --filter "TestCategory!=RealData"` and `python3 -B tools/research/dat_probe.py --self-test` and `python3 -B tools/original-oracle/oracle.py --self-test`.
   Root sln excludes the terrain viewer and its tests, `Arcanum.Input`, research
   probes and labs (own commands in `docs/workflow/toolchain.md`).
   Real-data tests are opt-in via env vars (`DAT_ROOT`, `ARCANUM_*`, `ARC_AREA_*`,
@@ -114,7 +114,7 @@ under `docs/research`. Details: `docs/project/status.md`.
    Check behaviour in the original 1.0.7.4 `Arcanum.exe`
    ([original executable check](docs/research/original-executable-check.md)):
    read it with `llvm-objdump` or headless Ghidra, or run a single function in the
-   emulator oracle (allowed by the owner; tool ARC-DEV-007, not merged yet);
+   emulator oracle (allowed by the owner; `./arcanum oracle`, ARC-DEV-007);
    behaviour in prose, no bytes, listings or oracle outputs in git. Use it in every
    part of the game whenever a task needs original behaviour or an anomaly must be
    classified (CE-only slip vs bug of the game, which decides the D8

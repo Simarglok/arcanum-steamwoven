@@ -121,8 +121,15 @@ differences a reader misses and needs no reading of the code at all.
 - Running the game as a whole (for example under CrossOver) is not part of this
   permission; it needs its own work item.
 
-The tool is ARC-DEV-007, not merged yet: until then the oracle is a method, not a
-check that can be run.
+The tool is [`tools/original-oracle`](../../tools/original-oracle/README.md) (ARC-DEV-007):
+`./arcanum oracle [--function ADDR|--all]` writes at least 10,000 seeded inputs per
+function with the original's outputs to `research-private/oracle/`, then runs the
+`OriginalExe` tests, which compare Steamwoven on them and replay at least two planted
+mutants per function ([toolchain](../workflow/toolchain.md#function-oracle)). A
+function gains an oracle with its own world model, test and launcher row. First
+functions: experience to next level (0x4A68B0), progress (0x4A6900) and bonus points
+(0x4A6980), at F3; the progress run reports the XP3 inputs until their rule-mode
+switch exists.
 
 ### Evidence levels for a function (F0–F4)
 
