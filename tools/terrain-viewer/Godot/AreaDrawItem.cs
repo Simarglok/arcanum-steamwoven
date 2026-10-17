@@ -31,6 +31,10 @@ public partial class AreaDrawItem : Node2D
         uniform vec3 ambient_right = vec3(1.0);
         uniform vec4 raster = vec4(0.0, 0.0, 1.0, 1.0);
         uniform vec4 item_rect = vec4(0.0, 0.0, 1.0, 1.0);
+        // ARC-RENDER-018 wading: destination rows at or below item_rect's bottom minus wade_rows take wade_alpha,
+        // which replaces body_alpha and the wall fade there; 0 rows = not wading.
+        uniform int wade_rows = 0;
+        uniform float wade_alpha = 1.0;
         uniform sampler2D light_lighter : filter_nearest, repeat_disable;
         uniform sampler2D light_darker : filter_nearest, repeat_disable;
         uniform ivec4 lattice = ivec4(0);
@@ -62,14 +66,25 @@ public partial class AreaDrawItem : Node2D
             int legacy_column = (sx - fade_scale * fade_start) / fade_scale;
             int column = fade_flip ? fade_width - 1 - legacy_column : legacy_column;
             float wall = fade.x + float(column) * (fade.y - fade.x) / float(fade_width);
-            COLOR = texelFetch(TEXTURE, ivec2(sx, sy), 0) * vec4(light_tint(FRAGCOORD.xy), body_alpha * wall);
+            float alpha = body_alpha * wall;
+            if (wade_rows > 0 && (FRAGCOORD.y - raster.y) / raster.w >= item_rect.y + item_rect.w - float(wade_rows)) alpha = wade_alpha;
+            vec4 texel = texelFetch(TEXTURE, ivec2(sx, sy), 0);
+            COLOR = BODY_COLOR;
         }
         """;
-    // Two immutable shader programs for process lifetime, not per-object copies.
-    private static readonly Lazy<Shader> NormalShader = new(() => new Shader { Code = Code });
-    private static readonly Lazy<Shader> AddShader = new(() => new Shader { Code = Code.Replace("blend_mix", "blend_add", StringComparison.Ordinal) });
+    private const string BlendColor = "texel * vec4(light_tint(FRAGCOORD.xy), alpha)";
+    // ARC-RENDER-018 multiply (blit 0x40): the destination times the source colour. A transparent texel multiplies by
+    // white (HD edges blend toward it), and the output alpha is 1 so the destination alpha is kept. A multiply body
+    // is unlit and has no alpha mode (alpha is 1), so neither changes its pixels.
+    private const string MultiplyColor = "vec4(mix(vec3(1.0), texel.rgb * light_tint(FRAGCOORD.xy), texel.a * alpha), 1.0)";
+    // Three immutable shader programs for process lifetime, not per-object copies.
+    private static readonly Lazy<Shader> NormalShader = new(() => new Shader { Code = Code.Replace("BODY_COLOR", BlendColor, StringComparison.Ordinal) });
+    private static readonly Lazy<Shader> AddShader = new(() => new Shader { Code = Code.Replace("BODY_COLOR", BlendColor, StringComparison.Ordinal)
+        .Replace("blend_mix", "blend_add", StringComparison.Ordinal) });
+    private static readonly Lazy<Shader> MultiplyShader = new(() => new Shader { Code = Code.Replace("BODY_COLOR", MultiplyColor, StringComparison.Ordinal)
+        .Replace("blend_mix", "blend_mul", StringComparison.Ordinal) });
     private ShaderMaterial? _material;
-    private (bool Additive, int Alpha)? _materialState;
+    private (bool Additive, bool Multiply, int Alpha, int WadeRows)? _materialState;
     private Color? _ambientState;
     private (AreaWallFade Fade, int Width, bool Flip, int Scale, int Start)? _fadeState;
     private (int Mode, Color Right, AreaLatticeBinding? Lattice, TerrainRect Rect, Vector4 Raster)? _lightState;
@@ -149,12 +164,14 @@ public partial class AreaDrawItem : Node2D
         var size = (Vector2I)viewport.GetVisibleRect().Size;
         var state = (transform, source, command.Destination, command.FlipX, command.FlipY, size);
         _material ??= new ShaderMaterial();
-        if (_materialState != (command.Additive, command.Alpha) || Material != _material)
+        if (_materialState != (command.Additive, command.Multiply, command.Alpha, command.WadeRows) || Material != _material)
         {
-            _material.Shader = command.Additive ? AddShader.Value : NormalShader.Value;
+            _material.Shader = command.Additive ? AddShader.Value : command.Multiply ? MultiplyShader.Value : NormalShader.Value;
             Material = _material;
             _material.SetShaderParameter("body_alpha", command.Alpha / 255f);
-            _materialState = (command.Additive, command.Alpha);
+            _material.SetShaderParameter("wade_rows", command.WadeRows);
+            _material.SetShaderParameter("wade_alpha", AreaScenePlan.WadingAlpha / 255f);
+            _materialState = (command.Additive, command.Multiply, command.Alpha, command.WadeRows);
             _ambientState = null; _lightState = null; _fadeState = null; // re-send the per-item uniforms with every shader swap
         }
         if (_ambientState != Ambient)
@@ -173,10 +190,11 @@ public partial class AreaDrawItem : Node2D
             _material.SetShaderParameter("fade_start", legacy.X);
             _fadeState = fadeState;
         }
-        // Constant-ambient items (every item without local light) never re-send per camera move.
+        // Constant-ambient items (every item without local light) never re-send per camera move; a wading item needs
+        // the raster and its destination for its water line.
         var mode = Lattice is not null ? 2 : AmbientRight != Ambient ? 1 : 0;
-        var raster = mode == 0 ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
-        var light = (mode, AmbientRight, Lattice, mode == 1 ? command.Destination : default, raster);
+        var raster = mode == 0 && command.WadeRows == 0 ? default : new Vector4(transform.Origin.X, transform.Origin.Y, transform.X.X, transform.Y.Y);
+        var light = (mode, AmbientRight, Lattice, mode == 1 || command.WadeRows > 0 ? command.Destination : default, raster);
         if (_lightState != light)
         {
             _material.SetShaderParameter("light_mode", mode);
