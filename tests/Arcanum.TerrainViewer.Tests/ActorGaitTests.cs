@@ -68,11 +68,17 @@ public sealed class ActorGaitTests
         Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, run.Id);
         Assert.AreEqual((0x20000180u, 2671, 10, 20), (run.Run!.Selector, run.Run.Ordinal, run.Run.FramesPerGroup, run.Run.RawFramesPerSecond));
         Assert.AreEqual(ActorDiagnosticAction.Run, run.ActionFor(0x20000180));
-        Assert.AreEqual((150, 1259440L), (run.DistinctKeys, run.OriginalRgbaBytes!.Value));
+        Assert.AreEqual((195, 1705144L), (run.DistinctKeys, run.OriginalRgbaBytes!.Value));
         Assert.AreEqual((0x20000340u, 2677, 9, 8), (run.Vault!.Selector, run.Vault.Ordinal, run.Vault.FramesPerGroup, run.Vault.RawFramesPerSecond));
         Assert.AreEqual(ActorDiagnosticAction.Vault, run.ActionFor(0x20000340));
         Assert.IsNull(ActorDiagnosticProfile.HumanFixed.Vault);
-        CollectionAssert.AreEqual(new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault }, run.Actions.ToArray());
+        CollectionAssert.AreEqual(new[] { ActorDiagnosticAction.Idle, ActorDiagnosticAction.Walk, ActorDiagnosticAction.Run, ActorDiagnosticAction.Vault,
+            ActorDiagnosticAction.Attack }, run.Actions.ToArray());
+        // ARC-COMBAT-005: the bare-handed attack, animation 20 with weapon slot 1 (resource1 ordinal 2683), 9 frames at 15 fps, action frame 6.
+        Assert.AreEqual((0x20000501u, 2683, 9, 15, 6), (run.Attack!.Selector, run.Attack.Ordinal, run.Attack.FramesPerGroup, run.Attack.RawFramesPerSecond,
+            run.Attack.ActionFrame));
+        Assert.AreEqual(ActorDiagnosticAction.Attack, run.ActionFor(0x20000501));
+        Assert.IsNull(ActorDiagnosticProfile.HumanFixed.Attack);
         Assert.Throws<TerrainViewerException>(() => ActorDiagnosticProfile.MonsterRegression.Resource(ActorDiagnosticAction.Run));
     }
 

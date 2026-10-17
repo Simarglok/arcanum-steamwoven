@@ -40,7 +40,7 @@ public sealed class DiagnosticWorldPolicyTests
     public void ModeAwareUnionBudgetsUseLiteralIndependentCapsAndByteEdges()
     {
         foreach (var (mode, cap) in new[] { (TerrainViewerMode.TerrainOnly,4096), (TerrainViewerMode.CombinedStaticDiagnostic,4101),
-            (TerrainViewerMode.ActorDiagnostic,4280), (TerrainViewerMode.WorldDiagnostic,4156) })
+            (TerrainViewerMode.ActorDiagnostic,4291), (TerrainViewerMode.WorldDiagnostic,4156) })
         {
             Assert.AreEqual(4L, TerrainCachePolicy.AddCheckedFrame(0,cap-1,1,1,mode));
             Assert.ThrowsExactly<TerrainViewerException>(() => TerrainCachePolicy.AddCheckedFrame(0,cap,1,1,mode));

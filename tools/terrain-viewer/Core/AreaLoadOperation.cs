@@ -21,6 +21,9 @@ public sealed record AreaLoadResult(long Generation, AreaSnapshot Snapshot, Area
     public LightingFailure? UnlitReason { get; init; }
     /// <summary>ARC-RENDER-017: why a lit whole map has no stationary lights; null otherwise.</summary>
     public LightingFailure? UnlitLightsReason { get; init; }
+    /// <summary>ARC-COMBAT-005: the archive file of each input key the snapshot's art came from (empty for fixtures), where a
+    /// fallen pose is read on demand (<see cref="AreaFallenPoses"/>).</summary>
+    public IReadOnlyDictionary<AreaInputKey, string> ArtSources { get; init; } = new Dictionary<AreaInputKey, string>();
 }
 
 /// <summary>Admitted CPU frame repository limits; GPU residency is a subset.</summary>
@@ -150,7 +153,10 @@ internal static class AreaLoadOperation
             VerifyFiles([(arguments.ModulePath, moduleIdentity), (arguments.ResourcePath, resourceIdentity)], token);
         }
         var elapsed = Environment.TickCount64 - started;
-        area = area with { Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
+        var artSources = new Dictionary<AreaInputKey, string>
+        { [new(AreaSourceRole.Resource1)] = arguments.ActorResourcePath!, [new(AreaSourceRole.Resource2)] = arguments.ResourcePath };
+        if (cave is not null) cave = cave with { Area = cave.Area with { ArtSources = artSources } };
+        area = area with { ArtSources = artSources, Lighting = new(lighting.Source, AreaAmbientPolicy.Channels(snapshot, plan)) { Local = local }, FinalUsage = owner.Usage, AllocatedBytes = GC.GetTotalAllocatedBytes() - allocated,
             ManagedBytes = GC.GetTotalMemory(false), ProcessBytes = System.Diagnostics.Process.GetCurrentProcess().WorkingSet64,
             ElapsedMilliseconds = elapsed };
         var mf = new InputFingerprint(moduleIdentity.Length, moduleIdentity.Sha256); var rf = new InputFingerprint(resourceIdentity.Length, resourceIdentity.Sha256);

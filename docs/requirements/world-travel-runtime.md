@@ -178,7 +178,7 @@ Rest/combat/travel/save restoration остаются зависимостями 
 | FR-TRAVEL-005 | Нет: нет teleport rules | Нет: проверка областей отсутствует | Нет | Нет |
 | FR-RUNTIME-001 | Неприменимо: цикл событий не требует игровых данных | Частично: очередь событий ARC-WORLD-022 и её проход в сессии ARC-WORLD-024, pump нет | Частично: цикл окна viewer | В указанном объёме: только lifecycle viewer |
 | FR-RUNTIME-002 | Частично: ART metadata | Нет: нет actor goal scheduler | Нет: worker viewer — диагностика | Нет: нет actor goals |
-| FR-RUNTIME-003 | Частично: ART ActionFrame | Частично: правило атаки (ARC-COMBAT-004), хоста нет | Частично: выбранная animation playback | В указанном объёме: только playback |
+| FR-RUNTIME-003 | Частично: ART ActionFrame | Частично: правило атаки (ARC-COMBAT-004); хост — атака героя во вьюере (ARC-COMBAT-005) | Частично: выбранная animation playback | В указанном объёме: только playback |
 | FR-RUNTIME-004 | Частично: HumanFixed Idle/Walk и отдельный MonsterRegression | Частично: fixed action/facing/group/flip/raw FPS; нет equipment compositor | Частично: event-derived actor facing в WORLD003 diagnostic | Частично: historical 264 Human selections source/export; не общий actor runtime |
 
 ## Граница просмотра CE

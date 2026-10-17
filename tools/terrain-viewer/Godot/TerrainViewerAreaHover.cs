@@ -100,8 +100,8 @@ public partial class TerrainViewerApp
         // ARC-WORLD-016: a companion is picked where it is drawn now, never on its T0 cell.
         // ARC-WORLD-017: a companion standing on another map is not picked on its T0 cell here.
         return index.Pick(command => !AreaTakenByPc(command) && _areaCompanions?.Absent.Contains(command.Identity!.Value) != true
-            && AreaAlphaAt(command, area.Frames, transform, sx, sy) != 0
-            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None, AreaCompanionCommands());
+            && AreaAlphaAt(command, AreaFrames(), transform, sx, sy) != 0
+            && _canvas?.AreaWallFadeOf(command) is null or AreaWallFade.None, AreaMovingCommands());
     }
 
     /// <summary>Per-frame entry from _Process: cheap unless something the decision reads has changed.</summary>
@@ -123,7 +123,8 @@ public partial class TerrainViewerApp
         var open = visible && WorldClickInputOpen && !AreaTransferPending;
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
-            _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions);
+            _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
+            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -138,6 +139,19 @@ public partial class TerrainViewerApp
         var actor = session.Chart.ToWorld(session.State.CommittedCell);
         if (key is { } hit)
         {
+            // ARC-COMBAT-005: in combat mode a living NPC is attacked; a corpse is looted only with Alt, a follower attacked only
+            // with left Alt (as WorldRouteClick decides).
+            if (AttackMapActive && HeroInCombatMode && _combatHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } foe)
+            {
+                if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
+                    ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot
+                    : AreaHoverAction.None;
+                if (foe.Follower && !LeftAltHeld || IsAreaCompanion(hit) || foe.Build.Combat is null) return AreaHoverAction.None;
+                if (_areaSession!.QueryHeroAttack() is not { Supported: true } hero || _areaSession.QueryHeroLife() is not { Status.IsActive: true })
+                    return AreaHoverAction.None;
+                var reach = hero.Range;
+                return Chebyshev(foe.Row, (actor.X, actor.Y)) <= reach ? AreaHoverAction.Attack : AreaHoverAction.WalkToAttack;
+            }
             if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit && SpeakerPresent(s)) is { } speaker)
                 return AreaConversationHost.Distance(speaker, actor.X, actor.Y, SpeakerCell) <= _conversationHost.Profile.Reach ? AreaHoverAction.Talk : AreaHoverAction.WalkToTalk;
             if (IsAreaTrigger(hit))
@@ -173,6 +187,7 @@ public partial class TerrainViewerApp
             AreaHoverAction.Talk or AreaHoverAction.WalkToTalk => Godot.Input.CursorShape.Help,
             AreaHoverAction.Use or AreaHoverAction.WalkToUse or AreaHoverAction.PickUp or AreaHoverAction.WalkToPickUp
                 or AreaHoverAction.Loot or AreaHoverAction.WalkToLoot => Godot.Input.CursorShape.PointingHand,
+            AreaHoverAction.Attack or AreaHoverAction.WalkToAttack => Godot.Input.CursorShape.Drag,
             _ => Godot.Input.CursorShape.Arrow,
         };
         if (cursor != _hoverCursor) { _hoverCursor = cursor; Godot.Input.SetDefaultCursorShape(cursor); }

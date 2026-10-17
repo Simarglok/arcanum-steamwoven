@@ -84,7 +84,7 @@ draws, a left click through the production ground-click seam sets a route goal
 up to 8 open steps away, frames walk the actor there on the map's chart, and the
 resource sweep and overlapped reload pass (`ARC-RENDER-017 native-smoke map
 PASS`, `ARC-RENDER-007 resources reload PASS`). Since ARC-WORLD-021 a map with a reachable window also
-steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Observed on `elven ruins`
+steps the actor across it with the vault (`ARC-WORLD-021 native-smoke vault PASS`; otherwise `NO-WINDOW`). Since ARC-COMBAT-005, with `--hero` and a lit map, the hero attacks the living NPC with the fewest hit points until it dies ([hero attack](../world/hero-attack-runtime.md#viewer-area); `ARC-COMBAT-005 native-smoke attack PASS`, otherwise `NO-TARGET`; observed on `crash site cave`: a rat of 6 hit points, walk to reach, 12 attacks, fallen pose read, 192 experience). Observed on `elven ruins`
 (9 sectors), `bates mansion lev 1` (9), `crash site cave` (1) and
 `caladon-castle main floor` (79 sectors, 323,584 terrain cells, 2,967 bodies,
 load about 14 s). Since ARC-DATA-023 also on `crematorium-lev 2` (concealed

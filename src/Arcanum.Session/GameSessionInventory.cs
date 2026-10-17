@@ -167,10 +167,13 @@ internal sealed class InventoryDomain
 
     internal SessionInventoryState Capture() => new(Gold, Kit.ToArray(), Pc.ToArray());
 
-    internal SessionMapInventory View(SessionMapId map, Seed seed) => new(map,
+    /// <summary>The map's current inventory; an NPC holder is dead when its seed says so or <paramref name="killed"/> (the session's
+    /// life records, ARC-COMBAT-005) does.</summary>
+    internal SessionMapInventory View(SessionMapId map, Seed seed, Func<string, bool> killed) => new(map,
         seed.Source.Items.Where(item => item.Cell is not null && !Taken.Contains(item.Entity))
             .Select(item => new SessionGroundItem(new(item.Entity, item.Facts), item.Cell!.Value)).ToArray(),
-        seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind, holder.Dead,
+        seed.Source.Holders.Select(holder => new SessionHolderInventory(holder.Entity, holder.Kind,
+            holder.Dead || holder.Kind == SessionHolderKind.Npc && killed(holder.Entity),
             Array.AsReadOnly(Current(seed, holder).ToArray()))).ToArray());
 
     /// <summary>The holder's list in its order without the taken items.</summary>

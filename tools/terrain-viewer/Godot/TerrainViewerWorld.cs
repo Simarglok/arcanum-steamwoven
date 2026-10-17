@@ -445,8 +445,10 @@ public partial class TerrainViewerApp
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
             FollowAreaAmbient(); FollowAreaWalls();
-            _canvas!.SetAreaMovingBodies(AreaCompanionCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
-            _canvas.PublishArea(_readyArea, actor, input, _cache); return;
+            // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
+            SyncAreaCombatBodies();
+            _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
+            _canvas.PublishArea(_readyArea.Plan, AreaFrames(), actor, input, _cache); return;
         }
         var plan = _readyDiagnosticPlan!.WithWorldActor(actor);
         _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current; _readyDiagnosticPlan = plan;
@@ -458,6 +460,7 @@ public partial class TerrainViewerApp
         if (ProcessAreaTransition()) return;
         ProcessTalkAfterRoute();
         ProcessInventoryAfterRoute();
+        ProcessAreaAttack();
         var time = WorldTime;
         // A queued map transfer holds the actor until it applies (ARC-WORLD-009): the stick starts no step meanwhile.
         // A dialog opened just above (walk-to-talk arrival) is modal: this frame's stick starts no step either.
@@ -465,7 +468,7 @@ public partial class TerrainViewerApp
             : DiagnosticGridActor.Resolve(actor, _worldSettings.InvertActorX, _worldSettings.InvertActorY);
         // The stick takes over at once; the click route never fights it.
         if (direction is null) _stickHeld = false;
-        if (direction is not null) { SetStickGait(); _stickHeld = true; StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); }
+        if (direction is not null) { SetStickGait(); _stickHeld = true; StopWorldRoute("ROUTE_STOPPED_BY_STICK"); CancelAreaUseApproach("the stick took over"); CancelTalkApproach("the stick took over"); CancelInventoryApproach("the stick took over"); CancelAreaAttack("the stick took over"); }
         _worldGridInput.Observe(session, time, direction is { } d ? ActorIntent.Toward(d) : ActorIntent.Neutral);
         if (_worldGridInput.CompleteFrontier is not { } frontier) return;
         var batches = _worldGridInput.CompleteThrough(frontier);
@@ -600,7 +603,7 @@ public partial class TerrainViewerApp
     {
         if (!IsWorld || !_worldInitialized || _exiting) return;
         if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } click)
-            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed));
+            WorldObservation(() => WorldRouteClick(click.Position, click.CtrlPressed, click.AltPressed));
         // ARC-WORLD-020: macOS reports a physical Ctrl+left click as a right button press with Ctrl held; the world has
         // no right-button action, so it is the original's Ctrl+LMB.
         else if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true, CtrlPressed: true } ctrlClick)
@@ -609,7 +612,7 @@ public partial class TerrainViewerApp
     /// <summary>The guards a world left press passes (ARC-UI-005 hover shows the same answer).</summary>
     private bool WorldClickInputOpen => _worldFocused && !WorldModal && !WorldUiFocus && _readyActorPlan is not null
         && _worldGate.IsOpen && _worldLifecycleSession is null;
-    private void WorldRouteClick(Vector2 screen, bool ctrl = false)
+    private void WorldRouteClick(Vector2 screen, bool ctrl = false, bool alt = false)
     {
         if (_worldActor.Session is not { } session || WorldRoute(session) is not { } route || _canvas is null) return;
         if (!WorldClickInputOpen)
@@ -622,6 +625,9 @@ public partial class TerrainViewerApp
             _worldRouteClick = "ignored (map transfer pending)";
             RefreshReadyStatus(); return;
         }
+        // ARC-COMBAT-005: in combat mode a press on an NPC attacks it (or walks within reach first) instead of talking.
+        if (TryAreaAttack(screen, alt)) return;
+        CancelAreaAttack("another click replaced it");
         // ARC-SCRIPT-005: a press on a dialog NPC talks (or walks within reach first), under the same guards.
         if (TryAreaTalk(screen)) { SetObjectApproachGait(); return; }
         // ARC-WORLD-009: a press on a cave trigger sprite is a use action, under the same guards as a ground click.
@@ -645,6 +651,7 @@ public partial class TerrainViewerApp
     private void InputWorldObserved(InputEvent input)
     {
         if (_worldInputTraceForSelfTest is not null) TraceWorldInput($"Callback:entry type={input.GetClass()}" + (input is InputEventKey tracedKey ? $" key={tracedKey.Keycode} pressed={tracedKey.Pressed} echo={tracedKey.Echo}" : ""));
+        if (input is InputEventKey modifierKey) TrackAttackModifiers(modifierKey);
         if (ConversationOpen && input is InputEventKey conversationKey && HandleConversationKey(conversationKey))
         {
             GetViewport().SetInputAsHandled();

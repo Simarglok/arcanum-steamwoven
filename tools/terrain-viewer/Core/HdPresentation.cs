@@ -142,7 +142,7 @@ public sealed record HdDomainBudget(long VisibleBytes, int RetainFrames, long Re
     /// <summary>The Legacy <c>AreaChunkTextureCache</c> chunk count cap.</summary>
     public const int TerrainChunkCap = 1024;
     /// <summary>WORLD: one HD byte limit for the actor and static textures, visible or kept, and
-    /// the Legacy key caps (184 actor + 5 static) as the frame count.</summary>
+    /// the Legacy key caps (195 actor + 5 static) as the frame count.</summary>
     public static HdDomainBudget World(HdDeviceBudget device)
     {
         ArgumentNullException.ThrowIfNull(device);
