@@ -186,6 +186,8 @@ scenery and for any other module's missing files.
 
 ## Slices
 
+Slice 1 is implemented by ARC-DATA-023 (79 of 80 interiors complete); slice 2 is open.
+
 1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
    read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the
    code `_plan.Original` means the pinned profiles instead): the full N1 normalization for classes 2, 12 and 13 (every

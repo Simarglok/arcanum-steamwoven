@@ -162,12 +162,13 @@ public sealed partial class AreaDataOwner
         else if (cls == 0 && OriginalArtNames && _objectTiles is not null)
         {
             // A tile id on an object names the tile's file as a terrain cell does (N7): no
-            // rotation or frame, palette from bits 4-5.
+            // rotation or frame, palette from bits 4-5, and a flippable tile (bits 6, 7) with
+            // flag bit 0 is drawn mirrored.
             lookup = aid & ~63U;
             try { path = TerrainLoader.TilePath(_objectTiles, lookup).Path; }
             catch (TerrainException) { throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping); }
             source = MappingSource(AreaMappingRole.Tile);
-            nominal = 0; group = 0; frame = 0; mirror = false;
+            nominal = 0; group = 0; frame = 0; mirror = (aid & 0xC1) == 0xC1;
         }
         else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
         AreaEntryIdentity entry; var badArt = false;

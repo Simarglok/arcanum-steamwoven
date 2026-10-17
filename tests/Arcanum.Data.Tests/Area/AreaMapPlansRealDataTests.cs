@@ -54,6 +54,8 @@ public sealed class AreaMapPlansRealDataTests
             var inspection = owner.Inspect();
             Assert.IsNotNull(inspection.Snapshot, map.Name);
             if (inspection.IsComplete) complete.Add(map.Name);
+            // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
+            if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
             if (map.Name == "crash site cave")
             {
                 // The generic plan reaches what the pinned cave profile pins, without its exceptions.

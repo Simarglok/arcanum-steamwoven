@@ -96,16 +96,19 @@ A whole-map plan also:
     in the two resource archives and it holds all 10 + monster + unique NPC masks;
     otherwise the masks are rebuilt by checking each pair's file, as the original
     rebuilds a stale table. Animations above 24, critter armour above 8, weapons
-    above 14 and critter bodies above 4 stay refused;
+    above 14 and critter bodies above 4 stay refused (no installed object has them;
+    the original would draw bad art for some of them);
   - damaged walls (bits `0x400`/`0x80`, swapped at rotations 2, 3, 6, 7): `0x400`
     names the `L` file (piece 7 as the base piece), `0x80` names `L` for pieces 1–6
     and `R` otherwise (piece 8 as the base piece);
   - a tile id on an object names the tile file as a terrain cell does (no rotation
-    or frame, palette from bits 4–5);
-  - a resolved name that neither resource archive holds is drawn from
+    or frame, palette from bits 4–5, mirrored when flippable with flag bit 0);
+  - an object's resolved name that neither resource archive holds is drawn from
     `art/badart.art`, frame 0 and its only rotation, as the original's art cache
     does; the visual's policy is `original-badart-v1`. A name the mapping cannot
-    build (no list entry) and an ambiguous name stay refused.
+    build (no list entry) and an ambiguous name stay refused. Terrain and facade
+    cells keep their strict resolution (the original's cache would draw bad art for
+    them too; no cell of the 79 complete interiors needs it).
 
 ## Result on the installed original
 

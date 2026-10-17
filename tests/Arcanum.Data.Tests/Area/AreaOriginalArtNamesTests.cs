@@ -26,10 +26,11 @@ public sealed class AreaOriginalArtNamesTests
     [TestMethod]
     public void A_unique_npc_without_standing_art_stands_unarmed_as_the_missing_art_table_says()
     {
-        // Unique NPC 1 ("dgn") stands with no weapon; only the unarmed standing file exists and
-        // its mask marks stand-without-weapon (bit 3) missing.
+        // Unique NPC 1 ("dgn") stands with no weapon; its mask marks stand-without-weapon (bit 3)
+        // missing, so the unarmed file is drawn although the no-weapon file exists too (a
+        // rebuilt table would keep the no-weapon file: the table itself is read).
         var masks = new uint[CritterMasks + 2 + 2]; masks[CritterMasks + 2 + 1] = 8;
-        var snapshot = Complete(Unique | (1u << 20), [("art/unique_npc/dgn/dgnxba.art", Art())], MissingDat(1, masks));
+        var snapshot = Complete(Unique | (1u << 20), [("art/unique_npc/dgn/dgnxaa.art", Art()), ("art/unique_npc/dgn/dgnxba.art", Art())], MissingDat(2, masks));
         Assert.AreEqual(Named("art/unique_npc/dgn/dgnxba.art"), Visual(snapshot).Name);
     }
 
@@ -39,6 +40,8 @@ public sealed class AreaOriginalArtNamesTests
         var art = new (string, byte[])[] { ("art/unique_npc/dgn/dgnxba.art", Art()) };
         // Header 7 does not match the one critter file: the masks are rebuilt (all zero here would keep XAa).
         Assert.AreEqual(Named("art/unique_npc/dgn/dgnxba.art"), Visual(Complete(Unique | (1u << 20), art, MissingDat(7, new uint[CritterMasks + 4]))).Name);
+        // A current header but too few masks: rebuilt the same way.
+        Assert.AreEqual(Named("art/unique_npc/dgn/dgnxba.art"), Visual(Complete(Unique | (1u << 20), art, MissingDat(1, new uint[CritterMasks + 3]))).Name);
         // No missing-art binding at all: rebuilt the same way.
         Assert.AreEqual(Named("art/unique_npc/dgn/dgnxba.art"), Visual(Complete(Unique | (1u << 20), art, missing: null)).Name);
     }
@@ -52,6 +55,39 @@ public sealed class AreaOriginalArtNamesTests
         var visual = Visual(snapshot);
         Assert.AreEqual(Named("art/badart.art"), visual.Name);
         Assert.AreEqual("original-badart-v1", visual.Visual.Policy);
+    }
+
+    [TestMethod]
+    public void Critter_and_monster_masks_are_found_by_their_original_index()
+    {
+        // A halfling (body 2) male (gender 1) is critter mask 1 + 2 × 2 = 5; stand-without-weapon is marked missing.
+        var masks = new uint[CritterMasks + 4]; masks[5] = 8;
+        (string, byte[])[] halfling = [("art/critter/GHM/GHMUWXAa.art", Art()), ("art/critter/GHM/GHMUWXBa.art", Art())];
+        Assert.AreEqual(Named("art/critter/GHM/GHMUWXBa.art"), Visual(Complete(Critter | (1u << 27) | (2u << 24), halfling, MissingDat(2, masks))).Name);
+        // Monster 1 is mask 10 + 1; its stunned file (bit 2) is marked missing, so stunned becomes stand with no weapon.
+        masks = new uint[CritterMasks + 4]; masks[CritterMasks + 1] = 4;
+        (string, byte[])[] lizard = [("art/monster/lz1/lz1uwxaa.art", Art()), ("art/monster/lz1/lz1uwxbx.art", Art())];
+        Assert.AreEqual(Named("art/monster/lz1/lz1uwxaa.art"), Visual(Complete(Monster | (1u << 23) | (23u << 6), lizard, MissingDat(2, masks))).Name);
+        // Without the mark the stunned name is unarmed without a shield.
+        Assert.AreEqual(Named("art/monster/lz1/lz1uwxbx.art"), Visual(Complete(Monster | (1u << 23) | (1u << 19) | (23u << 6), lizard, MissingDat(2, new uint[CritterMasks + 4]))).Name);
+    }
+
+    [TestMethod]
+    public void An_exploding_critter_is_named_without_armour_gender_shield_or_weapon()
+    {
+        const uint explode = Critter | (2u << 20) | (1u << 19) | 3u | (24u << 6);
+        Assert.AreEqual(Named("art/critter/HMX/HMXXXXAy.art"), Visual(Complete(explode, [("art/critter/HMX/HMXXXXAy.art", Art())], MissingDat(1, new uint[CritterMasks + 4]))).Name);
+    }
+
+    [TestMethod]
+    public void Only_files_one_folder_below_the_critter_roots_count_for_the_header()
+    {
+        Assert.IsTrue(AreaDataOwner.CritterFile("art/monster/lz1/lz1uwxaa.art"));
+        Assert.IsTrue(AreaDataOwner.CritterFile("art/unique_npc/dgn/dgnxba.art"));
+        Assert.IsFalse(AreaDataOwner.CritterFile("art/critter/hmfuwxaa.art"));
+        Assert.IsFalse(AreaDataOwner.CritterFile("art/critter/hmf/old/hmfuwxaa.art"));
+        Assert.IsFalse(AreaDataOwner.CritterFile("art/critter/hmf/readme.txt"));
+        Assert.IsFalse(AreaDataOwner.CritterFile("art/scenery/hmf/hmfuwxaa.art"));
     }
 
     [TestMethod]
@@ -97,6 +133,12 @@ public sealed class AreaOriginalArtNamesTests
         Assert.AreEqual(Named("art/tile/stonebse0a.art"), visual.Name);
         Assert.AreEqual(2, visual.Visual.RequestedPalette);
         Assert.AreEqual(0x0U, visual.Visual.LookupArt);
+        Assert.IsFalse(visual.Visual.Mirrored);
+        // A flippable tile (bits 6, 7) with flag bit 0 is mirrored, as a terrain cell is.
+        Assert.IsTrue(Visual(Complete(0xC1, [], MissingDat(0, new uint[CritterMasks + 4]))).Visual.Mirrored);
+        // Without the original's ART rules a tile id on an object stays refused.
+        using var strict = Owner(0x20, [], MissingDat(0, new uint[CritterMasks + 4]), allowArtTrailingBytes: false);
+        Assert.IsTrue(strict.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.UnsupportedArtClassOrState));
     }
 
     [TestMethod]
@@ -114,6 +156,17 @@ public sealed class AreaOriginalArtNamesTests
             Assert.IsTrue(none.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.MissingSource));
         using var strict = Owner(scenery, [("art/badart.art", Art())], MissingDat(0, new uint[CritterMasks + 4]), allowArtTrailingBytes: false);
         Assert.IsTrue(strict.Owner.Inspect().Issues.Any(i => i.Code == AreaErrorCode.MissingSource));
+    }
+
+    [TestMethod]
+    public void An_ambiguous_name_is_refused_not_replaced_by_bad_art()
+    {
+        const uint scenery = (4u << 28) | (1u << 19);
+        using var f = Owner(scenery, [("art/scenery/gone.art", Art()), ("art/badart.art", Art())], MissingDat(0, new uint[CritterMasks + 4]),
+            secondResource: Dat(("art/scenery/gone.art", Art())));
+        var report = f.Owner.Inspect();
+        Assert.IsTrue(report.Issues.Any(i => i.Code == AreaErrorCode.AmbiguousSource));
+        Assert.IsFalse(report.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"));
     }
 
     [TestMethod]
@@ -139,7 +192,7 @@ public sealed class AreaOriginalArtNamesTests
         return bytes;
     }
 
-    private static Fixture Owner(uint aid, (string, byte[])[] art, byte[]? missing, bool allowArtTrailingBytes = true)
+    private static Fixture Owner(uint aid, (string, byte[])[] art, byte[]? missing, bool allowArtTrailingBytes = true, byte[]? secondResource = null)
     {
         var resources = new List<(string, byte[])>
         {
@@ -151,7 +204,7 @@ public sealed class AreaOriginalArtNamesTests
         resources.Add(("art/tile/stonebse0a.art", Art())); resources.Add(("art/scenery/fixture.art", Art()));
         resources.AddRange(art);
         return new Fixture([(Start, [TypedRecord()])], extraPrototype: SceneryPrototype(aid), resourceEntries: [.. resources], mappingRoles: [.. roles],
-            selection: AreaSectorSelection.AllSectors, allowArtTrailingBytes: allowArtTrailingBytes);
+            selection: AreaSectorSelection.AllSectors, allowArtTrailingBytes: allowArtTrailingBytes, secondResource: secondResource);
     }
 
     private static AreaSnapshot Complete(uint aid, (string, byte[])[] art, byte[]? missing)

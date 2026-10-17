@@ -13,7 +13,6 @@ public sealed partial class AreaDataOwner
     private AreaInspection Build(CancellationToken token, AreaOwnership output)
     {
         _budget.BeginPhase(AreaBudgetPhase.I1);
-        _missingMasks = null; _artHolders = null; _objectTiles = null; // per build, charged to it
         using var construction = new AreaOwnership(_budget);
         // Candidate array, survey nodes, BFS/ring sets and bounded diagnostics.
         // The module entry count bounds even a malformed selector population.

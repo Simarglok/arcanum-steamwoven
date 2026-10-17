@@ -27,9 +27,11 @@ public sealed partial class AreaDataOwner
     private static readonly string[] ArmorCodes = ["UW", "V1", "LA", "CM", "PM", "RB", "PC", "BN", "CD"];
     private static readonly string[] BodyCodes = ["HM", "DF", "GH", "HG", "EF"];
     private const string WeaponCodes = "ABCDEFGHIJKXYNZ";
+    // Build-local caches (cleared when a build ends; charged to that build).
     private uint[]? _missingMasks;
     private HashSet<string>? _artHolders;
     private TerrainLoader.TileNames? _objectTiles;
+    private static readonly string[] CritterRoots = ["art/critter/", "art/monster/", "art/unique_npc/"];
 
     /// <summary>The file a critter (2), monster (12) or unique NPC (13) art id names in the
     /// original: normalized (N1), with the missing-art repair (N2) applied first.</summary>
@@ -125,6 +127,7 @@ public sealed partial class AreaDataOwner
             if (ObjectWireReader.Hash(bytes) != binding.PayloadSha256) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Mapping);
             if (bytes.Length >= checked(4 * (1 + total)) && BinaryPrimitives.ReadInt32LittleEndian(bytes) == files)
             {
+                _budget.Reserve(checked(total * 4L + 4096));
                 var read = new uint[total];
                 for (var index = 0; index < total; index++) read[index] = BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(4 * (index + 1)));
                 return _missingMasks = read;
@@ -164,13 +167,13 @@ public sealed partial class AreaDataOwner
     }
     /// <summary>A file the original counts for the missing-art header: one folder below
     /// <c>art/critter</c>, <c>art/monster</c> or <c>art/unique_npc</c>, ending in <c>.art</c>.</summary>
-    private static bool CritterFile(string name)
+    internal static bool CritterFile(string name)
     {
-        foreach (var root in new[] { "art/critter/", "art/monster/", "art/unique_npc/" })
+        foreach (var root in CritterRoots)
         {
             if (!name.StartsWith(root, StringComparison.Ordinal)) continue;
-            var rest = name[root.Length..]; var slash = rest.IndexOf('/');
-            return slash > 0 && rest.IndexOf('/', slash + 1) < 0 && rest.Length > slash + 1 && rest.EndsWith(".art", StringComparison.Ordinal);
+            var rest = name.AsSpan(root.Length); var slash = rest.IndexOf('/');
+            return slash > 0 && rest[(slash + 1)..].IndexOf('/') < 0 && rest.Length > slash + 1 && rest.EndsWith(".art", StringComparison.Ordinal);
         }
         return false;
     }
@@ -192,7 +195,7 @@ public sealed partial class AreaDataOwner
     private (AreaEntryIdentity Entry, bool BadArt) ResolveOrBadArt(AreaInputKey? source, string path)
     {
         try { return (source.HasValue ? Resolve(source.Value, path) : ClosedUnique(path), false); }
-        catch (AreaException error) when (OriginalArtNames && error.Issue.Code == AreaErrorCode.MissingSource && !ArtHolders().Contains(path.Replace('\\', '/').ToLowerInvariant()))
+        catch (AreaException error) when (OriginalArtNames && error.Issue.Code == AreaErrorCode.MissingSource)
         {
             return (ClosedUnique(BadArtPath), true);
         }
