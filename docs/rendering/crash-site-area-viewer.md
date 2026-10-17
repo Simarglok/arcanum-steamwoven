@@ -378,7 +378,8 @@ publish, and the successor must show the same fresh-owner usage counters. After
 the replaced generation the retired load result and its frame repository must
 be unreachable (weak references after a forced collection), file descriptors
 must not grow and post-GC managed growth must stay below half of the measured
-repository. The smoke releases its own result reference before this stage.
+repository (each side the least of three post-GC samples a frame apart, since
+ARC-RENDER-018). The smoke releases its own result reference before this stage.
 Resident size is recorded, not bounded, because freed runtime/driver pages need
 not return to the system. One full original load currently takes
 about 22 seconds in a Debug source run and 12–13 seconds in the release export on
