@@ -425,6 +425,23 @@ before and are only referenced.
 | CS6 | `charedit_refresh_secondary_stats` (0x55B1B0) | Effective levels of stats 8..15 (carry weight, damage bonus, AC adjustment, speed, heal rate, poison recovery, reaction modifier, max followers), then `object_get_resistance(obj, type, 1)` for normal, magick, fire, poison and electrical: the "for display" form, which leaves out the magic adjustment of unidentified magickal armour (EQ8). | Original |
 | CS7 | `charedit_refresh_alignment_aptitude_bars` (0x55EC90) | Alignment (stat 19) divided by 10 with truncation toward zero is printed and picks the bar frame (value / 10 + 10). Aptitude (stat 16): a value of 0 or more is printed on the magick side with 0 on the tech side, a negative one as its absolute value on the tech side with 0 on the magick side. | Original |
 
+## Map transitions (ARC-DATA-025)
+
+Source: the [map transitions](../world/map-transitions.md) reader, which decodes these actions and
+triggers as data; the [transition research](world-transitions.md) read them in CE (W3, W4, W6, W9).
+Both readings (this task's reader and a fresh second reader) agree on every row.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| TR1 | `script_execute_action` (0x447220), teleport case (0x4481A1, jump table entry 43) | Object from operand 0, then map, x and y from operands 1–3 as values; the location packs x low and y high; the map is the value − 4999; flags 0; then `teleport_do`. | Original |
+| TR2 | the same, fade-and-teleport case (0x449A85, entry 101) | Skipped in a network game. Fade out and in, then time, sound and movie from operands 0–2 (time and sound set their flags when positive; the movie flag is set for any non-zero value, an unsigned test where CE tests for positive), object from operand 3, map − 4999, x and y from operands 4–6. | Original |
+| TR3 | object location change (0x444270), `map_process_jumppoint` (0x4101D0), `tile_script_exec` (0x4C0980) | After a move, for any PC (`player_is_pc_obj` 0x40DA20; town map, roof, wall check and scroll only for the local one) the jump point at the new tile teleports it with flags 0, while fewer than 9 jump teleports are nested; then for an object of type 15 or 16 (PC or NPC) the tile script runs. | Original |
+| TR4 | `teleport_do` (0x4D3380), `teleport_process` (0x4D3460) | A request while a teleport of the local PC is pending is refused; any other pending request is replaced. A pending map of −1 becomes the current map when it is processed. | Original |
+| TR5 | `tile_script_exec` (0x4C0980), `jumppoint_get` (0x4E3450), `objlist_notify_sector_changed` (0x4F2330) | A tile script runs on a copy and the unchanged record is stored back (X3), so its self-removal never sticks and the tile fires every time; a sector script's changed copy is kept. A tile's first jump point wins and no flag is tested. | Original |
+
+So a script's catalogue 4998 and a jump point's −1 both keep the current map. What a teleport
+then does to followers and the destination map (W9) is not read here.
+
 ## Decisions to revisit
 
 These owner decisions or accepted proposals rest on a CE fact that the original does not share.
@@ -510,5 +527,5 @@ Details the second reading added or sharpened:
   are answered by the [combat-domain data census](combat-data-census.md): the description header's
   labels match the art, and no shipped `Resist:` uses an LM17 key.)
 - Code left for later: wilderness A2 (editor only); locomotion W4 and the frame-time clamp;
-  companion C2, C4, C10, C13 frequency; world-transition jump points and teleports; reputation A6
+  companion C2, C4, C10, C13 frequency; what a teleport does after it is processed (followers, the destination map, W9); reputation A6
   and A7; the first-tick marker after a load (OQ2, H1).
