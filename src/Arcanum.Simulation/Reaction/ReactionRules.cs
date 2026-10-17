@@ -144,7 +144,7 @@ public static class ReactionRules
 
     /// <summary>The stored value a conversation starts from: the stored value, or 100 when it is below 100 and the PC spent its
     /// "force good reaction" fate point (R5).</summary>
-    [OriginalFunction(0x4C1020, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4C1020, OriginalFunctionScope.Partial)]
     public static int ConversationStart(int stored, bool forceGoodReaction) =>
         forceGoodReaction && stored < ForcedGoodReaction ? ForcedGoodReaction : stored;
 

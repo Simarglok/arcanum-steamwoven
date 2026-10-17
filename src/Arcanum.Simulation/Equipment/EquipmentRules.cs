@@ -135,7 +135,7 @@ public static class EquipmentRules
     /// truncated toward zero, clamped to 0 .. complexity on the item's side (a magickal item gives a technologist nothing, a
     /// technological item a mage nothing).
     /// </summary>
-    [OriginalFunction(0x4614A0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4614A0, OriginalFunctionScope.Partial)]
     public static int EffectivePower(int complexity, int aptitude)
     {
         CheckComplexity(complexity);

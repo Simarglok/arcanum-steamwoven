@@ -1,10 +1,10 @@
 using System.Collections.Immutable;
 using Arcanum.Data.Characters;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Reaction;
-using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 

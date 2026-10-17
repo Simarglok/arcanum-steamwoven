@@ -150,7 +150,7 @@ public static class RealTimeCombatRules
     /// being attempted; false when an active, fighting NPC on screen has the critter or one of its followers as combat
     /// focus (<paramref name="threatened"/>).
     /// </summary>
-    [OriginalFunction(0x4B3D90, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4B3D90, OriginalFunctionScope.Partial)]
     public static bool CanExitCombatMode(bool inCombatMode, bool active, bool attemptingAttack, bool threatened) =>
         !inCombatMode || !active || !attemptingAttack && !threatened;
 

@@ -1,13 +1,13 @@
 using System.Collections.Immutable;
 using Arcanum.Scripting.Dialog;
 using Arcanum.Scripting.GlobalFlags;
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Party;
 using Arcanum.Simulation.Randomness;
-using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 

@@ -17,14 +17,16 @@ tests in `tests/Arcanum.Session.Tests/Verification` keep all four consistent.
 | `status` | `full`, `partial`, `not implemented` or `out of scope` |
 | `reason` | what is left out and why; required unless the status is `full` |
 | `level` | evidence level F0–F4 of the [original executable check](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4) |
-| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2, the receipt for F3 |
+| `evidence` | repository path (optionally with an anchor) of the evidence: the ledger section for F1/F2, the receipt for F3, the contract or research document whose claims the code follows for F0 |
 | `method` | the implementing method (`Namespace.Type.Method`) of a `full` or `partial` row; empty otherwise |
 
-The first rows are the experience functions of ARC-WORLD-030: three full at F3 (oracle; progress since its XP3 switch,
-ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), five partial at F2 (two readings,
-[ledger](../research/original-verification-ledger.md#experience-and-levels-arc-world-030)). Other domains add their
-rows when they are migrated; the audio rows (ARC-DATA-040, F2, [audio study](../research/audio-evidence.md)) mark
-methods of `Arcanum.Data`, which declares its own attribute.
+The registry covers the experience functions of ARC-WORLD-030 (three full at F3 by the oracle; progress since its XP3
+switch, ARC-WORLD-033: a known difference keeps a row from `full` until it is implemented), the audio rows (ARC-DATA-040,
+F2, [audio study](../research/audio-evidence.md), marking methods of `Arcanum.Data`, which declares its own attribute),
+the rows other tasks added, and since ARC-DEV-009 every original function the Simulation and Session code names (F2 where
+the [ledger](../research/original-verification-ledger.md) has two readings, F0 where the function was not read in the
+executable). A host method that only calls the registered rule carries no mark (one method per address). Other domains
+add their rows when they are migrated.
 
 ## OriginalFunction attribute
 

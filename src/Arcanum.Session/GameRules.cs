@@ -11,8 +11,8 @@ namespace Arcanum.Session;
 /// <summary>
 /// The game-wide rule mode of owner decision D8 (contract docs/world/rule-modes.md). <see cref="Steamwoven"/> is the
 /// original game with the recorded fixes and is the default; <see cref="Original"/> is the retail 1.0.7.4 behaviour,
-/// including the bugs of the original game that were confirmed in its executable. Behaviour the original does not have is
-/// never a mode difference: both modes follow the original there.
+/// including the bugs of the original game that were confirmed in its executable. Where only the reconstruction the studies read
+/// differs from the original, there is no mode difference: both modes follow the original there.
 /// </summary>
 public enum RuleMode
 {

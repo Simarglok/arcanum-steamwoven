@@ -113,7 +113,7 @@ public static class ExperienceRules
     /// is not reached. Otherwise each reached level is written with its points (the unspent total capped at
     /// <see cref="MaxUnspentPoints"/>), until a level is not reached or the next one would be <see cref="MaxLevel"/>: then the
     /// original writes the threshold of the PC's current level (<c>MaxLevel − 1</c>) as its experience, keeps the level and
-    /// grants nothing (ledger XP5: the index one higher would recurse without end). The PC level step is
+    /// grants nothing (ledger XP5: reading the index one higher, as one reading of the source did, would recurse without end). The PC level step is
     /// passed on to followers either way, so in that branch it is one level above the PC.
     /// </summary>
     [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]

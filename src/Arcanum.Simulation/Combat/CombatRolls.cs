@@ -32,7 +32,7 @@ public enum CombatRollPurpose
 
 /// <summary>
 /// The injected randomness of combat: an inclusive uniform integer in <c>min..max</c> (<c>min ≤ max</c>), the source's
-/// 0x4CEF00. A seeded implementation makes a fight reproducible; tests script each roll.
+/// random range function 0x4CEF00. A seeded implementation makes a fight reproducible; tests script each roll.
 /// </summary>
 public interface ICombatRollSource
 {

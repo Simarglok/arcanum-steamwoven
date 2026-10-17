@@ -1,7 +1,7 @@
+using Arcanum.Simulation;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
-using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
