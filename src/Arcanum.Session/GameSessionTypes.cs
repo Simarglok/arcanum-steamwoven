@@ -128,6 +128,8 @@ public enum GameSessionFailure
     EventBudgetExceeded, EventConflict, InvalidEventPass, InvalidEvents,
     // Reaction domain (ARC-WORLD-026).
     InvalidReactionTarget, InvalidReactionFacts, InvalidReactionAmount,
+    // Turn-based round (ARC-COMBAT-003).
+    CombatUnavailable, InvalidCombatant, InvalidCombatFacts, InvalidCombatCost, InvalidCombatRound,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -229,18 +231,19 @@ public sealed class GameSessionSnapshot
     /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 added
     /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 added <see cref="Random"/>
     /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 added <see cref="Events"/> (ARC-WORLD-024);
-    /// schema 10 adds <see cref="Reactions"/> (ARC-WORLD-026), which replaces the viewer's per-NPC <c>reaction.pc</c> map change.
-    /// Schemas 1..9 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 10;
+    /// schema 10 added <see cref="Reactions"/> (ARC-WORLD-026), which replaced the viewer's per-NPC <c>reaction.pc</c> map
+    /// change; schema 11 adds <see cref="Combat"/> (ARC-COMBAT-003). Schemas 1..10 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 11;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
-        SessionLifeState life, SessionReactionState reactions, SessionEventState events, SessionLightingState? lighting)
+        SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionEventState events,
+        SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Random = random; Life = life; Reactions = reactions; Events = events; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Random = random; Life = life; Reactions = reactions; Combat = combat; Events = events; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -261,6 +264,8 @@ public sealed class GameSessionSnapshot
     public SessionLifeState Life { get; }
     /// <summary>The changed NPCs' reaction memory toward the PC (ARC-WORLD-026).</summary>
     public SessionReactionState Reactions { get; }
+    /// <summary>The active turn-based round, or null when none is active (ARC-COMBAT-003).</summary>
+    public SessionCombatRound? Combat { get; }
     /// <summary>The pending game events (ARC-WORLD-024).</summary>
     public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>

@@ -138,9 +138,11 @@ truncating toward zero. Distances are Chebyshev cell distances, as in the
   ([round start][tb-start]). [`sort_combat_list`][sort] moves PCs to the tail
   and otherwise keeps the scan order of `object_list_rect`; it recomputes the
   reaction marker but sorts by nothing else.
-- **C7** Each round ([round][tb-round]) increments the turn counter, rebuilds
-  the list in the same way, and starts at the first participant that is active
-  and drawn. Inactive means destroyed or off, dead, unconscious, stunned,
+- **C7** Each round ([round][tb-round]) increments the turn counter, rescans
+  the square and merges the result into the list (participants of earlier
+  rounds stay, new ones are put in front, the last found first; confirmed in
+  the original by ARC-COMBAT-003), sorts it, and starts at the first
+  participant that is active and drawn. Inactive means destroyed or off, dead, unconscious, stunned,
   paralysed or stoned ([states][states]); a not-drawn critter that is not
   sleeping is also skipped ([skip][tb-skip]). If nobody qualifies but the PC
   is active, the PC acts alone; otherwise the round ends.
@@ -429,8 +431,19 @@ neither see nor hear the attacker; then the critical chance gains
   flags after a critical miss retargets the attack to the attacker, so the
   self-hit gets the backstab damage bonus ([calc][calc], [crit miss][crit-miss]).
 
-The decisions on A1–A10 (owner decision D2) are recorded in the [NPC combat
-AI plan](npc-combat-ai-plan.md#anomaly-decisions).
+- **A11** (found by ARC-COMBAT-003) The stalled-actor check of the
+  animations-complete step records a new actor without its action points, so
+  the new actor's second check compares its action points with the previous
+  actor's last value (0 after a round start) and may force it to stop
+  although it spent ([anim completion][tb-anims]).
+- **A12** (found by ARC-COMBAT-003) An overexertion that knocks the PC out
+  ends its subturn inside the damage step; the charge then sets the action
+  points, by now the next participant's, to 0 ([consume][ap-consume],
+  [fatigue set][fatigue-set]).
+
+The decisions on A1–A12 (owner decision D2) are recorded in the [NPC combat
+AI plan](npc-combat-ai-plan.md#anomaly-decisions); A11 and A12 were checked in
+the original by ARC-COMBAT-003 ([ledger](original-verification-ledger.md#turn-based-round-arc-combat-003)).
 
 ## Original executable check (ARC-COMBAT-001)
 
@@ -462,7 +475,9 @@ repository; the table records only the observed behaviour.
   the anomalies A1–A10 were checked in the original executable).
   An original-runtime oracle would need scripted fights with a fixed seed.
 - **O2** The scan order of `object_list_rect`, which is the actual NPC order in
-  a round, was not read.
+  a round, was not read. *Answered by ARC-COMBAT-003:* sector rows from the
+  top, sectors from the left, and inside a sector the critter that entered it
+  last first ([ledger TB13](original-verification-ledger.md#turn-based-round-arc-combat-003)).
 - **O3** The Speed-scaled animation rate (`sub_437990`), so the real-time
   cadence as a function of Speed, was not read.
 - **O4** The line-of-fire test `sub_4ADE00` (the 26 threshold and the cover
@@ -486,7 +501,8 @@ same source formulas ([contract](../world/character-stats-runtime.md)); the
 session clock provides game time for the 80-second recovery and the
 one-second round advance; exact movement and the click-route planner provide
 steps. Skills, training, resistances, AC, items and equipment do not exist yet.
-*Update:* slice 2 is the [attack resolver](../world/attack-resolver-runtime.md)
+*Update:* slice 3 is the [turn-based round](../world/turn-based-round-runtime.md)
+(ARC-COMBAT-003, snapshot schema 11); slice 2 is the [attack resolver](../world/attack-resolver-runtime.md)
 (ARC-COMBAT-001) and slice 1 the [life state](../world/life-state-runtime.md)
 (ARC-COMBAT-002: hit points, fatigue, poison, injuries, knockout, death,
 healing and the recovery steps in the session, snapshot schema 8).
@@ -512,7 +528,9 @@ take randomness from an injected, seedable source so tests can pin every roll.
 3. **Turn-based round**: participants, skip rules, AP grant and costs,
    overexertion, end of round +1 s and save/restore of round state as a new
    snapshot schema version (C6–C14, C30). Initiative stays "scan order, PCs
-   last" unless the owner chooses otherwise after O2.
+   last" unless the owner chooses otherwise after O2. *Implemented by
+   ARC-COMBAT-003* ([turn-based round runtime](../world/turn-based-round-runtime.md),
+   snapshot schema 11).
 4. **Real-time cadence and combat mode**: the per-critter mode flag, the exit
    rule (C1), attack timing from animation rate and weapon speed (C4) and the
    auto-attack setting (C5).

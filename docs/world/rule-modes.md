@@ -66,6 +66,9 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Combat | `CombatAnomalyProfile` | `ArmorClassEffectsCountedTwice` | A6 | AC-adjustment effects count twice |
 | Combat | `CombatAnomalyProfile` | `CriticalSelfHitRolledTwice` | A7 | a critical self-hit rolls the critical procedure twice |
 | Combat | `CombatAnomalyProfile` | `BackstabDamageOnSelfHit` | A10 | the backstab bonus applies to a self-hit |
+| Combat | `CombatAnomalyProfile` | `FirstSubturnStartedTwice` | A9 | after the next-subturn skip loop runs past the end, the new round's first subturn starts twice (ARC-COMBAT-003) |
+| Combat | `CombatAnomalyProfile` | `StallCheckKeepsPreviousActionPoints` | A11 | the stalled-actor check compares a new actor's second check with the previous actor's action points (ARC-COMBAT-003) |
+| Combat | `CombatAnomalyProfile` | `OverexertionKnockoutClearsNextActionPoints` | A12 | an overexertion that knocks the PC out zeroes the next participant's action points (ARC-COMBAT-003) |
 | Event queue | `GameEventQueueProfile` | `RebuildOnLoad` | OQ2 | AI ticks are rebuilt with fresh jitter on load |
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 | Scripts | `ScrRuleProfile` | `GlobalFlagWriteSpills` | X10 | a value written into a global flag is ORed, shifted, into the flag's 32-flag word (ARC-SCRIPT-008) |
@@ -78,7 +81,7 @@ until then both modes behave as the original):
 
 | Domain | Ledger IDs | Note |
 | --- | --- | --- |
-| Combat | A9 | `FirstSubturnStartedTwice` reserved (fix accepted). |
+| Combat | NPC goal-start gate with a maximum fatigue of 0 (both fixed: division by zero, ARC-COMBAT-003) | A9 is implemented (above). |
 | Magic | MG3, MG4, MG5, MG6, MG7, MG9, MG10, MG11, MG15, MG18, MG19, LM10; CE changes: shell order, charm bonus, summon palette, resistance source (O9), effect min/max | MG12 and LM20 (out-of-bounds writes and copies) are fixed in both modes. |
 | Skills | SK8, LM17, SK3 repair off-by-one (multiplayer only), auto-level A3 (both fixed: null read) | SK1, SK2, SK4, SK5, LM1, LM2 and dodge are CE slips, no switch; dodge already follows the original's 2 × level in `AttackRules`. |
 | AI and reaction | LM3 (both fixed: out-of-bounds, latent), LM12 (both fixed; the reaction rules refuse a PC race outside the table, ARC-WORLD-026), reputation A5 (both fixed: out-of-bounds read, latent), reaction A4 charm asymmetry (decision D2 of that study; CE's bypass does not exist in the original), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (D1 decided 2026-10-17: written scope in both modes), reaction R1's effect owner (the original applies the PC's `reaction` effects, ARC-WORLD-026) and the companion wait timer are CE slips. Reaction A2 is implemented (above). |
@@ -90,7 +93,8 @@ The list covers every "Original bug" and "CE change" row of the ledger.
 
 ## Not ready
 
-- Combat is not wired into the session yet and does not read `GameSessionOwner.Rules`. The event queue does
+- The attack resolver is not wired into the session yet; the turn-based round (ARC-COMBAT-003) reads `Rules.Combat` at
+  each round call, but no host runs a round yet. The event queue reads the rules too
   (ARC-WORLD-024): a restore uses `Rules.Events` for `RebuildOnLoad`, and the poison recovery timer reads
   `PoisonRecoveryTwice` when it fires.
 - There is no settings menu yet; the viewer has no mode toggle. The codec is ready for the menu. The AREA quick load
