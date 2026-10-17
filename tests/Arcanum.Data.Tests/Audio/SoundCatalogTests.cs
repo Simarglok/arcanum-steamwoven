@@ -309,6 +309,22 @@ public sealed class SoundCatalogTests
         Assert.IsTrue(new SectorSoundRecord(0, 0, 29).AppliesOnEntry);
     }
 
+    [TestMethod]
+    public void Open_payload_reads_a_found_file_and_types_every_other_case()
+    {
+        Base();
+        Write("data/sound/real.wav", [.. "RIFF"u8, 36 + 4, 0, 0, 0, .. "WAVE"u8, .. "fmt "u8, 16, 0, 0, 0, 1, 0, 1, 0, 0x22, 0x56, 0, 0, 0x44, 0xAC, 0, 0, 2, 0, 16, 0,
+            .. "data"u8, 4, 0, 0, 0, 1, 2, 3, 4]);
+        using var stack = Stack();
+        var catalog = Open(stack);
+        var admitted = catalog.OpenPayload(catalog.ResolveSoundFile("real.wav"));
+        Assert.AreEqual((SoundPayloadStatus.Admitted, SoundPayloadKind.Wav, 22050, 2), (admitted.Status, admitted.Kind, admitted.Wav!.SampleRate, admitted.Wav.FrameCount));
+        Assert.AreEqual(SoundPayloadStatus.UnknownContainer, catalog.OpenPayload(catalog.ResolveSoundFile("a10.wav")).Status, "a one-byte file");
+        Assert.AreEqual(SoundPayloadStatus.Missing, catalog.OpenPayload(catalog.ResolveSoundFile("none.wav")).Status);
+        Assert.AreEqual(SoundPayloadStatus.InvalidPath, catalog.OpenPayload(catalog.ResolveSoundFile("../x.wav")).Status);
+        Assert.AreEqual(SoundPayloadStatus.TooLarge, catalog.OpenPayload(catalog.ResolveSoundFile("real.wav"), new SoundPayloadOptions { MaxBytes = 10 }).Status);
+    }
+
     private (SoundCatalogStatus, string?) Status(ContentStack stack)
     {
         var result = SoundCatalog.Open(stack);

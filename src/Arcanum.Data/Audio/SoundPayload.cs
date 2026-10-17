@@ -1,6 +1,4 @@
 using System.Buffers.Binary;
-using System.Text;
-using Arcanum.Data.Content;
 
 namespace Arcanum.Data.Audio;
 
@@ -25,11 +23,12 @@ public enum SoundPayloadStatus
     Unreadable,
     /// <summary>Neither a RIFF WAVE file nor MPEG audio.</summary>
     UnknownContainer,
-    /// <summary>A well-formed file of a class outside the admitted set (compressed WAV, other rates or sample sizes,
-    /// MPEG layers I/II, free-format bit rate, ...).</summary>
+    /// <summary>A well-formed file of a class outside the admitted set: a WAV whose format tag is not PCM (compressed,
+    /// float or extensible), other rates, sample sizes or channel counts; MPEG layer I or II.</summary>
     Unsupported,
     /// <summary>The structure is inconsistent: truncated or overlapping chunks, a missing or repeated fmt/data chunk, a
-    /// loop outside the samples, no two consecutive MPEG frames.</summary>
+    /// loop outside the samples, a damaged ID3v2 tag, no two consecutive valid MPEG frames at the start (a free-format
+    /// bit rate is not a valid frame here).</summary>
     Malformed,
 }
 
@@ -66,20 +65,24 @@ public sealed class SoundPayloadOptions
     public int MaxWavChunks { get; init; } = 128;
     /// <summary>Upper bound on <c>smpl</c> loops in one WAV file (all chunks together).</summary>
     public int MaxWavLoops { get; init; } = 16;
-    /// <summary>How far after an ID3v2 tag (or the file start) the first MPEG frame may begin.</summary>
+    /// <summary>How many zero bytes may pad the start (after an ID3v2 tag, when there is one) before the first MPEG frame.</summary>
     public int MaxMp3SyncSearchBytes { get; init; } = 64 * 1024;
+
+    /// <summary>Upper bounds of the options themselves, so that no offset arithmetic can overflow.</summary>
+    public const int MaxWavChunksLimit = 65_536, MaxWavLoopsLimit = 4_096;
 
     internal void Validate()
     {
-        if (MaxBytes <= 0 || MaxWavChunks <= 0 || MaxWavLoops < 0 || MaxMp3SyncSearchBytes <= 0)
-            throw new ArgumentOutOfRangeException(nameof(SoundPayloadOptions), "Sound payload limits must be positive.");
+        if (MaxBytes <= 0 || MaxWavChunks is <= 0 or > MaxWavChunksLimit || MaxWavLoops is < 0 or > MaxWavLoopsLimit || MaxMp3SyncSearchBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(SoundPayloadOptions), "Sound payload limits must be positive and within their bounds.");
     }
 }
 
 /// <summary>
-/// ARC-DATA-041: admits a sound payload for playback by its content (docs/audio/sound-catalog.md#payloads): RIFF WAVE PCM
-/// (8- or 16-bit, mono or stereo, 8–48 kHz) or MPEG-1/2/2.5 Layer III with two consecutive valid frames, the classes the
-/// installed original uses. Nothing is decoded; a player receives the admitted bytes and the format.
+/// ARC-DATA-041: admits a sound payload for playback by its content (docs/audio/sound-catalog.md#payloads-arc-data-041):
+/// RIFF WAVE PCM (8- or 16-bit, mono or stereo, at 8, 11.025, 16, 22.05, 32, 44.1 or 48 kHz) or MPEG-1/2/2.5 Layer III
+/// starting with two consecutive valid frames (after an optional ID3v2 tag and zero padding), the classes the installed
+/// original uses. Nothing is decoded; a player receives the admitted bytes and the format.
 /// </summary>
 public static class SoundPayloadReader
 {
@@ -107,10 +110,14 @@ public static class SoundPayloadReader
         while (at < bytes.Length)
         {
             if (++chunks > options.MaxWavChunks) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "too many chunks");
+            var found = fmtAt is not null && dataAt is not null;
+            // Zero padding after the last chunk carries no chunk.
+            if (bytes[at..].IndexOfAnyExcept((byte)0) < 0 && (found || bytes.Length - at < 8)) break;
             if (bytes.Length - at < 8)
             {
-                // A short tail after the last chunk (padding written by some tools) carries no chunk.
-                if (bytes[at..].IndexOfAnyExcept((byte)0) < 0) break;
+                // Some installed files carry unrelated bytes after their samples: once fmt and data are found, bytes that do
+                // not form a chunk end the walk; they are reported, never read as audio.
+                if (found) { ignored = bytes.Length - at; break; }
                 return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "truncated chunk header");
             }
             var id = bytes.Slice(at, 4);
@@ -118,9 +125,7 @@ public static class SoundPayloadReader
             var body = at + 8;
             if (size > (uint)(bytes.Length - body))
             {
-                // Some installed files carry unrelated bytes after their samples. Once both fmt and data are found, a
-                // damaged chunk after them ends the walk; it is reported, never read as audio.
-                if (fmtAt is not null && dataAt is not null) { ignored = bytes.Length - at; break; }
+                if (found) { ignored = bytes.Length - at; break; }
                 return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, $"chunk '{Ascii(id)}' runs past the end");
             }
             if (id.SequenceEqual("fmt "u8)) { if (fmtAt is not null) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "two fmt chunks"); (fmtAt, fmtSize) = (body, (int)size); }
@@ -149,10 +154,10 @@ public static class SoundPayloadReader
             if (loopSize < 36) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "smpl chunk shorter than its header");
             var count = BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(loopAt + 28, 4));
             if (count > (uint)(options.MaxWavLoops - loops.Count)) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "too many loops");
-            if (36 + count * 24 > (uint)loopSize) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "smpl loops run past the chunk");
+            if (36UL + count * 24UL > (ulong)loopSize) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "smpl loops run past the chunk");
             for (var i = 0; i < count; i++)
             {
-                var loop = bytes.Slice(loopAt + 36 + i * 24, 24);
+                var loop = bytes.Slice(loopAt + 36 + (int)i * 24, 24);
                 var (type, start, end, playCount) = (BinaryPrimitives.ReadUInt32LittleEndian(loop[4..]), BinaryPrimitives.ReadUInt32LittleEndian(loop[8..]),
                     BinaryPrimitives.ReadUInt32LittleEndian(loop[12..]), BinaryPrimitives.ReadUInt32LittleEndian(loop[20..]));
                 if (start > end || end >= (uint)frames || type > int.MaxValue || playCount > int.MaxValue)
@@ -166,8 +171,10 @@ public static class SoundPayloadReader
 
     private readonly record struct Frame(int Offset, int Version, int Layer, int Bitrate, int SampleRate, bool Stereo, int Length);
 
-    /// <summary>The first of two consecutive valid frames after an optional ID3v2 tag, or null; <paramref name="failure"/>
-    /// is set when the bytes look like MPEG audio (a tag or a frame sync) but do not hold two valid frames.</summary>
+    /// <summary>The first of two consecutive valid frames at the start of the audio (after an optional ID3v2 tag and zero
+    /// padding), or null; <paramref name="failure"/> is set when the bytes are meant as MPEG audio (a tag, or a frame sync
+    /// at the start) but do not hold two valid frames there. Every installed MP3 starts its frames right there; requiring
+    /// it keeps arbitrary data from passing as audio.</summary>
     private static Frame? Mp3Start(ReadOnlySpan<byte> bytes, SoundPayloadOptions options, out string? failure)
     {
         failure = null; var tagEnd = 0;
@@ -176,21 +183,22 @@ public static class SoundPayloadReader
         {
             if (bytes[3] is not (2 or 3 or 4) || ((bytes[6] | bytes[7] | bytes[8] | bytes[9]) & 0x80) != 0) { failure = "unsupported or damaged ID3v2 tag"; return null; }
             var size = (bytes[6] << 21) | (bytes[7] << 14) | (bytes[8] << 7) | bytes[9];
-            tagEnd = 10 + size + ((bytes[5] & 0x10) != 0 ? 10 : 0);
+            tagEnd = 10 + size + (bytes[3] == 4 && (bytes[5] & 0x10) != 0 ? 10 : 0);
             if (tagEnd > bytes.Length) { failure = "ID3v2 tag runs past the end"; return null; }
         }
-        var limit = Math.Min(bytes.Length - 4, tagEnd + options.MaxMp3SyncSearchBytes);
-        for (var at = tagEnd; at <= limit; at++)
+        var at = tagEnd;
+        var paddingEnd = (int)Math.Min(bytes.Length, (long)tagEnd + options.MaxMp3SyncSearchBytes);
+        while (at < paddingEnd && bytes[at] == 0) at++;
+        var meant = tagged || (bytes.Length - at >= 2 && bytes[at] == 0xFF && (bytes[at + 1] & 0xE0) == 0xE0);
+        if (!meant) return null;
+        if (bytes.Length - at >= 4 && Header(bytes, at) is { } first)
         {
-            if (bytes[at] != 0xFF || (bytes[at + 1] & 0xE0) != 0xE0) continue;
-            if (Header(bytes, at) is not { } first) continue;
             var next = at + first.Length;
-            if (next + 4 <= bytes.Length && Header(bytes, next) is { } second && second.Version == first.Version && second.Layer == first.Layer && second.SampleRate == first.SampleRate)
+            if (bytes.Length - next >= 4 && Header(bytes, next) is { } second && second.Version == first.Version && second.Layer == first.Layer
+                && second.SampleRate == first.SampleRate)
                 return first;
-            if (next + 4 > bytes.Length) break;
         }
-        // A tag, or a frame sync at the very start, says the file is meant as MPEG audio; anything else is not.
-        if (tagged || (bytes.Length >= 2 && bytes[0] == 0xFF && (bytes[1] & 0xE0) == 0xE0)) failure = "no two consecutive valid MPEG frames";
+        failure = "no two consecutive valid MPEG frames at the start";
         return null;
     }
 
@@ -203,25 +211,28 @@ public static class SoundPayloadReader
         var version = versionBits switch { 3 => 1, 2 => 2, _ => 25 };
         var layer = 4 - layerBits;
         var bitrate = Bitrate(version, layer, bitrateIndex);
-        var rate = (version switch { 1 => new[] { 44100, 48000, 32000 }, 2 => new[] { 22050, 24000, 16000 }, _ => new[] { 11025, 12000, 8000 } })[rateIndex];
+        var rate = (version switch { 1 => Rates1, 2 => Rates2, _ => Rates25 })[rateIndex];
         var length = layer == 1 ? (12 * bitrate * 1000 / rate + padding) * 4
             : layer == 3 && version != 1 ? 72 * bitrate * 1000 / rate + padding
             : 144 * bitrate * 1000 / rate + padding;
         return new(at, version, layer, bitrate, rate, ((bytes[at + 3] >> 6) & 3) != 3, length);
     }
 
-    private static int Bitrate(int version, int layer, int index)
+    private static readonly int[] Rates1 = [44100, 48000, 32000], Rates2 = [22050, 24000, 16000], Rates25 = [11025, 12000, 8000];
+    private static readonly int[] V1L1 = [32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448];
+    private static readonly int[] V1L2 = [32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384];
+    private static readonly int[] V1L3 = [32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320];
+    private static readonly int[] V2L1 = [32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256];
+    private static readonly int[] V2L23 = [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160];
+
+    private static int Bitrate(int version, int layer, int index) => ((version, layer) switch
     {
-        int[] table = (version, layer) switch
-        {
-            (1, 1) => [32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448],
-            (1, 2) => [32, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320, 384],
-            (1, 3) => [32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320],
-            (_, 1) => [32, 48, 56, 64, 80, 96, 112, 128, 144, 160, 176, 192, 224, 256],
-            _ => [8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160],
-        };
-        return table[index - 1];
-    }
+        (1, 1) => V1L1,
+        (1, 2) => V1L2,
+        (1, 3) => V1L3,
+        (_, 1) => V2L1,
+        _ => V2L23,
+    })[index - 1];
 
     private static SoundPayload Mp3(string key, ReadOnlyMemory<byte> payload, Frame frame) =>
         frame.Layer != 3 ? Unsupported(key, payload, SoundPayloadKind.Mp3, $"MPEG layer {frame.Layer}")

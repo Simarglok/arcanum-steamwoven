@@ -139,7 +139,8 @@ public sealed class SoundCatalog
 
     /// <summary>ARC-DATA-041: reads a found sound file and admits its payload for playback
     /// (<see cref="SoundPayloadReader"/>). Archive members and loose files are read whole within
-    /// <see cref="SoundPayloadOptions.MaxBytes"/>; nothing is extracted to disk.</summary>
+    /// <see cref="SoundPayloadOptions.MaxBytes"/>; nothing is extracted to disk. <paramref name="file"/> must come from this
+    /// catalogue (a hand-built or foreign candidate is an argument error of the stack).</summary>
     public SoundPayload OpenPayload(SoundFile file, SoundPayloadOptions? options = null)
     {
         ArgumentNullException.ThrowIfNull(file);

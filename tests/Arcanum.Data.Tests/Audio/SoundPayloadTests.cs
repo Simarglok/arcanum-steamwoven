@@ -54,10 +54,10 @@ public sealed class SoundPayloadTests
     }
 
     /// <summary>MPEG-1 Layer III, 128 kbit/s, 44.1 kHz, mono, no padding: 144 × 128000 / 44100 = 417 bytes per frame.</summary>
-    private static byte[] Frame(byte second = 0xFB, byte third = 0x90)
+    private static byte[] Frame(byte second = 0xFB, byte third = 0x90, byte fourth = 0xC0, int length = 417)
     {
-        var frame = new byte[417];
-        frame[0] = 0xFF; frame[1] = second; frame[2] = third; frame[3] = 0xC0;
+        var frame = new byte[length];
+        frame[0] = 0xFF; frame[1] = second; frame[2] = third; frame[3] = fourth;
         return frame;
     }
 
@@ -112,6 +112,26 @@ public sealed class SoundPayloadTests
         var payload = Inspect(bytes);
         Assert.AreEqual((SoundPayloadStatus.Admitted, 10), (payload.Status, payload.Wav!.IgnoredTailBytes));
         Assert.AreEqual(SoundPayloadStatus.Admitted, Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8])).Concat(new byte[3]).ToArray()).Status, "zero padding");
+        var zeros = Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8])).Concat(new byte[2048]).ToArray());
+        Assert.AreEqual((SoundPayloadStatus.Admitted, 0), (zeros.Status, zeros.Wav!.IgnoredTailBytes), "a long zero tail is padding, not chunks");
+        var shortTail = Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8])).Concat(new byte[] { 7, 7, 7 }).ToArray());
+        Assert.AreEqual((SoundPayloadStatus.Admitted, 3), (shortTail.Status, shortTail.Wav!.IgnoredTailBytes), "a short tail after fmt and data is ignored too");
+        var before = Riff(Fmt(1, 1, 22050, 16)).Concat(new byte[] { 7, 7, 7 }).ToArray();
+        Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect(before).Status, "the same damage before data refuses");
+        Assert.AreEqual((SoundPayloadStatus.Admitted, 0), (Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", []))).Status, Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", []))).Wav!.FrameCount));
+    }
+
+    [TestMethod]
+    public void Wav_limits_and_short_loop_chunks()
+    {
+        var many = Riff([Fmt(1, 1, 22050, 16), .. Enumerable.Repeat(Chunk("junk", [1]), 130), Chunk("data", new byte[2])]);
+        Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect(many).Status, "more chunks than MaxWavChunks");
+        Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8]), Chunk("smpl", new byte[20]))).Status);
+        var wrap = new byte[44];
+        BinaryPrimitives.WriteUInt32LittleEndian(wrap.AsSpan(28), 0x0AAAAAAB);
+        Assert.AreEqual(SoundPayloadStatus.Malformed, SoundPayloadReader.Inspect("sound/x", Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8]), Chunk("smpl", wrap)),
+            new SoundPayloadOptions { MaxWavLoops = SoundPayloadOptions.MaxWavLoopsLimit }).Status, "a loop count whose size would wrap 32 bits");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SoundPayloadReader.Inspect("sound/x", new byte[1], new SoundPayloadOptions { MaxWavLoops = SoundPayloadOptions.MaxWavLoopsLimit + 1 }));
     }
 
     [TestMethod]
@@ -125,6 +145,14 @@ public sealed class SoundPayloadTests
         Assert.AreEqual(SoundPayloadStatus.Unsupported, Inspect([.. Frame(0xFD, 0x80), .. Frame(0xFD, 0x80)]).Status, "layer II at 128 kbit/s (index 8)");
         Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect([.. Frame(third: 0x00), .. Frame(third: 0x00)]).Status, "free-format bit rate");
         Assert.AreEqual(SoundPayloadStatus.UnknownContainer, Inspect(Encoding.ASCII.GetBytes("not audio at all")).Status);
+
+        // MPEG-2 Layer III, 64 kbit/s, 22.05 kHz, padded, stereo: 72 × 64000 / 22050 + 1 = 209 bytes.
+        var mpeg2 = Inspect([.. Frame(0xF3, 0x82, 0x00, 209), .. Frame(0xF3, 0x80, 0x00, 208)]);
+        Assert.AreEqual((SoundPayloadStatus.Admitted, new Mp3Format(2, 22050, true, 0, 64)), (mpeg2.Status, mpeg2.Mp3));
+        // MPEG-1 Layer I, 32 kbit/s, 44.1 kHz: (12 × 32000 / 44100) × 4 = 32 bytes.
+        Assert.AreEqual(SoundPayloadStatus.Unsupported, Inspect([.. Frame(0xFF, 0x10, 0xC0, 32), .. Frame(0xFF, 0x10, 0xC0, 32)]).Status, "layer I");
+        Assert.AreEqual(SoundPayloadStatus.Admitted, Inspect([.. new byte[100], .. Frame(), .. Frame()]).Status, "zero padding before the first frame");
+        Assert.AreEqual(SoundPayloadStatus.UnknownContainer, Inspect([.. Encoding.ASCII.GetBytes("junk"), .. Frame(), .. Frame()]).Status, "frames after other bytes are not audio");
     }
 
     [TestMethod]
@@ -135,6 +163,10 @@ public sealed class SoundPayloadTests
         Assert.AreEqual((SoundPayloadStatus.Admitted, 138), (payload.Status, payload.Mp3!.FirstFrameOffset));
         byte[] damaged = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0, 0x80, 0, 0, 0];
         Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect([.. damaged, .. Frame(), .. Frame()]).Status);
+        byte[] footer = [(byte)'I', (byte)'D', (byte)'3', 4, 0, 0x10, 0, 0, 0, 4];
+        Assert.AreEqual(24, Inspect([.. footer, .. new byte[14], .. Frame(), .. Frame()]).Mp3!.FirstFrameOffset, "a v2.4 footer adds 10 bytes");
+        byte[] v3flag = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0x10, 0, 0, 0, 4];
+        Assert.AreEqual(14, Inspect([.. v3flag, .. new byte[4], .. Frame(), .. Frame()]).Mp3!.FirstFrameOffset, "the footer bit means nothing before v2.4");
         byte[] longTag = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0, 0, 0, 0x7F, 0];
         Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect([.. longTag, .. Frame()]).Status, "tag runs past the end");
     }
