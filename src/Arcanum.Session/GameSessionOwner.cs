@@ -160,6 +160,8 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombat(snapshot.Combat, hero is not null, out var combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportCombatMode(snapshot.CombatMode, hero is not null, combat);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
@@ -1104,7 +1106,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), _experience.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
+            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), _experience.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureCombatMode(), CaptureEvents(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1343,6 +1345,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (target.IsHero) _life.Hero = next;
         else _life.Critters[target.Entity!] = next;
         EndSubturnOnIncapacitation(target, outcome);
+        if (outcome.Events.HasFlag(LifeEvents.Died)) LeaveCombatModeOnDeath(target);
         _revision++;
         return new(GameSessionDisposition.Changed, GameSessionFailure.None, outcome, new(_identity, _revision));
     }

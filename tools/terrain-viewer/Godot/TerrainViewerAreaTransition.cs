@@ -78,6 +78,7 @@ public partial class TerrainViewerApp
 
     private void StopAreaTransitions()
     {
+        EndSheet(); _sheetStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;
@@ -219,6 +220,8 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return false;
         }
+        // ARC-COMBAT-004: the source's teleport leaves combat mode.
+        LeaveCombatModeForMapChange();
         if (carry is { } carried)
             GD.Print("ARC-WORLD-017 companions carried " + System.Text.Json.JsonSerializer.Serialize(new {
                 transition.FromMap, transition.ToMap, transition.Arrival, Carried = carried.Carried.Select(c => c.Speaker.ScriptId).ToArray(),

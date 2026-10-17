@@ -222,6 +222,19 @@ public static class LifeRules
         return new(state, after, LifeEvents.None, 0, DeathAnimation.None);
     }
 
+    /// <summary>
+    /// A plain fatigue charge (the source's fatigue-damage write, as a run step in combat mode makes it, ARC-COMBAT-004):
+    /// fatigue damage plus <paramref name="amount"/> whatever the critter's immunities or state, losing consciousness
+    /// reported; no damage step runs.
+    /// </summary>
+    public static LifeOutcome ChargeFatigue(LifeState state, LifeFacts facts, int amount)
+    {
+        Check(state, facts);
+        if (amount is < 1 or > LifeLimits.MaxAmount) throw new ArgumentOutOfRangeException(nameof(amount));
+        var after = state with { FatigueDamage = AddDamage(state.FatigueDamage, amount) };
+        return new(state, after, Consciousness(state, after, facts), 0, DeathAnimation.None);
+    }
+
     /// <summary>The stun animation ended (or could not start): the stun is cleared.</summary>
     public static LifeOutcome ClearStun(LifeState state, LifeFacts facts)
     {

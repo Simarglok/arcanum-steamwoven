@@ -485,7 +485,7 @@ public sealed class CombatRoundTests
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
         var text = GameSessionSnapshotCodec.Encode(owner.Capture());
         StringAssert.Contains(text, ",\"reactions\":{\"records\":[]},\"combat\":{\"turn\":1,\"participants\":[\"oid:wolf\",\"oid:bandit\",null]," +
-            "\"current\":0,\"actionPoints\":3},\"events\":");
+            "\"current\":0,\"actionPoints\":3},\"combatMode\":{\"hero\":false,\"critters\":[]},\"events\":");
         using var restored = Restore(Decode(text), RestoreOptions());
         Assert.AreEqual(text, GameSessionSnapshotCodec.Encode(restored.Capture()));
         Round(restored, 1, Wolf, 3, Wolf, Bandit, Hero);

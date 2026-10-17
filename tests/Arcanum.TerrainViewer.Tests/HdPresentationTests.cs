@@ -316,6 +316,29 @@ public sealed class HdPresentationTests
         Assert.IsFalse(residency.UploadsDeferred);
     }
 
+    // ARC-RENDER-016: two residencies share one source (AREA bodies and terrain chunks); each
+    // releases only the decoded pixels of its own questions, so a deferred upload of the other
+    // survives and binds on a later submission.
+    [TestMethod]
+    public void ResidenciesSharingASourceReleaseOnlyTheirOwnPixels()
+    {
+        var mine = Enumerable.Range(0, 2).Select(i => Frame("m" + i, 4, 4, i)).ToArray();
+        var theirs = Frame("t", 4, 4, 7);
+        using var source = new HdFrameSource(WritePack("scoped", 2, [.. mine, theirs]), 3);
+        var theirQuery = theirs.Query;
+        using var a = new HdResidency<FakeTexture>((w, h, rgba) => new FakeTexture(w, h, rgba), texture => texture.Disposed = true,
+            new HdDomainBudget(1 << 20, 0, 0), maxUploadsPerSubmission: 1, scope: query => query != theirQuery);
+        using var b = new HdResidency<FakeTexture>((w, h, rgba) => new FakeTexture(w, h, rgba), texture => texture.Disposed = true,
+            new HdDomainBudget(1 << 20, 0, 0), scope: query => query == theirQuery);
+        var draws = mine.Select(Draw).ToArray();
+        a.Submit(draws, source); b.Submit([Draw(theirs)], source); Drain(source);
+        // a uploads one of its two and defers the other; it must not drop b's decoded pixels.
+        a.Submit(draws, source);
+        Assert.AreEqual(HdSourceState.Ready, source.Peek(theirQuery).State, "the other residency's pixels are kept");
+        Assert.IsTrue(b.Submit([Draw(theirs)], source).Single().IsHd);
+        Assert.IsTrue(a.Submit(draws, source).All(binding => binding.IsHd), "a's deferred frame binds next");
+    }
+
     [TestMethod]
     public void StatsAndDomainBudgets()
     {
@@ -344,5 +367,47 @@ public sealed class HdPresentationTests
         var manifest = JsonNode.Parse(File.ReadAllText(Path.Combine(directory, "manifest.json")))!;
         Assert.AreEqual(1, manifest["entries"]!.AsArray().Count, "a repeated question is written once");
         Assert.ThrowsExactly<IOException>(() => HdNearestPack.Write(directory, "once", 4, [frame]));
+    }
+
+    // ARC-RENDER-016: composed level-0 chunks round-trip through a nearest 4× pack and the frame
+    // source; other composed pixels or another tile list are refused per chunk.
+    [TestMethod]
+    public void TerrainChunksResolveThroughThePackAndTheFrameSource()
+    {
+        var (raw, rawFrames) = AreaTerrainChunksTests.Terrain(new Random(16), 160);
+        // Real RGBA hashes in the frame keys, as the AREA owner carries them (the pack keeps the tile list).
+        var keys = rawFrames.ToDictionary(pair => pair.Key, pair => pair.Key with { RgbaSha256 = HdFrameQueries.Sha256(pair.Value.Rgba) });
+        var commands = raw.Select(command => command with { Frame = keys[command.Frame] }).ToArray();
+        var frames = rawFrames.ToDictionary(pair => keys[pair.Key], pair => pair.Value);
+        var terrain = AreaTerrainChunks.TryCreate(commands, frames)!;
+        var chunks = terrain.Chunks.Take(3).ToArray();
+        var pack = WritePack("chunks", 4, chunks.Select(chunk => HdNearestPack.Chunk(terrain, chunk)));
+        Assert.AreEqual((0, 3), (pack.SpriteCount, pack.TerrainChunkCount));
+        using var source = new HdFrameSource(pack, 2);
+        var queries = chunks.Select(chunk => (chunk, query: HdFrameQueries.FromTerrainChunk(terrain, chunk, terrain.Compose(chunk, 0)))).ToArray();
+        foreach (var (chunk, query) in queries)
+        {
+            Assert.AreEqual((chunk.X, chunk.Y, 512, 512), (query.Chunk!.X, query.Chunk.Y, query.Legacy.Width, query.Legacy.Height));
+            Assert.AreEqual(HdSourceState.Pending, source.Request(query, () => terrain.Compose(chunk, 0)).State);
+        }
+        // Another chunk of the plan is missing; the same coordinates with a repainted tile are changed.
+        var absent = terrain.Chunks.Skip(3).First();
+        var absentQuery = HdFrameQueries.FromTerrainChunk(terrain, absent, terrain.Compose(absent, 0));
+        source.Request(absentQuery, () => terrain.Compose(absent, 0));
+        var first = queries[0].query;
+        var repainted = new byte[512 * 512 * 4]; repainted[3] = 255;
+        var changed = HdSpriteQuery.ForTerrainChunk(first.Chunk!, new(512, 512, HdFrameQueries.Sha256(repainted)));
+        source.Request(changed, () => repainted);
+        Drain(source);
+        foreach (var (chunk, query) in queries)
+        {
+            var ready = source.Peek(query);
+            Assert.AreEqual(HdSourceState.Ready, ready.State);
+            CollectionAssert.AreEqual(HdNearestPack.Replicate(terrain.Compose(chunk, 0), 512, 512, 4), ready.Rgba, $"chunk {chunk}");
+        }
+        Assert.AreEqual(HdFallbackReason.FrameMissing, source.Peek(absentQuery).Reason);
+        Assert.AreEqual(HdFallbackReason.SourceMismatch, source.Peek(changed).Reason);
+        CollectionAssert.AreEqual(terrain.CommandsIn(chunks[0]).Select(command => command.Frame.RgbaSha256).ToArray(),
+            pack.Entries.Single(entry => entry.ChunkX == chunks[0].X && entry.ChunkY == chunks[0].Y).TileRgbaSha256!.ToArray(), "tiles in plan order");
     }
 }

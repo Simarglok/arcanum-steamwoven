@@ -58,7 +58,7 @@ public sealed class AreaTerrainChunksTests
     // Terrain-like commands: 78x40 tiles and 80x40 facades, cropped to frames that may be
     // larger, X-mirrored tiles, overlaps, transparent texels with non-zero RGB, negative
     // and chunk-crossing destinations.
-    private static (AreaDrawCommand[] Commands, Dictionary<AreaFrameKey, DecodedAreaFrame> Frames) Terrain(Random random, int count)
+    internal static (AreaDrawCommand[] Commands, Dictionary<AreaFrameKey, DecodedAreaFrame> Frames) Terrain(Random random, int count)
     {
         var frames = new Dictionary<AreaFrameKey, DecodedAreaFrame>(); var keys = new List<AreaFrameKey>();
         for (var f = 0; f < 12; f++)

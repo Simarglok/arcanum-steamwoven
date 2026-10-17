@@ -147,6 +147,8 @@ public partial class TerrainViewerApp
     private void BeginConversation(AreaSpeaker speaker)
     {
         if (_conversationHost is null || _conversationPanel is null || ConversationOpen) return;
+        // ARC-COMBAT-004: a dialog first leaves combat mode, and does not start while the hero is under attack.
+        if (!LeaveCombatModeForDialog()) { RefreshReadyStatus(); return; }
         QuarantineWorld();
         _conversationNotice = null;
         AreaConversationStart start;

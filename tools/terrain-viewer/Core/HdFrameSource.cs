@@ -9,6 +9,7 @@ public readonly record struct HdSourceStatus(HdSourceState State, HdFallbackReas
 
 /// <summary>The presentation layer's frame source for one active pack (ARC-RENDER-013 Frame
 /// binding). It resolves HD frames off the main thread through <see cref="HdPack.ResolveSprite"/>
+/// (terrain chunk questions through <see cref="HdPack.ResolveTerrainChunk"/>, ARC-RENDER-016)
 /// (file, hash, PNG, size and mask checks against this device's Legacy frame), keeps each
 /// refusal as a per-frame reason, and holds decoded pixels only until the caller has uploaded
 /// them (<see cref="Release"/>), so there is no whole-area HD CPU repository. Without a pack
@@ -111,7 +112,7 @@ public sealed class HdFrameSource : IDisposable
         // A query that contradicts its own pixels is a caller defect, and any other failure of
         // one frame (memory, a reader defect) still only costs that frame its HD texture: it
         // draws Legacy as Invalid, never stays Pending and never fails the view.
-        try { result = pack.ResolveSprite(query, legacy); }
+        try { result = query.Chunk is null ? pack.ResolveSprite(query, legacy) : pack.ResolveTerrainChunk(query, legacy); }
         catch (Exception error) when (error is not OperationCanceledException) { return new(HdSourceState.Refused, HdFallbackReason.Invalid); }
         return result.Status switch
         {
@@ -132,12 +133,15 @@ public sealed class HdFrameSource : IDisposable
             if (_slots.TryGetValue(query, out var slot) && slot.State == HdSourceState.Ready) _slots.Remove(query);
     }
 
-    /// <summary>Drops the pixels of every Ready question not in <paramref name="keep"/>.</summary>
-    public void ReleaseReadyExcept(IReadOnlySet<HdSpriteQuery> keep)
+    /// <summary>Drops the pixels of every Ready question not in <paramref name="keep"/>, only among
+    /// the questions <paramref name="scope"/> selects (all when null): a residency releases its own
+    /// questions, never another's (ARC-RENDER-016: AREA bodies and terrain chunks share a source).</summary>
+    public void ReleaseReadyExcept(IReadOnlySet<HdSpriteQuery> keep, Func<HdSpriteQuery, bool>? scope = null)
     {
         ArgumentNullException.ThrowIfNull(keep);
         lock (_gate)
-            foreach (var query in _slots.Where(pair => pair.Value.State == HdSourceState.Ready && !keep.Contains(pair.Key)).Select(pair => pair.Key).ToArray())
+            foreach (var query in _slots.Where(pair => pair.Value.State == HdSourceState.Ready && !keep.Contains(pair.Key) && (scope?.Invoke(pair.Key) ?? true))
+                         .Select(pair => pair.Key).ToArray())
                 _slots.Remove(query);
     }
 

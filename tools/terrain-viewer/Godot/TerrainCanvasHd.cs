@@ -7,8 +7,9 @@ namespace Arcanum.TerrainViewer;
 /// <summary>ARC-RENDER-014: the HD path of the AREA and WORLD canvas. Under profile Hd each
 /// character and object draw asks the frame source for its HD frame; a valid one is bound with
 /// the scaled crop and the unchanged destination, anything else draws Legacy with a typed
-/// reason (counted per submission). Terrain, terrain chunks and walls stay Legacy in this
-/// stage. Plans, picking, routes, light, the wall check and Session never see HD. ARC-UI-006 adds
+/// reason (counted per submission). ARC-RENDER-016 adds walls and the composed level-0 terrain
+/// chunks (tiles and facades) of the AREA; per-command terrain, decimated chunks (zoom below 1)
+/// and WORLD terrain stay Legacy. Plans, picking, routes, light, the wall check and Session never see HD. ARC-UI-006 adds
 /// the requested switch with its timed commit (<see cref="RequestVisualProfile"/>).</summary>
 public partial class TerrainCanvas
 {
@@ -17,12 +18,15 @@ public partial class TerrainCanvas
     private HdFrameSource? _hdSource;
     private HdDeviceBudget? _hdBudget;
     private HdResidency<ImageTexture>? _hdArea;
+    // ARC-RENDER-016: AREA terrain chunks under their own (terrain) budget.
+    private HdResidency<ImageTexture>? _hdTerrain;
     private HdResidency<ImageTexture>? _hdWorld;
     private long _hdSeenCompletions = -1;
     // The pack-less source made for Hd without a selected source; owned (disposed) here.
     private HdFrameSource? _hdOwnedSource;
-    /// <summary>Walls (ART class 1) stay Legacy in this stage.</summary>
-    private static bool HdArtClassEligible(int artClass) => artClass != 1;
+    // ARC-RENDER-016: the HD question of each level-0 chunk of the published map, made once (one
+    // compose and hash per chunk); dropped with the map's HD textures.
+    private readonly Dictionary<(int X, int Y), HdSpriteQuery> _hdChunkQueries = new();
 
     public VisualProfile VisualProfile => _visualSwitch.Active;
     /// <summary>The requested profile being prepared (ARC-UI-006), or null.</summary>
@@ -40,10 +44,15 @@ public partial class TerrainCanvas
     /// <summary>Counts of the last AREA and WORLD submissions (HD draws and Legacy draws by reason).</summary>
     public HdSubmissionStats AreaHdStats { get; } = new();
     public HdSubmissionStats WorldHdStats { get; } = new();
-    public int HdResidentCount => (_hdArea?.Count ?? 0) + (_hdWorld?.Count ?? 0);
-    public long HdResidentBytes => (_hdArea?.Bytes ?? 0) + (_hdWorld?.Bytes ?? 0);
-    internal long HdCreatedCount => (_hdArea?.CreatedCount ?? 0) + (_hdWorld?.CreatedCount ?? 0);
-    internal long HdDisposedCount => (_hdArea?.DisposedCount ?? 0) + (_hdWorld?.DisposedCount ?? 0);
+    public int HdResidentCount => (_hdArea?.Count ?? 0) + (_hdTerrain?.Count ?? 0) + (_hdWorld?.Count ?? 0);
+    public long HdResidentBytes => (_hdArea?.Bytes ?? 0) + (_hdTerrain?.Bytes ?? 0) + (_hdWorld?.Bytes ?? 0);
+    /// <summary>Resident HD terrain chunks and their bytes (ARC-RENDER-016).</summary>
+    public int HdTerrainResidentCount => _hdTerrain?.Count ?? 0;
+    public long HdTerrainResidentBytes => _hdTerrain?.Bytes ?? 0;
+    /// <summary>HD terrain chunks bound by the last AREA submission (not kept ones).</summary>
+    internal int HdTerrainVisibleCount => _hdTerrain?.VisibleFrames ?? 0;
+    internal long HdCreatedCount => (_hdArea?.CreatedCount ?? 0) + (_hdTerrain?.CreatedCount ?? 0) + (_hdWorld?.CreatedCount ?? 0);
+    internal long HdDisposedCount => (_hdArea?.DisposedCount ?? 0) + (_hdTerrain?.DisposedCount ?? 0) + (_hdWorld?.DisposedCount ?? 0);
     internal long HdAreaVisibleBytes => _hdArea?.VisibleBytes ?? 0;
 
     /// <summary>Selects the visual profile and the frame source it uses (null with Hd = every
@@ -98,7 +107,7 @@ public partial class TerrainCanvas
         if (_hdSource is { } source)
         {
             source.CancelPending();
-            _hdArea?.ReleaseToRetained(source); _hdWorld?.ReleaseToRetained(source);
+            _hdArea?.ReleaseToRetained(source); _hdTerrain?.ReleaseToRetained(source); _hdWorld?.ReleaseToRetained(source);
         }
         AreaHdStats.Clear(); WorldHdStats.Clear();
     }
@@ -122,8 +131,11 @@ public partial class TerrainCanvas
     private HdFrameSource ActiveHdSource => _hdSource ??= _hdOwnedSource = new HdFrameSource(null);
     private HdDeviceBudget ActiveHdBudget => _hdBudget ?? HdDeviceBudget.Ceiling(Math.Max(2, ActiveHdSource.Scale));
 
-    private HdResidency<ImageTexture> HdResidency(ref HdResidency<ImageTexture>? residency, Func<HdDeviceBudget, HdDomainBudget> domain)
-        => residency ??= new HdResidency<ImageTexture>(CreateHdTexture, texture => texture.Dispose(), domain(ActiveHdBudget));
+    private HdResidency<ImageTexture> HdResidency(ref HdResidency<ImageTexture>? residency, Func<HdDeviceBudget, HdDomainBudget> domain,
+        Func<HdSpriteQuery, bool>? scope = null)
+        => residency ??= new HdResidency<ImageTexture>(CreateHdTexture, texture => texture.Dispose(), domain(ActiveHdBudget), scope: scope);
+    private static bool IsChunkQuery(HdSpriteQuery query) => query.Chunk is not null;
+    private static bool IsFrameQuery(HdSpriteQuery query) => query.Chunk is null;
 
     private static ImageTexture CreateHdTexture(int width, int height, byte[] rgba)
     {
@@ -139,14 +151,14 @@ public partial class TerrainCanvas
         // finish, uploads were deferred or the bounded wait has passed.
         if (_visualSwitch.Pending == VisualProfile.Legacy || _visualSwitch.TimedOut(VisualClock())) return true;
         if (!HdTarget || _hdSource is not { } source) return false;
-        return source.CompletedCount != _hdSeenCompletions || _hdArea?.UploadsDeferred == true || _hdWorld?.UploadsDeferred == true;
+        return source.CompletedCount != _hdSeenCompletions || _hdArea?.UploadsDeferred == true || _hdTerrain?.UploadsDeferred == true || _hdWorld?.UploadsDeferred == true;
     }
 
     /// <summary>Releases every HD texture and drops pending decodes (map change, reload, exit, pack change).</summary>
     internal void ReleaseHd()
     {
-        _hdArea?.Dispose(); _hdArea = null; _hdWorld?.Dispose(); _hdWorld = null;
-        _hdSource?.Reset();
+        _hdArea?.Dispose(); _hdArea = null; _hdTerrain?.Dispose(); _hdTerrain = null; _hdWorld?.Dispose(); _hdWorld = null;
+        _hdSource?.Reset(); _hdChunkQueries.Clear();
         AreaHdStats.Clear(); WorldHdStats.Clear(); _hdSeenCompletions = -1;
     }
 
@@ -154,8 +166,9 @@ public partial class TerrainCanvas
     // on every actor step (ClearArea runs then too), which must not drop WORLD HD textures.
     private void ReleaseAreaHd()
     {
-        if (_hdArea is null) return;
-        _hdArea.Dispose(); _hdArea = null; _hdSource?.Reset(); AreaHdStats.Clear(); _hdSeenCompletions = -1;
+        if (_hdArea is null && _hdTerrain is null) return;
+        _hdArea?.Dispose(); _hdArea = null; _hdTerrain?.Dispose(); _hdTerrain = null;
+        _hdSource?.Reset(); AreaHdStats.Clear(); _hdSeenCompletions = -1; _hdChunkQueries.Clear();
     }
 
     // AREA: one binding per draw, Legacy (default) for every non-candidate.
@@ -169,7 +182,27 @@ public partial class TerrainCanvas
         for (var index = 0; index < draw.Count; index++)
         {
             var command = draw[index];
-            if (_areaChunkCommands.ContainsKey(command) || command.Identity is null) continue; // terrain stays Legacy
+            if (_areaChunkCommands.TryGetValue(command, out var chunk))
+            {
+                // Decimated chunks (zoom 2^-k with an integer origin) draw Legacy and are not candidates.
+                if (AreaChunkLevel != 0) continue;
+                // Without a usable pack or without chunk entries no chunk is composed for a question.
+                var refused = source.Pack is not { } pack ? HdFallbackReason.NoPack : pack.Review == HdReviewStatus.Rejected ? HdFallbackReason.PackRejected
+                    : pack.TerrainChunkCount == 0 ? HdFallbackReason.FrameMissing : (HdFallbackReason?)null;
+                if (refused is not null) { draws[index] = new(null, null, refused); continue; }
+                if (!HdCrop.Fits(command.Source, scale)) { draws[index] = new(null, null, HdFallbackReason.HdAxisLimit); continue; }
+                var terrain = _areaChunks!;
+                byte[]? fresh = null;
+                if (!_hdChunkQueries.TryGetValue(chunk, out var chunkQuery))
+                {
+                    fresh = terrain.Compose(chunk, 0);
+                    _hdChunkQueries[chunk] = chunkQuery = HdFrameQueries.FromTerrainChunk(terrain, chunk, fresh);
+                }
+                // The first request takes the bytes composed for the question; a later one composes again.
+                draws[index] = new(chunkQuery, () => { var bytes = fresh ?? terrain.Compose(chunk, 0); fresh = null; return bytes; });
+                continue;
+            }
+            if (command.Identity is null) continue; // per-command terrain stays Legacy
             if (command.Identity == ActorSentinel)
             {
                 var key = _actorPlan!.Current.TextureKey;
@@ -178,12 +211,20 @@ public partial class TerrainCanvas
                     : new(null, null, HdFallbackReason.HdAxisLimit);
                 continue;
             }
-            if (!HdArtClassEligible(command.ArtClass)) continue;
             if (!HdCrop.Fits(command.Source, scale)) { draws[index] = new(null, null, HdFallbackReason.HdAxisLimit); continue; }
             var frame = _areaFrames![command.Frame];
             draws[index] = new(HdFrameQueries.FromArea(command.Frame, frame), () => frame.Rgba);
         }
-        var bindings = HdResidency(ref _hdArea, HdDomainBudget.Area).Submit(draws, source);
+        // Terrain chunks go to their own residency (terrain budget), everything else to the AREA one;
+        // each binds in draw order and the bindings are merged back by index.
+        var isChunk = draw.Select(command => _areaChunkCommands.ContainsKey(command)).ToArray();
+        var bodyBindings = HdResidency(ref _hdArea, HdDomainBudget.Area, IsFrameQuery).Submit(draws.Select((d, i) => isChunk[i] ? HdDraw.None : d).ToArray(), source);
+        // The terrain residency is submitted whenever it exists (all None without chunks in view), so
+        // it keeps its textures within limits, drops its own decoded pixels and clears deferred uploads.
+        var chunkBindings = isChunk.Any(chunk => chunk) || _hdTerrain is not null
+            ? HdResidency(ref _hdTerrain, HdDomainBudget.Terrain, IsChunkQuery).Submit(draws.Select((d, i) => isChunk[i] ? d : HdDraw.None).ToArray(), source)
+            : new HdBinding<ImageTexture>[draw.Count];
+        var bindings = bodyBindings.Select((binding, i) => isChunk[i] ? chunkBindings[i] : binding).ToArray();
         if (!HdActive && !CommitPreparedHd(bindings)) return new HdBinding<ImageTexture>[draw.Count];
         foreach (var binding in bindings) if (binding.Candidate) AreaHdStats.Add(binding.Reason);
         return bindings;
@@ -238,7 +279,7 @@ public partial class TerrainCanvas
         var source = ActiveHdSource;
         var pack = source.Pack is { } p ? $"pack {p.Id} {p.Scale}x {p.Review.ToString().ToLowerInvariant()}" : "no pack";
         var stats = _area is not null ? AreaHdStats : WorldHdStats;
-        return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}; terrain and walls Legacy" + switching;
+        return $"visual HD {pack}: {stats.Format()}, HD textures {HdResidentCount}/{HdResidentBytes} bytes, decoding {source.PendingCount}{(_area is not null && AreaChunkLevel != 0 ? "; terrain Legacy below zoom 1" : "")}" + switching;
     }
 }
 

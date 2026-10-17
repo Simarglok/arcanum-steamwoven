@@ -150,11 +150,14 @@ public sealed record SessionCombatResult(GameSessionDisposition Disposition, Gam
     public SessionLifeResult? Life { get; init; }
 }
 
-/// <summary>The round domain of one owner: the saved round and the unsaved stalled-actor check.</summary>
+/// <summary>The round domain of one owner: the saved round, the unsaved stalled-actor check and the saved combat-mode flags
+/// (ARC-COMBAT-004).</summary>
 internal sealed class CombatDomain
 {
     internal CombatRound? Round { get; set; }
     internal TurnBasedStall<SessionCombatant> Stall { get; set; }
+    internal bool HeroCombatMode { get; set; }
+    internal SortedSet<string> Critters { get; } = new(StringComparer.Ordinal);
 }
 
 internal sealed class CombatRound(int turn, List<SessionCombatant> participants, int current, int actionPoints)

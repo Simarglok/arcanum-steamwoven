@@ -479,7 +479,9 @@ repository; the table records only the observed behaviour.
   top, sectors from the left, and inside a sector the critter that entered it
   last first ([ledger TB13](original-verification-ledger.md#turn-based-round-arc-combat-003)).
 - **O3** The Speed-scaled animation rate (`sub_437990`), so the real-time
-  cadence as a function of Speed, was not read.
+  cadence as a function of Speed, was not read. *Answered by ARC-COMBAT-004:* the attack rate per weapon slot and
+  Speed, the frame pause and the goal timeline, read in CE and the original
+  ([ledger RT8–RT11](original-verification-ledger.md#real-time-combat-arc-combat-004)).
 - **O4** The line-of-fire test `sub_4ADE00` (the 26 threshold and the cover
   rating) belongs to FR-COMBAT-007 and was not read.
 - **O5** How AI chooses attacks, flees or ends its subturn early

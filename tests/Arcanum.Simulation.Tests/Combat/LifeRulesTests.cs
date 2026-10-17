@@ -29,6 +29,18 @@ public sealed class LifeRulesTests
     }
 
     [TestMethod]
+    public void AFatigueChargeAddsToTheDamageWhateverTheImmunities()
+    {
+        // ARC-COMBAT-004: the run charge in combat mode is a plain fatigue write, not a damage step.
+        Assert.AreEqual(new LifeOutcome(Hurt(fatigue: 3), Hurt(fatigue: 4), LifeEvents.None, 0, DeathAnimation.None), LifeRules.ChargeFatigue(Hurt(fatigue: 3), Plain, 1));
+        Assert.AreEqual(1, LifeRules.ChargeFatigue(Hurt(), Plain with { Traits = LifeTraits.FatigueImmune | LifeTraits.Invulnerable }, 1).After.FatigueDamage);
+        Assert.AreEqual(LifeEvents.LostConsciousness, LifeRules.ChargeFatigue(Hurt(fatigue: 29), Plain, 1).Events, "30 fatigue: the 30th point knocks out");
+        Assert.AreEqual(LifeEvents.None, LifeRules.ChargeFatigue(Hurt(fatigue: 29), Plain with { Traits = LifeTraits.Undead }, 1).Events);
+        Assert.AreEqual(LifeLimits.MaxDamage, LifeRules.ChargeFatigue(Hurt(fatigue: LifeLimits.MaxDamage), Plain, 1).After.FatigueDamage);
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => LifeRules.ChargeFatigue(Hurt(), Plain, 0));
+    }
+
+    [TestMethod]
     public void MaximaFollowTheSourceFormulas()
     {
         Assert.AreEqual((30, 30), (LifeRules.MaxHitPoints(Plain, 0), LifeRules.MaxFatigue(Plain)));

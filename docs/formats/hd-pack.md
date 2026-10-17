@@ -5,10 +5,10 @@ Code: [`src/Arcanum.Data/Hd`](../../src/Arcanum.Data/Hd); tests:
 [`tests/Arcanum.Data.Tests/Hd`](../../tests/Arcanum.Data.Tests/Hd). Nothing here draws
 an HD frame: binding textures, caches and the HUD are the viewer's
 ([ARC-RENDER-014](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)), the setting, toggle and
-active pack choice the viewer's too ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)), the build tool (`./arcanum hd-build` / `hd-import`) is ARC-DEV-003, terrain
-chunks are ARC-RENDER-016. The rules this format serves are in the
-[HD presentation contract](../rendering/hd-presentation-contract.md) (ARC-RENDER-013, with
-its ARC-DATA-014 amendment).
+active pack choice the viewer's too ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006)), the build tool (`./arcanum hd-build` / `hd-import`) is ARC-DEV-003.
+Terrain chunk entries are bound since ARC-RENDER-016 (`ResolveTerrainChunk`). The rules this
+format serves are in the [HD presentation contract](../rendering/hd-presentation-contract.md)
+(ARC-RENDER-013, with its ARC-DATA-014 and ARC-RENDER-016 amendments).
 
 Owner decisions it follows (2026-10-16, [decisions](../architecture/decisions.md), HD
 pack): the pack is a separate local directory outside the repository and is not
@@ -122,7 +122,7 @@ checks bind the entry to this device's Legacy frame:
   ART); anything else, including another frame of an ART the pack has, is
   `FrameMissing`.
 
-### Terrain chunk entries (reserved)
+### Terrain chunk entries
 
 ```json
 { "kind": "terrainChunk", "file": "chunks/4_1.png", "sha256": "…", "bytes": 1, "slice": "ground",
@@ -133,11 +133,23 @@ checks bind the entry to this device's Legacy frame:
 ```
 
 Terrain is upscaled as composed 512-pixel chunks with neighbour padding, never tile by
-tile (ARC-RES-033). The kind is **reserved**: it is parsed, validated (size equal to the
-recipe's `terrain.chunkSize`, padding equal to its `terrain.padding` ≥ 32, legacy size
-equal to the chunk, 1..4,096 tile hashes, slice selecting `terrainChunk`) and
-integrity-checked, but never bound; how a chunk is keyed to a chart and drawn is the
-ARC-RENDER-016 amendment.
+tile (ARC-RES-033). An entry is parsed, validated (size equal to the recipe's
+`terrain.chunkSize`, padding equal to its `terrain.padding` ≥ 32, legacy size equal to the
+chunk, 1..4,096 tile hashes, slice selecting `terrainChunk`) and integrity-checked like a
+sprite. The file is exactly `scale · size` square: the padding is neighbour context used
+while building and cropped away, never stored.
+
+**Binding a chunk (ARC-RENDER-016).** The viewer asks `HdPack.ResolveTerrainChunk` with an
+`HdSpriteQuery` made by `HdSpriteQuery.ForTerrainChunk`: chunk coordinates as
+`AreaTerrainChunks` numbers them in the map's chart, the SHA-256 of the composed level-0
+Legacy chunk (transparent where no tile is drawn) and `HdChunkKey.TilesDigest` of the
+`tiles` list (the SHA-256 of the lowercase hex hashes, each followed by a line feed). The
+`chunk.x`/`chunk.y` pair is unique per slice only, so one pack can hold the chunks of two
+maps in two slices (for example `exterior-ground` and `cave-ground`): candidates at the
+coordinates are matched by composed Legacy frame and tile digest. No entry at those
+coordinates is `FrameMissing`; entries there that all differ are `SourceMismatch` (a mod or
+another version changed a tile); then the entry's review mark, file, PNG, size and alpha
+checks apply as for a frame, against the composed chunk's binary alpha.
 
 ## Frame files
 
@@ -324,9 +336,9 @@ handheld (Steam Deck class) that also wants room for the game.
 ## Not ready / out of scope
 
 - The setting, toggle and diagnostic key are ARC-UI-006's and the HD draw, caches and HUD counter
-  ARC-RENDER-014's ([viewer](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)); no build or import command (ARC-DEV-003). The before/after
-  review (ARC-RENDER-015) reviews sprite entries only; terrain chunk entries are never
-  bound or reviewed (ARC-RENDER-016).
+  ARC-RENDER-014/016's ([viewer](../rendering/terrain-viewer.md#hd-render-path-arc-render-014)); no build or import command (ARC-DEV-003). The before/after
+  review (ARC-RENDER-015) reviews sprite entries only; terrain chunk entries are bound in the
+  AREA view (ARC-RENDER-016) but not shown by the review tool.
 - One active pack; layering several packs is not defined. A whole-game manifest near the
   limits needs about its own size in memory to open; an index split is a later change.
 - Archive import, pack signing and any distribution mechanism are out of scope (the pack
