@@ -89,15 +89,17 @@ pinned by the test (a map that starts publishing joins the list). The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
-What stops the other 26 (counts of issues, not maps; a one-off measurement
-with a scratch runner over `AreaMapPlans` on the installed original at the PR
-head, not asserted by tests):
+What stops the other 26 is measured map by map in the
+[whole-map art gaps study](../research/whole-map-art-gaps.md) (ARC-RES-050, census at
+`1ec13f5`, not asserted by tests): 245 object bodies outside K'na Tha and the frame
+budget of K'na Tha. No eye-candy overlay is active at T0 in any interior.
 
-| Cause | Issues | Next |
+| Cause | Objects | Next |
 | --- | ---: | --- |
-| Unsupported art states (eye-candy overlays, critter poses beyond the admitted set) | 138 | overlays and poses |
-| Critter ART the owner's path rule does not find in any archive (a unique NPC and a monster pose) | 114 | the original's missing-art fallback |
-| Frame budget cap of the largest map (K'na Tha, 43,219 objects) | 15,367 | stream large maps |
+| Concealed monsters (animation 5, art present) | 132 | the original's name rules (ARC-DATA-023) |
+| Unique NPC `dgnuw` and the `AIR` monster standing with no weapon without that file | 111 | the original's missing-art repair (ARC-DATA-023) |
+| A damaged wall; a scenery object with tile art | 2 | damaged wall names, tile-art bodies (ARC-DATA-023) |
+| K'na Tha: encoded-frame budget after 28,091 frame requests (260 distinct art ids among 43,219 objects) | 15,367 + 7 | decode each distinct frame once (ARC-DATA-024) |
 
 Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
 19 maps were complete; those added 2,568 objects of the types the owner did not

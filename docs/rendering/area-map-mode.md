@@ -156,8 +156,10 @@ lighting and is left to its own task.
 
 ## Not yet
 
-- Eye-candy overlays and the remaining critter poses; the
-  original's missing-art fallback; K'na Tha's frame budget (streaming).
+- The 26 incomplete interiors: concealed monsters, critters without standing
+  art, one damaged wall, one tile-art scenery object and K'na Tha's frame budget
+  ([whole-map art gaps](../research/whole-map-art-gaps.md), ARC-RES-050; slices
+  ARC-DATA-023 and ARC-DATA-024).
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).
