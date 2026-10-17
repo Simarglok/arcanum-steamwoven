@@ -16,6 +16,9 @@ public enum ScriptContentStatus
     Invalid,
     /// <summary>The winning copy's bytes differ from the first read of the same path through this object.</summary>
     Changed,
+    /// <summary>ARC-SCRIPT-012: the DLG holds no record the original keeps (<c>dialog_load</c> 0x412E10 then refuses the
+    /// file, so the game shows nothing from it).</summary>
+    Empty,
 }
 
 /// <summary>A script read: the program when <see cref="Status"/> is <see cref="ScriptContentStatus.Read"/>.
@@ -34,7 +37,8 @@ public sealed record ScriptContentOpenResult(ContentStackStatus Status, ScriptCo
 /// <see cref="ScriptNameIndex"/> picks the name, the content stack's winning copy of that path is read, as the original
 /// opens it. Each read goes to the stack again; the first bytes read for a path are remembered by SHA-256, and a later
 /// read that differs is <see cref="ScriptContentStatus.Changed"/>, so one object never mixes two versions of a file.
-/// Thread-safe for reads.
+/// Dialogs are read as the original reads them (<see cref="DlgReadMode.Original"/>, ARC-SCRIPT-012) unless the caller
+/// passes other reader options. Thread-safe for reads.
 /// </summary>
 public sealed class ScriptContent : IDisposable
 {
@@ -48,9 +52,12 @@ public sealed class ScriptContent : IDisposable
 
     private ScriptContent(ContentStack stack, bool ownsStack, ScrReaderOptions? scripts, DlgReaderOptions? dialogs)
     {
-        _stack = stack; _ownsStack = ownsStack; _scripts = scripts ?? new(); _dialogs = dialogs ?? new();
+        _stack = stack; _ownsStack = ownsStack; _scripts = scripts ?? new(); _dialogs = dialogs ?? OriginalDialogs;
         Names = ScriptNameIndex.Build(stack);
     }
+
+    /// <summary>The default dialog reading: the original's (ARC-DATA-017), with the default limits.</summary>
+    public static DlgReaderOptions OriginalDialogs { get; } = new() { Mode = DlgReadMode.Original };
 
     public ScriptNameIndex Names { get; }
     /// <summary>The mount plan the files come from.</summary>
@@ -104,14 +111,20 @@ public sealed class ScriptContent : IDisposable
             : new(ScriptContentStatus.Invalid, name, null, $"{name.ScriptPath}: {read.Status}");
     }
 
-    /// <summary>The dialog of script <paramref name="number"/>: the script's name with <c>dlg</c> folder and extension.</summary>
+    /// <summary>The dialog of script <paramref name="number"/>: the script's name with <c>dlg</c> folder and extension. A
+    /// document whose original read stopped early keeps the records before the stop, as the game does
+    /// (<see cref="DlgDocument.StopReason"/>).</summary>
     public DialogRead Dialog(int number)
     {
         if (Names.Find(number) is not { } name) return new(ScriptContentStatus.NoName, null, null, $"script {number} has no name");
         var (status, bytes, detail) = ReadWinner(name.DialogPath);
         if (status != ScriptContentStatus.Read) return new(status, name, null, detail);
-        try { return new(ScriptContentStatus.Read, name, DlgReader.Read(bytes, _dialogs), name.DialogPath); }
+        DlgDocument document;
+        try { document = DlgReader.Read(bytes, _dialogs); }
         catch (DlgException exception) { return new(ScriptContentStatus.Invalid, name, null, $"{name.DialogPath}: {exception.GetType().Name}"); }
+        return document.Records.Count == 0
+            ? new(ScriptContentStatus.Empty, name, null, $"{name.DialogPath}: no record the original keeps ({document.StopReason})")
+            : new(ScriptContentStatus.Read, name, document, name.DialogPath);
     }
 
     private (ScriptContentStatus, byte[], string) ReadWinner(string path)

@@ -77,13 +77,13 @@ public sealed class ScriptContentTests
         Base();
         Loose("scr/00001short.scr", new byte[10]);
         Loose("scr/00002ok.scr", Script(1));
-        Loose("dlg/00002ok.dlg", Encoding.Latin1.GetBytes("{1}{unterminated"));
+        Loose("dlg/00002ok.dlg", Encoding.Latin1.GetBytes("{1}{nul\0}{}{}{}{}{}"));
         Loose("scr/00003ok.scr", Script(1));
         Loose("dlg/00003ok.dlg", Dialog);
         using var content = Open();
         Assert.AreEqual(ScriptContentStatus.Invalid, content.Script(1).Status);
         Assert.AreEqual("scr/00001short.scr: Truncated", content.Script(1).Detail);
-        Assert.AreEqual(ScriptContentStatus.Invalid, content.Dialog(2).Status);
+        Assert.AreEqual(ScriptContentStatus.Invalid, content.Dialog(2).Status, "a NUL byte is refused in the original read too");
         Assert.AreEqual(ScriptContentStatus.Read, content.Script(3).Status);
         Assert.AreEqual(ScriptContentStatus.Read, content.Dialog(3).Status);
         Assert.IsFalse(content.Changed);
@@ -95,6 +95,40 @@ public sealed class ScriptContentTests
         Loose("scr/00003ok.scr", Script(1));
         Assert.AreEqual(ScriptContentStatus.Read, content.Script(3).Status, "the first bytes again");
         Assert.IsTrue(content.Changed, "a change is remembered");
+    }
+
+    [TestMethod]
+    public void Dialogs_are_read_as_the_original_reads_them_and_an_empty_one_is_not_opened()
+    {
+        Base();
+        foreach (var n in new[] { 1, 2, 3, 4, 5, 6 }) Loose($"scr/0000{n}s.scr", Script(1));
+        Loose("dlg/00005s.dlg", Encoding.Latin1.GetBytes("// only a comment\r\n"));                     // no record at all
+        Loose("dlg/00006s.dlg", Encoding.Latin1.GetBytes("{1}{First stops.}{}{}{}{#}{}{2}{Never.}{}{}{}{}{}")); // the first record stops
+        Loose("dlg/00001s.dlg", Encoding.Latin1.GetBytes("{1}{Hello.} {}{}{}{}{}\r\n\t{2}{Bye.}{}{1}{}{0}{}"));  // spaces and tabs between fields
+        Loose("dlg/00002s.dlg", Encoding.Latin1.GetBytes("{1}{Only six fields.}{}{}{}{}"));                         // the record lacks its last field
+        Loose("dlg/00003s.dlg", Encoding.Latin1.GetBytes("{1}{Kept.}{}{}{}{}{}{2}{Cut}{}{1}{}{#}{}{3}{Lost.}{}{}{}{}{}")); // stops at '#'
+        Loose("dlg/00004s.dlg", Encoding.Latin1.GetBytes("{1}{Hi.}{}{}{}{}{} {2}{Bye.}{}{5, -17}{}{0}{}"));                // atoi reads 5
+        using var content = Open();
+        var spaced = content.Dialog(1);
+        Assert.AreEqual(ScriptContentStatus.Read, spaced.Status, spaced.Detail);
+        Assert.AreEqual(DlgReadMode.Original, spaced.Document!.Mode);
+        Assert.AreEqual(2, spaced.Document.Records.Count);
+        var empty = content.Dialog(2);
+        Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00002s.dlg: no record the original keeps (IncompleteRecord)"), (empty.Status, empty.Detail));
+        Assert.IsNull(empty.Document);
+        Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00005s.dlg: no record the original keeps (EndOfInput)"), (content.Dialog(5).Status, content.Dialog(5).Detail));
+        Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00006s.dlg: no record the original keeps (HashResponse)"), (content.Dialog(6).Status, content.Dialog(6).Detail));
+        var stopped = content.Dialog(3);
+        Assert.AreEqual(ScriptContentStatus.Read, stopped.Status);
+        Assert.AreEqual((1, DlgStopReason.HashResponse), (stopped.Document!.Records.Count, stopped.Document.StopReason));
+        Assert.AreEqual(5, content.Dialog(4).Document!.Records[1].IqValue);
+
+        // A caller may still ask for the strict reader.
+        var discovery = ContentMountPlan.Discover(_root, "Mod");
+        using var strict = ScriptContent.Open(discovery.Plan!, dialogs: new DlgReaderOptions()).Content!;
+        Assert.AreEqual(ScriptContentStatus.Invalid, strict.Dialog(1).Status);
+        Assert.AreEqual(ScriptContentStatus.Invalid, strict.Dialog(2).Status);
+        Assert.AreEqual(DlgReadMode.Original, ScriptContent.OriginalDialogs.Mode);
     }
 
     [TestMethod]

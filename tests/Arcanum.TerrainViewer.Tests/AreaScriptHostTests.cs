@@ -145,14 +145,16 @@ public sealed class AreaScriptHostTests
             Write("modules/Syn.dat", AreaOwnerFixture.Dat(("dlg\\00777test.dlg", dlg), ("scr\\00777test.scr", program)));
             Write("scr/00777test.scr", new byte[3]);
             Write("scr/00778twice.scr", program); Write("scr/00778again.scr", program);
-            Write("dlg/00778again.dlg", dlg); Write("dlg/00778twice.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{unterminated"));
+            Write("dlg/00778again.dlg", dlg); Write("dlg/00778twice.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{nul\0}{}{}{}{}{}"));
+            Write("scr/00782empty.scr", program); Write("dlg/00782empty.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Six fields.}{}{}{}{}"));
+            Write("scr/00783spaced.scr", program); Write("dlg/00783spaced.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Hello.} {}{}{}{}{}\r\n\t{2}{Bye.}{}{1}{}{0}{}"));
             Write("scr/00779named.scr", program); Write("dlg/00779named.dlg", dlg);
             Write("dlg/00781other.dlg", dlg); Write("scr/00781other2.scr", program);
 
             Assert.AreEqual(AreaContentRootStatus.ModuleOutsideGameRoot, AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "Syn.dat")).Status);
             Assert.AreEqual(AreaContentRootStatus.MountFailed, AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Absent.dat")).Status);
             var load = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat"));
-            Assert.AreEqual((AreaContentRootStatus.Ready, "4 script numbers"), (load.Status, load.Detail));
+            Assert.AreEqual((AreaContentRootStatus.Ready, "6 script numbers"), (load.Status, load.Detail));
             using var content = load.Content!;
             using var f = Create();
             var host = new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, content);
@@ -165,6 +167,10 @@ public sealed class AreaScriptHostTests
             Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 2).Status, "node 2 is a PC reply");
             Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 9).Status);
             Assert.AreEqual(AreaConversationStartStatus.DialogUnreadable, AreaScriptHost.LoadDialog(content, 778, 1).Status, "00778twice.dlg, the winning name's");
+            // ARC-SCRIPT-012: the game opens no DLG without records; one with a space between fields reads.
+            Assert.AreEqual((AreaConversationStartStatus.DialogResourceMismatch, "dialog 782: dlg/00782empty.dlg: no record the original keeps (IncompleteRecord)"),
+                (AreaScriptHost.LoadDialog(content, 782, 1).Status, AreaScriptHost.LoadDialog(content, 782, 1).Detail));
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 783, 1).Status);
             Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 781, 1).Status, "00781other.dlg is not script 781's name");
             Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 780, 1).Status);
 
