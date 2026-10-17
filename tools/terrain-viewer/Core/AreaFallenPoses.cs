@@ -121,6 +121,9 @@ public sealed class AreaFrameOverlay : IReadOnlyDictionary<AreaFrameKey, Decoded
     public AreaFrameOverlay(IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> map) => Map = map ?? throw new ArgumentNullException(nameof(map));
 
     public IReadOnlyDictionary<AreaFrameKey, DecodedAreaFrame> Map { get; }
+    /// <summary>The frames added so far and their RGBA bytes.</summary>
+    public int AddedCount => _added.Count;
+    public long AddedBytes => _added.Values.Sum(frame => (long)frame.Rgba.Length);
 
     /// <summary>Adds a frame; a key already present must hold the same pixels.</summary>
     public void Add(AreaFrameKey key, DecodedAreaFrame frame)

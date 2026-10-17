@@ -50,9 +50,12 @@ public partial class TerrainViewerApp
             var targetCell = map.Chart.ToChart(new(target.Row.WorldX!.Value, target.Row.WorldY!.Value));
             // A standable cell 2..4 cells from the target, so the click walks within reach first.
             CellCoord? start = null;
-            foreach (var range in new[] { 3, 2, 4 })
+            foreach (var (dx, dy) in new[] { (3, 0), (-3, 0), (0, 3), (0, -3), (3, 3), (-3, -3), (2, 0), (-2, 0), (0, 2), (0, -2) })
             {
-                var cell = AreaSmokeStandable(map, targetCell, range);
+                var near = new CellCoord(targetCell.X + dx, targetCell.Y + dy);
+                if (!map.Chart.Contains(near)) continue;
+                CellCoord cell;
+                try { cell = AreaSmokeStandable(map, near, 1); } catch (InvalidOperationException) { continue; }
                 var d = Math.Max(Math.Abs(cell.X - targetCell.X), Math.Abs(cell.Y - targetCell.Y));
                 if (d >= 2) { start = cell; break; }
             }
@@ -94,10 +97,13 @@ public partial class TerrainViewerApp
             Require(_fallenBodies.ContainsKey(key), "the body is drawn fallen");
 
             // A corpse clicked in combat mode without Alt does nothing.
+            point = await HoverPointAsync(this, _fallenBodies[key]) ?? throw new InvalidOperationException("ARC-COMBAT-005 smoke: corpse not visible");
             HoverAtForSelfTest(point);
             var corpseHover = HoverActionForSelfTest;
+            Require(corpseHover == AreaHoverAction.None, "corpse hover " + corpseHover);
+            var route = _worldRoute?.Target;
             AreaSmokeClick(point);
-            Require(_attack is null && !InventoryOpen, "a corpse click without Alt does nothing");
+            Require(_attack is null && !InventoryOpen && _worldRoute?.Target == route, "a corpse click without Alt does nothing");
             ToggleCombatMode();
             HoverReleaseForSelfTest();
             // The later stages see the map as it was: the NPC is brought back (experience stays).

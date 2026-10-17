@@ -298,6 +298,10 @@ public partial class TerrainViewerApp
         return overlay.Frames;
     }
 
+    /// <summary>The poses added to the shown map's repository: they may be resident besides its own frames.</summary>
+    private (int Frames, long Bytes) AreaOverlayExtra() => _areaOverlay is { } overlay && ReferenceEquals(overlay.Area, _readyArea)
+        ? (overlay.Frames.AddedCount, overlay.Frames.AddedBytes) : (0, 0);
+
     /// <summary>The bodies drawn away from their T0 command: companions where they stand, then the fallen bodies (a companion's
     /// own command wins).</summary>
     private IReadOnlyList<AreaDrawCommand>? AreaMovingCommands()
