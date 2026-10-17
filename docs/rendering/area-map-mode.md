@@ -70,8 +70,9 @@ Opt-in `RealData` tests (`tests/Arcanum.TerrainViewer.Tests/AreaMapLoadOriginalT
 `DAT_ROOT` = the game folder): four interiors load with a drawable plan, step
 evidence and a session the walker can leave (the cave spawns on the pinned
 cave's arrival 2087,2018); all interiors whose strict snapshot is
-complete load in the viewer: 79 since ARC-DATA-023 (every interior but K'na Tha;
-the original's [art names and bad art](../world/whole-map-plans.md#rules-of-a-whole-map-plan)),
+complete load in the viewer: all 80 since ARC-DATA-024 (K'na Tha's shared frame
+selections), 79 since ARC-DATA-023 (the original's
+[art names and bad art](../world/whole-map-plans.md#rules-of-a-whole-map-plan)),
 54 before it and 49 before ARC-RENDER-018, which draws the
 [body blends and wading](#body-blends-and-wading-arc-render-018) of five of them.
 
@@ -89,7 +90,10 @@ standing art), `dernholm pits` (damaged wall), `caladon-panarrii temple` (tile-a
 scenery) and `tulla interior` (42 sectors, repaired `AIR` monster, vault PASS); the
 first of four `crematorium-lev 2` runs, right after a build, stopped at the
 resource sweep's coverage check (`AREA_RESOURCES_SWEEP_COVERAGE`, a command not
-seen in any view) and the three repeats passed, so the cause is not known. A small map may fit every GPU cache, so map mode does not
+seen in any view) and the three repeats passed, so the cause is not known.
+Since ARC-DATA-024 also on `k'na tha` (77 sectors, 315,392 terrain cells, 43,087
+drawn bodies, 416 frames, 8.6 MB of frames; load about 187 s; wading blend, vault,
+sweep of 2,728 views and reload PASS). A small map may fit every GPU cache, so map mode does not
 require evictions in the sweep; every per-view budget and the ownership balance
 still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
@@ -164,9 +168,10 @@ lighting and is left to its own task.
 
 ## Not yet
 
-- K'na Tha, the one interior whose strict snapshot is incomplete: its frame
-  budget (ARC-DATA-024, [whole-map art gaps](../research/whole-map-art-gaps.md)).
-  The other 25 interiors of ARC-RES-050 load since ARC-DATA-023.
+- K'na Tha loads (ARC-DATA-024) but slowly: about 3 minutes in a source run,
+  almost all in the scene plan, which looks up each body's visual by scanning every
+  visual (43,219 objects), and about half a minute in the wall check and frame copy
+  (ARC-RENDER-019).
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).

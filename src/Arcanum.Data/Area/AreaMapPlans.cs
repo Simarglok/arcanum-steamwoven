@@ -166,8 +166,9 @@ public static class AreaMapPlans
         var factor = Math.Clamp(Math.Max(sectors / 20.0, objects / 524.0), 1.0, MaxLimitScale);
         long Scale(long value) => (long)Math.Ceiling(value * factor);
         var visuals = Math.Min(int.MaxValue, checked(sectors * 4096L + objects * 4 + 64));
-        // Frame budgets count every visual's ART read while the snapshot is built; interiors read
-        // larger ART per visual than the exterior, so whole maps get the capped budget outright.
+        // Frame budgets count every decoded frame while the snapshot is built (one per distinct
+        // selection on a whole map, ARC-DATA-024); interiors read larger ART per frame than the
+        // exterior, so whole maps get the capped budget outright.
         long Frames(long value) => (long)Math.Ceiling(value * MaxLimitScale);
         return new()
         {

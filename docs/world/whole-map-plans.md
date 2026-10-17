@@ -108,24 +108,33 @@ A whole-map plan also:
     does; the visual's policy is `original-badart-v1`. A name the mapping cannot
     build (no list entry) and an ambiguous name stay refused. Terrain and facade
     cells keep their strict resolution (the original's cache would draw bad art for
-    them too; no cell of the 79 complete interiors needs it).
+    them too; no installed cell needs it);
+- decodes each distinct frame selection (entry, group, frame, palette, fallback policy
+  and whether the art class is a wall or portal) once
+  per build and copies its frame facts (size, hot spot, offsets, payload and pixel
+  hashes, policy) into every later visual with that selection, each keeping its own
+  key, raw and lookup art, facing, mirror flag, offsets and scale (ARC-DATA-024).
+  Budget admissions and decodes are therefore per distinct selection, as terrain
+  selections already were; pinned profiles keep one admission and decode per
+  visual.
 
 ## Result on the installed original
 
 Opt-in `AreaMapPlansRealDataTests` (`DAT_ROOT`): all 80 interiors get a plan,
-open and inspect without an exception; 79 publish a complete snapshot and are
-pinned by the test (a map that starts publishing joins the list): all but K'na Tha
-since ARC-DATA-023 (54 before), and none of them draws bad art. The Crash Site
+open and inspect without an exception and all 80 publish a complete snapshot,
+pinned by the test: 54 until ARC-DATA-023, 79 (all but K'na Tha) until ARC-DATA-024.
+None of them draws bad art. The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
 What stopped the other 26 is measured map by map in the
 [whole-map art gaps study](../research/whole-map-art-gaps.md) (ARC-RES-050): 132
 concealed monsters, 111 critters without standing art, a damaged wall and a
-tile-art scenery object, all drawn since ARC-DATA-023, and K'na Tha. K'na Tha still
-stops at the cumulative encoded-frame budget after 28,091 frame requests (15,374
-objects refused; 260 distinct art ids among its 43,219 objects); decoding each
-distinct frame once is ARC-DATA-024. No eye-candy overlay is active at T0 in any
+tile-art scenery object, all drawn since ARC-DATA-023, and K'na Tha, which stopped
+at the cumulative encoded-frame budget after 28,091 frame requests (15,374 objects
+refused; 260 distinct art ids among its 43,219 objects). With shared frame
+selections (ARC-DATA-024) K'na Tha needs 477 frame decodes and inspects in about
+8 s (Release, scratch runner). No eye-candy overlay is active at T0 in any
 interior.
 
 Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
