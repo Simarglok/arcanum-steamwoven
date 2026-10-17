@@ -32,6 +32,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly PartyDomain _party;
     private readonly InventoryDomain _inventory;
     private readonly EquipmentDomain _equipment;
+    private readonly EffectDomain _effects;
     private readonly HeroDomain? _hero;
     private readonly LifeDomain _life;
     private readonly ReactionDomain _reactions;
@@ -41,6 +42,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private ISessionEventWorld? _passWorld;
     private List<SessionLifeFiring>? _passFirings;
     private List<SessionScriptCallFiring>? _passCalls;
+    private List<SessionEffectFiring>? _passEffects;
     // Replaced, not mutated, when a life step that drew on a trial copy commits.
     private SeededRandom _random;
     private readonly SessionCombatRolls _combatRolls;
@@ -54,11 +56,11 @@ public sealed partial class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, SeededRandom random, LifeDomain life,
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects, SeededRandom random, LifeDomain life,
         ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _random = random; _life = life; _reactions = reactions;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _effects = effects; _random = random; _life = life; _reactions = reactions;
         _combat = combat;
         _lighting = lighting;
         _events = events;
@@ -106,7 +108,7 @@ public sealed partial class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(), new(descriptor.RandomSeed), life, new(), new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
+            new(), new(), new(descriptor.RandomSeed), life, new(), new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -141,12 +143,14 @@ public sealed partial class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportEffects(snapshot.Effects, hero, life, out var effects);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportReactions(snapshot.Reactions, limits, out var reactions);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportCombat(snapshot.Combat, hero is not null, out var combat);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
-        failure = ImportEvents(snapshot.Events, hero is not null, life, snapshot.Clock.GameTimestampMs, sink,
+        failure = ImportEvents(snapshot.Events, hero?.State, life, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
         if (failure != GameSessionFailure.None) return Rejected(failure);
 
@@ -170,7 +174,7 @@ public sealed partial class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, equipment, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat, snapshot.Lighting, sink, events!)
+            hero, inventory, equipment, effects, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat, snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -721,7 +725,7 @@ public sealed partial class GameSessionOwner : IDisposable
         ThrowIfDisposed();
         if (_hero is null) return null;
         var record = _life.Hero!.Value;
-        return new(record, LifeRules.Evaluate(record.State, LifeDomain.HeroFacts(_hero, record.State, HeroNormalResistance())), true);
+        return new(record, LifeRules.Evaluate(record.State, HeroLifeFacts(record.State)), true);
     }
 
     /// <summary>
@@ -862,9 +866,11 @@ public sealed partial class GameSessionOwner : IDisposable
         var now = _clock.QueryClockSnapshot().GameTimestampMs;
         var firings = new List<SessionLifeFiring>();
         var calls = new List<SessionScriptCallFiring>();
+        var effects = new List<SessionEffectFiring>();
         _passWorld = world;
         _passFirings = firings;
         _passCalls = calls;
+        _passEffects = effects;
         GameEventPassResult pass;
         try
         {
@@ -881,9 +887,10 @@ public sealed partial class GameSessionOwner : IDisposable
             _passWorld = null;
             _passFirings = null;
             _passCalls = null;
+            _passEffects = null;
         }
         return new(pass.Failure == GameEventFailure.None ? GameSessionFailure.None : GameSessionFailure.InvalidEventPass, pass,
-            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly() };
+            firings.AsReadOnly(), new(_identity, _revision)) { ScriptCalls = calls.AsReadOnly(), Effects = effects.AsReadOnly() };
     }
 
     /// <summary>
@@ -1068,7 +1075,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
+            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1360,7 +1367,7 @@ public sealed partial class GameSessionOwner : IDisposable
         {
             if (_hero is null) return GameSessionFailure.InvalidLifeTarget;
             record = _life.Hero!.Value;
-            facts = LifeDomain.HeroFacts(_hero, record.State, HeroNormalResistance());
+            facts = HeroLifeFacts(record.State);
             recorded = true;
             return GameSessionFailure.None;
         }
@@ -1386,10 +1393,11 @@ public sealed partial class GameSessionOwner : IDisposable
     // Saved timers: the queue's strict restore (registry version, kinds, sequences, order, payloads, keys), plus what only
     // the session knows: a hero timer needs the hero, an NPC timer a life record of its NPC, and every timer was set at a
     // game time no later than the saved clock, exactly its kind's delay before its deadline.
-    private static GameSessionFailure ImportEvents(SessionEventState saved, bool hero, LifeDomain life, long clockMs,
+    private static GameSessionFailure ImportEvents(SessionEventState saved, SessionHeroState? heroState, LifeDomain life, long clockMs,
         SessionEventSink sink, GameEventQueueProfile profile, out GameEventQueue? events)
     {
         events = null;
+        var hero = heroState is not null;
         var registry = SessionEventKinds.Build(sink);
         var converted = ImmutableArray.CreateBuilder<GameEvent>(saved.Pending.Count);
         var maps = new Dictionary<string, int>(StringComparer.Ordinal);
@@ -1407,6 +1415,16 @@ public sealed partial class GameSessionOwner : IDisposable
                 converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
                 continue;
             }
+            if (pending.Kind == SessionEventKinds.HeroEffectEnd)
+            {
+                // A timed effect's END (ARC-WORLD-029): the hero's, set no later than the saved clock, exactly its duration
+                // before its deadline, of a number no innate entry has.
+                if (heroState is null || !pending.Entities.IsEmpty || pending.Values[0] < 0 || pending.Values[0] > clockMs ||
+                    pending.Values[1] is < 1 or > SessionEffectLimits.MaxDurationMs || pending.DeadlineMs != pending.Values[0] + pending.Values[1] ||
+                    EffectDomain.IsInnate(heroState, (int)pending.Values[2])) return GameSessionFailure.InvalidEvents;
+                converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, 0, new(pending.Entities, pending.Values)));
+                continue;
+            }
             var scheduledAt = pending.Values[0];
             if (scheduledAt < 0 || scheduledAt > clockMs || scheduledAt > long.MaxValue - SessionEventKinds.Delay(TimerOf(kind.Name)) ||
                 pending.DeadlineMs != scheduledAt + SessionEventKinds.Delay(TimerOf(kind.Name))) return GameSessionFailure.InvalidEvents;
@@ -1419,7 +1437,8 @@ public sealed partial class GameSessionOwner : IDisposable
             converted.Add(new(pending.Sequence, pending.Kind, kind.Domain, pending.DeadlineMs, scope, new(pending.Entities, pending.Values)));
         }
         // No session kind is SavedUnlessRebuilt yet, so Rebuild is always empty; the AI tick (slice I6) reschedules it here.
-        if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls) return GameSessionFailure.EventBudgetExceeded;
+        if (converted.Count(e => e.Kind == SessionEventKinds.ScriptCall) > SessionEventKinds.MaxScriptCalls ||
+            converted.Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) > SessionEffectLimits.MaxTimedEffects) return GameSessionFailure.EventBudgetExceeded;
         var result = GameEventQueue.Restore(registry, new(saved.Registry, saved.NextSequence, converted.ToImmutable()), profile,
             SessionEventKinds.Limits);
         if (result.Queue is null)

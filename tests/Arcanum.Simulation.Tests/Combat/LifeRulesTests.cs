@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Simulation.Tests.Combat.CombatFixtures;
@@ -35,6 +36,29 @@ public sealed class LifeRulesTests
         // 4 × 2 + 3 + 9 + 2 × (12 + 5) + 4 = 58; 4 × 1 − 2 + 2 × (5 + 10) + 9 + 4 = 45.
         Assert.AreEqual((58, 45), (LifeRules.MaxHitPoints(built, 0), LifeRules.MaxFatigue(built)));
         Assert.AreEqual(new LifeStatus(30, 18, 30, 25, false, false, true), LifeRules.Evaluate(Hurt(12, 5), Plain));
+    }
+
+    [TestMethod]
+    public void EffectsOnAMaximumApplyToTheWholeSum()
+    {
+        // ARC-WORLD-029 (object_hp_max 0x43D5A0, critter_fatigue_max 0x45D670): +10 %, then +5 over 4 × 2 + 3 + 30 = 41.
+        var built = Plain with
+        {
+            HitPointPoints = 2, HitPointAdjustment = 3,
+            MaxHitPointEffects = [new(StatModifierOperator.Add, 5), new(StatModifierOperator.Percent, 10)],
+            MaxFatigueEffects = [new(StatModifierOperator.Maximum, 12), new(StatModifierOperator.Maximum, 20)],
+        };
+        Assert.AreEqual((41 * 110 / 100 + 5, 12), (LifeRules.MaxHitPoints(built, 0), LifeRules.MaxFatigue(built)));
+        // Poison lowers the strength inside the sum: 39 × 110 % + 5.
+        Assert.AreEqual(39 * 110 / 100 + 5, LifeRules.MaxHitPoints(built, 100));
+        Assert.IsTrue(LifeRules.IsValid(built));
+        // A maximum at the pinned death damage, in either direction, or a default list is out of range.
+        Assert.IsFalse(LifeRules.IsValid(Plain with { MaxHitPointEffects = [new(StatModifierOperator.Add, LifeLimits.DeathHitPointDamage - 30)] }));
+        Assert.IsTrue(LifeRules.IsValid(Plain with { MaxHitPointEffects = [new(StatModifierOperator.Add, LifeLimits.DeathHitPointDamage - 31)] }));
+        Assert.IsFalse(LifeRules.IsValid(Plain with { MaxFatigueEffects = [new(StatModifierOperator.Add, -LifeLimits.DeathHitPointDamage - 30)] }));
+        Assert.IsFalse(LifeRules.IsValid(Plain with { MaxFatigueEffects = default }));
+        Assert.IsFalse(LifeRules.IsValid(Plain with { MaxFatigueEffects = [new(StatModifierOperator.Divide, 0)] }));
+        Assert.ThrowsExactly<ArgumentException>(() => LifeRules.Evaluate(Hurt(), Plain with { MaxHitPointEffects = [new((StatModifierOperator)6, 1)] }));
     }
 
     [TestMethod]

@@ -1,3 +1,5 @@
+using Arcanum.Simulation.Character;
+
 namespace Arcanum.Simulation.Combat;
 
 /// <summary>
@@ -26,13 +28,17 @@ public static class LifeRules
         return facts.PoisonedStrength.IsDefaultOrEmpty ? Math.Max(1, facts.Strength - penalty) : facts.PoisonedStrength[penalty - 1];
     }
 
-    /// <summary>Maximum hit points: <c>4 × points + adjustment + WP + 2 × (ST + level) + 4</c> (effects on the maximum are not modelled).</summary>
-    public static int MaxHitPoints(LifeFacts facts, int poisonLevel) =>
-        4 * facts.HitPointPoints + facts.HitPointAdjustment + facts.Willpower + 2 * (StrengthAt(facts, poisonLevel) + facts.Level) + 4;
+    /// <summary>Maximum hit points: <c>4 × points + adjustment + WP + 2 × (ST + level) + 4</c>, then the maximum's effects over
+    /// that whole sum (ARC-WORLD-029; <c>object_hp_max</c>, checked in the original executable at 0x43D5A0).</summary>
+    public static int MaxHitPoints(LifeFacts facts, int poisonLevel) => EffectModifiers.Apply(
+        4L * facts.HitPointPoints + facts.HitPointAdjustment + facts.Willpower + 2 * (StrengthAt(facts, poisonLevel) + facts.Level) + 4,
+        facts.MaxHitPointEffects.IsDefault ? [] : facts.MaxHitPointEffects);
 
-    /// <summary>Maximum fatigue: <c>4 × points + adjustment + 2 × (level + CN) + WP + 4</c>.</summary>
-    public static int MaxFatigue(LifeFacts facts) =>
-        4 * facts.FatiguePoints + facts.FatigueAdjustment + 2 * (facts.Level + facts.Constitution) + facts.Willpower + 4;
+    /// <summary>Maximum fatigue: <c>4 × points + adjustment + 2 × (level + CN) + WP + 4</c>, then the maximum's effects over that
+    /// whole sum (<c>critter_fatigue_max</c>, 0x45D670).</summary>
+    public static int MaxFatigue(LifeFacts facts) => EffectModifiers.Apply(
+        4L * facts.FatiguePoints + facts.FatigueAdjustment + 2 * (facts.Level + facts.Constitution) + facts.Willpower + 4,
+        facts.MaxFatigueEffects.IsDefault ? [] : facts.MaxFatigueEffects);
 
     public static bool IsDead(LifeState state, LifeFacts facts) => MaxHitPoints(facts, state.PoisonLevel) - state.HitPointDamage <= 0;
 
@@ -244,7 +250,12 @@ public static class LifeRules
         facts.Level is >= 0 and <= LifeLimits.MaxLevel && Stat(facts.Strength) && Stat(facts.Constitution) && Stat(facts.Willpower) &&
         Stat(facts.HealRate) && Stat(facts.PoisonRecovery) && Math.Abs((long)facts.NormalResistance) <= LifeLimits.MaxResistance &&
         (facts.Traits & ~AllTraits) == 0 &&
-        (facts.PoisonedStrength.IsDefaultOrEmpty || facts.PoisonedStrength.Length == 3 && facts.PoisonedStrength.All(Stat));
+        (facts.PoisonedStrength.IsDefaultOrEmpty || facts.PoisonedStrength.Length == 3 && facts.PoisonedStrength.All(Stat)) &&
+        !facts.MaxHitPointEffects.IsDefault && !facts.MaxFatigueEffects.IsDefault &&
+        EffectModifiers.IsValid(facts.MaxHitPointEffects, LifeLimits.MaxMaximumEffects, LifeLimits.MaxMaximumEffectMagnitude) &&
+        EffectModifiers.IsValid(facts.MaxFatigueEffects, LifeLimits.MaxMaximumEffects, LifeLimits.MaxMaximumEffectMagnitude) &&
+        Math.Abs((long)MaxFatigue(facts)) < LifeLimits.DeathHitPointDamage &&
+        Enumerable.Range(0, 4).All(penalty => Math.Abs((long)MaxHitPoints(facts, penalty * 100)) < LifeLimits.DeathHitPointDamage);
 
     private static bool Stat(int value) => value is >= 0 and <= LifeLimits.MaxStat;
 

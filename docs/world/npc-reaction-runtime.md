@@ -50,7 +50,7 @@ Single PC: the source's ten-slot memory with eviction of the slot closest to 50 
 
 | API | Behaviour |
 | --- | --- |
-| `QueryHeroReactionFacts()` | The hero's race, effective reaction modifier and extraordinary charisma (≥ 20); reputation 0 and no effects (no reputation owner; the hero's innate effects keep only modelled stats). `null` without a hero. |
+| `QueryHeroReactionFacts()` | The hero's race, effective reaction modifier and extraordinary charisma (≥ 20); reputation 0 (no reputation owner); the reaction, good and bad reaction effects of its [durable effects](durable-effects-runtime.md) (ARC-WORLD-029; its innate effects keep only modelled stats, so the gnome's bad-reaction adjustment is still missing). `null` without a hero. |
 | `QueryReaction(entity, npc, pc, query)` | `SessionReactionView`: effective value, category, stored value, met before (remembered slot only, so false during the first conversation), in conversation, recorded. |
 | `QueryReactionRecord(entity)` / `QueryReactions()` | The record or `null`; a detached copy of the domain. |
 | `AdjustReaction(version, entity, npc, pc, delta)` | `Adjust` with "led by the PC" taken from the session party (following or waiting). The new value goes to the conversation slot while one is open, else to the remembered slot. |

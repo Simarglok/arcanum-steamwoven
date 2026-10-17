@@ -54,6 +54,8 @@ public sealed record SessionEventPassResult(GameSessionFailure Failure, GameEven
 {
     /// <summary>The deferred SCR calls that came due (ARC-SCRIPT-010), in firing order.</summary>
     public IReadOnlyList<SessionScriptCallFiring> ScriptCalls { get; init; } = Array.Empty<SessionScriptCallFiring>();
+    /// <summary>The timed effects' ENDs that came due (ARC-WORLD-029), in firing order.</summary>
+    public IReadOnlyList<SessionEffectFiring> Effects { get; init; } = Array.Empty<SessionEffectFiring>();
 }
 
 /// <summary>One saved pending event: the queue record without its derived domain and scope map.</summary>
@@ -86,10 +88,16 @@ public sealed class SessionEventState
 public static class SessionEventKinds
 {
     /// <summary>
-    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/> without a new version: the life kinds are unchanged, a save with no
-    /// deferred call is byte-identical, and a build without the kind refuses a save holding one as an unknown kind.
+    /// 1. ARC-SCRIPT-010 added <see cref="ScriptCall"/> and ARC-WORLD-029 <see cref="HeroEffectEnd"/> without a new version:
+    /// the life kinds are unchanged, and a build without a kind refuses a save holding one as an unknown kind.
     /// </summary>
     public const int RegistryVersion = 1;
+
+    /// <summary>
+    /// The END of a hero's timed effect (ARC-WORLD-029): global, any number. No entities; values: the game time it was set at,
+    /// its duration, the effect number, the count of entries it removes.
+    /// </summary>
+    public const string HeroEffectEnd = "effect.hero.end";
 
     /// <summary>
     /// A deferred SCR call (ARC-SCRIPT-010): global, any number per key. Entities: the triggerer and the attachee (the
@@ -125,8 +133,8 @@ public static class SessionEventKinds
     public const long RestingDelayMs = 3_600_000;
 
     /// <summary>Pending events a session holds: four timers for each NPC life record and three for the hero, so a life step
-    /// can always set its timers.</summary>
-    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls;
+    /// can always set its timers, the deferred calls and the timed effects' ENDs.</summary>
+    public const int MaxPending = 4 * GameSessionLimits.PolicyMaxLifeRecords + 3 + MaxScriptCalls + SessionEffectLimits.MaxTimedEffects;
 
     internal static GameEventQueueLimits Limits { get; } = new(MaxPending: MaxPending);
 
@@ -146,8 +154,16 @@ public static class SessionEventKinds
             Npc(NpcPoisonRecovery, LifeTimer.PoisonRecovery), Npc(NpcResting, LifeTimer.Resting),
             new(ScriptCall, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 2, 4, 0, 0,
                 new ScriptCallHandler(owner), Validate: ScriptCallPayload),
+            new(HeroEffectEnd, GameEventDomain.Game, GameEventPersistence.Saved, GameEventUniqueness.Many, GameEventScopeRule.Global, 0, 4, 0, 0,
+                new EffectEndHandler(owner), Validate: EffectEndPayload),
         ]);
     }
+
+    // Set at a game time, a duration of 1 ms up to the longest, a number of the effect tables and a count the hero's list holds.
+    private static bool EffectEndPayload(GameEventPayload payload) =>
+        payload.Values[0] >= 0 && payload.Values[1] is >= 1 and <= SessionEffectLimits.MaxDurationMs &&
+        payload.Values[2] is >= SessionEffectLimits.FirstNumber and <= SessionEffectLimits.LastNumber &&
+        payload.Values[3] is >= 1 and <= SessionEffectLimits.MaxHeroEffects;
 
     // Scheduled at a game time, a delay of 1 ms up to the longest, any script and line number (a missing script or line
     // ends the run when it fires, as in the original).
@@ -206,6 +222,12 @@ internal sealed class ScriptCallHandler(SessionEventSink sink) : IGameEventHandl
 {
     public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
         sink.Owner?.FireScriptCall(firing) ?? GameEventHandlerOutcome.Refused;
+}
+
+internal sealed class EffectEndHandler(SessionEventSink sink) : IGameEventHandler
+{
+    public GameEventHandlerOutcome Handle(GameEventFiring firing, GameEventQueue queue) =>
+        sink.Owner?.FireEffectEnd(firing) ?? GameEventHandlerOutcome.Refused;
 }
 
 internal sealed class LifeTimerHandler(SessionEventSink sink, LifeTimer timer) : IGameEventHandler

@@ -1,0 +1,473 @@
+using System.Collections.Immutable;
+using Arcanum.Data.Characters;
+using Arcanum.Simulation.Character;
+using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Reaction;
+
+namespace Arcanum.Session;
+
+/// <summary>Bounds of the hero's durable effects (ARC-WORLD-029; project policy, the source has none).</summary>
+public static class SessionEffectLimits
+{
+    /// <summary>The source's effect tables hold numbers 0..399 (0..49 the module's <c>gameeffect.mes</c>, 50..399
+    /// <c>effect.mes</c>); a larger number would read past them, so the session refuses it.</summary>
+    public const int FirstNumber = 0, LastNumber = 399;
+    /// <summary>Durable entries the hero holds after its innate ones: the character owner's capacity.</summary>
+    public const int MaxHeroEffects = 64;
+    /// <summary>Pending timed effects (their END events) a session holds: as many as durable entries, though an END can
+    /// outlive the entries it would remove.</summary>
+    public const int MaxTimedEffects = 64;
+    /// <summary>The longest duration: int.MaxValue real seconds at the game rate (8 game ms per real ms).</summary>
+    public const long MaxDurationMs = int.MaxValue * 8000L;
+    /// <summary>The largest magnitude of a change the hero's character owner, reaction and life rules admit.</summary>
+    public const int MaxModelledMagnitude = 1000;
+    /// <summary>The largest magnitude of any change: the nine digits the effect rules read.</summary>
+    public const int MaxMagnitude = 999_999_999;
+}
+
+/// <summary>
+/// One effect number and its changes, as the effect tables hold it (ARC-WORLD-029): every change of the rule, in its order,
+/// also those the session does not model yet (skills, tech skills, resistances, tech disciplines and most special values),
+/// so a save keeps the whole rule. Build it from the data with <see cref="FromRule"/>; a number with no table entry has no
+/// changes, as in the source.
+/// </summary>
+public sealed record SessionEffectDefinition(int Number, ImmutableArray<EffectChange> Changes)
+{
+    public static SessionEffectDefinition FromRule(EffectRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(rule);
+        return new(rule.Number, [.. rule.Changes]);
+    }
+
+    /// <summary>Same number and the same changes in the same order.</summary>
+    public bool SameAs(SessionEffectDefinition? other) =>
+        other is not null && other.Number == Number && !Changes.IsDefault && !other.Changes.IsDefault && Changes.SequenceEqual(other.Changes);
+}
+
+/// <summary>One entry of the hero's effect list: its number and cause (the source's two parallel critter arrays).</summary>
+public readonly record struct SessionEffect(int Number, EffectCause Cause);
+
+/// <summary>A pending timed effect: the END its event runs (remove <see cref="Count"/> entries of <see cref="Number"/>),
+/// when it was set and when it is due.</summary>
+public sealed record SessionTimedEffect(long Sequence, long ScheduledAtMs, long DeadlineMs, int Number, int Count);
+
+/// <summary>
+/// The hero's effect list (ARC-WORLD-029): <see cref="Innate"/> are the race and female effects the list starts with (their
+/// stat changes are the hero's <see cref="SessionHeroState.RaceEffect"/> and <see cref="SessionHeroState.GenderEffect"/>),
+/// <see cref="Effects"/> the durable entries after them in list order, <see cref="Definitions"/> the rule of each number
+/// they use, and <see cref="Timed"/> the pending ENDs in queue order.
+/// </summary>
+public sealed record SessionHeroEffectsView(IReadOnlyList<SessionEffect> Innate, IReadOnlyList<SessionEffect> Effects,
+    IReadOnlyList<SessionEffectDefinition> Definitions, IReadOnlyList<SessionTimedEffect> Timed)
+{
+    /// <summary>Entries of <paramref name="number"/> in the whole list, innate ones included (<c>effect_count_effects_of_type</c>).</summary>
+    public int Count(int number) => Innate.Count(e => e.Number == number) + Effects.Count(e => e.Number == number);
+}
+
+/// <summary>Saved durable effects of the hero (snapshot schema 13): the entries in list order and the rule of each number
+/// they use, by ascending number. Both are empty for a session without a hero.</summary>
+public sealed class SessionEffectState
+{
+    internal SessionEffectState(SessionEffect[] hero, SessionEffectDefinition[] definitions)
+    {
+        Hero = Array.AsReadOnly(hero);
+        Definitions = Array.AsReadOnly(definitions);
+    }
+
+    public static SessionEffectState Empty { get; } = new([], []);
+
+    public IReadOnlyList<SessionEffect> Hero { get; }
+    public IReadOnlyList<SessionEffectDefinition> Definitions { get; }
+}
+
+/// <summary>
+/// An effect change: how many entries it added or removed, the hero's life record when the change of a maximum moved its
+/// damage (null when the life record did not change), and the queue sequence of a timed effect's END (null otherwise).
+/// </summary>
+public sealed record SessionEffectResult(GameSessionDisposition Disposition, GameSessionFailure Failure, int Entries,
+    SessionLifeRecord? Life, long? TimedEffect, GameSessionVersion Version);
+
+/// <summary>A timed effect's END that ran in an event pass, and what it did.</summary>
+public sealed record SessionEffectFiring(GameEvent Event, SessionEffectResult Result);
+
+// The special changes the session models (indices of the effect rules' special collection).
+internal enum EffectSpecial { MaxHitPoints = 0, MaxFatigue = 1, Reaction = 2, BadReaction = 7, GoodReaction = 8 }
+
+/// <summary>The durable effects of one owner: the hero's entries after its innate ones, the character owner's id of each
+/// entry with modelled stat changes, and the rule of each number in use.</summary>
+internal sealed class EffectDomain
+{
+    internal List<SessionEffect> Entries { get; } = [];
+    internal List<AppliedEffectId?> Applied { get; } = [];
+    internal Dictionary<int, SessionEffectDefinition> Definitions { get; } = [];
+
+    internal SessionEffectState Capture() => new([.. Entries], [.. Definitions.OrderBy(pair => pair.Key).Select(pair => pair.Value)]);
+
+    internal ImmutableArray<EffectModifier> Maximum(EffectSpecial special) => Modifiers(Entries, Definitions, special);
+
+    internal IReadOnlyList<ReactionModifier> Special(EffectSpecial special) =>
+        Array.AsReadOnly(Modifiers(Entries, Definitions, special).Select(m => new ReactionModifier(m.Operator, m.Value)).ToArray());
+
+    internal static ImmutableArray<EffectModifier> Modifiers(IEnumerable<SessionEffect> entries,
+        IReadOnlyDictionary<int, SessionEffectDefinition> definitions, EffectSpecial special) =>
+        [.. entries.SelectMany(entry => definitions[entry.Number].Changes)
+            .Where(c => c.Kind == EffectAttributeKind.Special && c.Attribute == (int)special)
+            .Select(c => new EffectModifier(Operator(c.Operator), c.Value))];
+
+    /// <summary>The stat changes of a rule the character owner models, or null when it has none.</summary>
+    internal static StatEffectDefinition? Stats(SessionEffectDefinition definition)
+    {
+        var modifiers = definition.Changes.Where(c => c.Kind == EffectAttributeKind.Stat && Stat(c.Attribute) is not null)
+            .Select(c => new StatModifier(Stat(c.Attribute)!.Value, Operator(c.Operator), c.Value)).ToImmutableArray();
+        return modifiers.IsEmpty ? null : new(definition.Number, modifiers);
+    }
+
+    /// <summary>
+    /// A rule the session admits: a number in the tables' range, at most seven changes per collection, each naming an
+    /// attribute of its collection with an admitted operator and at most nine digits, and every change the session models
+    /// (the stats, the two maxima and the three reaction values) at most <see cref="SessionEffectLimits.MaxModelledMagnitude"/>.
+    /// </summary>
+    internal static bool IsValid(SessionEffectDefinition? definition)
+    {
+        if (definition is null || definition.Changes.IsDefault ||
+            definition.Number is < SessionEffectLimits.FirstNumber or > SessionEffectLimits.LastNumber) return false;
+        var counts = new int[Sizes.Length];
+        foreach (var change in definition.Changes)
+        {
+            if ((uint)change.Kind >= (uint)Sizes.Length || change.Attribute < 0 || change.Attribute >= Sizes[(int)change.Kind] ||
+                !Enum.IsDefined(change.Operator) || Math.Abs((long)change.Value) > SessionEffectLimits.MaxMagnitude ||
+                ++counts[(int)change.Kind] > EffectRules.MaxChangesPerCollection) return false;
+            if (Modelled(change) && Math.Abs((long)change.Value) > SessionEffectLimits.MaxModelledMagnitude) return false;
+        }
+        return true;
+    }
+
+    // The attribute counts of the six collections (stats, basic skills, tech skills, resistances, tech disciplines, special).
+    private static readonly int[] Sizes = [28, 12, 4, 5, 8, 10];
+
+    private static bool Modelled(EffectChange change) =>
+        change.Kind == EffectAttributeKind.Stat ? Stat(change.Attribute) is not null
+        : change.Kind == EffectAttributeKind.Special && Enum.IsDefined((EffectSpecial)change.Attribute);
+
+    // The source's stat index of the stats the character owner models: 0..7 primary, 8..16 derived, 22 and 23 the points.
+    private static CharacterStat? Stat(int attribute) => attribute switch
+    {
+        >= 0 and <= 7 => (CharacterStat)attribute,
+        8 => CharacterStat.CarryWeight, 9 => CharacterStat.DamageBonus, 10 => CharacterStat.AcAdjustment, 11 => CharacterStat.Speed,
+        12 => CharacterStat.HealRate, 13 => CharacterStat.PoisonRecovery, 14 => CharacterStat.ReactionModifier,
+        15 => CharacterStat.MaxFollowers, 16 => CharacterStat.MagickTechAptitude,
+        22 => CharacterStat.MagickPoints, 23 => CharacterStat.TechPoints,
+        _ => null,
+    };
+
+    private static StatModifierOperator Operator(EffectChangeOperator op) => op switch
+    {
+        EffectChangeOperator.Add => StatModifierOperator.Add,
+        EffectChangeOperator.Percent => StatModifierOperator.Percent,
+        EffectChangeOperator.Minimum => StatModifierOperator.Minimum,
+        EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+        _ => throw new ArgumentOutOfRangeException(nameof(op)),
+    };
+
+    /// <summary>The innate entries the hero's list starts with: the race effect <c>64 + race</c>, then the female effect 330.</summary>
+    internal static SessionEffect[] Innate(SessionHeroState hero) => hero.Gender == CharacterGender.Female
+        ? [new(EffectRules.RaceEffectBase + HeroDomain.SourceRace(hero.Race), EffectCause.Race), new(EffectRules.FemaleEffect, EffectCause.Gender)]
+        : [new(EffectRules.RaceEffectBase + HeroDomain.SourceRace(hero.Race), EffectCause.Race)];
+
+    internal static bool IsInnate(SessionHeroState hero, int number) => Innate(hero).Any(e => e.Number == number);
+
+    /// <summary>Causes the effect domain owns: not the race and gender setters' (innate), not the life domain's scars (injury).</summary>
+    internal static bool OwnCause(EffectCause cause) =>
+        Enum.IsDefined(cause) && cause is not (EffectCause.Race or EffectCause.Gender or EffectCause.Injury);
+}
+
+/// <summary>One step of an effect change: append an entry, or remove the entry at an index of the durable list.</summary>
+internal readonly record struct EffectStep(SessionEffect? Add, int RemoveAt);
+
+public sealed partial class GameSessionOwner
+{
+    /// <summary>The hero's effect list (ARC-WORLD-029), or null for a session without a hero.</summary>
+    public SessionHeroEffectsView? QueryHeroEffects()
+    {
+        ThrowIfDisposed();
+        if (_hero is null) return null;
+        return new(Array.AsReadOnly(EffectDomain.Innate(_hero.State)), Array.AsReadOnly(_effects.Entries.ToArray()),
+            _effects.Capture().Definitions, TimedEffects());
+    }
+
+    /// <summary>
+    /// Adds <paramref name="count"/> entries of an effect with <paramref name="cause"/> to the end of the hero's list, one at a
+    /// time, as <c>effect_add</c> does for each (a script's add-effect action, an Effect component that adds). Each entry that
+    /// changes a maximum moves the damage by the same amount, so current hit points and fatigue stay, clamped at no damage.
+    /// Refused: no hero (<see cref="GameSessionFailure.EffectsUnavailable"/>); a rule the session does not admit, a count below
+    /// 1, a cause of the race and gender setters or of the life domain's scars, or maxima the life rules refuse
+    /// (<see cref="GameSessionFailure.InvalidEffect"/>); a number in use with other changes
+    /// (<see cref="GameSessionFailure.EffectMismatch"/>); the number of one of the hero's innate effects
+    /// (<see cref="GameSessionFailure.InnateEffect"/>: its typed removal would reach the innate entry); more than
+    /// <see cref="SessionEffectLimits.MaxHeroEffects"/> entries (<see cref="GameSessionFailure.EffectCapacityExceeded"/>). One revision.
+    /// </summary>
+    public SessionEffectResult AddHeroEffect(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause, int count = 1)
+    {
+        ThrowIfDisposed();
+        return AddEffects(expected, definition, cause, count, null);
+    }
+
+    /// <summary>
+    /// A timed effect: <see cref="AddHeroEffect"/>, and an END after <paramref name="durationMs"/> of game time (1 ms up to
+    /// <see cref="SessionEffectLimits.MaxDurationMs"/>; a spell's <c>Duration:</c> seconds × 8000) that removes
+    /// <paramref name="count"/> entries of the number, as the END of a timed magick or tech run whose components only add and
+    /// remove that effect does. The END removes the first entries with that number, whatever added them, as the source does.
+    /// Its sequence is <see cref="SessionEffectResult.TimedEffect"/>. One revision.
+    /// </summary>
+    public SessionEffectResult AddHeroTimedEffect(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause,
+        int count, long durationMs)
+    {
+        ThrowIfDisposed();
+        if (durationMs is < 1 or > SessionEffectLimits.MaxDurationMs) return RejectEffect(GameSessionFailure.InvalidEffect);
+        return AddEffects(expected, definition, cause, count, durationMs);
+    }
+
+    /// <summary>
+    /// Removes the first entry of <paramref name="number"/>, <paramref name="count"/> times (<c>effect_remove_one_typed</c>: a
+    /// script's remove-effect action, an Effect component that removes). Refused with <see cref="GameSessionFailure.InnateEffect"/>
+    /// when the first entry would be an innate one (the race and gender setters own them); NoChange when there is none.
+    /// </summary>
+    public SessionEffectResult RemoveHeroEffect(GameSessionVersion expected, int number, int count = 1)
+    {
+        ThrowIfDisposed();
+        if (count < 1 || number is < SessionEffectLimits.FirstNumber or > SessionEffectLimits.LastNumber) return RejectEffect(GameSessionFailure.InvalidEffect);
+        return RemoveEffects(expected, number, count, null);
+    }
+
+    /// <summary>Removes every entry of <paramref name="number"/> (<c>effect_remove_all_typed</c>); innate numbers are refused.</summary>
+    public SessionEffectResult RemoveAllHeroEffects(GameSessionVersion expected, int number)
+    {
+        ThrowIfDisposed();
+        if (number is < SessionEffectLimits.FirstNumber or > SessionEffectLimits.LastNumber) return RejectEffect(GameSessionFailure.InvalidEffect);
+        return RemoveEffects(expected, number, int.MaxValue, null);
+    }
+
+    /// <summary>
+    /// Removes the first entry with <paramref name="cause"/>, or every one when <paramref name="all"/>
+    /// (<c>effect_remove_one_caused_by</c>, <c>effect_remove_all_caused_by</c>). The race, gender and injury causes are refused.
+    /// </summary>
+    public SessionEffectResult RemoveHeroEffectsCausedBy(GameSessionVersion expected, EffectCause cause, bool all = false)
+    {
+        ThrowIfDisposed();
+        if (!EffectDomain.OwnCause(cause)) return RejectEffect(GameSessionFailure.InvalidEffect);
+        return RemoveEffects(expected, null, all ? int.MaxValue : 1, cause);
+    }
+
+    /// <summary>
+    /// Ends a pending timed effect now (the run interrupted: a dispel, an explicit stop, the death of its caster or target):
+    /// its END runs at once and its event is cancelled. <see cref="GameSessionFailure.UnknownTimedEffect"/> when no END with
+    /// that sequence is pending.
+    /// </summary>
+    public SessionEffectResult EndHeroTimedEffect(GameSessionVersion expected, long sequence)
+    {
+        ThrowIfDisposed();
+        if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
+        var pending = _events.QueryPending().FirstOrDefault(e => e.Kind == SessionEventKinds.HeroEffectEnd && e.Sequence == sequence);
+        if (pending is null) return RejectEffect(GameSessionFailure.UnknownTimedEffect);
+        if (_passWorld is not null) return RejectEffect(GameSessionFailure.InvalidEventPass);
+        var result = RemoveEffects(expected, (int)pending.Payload.Values[2], (int)pending.Payload.Values[3], null, cancel: pending);
+        return result;
+    }
+
+    // An END that came due: its removals, without a version check, as any timer's step.
+    internal GameEventHandlerOutcome FireEffectEnd(GameEventFiring firing)
+    {
+        if (_hero is null) return GameEventHandlerOutcome.Refused;
+        var values = firing.Event.Payload.Values;
+        var result = RemoveEffects(Version, (int)values[2], (int)values[3], null);
+        _passEffects?.Add(new(firing.Event, result));
+        return result.Disposition == GameSessionDisposition.Rejected ? GameEventHandlerOutcome.Refused : GameEventHandlerOutcome.Completed;
+    }
+
+    private IReadOnlyList<SessionTimedEffect> TimedEffects() => Array.AsReadOnly(_events.QueryPending()
+        .Where(e => e.Kind == SessionEventKinds.HeroEffectEnd)
+        .Select(e => new SessionTimedEffect(e.Sequence, e.Payload.Values[0], e.DeadlineMs, (int)e.Payload.Values[2], (int)e.Payload.Values[3]))
+        .ToArray());
+
+    private SessionEffectResult AddEffects(GameSessionVersion expected, SessionEffectDefinition definition, EffectCause cause, int count,
+        long? durationMs)
+    {
+        if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
+        if (!EffectDomain.IsValid(definition) || !EffectDomain.OwnCause(cause) || count < 1) return RejectEffect(GameSessionFailure.InvalidEffect);
+        if (EffectDomain.IsInnate(_hero.State, definition.Number)) return RejectEffect(GameSessionFailure.InnateEffect);
+        if (_effects.Definitions.TryGetValue(definition.Number, out var known) && !known.SameAs(definition))
+            return RejectEffect(GameSessionFailure.EffectMismatch);
+        if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
+        if (count > SessionEffectLimits.MaxHeroEffects - _effects.Entries.Count) return RejectEffect(GameSessionFailure.EffectCapacityExceeded);
+        var steps = Enumerable.Repeat(new EffectStep(new SessionEffect(definition.Number, cause), -1), count).ToArray();
+        return Commit(steps, definition, durationMs is { } d ? (definition.Number, count, d) : null, null);
+    }
+
+    // The first matches by number or cause, up to count of them, as the source's loops find them: each removal shifts the
+    // later entries up. An innate entry ahead of the durable ones would be the first match of its number, so a typed removal
+    // of an innate number is refused (no durable entry or timed END can have one).
+    private SessionEffectResult RemoveEffects(GameSessionVersion expected, int? number, int count, EffectCause? cause, GameEvent? cancel = null)
+    {
+        if (_hero is null) return RejectEffect(GameSessionFailure.EffectsUnavailable);
+        if (number is { } n && EffectDomain.IsInnate(_hero.State, n)) return RejectEffect(GameSessionFailure.InnateEffect);
+        if (!IsCurrent(expected)) return RejectEffect(GameSessionFailure.StaleVersion);
+        var indices = new List<int>();
+        var shifted = 0;
+        for (var i = 0; i < _effects.Entries.Count && indices.Count < count; i++)
+        {
+            var entry = _effects.Entries[i];
+            if (number is { } k ? entry.Number != k : entry.Cause != cause) continue;
+            indices.Add(i - shifted);
+            shifted++;
+        }
+        var steps = indices.Select(index => new EffectStep(null, index)).ToArray();
+        if (steps.Length == 0 && cancel is null) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, 0, null, null, Version);
+        return Commit(steps, null, null, cancel);
+    }
+
+    // Every change: the steps on a trial character owner, each moving the damage by the change of a maximum, then the
+    // admission of the life facts, the timers and the revision; nothing is written before every check passed.
+    private SessionEffectResult Commit(EffectStep[] steps, SessionEffectDefinition? added, (int Number, int Count, long Duration)? timed,
+        GameEvent? cancel)
+    {
+        var hero = _hero!;
+        var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
+            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect)!;
+        var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions);
+        if (added is not null) definitions[added.Number] = added;
+        var entries = new List<SessionEffect>(_effects.Entries);
+        var ids = new List<AppliedEffectId?>();
+        foreach (var entry in entries) ids.Add(ApplyStats(trial.Stats, entry, definitions));
+        var before = _life.Hero!.Value;
+        var state = before.State;
+        var facts = TrialFacts(trial, entries, definitions, state);
+        if (facts is null) return RejectEffect(GameSessionFailure.InvalidEffect);
+        foreach (var step in steps)
+        {
+            if (step.Add is { } entry)
+            {
+                entries.Add(entry);
+                ids.Add(ApplyStats(trial.Stats, entry, definitions));
+            }
+            else
+            {
+                entries.RemoveAt(step.RemoveAt);
+                if (ids[step.RemoveAt] is { } id && trial.Stats.RemoveEffect(id).Disposition == CharacterStatsDisposition.Rejected)
+                    throw new InvalidOperationException("Trial effect removal failed.");
+                ids.RemoveAt(step.RemoveAt);
+            }
+            // effect_add and effect_remove_internal: each maximum's change moves its damage, which never goes below 0.
+            var next = TrialFacts(trial, entries, definitions, state);
+            if (next is null) return RejectEffect(GameSessionFailure.InvalidEffect);
+            state = state with
+            {
+                HitPointDamage = Shift(state.HitPointDamage, LifeRules.MaxHitPoints(next, state.PoisonLevel) - (long)LifeRules.MaxHitPoints(facts, state.PoisonLevel)),
+                FatigueDamage = Shift(state.FatigueDamage, LifeRules.MaxFatigue(next) - (long)LifeRules.MaxFatigue(facts)),
+            };
+            facts = next;
+        }
+        var now = _clock.QueryClockSnapshot().GameTimestampMs;
+        var lifeChanged = state != before.State;
+        var timers = Timers(true, before.State, state, null).Select(timer => TimerEvent(timer, SessionLifeTarget.Hero, 0, now, 1))
+            .Where(pending => !IsPending(pending.Kind, null)).ToArray();
+        var events = timers.Length + (timed is null ? 0 : 1);
+        if (timed is not null && _events.QueryPending().Count(e => e.Kind == SessionEventKinds.HeroEffectEnd) >= SessionEffectLimits.MaxTimedEffects)
+            return RejectEffect(GameSessionFailure.EventBudgetExceeded);
+        if (events > 0 && (_events.Count > _events.Limits.MaxPending - events || _events.NextSequence > long.MaxValue - events ||
+            now > long.MaxValue - Math.Max(SessionEffectLimits.MaxDurationMs, SessionEventKinds.RestingDelayMs)))
+            return RejectEffect(GameSessionFailure.EventBudgetExceeded);
+        if (_revision == long.MaxValue) return RejectEffect(GameSessionFailure.RevisionExhausted);
+
+        // Commit: the live character owner takes the same steps; the trial already showed each of them is admitted.
+        foreach (var step in steps)
+        {
+            if (step.Add is { } entry)
+            {
+                _effects.Entries.Add(entry);
+                _effects.Applied.Add(ApplyStats(hero.Stats, entry, definitions));
+            }
+            else
+            {
+                if (_effects.Applied[step.RemoveAt] is { } id && hero.Stats.RemoveEffect(id).Disposition == CharacterStatsDisposition.Rejected)
+                    throw new InvalidOperationException("Effect removal failed after admission.");
+                _effects.Entries.RemoveAt(step.RemoveAt);
+                _effects.Applied.RemoveAt(step.RemoveAt);
+            }
+        }
+        _effects.Definitions.Clear();
+        foreach (var number in _effects.Entries.Select(e => e.Number).Distinct()) _effects.Definitions[number] = definitions[number];
+        if (lifeChanged) _life.Hero = before with { State = state };
+        foreach (var (kind, payload) in timers)
+            if (_events.ScheduleAfter(kind, payload, SessionEventKinds.Delay(TimerOf(kind)), new(0, now, 0)).Disposition != GameEventScheduleDisposition.Added)
+                throw new InvalidOperationException("Timer scheduling failed after admission.");
+        long? sequence = null;
+        if (timed is { } t)
+        {
+            var scheduled = _events.ScheduleAfter(SessionEventKinds.HeroEffectEnd, GameEventPayload.Of([], now, t.Duration, t.Number, t.Count),
+                t.Duration, new(0, now, 0));
+            if (scheduled.Disposition != GameEventScheduleDisposition.Added) throw new InvalidOperationException("END scheduling failed after admission.");
+            sequence = scheduled.Event!.Sequence;
+        }
+        if (cancel is not null) _events.RemoveFirst(cancel.Kind, e => e.Sequence == cancel.Sequence);
+        _revision++;
+        return new(GameSessionDisposition.Changed, GameSessionFailure.None, steps.Length, lifeChanged ? _life.Hero : null, sequence,
+            new(_identity, _revision));
+
+        static int Shift(int damage, long change) => (int)Math.Clamp(damage + change, 0, LifeLimits.MaxDamage);
+    }
+
+    // The hero's life facts under a trial list, or null when the life rules refuse the maxima it gives.
+    private LifeFacts? TrialFacts(HeroDomain trial, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
+        LifeState state)
+    {
+        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State.Level, state, HeroNormalResistance(),
+            EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue));
+        return LifeRules.IsValid(facts) ? facts : null;
+    }
+
+    // The entry's modelled stat changes into a character owner; its id, or null for a rule without any.
+    private static AppliedEffectId? ApplyStats(CharacterStatsOwner stats, SessionEffect entry, IReadOnlyDictionary<int, SessionEffectDefinition> definitions)
+    {
+        if (EffectDomain.Stats(definitions[entry.Number]) is not { } modifiers) return null;
+        var result = stats.AddEffect(modifiers, entry.Cause);
+        return result.AddedEffect ?? throw new InvalidOperationException("Effect refused by the character owner after admission.");
+    }
+
+    /// <summary>The hero's life facts at a state, with its worn armour and durable effects.</summary>
+    private LifeFacts HeroLifeFacts(LifeState state) => LifeDomain.HeroFacts(_hero!.Stats, _hero.State.Level, state, HeroNormalResistance(),
+        _effects.Maximum(EffectSpecial.MaxHitPoints), _effects.Maximum(EffectSpecial.MaxFatigue));
+
+    private SessionEffectResult RejectEffect(GameSessionFailure failure) =>
+        new(GameSessionDisposition.Rejected, failure, 0, null, null, new(_identity, _revision));
+
+    // Saved effects: only with a hero; every entry of an own cause with a rule of its number, every rule admitted and in use,
+    // by ascending number; the entries applied in order to the restored hero, whose life facts must stay valid.
+    private static GameSessionFailure ImportEffects(SessionEffectState saved, HeroDomain? hero, LifeDomain life, out EffectDomain effects)
+    {
+        effects = new();
+        if (hero is null) return saved.Hero.Count == 0 && saved.Definitions.Count == 0 ? GameSessionFailure.None : GameSessionFailure.InvalidSnapshot;
+        if (saved.Hero.Count > SessionEffectLimits.MaxHeroEffects) return GameSessionFailure.EffectCapacityExceeded;
+        var previous = int.MinValue;
+        foreach (var definition in saved.Definitions)
+        {
+            if (!EffectDomain.IsValid(definition) || definition.Number <= previous) return GameSessionFailure.InvalidEffect;
+            previous = definition.Number;
+            effects.Definitions.Add(definition.Number, definition);
+        }
+        foreach (var entry in saved.Hero)
+        {
+            if (!EffectDomain.OwnCause(entry.Cause) || !effects.Definitions.ContainsKey(entry.Number) ||
+                EffectDomain.IsInnate(hero.State, entry.Number)) return GameSessionFailure.InvalidEffect;
+            effects.Entries.Add(entry);
+            try { effects.Applied.Add(ApplyStats(hero.Stats, entry, effects.Definitions)); }
+            catch (InvalidOperationException) { return GameSessionFailure.InvalidEffect; }
+        }
+        var used = effects.Entries.Select(e => e.Number).ToHashSet();
+        if (effects.Definitions.Keys.Any(number => !used.Contains(number))) return GameSessionFailure.InvalidEffect;
+        // The stats and maxima under every saved entry: the life rules must admit the hero's facts at its saved state.
+        var facts = LifeDomain.HeroFacts(hero.Stats, hero.State.Level, life.Hero!.Value.State, 0,
+            effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue));
+        return LifeRules.IsValid(facts) ? GameSessionFailure.None : GameSessionFailure.InvalidEffect;
+    }
+}
