@@ -157,10 +157,22 @@ public sealed partial class AreaDataOwner
         }
         return _missingMasks = rebuilt;
     }
-    /// <summary>Entry names of the two resource archives (normalized, distinct).</summary>
+    /// <summary>Entry names of the two resource archives (normalized, distinct); with a stack order
+    /// (ARC-DATA-018), the file names its sources hold, which is every name the content stack holds
+    /// under <c>art/</c>, since each one's winner is a listed source.</summary>
     private HashSet<string> ArtHolders()
     {
         if (_artHolders is not null) return _artHolders;
+        if (_plan.ResourceOrder.Count > 0)
+        {
+            var archives = _plan.ResourceOrder.Where(s => s.Key.Role != AreaSourceRole.Loose && _indexes.ContainsKey(s.Key)).Select(s => _indexes[s.Key]).ToArray();
+            _budget.Reserve(checked(archives.Sum(index => (long)index.Count) * 64 + _loose.Count * 64L + 65536));
+            var held = new HashSet<string>(_loose.Keys, StringComparer.Ordinal);
+            foreach (var index in archives)
+                foreach (var (name, entries) in index)
+                    if (entries.Any(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0)) held.Add(name);
+            return _artHolders = held;
+        }
         var indexes = new[] { AreaSourceRole.Resource1, AreaSourceRole.Resource2 }.Select(role => _indexes.TryGetValue(new(role), out var index) ? index : null).OfType<Dictionary<string, DatEntry[]>>().ToArray();
         _budget.Reserve(checked(indexes.Sum(index => (long)index.Count) * 64 + 65536));
         var names = new HashSet<string>(StringComparer.Ordinal);
