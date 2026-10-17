@@ -403,6 +403,7 @@ game never takes.
 | RT10 | `sub_437990` (0x437990) | Attack and low-attack rates per weapon slot as CE's tables (both jump tables decoded); no dwarf or halfling offset for attacks; Speed 8 gives the middle value (LA1). | Original; Speed 8 a CE slip (LA1) |
 | RT11 | goal tables `anim_goal_node_attack` (0x5A7BD0), `anim_goal_node_attempt_attack` (0x5A7DD0) | Byte for byte the CE tables: the hit runs in the update that shows the action frame, the end one pause after the last frame appears, the repeat 5 ms later. | Original (as CE) |
 | RT12 | `sub_430FC0` (0x430FC0) | A4 and TB14: every fifth run step of a move in combat mode (×4 fatigue-limiting, ÷4 draining) adds 1 fatigue damage through the plain fatigue write; a runner without fatigue walks. | Original (A4 a CE slip) |
+
 ## Character sheet (ARC-UI-007)
 
 Source: [viewer character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) and
