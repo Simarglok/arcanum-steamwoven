@@ -93,7 +93,7 @@ reaction, good and bad reaction adjustments (`QueryHeroReactionFacts`, which the
 rules read). Admitted: numbers 0..399 (the source's tables; a larger one would read past them), at most seven changes per
 collection, each naming an attribute of its collection with nine digits at most, every modelled change within ±1000.
 The `xpgain` special changes every experience award after the difficulty (ARC-WORLD-030,
-[experience](experience-runtime.md)); its changes are modelled since then (±1000; the one installed rule, 339, is +10 %).
+[experience](experience-runtime.md)); its changes are modelled since then (±1000; one installed rule uses it, within that bound).
 Inert until their owners exist: skills, tech skills, resistances, tech disciplines, the critical-hit specials,
 level, age, gender, race, alignment, poison level.
 

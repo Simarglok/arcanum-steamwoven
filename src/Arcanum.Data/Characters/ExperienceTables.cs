@@ -37,19 +37,19 @@ public static class ExperienceTables
 
     /// <summary>
     /// <c>rules\xp_level.mes</c>: entry <c>n</c> is the experience of level <c>n</c> (1..51); a missing entry is 0, and level 1
-    /// is 0 whatever the file says, as <c>level_init</c> reads it. Entries outside 1..51 are not read.
+    /// is 0 whatever the file says, as <c>level_init</c> reads it, so its entry is not read either. Entries outside 2..51 are
+    /// not read.
     /// </summary>
     public static ExperienceLevelsRead ReadLevels(MesFile file)
     {
         ArgumentNullException.ThrowIfNull(file);
         var thresholds = new int[Levels];
-        for (var level = 1; level <= Levels; level++)
+        for (var level = 2; level <= Levels; level++)
         {
             if (file.Find(level) is not { } message) continue;
             if (!Number(message.Bytes.Span, out var value)) return new(ExperienceTableStatus.InvalidNumber, null, level);
             thresholds[level - 1] = value;
         }
-        thresholds[0] = 0;
         return new(ExperienceTableStatus.Read, Array.AsReadOnly(thresholds));
     }
 

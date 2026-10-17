@@ -9,7 +9,7 @@ namespace Arcanum.Session.Tests;
 
 // The hero's experience and the NPCs' worth and pool (ARC-WORLD-030). Tables are invented: level n needs
 // 1000·(n−1) + 10·(n−1)² (level 2 1010, level 3 2040, level 5 4160, level 50 73 010, level 51 75 000); quest experience
-// level 1 gives 800 and level 5 1700; quest 1003 is level 5, every other quest level 1. The half-elf fixture hero starts at
+// level 1 gives 700 and level 5 1300; quest 1003 is level 5, every other quest level 1. The half-elf fixture hero starts at
 // level 1 with 5 unspent points and 30 hit points.
 [TestClass]
 public sealed class ExperienceStateTests
@@ -18,7 +18,7 @@ public sealed class ExperienceStateTests
 
     internal static SessionExperienceRules Rules() => SessionExperienceRules.Create(
         ExperienceTable.Create(Enumerable.Range(1, 51).Select(T).ToArray()),
-        new Dictionary<int, int> { [1] = 800, [5] = 1700 }, new Dictionary<int, int> { [1003] = 5 })!;
+        new Dictionary<int, int> { [1] = 700, [5] = 1300 }, new Dictionary<int, int> { [1003] = 5 })!;
 
     private static GameSessionOwner Owner(SessionHeroDefinition? hero = null, bool rules = true, GameSessionLimits? limits = null,
         GameDifficulty difficulty = GameDifficulty.Normal)
@@ -89,7 +89,7 @@ public sealed class ExperienceStateTests
     [TestMethod]
     public void ZeroNegativeAndClampedAwardsFollowTheSource()
     {
-        using var owner = Owner(AtLevel(3, 2100));
+        using var owner = Owner(AtLevel(3, 2200));
         var zero = owner.AwardHeroExperience(owner.Version, 0);
         Assert.AreEqual((GameSessionDisposition.NoChange, (SessionExperienceAward?)null, 0L), (zero.Disposition, zero.Award, owner.Version.Revision));
         // Experience can fall, never below 0; levels never fall.
@@ -151,10 +151,10 @@ public sealed class ExperienceStateTests
     public void TheHerosExperienceEffectsChangeTheAwardAfterTheDifficulty()
     {
         using var owner = Owner(difficulty: GameDifficulty.Easy);
-        var learned = new SessionEffectDefinition(339, [new EffectChange(EffectAttributeKind.Special, 9, EffectChangeOperator.Percent, 10)]);
+        var learned = new SessionEffectDefinition(350, [new EffectChange(EffectAttributeKind.Special, 9, EffectChangeOperator.Percent, 20)]);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroEffect(owner.Version, learned, EffectCause.Background).Disposition);
-        // 200 on easy is 300, and +10 % is 330.
-        Assert.AreEqual(330, owner.AwardHeroExperience(owner.Version, 200).Award!.Award);
+        // 200 on easy is 300, and +20 % is 360.
+        Assert.AreEqual(360, owner.AwardHeroExperience(owner.Version, 200).Award!.Award);
     }
 
     [TestMethod]
@@ -196,20 +196,71 @@ public sealed class ExperienceStateTests
     public void QuestExperienceComesFromTheQuestTables()
     {
         using var owner = Owner();
-        Assert.AreEqual(800, Changed(owner.AwardQuestExperience(owner.Version, 1), owner).Award!.Award);
+        Assert.AreEqual(700, Changed(owner.AwardQuestExperience(owner.Version, 1), owner).Award!.Award);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.AwardQuestExperience(owner.Version, 77).Disposition);
-        Assert.AreEqual(800, Hero(owner).Experience);
+        Assert.AreEqual(700, Hero(owner).Experience);
 
-        // Completing quest 1003 (level 5) gives 1700 in the quest change's revision; quest 1004 is level 1.
+        // Completing quest 1003 (level 5) gives 1300 in the quest change's revision; quest 1004 is level 1.
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Accepted, out var accepted), owner, 2);
         Assert.IsNull(accepted);
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1003, SessionQuestState.Completed, out var completed), owner, 3);
-        Assert.AreEqual(new SessionExperienceAward(1700, 2, 2, new(1, 3)), completed);
-        Assert.AreEqual((3, 2500, 7), Hero(owner));
+        Assert.AreEqual(new SessionExperienceAward(1300, 1, 1, new(1, 2)), completed);
+        Assert.AreEqual((2, 2000, 6), Hero(owner));
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetQuestState(owner.Version, 1003, SessionQuestState.Completed).Disposition);
         SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1004, SessionQuestState.Completed), owner, 4);
-        Assert.AreEqual(3300, Hero(owner).Experience);
+        Assert.AreEqual(2700, Hero(owner).Experience);
         Assert.AreEqual(SessionQuestState.Completed, owner.QueryQuest(1004)!.Value.Effective);
+    }
+
+    [TestMethod]
+    public void QuestExperienceFollowsTheRequestNotTheStoredState()
+    {
+        using var owner = Owner();
+        // A quest another PC completed: the request for Completed is stored as OtherCompleted and still pays.
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture())
+            .Replace("\"globalQuests\":[]", "\"globalQuests\":[{\"quest\":1005,\"state\":\"Completed\"}]", StringComparison.Ordinal);
+        using var shared = Restore(Decode(text), RestoreOptions() with { Experience = Rules() });
+        SessionFixtures.Changed(shared.SetQuestState(shared.Version, 1005, SessionQuestState.Completed, out var other), shared, 1);
+        Assert.AreEqual(SessionQuestState.OtherCompleted, shared.QueryQuest(1005)!.Value.Effective);
+        Assert.AreEqual(700, other!.Award);
+        Assert.AreEqual(700, Hero(shared).Experience);
+
+        // A request for OtherCompleted pays nothing; a botched quest takes no completion.
+        SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1006, SessionQuestState.OtherCompleted, out var none), owner, 1);
+        Assert.IsNull(none);
+        SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1007, SessionQuestState.Botched), owner, 2);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.SetQuestState(owner.Version, 1007, SessionQuestState.Completed, out var botched).Disposition);
+        Assert.IsNull(botched);
+        Assert.AreEqual(0, Hero(owner).Experience);
+
+        // A dead hero's completion still completes the quest, without experience.
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
+        SessionFixtures.Changed(owner.SetQuestState(owner.Version, 1008, SessionQuestState.Completed, out var dead), owner, 4);
+        Assert.IsNull(dead);
+        Assert.AreEqual(SessionQuestState.Completed, owner.QueryQuest(1008)!.Value.Effective);
+        Assert.AreEqual(0, Hero(owner).Experience);
+    }
+
+    [TestMethod]
+    public void AnAwardThatChangesNothingStillStepsTheFollowersAtTheLastLevel()
+    {
+        using var owner = Owner(AtLevel(50, T(50)));
+        // Reaching level 51's experience again writes level 50's threshold back: the hero is unchanged (no revision), but the
+        // source still runs the followers' update, so the step is reported with NoChange.
+        var again = owner.AwardHeroExperience(owner.Version, T(51) - T(50));
+        Assert.AreEqual((GameSessionDisposition.NoChange, 0L), (again.Disposition, owner.Version.Revision));
+        Assert.AreEqual(new SessionExperienceAward(T(51) - T(50), 0, 0, new(50, 51)), again.Award);
+        Assert.AreEqual((50, T(50), 0), Hero(owner));
+    }
+
+    [TestMethod]
+    public void ANewHeroOutsideTheExperienceRangeIsRefused()
+    {
+        foreach (var experience in new[] { -1, SessionHeroLimits.MaxExperience + 1 })
+            Assert.AreEqual(GameSessionFailure.InvalidHero,
+                GameSessionOwner.Create(Descriptor() with { Hero = HalfElf() with { Experience = experience } }).Failure);
+        using var top = Owner(HalfElf() with { Experience = SessionHeroLimits.MaxExperience });
+        Assert.AreEqual(SessionHeroLimits.MaxExperience, Hero(top).Experience);
     }
 
     [TestMethod]
@@ -244,12 +295,12 @@ public sealed class ExperienceStateTests
     public void AKillPaysAFifthOfTheWorthOnce()
     {
         using var owner = Owner();
-        var loaded = new SessionNpcExperience("npc-2", 1700, 1700);
+        var loaded = new SessionNpcExperience("npc-2", 1900, 1900);
         var other = owner.RecordNpcKill(owner.Version, loaded, false);
         Assert.AreEqual((GameSessionDisposition.NoChange, loaded), (other.Disposition, other.Npc!.Value));
         var kill = Changed(owner.RecordNpcKill(owner.Version, loaded, true), owner);
-        Assert.AreEqual((340, new SessionNpcExperience("npc-2", 0, 1700)), (kill.Award!.Award, kill.Npc));
-        Assert.AreEqual(340, Hero(owner).Experience);
+        Assert.AreEqual((380, new SessionNpcExperience("npc-2", 0, 1900)), (kill.Award!.Award, kill.Npc));
+        Assert.AreEqual(380, Hero(owner).Experience);
         var again = owner.RecordNpcKill(owner.Version, loaded, true);
         Assert.AreEqual((GameSessionDisposition.NoChange, (SessionExperienceAward?)null), (again.Disposition, again.Award));
 
@@ -257,7 +308,7 @@ public sealed class ExperienceStateTests
         Assert.AreEqual(GameSessionDisposition.Changed, owner.Kill(owner.Version, SessionLifeTarget.Hero).Disposition);
         var dead = Changed(owner.RecordNpcKill(owner.Version, new("npc-3", 500, 500), true), owner);
         Assert.AreEqual(((SessionExperienceAward?)null, new SessionNpcExperience("npc-3", 0, 500)), (dead.Award, dead.Npc));
-        Assert.AreEqual(340, Hero(owner).Experience);
+        Assert.AreEqual(380, Hero(owner).Experience);
     }
 
     [TestMethod]

@@ -175,8 +175,8 @@ public static class ExperienceRules
     /// <summary>
     /// One hit's share of an NPC's experience pool (<c>combat_dmg</c>, 0x4B4390): the damage as a truncated percentage of the
     /// maximum hit points, that percentage of the worth (truncated), at most what is left in the pool, which loses it.
-    /// Nothing is taken from an empty pool. Computed without the original's 32-bit wrap of worth × percentage, which needs a
-    /// hit thousands of times larger than the maximum hit points.
+    /// Nothing is taken from an empty pool. Computed without the original's 32-bit wrap of worth × percentage, which no
+    /// installed worth (a few thousand) reaches short of a hit thousands of times larger than the maximum hit points.
     /// </summary>
     public static (int Award, int Pool) DamageShare(int worth, int pool, int damage, int maxHitPoints)
     {

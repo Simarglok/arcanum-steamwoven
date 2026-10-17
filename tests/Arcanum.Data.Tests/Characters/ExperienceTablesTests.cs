@@ -19,10 +19,10 @@ public sealed class ExperienceTablesTests
     [TestMethod]
     public void LevelsAreReadByNumberWithLevelOneAtZeroAndMissingLevelsAtZero()
     {
-        var read = ExperienceTables.ReadLevels(Mes("{1}{5}\n{2}{ 2100 }\n{3}{+4600}\n{51}{9000}\n{52}{1}\n{0}{7}\n"));
+        var read = ExperienceTables.ReadLevels(Mes("{1}{5}\n{2}{ 2300 }\n{3}{+4400}\n{51}{9000}\n{52}{1}\n{0}{7}\n"));
         Assert.AreEqual(ExperienceTableStatus.Read, read.Status);
         Assert.AreEqual(ExperienceTables.Levels, read.Thresholds!.Count);
-        Assert.AreEqual((0, 2100, 4600, 0, 9000), (read.Thresholds[0], read.Thresholds[1], read.Thresholds[2], read.Thresholds[3], read.Thresholds[50]));
+        Assert.AreEqual((0, 2300, 4400, 0, 9000), (read.Thresholds[0], read.Thresholds[1], read.Thresholds[2], read.Thresholds[3], read.Thresholds[50]));
     }
 
     [TestMethod]
@@ -35,8 +35,9 @@ public sealed class ExperienceTablesTests
             Assert.IsNull(read.Thresholds);
         }
         Assert.AreEqual(ExperienceTableStatus.Read, ExperienceTables.ReadLevels(Mes("{4}{-2147483648}\n")).Status);
-        // Entries the level table does not read are not checked.
+        // Entries the level table does not read are not checked: level 1 is always 0, and 52 and above are outside it.
         Assert.AreEqual(ExperienceTableStatus.Read, ExperienceTables.ReadLevels(Mes("{60}{text}\n")).Status);
+        Assert.AreEqual(ExperienceTableStatus.Read, ExperienceTables.ReadLevels(Mes("{1}{text}\n")).Status);
     }
 
     [TestMethod]

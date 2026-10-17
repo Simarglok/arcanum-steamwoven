@@ -58,7 +58,8 @@ admission: an equal step would divide by zero in the progress formula; the insta
 `Progress`, `BonusPoints`, `Advance` (the recalculation for a PC without an auto-level scheme and without level effects:
 level, experience, unspent points, levels and points gained, and the step for the followers or null when it stopped early),
 `FollowerLevel`, `AdjustForDifficulty`, `KillAward` and `DamageShare`. `DamageShare` computes without the original's
-32-bit wrap of worth × percentage, which needs a hit thousands of times larger than the maximum hit points.
+32-bit wrap of worth × percentage, which installed worths (a few thousand) reach only with a hit thousands of times larger
+than the maximum hit points.
 
 ## Session (`GameSessionOwner`)
 
@@ -68,7 +69,7 @@ level, experience, unspent points, levels and points gained, and the step for th
 | `Difficulty`, `SelectDifficulty`, descriptor and restore `Difficulty` | The game difficulty (`GameDifficulty`, the player's setting): Normal by default, switched at once without a revision, not saved, like the rule mode. An undefined value is `InvalidDescriptor` or `Rejected`. |
 | `SessionHeroDefinition.Experience`, `SessionHeroState.Experience` | The stored experience (0..2,000,000,000, else `InvalidHero`); a pre-made hero has 0. |
 | `QueryHeroExperience` | Level, experience, unspent points, and with data the remaining experience and the progress. |
-| `AwardHeroExperience(expected, amount)` | XP1 and XP5 for the hero: amount within ±100,000,000 (`InvalidExperience`); a zero amount and a dead hero are `NoChange`. The result's `SessionExperienceAward` has the award after difficulty and effects, the levels and points gained and the followers' level step. One revision. |
+| `AwardHeroExperience(expected, amount)` | XP1 and XP5 for the hero: amount within ±100,000,000 (`InvalidExperience`); a zero amount and a dead hero are `NoChange` with no award. The result's `SessionExperienceAward` has the award after difficulty and effects, the levels and points gained and the followers' level step. One revision. An award that leaves the hero unchanged (a negative one at 0, or the last-level branch from level 50's threshold) is `NoChange` with its award set, and its follower step still applies, as the source runs the followers' update every time. |
 | `AwardQuestExperience(expected, level)` | The dialog `XP` action and the script quest-experience action: `xp_quest.mes`[level], 0 (no change) without an entry. |
 | `SetQuestState` | A Completed request that passes the quest rules gives the quest's experience first, in the same revision; the overload with `out SessionExperienceAward?` returns it. |
 | `RecordNpcDamage(expected, loaded, damage, maxHitPoints, byHero)` | XP10: the NPC's record (or its loaded worth and pool while it has none) loses the hit's share; the hero gets it when `byHero`. Damage 0..1,000,000 and maximum 1..1,000,000. The host calls it only for an NPC not turned to stone, with an attacker. |

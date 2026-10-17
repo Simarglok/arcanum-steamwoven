@@ -169,7 +169,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":13,
+{"format":"arcanum-steamwoven-session","schemaVersion":14,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -187,6 +187,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
  "equipment":[],
  "effects":{"hero":[],"definitions":[]},
+ "experience":{"npcs":[]},
  "random":{"seed":"0000000000000000","draws":0},
  "life":{"hero":null,"critters":[]},
  "reactions":{"records":[]},
@@ -242,7 +243,7 @@ required `party` domain and refused schema 3 (see
 [party runtime](party-runtime.md#snapshot-schema-4)). Before that, ARC-SCRIPT-006
 added the required `story` domain and ARC-WORLD-010 the required, nullable `lighting`
 field; each was briefly schema 2 on its own while they landed together, so that merged
-format was schema 3. A quick-save file of schema 1..11 (ARC-WORLD-011) loads as "written by an incompatible version" with the
+format was schema 3. A quick-save file of an older schema (ARC-WORLD-011) loads as "written by an incompatible version" with the
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.

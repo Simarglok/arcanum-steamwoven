@@ -8,7 +8,8 @@ namespace Arcanum.Session;
 public static class SessionExperienceLimits
 {
     /// <summary>The largest magnitude of one award and of a quest table value: far above the installed tables (a few
-    /// thousand), low enough that the difficulty and effect changes stay exact.</summary>
+    /// thousand), low enough that the difficulty and effect changes never overflow (the effect aggregation saturates at
+    /// ±1,000,000,000).</summary>
     public const int MaxAward = 100_000_000;
     /// <summary>The largest experience worth or pool of an NPC.</summary>
     public const int MaxWorth = 100_000_000;
@@ -83,12 +84,14 @@ public sealed class SessionExperienceState
 /// effects (before the 0..2,000,000,000 clamp), <see cref="LevelsGained"/> and <see cref="PointsGained"/> the levels written
 /// and their points (before the unspent cap), and <see cref="Followers"/> the PC level step the source passes to its followers
 /// and nearby waiting followers (<see cref="ExperienceRules.FollowerLevel"/>), null when the recalculation stopped before it.
-/// NPC levels are not session state: the host applies the step to the NPCs it owns.
+/// NPC levels are not session state: the host applies the step to the NPCs it owns, also when the result is NoChange (at the
+/// last level an award can leave the hero unchanged and still step the followers, as the source does).
 /// </summary>
 public sealed record SessionExperienceAward(int Award, int LevelsGained, int PointsGained, FollowerLevelStep? Followers);
 
 /// <summary>An experience call: the hero's award (null when none was given: refused, a zero amount, a dead hero, an award
-/// to nobody) and the NPC's record after the call (null for a hero-only call or a refusal).</summary>
+/// to nobody; set also for NoChange when an award left the hero unchanged, such as a negative one at 0 or the last-level
+/// branch, whose follower step still applies) and the NPC's record after the call (null for a hero-only call or a refusal).</summary>
 public sealed record SessionExperienceResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
     SessionExperienceAward? Award, SessionNpcExperience? Npc, GameSessionVersion Version);
 
