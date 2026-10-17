@@ -189,7 +189,8 @@ scenery and for any other module's missing files.
 ## Slices
 
 Slice 1 is implemented by ARC-DATA-023 (79 of 80 interiors complete), slice 2 by
-ARC-DATA-024 (all 80; the viewer's slow K'na Tha load is ARC-RENDER-019).
+ARC-DATA-024 (all 80); ARC-RENDER-019 made the viewer load K'na Tha in about 17 s
+instead of about 3 minutes.
 
 1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
    read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the

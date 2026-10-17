@@ -41,6 +41,19 @@ public sealed class AreaScenePlanTests
         Assert.AreEqual(1, plan.Commands.Select(command => command.Frame).Distinct().Count());
     }
     [TestMethod]
+    public void EachBodyFindsItsOwnVisualAndTwoBodyVisualsForOneObjectAreRefused()
+    {
+        // ARC-RENDER-019: bodies find their visual by object key (a lookup, not a scan per body).
+        var bodies = Enumerable.Range(0, 200).Select(index => Body(index, 92928 + index, 82560)).ToArray();
+        var plan = AreaScenePlan.Create([], bodies, bodies.Select((body, index) => BodyVisual(body, 10 + index, 20)).Reverse().ToArray());
+        Assert.AreEqual(200, plan.Commands.Count);
+        foreach (var command in plan.Commands) Assert.AreEqual(10 + command.Identity!.Value.SourceIndex, command.Destination.Width);
+        var twice = BodyVisual(bodies[0]) with { Key = BodyVisual(bodies[0]).Key with { SourceIndex = 9999 } };
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], [BodyVisual(bodies[0]), twice]));
+        // A body without a visual is still refused.
+        Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], []));
+    }
+    [TestMethod]
     public void BodyCenterSignedHotspotsAndSerializedScaleDoNotUseArtOffsets()
     {
         var body = Body(1, scale: 75); var visual = BodyVisual(body, 167,321,-12,-40,scale:75);

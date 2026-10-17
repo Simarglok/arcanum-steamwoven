@@ -92,8 +92,12 @@ first of four `crematorium-lev 2` runs, right after a build, stopped at the
 resource sweep's coverage check (`AREA_RESOURCES_SWEEP_COVERAGE`, a command not
 seen in any view) and the three repeats passed, so the cause is not known.
 Since ARC-DATA-024 also on `k'na tha` (77 sectors, 315,392 terrain cells, 43,087
-drawn bodies, 416 frames, 8.6 MB of frames; load about 187 s; wading blend, vault,
-sweep of 2,728 views and reload PASS). A small map may fit every GPU cache, so map mode does not
+drawn bodies, 416 frames, 8.6 MB of frames; wading blend, vault, sweep of 2,728
+views and reload PASS in the first run). Its load took about 187 s until
+ARC-RENDER-019, almost all in the scene plan, which looked up each body's visual by
+scanning every visual, and in the wall check, which did the same per wall; both
+now use a lookup by key, and K'na Tha loads in about 17 s in a source run (the
+strict snapshot about 10 s of it). A small map may fit every GPU cache, so map mode does not
 require evictions in the sweep; every per-view budget and the ownership balance
 still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
@@ -168,10 +172,12 @@ lighting and is left to its own task.
 
 ## Not yet
 
-- K'na Tha loads (ARC-DATA-024) but slowly: about 3 minutes in a source run,
-  almost all in the scene plan, which looks up each body's visual by scanning every
-  visual (43,219 objects), and about half a minute in the wall check and frame copy
-  (ARC-RENDER-019).
+- K'na Tha's native smoke is not green: the ARC-RENDER-018 blend check of its
+  first wading body reports `AREA_BLEND_PIXEL_MISMATCH` in most runs, on
+  `origin/main` before ARC-RENDER-019 as well (two of two runs) as after it, and
+  one run that passed the blend check stopped at the reload's managed-heap bound
+  (+64 MB over a 4 % floor of about 33 MB). Both are left to their own
+  investigation.
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).

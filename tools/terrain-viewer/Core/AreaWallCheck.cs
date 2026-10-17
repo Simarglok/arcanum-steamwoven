@@ -87,10 +87,11 @@ public sealed class AreaWallCheck
             if ((flags & 0x3) == 0) throw new InvalidOperationException("AREA_WALL_NOT_DRAWN");
         }
         var pieces = new List<AreaWallPiece>();
+        var visuals = snapshot.Visuals.ToDictionary(candidate => candidate.Key);
         foreach (var command in plan.Commands.Where(command => command.Identity is { } key && objects.ContainsKey(key)))
         {
             var body = objects[command.Identity!.Value];
-            var visual = snapshot.Visuals.Single(candidate => candidate.Key == command.Visual);
+            var visual = visuals.TryGetValue(command.Visual, out var found) ? found : throw new InvalidOperationException("AREA_WALL_VISUAL_REQUIRED");
             var flags = body.EffectiveFields.SingleOrDefault(field => field.Slot == 36 && field.Presence == AreaPresence.Value)?.Number
                 ?? throw new InvalidOperationException("AREA_WALL_FLAGS_REQUIRED");
             if ((flags & ~1L) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_WALL_FLAGS");

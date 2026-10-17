@@ -64,6 +64,12 @@ public sealed class AreaScenePlan
     {
         chart ??= AreaChart.Exterior;
         var catalog = visuals.ToDictionary(visual => visual.Key);
+        // Each body's visual by its object (ARC-RENDER-019: a lookup, not a scan per body, so a
+        // 43,219-object map plans in linear time). Two body visuals for one object stay an error.
+        var bodyVisuals = new Dictionary<AreaObjectKey, AreaVisualRecord?>();
+        foreach (var candidate in catalog.Values)
+            if (candidate.Key.Object is { } owner && candidate.Key.Layer == AreaLayerKind.Body)
+                bodyVisuals[owner] = bodyVisuals.ContainsKey(owner) ? null : candidate;
         var commands = new List<AreaDrawCommand>(); var coverage = new List<AreaCoverage>();
         foreach (var tile in terrain)
         {
@@ -84,7 +90,8 @@ public sealed class AreaScenePlan
         }
         foreach (var body in objects)
         {
-            var visual = catalog.Values.SingleOrDefault(candidate => candidate.Key.Object == body.Key && candidate.Key.Layer == AreaLayerKind.Body);
+            var visual = bodyVisuals.TryGetValue(body.Key, out var found)
+                ? found ?? throw new InvalidOperationException("AREA_VISUAL_AMBIGUOUS") : null;
             if (body.Scope != AreaScope.Core)
             { coverage.Add(new(body.Key, visual?.Key, AreaDisposition.OutsideScope, "DATA009Scope")); continue; }
             var state = State(body);
