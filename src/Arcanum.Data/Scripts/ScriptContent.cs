@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Arcanum.Data.Content;
+using Arcanum.Data.Fixes;
 
 namespace Arcanum.Data.Scripts;
 
@@ -25,8 +26,12 @@ public enum ScriptContentStatus
 /// <see cref="Detail"/> names a status or a virtual path, never an absolute path or payload bytes.</summary>
 public sealed record ScriptRead(ScriptContentStatus Status, ScriptName? Name, ScrProgram? Program, string Detail);
 
-/// <summary>A dialog read: the document when <see cref="Status"/> is <see cref="ScriptContentStatus.Read"/>.</summary>
-public sealed record DialogRead(ScriptContentStatus Status, ScriptName? Name, DlgDocument? Document, string Detail);
+/// <summary>A dialog read: the document when <see cref="Status"/> is <see cref="ScriptContentStatus.Read"/>, and the data
+/// fixes (ARC-DATA-022) that matched the file, applied or refused.</summary>
+public sealed record DialogRead(ScriptContentStatus Status, ScriptName? Name, DlgDocument? Document, string Detail)
+{
+    public IReadOnlyList<DlgFixAttempt> Fixes { get; init; } = Array.Empty<DlgFixAttempt>();
+}
 
 /// <summary>The opened content or why the stack could not be opened; <see cref="Detail"/> is the stack's own detail,
 /// which names the failing source path.</summary>
@@ -50,9 +55,12 @@ public sealed class ScriptContent : IDisposable
     private readonly object _gate = new();
     private int _changed;
 
-    private ScriptContent(ContentStack stack, bool ownsStack, ScrReaderOptions? scripts, DlgReaderOptions? dialogs)
+    private readonly DlgDataFixCatalogue _fixes;
+
+    private ScriptContent(ContentStack stack, bool ownsStack, ScrReaderOptions? scripts, DlgReaderOptions? dialogs, DlgDataFixCatalogue? fixes)
     {
         _stack = stack; _ownsStack = ownsStack; _scripts = scripts ?? new(); _dialogs = dialogs ?? OriginalDialogs;
+        _fixes = fixes ?? DlgDataFixCatalogue.Installed;
         Names = ScriptNameIndex.Build(stack);
     }
 
@@ -66,19 +74,20 @@ public sealed class ScriptContent : IDisposable
     public bool Changed => Volatile.Read(ref _changed) != 0;
 
     /// <summary>Opens a stack over <paramref name="plan"/> and owns it.</summary>
-    public static ScriptContentOpenResult Open(ContentMountPlan plan, ContentStackOptions? options = null, ScrReaderOptions? scripts = null, DlgReaderOptions? dialogs = null)
+    public static ScriptContentOpenResult Open(ContentMountPlan plan, ContentStackOptions? options = null, ScrReaderOptions? scripts = null, DlgReaderOptions? dialogs = null,
+        DlgDataFixCatalogue? fixes = null)
     {
         var opened = ContentStack.Open(plan, options);
         if (opened.Status != ContentStackStatus.Ready) return new(opened.Status, null, opened.Detail);
-        try { return new(ContentStackStatus.Ready, new ScriptContent(opened.Stack!, true, scripts, dialogs)); }
+        try { return new(ContentStackStatus.Ready, new ScriptContent(opened.Stack!, true, scripts, dialogs, fixes)); }
         catch { opened.Stack!.Dispose(); throw; }
     }
 
     /// <summary>Reads through a stack the caller keeps open and disposes.</summary>
-    public static ScriptContent Over(ContentStack stack, ScrReaderOptions? scripts = null, DlgReaderOptions? dialogs = null)
+    public static ScriptContent Over(ContentStack stack, ScrReaderOptions? scripts = null, DlgReaderOptions? dialogs = null, DlgDataFixCatalogue? fixes = null)
     {
         ArgumentNullException.ThrowIfNull(stack);
-        return new(stack, false, scripts, dialogs);
+        return new(stack, false, scripts, dialogs, fixes);
     }
 
     /// <summary>
@@ -113,18 +122,22 @@ public sealed class ScriptContent : IDisposable
 
     /// <summary>The dialog of script <paramref name="number"/>: the script's name with <c>dlg</c> folder and extension. A
     /// document whose original read stopped early keeps the records before the stop, as the game does
-    /// (<see cref="DlgDocument.StopReason"/>).</summary>
-    public DialogRead Dialog(int number)
+    /// (<see cref="DlgDocument.StopReason"/>). <paramref name="rules"/> chooses the data fixes (ARC-DATA-022) by rule mode;
+    /// without it the file is read as the retail game reads it (<see cref="DataFixProfile.Original"/>). A caller in a game
+    /// session passes the session's current rules at each read.</summary>
+    public DialogRead Dialog(int number, DataFixProfile? rules = null)
     {
         if (Names.Find(number) is not { } name) return new(ScriptContentStatus.NoName, null, null, $"script {number} has no name");
         var (status, bytes, detail) = ReadWinner(name.DialogPath);
         if (status != ScriptContentStatus.Read) return new(status, name, null, detail);
+        // Change detection is on the file as stored; the fixes edit a copy.
+        var fixedBytes = _fixes.Apply(name.DialogPath, bytes, rules ?? DataFixProfile.Original);
         DlgDocument document;
-        try { document = DlgReader.Read(bytes, _dialogs); }
-        catch (DlgException exception) { return new(ScriptContentStatus.Invalid, name, null, $"{name.DialogPath}: {exception.GetType().Name}"); }
+        try { document = DlgReader.Read(fixedBytes.Bytes, _dialogs); }
+        catch (DlgException exception) { return new(ScriptContentStatus.Invalid, name, null, $"{name.DialogPath}: {exception.GetType().Name}") { Fixes = fixedBytes.Attempts }; }
         return document.Records.Count == 0
-            ? new(ScriptContentStatus.Empty, name, null, $"{name.DialogPath}: no record the original keeps ({document.StopReason})")
-            : new(ScriptContentStatus.Read, name, document, name.DialogPath);
+            ? new(ScriptContentStatus.Empty, name, null, $"{name.DialogPath}: no record the original keeps ({document.StopReason})") { Fixes = fixedBytes.Attempts }
+            : new(ScriptContentStatus.Read, name, document, name.DialogPath) { Fixes = fixedBytes.Attempts };
     }
 
     private (ScriptContentStatus, byte[], string) ReadWinner(string path)

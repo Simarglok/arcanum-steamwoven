@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Arcanum.Data.Fixes;
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
@@ -28,13 +29,14 @@ public enum RuleMode
 public sealed class GameRules
 {
     private GameRules(RuleMode mode, CombatAnomalyProfile combat, GameEventQueueProfile events, ScrRuleProfile scripts,
-        ReactionRuleProfile reaction)
+        ReactionRuleProfile reaction, DataFixProfile data)
     {
         Mode = mode;
         Combat = combat;
         Events = events;
         Scripts = scripts;
         Reaction = reaction;
+        Data = data;
     }
 
     public RuleMode Mode { get; }
@@ -54,13 +56,16 @@ public sealed class GameRules
     /// <summary>NPC reaction (ARC-WORLD-026): reputation A2, a deliberate hit on a follower raises its reaction.</summary>
     public ReactionRuleProfile Reaction { get; }
 
+    /// <summary>Game data fixes (ARC-DATA-022): DF1..DF3, DLG defects that make the retail game lose content.</summary>
+    public DataFixProfile Data { get; }
+
     /// <summary>The default mode: the original with every recorded fix.</summary>
     public static GameRules Steamwoven { get; } = new(RuleMode.Steamwoven, CombatAnomalyProfile.Steamwoven, GameEventQueueProfile.Steamwoven, ScrRuleProfile.Steamwoven,
-        ReactionRuleProfile.Steamwoven);
+        ReactionRuleProfile.Steamwoven, DataFixProfile.Steamwoven);
 
     /// <summary>The retail 1.0.7.4 behaviour in every domain.</summary>
     public static GameRules Original { get; } = new(RuleMode.Original, CombatAnomalyProfile.Original, GameEventQueueProfile.Original, ScrRuleProfile.Original,
-        ReactionRuleProfile.Original);
+        ReactionRuleProfile.Original, DataFixProfile.Original);
 
     /// <summary>Both modes, default first.</summary>
     public static IReadOnlyList<GameRules> All { get; } = [Steamwoven, Original];
