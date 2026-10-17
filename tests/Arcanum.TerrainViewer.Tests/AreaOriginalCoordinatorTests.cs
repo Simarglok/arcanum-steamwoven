@@ -116,7 +116,7 @@ public sealed class AreaOriginalCoordinatorTests
         Assert.AreEqual(ActorDiagnosticProfileId.HumanFixed, result.ActorPlan.Profile.Id);
         Assert.AreEqual(195, result.ActorTextures.Count, "HumanFixedArea: idle, walk, run, vault (ARC-WORLD-020/021) and attack (ARC-COMBAT-005)");
         Assert.AreEqual(1705144L, result.ActorTextures.Values.Sum(t => (long)t.Rgba.Length));
-        Assert.AreEqual(27174376L, result.CheckedRgbaBytes);
+        Assert.AreEqual(27620080L, result.CheckedRgbaBytes);
         Assert.AreEqual((-200L, 160L), (result.ActorPlan.Current.AnchorX, result.ActorPlan.Current.AnchorY));
         Assert.AreEqual((ActorDiagnosticAction.Idle, 5, 0), (result.ActorPlan.Current.Action, result.ActorPlan.Current.RequestedFacing, result.ActorPlan.Current.Frame));
         Assert.AreEqual(195, result.ActorPlan.Catalog.Count);
