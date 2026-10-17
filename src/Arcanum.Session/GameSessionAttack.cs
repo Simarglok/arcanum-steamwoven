@@ -42,7 +42,7 @@ public sealed record SessionCritterCombatBuild(SessionCritterCombatFailure Failu
 /// </summary>
 public sealed class SessionCritterCombat
 {
-    // Stored stat indices (CE stat.h): 0..7 primary, 17 level, 22 magick points, 23 tech points, 24 poison level, 26 gender,
+    // Stored stat indices: 0..7 primary, 17 level, 22 magick points, 23 tech points, 24 poison level, 26 gender,
     // 27 race.
     private const int LevelStat = 17, MagickPointsStat = 22, TechPointsStat = 23, PoisonStat = 24, GenderStat = 26, RaceStat = 27;
     // Critter flags (OBJ_F_CRITTER_FLAGS) and flags 2, object flags, spell flags: the source's bits.

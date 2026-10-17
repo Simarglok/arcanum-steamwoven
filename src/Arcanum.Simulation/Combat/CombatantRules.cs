@@ -35,6 +35,7 @@ public static class CombatantRules
     /// positive, clamped to 0..95 unless the critter is a monstrous NPC (<paramref name="unclamped"/>). Resistance effects are not
     /// applied (no owner models them yet).
     /// </summary>
+    [OriginalFunction(0x43D6D0, OriginalFunctionScope.Partial)]
     public static DamageResistances Resistances(DamageResistances stored, EquipmentResistances worn, int constitution, bool unclamped)
     {
         foreach (var value in new[] { stored.Normal, stored.Poison, stored.Electrical, stored.Fire, worn.Normal, worn.Poison, worn.Electrical,

@@ -7,8 +7,8 @@ public enum BasicCombatSkill { Bow = 0, Dodge = 1, Melee = 2, Throwing = 3, Back
 
 /// <summary>
 /// The level and training of a basic combat skill (ARC-COMBAT-005; the source's <c>basic_skill_base</c>,
-/// <c>basic_skill_level</c>, <c>max_skill_for_stat_level</c> and <c>basic_skill_training_get</c>, read in CE at
-/// <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c> and checked in the original 1.0.7.4 executable, ledger rows FA7–FA9).
+/// <c>basic_skill_level</c>, <c>max_skill_for_stat_level</c> and <c>basic_skill_training_get</c>, checked in the original
+/// 1.0.7.4 executable, ledger rows FA7–FA9).
 /// A stored skill keeps its points in bits 0..5 and its training in bits 6..7. The level is four per point, or 20 for the
 /// melee skill of a monstrous critter (mechanical, monster, animal or undead), then the skill's effect changes, clamped to
 /// 0..20 and capped by the key stat (dexterity for all five). Every function validates its inputs
@@ -25,7 +25,7 @@ public static class CombatSkillRules
     /// <summary>Bound of the magnitude of a stored skill value or a stat these rules read.</summary>
     public const int MaxValue = 1_000_000;
 
-    // The original's cap per key stat 1..20 (CE max_skill_level_tbl, the same values in the executable).
+    // The original's cap per key stat 1..20 (its table at 0x5B6FA4).
     private static readonly int[] KeyStatCaps = [3, 3, 3, 3, 3, 7, 7, 7, 11, 11, 11, 15, 15, 15, 19, 19, 19, 20, 20, 20];
     // Monstrous melee training: the effective melee level and the character level each tier needs (apprentice, expert,
     // master).
@@ -37,6 +37,7 @@ public static class CombatSkillRules
         ? CharacterStat.Dexterity : throw new ArgumentOutOfRangeException(nameof(skill));
 
     /// <summary>The points of a stored skill value (bits 0..5).</summary>
+    [OriginalFunction(0x4C5FA0, OriginalFunctionScope.Full)]
     public static int Points(int stored)
     {
         Check(stored, nameof(stored));
@@ -50,7 +51,12 @@ public static class CombatSkillRules
         return (SkillTraining)((stored >> 6) & 3);
     }
 
+    /// <summary>The level a skill's points give before effects: four per point.</summary>
+    [OriginalFunction(0x4C5E50, OriginalFunctionScope.Full)]
+    public static int BaseLevel(int stored) => LevelPerPoint * Points(stored);
+
     /// <summary>The highest level a key stat allows: the original's table for the stat clamped to 1..20.</summary>
+    [OriginalFunction(0x4C5F70, OriginalFunctionScope.Full)]
     public static int KeyStatCap(int keyStat)
     {
         Check(keyStat, nameof(keyStat));
@@ -63,10 +69,11 @@ public static class CombatSkillRules
     /// <see cref="EffectModifiers.Apply"/>), clamped to 0..20, then capped by <see cref="KeyStatCap"/> of the effective key
     /// stat.
     /// </summary>
+    [OriginalFunction(0x4C5EB0, OriginalFunctionScope.Partial)]
     public static int Level(BasicCombatSkill skill, int stored, int keyStat, bool monstrous, IReadOnlyList<EffectModifier>? effects = null)
     {
         if (!Enum.IsDefined(skill)) throw new ArgumentOutOfRangeException(nameof(skill));
-        var level = skill == BasicCombatSkill.Melee && monstrous ? MonstrousMeleeLevel : LevelPerPoint * Points(stored);
+        var level = skill == BasicCombatSkill.Melee && monstrous ? MonstrousMeleeLevel : BaseLevel(stored);
         if (effects is { Count: > 0 }) level = EffectModifiers.Apply(level, effects);
         return Math.Min(Math.Clamp(level, 0, MaxLevel), KeyStatCap(keyStat));
     }
@@ -76,6 +83,7 @@ public static class CombatSkillRules
     /// thresholds both its effective melee level (<see cref="Level"/>) and its character level reach in order (none below
     /// melee 1 or level 10, apprentice from 1 and 10, expert from 9 and 20, master from 18 and 30).
     /// </summary>
+    [OriginalFunction(0x4C60C0, OriginalFunctionScope.Partial)]
     public static SkillTraining Training(BasicCombatSkill skill, int stored, bool monstrous, int meleeLevel, int characterLevel)
     {
         if (!Enum.IsDefined(skill)) throw new ArgumentOutOfRangeException(nameof(skill));

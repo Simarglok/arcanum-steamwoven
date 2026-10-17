@@ -15,14 +15,14 @@ effective object fields. No NPC fights back. Requirements:
 
 ## Evidence
 
-- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd`: `ui/intgame.c` (`sub_54ED30`, the click on a target),
+- The reconstruction at its pinned commit (see the [original executable check](../research/original-executable-check.md)), read first: `ui/intgame.c` (`sub_54ED30`, the click on a target),
   `skill.c` (skill base, level, key-stat cap, training), `critter.c` (`critter_is_monstrous`), `object.c` (resistance),
   `combat.c` (`combat_dmg`, the dying animation), `anim.c` (the attack and attempt-attack goals, the death and fall-down
   animations).
 - The retail 1.0.7.4 `Arcanum.exe`, read statically by two independent readers per the
   [original executable check](../research/original-executable-check.md); rows FA1–FA10 of the
-  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). The original differs from CE
-  in three CE slips (a follower click, a corpse click without Alt, the inactive-PC test of the click); none is a bug of the
+  [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). The original differs from the
+  reconstruction in three of its slips (a follower click, a corpse click without Alt, the inactive-PC test of the click); none is a bug of the
   original, so there is no rule-mode switch.
 - The installed data: the twelve pre-made PC prototypes store no skills (the pre-made hero reader refuses one that does), the
   Crash Site creatures are animals and monsters with stored hit-point adjustments of −3 to −6.
@@ -35,7 +35,7 @@ effective object fields. No NPC fights back. Requirements:
 | Skill level (`CombatSkillRules`, FA7) | 4 per stored point (bits 0..5), or 20 for the melee of a monstrous critter, then the skill's effect changes, clamped 0..20, then capped by the dexterity table `3,3,3,3,3,7,7,7,11,11,11,15,15,15,19,19,19,20,20,20` (dexterity clamped to 1..20); all five combat skills (bow, dodge, melee, throwing, backstab) key on dexterity. |
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
-| Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (CE `object_get_resistance`); resistance effects are not applied. |
+| Resistance (`CombatantRules.Resistances`) | Stored + worn armour (with its magic, scaled for the wearer) + `5 × (CN − 4)` for poison when positive, clamped 0..95 unless a monstrous NPC (`object_get_resistance`, ledger EQ8); resistance effects are not applied. |
 | Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) to the nearest standable cell within reach first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |

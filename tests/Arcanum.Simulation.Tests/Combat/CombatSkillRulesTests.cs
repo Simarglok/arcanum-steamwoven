@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-// Combat skill levels and training (ARC-COMBAT-005, ledger FA4–FA6) and the combatant helpers: numbers from the CE reading,
+// Combat skill levels and training (ARC-COMBAT-005, ledger FA7–FA9) and the combatant helpers: numbers
 // checked in the original 1.0.7.4 executable.
 [TestClass]
 public sealed class CombatSkillRulesTests

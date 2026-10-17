@@ -115,7 +115,7 @@ public partial class TerrainViewerApp
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Walked = walked, Frames = frames, AttackFrames = attackFrames, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),
                 Experience = session.QueryHeroExperience()?.Experience - experience, Refused = refused,
-                Parity = "NOT_VERIFIED (rules from the CE reading and the original executable; no original-runtime run)" }));
+                Parity = "NOT_VERIFIED (rules read in the original executable; no original-runtime run)" }));
         }
         finally
         {
