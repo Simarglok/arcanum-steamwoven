@@ -25,6 +25,51 @@ public sealed record AreaUseResult(AreaUseOutcome Outcome, AreaEndpoint? Endpoin
 public sealed record AreaTransition(AreaEndpoint Endpoint, int FromMap, int ToMap, AreaStepCell Arrival, CellCoord ArrivalChartCell);
 
 /// <summary>
+/// ARC-WORLD-009 use rule (docs/research/cave-transition-evidence.md T3), shared by the Crash Site pair and map mode
+/// (ARC-WORLD-031): a use of a trigger object is accepted within Chebyshev distance 2 when the object's tile is not
+/// terrain-blocking and one step from the actor towards the object is not blocked by anything but the object itself.
+/// </summary>
+public static class AreaUseRule
+{
+    public const int UseRange = 2;
+
+    /// <summary><see cref="AreaUseOutcome.Accepted"/> with the distance when the use may run, else the refusal.</summary>
+    public static (AreaUseOutcome Outcome, int Distance, string Reason) Check(AreaMapRuntime map, AreaObjectKey trigger, AreaStepCell objectCell, AreaStepCell actor)
+    {
+        ArgumentNullException.ThrowIfNull(map);
+        var dx = objectCell.X - actor.X; var dy = objectCell.Y - actor.Y;
+        var distance = checked((int)Math.Max(Math.Abs(dx), Math.Abs(dy)));
+        if (distance > UseRange) return (AreaUseOutcome.TooFar, distance, "OUTSIDE_USE_RANGE");
+        // The object's own tile must not be terrain-blocking.
+        if (map.Steps.Terrain(objectCell) is not { Coverage: CardinalTraversalCoverage.Supported } terrain)
+            return (AreaUseOutcome.StepUnknown, distance, "TRIGGER_TILE_TERRAIN_UNKNOWN");
+        if (terrain.Disposition == CardinalTraversalDisposition.Blocked) return (AreaUseOutcome.TriggerTileBlocked, distance, terrain.ReasonCode);
+        if (distance > 0)
+        {
+            // One step towards the object, with the object itself ignored.
+            var direction = Direction(Math.Sign(dx), Math.Sign(dy));
+            var next = new AreaStepCell(actor.X + Math.Sign(dx), actor.Y + Math.Sign(dy));
+            var step = map.Steps.Assess(map.Steps.Request(actor, next, direction));
+            var others = step.Objects.Where(o => o.Key != trigger).ToArray();
+            var blocked = step.DestinationTerrain?.Disposition == CardinalTraversalDisposition.Blocked || step.WallBlocker is not null ||
+                others.Any(o => o.Disposition == CardinalTraversalDisposition.Blocked);
+            if (blocked) return (AreaUseOutcome.StepBlocked, distance, step.ReasonCode);
+            if (step.Coverage == CardinalTraversalCoverage.Unsupported || step.Gaps.Any(g => g.Object != trigger))
+                return (AreaUseOutcome.StepUnknown, distance, step.ReasonCode);
+        }
+        return (AreaUseOutcome.Accepted, distance, "OK");
+    }
+
+    private static CardinalTraversalDirection Direction(int dx, int dy) => (dx, dy) switch
+    {
+        (-1, -1) => CardinalTraversalDirection.XMinusYMinus, (-1, 0) => CardinalTraversalDirection.XMinus,
+        (-1, 1) => CardinalTraversalDirection.XMinusYPlus, (0, 1) => CardinalTraversalDirection.YPlus,
+        (1, 1) => CardinalTraversalDirection.XPlusYPlus, (1, 0) => CardinalTraversalDirection.XPlus,
+        (1, -1) => CardinalTraversalDirection.XPlusYMinus, _ => CardinalTraversalDirection.YMinus,
+    };
+}
+
+/// <summary>
 /// ARC-WORLD-009 transition rule (docs/research/cave-transition-evidence.md T3, T4): a use of an endpoint's
 /// trigger object is accepted within Chebyshev distance 2 when the object's tile is not terrain-blocking and
 /// one step from the actor towards the object is not blocked by anything but the object itself. An accepted
@@ -34,7 +79,7 @@ public sealed record AreaTransition(AreaEndpoint Endpoint, int FromMap, int ToMa
 /// </summary>
 public sealed class AreaTransitionCoordinator
 {
-    public const int UseRange = 2;
+    public const int UseRange = AreaUseRule.UseRange;
     private readonly IReadOnlyDictionary<int, AreaMapRuntime> _maps;
     private readonly GameSessionOwner? _session;
 
@@ -71,27 +116,9 @@ public sealed class AreaTransitionCoordinator
         var target = endpoint is null ? null : map.Snapshot.Objects.SingleOrDefault(o => o.Key == trigger);
         if (endpoint is null || target?.WorldX is not { } tx || target.WorldY is not { } ty)
             return new(AreaUseOutcome.NotATrigger, null, -1, "NO_ENDPOINT_FOR_OBJECT");
-        var objectCell = new AreaStepCell(tx, ty);
-        var dx = objectCell.X - actor.X; var dy = objectCell.Y - actor.Y;
-        var distance = checked((int)Math.Max(Math.Abs(dx), Math.Abs(dy)));
-        if (distance > UseRange) return new(AreaUseOutcome.TooFar, endpoint, distance, "OUTSIDE_USE_RANGE");
-        // The object's own tile must not be terrain-blocking.
-        if (map.Steps.Terrain(objectCell) is not { Coverage: CardinalTraversalCoverage.Supported } terrain)
-            return new(AreaUseOutcome.StepUnknown, endpoint, distance, "TRIGGER_TILE_TERRAIN_UNKNOWN");
-        if (terrain.Disposition == CardinalTraversalDisposition.Blocked) return new(AreaUseOutcome.TriggerTileBlocked, endpoint, distance, terrain.ReasonCode);
-        if (distance > 0)
-        {
-            // One step towards the object, with the object itself ignored.
-            var direction = Direction(Math.Sign(dx), Math.Sign(dy));
-            var next = new AreaStepCell(actor.X + Math.Sign(dx), actor.Y + Math.Sign(dy));
-            var step = map.Steps.Assess(map.Steps.Request(actor, next, direction));
-            var others = step.Objects.Where(o => o.Key != trigger).ToArray();
-            var blocked = step.DestinationTerrain?.Disposition == CardinalTraversalDisposition.Blocked || step.WallBlocker is not null ||
-                others.Any(o => o.Disposition == CardinalTraversalDisposition.Blocked);
-            if (blocked) return new(AreaUseOutcome.StepBlocked, endpoint, distance, step.ReasonCode);
-            if (step.Coverage == CardinalTraversalCoverage.Unsupported || step.Gaps.Any(g => g.Object != trigger))
-                return new(AreaUseOutcome.StepUnknown, endpoint, distance, step.ReasonCode);
-        }
+        var check = AreaUseRule.Check(map, trigger, new(tx, ty), actor);
+        if (check.Outcome != AreaUseOutcome.Accepted) return new(check.Outcome, endpoint, check.Distance, check.Reason);
+        var distance = check.Distance;
         if (!_maps.TryGetValue(endpoint.RuntimeDestination, out var destination))
             return new(AreaUseOutcome.DestinationUnavailable, endpoint, distance, "DESTINATION_MAP_NOT_LOADED");
         var arrival = new AreaStepCell(endpoint.ArrivalX, endpoint.ArrivalY);
@@ -140,14 +167,6 @@ public sealed class AreaTransitionCoordinator
 
     private static bool IsTrigger(AreaEndpoint endpoint, AreaObjectKey key) =>
         key.Kind == AreaSourceKind.Static && key.Sector == endpoint.Sector && key.SourceIndex == endpoint.Ordinal && key.ObjectIdSha256 == endpoint.SourceObjectIdSha256;
-
-    private static CardinalTraversalDirection Direction(int dx, int dy) => (dx, dy) switch
-    {
-        (-1, -1) => CardinalTraversalDirection.XMinusYMinus, (-1, 0) => CardinalTraversalDirection.XMinus,
-        (-1, 1) => CardinalTraversalDirection.XMinusYPlus, (0, 1) => CardinalTraversalDirection.YPlus,
-        (1, 1) => CardinalTraversalDirection.XPlusYPlus, (1, 0) => CardinalTraversalDirection.XPlus,
-        (1, -1) => CardinalTraversalDirection.XPlusYMinus, _ => CardinalTraversalDirection.YMinus,
-    };
 
     /// <summary>A new-game session for the viewer: the clock profile of the area lighting source, the original
     /// new-game global flags (0..3199 known false, ARC-SCRIPT-006) that dialogs read and write, an empty story
