@@ -47,8 +47,8 @@ public readonly record struct FollowerLevelStep(int OldPcLevel, int NewPcLevel);
 public readonly record struct FollowerLevelUp(int Level, int PointsGained);
 
 /// <summary>
-/// The source's experience and level rules (ARC-WORLD-030; CE <c>level.c</c>, <c>critter.c</c>, <c>combat.c</c> at the pinned
-/// revision, checked in the original 1.0.7.4 executable, ledger XP1–XP12). Pure functions over explicit values; the session owns
+/// The source's experience and level rules (ARC-WORLD-030, checked in the original 1.0.7.4 executable,
+/// ledger XP1–XP12). Pure functions over explicit values; the session owns
 /// the PC's numbers.
 /// </summary>
 public static class ExperienceRules
@@ -65,7 +65,7 @@ public static class ExperienceRules
     public const int ProgressFallback = 999;
 
     /// <summary>
-    /// Experience still needed for the next level (<c>level_experience_points_to_next_level</c>, 0x4A68B0): the next level's
+    /// Experience still needed for the next level (0x4A68B0): the next level's
     /// threshold minus the experience, negative when it is already reached; <see cref="NoNextLevel"/> at or above the maximum.
     /// </summary>
     [OriginalFunction(0x4A68B0, OriginalFunctionScope.Full)]
@@ -77,7 +77,7 @@ public static class ExperienceRules
     }
 
     /// <summary>
-    /// Progress toward the next level in thousandths (<c>level_progress_towards_next_level</c>, 0x4A6900):
+    /// Progress toward the next level in thousandths (0x4A6900):
     /// <c>1000 − 1000 × remaining / step</c>, truncated; 0 at or above the maximum; <see cref="ProgressFallback"/> for level 0
     /// or when the next level is already reached. The product is exact unless <paramref name="rules"/> has
     /// <see cref="ExperienceRuleProfile.ProgressProductWraps"/> (Original, ledger XP3): then it is a wrapping 32-bit product,
@@ -98,7 +98,7 @@ public static class ExperienceRules
     }
 
     /// <summary>Character points for the levels after <paramref name="from"/> up to <paramref name="to"/>
-    /// (<c>calculate_bonus_character_points</c>, 0x4A6980): one per level and one more for every fifth level.</summary>
+    /// (0x4A6980): one per level and one more for every fifth level.</summary>
     [OriginalFunction(0x4A6980, OriginalFunctionScope.Full)]
     public static int BonusPoints(int from, int to)
     {
@@ -108,12 +108,12 @@ public static class ExperienceRules
     }
 
     /// <summary>
-    /// The source's level recalculation after the experience changed (<c>level_recalc</c>, 0x4A69C0), for a PC with no
+    /// The source's level recalculation after the experience changed (0x4A69C0), for a PC with no
     /// auto-level scheme and no effects on its level. Nothing changes at or above the maximum level or while the next level
     /// is not reached. Otherwise each reached level is written with its points (the unspent total capped at
     /// <see cref="MaxUnspentPoints"/>), until a level is not reached or the next one would be <see cref="MaxLevel"/>: then the
     /// original writes the threshold of the PC's current level (<c>MaxLevel − 1</c>) as its experience, keeps the level and
-    /// grants nothing (ledger XP5: CE's index one higher would recurse without end). The PC level step is
+    /// grants nothing (ledger XP5: the index one higher would recurse without end). The PC level step is
     /// passed on to followers either way, so in that branch it is one level above the PC.
     /// </summary>
     [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]
@@ -150,8 +150,8 @@ public static class ExperienceRules
     }
 
     /// <summary>
-    /// A follower's level after its leader's level step (<c>update_follower_level</c>, 0x4A6CB0): a follower at or above the
-    /// PC's new level stays (the original's first test; CE tests the maximum instead, the same for every step the
+    /// A follower's level after its leader's level step (0x4A6CB0): a follower at or above the
+    /// PC's new level stays (the original's first test; testing the maximum instead gives the same for every step the
     /// recalculation passes, ledger XP7); one at or below the PC's old level keeps its gap, one between is pulled to the PC's new
     /// level, never to <see cref="MaxLevel"/> or above; a level that would not rise stays. Points are the bonus points of the
     /// levels gained (the source then runs the NPC's auto-level scheme, which is not modelled here).
@@ -167,8 +167,8 @@ public static class ExperienceRules
     }
 
     /// <summary>
-    /// The difficulty change of an award (<c>critter_give_xp</c>, 0x45F110): easy adds half, hard takes a quarter away (the
-    /// original; CE's half is a reconstruction slip, ledger XP1), each truncated toward zero; normal keeps it.
+    /// The difficulty change of an award (0x45F110): easy adds half, hard takes a quarter away (the
+    /// original takes a quarter, not half, ledger XP1), each truncated toward zero; normal keeps it.
     /// </summary>
     [OriginalFunction(0x45F110, OriginalFunctionScope.Partial)]
     public static long AdjustForDifficulty(long award, GameDifficulty difficulty) => difficulty switch
@@ -179,12 +179,12 @@ public static class ExperienceRules
         _ => throw new ArgumentOutOfRangeException(nameof(difficulty)),
     };
 
-    /// <summary>The award for killing an NPC (<c>critter_notify_killed</c>, 0x45DA20): a fifth of its experience worth, truncated.</summary>
+    /// <summary>The award for killing an NPC (0x45DA20): a fifth of its experience worth, truncated.</summary>
     [OriginalFunction(0x45DA20, OriginalFunctionScope.Partial)]
     public static int KillAward(int worth) => (int)(20L * worth / 100);
 
     /// <summary>
-    /// One hit's share of an NPC's experience pool (<c>combat_dmg</c>, 0x4B4390): the damage as a truncated percentage of the
+    /// One hit's share of an NPC's experience pool (0x4B4390): the damage as a truncated percentage of the
     /// maximum hit points, that percentage of the worth (truncated), at most what is left in the pool, which loses it.
     /// Nothing is taken from an empty pool. Computed without the original's 32-bit wrap of worth × percentage, which no
     /// installed worth (a few thousand) reaches short of a hit thousands of times larger than the maximum hit points.

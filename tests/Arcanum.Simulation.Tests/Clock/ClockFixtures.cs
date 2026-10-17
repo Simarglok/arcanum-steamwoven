@@ -6,7 +6,7 @@ namespace Arcanum.Simulation.Tests.Clock;
 internal static class ClockFixtures
 {
     internal static ProfileBinding Profile(int hour = 15, int year = 1885) => new(1,
-        "steamwoven-normalized-clock-v1", "a7ff41b300ef712f0e7d088183a3d08957110cdd",
+        "steamwoven-normalized-clock-v1", "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
         new string('a', 64), new string('c', 64), year, hour);
 
     internal static GameClockOwner Ready(ProfileBinding profile)

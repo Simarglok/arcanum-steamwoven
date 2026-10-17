@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -48,7 +49,8 @@ public sealed class SessionExperienceRules
         return new(levels, experience, quests);
     }
 
-    /// <summary>The experience of a quest experience level (<c>quest_get_xp</c>): its table value, 0 without an entry.</summary>
+    /// <summary>The experience of a quest experience level (0x4C53C0): its table value, 0 without an entry.</summary>
+    [OriginalFunction(0x4C53C0, OriginalFunctionScope.Full)]
     public int QuestExperience(int experienceLevel) => _questExperience.GetValueOrDefault(experienceLevel);
 
     /// <summary>A quest's experience level: its <c>rules\gamequest.mes</c> value, 1 without an entry.</summary>
@@ -157,7 +159,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Gives the hero experience as <c>critter_give_xp</c> does (0x45F110): a zero amount changes nothing; otherwise the
+    /// Gives the hero experience as 0x45F110 does: a zero amount changes nothing; otherwise the
     /// difficulty changes it (<see cref="Simulation.Character.ExperienceRules.AdjustForDifficulty"/>), a dead hero gets
     /// nothing, the hero's experience effects (<c>xpgain</c>) change it, the sum is clamped to 0..2,000,000,000 and the level is
     /// recalculated (<see cref="Simulation.Character.ExperienceRules.Advance"/>): every level reached is written with its
@@ -188,7 +190,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// One hit on an NPC with an attacker (<c>combat_dmg</c>, 0x4B4390): while the NPC's pool holds experience, the hit takes its
+    /// One hit on an NPC with an attacker (0x4B4390): while the NPC's pool holds experience, the hit takes its
     /// share (<see cref="Simulation.Character.ExperienceRules.DamageShare"/>) from the pool, and the hero gets it as
     /// <see cref="AwardHeroExperience"/> when <paramref name="byHero"/>: another attacker (a follower included) empties the pool
     /// for nothing. <paramref name="loaded"/> is the NPC's map data, read only while the session has no record of it;
@@ -216,7 +218,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// An NPC's death (<c>critter_notify_killed</c>, 0x45DA20): when <paramref name="creditsHero"/> (the killer is the hero or a
+    /// An NPC's death (0x45DA20): when <paramref name="creditsHero"/> (the killer is the hero or a
     /// critter whose leader is the hero), the hero gets a fifth of the NPC's worth
     /// (<see cref="Simulation.Character.ExperienceRules.KillAward"/>) as <see cref="AwardHeroExperience"/> and the worth becomes 0,
     /// so the same NPC never pays twice; any other death changes nothing. The host calls this after the dying script and only

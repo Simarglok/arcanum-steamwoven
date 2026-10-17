@@ -9,8 +9,8 @@ public enum SessionItemType { Weapon = 5, Ammo = 6, Armor = 7, Gold = 8, Food = 
 public enum SessionHolderKind { Container = 2, Npc = 16 }
 
 /// <summary>
-/// Script attachment points the inventory rules look at, numbered as the source's <c>ScriptAttachmentPoint</c> enum
-/// (pinned CE <c>src/game/script.h</c>), which is also the key of an object's script array element.
+/// Script attachment points the inventory rules look at, numbered as the source's script attachment
+/// points (docs/research/scr-event-dispatcher.md), which are also the key of an object's script array element.
 /// </summary>
 public static class SessionScriptPoint
 {
@@ -40,7 +40,7 @@ public sealed record SessionItemFacts(SessionItemKind Kind, int Weight, int Comp
 {
     public bool HasScript(int point) => ScriptPoints.Contains(point);
 
-    /// <summary>Worn slots, helmet 1000 to boots 1008 (CE <c>IS_WEAR_INV_LOC</c>).</summary>
+    /// <summary>Worn slots, helmet 1000 to boots 1008 (the source's wear locations).</summary>
     public bool Worn => InventoryLocation is >= 1000 and <= 1008;
 }
 
@@ -115,7 +115,7 @@ public sealed class SessionMapInventory
 }
 
 /// <summary>
-/// The PC's insert check (CE <c>item_check_insert</c>: carry weight, the Technophobia background against technology items,
+/// The PC's insert check (0x466510: carry weight, the Technophobia background against technology items,
 /// free inventory room). It depends on the created character and its own items, which the session does not own, so the
 /// host answers it per item.
 /// </summary>

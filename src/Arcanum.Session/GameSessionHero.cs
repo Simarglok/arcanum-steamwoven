@@ -5,8 +5,8 @@ using Arcanum.Simulation.Character;
 namespace Arcanum.Session;
 
 /// <summary>
-/// Stored ranges of the hero's non-stat fields, as the source's stat tables bound them (pinned CE <c>stat.c</c>
-/// <c>stat_min_values</c>/<c>stat_max_values</c>: level 0..51, experience 0..2,000,000,000, alignment −1000..1000, unspent
+/// Stored ranges of the hero's non-stat fields, as the source's stat tables bound them (the stat
+/// minimum and maximum tables, ledger XP2: level 0..51, experience 0..2,000,000,000, alignment −1000..1000, unspent
 /// points 0..56).
 /// </summary>
 public static class SessionHeroLimits
@@ -130,7 +130,7 @@ internal sealed class HeroDomain
         return new(gender, snapshot.GetEffective(CharacterStat.Intelligence), false, SourceRace(State.Race));
     }
 
-    /// <summary>The source's zero-based race index (CE <c>RACE_*</c>), the value DLG race selectors compare.</summary>
+    /// <summary>The source's zero-based race index (human 0 .. ogre 10), the value DLG race selectors compare.</summary>
     internal static int SourceRace(CharacterRace race) => race switch
     {
         CharacterRace.Human => 0, CharacterRace.Dwarf => 1, CharacterRace.Elf => 2, CharacterRace.HalfElf => 3,

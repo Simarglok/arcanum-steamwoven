@@ -143,8 +143,10 @@ Year = StartYear + DayIndex / 360, checked signed64. IsDay uses `[6,18)`
 
 `ProfileBinding` is the exact immutable tuple:
 `{ClockSchemaVersion:1, PolicyId:steamwoven-normalized-clock-v1,
-SourceRevision:a7ff41b300ef712f0e7d088183a3d08957110cdd,
-SourceDataSha256, StartupResourceSha256, StartYear, StartHour}`.
+SourceRevision:9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52,
+SourceDataSha256, StartupResourceSha256, StartYear, StartHour}`. `SourceRevision` is the SHA-256 of the retail 1.0.7.4
+`Arcanum.exe` whose clock functions were checked (`GameClockOwner.RetailExecutableSha256`, ARC-DEV-009); a profile or
+snapshot written before ARC-DEV-009 names an older revision and is refused as an invalid profile.
 Fingerprints are lowercase 64-hex declarations for equality, not attestations;
 startup provenance must separately be validated. StartYear is integral
 0..2,147,483,647; StartHour 0..23. Require the exact supported tuple selected by

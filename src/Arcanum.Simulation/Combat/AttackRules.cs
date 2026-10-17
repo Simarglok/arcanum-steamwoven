@@ -2,12 +2,11 @@ namespace Arcanum.Simulation.Combat;
 
 /// <summary>
 /// The attack formulas of the combat core research (ARC-RES-030, FR-COMBAT-005/008) as pure functions. Numbers are
-/// source claims read in CE at <see cref="SourceRevision"/>; integer division truncates toward zero as in the source.
+/// the claims of docs/world/attack-resolver-runtime.md (F0 except the checked anomaly rows); integer division truncates toward zero as in the source.
 /// Original executable parity is NOT_VERIFIED.
 /// </summary>
 public static class AttackRules
 {
-    public const string SourceRevision = "a7ff41b300ef712f0e7d088183a3d08957110cdd";
     public const int MaxSkillLevel = 20;
     public const int MaxArmorClass = 95;
     public const int MaxLightLevel = 255;
@@ -56,7 +55,7 @@ public static class AttackRules
 
     /// <summary>
     /// Dodge effectiveness: <c>2L</c>, +10 for extraordinary intelligence, a PC's difficulty scaling, capped at 95. The
-    /// retail 1.0.7.4 executable computes <c>2L</c>; CE's <c>5L</c> is a reconstruction slip, so both rule settings
+    /// retail 1.0.7.4 executable computes <c>2L</c> (ledger, dodge), so both rule settings
     /// follow the original (ARC-RES-048, docs/research/original-verification-ledger.md).
     /// </summary>
     public static int DodgeEffectiveness(int level, bool extraordinaryIntelligence, bool isPc, GameDifficulty difficulty)

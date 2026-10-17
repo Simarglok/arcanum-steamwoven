@@ -6,7 +6,7 @@ using static Arcanum.Simulation.Tests.Combat.CombatFixtures;
 
 namespace Arcanum.Simulation.Tests.Combat;
 
-// ARC-COMBAT-002. Facts are invented; numbers are the CE formulas worked by hand.
+// ARC-COMBAT-002. Facts are invented; numbers are the formulas of docs/world/life-state-runtime.md worked by hand.
 [TestClass]
 public sealed class LifeRulesTests
 {
@@ -222,7 +222,7 @@ public sealed class LifeRulesTests
         Assert.AreEqual(Hurt(0, 0, 70, LifeConditions.Stunned, 2), full.After);
         Assert.AreEqual(12, LifeRules.Heal(Hurt(20, 12), Plain, new LifeHeal { Full = true }).After.FatigueDamage, "fatigue only when asked");
 
-        // Single cures: legs heal legs, as in the original game (CE clears blindness there, anomaly A5).
+        // Single cures: legs heal legs, as in the original game (anomaly A5).
         Assert.AreEqual(LifeConditions.Blinded, LifeRules.Heal(Hurt(conditions: all & ~LifeConditions.Stunned), Plain,
             new LifeHeal { CrippledArms = true, CrippledLegs = true }).After.Conditions);
         Assert.AreEqual(LifeConditions.CrippledLegsBoth, LifeRules.Heal(Hurt(conditions: LifeConditions.Blinded | LifeConditions.CrippledLegsBoth), Plain,

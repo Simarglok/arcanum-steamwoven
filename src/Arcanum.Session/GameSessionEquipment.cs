@@ -1,6 +1,7 @@
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Equipment;
+using Arcanum.Simulation;
 
 namespace Arcanum.Session;
 
@@ -170,7 +171,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Puts an item the hero holds into a wear slot (the source's <c>item_wield_set</c>). Refused before any effect, in order:
+    /// Puts an item the hero holds into a wear slot (the source's 0x464AE0). Refused before any effect, in order:
     /// input (<see cref="GameSessionFailure.InvalidItem"/>), version, no hero (<see cref="GameSessionFailure.EquipmentUnavailable"/>),
     /// an item the hero does not hold (<see cref="GameSessionFailure.ItemNotAvailable"/>) or whose saved kind differs
     /// (<see cref="GameSessionFailure.InventoryMismatch"/>); NoChange when it already is in that slot; a move script or item spell
@@ -183,6 +184,7 @@ public sealed partial class GameSessionOwner
     /// occupant's saved kind only; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
     /// One revision.
     /// </summary>
+    [OriginalFunction(0x464AE0, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Equip(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
         SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
     {
@@ -229,11 +231,12 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>
-    /// Takes the item in <paramref name="slot"/> off into the hero's inventory (the source's <c>sub_464C80</c>): NoChange for an
+    /// Takes the item in <paramref name="slot"/> off into the hero's inventory (the source's 0x464C80): NoChange for an
     /// empty slot; refused for an item with the no-drop flag (<see cref="GameSessionFailure.WearRefused"/>,
     /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>), which
     /// the source asks with the item still worn (its weight counts twice near the carry limit). One revision.
     /// </summary>
+    [OriginalFunction(0x464C80, OriginalFunctionScope.Partial)]
     public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck)
     {
         ThrowIfDisposed();

@@ -29,7 +29,8 @@ methods of `Arcanum.Data`, which declares its own attribute.
 ## OriginalFunction attribute
 
 `[OriginalFunction(address, OriginalFunctionScope.Full | Partial)]` (`Arcanum.Simulation.OriginalFunctionAttribute`) marks
-the method that implements a function. An assembly that cannot reference `Arcanum.Simulation` declares its own attribute
+the method that implements a function; a method that implements two functions carries two marks (one method per
+address). An assembly that cannot reference `Arcanum.Simulation` declares its own attribute
 of the same name and shape. The root test loads `Arcanum.Data`, `Arcanum.Simulation`, `Arcanum.Scripting` and
 `Arcanum.Session`, and reads the tracked C# sources under `src/`, `tools/` and `experiments/` for marks in other assemblies.
 It fails when a marked method has no row, a different scope or method name, a mark lies in an assembly it does not load,
