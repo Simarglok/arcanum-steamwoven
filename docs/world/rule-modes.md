@@ -23,7 +23,8 @@ and the [verification ledger](../research/original-verification-ledger.md) recor
 | Project improvement recorded by the owner (for example persisted AI ticks, OQ2) | the improvement | the original's behaviour (a switch) |
 
 So a switch exists only where Steamwoven deliberately differs from the retail game. A CE slip never becomes a switch.
-Owner decision (2026-10-17): **the Original mode never reproduces a crash, a hang or an out-of-bounds access**; such bugs are fixed in both modes and listed in the registry as "both fixed", because
+Owner decision (2026-10-17): **the Original mode never reproduces a crash, a hang or an out-of-bounds access**; such
+bugs are fixed in both modes and listed in the registry as "both fixed", because
 reproducing them would end the game rather than show the original rules.
 
 ## Mechanism

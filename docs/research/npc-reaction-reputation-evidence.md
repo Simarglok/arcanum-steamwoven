@@ -130,7 +130,8 @@ for several PCs (R3).
   the data values are 0..10 (none negative). The companion research C13
   repeated the comment. The retail executable adds it too
   ([ARC-RES-048](original-verification-ledger.md)), so the rise is a bug of the
-  original game. **Decision (owner, 2026-10-17)**: the Steamwoven setting lowers
+  original game (the field comment's meaning is the evidence for intent).
+  **Decision (owner, 2026-10-17)**: the Steamwoven setting lowers
   the follower's reaction by parameter 9; the Original setting keeps the rise
   through a switch of the [rule modes](../world/rule-modes.md).
 - **A3 Mind control.** −50 is applied when control starts and nothing restores
@@ -154,7 +155,8 @@ for several PCs (R3).
 - **A7 Gift category test.** The categories are numbered love = 0 … hatred
   = 6, and the gift rule of R9 raises reaction only when the category number
   is below amiable, that is only for an NPC that already loves the PC. The
-  likely intent ("not yet amiable") is the opposite. Open, like A2.
+  likely intent ("not yet amiable") is the opposite. Open until checked in the
+  original executable.
 - **A8 RE comparison operand.** The action operand is read with `atoi` on
   text that still starts with `>` or `<`, which yields 0, so CE's `RE >v`
   raises a negative reaction to 0 and `RE <v` lowers a positive one to 0,
@@ -204,10 +206,11 @@ for several PCs (R3).
 
 - **O1** Answered for Virgil by ARC-RES-026 (see above). Other Crash Site
   NPCs' bases, races, origins and factions were not surveyed.
-- **O2** P1 against the original executable: does a signed effect keep its
-  origin and faction there?
-- **O3** A2 (follower hit sign), A6 (script operand), A7 (gift test), A8 (RE
-  comparison operand) and A9 (greeting number), same kind of observation.
+- **O2** Answered by ARC-RES-048: the original keeps a signed effect's origin
+  and faction (decision D1).
+- **O3** A6 (script operand), A7 (gift test), A8 (RE comparison operand) and A9
+  (greeting number), same kind of observation. A2 was answered by ARC-RES-048
+  and decided on 2026-10-17.
 - **O4** Fate-point flow (when "force good reaction" is armed and consumed)
   and the higher-priority greeting kinds before R12 were not read.
 - **O5** The race matrix and beauty table are source tables, not data files;
