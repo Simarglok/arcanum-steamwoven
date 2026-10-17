@@ -88,8 +88,8 @@ rate is not a valid frame).
 One installed effect carries unrelated bytes after its samples: once both fmt and data were found,
 bytes that do not form a chunk (a short tail, or a header that runs past the end) end the walk and
 are reported as `IgnoredTailBytes`, never read as audio; the same damage before them is
-`Malformed`. An all-zero remainder is padding, of any length after fmt and data, and of fewer than
-8 bytes before them.
+`Malformed`. An all-zero remainder after fmt and data is padding, of any length, and is not counted as a
+chunk.
 
 Limits (`SoundPayloadOptions`): `MaxBytes` 32 MiB (the largest installed file, a music track, is
 under 3 MiB), `MaxWavChunks` 128 (at most 65,536), `MaxWavLoops` 16 (at most 4,096),

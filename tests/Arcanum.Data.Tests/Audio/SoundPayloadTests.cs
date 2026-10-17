@@ -129,8 +129,11 @@ public sealed class SoundPayloadTests
         Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect(Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8]), Chunk("smpl", new byte[20]))).Status);
         var wrap = new byte[44];
         BinaryPrimitives.WriteUInt32LittleEndian(wrap.AsSpan(28), 0x0AAAAAAB);
-        Assert.AreEqual(SoundPayloadStatus.Malformed, SoundPayloadReader.Inspect("sound/x", Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8]), Chunk("smpl", wrap)),
-            new SoundPayloadOptions { MaxWavLoops = SoundPayloadOptions.MaxWavLoopsLimit }).Status, "a loop count whose size would wrap 32 bits");
+        var huge = SoundPayloadReader.Inspect("sound/x", Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8]), Chunk("smpl", wrap)),
+            new SoundPayloadOptions { MaxWavLoops = SoundPayloadOptions.MaxWavLoopsLimit });
+        Assert.AreEqual((SoundPayloadStatus.Malformed, "too many loops"), (huge.Status, huge.Detail), "a huge loop count stops at the bound");
+        var two = Riff(Fmt(1, 1, 22050, 16), Chunk("data", new byte[8])).Concat(new byte[3]).ToArray();
+        Assert.AreEqual(SoundPayloadStatus.Admitted, SoundPayloadReader.Inspect("sound/x", two, new SoundPayloadOptions { MaxWavChunks = 2 }).Status, "padding is not a chunk");
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => SoundPayloadReader.Inspect("sound/x", new byte[1], new SoundPayloadOptions { MaxWavLoops = SoundPayloadOptions.MaxWavLoopsLimit + 1 }));
     }
 
@@ -164,7 +167,8 @@ public sealed class SoundPayloadTests
         byte[] damaged = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0, 0x80, 0, 0, 0];
         Assert.AreEqual(SoundPayloadStatus.Malformed, Inspect([.. damaged, .. Frame(), .. Frame()]).Status);
         byte[] footer = [(byte)'I', (byte)'D', (byte)'3', 4, 0, 0x10, 0, 0, 0, 4];
-        Assert.AreEqual(24, Inspect([.. footer, .. new byte[14], .. Frame(), .. Frame()]).Mp3!.FirstFrameOffset, "a v2.4 footer adds 10 bytes");
+        byte[] footerBody = [0, 0, 0, 0, (byte)'3', (byte)'D', (byte)'I', 4, 0, 0x10, 0, 0, 0, 4];
+        Assert.AreEqual(24, Inspect([.. footer, .. footerBody, .. Frame(), .. Frame()]).Mp3!.FirstFrameOffset, "a v2.4 footer (non-zero bytes) adds 10 bytes");
         byte[] v3flag = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0x10, 0, 0, 0, 4];
         Assert.AreEqual(14, Inspect([.. v3flag, .. new byte[4], .. Frame(), .. Frame()]).Mp3!.FirstFrameOffset, "the footer bit means nothing before v2.4");
         byte[] longTag = [(byte)'I', (byte)'D', (byte)'3', 3, 0, 0, 0, 0, 0x7F, 0];

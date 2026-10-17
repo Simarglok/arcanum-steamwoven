@@ -37,8 +37,8 @@ public sealed record WavLoop(int Type, int StartFrame, int EndFrame, int PlayCou
 
 /// <param name="DataOffset">Byte offset of the PCM samples in the payload.</param>
 /// <param name="FrameCount">Whole sample frames in the data chunk; a trailing partial frame is not counted.</param>
-/// <param name="IgnoredTailBytes">Bytes after the fmt and data chunks that do not form a chunk (a damaged header running
-/// past the end); they are not audio and are not read.</param>
+/// <param name="IgnoredTailBytes">Bytes after the fmt and data chunks that do not form a chunk (fewer than 8 non-zero bytes,
+/// or a header running past the end); they are not audio and are not read.</param>
 public sealed record WavFormat(int Channels, int SampleRate, int BitsPerSample, int DataOffset, int DataLength, int FrameCount, IReadOnlyList<WavLoop> Loops,
     int IgnoredTailBytes)
 {
@@ -47,7 +47,7 @@ public sealed record WavFormat(int Channels, int SampleRate, int BitsPerSample, 
 }
 
 /// <param name="Version">1, 2 or 25 (MPEG-2.5).</param>
-/// <param name="FirstFrameOffset">Byte offset of the first frame header (after an ID3v2 tag, when there is one).</param>
+/// <param name="FirstFrameOffset">Byte offset of the first frame header (after an ID3v2 tag and zero padding, when present).</param>
 /// <param name="FirstFrameBitrate">Bit rate of the first frame in kbit/s; later frames may differ (VBR).</param>
 public sealed record Mp3Format(int Version, int SampleRate, bool Stereo, int FirstFrameOffset, int FirstFrameBitrate);
 
@@ -107,12 +107,12 @@ public static class SoundPayloadReader
         int? fmtAt = null, fmtSize = null, dataAt = null, dataSize = null;
         var loopChunks = new List<(int At, int Size)>();
         var at = 12; var chunks = 0; var ignored = 0;
+        var lastNonZero = bytes.LastIndexOfAnyExcept((byte)0);
         while (at < bytes.Length)
         {
-            if (++chunks > options.MaxWavChunks) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "too many chunks");
             var found = fmtAt is not null && dataAt is not null;
-            // Zero padding after the last chunk carries no chunk.
-            if (bytes[at..].IndexOfAnyExcept((byte)0) < 0 && (found || bytes.Length - at < 8)) break;
+            // Zero padding after the last chunk carries no chunk (and is not counted as one).
+            if (at > lastNonZero && (found || bytes.Length - at < 8)) break;
             if (bytes.Length - at < 8)
             {
                 // Some installed files carry unrelated bytes after their samples: once fmt and data are found, bytes that do
@@ -120,6 +120,7 @@ public static class SoundPayloadReader
                 if (found) { ignored = bytes.Length - at; break; }
                 return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "truncated chunk header");
             }
+            if (++chunks > options.MaxWavChunks) return Refuse(SoundPayloadStatus.Malformed, key, SoundPayloadKind.Wav, "too many chunks");
             var id = bytes.Slice(at, 4);
             var size = BinaryPrimitives.ReadUInt32LittleEndian(bytes.Slice(at + 4, 4));
             var body = at + 8;
