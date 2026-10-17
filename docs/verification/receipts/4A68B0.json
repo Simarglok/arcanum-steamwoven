@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4A68B0",
+  "name": "experience-to-next-level",
+  "method": "Arcanum.Simulation.Character.ExperienceRules.ToNextLevel",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "recordedDifference": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "c62708cfb512e271062132426d1ac71457ce2da0fe0e23903f51c5775aa7ed9f",
+  "configuration": "Debug"
+}

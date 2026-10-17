@@ -35,8 +35,9 @@ python3 -B tools/original-oracle/oracle.py list
 | 0x4A6900 | experience progress | as above, may call 0x4A68B0 | `ProgressMatchesTheOriginalExceptTheXp3Wrap` (XP3 inputs reported) |
 | 0x4A6980 | level bonus points | two integers, no stubs | `BonusPointsMatchTheOriginal` |
 
-Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants, and a row in
-`ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` (`test_launcher_sync.py` checks all three agree).
+Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
+a row in `ORACLE_FUNCTIONS` of `tools/local_dev/launch.py` (`test_launcher_sync.py` checks all three agree), and its F3
+row in the [function registry](../../docs/verification/README.md) with the committed receipt.
 
 ## Unicorn and its licence
 

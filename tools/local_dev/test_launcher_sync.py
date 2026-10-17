@@ -1,6 +1,7 @@
 """The ordinary launcher must stay in step with the viewer's argument parser and pinned inputs."""
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
@@ -172,6 +173,11 @@ class LauncherSyncTests(unittest.TestCase):
             self.assertEqual(project["parser"]().parse_args(["oracle", "--function", function]).function, function)
         with patch("sys.stderr"), self.assertRaises(SystemExit):
             project["parser"]().parse_args(["oracle", "--function", "0x401000"])
+        # ARC-DEV-008: an F3 row of the function registry claims an oracle run, so its function must have an oracle.
+        rows = list(csv.DictReader((REPO / "docs/verification/functions.csv").open(newline="")))
+        f3 = {row["address"] for row in rows if row["level"] == "F3"}
+        self.assertTrue(f3 <= set(launch.ORACLE_FUNCTIONS), f3 - set(launch.ORACLE_FUNCTIONS))
+        self.assertTrue((REPO / launch.ORACLE_RECEIPTS).is_dir())
 
     def test_discovery_verifies_identity_and_rejects_links(self):
         game = self.root / "game"

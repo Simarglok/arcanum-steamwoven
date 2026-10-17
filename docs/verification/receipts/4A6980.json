@@ -1,0 +1,16 @@
+{
+  "format": 1,
+  "function": "0x4A6980",
+  "name": "level-bonus-points",
+  "method": "Arcanum.Simulation.Character.ExperienceRules.BonusPoints",
+  "seed": 20261017,
+  "inputs": 10000,
+  "mutantsPlanted": 2,
+  "mutantsCaught": 2,
+  "differences": 0,
+  "recordedDifference": null,
+  "result": "pass",
+  "exeSha256": "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52",
+  "ilSha256": "eeeee791ad5591f9fe3adf517259a92d88b7fb603c49066eb175f673928dfc80",
+  "configuration": "Debug"
+}

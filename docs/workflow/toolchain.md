@@ -129,7 +129,8 @@ ARCANUM_EXE=/path/to/Arcanum.exe ./arcanum oracle         # every function: gene
 finds `Arcanum.exe` in the configured game folder. Generated files go to `research-private/oracle/` of the
 checkout (`oracle.py generate` also takes `--out` or `ARCANUM_ORACLE_DIR`; the tests read `ARCANUM_ORACLE_DIR`) and
 never into git. `./arcanum oracle` sets `ARCANUM_ORACLE_REQUIRED=1`, so a missing file fails
-the tests instead of leaving them inconclusive.
+the tests instead of leaving them inconclusive, and `ARCANUM_ORACLE_RECEIPTS=docs/verification/receipts`, where each
+test writes its [receipt](../verification/README.md#oracle-receipts) to commit.
 
 ## Opt-in original data
 
