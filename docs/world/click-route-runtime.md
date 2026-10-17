@@ -195,8 +195,9 @@ runtime receives therefore share one Data verdict.
 
 ## NOT READY
 
-No hover cursor or route preview, no physical mouse check (synthetic and local
-software checks only). No running,
+No hover cursor or route preview. Physical mouse: only the owner's one-line ARC-INPUT-002 check
+(2026-10-17: LMB on the ground sets the goal; [result](../input/diagnostic-palette.md#result-2026-10-17));
+everything else is synthetic and local software checks. No running,
 NPC/object goals, doors, windows, traps or state after T0 other than the live PC and companions of
 [ARC-WORLD-016](companion-follow-runtime.md#live-actors-over-t0-evidence-terrain-viewer-core),
 movement speed or original path choice. Unknown or unsupported evidence is

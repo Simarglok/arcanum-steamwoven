@@ -51,9 +51,6 @@ public static class ReactionRules
         { -20, -30, -40, -30, -20, -20, 10, 0 },
     };
 
-    // Intermediates of an effect aggregation saturate here, as the character stats owner's do.
-    private const long Saturation = 1_000_000_000;
-
     /// <summary>The race term of an NPC race toward a PC race. A PC race outside the eight PC races throws: the source indexes
     /// its 8-column table without a check (latent bug LM12, fixed in both rule modes).</summary>
     public static int RaceReaction(CharacterRace npc, CharacterRace pc)
@@ -171,36 +168,11 @@ public static class ReactionRules
         return hostile > ai.HostileReaction ? new(checked((int)DeltaTo(ai.HostileReaction, hostile)), false) : new(null, false);
     }
 
-    /// <summary>Effect aggregation in the source order: percent, multiply, divide, add, minimum, maximum (integer division
-    /// truncates toward zero; intermediates saturate at ±1e9, which no admitted input reaches by addition alone).</summary>
+    /// <summary>Effect aggregation in the source order (<see cref="EffectModifiers.Apply"/>, ARC-WORLD-029): percent, multiply,
+    /// divide, add, minimum, maximum, with −1 as the bounds' "unset" mark.</summary>
     public static int ApplyEffects(long value, IReadOnlyList<ReactionModifier> effects)
     {
         ArgumentNullException.ThrowIfNull(effects);
-        long percents = 0, adds = 0, multiply = 1, divide = 1;
-        int? minimum = null, maximum = null;
-        foreach (var effect in effects)
-        {
-            switch (effect.Operator)
-            {
-                case StatModifierOperator.Add: adds = Saturate(adds + effect.Value); break;
-                case StatModifierOperator.Percent: percents = Saturate(percents + effect.Value); break;
-                case StatModifierOperator.Multiply: multiply = Saturate(multiply * effect.Value); break;
-                case StatModifierOperator.Divide: divide = Saturate(divide * effect.Value); break;
-                case StatModifierOperator.Minimum: minimum = minimum is { } low ? Math.Max(low, effect.Value) : effect.Value; break;
-                case StatModifierOperator.Maximum: maximum = maximum is { } high ? Math.Min(high, effect.Value) : effect.Value; break;
-                default: throw new ArgumentOutOfRangeException(nameof(effects));
-            }
-        }
-        var result = Saturate(value);
-        if (percents != 0) result = Saturate(result * (percents + 100) / 100);
-        result = Saturate(result * multiply);
-        if (divide == 0) throw new ArgumentOutOfRangeException(nameof(effects), "divisor 0");
-        result /= divide;
-        result = Saturate(result + adds);
-        if (minimum is { } min && result < min) result = min;
-        if (maximum is { } max && result > max) result = max;
-        return (int)result;
+        return EffectModifiers.Apply(value, effects.Select(e => new EffectModifier(e.Operator, e.Value)).ToArray());
     }
-
-    private static long Saturate(long value) => Math.Clamp(value, -Saturation, Saturation);
 }

@@ -149,7 +149,10 @@ public sealed partial class AreaDataOwner : IDisposable
                 if (_openAuthenticated) { _openAuthenticated = false; CheckBindings(); }
                 else AuthenticateAll(cancellationToken);
                 BeginEntryMemo();
-                var inspection = Build(cancellationToken, output);
+                AreaInspection inspection;
+                _sharedFrames = !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors ? new() : null;
+                try { inspection = Build(cancellationToken, output); }
+                finally { _missingMasks = null; _artHolders = null; _objectTiles = null; _sharedFrames = null; } // build-local (ARC-DATA-023/024)
                 EndEntryMemo();
                 _budget.BeginPhase(AreaBudgetPhase.I7);
                 AuthenticateAll(cancellationToken);

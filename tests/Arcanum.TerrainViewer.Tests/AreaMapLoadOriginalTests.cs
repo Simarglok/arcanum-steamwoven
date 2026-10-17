@@ -47,9 +47,10 @@ public sealed class AreaMapLoadOriginalTests
             try { _ = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default); loaded.Add(map.Name); }
             catch (Exception exception) when (exception is InvalidOperationException or AreaException) { failed.Add($"{map.Name}: {exception.Message}"); }
         }
-        // Since ARC-RENDER-018 the wading, multiply and constant-alpha bodies are drawn, so every complete interior loads.
+        // Since ARC-RENDER-018 the wading, multiply and constant-alpha bodies are drawn, so every complete interior loads;
+        // since ARC-DATA-023 every interior but K'na Tha is complete, and since ARC-DATA-024 K'na Tha too.
         Assert.AreEqual(0, failed.Count, string.Join("; ", failed));
-        Assert.AreEqual(54, loaded.Count, string.Join(", ", loaded));
+        Assert.AreEqual(80, loaded.Count, string.Join(", ", loaded));
     }
 
     [TestMethod, TestCategory("RealData")]
@@ -65,8 +66,13 @@ public sealed class AreaMapLoadOriginalTests
         Assert.IsTrue(bodies.Where(command => command.WadeRows > 0).All(command => command.WadeRows == Math.Min(AreaScenePlan.WadingRows, command.Destination.Height)));
     }
 
-    private static string Root() => Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root ? root
-        : throw new AssertFailedException("DAT_ROOT is required for the opt-in map load check; this is not a synthetic pass.");
+    private static string Root()
+    {
+        if (Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root)
+            return root;
+        Assert.Inconclusive("DAT_ROOT is required for the opt-in map load check; this is not a synthetic pass.");
+        return string.Empty;
+    }
 
     private static TerrainViewerArguments Arguments(string root, string map) => TerrainViewerArguments.Parse(["--mode", "crash-site-area",
         "--module", Path.Combine(root, "modules", "Arcanum.dat"), "--resource", Path.Combine(root, "arcanum2.dat"), "--source-id", "map-test",

@@ -104,13 +104,17 @@ before this schema, so nothing is lost.
   heal are scheduled by every life step on the session's game event queue and saved with it
   ([session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024)); no host runs the pass yet. Body decay,
   encumbrance fatigue damage and the combat-focus wipe have no timer.
-- What other owners do on these events: experience and alignment on a kill, the party leaving of a dead follower,
+- What other owners do on these events: alignment on a kill (the kill's experience is the session's
+  [experience](experience-runtime.md) `RecordNpcKill`, ARC-WORLD-030, which a host calls), the party leaving of a dead follower,
   AI focus and near-death reactions, spell demaintenance on unconsciousness, item drops and wear, the death slide and
   return to the main menu for a dead PC, logbook injuries.
-- The dying, taking-damage and resurrect scripts (no SCR runtime). Effects on maximum HP or fatigue and their
-  damage compensation, encumbrance fatigue, the scarring effect's stat change (only the count is kept), Tempus Fugit and
-  background stat adjustments.
-- Hero pools from levelling (`maxhps`, `maxfatigue`). Six pre-made PC prototypes (016093..016098) store fatigue damage
+- The dying, taking-damage and resurrect scripts (no SCR runtime). Encumbrance fatigue, the scarring effect's stat change
+  (only the count is kept), Tempus Fugit and background stat adjustments. Effects on maximum HP or fatigue and their damage
+  compensation came with [durable effects](durable-effects-runtime.md) (ARC-WORLD-029): `LifeFacts.MaxHitPointEffects` and
+  `MaxFatigueEffects` apply to the whole sum, and facts whose maxima reach the pinned death damage are invalid; the session
+  fills them for its hero only.
+- Hero pools from levelling (`maxhps`, `maxfatigue` purchases; a level itself raises both maxima through the formulas
+  since ARC-WORLD-030). Six pre-made PC prototypes (016093..016098) store fatigue damage
   2 or 4; whether a new PC keeps it was not verified, and the session starts every hero unharmed.
 
 ## Tests

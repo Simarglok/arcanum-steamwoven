@@ -156,7 +156,7 @@ and its synthetic gates additionally require the `ARC-INPUT-001 palette chord ma
 and both `palette UI` viewport markers. Its manifest's ordinary mode is
 `crash-site-area`; `tools/arcanum-local launch terrain --mode crash-site-area` accepts
 an exact ARC-RENDER-007, ARC-INPUT-001, ARC-WORLD-007, ARC-WORLD-009 or ARC-RENDER-008 v2
-artifact and nothing broader. The owner's physical check is ARC-INPUT-002 (checklist in the palette contract).
+artifact and nothing broader. The owner's physical check ARC-INPUT-002 passed on 2026-10-17 (checklist and result in the palette contract).
 
 ## Click-to-move candidate (ARC-WORLD-007)
 

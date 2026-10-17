@@ -11,8 +11,9 @@ public sealed partial class AreaDataOwner
     // Inside one authenticated bracket (a strict build between I0 and I7, or one frame batch
     // between a source's first authentication and Complete) an entry's bytes cannot differ
     // between reads that the bracket's authentication does not already cover, so the entry is
-    // read, inflated and payload-hashed once per bracket. Every frame keeps its own budget
-    // admission, decode and pixel/geometry checks. The memo is owner-private, bounded by
+    // read, inflated and payload-hashed once per bracket. Every decoded frame keeps its own
+    // budget admission, decode and pixel/geometry checks (a whole map decodes each distinct
+    // selection once per build, ARC-DATA-024). The memo is owner-private, bounded by
     // EntryMemoMaxBytes, held in the retained domain (only while a quarter of it stays free)
     // until its bracket ends, faults, or the batch or owner is disposed.
     private void BeginEntryMemo() { EndEntryMemo(); _entryMemo = new(); }
