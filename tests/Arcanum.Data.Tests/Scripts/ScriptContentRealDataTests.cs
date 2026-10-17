@@ -30,12 +30,19 @@ public sealed class ScriptContentRealDataTests
             var status = content.Dialog(name.Number).Status;
             dialogs[status] = dialogs.GetValueOrDefault(status) + 1;
         }
-        // 663 dialogs read; 38 are outside the strict DLG reader (DlgUnsupportedFormatException); the rest have none.
-        Assert.AreEqual(663, dialogs[ScriptContentStatus.Read]);
-        Assert.AreEqual(38, dialogs[ScriptContentStatus.Invalid]);
+        // ARC-SCRIPT-012: read as the game reads them, 697 dialogs open and 4 hold one record that lacks its last field, so
+        // the game opens nothing from them; the rest have no DLG.
+        Assert.AreEqual(697, dialogs[ScriptContentStatus.Read]);
+        Assert.AreEqual(4, dialogs[ScriptContentStatus.Empty]);
         Assert.AreEqual(1698, dialogs[ScriptContentStatus.NotFound]);
         Assert.AreEqual(3, dialogs.Count);
         Assert.IsFalse(content.Changed);
+        // The strict reader, on request, still refuses 38 of them (docs/formats/dlg-reader.md).
+        using (var strict = ScriptContent.Open(plan, dialogs: new DlgReaderOptions()).Content!)
+        {
+            Assert.AreEqual(663, names.Names.Count(name => strict.Dialog(name.Number).Status == ScriptContentStatus.Read));
+            Assert.AreEqual(38, names.Names.Count(name => strict.Dialog(name.Number).Status == ScriptContentStatus.Invalid));
+        }
 
         using var stack = ContentStack.Open(plan).Stack!;
         Assert.AreEqual(3, names.Names.Count(name => !ScriptNameIndex.IsBase(stack.Resolve(name.ScriptPath).Winner!.Source.Role)), "module copies win");

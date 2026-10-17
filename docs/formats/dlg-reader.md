@@ -111,8 +111,11 @@ is a separate proposal, not part of this physical reader.
 
 `DlgReaderOptions.Mode = DlgReadMode.Original` reads a file the way the pinned CE
 `dialog_load_internal` → `dialog_parse_entry` → `dialog_parse_field` does; the
-default `Strict` mode above is unchanged and remains the contract of the
-conversation runtime.
+default `Strict` mode above is unchanged. Since ARC-SCRIPT-012 the universal script
+and dialog loader ([script content](../scripting/script-content.md)) reads game data
+in this mode, as the game does, and the conversation runtime receives those
+documents; the strict mode stays a data-quality check and the reader for project
+fixtures.
 
 - Fields flow: each field is found by skipping to the next `{`, whatever lies
   between (white space, line breaks, stray text); a `//` pair outside a field
@@ -145,10 +148,47 @@ files read. The 671 the strict mode accepts read identically; of the 38 it
 refuses, 4 hold a single record that lacks its last field, so the original
 loads nothing from them either (they read as `IncompleteRecord` with zero
 records); the test asserts these counts, one file with skipped bytes and no
-repeated ids. A manual breakdown of the other 34 (not asserted): 31 have white
-space between fields, 1 has stray text between records, and 2 have a number
-field that is not a plain number (an IQ of `5, -17`, a response starting with
-text).
+repeated ids.
+
+### The 38 strict refusals (ARC-SCRIPT-012)
+
+Measured on the installed original with a local probe (structure only; the
+counts are not asserted beyond the totals above):
+
+| Cause | Files | What the game does |
+| --- | ---: | --- |
+| one space between two fields of a record | 28 | skips it |
+| tabs between records | 3 | skips them |
+| `//` comments and 53 bytes of stray text between records | 1 | skips them |
+| a number field that is not a plain number | 2 | reads it like `atoi` |
+| one record that lacks its 7th field | 4 | keeps no record and does not open the file |
+
+Checked in the 1.0.7.4 executable, not only in CE: `dialog_load` (0x412E10)
+fails when no record was read; `dialog_parse_field` (0x417C20) skips to the next
+`{`, honours `//` and caps a field at 999 characters; `dialog_parse_entry`
+(0x417860) reads seven fields, the id, IQ and response with `atoi`, refuses a
+non-empty IQ that reads 0 and a response starting with `#`.
+
+All 38 are the DLGs of their scripts (named after the script). 31 are not
+conversations but text for the script actions float line (23) and print line
+(24): altars, graves, stones, levers, object examination. 7 open a conversation
+(dialog action 4). 31 of the 38 scripts are attached on the module's maps, most
+on the world map.
+
+Three of them lose content in the game itself (data bugs; Steamwoven reads them
+as the game does, and any fix is an owner decision under D8):
+
+- `03042`..`03045` (`*_stone_exa`, four stones on one Tulla map): the only record
+  lacks its effects field, so the game opens no file and examining a stone prints
+  nothing.
+- `01306benjamin_gershwin` record 315: the effects are written in the response
+  field of an NPC line and the effects field is empty, so the game never applies
+  them.
+- `01009mayor_blackroot` record 361: a player reply's response field holds text,
+  which `atoi` reads as 0, so the reply ends the conversation.
+
+`01957game_of_witt` has 154 player replies whose IQ field reads `N, -N`; the game
+takes the first number as the IQ. The second number's meaning is unknown.
 
 ## Explicit exclusions
 

@@ -85,7 +85,7 @@ public sealed class AreaScriptHost : IScrHost
 
     /// <summary>
     /// The DLG a dialog action names: the script's name with the <c>dlg</c> folder and extension (as the original
-    /// derives it), read strictly, whose <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/>
+    /// derives it), read as the original reads it (ARC-SCRIPT-012), whose <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/>
     /// with the document, or the typed reason.
     /// </summary>
     public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(ScriptContent content, int script, int node)
@@ -97,6 +97,8 @@ public sealed class AreaScriptHost : IScrHost
             case ScriptContentStatus.Read: break;
             case ScriptContentStatus.Changed: return (AreaConversationStartStatus.SourceChanged, null, read.Detail);
             case ScriptContentStatus.Invalid or ScriptContentStatus.Unreadable: return (AreaConversationStartStatus.DialogUnreadable, null, read.Detail);
+            // ARC-SCRIPT-012: the game does not open a DLG without records either.
+            case ScriptContentStatus.Empty: return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {read.Detail}");
             default: return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {read.Detail}");
         }
         if (!read.Document!.TryGetRecord(node, out var record) || record!.Role != DlgRecordRole.Npc)
