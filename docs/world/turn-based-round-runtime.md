@@ -68,8 +68,12 @@ Every mutation takes the expected version, decides the whole step on a copy (rea
 call), refuses before any effect, and adds one revision when the saved round changes (the clock's own revision moves
 when a round ends). Results list what happened in order: `RoundBegan(turn)`, `SubturnStarted(combatant, action points)`
 (for an NPC the host then runs its heartbeat script and AI), `SubturnEnded(combatant)` (for an NPC its end-of-combat
-script) and `RoundEnded`. A life step that knocks out the participant whose subturn it is sets its action points to 0;
-the host's next `CompleteCombatActions` passes the turn on (the source does it inside the fatigue write).
+script) and `RoundEnded`. A life step that knocks out or stuns the participant whose subturn it is sets its action points
+to 0; the host's next `CompleteCombatActions` passes the turn on (the source does it inside the fatigue write and when the
+stunned animation starts). An overexertion decides the rest of its step with the hero's state after the damage, so a
+knockout that leaves nobody able to act ends the round. The hero holds its subturn with action points left only while
+it is active: a hero killed on its own subturn (the original ends the game then) passes on at the next completion check.
+The hero is never hidden from drawing, so only its activity decides whether it is skipped.
 
 `AdvanceGameTime` with `OrdinaryAdvance` is NoChange while a round is active (after the clock's own checks): in the
 original single-player game time does not flow during a round and moves only by the round's second. An explicit wait

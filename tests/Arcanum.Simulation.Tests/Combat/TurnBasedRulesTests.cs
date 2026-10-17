@@ -119,6 +119,7 @@ public sealed class TurnBasedRulesTests
         Assert.AreEqual(2, TurnBasedRules.OverexertionFatigueDamage(0));
         Assert.AreEqual(2, TurnBasedRules.OverexertionFatigueDamage(-40), "only a positive resistance counts");
         Assert.AreEqual(2, TurnBasedRules.OverexertionFatigueDamage(40), "¾ × 40 = 30 % of 2 truncates to 0");
+        Assert.AreEqual(2, TurnBasedRules.OverexertionFatigueDamage(60), "¾ × 60 = 45 % of 2 truncates to 0 (60 % would take 1)");
         Assert.AreEqual(1, TurnBasedRules.OverexertionFatigueDamage(68), "¾ × 68 = 51 % of 2 is 1");
         Assert.AreEqual(1, TurnBasedRules.OverexertionFatigueDamage(95));
     }

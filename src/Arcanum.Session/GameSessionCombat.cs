@@ -290,17 +290,19 @@ public sealed partial class GameSessionOwner
 
         // Overexertion: the damage step first (it can refuse), then the round; the knockout is known before either commits,
         // as a fatigue-only packet draws no roll.
-        var damage = new LifeDamage { Fatigue = TurnBasedRules.OverexertionFatigueDamage(LifeDomain.HeroFacts(_hero!, _life.Hero!.Value.State).NormalResistance) };
         var heroState = _life.Hero!.Value.State;
-        var predicted = LifeRules.ApplyDamage(heroState, LifeDomain.HeroFacts(_hero!, heroState), damage, NoCombatRolls.Instance);
+        var heroFacts = LifeDomain.HeroFacts(_hero!, heroState);
+        var damage = new LifeDamage { Fatigue = TurnBasedRules.OverexertionFatigueDamage(heroFacts.NormalResistance) };
+        var predicted = LifeRules.ApplyDamage(heroState, heroFacts, damage, NoCombatRolls.Instance);
         var knockedOut = predicted.Events.HasFlag(LifeEvents.LostConsciousness);
-        var profile = _rules.Combat;
         var planned = PlanCombat(world, plan =>
         {
+            // The rest of the step sees the hero after the damage (an unconscious hero is skipped and cannot hold the round).
+            plan.Hero = predicted.After;
             plan.Round!.ActionPoints = 0;
             if (!knockedOut) return;
             NextSubturn(plan);
-            if (plan.Round is not null && profile.OverexertionKnockoutClearsNextActionPoints) plan.Round.ActionPoints = 0;
+            if (plan.Round is not null && plan.Profile.OverexertionKnockoutClearsNextActionPoints) plan.Round.ActionPoints = 0;
         }, out var failure);
         if (planned is null) return RejectCombat(failure);
         if (!IsCurrent(expected)) return RejectCombat(GameSessionFailure.StaleVersion);
@@ -308,7 +310,7 @@ public sealed partial class GameSessionOwner
         var life = Life(expected, SessionLifeTarget.Hero, true, (state, facts, rolls) => LifeRules.ApplyDamage(state, facts, damage, rolls));
         if (life.Disposition == GameSessionDisposition.Rejected)
             return RejectCombat(life.Failure) with { Life = life };
-        if (life.Outcome!.Events.HasFlag(LifeEvents.LostConsciousness) != knockedOut)
+        if (life.Outcome!.After != predicted.After)
             throw new InvalidOperationException("Overexertion outcome differs from its prediction.");
         var result = CommitCombat(planned, life.Disposition == GameSessionDisposition.Changed);
         return result with { Charge = use, Life = life };
@@ -345,12 +347,13 @@ public sealed partial class GameSessionOwner
         ArgumentNullException.ThrowIfNull(world);
         if (!IsCurrent(expected)) return RejectCombat(GameSessionFailure.StaleVersion);
         if (_combat.Round is not { } round) return NoCombatChange();
-        if (round.Actor.IsHero && round.ActionPoints > 0) return NoCombatChange();
-        var keep = _rules.Combat.StallCheckKeepsPreviousActionPoints;
+        // An inactive hero (stunned, knocked out) never holds the round with its action points.
+        if (round.Actor.IsHero && round.ActionPoints > 0 && HeroStatus().IsActive) return NoCombatChange();
         return RunCombat(expected, world, plan =>
         {
             var current = plan.Round!;
-            plan.Stall = plan.Stall.Observe(current.Actor, current.ActionPoints, keep);
+            if (current.Actor.IsHero && !HeroStatus(plan).IsActive) current.ActionPoints = 0;
+            plan.Stall = plan.Stall.Observe(current.Actor, current.ActionPoints, plan.Profile.StallCheckKeepsPreviousActionPoints);
             if (plan.Stall.Forced)
             {
                 plan.Stall = plan.Stall with { Forced = false };
@@ -382,9 +385,14 @@ public sealed partial class GameSessionOwner
 
     // ---- planning: every world answer is read and every step decided on a copy, then one commit ----
 
-    private sealed class CombatPlan(ISessionCombatWorld world, CombatRound? round, TurnBasedStall<SessionCombatant> stall)
+    private sealed class CombatPlan(ISessionCombatWorld world, CombatRound? round, TurnBasedStall<SessionCombatant> stall,
+        CombatAnomalyProfile profile)
     {
         internal ISessionCombatWorld World { get; } = world;
+        // The rule mode as read when the step began, so a world answer that switches it cannot mix two modes in one step.
+        internal CombatAnomalyProfile Profile { get; } = profile;
+        // The hero's life state the step decides with, when the step itself changes it (an overexertion); else the record's.
+        internal LifeState? Hero { get; set; }
         internal CombatRound? Round { get; set; } = round;
         internal TurnBasedStall<SessionCombatant> Stall { get; set; } = stall;
         internal List<SessionCombatEvent> Events { get; } = [];
@@ -409,7 +417,7 @@ public sealed partial class GameSessionOwner
 
     private CombatPlan? PlanCombat(ISessionCombatWorld world, Action<CombatPlan> step, out GameSessionFailure failure)
     {
-        var plan = new CombatPlan(world, _combat.Round?.Clone(), _combat.Stall);
+        var plan = new CombatPlan(world, _combat.Round?.Clone(), _combat.Stall, _rules.Combat);
         failure = GameSessionFailure.None;
         try { step(plan); }
         catch (CombatPlanException e) { failure = e.Failure; return null; }
@@ -450,7 +458,7 @@ public sealed partial class GameSessionOwner
         var index = participants.FindIndex(participant => !Skipped(plan, participant));
         if (index < 0)
         {
-            if (!HeroStatus().IsActive)
+            if (!HeroStatus(plan).IsActive)
             {
                 plan.Round = null;
                 plan.Events.Add(new(SessionCombatEventKind.RoundEnded, null, 0));
@@ -487,7 +495,7 @@ public sealed partial class GameSessionOwner
             while (next < count && Skipped(plan, round.Participants[next]));
             if (next >= count)
             {
-                if (NextRound(plan) && _rules.Combat.FirstSubturnStartedTwice) StartSubturn(plan);
+                if (NextRound(plan) && plan.Profile.FirstSubturnStartedTwice) StartSubturn(plan);
                 return;
             }
         }
@@ -527,7 +535,8 @@ public sealed partial class GameSessionOwner
 
     private bool Skipped(CombatPlan plan, SessionCombatant participant)
     {
-        if (participant.IsHero) return !HeroStatus().IsActive;
+        // The hero is never hidden from drawing, so only its activity counts.
+        if (participant.IsHero) return !HeroStatus(plan).IsActive;
         if (Facts(plan, participant.Entity!) is not { } facts) return true;
         var active = LifeRules.Evaluate(NpcState(participant.Entity!, facts), facts.Life).IsActive;
         return TurnBasedRules.IsSkipped(active, facts.Hidden, facts.Sleeping);
@@ -551,9 +560,9 @@ public sealed partial class GameSessionOwner
 
     private bool InPcParty(SessionCombatant participant) => participant.IsHero || LedByPc(participant.Entity!);
 
-    private LifeStatus HeroStatus()
+    private LifeStatus HeroStatus(CombatPlan? plan = null)
     {
-        var state = _life.Hero!.Value.State;
+        var state = plan?.Hero ?? _life.Hero!.Value.State;
         return LifeRules.Evaluate(state, LifeDomain.HeroFacts(_hero!, state));
     }
 
@@ -570,11 +579,12 @@ public sealed partial class GameSessionOwner
             ClockCalendar.TryDerive(clock.GameTimestampMs + TurnBasedRules.RoundGameTimeMs, clock.ProfileBinding.StartYear, out _) == ClockFailure.None;
     }
 
-    // A life step that knocks out the participant whose subturn it is ends that subturn (the source's fatigue write): its
-    // action points drop to 0 here and the host's next completion check passes the turn on.
+    // A life step that knocks out or stuns the participant whose subturn it is ends that subturn (the source's fatigue
+    // write and its stunned animation goal): its action points drop to 0 here and the host's next completion check passes
+    // the turn on.
     private void EndSubturnOnKnockout(SessionLifeTarget target, LifeOutcome outcome)
     {
-        if (!outcome.Events.HasFlag(LifeEvents.LostConsciousness) || _combat.Round is not { } round) return;
+        if ((outcome.Events & (LifeEvents.LostConsciousness | LifeEvents.Stunned)) == 0 || _combat.Round is not { } round) return;
         var combatant = target.IsHero ? SessionCombatant.Hero : SessionCombatant.Critter(target.Entity!);
         if (round.Actor == combatant) round.ActionPoints = 0;
     }

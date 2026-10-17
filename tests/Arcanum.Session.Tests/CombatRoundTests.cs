@@ -283,6 +283,72 @@ public sealed class CombatRoundTests
     }
 
     [TestMethod]
+    public void AnOverexertionKnockoutOfTheLastActiveParticipantEndsTheRound()
+    {
+        foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
+        {
+            using var owner = Owner(mode);
+            Assert.AreEqual(GameSessionDisposition.Changed,
+                owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { Fatigue = 26 }).Disposition);
+            var world = new World().With(Hero, 0, 0, null).With(Wolf, 105, 200, Npc(7, new LifeState(30, 0, 0, LifeConditions.None, 0)));
+            Ok(owner.StartCombatRound(owner.Version, world), owner);
+            Round(owner, 1, Hero, 9, Wolf, Hero);
+            var start = Now(owner);
+            var knockout = Ok(owner.ConsumeActionPoints(owner.Version, Hero, 10, world), owner);
+            CollectionAssert.AreEqual(new[] { Ended(Hero), new SessionCombatEvent(SessionCombatEventKind.RoundEnded, null, 0) },
+                knockout.Events.ToArray(), mode.ToString());
+            Assert.IsNull(owner.QueryCombatRound());
+            Assert.AreEqual(start + TurnBasedRules.RoundGameTimeMs, Now(owner), "the round's end still moved the clock");
+        }
+    }
+
+    [TestMethod]
+    public void AStunEndsTheVictimsSubturnAndAnInactiveHeroNeverHoldsTheRound()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { Effects = CriticalHitEffects.Stun }).Disposition);
+        Round(owner, 1, Hero, 0, Wolf, Bandit, Hero);
+        CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Wolf, 7) },
+            Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray());
+    }
+
+    [TestMethod]
+    public void AHeroKilledOnItsSubturnDoesNotHoldTheRound()
+    {
+        using var owner = Owner();
+        var world = Fight();
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
+        Assert.AreEqual(GameSessionDisposition.Changed,
+            owner.ApplyDamage(owner.Version, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 100 }).Disposition);
+        Assert.AreEqual(9, owner.QueryCombatRound()!.ActionPoints, "a death keeps the action points");
+        CollectionAssert.AreEqual(new[] { Ended(Hero), Began(2), Started(Wolf, 7) },
+            Ok(owner.CompleteCombatActions(owner.Version, world), owner).Events.ToArray());
+    }
+
+    [TestMethod]
+    public void TheStallCheckStartsEmptyEveryRound()
+    {
+        using var owner = Owner();
+        var world = new World().With(Hero, 0, 0, null).With(Wolf, 105, 200, Npc(7));
+        Ok(owner.StartCombatRound(owner.Version, world), owner);
+        Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition);
+        Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
+        Ok(owner.EndCombatTurn(owner.Version, Hero, world), owner);
+        Ok(owner.ConsumeActionPoints(owner.Version, Wolf, 4, world), owner);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.CompleteCombatActions(owner.Version, world).Disposition,
+            "the wolf's 3 from the last round is no reference");
+        Round(owner, 2, Wolf, 3, Wolf, Hero);
+    }
+
+    [TestMethod]
     public void A11StalledActorsAreForcedToSpendTheRest()
     {
         foreach (var mode in new[] { RuleMode.Steamwoven, RuleMode.Original })
@@ -362,11 +428,18 @@ public sealed class CombatRoundTests
         Ok(owner.EndCombatTurn(owner.Version, Wolf, world), owner);
         Ok(owner.AddCombatant(owner.Version, Dog), owner);
         Round(owner, 1, Bandit, 8, Wolf, Bandit, Dog, Hero);
+        Assert.AreEqual(1, owner.QueryCombatRound()!.Current);
         Assert.AreEqual(GameSessionDisposition.NoChange, owner.AddCombatant(owner.Version, Dog).Disposition);
         Refused(owner.AddCombatant(owner.Version, Hero), owner, GameSessionFailure.InvalidCombatant, owner.Version.Revision);
         world.Facts["oid:dog"] = Npc(5);
         Ok(owner.EndCombatTurn(owner.Version, Bandit, world), owner);
         Assert.AreEqual(Dog, owner.QueryCombatRound()!.Actor);
+        Ok(owner.EndCombatTurn(owner.Version, Dog, world), owner);
+
+        // Joining while the hero acts moves the hero's index; its subturn goes on.
+        Ok(owner.AddCombatant(owner.Version, Virgil), owner);
+        Round(owner, 1, Hero, 9, Wolf, Bandit, Dog, Virgil, Hero);
+        Assert.AreEqual(4, owner.QueryCombatRound()!.Current);
     }
 
     [TestMethod]
