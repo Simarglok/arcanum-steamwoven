@@ -109,9 +109,7 @@ public sealed class ObjectDescriptionCatalog
         out MesFile? file, out ContentCandidate? source)
     {
         file = null;
-        var candidates = stack.Resolve(path).Candidates;
-        source = baseOnly ? candidates.FirstOrDefault(c => c.Source.Role is ContentSourceRole.Tig or ContentSourceRole.GameRoot
-            or ContentSourceRole.BaseArchive or ContentSourceRole.DataDirectory) : candidates.FirstOrDefault();
+        source = ContentPhase.Candidate(stack, path, baseOnly ? ContentLoadPhase.GameStart : ContentLoadPhase.ModuleLoaded);
         if (source is null) return null;
         if (source.Length > options.MaxBytes) return new(DescriptionCatalogStatus.ParseFailed, null, kind, new(MesParseStatus.TooLarge, null));
         var read = stack.Read(source);

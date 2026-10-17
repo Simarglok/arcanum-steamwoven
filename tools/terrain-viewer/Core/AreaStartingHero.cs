@@ -48,7 +48,7 @@ public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, S
 /// (<see cref="ContentPrototypes"/>, ARC-DATA-026), <c>rules\effect.mes</c>,
 /// <c>rules\InvenSource.mes</c>, <c>rules\InvenSourceBuy.mes</c> and the hero's flag from <c>mes\MainMenu.mes</c>; since ARC-UI-007
 /// also the experience tables the session awards with and the character sheet reads the next level from (ARC-WORLD-030).
-/// Godot-free; a typed status, never an exception for data.
+/// Each table comes from the sources of its load phase (<see cref="ContentPhase"/>, ARC-DATA-027). Godot-free; a typed status, never an exception for data.
 /// </summary>
 public static class AreaStartingHero
 {
@@ -83,13 +83,17 @@ public static class AreaStartingHero
         var opened = ContentStack.Open(found.Plan!);
         if (opened.Status != ContentStackStatus.Ready) return Refused(AreaHeroStatus.StackFailed, hero, opened.Status.ToString());
         using var stack = opened.Stack!;
-        var effects = Table(stack, EffectsPath, required: true, out var detail);
-        var sources = effects is null ? null : Table(stack, SourcesPath, required: true, out detail);
-        var buy = sources is null ? null : Table(stack, SourcesBuyPath, required: false, out detail);
-        var menu = sources is null || detail is not null ? null : Table(stack, MainMenuPath, required: true, out detail);
-        var levels = menu is null ? null : Table(stack, LevelsPath, required: true, out detail);
-        var quests = levels is null ? null : Table(stack, QuestExperiencePath, required: true, out detail);
-        var questLevels = quests is null ? null : Table(stack, QuestLevelsPath, required: true, out detail);
+        // ARC-DATA-027: each table from the sources of the phase the original reads it in (exe-checked): the effect,
+        // inventory-source, main-menu, level and quest-experience tables at game start (base sources only), the
+        // module's quest table at module load.
+        const ContentLoadPhase start = ContentLoadPhase.GameStart, module = ContentLoadPhase.ModuleLoaded;
+        var effects = Table(stack, EffectsPath, start, required: true, out var detail);
+        var sources = effects is null ? null : Table(stack, SourcesPath, start, required: true, out detail);
+        var buy = sources is null ? null : Table(stack, SourcesBuyPath, start, required: false, out detail);
+        var menu = sources is null || detail is not null ? null : Table(stack, MainMenuPath, start, required: true, out detail);
+        var levels = menu is null ? null : Table(stack, LevelsPath, start, required: true, out detail);
+        var quests = levels is null ? null : Table(stack, QuestExperiencePath, start, required: true, out detail);
+        var questLevels = quests is null ? null : Table(stack, QuestLevelsPath, module, required: true, out detail);
         if (effects is null || sources is null || menu is null || questLevels is null || detail is not null)
             return Refused(AreaHeroStatus.TableUnavailable, hero, detail ?? "table");
         if (Experience(levels!, quests!, questLevels, out detail) is not { } experience) return Refused(AreaHeroStatus.ExperienceInvalid, hero, detail!);
@@ -146,13 +150,14 @@ public static class AreaStartingHero
         return value < OriginalGlobalFlags.Count ? value : null;
     }
 
-    private static MesFile? Table(ContentStack stack, string path, bool required, out string? detail)
+    /// <summary>One rule table from the candidate of its load phase; a table only another phase's sources hold is "NotInPhase".</summary>
+    internal static MesFile? Table(ContentStack stack, string path, ContentLoadPhase phase, bool required, out string? detail)
     {
         detail = null;
         var resolution = stack.Resolve(path);
-        if (resolution.Status != ContentResolutionStatus.Resolved || resolution.Winner is not { } winner)
+        if (ContentPhase.Candidate(resolution, phase) is not { } winner)
         {
-            if (required) detail = $"{path} {resolution.Status}";
+            if (required) detail = $"{path} {(resolution.Status == ContentResolutionStatus.Resolved ? "NotInPhase" : resolution.Status)}";
             return null;
         }
         var bytes = stack.Read(winner);

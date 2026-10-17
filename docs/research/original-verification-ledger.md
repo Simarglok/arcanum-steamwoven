@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); audio in [Audio](#audio-arc-res-052))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026); the phase of other rule files in [Load phases](#load-phases-arc-data-027); audio in [Audio](#audio-arc-res-052))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -484,6 +484,29 @@ branch of the functions read stays inside `.text`.
 | SN24 | `sfx_critter_sound` (0x4F0ED0) | The off flag is tested on the local PC, not the sounding critter. | CE slip |
 | SN26 | `AGbeginAnimLoopAnim` (0x42DA50), eye candy (0x431550, 0x431960) | Looping scenery and eye-candy sounds loop; flag bit 0x80; handle test and goal fields as written in the study. | CE slip |
 | SN31 | hot-key equip (0x550000) | Equipping into an empty slot plays the slot number as a sound id. | Original bug, switch candidate |
+
+## Load phases (ARC-DATA-027)
+
+Source: [lighting sources](../rendering/area-lighting.md#sources-and-load-phases-arc-data-027), the
+[starting hero](../world/starting-hero-runtime.md) and `ContentPhase`. Question: which files does the original read while
+only the base sources are mounted (an init function; then `tig.dat`, the game folder, `arcanum*.dat` and `data/` can
+supply them), and which at module load or later (every source)? Background: the [prototype phase](#prototype-phase-arc-data-026)
+row; `main` calls `gamelib_init` (0x4012FF), then the UI library's init (0x53E600, at 0x401411), then `gamelib_mod_load`
+(0x401444). Read on 2026-10-17 by a first reader and, independently, a second reader that saw only the questions (method
+step 6); both agree on every row. The second reader adds that `mes_load` (0x4D4290) keeps a name cache, so loading a file
+that is already loaded returns the loaded copy; that later module loads (`gamelib_mod_load` has six more callers) read the
+module-load files again but never the game-start ones; and that `rules\gameinit.mes` is skipped when a flag set by
+gameinit's init (0x4B9BC5) is set, whose meaning was not identified.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LP1 | `effect_init` (0x4E99F0), `level_init` (0x4A6620), `quest_init` (0x4C45C0), `invensource_init` (0x4BF390), `name_init` (0x41CA40) with `a_name_light_init` (0x4ED1E0) and `a_name_tile_init` (0x4EAC80) | Init functions of the gamelib table (Level entry 16, Quest 31, Inven-Source 46, Name 6) and of the map table (Effect). They load `rules\effect.mes`, `rules\xp_level.mes`, `Rules\xp_quest.mes`, `Rules\InvenSource.mes` and `Rules\InvenSourceBuy.mes` (through two name pointers), and Name's init calls the light and tile name loaders, which load `art\light\light.mes` and `art\tile\tilename.mes`. None of these subsystems has a module-load function that reads them again. | Original: base sources only |
+| LP2 | `mainmenu_ui_init` (0x540930) | An init function of the UI library, which `main` runs before `gamelib_mod_load`; it loads `mes\mainmenu.mes` into the main menu's handle unless that handle is already loaded. The same init also loads it into a second handle through 0x585BC0 (the name cache returns the loaded copy; CE omits this call); a third load site (0x5443E0) has the same guard and no reference (dead code). So no load after the module is mounted can replace the init-time copy. | Original: base sources only |
+| LP3 | `gameinit_mod_load` (0x4B9C30), `map_mod_load` (0x40ED10) with `map_list_info_load` (0x4125C0), `light_scheme_mod_load` (0x4A7C90), `quest_mod_load` (0x4C4670) | Module-load functions (gameinit entry 61, Map 17, LightScheme 18, Quest 31) load `rules\gameinit.mes`, `Rules\MapList.mes`, `Rules\Lighting Schemes.mes` and `rules\gamequest.mes` after the module is mounted. | Original: every source |
+| LP4 | `light_scheme_set` (0x4A7DD0), `map_load_extension` (0x4115D0) | A scheme file is loaded when a scheme is set, by the name the scheme catalogue gives (`Rules\%s.mes`); `mapinfo.txt` is opened from the map's base path when the map opens. | Original: every source |
+
+Not checked in the executable: when a light ART file is first opened (CE: when it is drawn, through the ART cache);
+the readers take it from the stack winner, as every ART since ARC-DATA-018.
 
 ## Decisions to revisit
 

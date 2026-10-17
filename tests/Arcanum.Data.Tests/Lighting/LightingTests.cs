@@ -58,18 +58,24 @@ public sealed class LightingTests
     }
 
     [TestMethod]
-    public void Comments_hour_notes_and_whitespace_are_accepted_but_other_text_fails()
+    public void Scheme_files_are_read_with_the_original_mes_grammar()
     {
+        // ARC-DATA-027: text outside braces (comments, hour notes, anything else) is ignored as by the original.
         var text = "//\n// header\n//\n\n" + string.Concat(Enumerable.Range(0, 24).Select(h =>
             $"{{{h}}}{{{(h is 0 or 23 ? " 1, 2,3 ,4,5,6 " : "")}}}\t{(h % 12 == 0 ? 12 : h % 12)}{(h < 12 ? "AM" : "PM")} // note\r\n"));
         Assert.AreEqual(new AmbientPair(new(1, 2, 3), new(4, 5, 6)), Parse(text).At(11));
-        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text.Replace("{5}{}\t5AM", "{5}{}\t13PM")));
-        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text.Replace("{5}{}\t5AM", "{5}{}\t05AM")));
-        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "junk"));
-        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{5}{}"));
-        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{x}{}"));
+        Assert.AreEqual(LightingFailure.None, Fails(text.Replace("{5}{}\t5AM", "{5}{}\t13PM")));
+        Assert.AreEqual(LightingFailure.None, Fails(text + "junk } text"));
+        // The shapes the original only warns about, truncates or stops on stay refused (docs/formats/mes-reader.md).
+        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{5}{}"), "duplicate number");
+        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{x}{}"), "not a number");
         Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{30}{unterminated"));
+        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "{30}{a{b}"), "brace in a field");
+        Assert.AreEqual(LightingFailure.MesGrammar, Fails(text + "\r{30}{1}"), "lone carriage return");
+        Assert.AreEqual(LightingFailure.LimitExceeded, Fails(text + "{30}{" + new string('a', 2000) + "}"), "text over 1,999 bytes");
         Assert.AreEqual(LightingFailure.LimitExceeded, LightSchemeParser.TryParse(1, new byte[(1 << 20) + 1], out _));
+        // A multi-line row is kept as the original reads it, and is then not six channels.
+        Assert.AreEqual(LightingFailure.ChannelCount, Fails(text.Replace("{11}{}", "{11}{1,2,3\n4,5,6}")));
     }
 
     [TestMethod]
@@ -183,7 +189,8 @@ public sealed class LightingTests
                 if (replace.TryGetValue(files[i].Name, out var bytes)) files[i] = (files[i].Name, bytes);
         files.RemoveAll(file => file.Bytes.Length == 0);
         if (extra is not null) files.AddRange(extra);
-        var module = Dat(files.ToArray());
+        // Sorted as an original archive index (lower-case, '/' and '\\' alike), which the content stack requires.
+        var module = Dat(files.OrderBy(file => file.Name.ToLowerInvariant().Replace('\\', '/'), StringComparer.Ordinal).ToArray());
         using var archive = DatArchive.Open(new MemoryStream(module));
         var key = new AreaInputKey(AreaSourceRole.Module);
         var sectors = new List<AreaSectorRecord>();
@@ -257,6 +264,72 @@ public sealed class LightingTests
         // A catalogue row naming another map directory must not lend its default to these sectors.
         Assert.AreEqual(LightingFailure.MapDirectoryMismatch, Read(Build(With("rules/maplist.mes", "{1}{Other, 1, 2}"),
             extra: [("maps/Other/mapinfo.txt", Encoding.ASCII.GetBytes("LightScheme:5"))])).Failure);
+    }
+
+    // ---- ARC-DATA-027: the same reader over a content stack ----
+
+    /// <summary>A synthetic installation: tig.dat, the fixture's module archive as <c>modules/Mod.dat</c>, then the given loose
+    /// files (relative to the game folder) and base archives.</summary>
+    private static AreaLightingReadResult ReadStack(Fixture fixture, (string Path, byte[] Bytes)[]? loose = null, (string Name, byte[] Bytes)[]? arcanum1 = null)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "arc-light-stack-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "modules"));
+            File.WriteAllBytes(Path.Combine(root, "tig.dat"), Dat());
+            File.WriteAllBytes(Path.Combine(root, "modules", "Mod.dat"), fixture.Module);
+            if (arcanum1 is not null) File.WriteAllBytes(Path.Combine(root, "arcanum1.dat"), Dat(arcanum1));
+            foreach (var (relative, bytes) in loose ?? [])
+            {
+                var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+            }
+            var discovery = Arcanum.Data.Content.ContentMountPlan.Discover(root, "Mod");
+            Assert.AreEqual(Arcanum.Data.Content.ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+            var opened = Arcanum.Data.Content.ContentStack.Open(discovery.Plan!);
+            Assert.AreEqual(Arcanum.Data.Content.ContentStackStatus.Ready, opened.Status, opened.Status + " " + opened.Detail);
+            using var stack = opened.Stack!;
+            return AreaLightingReader.Read(stack, fixture.Snapshot);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    public void Stack_reader_reads_what_the_module_archive_holds_and_follows_overrides()
+    {
+        var fixture = Build();
+        var archive = Read(fixture).Source!;
+        var stacked = ReadStack(fixture);
+        Assert.AreEqual(LightingFailure.None, stacked.Failure);
+        var source = stacked.Source!;
+        Assert.AreEqual((archive.ModuleSha256, archive.MapDefaultScheme, archive.MapInfoSha256, archive.Startup), (source.ModuleSha256, source.MapDefaultScheme, source.MapInfoSha256, source.Startup));
+        CollectionAssert.AreEqual(archive.SectorSchemes.ToArray(), source.SectorSchemes.ToArray());
+        CollectionAssert.AreEqual(archive.Schemes.Select(p => (p.Key, p.Value.PayloadSha256)).ToArray(), source.Schemes.Select(p => (p.Key, p.Value.PayloadSha256)).ToArray());
+
+        // Every lighting file is read after the module is mounted: a module-folder copy wins over the archive.
+        var five = Encoding.ASCII.GetBytes(Rows(h => $"7,7,7,{h},{h},{h}"));
+        var overridden = ReadStack(fixture, [("modules/Mod/rules/lighting five.mes", five), ("modules/Mod/maps/test-map/mapinfo.txt", "LightScheme:5\n"u8.ToArray())]);
+        Assert.AreEqual(LightingFailure.None, overridden.Failure);
+        Assert.AreEqual((5, Hash(five)), (overridden.Source!.MapDefaultScheme, overridden.Source.Schemes[5].PayloadSha256));
+        CollectionAssert.AreEqual(new[] { 5 }, overridden.Source.Schemes.Keys.ToArray(), "both sectors now use scheme 5");
+
+        // A file only a base archive holds is read; a file nothing holds is missing.
+        var moved = Build(new() { ["rules/lighting five.mes"] = [] });
+        Assert.AreEqual(LightingFailure.MissingResource, ReadStack(moved).Failure);
+        Assert.AreEqual(LightingFailure.None, ReadStack(moved, arcanum1: [("rules/lighting five.mes", five)]).Failure);
+
+        // A sector the stack resolves to another source is not the one the snapshot read.
+        Assert.AreEqual(LightingFailure.SectorIdentityMismatch, ReadStack(fixture, [($"modules/Mod/maps/test-map/{CoreB}.sec", SectorBytes(5, 0xAA0003))]).Failure);
+        Assert.AreEqual(LightingFailure.MapDirectoryMismatch, ReadStack(Build(new() { ["rules/maplist.mes"] = Encoding.ASCII.GetBytes("{1}{Other, 1, 2}") },
+            extra: [("maps/Other/mapinfo.txt", Encoding.ASCII.GetBytes("LightScheme:5"))])).Failure);
+        // The same with the other directory holding a sector of the same id: still a directory mismatch, as the module-only read.
+        var other = Build(new() { ["rules/maplist.mes"] = Encoding.ASCII.GetBytes("{1}{Other, 1, 2}") },
+            extra: [("maps/Other/mapinfo.txt", Encoding.ASCII.GetBytes("LightScheme:5")), ($"maps/Other/{CoreA}.sec", SectorBytes(0, 0xAA0003)), ($"maps/Other/{CoreB}.sec", SectorBytes(0, 0xAA0003))]);
+        Assert.AreEqual((LightingFailure.MapDirectoryMismatch, LightingFailure.MapDirectoryMismatch), (Read(other).Failure, ReadStack(other).Failure));
+        // A file over the 1 MiB rule cap, and a stack whose module archive is not the snapshot's.
+        Assert.AreEqual(LightingFailure.LimitExceeded, ReadStack(fixture, [("modules/Mod/maps/test-map/mapinfo.txt", new byte[(1 << 20) + 1])]).Failure);
+        Assert.AreEqual(LightingFailure.SectorIdentityMismatch, ReadStack(fixture with { Module = Build(extra: [("rules/extra.mes", [1])]).Module }).Failure);
     }
 
     // Selected original module (opt-in): numeric identities from the ARC-RES-018/RES-020 research
