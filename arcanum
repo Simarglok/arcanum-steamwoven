@@ -122,7 +122,10 @@ def oracle(args: argparse.Namespace) -> int:
     code = subprocess.call(generate)
     if code != 0:
         return code
-    environment = dict(os.environ, ARCANUM_EXE=str(exe), ARCANUM_ORACLE_DIR=str(out), ARCANUM_ORACLE_REQUIRED="1")
+    # ARC-DEV-008: each OriginalExe test writes its receipt (seed, inputs, mutants, result, executable and IL hashes) into
+    # docs/verification/receipts; commit the receipts of a run whose functions changed.
+    environment = dict(os.environ, ARCANUM_EXE=str(exe), ARCANUM_ORACLE_DIR=str(out), ARCANUM_ORACLE_REQUIRED="1",
+                       ARCANUM_ORACLE_RECEIPTS=str(ROOT / launch.ORACLE_RECEIPTS))
     environment.setdefault("DOTNET_ROOT", str(Path(dotnet()).parent))
     project = str(ROOT / launch.ORACLE_TESTS)
     code = subprocess.call([dotnet(), "restore", project, "--locked-mode"], env=environment)

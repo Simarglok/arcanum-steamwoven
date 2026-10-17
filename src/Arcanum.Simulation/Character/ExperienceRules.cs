@@ -68,6 +68,7 @@ public static class ExperienceRules
     /// Experience still needed for the next level (<c>level_experience_points_to_next_level</c>, 0x4A68B0): the next level's
     /// threshold minus the experience, negative when it is already reached; <see cref="NoNextLevel"/> at or above the maximum.
     /// </summary>
+    [OriginalFunction(0x4A68B0, OriginalFunctionScope.Full)]
     public static int ToNextLevel(ExperienceTable table, int level, int experience)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -80,6 +81,7 @@ public static class ExperienceRules
     /// <c>1000 − 1000 × remaining / step</c>, truncated; 0 at or above the maximum; <see cref="ProgressFallback"/> for level 0
     /// or when the next level is already reached.
     /// </summary>
+    [OriginalFunction(0x4A6900, OriginalFunctionScope.Partial)]
     public static int Progress(ExperienceTable table, int level, int experience)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -93,6 +95,7 @@ public static class ExperienceRules
 
     /// <summary>Character points for the levels after <paramref name="from"/> up to <paramref name="to"/>
     /// (<c>calculate_bonus_character_points</c>, 0x4A6980): one per level and one more for every fifth level.</summary>
+    [OriginalFunction(0x4A6980, OriginalFunctionScope.Full)]
     public static int BonusPoints(int from, int to)
     {
         var points = 0;
@@ -109,6 +112,7 @@ public static class ExperienceRules
     /// grants nothing (ledger XP5: CE's index one higher would recurse without end). The PC level step is
     /// passed on to followers either way, so in that branch it is one level above the PC.
     /// </summary>
+    [OriginalFunction(0x4A69C0, OriginalFunctionScope.Partial)]
     public static ExperienceAdvance Advance(ExperienceTable table, int level, int experience, int unspentPoints)
     {
         ArgumentNullException.ThrowIfNull(table);
@@ -148,6 +152,7 @@ public static class ExperienceRules
     /// level, never to <see cref="MaxLevel"/> or above; a level that would not rise stays. Points are the bonus points of the
     /// levels gained (the source then runs the NPC's auto-level scheme, which is not modelled here).
     /// </summary>
+    [OriginalFunction(0x4A6CB0, OriginalFunctionScope.Partial)]
     public static FollowerLevelUp FollowerLevel(int level, FollowerLevelStep step)
     {
         ValidateLevel(level);
@@ -161,6 +166,7 @@ public static class ExperienceRules
     /// The difficulty change of an award (<c>critter_give_xp</c>, 0x45F110): easy adds half, hard takes a quarter away (the
     /// original; CE's half is a reconstruction slip, ledger XP1), each truncated toward zero; normal keeps it.
     /// </summary>
+    [OriginalFunction(0x45F110, OriginalFunctionScope.Partial)]
     public static long AdjustForDifficulty(long award, GameDifficulty difficulty) => difficulty switch
     {
         GameDifficulty.Normal => award,
@@ -170,6 +176,7 @@ public static class ExperienceRules
     };
 
     /// <summary>The award for killing an NPC (<c>critter_notify_killed</c>, 0x45DA20): a fifth of its experience worth, truncated.</summary>
+    [OriginalFunction(0x45DA20, OriginalFunctionScope.Partial)]
     public static int KillAward(int worth) => (int)(20L * worth / 100);
 
     /// <summary>
@@ -178,6 +185,7 @@ public static class ExperienceRules
     /// Nothing is taken from an empty pool. Computed without the original's 32-bit wrap of worth × percentage, which no
     /// installed worth (a few thousand) reaches short of a hit thousands of times larger than the maximum hit points.
     /// </summary>
+    [OriginalFunction(0x4B4390, OriginalFunctionScope.Partial)]
     public static (int Award, int Pool) DamageShare(int worth, int pool, int damage, int maxHitPoints)
     {
         if (maxHitPoints < 1) throw new ArgumentOutOfRangeException(nameof(maxHitPoints));

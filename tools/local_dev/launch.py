@@ -56,6 +56,8 @@ ORIGINAL_EXE_NAME = "Arcanum.exe"
 ORIGINAL_EXE_SHA256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52"
 ORACLE_TESTS = "tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj"
 ORACLE_TEST_CLASS = "tests/Arcanum.Simulation.Tests/Character/ExperienceOriginalExeTests.cs"
+# ARC-DEV-008: where `./arcanum oracle` has the tests write their receipts (checked against docs/verification/functions.csv).
+ORACLE_RECEIPTS = "docs/verification/receipts"
 ORACLE_FUNCTIONS: dict[str, str] = {
     "0x4A68B0": "ToNextLevelMatchesTheOriginal",
     "0x4A6900": "ProgressMatchesTheOriginalExceptTheXp3Wrap",

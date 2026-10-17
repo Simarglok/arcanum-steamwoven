@@ -68,7 +68,7 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
    `OriginalExe`, the function registry, the `OriginalFunction` attribute, receipts, `./arcanum oracle`, and the
    reference counter for CE, with Ghidra and Unicorn pinned in the [toolchain](../workflow/toolchain.md). First functions:
    the three experience functions of the trial. Done for the oracle tool, the `OriginalExe` category and `./arcanum oracle`;
-   the registry, attribute, receipts and CE counter follow as ARC-DEV-008.
+   the registry, attribute, receipts and CE counter are ARC-DEV-008 ([function verification](../verification/README.md)).
 3. **Experience XP3 switch**: the progress overflow as a rule-mode switch (owner decision 2026-10-17), with the oracle
    expecting the difference in Steamwoven mode only.
 4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace CE references

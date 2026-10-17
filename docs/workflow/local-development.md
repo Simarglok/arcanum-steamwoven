@@ -42,7 +42,8 @@ ARC-RENDER-008 build, like map mode: a build exported before ARC-WORLD-027 refus
 export. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
 `tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
 `tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
-`tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`; the executable is `--exe`, `$ARCANUM_EXE` or
+`tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`, which write their receipts to `docs/verification/receipts`
+(`ORACLE_RECEIPTS`, ARC-DEV-008); the executable is `--exe`, `$ARCANUM_EXE` or
 `Arcanum.exe` in the configured game folder (`ORIGINAL_EXE_NAME`, SHA-256 `ORIGINAL_EXE_SHA256`). `test_launcher_sync.py`
 fails when that table, the oracle's function list, the test methods or the pinned SHA-256 drift apart. **Rule:** a change that adds
 or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
