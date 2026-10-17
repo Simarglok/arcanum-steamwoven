@@ -40,6 +40,10 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   `UnsupportedSource`. The owner parses them in the original MES grammar
   (`MesFile`). `art/missing.dat` is optional: without it the
   owner rebuilds the masks, as the original does (N3).
+- **Roof tables** (ARC-RENDER-021): `art/roof/roofname.mes` (read with the
+  names) and `art/roof/roofshade.mes` (read by the roofs' own init), optional,
+  resolved in the same game-start phase; that phase is not checked in the
+  executable for these two tables.
 - **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
   missing number (at most 200), as the original does; runtime = catalogue − 4999;
   0/0 for an unlisted map or a list that does not parse.
@@ -78,7 +82,10 @@ A whole-map plan also:
 - looks a resource up in content-stack order (ARC-DATA-018, below), not only
   in the archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without
-  failing the map: roofs are not drawn yet;
+  failing the map, and since ARC-RENDER-021 reads the roof blocks of every core
+  sector, with the `Roof` (`art/roof/roofname.mes`) and `RoofShade`
+  (`art/roof/roofshade.mes`) mappings, into `AreaSnapshot.Roofs` and roof
+  visuals ([roofs](../rendering/roofs.md));
 - draws doors and windows (ARC-DATA-020): with the `Portal` mapping
   (`art/portal/portal.mes`) a type-1 object's ART is the entry's first word for
   its number (+1001 for a window), the busted bit turns the name's
