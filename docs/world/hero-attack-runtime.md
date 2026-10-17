@@ -24,6 +24,9 @@ effective object fields. No NPC fights back. Requirements:
   [verification ledger](../research/original-verification-ledger.md#hero-attack-arc-combat-005). The original differs from the
   reconstruction in three of its slips (a follower click, a corpse click without Alt, the inactive-PC test of the click); none is a bug of the
   original, so there is no rule-mode switch.
+- [Function registry](../verification/README.md) rows (F2, two readings): skill points, base level, level, key-stat cap and
+  training (`CombatSkillRules`, 0x4C5FA0, 0x4C5E50, 0x4C5EB0, 0x4C5F70, 0x4C60C0) and the critter resistance
+  (`CombatantRules.Resistances`, 0x43D6D0); no function oracle covers them yet.
 - The installed data: the twelve pre-made PC prototypes store no skills (the pre-made hero reader refuses one that does), the
   Crash Site creatures are animals and monsters with stored hit-point adjustments of −3 to −6.
 
