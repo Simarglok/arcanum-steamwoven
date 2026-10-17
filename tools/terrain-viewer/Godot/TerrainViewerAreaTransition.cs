@@ -78,6 +78,7 @@ public partial class TerrainViewerApp
 
     private void StopAreaTransitions()
     {
+        EndSheet(); _sheetStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         _areaTransitions = null; _areaSession?.Dispose(); _areaSession = null; _areaUseAfterRoute = null;

@@ -368,7 +368,8 @@ public sealed class AreaConversationState : IDialogStateQueryPort, IDialogComman
 
     /// <summary>
     /// QU through the session's quest rules. A quest that became Accepted lifts the NPC's reaction to at least 41 and
-    /// one that became Completed adds 10 (source quest rules); experience and quest alignment need quest data and are not applied.
+    /// one that became Completed adds 10 (source quest rules). A completion gives the quest's experience inside the session's quest
+    /// rules when the session has experience data (with --hero since ARC-UI-007); quest alignment is not applied.
     /// </summary>
     public DialogCommandResult Execute(QuestStateCommand command)
     {

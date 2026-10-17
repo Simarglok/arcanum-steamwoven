@@ -153,7 +153,8 @@ public sealed class AreaTransitionCoordinator
     /// new-game global flags (0..3199 known false, ARC-SCRIPT-006) that dialogs read and write, an empty story
     /// domain and the actor at the given exterior cell. The cave's story scripts are out of scope
     /// (docs/research/cave-transition-evidence.md T9). ARC-WORLD-027: with a ready pre-made <paramref name="hero"/> the
-    /// session's player character is that hero and its main-menu flag starts true.</summary>
+    /// session's player character is that hero and its main-menu flag starts true. ARC-UI-007: the hero's load also brings the
+    /// experience data, so the session awards experience (ARC-WORLD-030) and knows the next level.</summary>
     public static GameSessionCreationResult CreateSession(ProfileBinding clock, Guid world, Guid module, AreaStepCell actor, int runtimeMap,
         AreaHeroLoad? hero = null)
     {
@@ -162,6 +163,6 @@ public sealed class AreaTransitionCoordinator
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
         return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
-            Hero: hero?.Definition));
+            Hero: hero?.Definition, Experience: hero?.Experience));
     }
 }

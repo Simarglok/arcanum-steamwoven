@@ -49,6 +49,46 @@ public partial class TerrainViewerApp
         GD.Print("ARC-WORLD-027 native-smoke hero PASS " + System.Text.Json.JsonSerializer.Serialize(new {
             hero.Hero.Name, definition.Prototype, Flag = flag, definition.Gold, Kit = definition.Kit.Count, hero.DroppedChanges,
             Facts = facts!.ToString(), Conversation = _conversationHost is not null }));
+        RunAreaSheetSmoke(hero);
         return Task.CompletedTask;
+    }
+
+    // ARC-UI-007 native observation with the original hero: the production C key opens the sheet over the session values
+    // (experience data loaded with the hero), the open sheet owns the keys and Escape closes it. Prints outcomes and counts
+    // only, no values of the original data.
+    private void RunAreaSheetSmoke(AreaHeroLoad hero)
+    {
+        static void Require(bool value, string why) { if (!value) throw new InvalidOperationException("ARC-UI-007 sheet smoke: " + why); }
+        var session = _areaSession!;
+        var simulatedFocus = _worldFocusSimulationForSelfTest; var focused = _worldFocused;
+        _worldFocusSimulationForSelfTest = true; _worldFocused = true;
+        try
+        {
+            Require(hero.Experience is not null && ReferenceEquals(session.Experience, hero.Experience), "the hero's experience data is the session's");
+            var revision = session.Version.Revision;
+            InventoryKey(Key.C);
+            Require(SheetOpen && WorldModal && _sheetPanel!.ViewForSelfTest is not null, "C opened the sheet: " + _sheetStatus);
+            var expected = AreaCharacterSheet.Build(session).View!;
+            var shown = _sheetPanel!.ViewForSelfTest!;
+            var experience = session.QueryHeroExperience()!;
+            var life = session.QueryHeroLife()!.Status;
+            Require(shown.Name == hero.Hero.Name && shown.Level == experience.Level && shown.ToNextLevel == experience.ToNextLevel && shown.ToNextLevel is > 0
+                && shown.UnspentPoints == experience.UnspentPoints && shown.MaxHitPoints == life.MaxHitPoints && shown.MaxFatigue == life.MaxFatigue
+                && shown.Stats.Count == 8 && shown.Secondary.Count == 8 && shown.Resistances.Count == 5
+                && shown.Stats.Select(v => v.Value).SequenceEqual(expected.Stats.Select(v => v.Value)), "the sheet shows the session hero");
+            Require(_sheetPanel.TextForSelfTest.Split('\n').Length == AreaCharacterSheet.Lines(shown).Count, "sheet text rows");
+            InventoryKey(Key.I);
+            Require(SheetOpen && !InventoryOpen, "the open sheet owns the I key");
+            InventoryKey(Key.Escape);
+            Require(!SheetOpen && session.Version.Revision == revision, "Escape closed the sheet; the sheet changed nothing");
+            GD.Print("ARC-UI-007 native-smoke character sheet PASS " + System.Text.Json.JsonSerializer.Serialize(new {
+                hero.Hero.Name, Rows = AreaCharacterSheet.Lines(shown).Count, NextLevelKnown = shown.ToNextLevel is not null,
+                Marked = shown.Stats.Count(v => v.Mark != AreaSheetMark.None) }));
+        }
+        finally
+        {
+            if (SheetOpen) EndSheet();
+            _worldFocusSimulationForSelfTest = simulatedFocus; _worldFocused = focused;
+        }
     }
 }
