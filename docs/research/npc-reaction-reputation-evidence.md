@@ -71,8 +71,8 @@ Original executable parity remains **NOT_VERIFIED**.
   `rules\gamerep.mes` stops at a sign. On the owner's data **62 of 93**
   effects carry an explicit `+` or `-`, so CE stores their origin and faction
   as the adjustment value itself and they match almost no NPC. Whether the
-  original executable does the same is unknown, and it decides whether most
-  reputation reaction effects exist at all (decision D1).
+  original executable does the same was unknown; ARC-RES-048 found that it
+  does not (a CE slip), and decision D1 keeps every effect's written scope.
 
 ## Stored state (source facts)
 
@@ -111,7 +111,7 @@ for several PCs (R3).
 
 ## Source anomalies and decisions
 
-**Original check (ARC-RES-048):** P1 is a CE slip (the original keeps a signed effect's written origin and faction), A2 is the original's own sign, and A4's asymmetry is confirmed. D1 stays as recorded until the owner answers. The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** P1 is a CE slip (the original keeps a signed effect's written origin and faction), A2 is the original's own sign, and A4's asymmetry is confirmed. The owner decided D1 and A2 on 2026-10-17 (below). The verdicts in the [verification ledger](original-verification-ledger.md#npc-ai-reaction-and-companions-arc-res-039-arc-res-028-arc-res-024) supersede the CE readings below where they differ.
 
 - **P1 Signed reputation effects.** R14 as read, applied to the owner's data:
   62 of 93 effects get origin = faction = adjustment, so each matches only an
@@ -120,16 +120,20 @@ for several PCs (R3).
   (likely none for negative values) is inferred, not measured. Only the 31
   unsigned effects keep their authored scope. CE notes its loop differs
   from the original code "but is the same thing"; no original observation
-  exists. **D1 (owner decision)**: reproduce the source parse (parity
-  candidate) or the authored intent (every effect scoped as written). Proposal:
-  keep both readings in the parsed model, select by an explicit named policy,
-  and default to the source parse until an original-executable observation
-  says otherwise.
+  exists. **D1 (owner decision, 2026-10-17)**: every effect keeps its
+  written scope in both rule settings, with no switch. The retail executable
+  skips the sign together with the digits ([ARC-RES-048](original-verification-ledger.md)),
+  so the "source parse" is a CE reconstruction slip; the earlier proposal (keep
+  both readings, default to the source parse) is withdrawn.
 - **A2 Follower hit sign.** CE's own field comment says parameter 9 is how much
   a deliberate hit *lowers* a follower's reaction, but the code adds it, and
   the data values are 0..10 (none negative). The companion research C13
-  repeated the comment. Open until an original observation; do not encode
-  either sign as fact.
+  repeated the comment. The retail executable adds it too
+  ([ARC-RES-048](original-verification-ledger.md)), so the rise is a bug of the
+  original game (the field comment's meaning is the evidence for intent).
+  **Decision (owner, 2026-10-17)**: the Steamwoven setting lowers
+  the follower's reaction by parameter 9; the Original setting keeps the rise
+  through a switch of the [rule modes](../world/rule-modes.md).
 - **A3 Mind control.** −50 is applied when control starts and nothing restores
   it when control ends, while reaction changes during control are ignored
   (R2). Recorded as source behaviour, not reviewed for intent.
@@ -151,7 +155,8 @@ for several PCs (R3).
 - **A7 Gift category test.** The categories are numbered love = 0 … hatred
   = 6, and the gift rule of R9 raises reaction only when the category number
   is below amiable, that is only for an NPC that already loves the PC. The
-  likely intent ("not yet amiable") is the opposite. Open, like A2.
+  likely intent ("not yet amiable") is the opposite. Open until checked in the
+  original executable.
 - **A8 RE comparison operand.** The action operand is read with `atoi` on
   text that still starts with `>` or `<`, which yields 0, so CE's `RE >v`
   raises a negative reaction to 0 and `RE <v` lowers a positive one to 0,
@@ -201,10 +206,11 @@ for several PCs (R3).
 
 - **O1** Answered for Virgil by ARC-RES-026 (see above). Other Crash Site
   NPCs' bases, races, origins and factions were not surveyed.
-- **O2** P1 against the original executable: does a signed effect keep its
-  origin and faction there?
-- **O3** A2 (follower hit sign), A6 (script operand), A7 (gift test), A8 (RE
-  comparison operand) and A9 (greeting number), same kind of observation.
+- **O2** Answered by ARC-RES-048: the original keeps a signed effect's origin
+  and faction (decision D1).
+- **O3** A6 (script operand), A7 (gift test), A8 (RE comparison operand) and A9
+  (greeting number), same kind of observation. A2 was answered by ARC-RES-048
+  and decided on 2026-10-17.
 - **O4** Fate-point flow (when "force good reaction" is armed and consumed)
   and the higher-priority greeting kinds before R12 were not read.
 - **O5** The race matrix and beauty table are source tables, not data files;
@@ -234,7 +240,7 @@ Godot.
 3. **Dialog binding**: `ME`, `RE` actions as deltas, the insult rule, and the
    quest rule through the owner.
 4. **Reputation data and owner**: a Data reader for the four file kinds with
-   the D1 policy explicit, a PC reputation list with game time, add/remove/has,
+   every effect in its written scope (D1), a PC reputation list with game time, add/remove/has,
    `RP` condition and action with the A5 domain, faction membership and the
    reaction sum. The greeting pick needs a random port and speech text and can
    follow later.

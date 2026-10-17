@@ -136,7 +136,7 @@ Source: [AI plan](npc-combat-ai-plan.md#first-pass-ce-anomalies-to-confirm-not-a
 | LM15 | prototype range labels | Comments and labels only; the data census decides. | Not checked |
 | LM18 | `script_unlock` (0x44C450) | Returns early only **in** editor mode; unlocks in the game. | CE slip |
 | Reputation P1 (D1) | `reputation_parse` (0x4C1730) | The skip between numbers passes digits **and** `-`/`+`, so a signed effect keeps its written origin and faction. | CE slip |
-| Reputation A2 | `ai_attack` (0x4A9650), `reaction_adj` | A deliberate hit on the PC's follower **adds** parameter 9: the reaction rises. | Original bug (likely) |
+| Reputation A2 | `ai_attack` (0x4A9650), `reaction_adj` | A deliberate hit on the PC's follower **adds** parameter 9: the reaction rises. | Original bug (likely; owner decided 2026-10-17: Steamwoven lowers, Original switch keeps the rise) |
 | Reputation A3 | `magictech_component_obj_flag` | Mind control applies −50 on start and nothing on end. | Original |
 | Reputation A5 | `reputation_add` (0x4C1D20), `reputation_reaction_adj` (0x4C1AC0) | No range check. Latent bug if a dialog passes `RP 1`/`RP 2` through. | Original (latent bug) |
 | Wait timer (C12, O3, TE8) | `ai_npc_wait` (0x4AA7A0) | The timer is scheduled when the leader's charisma is **not** extraordinary and the NPC is not mind-controlled, and it carries the NPC's handle. Followers of an ordinary leader time out (0, 15 min, 2 h, 1 d, 7 d, 30 d by wait index); Virgil (index 6) never does. | CE slip |
@@ -206,7 +206,7 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
 1. **Reputation D1** ([reaction study](npc-reaction-reputation-evidence.md#source-anomalies-and-decisions)):
    the default "source parse" (signed effects get origin = faction = adjustment) is a CE slip. The
    original keeps the written scope, which is the other reading D1 offered; under D8 a CE slip gets
-   no switch.
+   no switch. **Decided 2026-10-17:** the owner chose the written scope in both settings.
 2. **Dodge 5 × level** ([attack resolver](../world/attack-resolver-runtime.md), ARC-COMBAT-001,
    `AttackRules.DodgeEffectiveness`): implemented from CE; the original uses 2 × level. Under D8 both
    settings follow the original; ARC-WORLD-023 changed the resolver to 2 × level.

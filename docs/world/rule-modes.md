@@ -23,8 +23,8 @@ and the [verification ledger](../research/original-verification-ledger.md) recor
 | Project improvement recorded by the owner (for example persisted AI ticks, OQ2) | the improvement | the original's behaviour (a switch) |
 
 So a switch exists only where Steamwoven deliberately differs from the retail game. A CE slip never becomes a switch.
-Project policy (proposed with this contract, open to the owner): **the Original mode never reproduces a crash, a hang
-or an out-of-bounds access**; such bugs are fixed in both modes and listed in the registry as "both fixed", because
+Owner decision (2026-10-17): **the Original mode never reproduces a crash, a hang or an out-of-bounds access**; such
+bugs are fixed in both modes and listed in the registry as "both fixed", because
 reproducing them would end the game rather than show the original rules.
 
 ## Mechanism
@@ -80,7 +80,7 @@ until then both modes behave as the original):
 | Combat | A9 | `FirstSubturnStartedTwice` reserved (fix accepted). |
 | Magic | MG3, MG4, MG5, MG6, MG7, MG9, MG10, MG11, MG15, MG18, MG19, LM10; CE changes: shell order, charm bonus, summon palette, resistance source (O9), effect min/max | MG12 and LM20 (out-of-bounds writes and copies) are fixed in both modes. |
 | Skills | SK8, LM17, SK3 repair off-by-one (multiplayer only), auto-level A3 (both fixed: null read) | SK1, SK2, SK4, SK5, LM1, LM2 and dodge are CE slips, no switch; dodge already follows the original's 2 × level in `AttackRules`. |
-| AI and reaction | LM3 and LM12 (both fixed: out-of-bounds, latent), reputation A5 (both fixed: out-of-bounds read, latent), reaction A2 (a deliberate hit raises the follower's reaction; Steamwoven fix proposed, owner to confirm), reaction A4 charm asymmetry (decision D2 of that study), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (decision D1 to revisit) and the companion wait timer are CE slips. |
+| AI and reaction | LM3 and LM12 (both fixed: out-of-bounds, latent), reputation A5 (both fixed: out-of-bounds read, latent), reaction A2 (owner decision 2026-10-17: Steamwoven lowers the follower's reaction, the Original switch keeps the original's rise), reaction A4 charm asymmetry (decision D2 of that study), P7 (label open) | P1, P2, P3, LM13, LM18, reputation P1 (D1 decided 2026-10-17: written scope in both modes) and the companion wait timer are CE slips. |
 | Scripts | X2 (both fixed: uninitialised read, with call-script); `int.MinValue / −1` divide (both fixed: the original faults); a global flag number outside 0..3199 (both fixed: out of bounds); admission strictness in both modes: negative gotos (X6) and literal change-this-script numbers outside 0..99999, which no installed script uses | X1, X3 sector, X6 detail, X7, X8 are CE slips. X3 tile and X10 are implemented (above). |
 | Event queue | TE3/OQ1 tie order (FIFO decided without a switch) | TE1 is implemented in scripts (above). |
 | World | LA4 direction-5 leaving on the portal tile; clock day carry only above one day (off by one), clock subtraction underflow, exchanged current day/month getters (dead code); wilderness A6 (both fixed: a null name faults) | LA1, LA2 and the tile swap itself are CE slips. |
