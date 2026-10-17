@@ -95,7 +95,8 @@ internal sealed class LifeDomain
     /// each poison penalty, crippled legs as a query condition. Pools are 0: every pre-made PC prototype stores no hit-point
     /// or fatigue points or adjustment, and buying them belongs to levelling. No traits; the normal resistance is the worn armour's
     /// (ARC-WORLD-028, <see cref="GameSessionOwner"/> equipment); the effect changes of the two maxima are the hero's durable
-    /// effects' (ARC-WORLD-029).
+    /// effects' (ARC-WORLD-029). Pools or adjustments added here must raise <see cref="EffectDomain.HeroMaximumCeiling"/> too,
+    /// or the effect bounds stop holding.
     /// </summary>
     internal static LifeFacts HeroFacts(CharacterStatsOwner stats, int level, LifeState state, int normalResistance,
         ImmutableArray<EffectModifier> maxHitPoints, ImmutableArray<EffectModifier> maxFatigue)

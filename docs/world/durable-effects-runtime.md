@@ -146,6 +146,9 @@ effect).
 - **Runs.** A timed effect stands for a run made only of Effect components. Active spells (magic slice 4) own maintenance,
   the `INT / 4` cap, the scaled count and its MG17, and every ending trigger: they will call `EndHeroTimedEffect` or replace
   the END kind. The session ends no timed effect by itself on death, unconsciousness, rest or travel.
+- **Dead without a death time.** An effect that takes the hero's hit points to none (EF10) runs no death step: the hero
+  reads as dead with no death time, and removing the effect leaves it there (the maximum returns to the damage). Hosts must
+  not take a death time as the only sign of death.
 - **Not modelled:** encumbrance (a strength change does not recalculate it), the animation speed, the injury cause (the
   life domain counts scars; their effect 50 changes nothing in the session), the innate effects' non-stat changes (the
   gnome's bad-reaction adjustment, the halfling's critical-hit chance: ARC-WORLD-015 keeps only stats), multiply and divide
