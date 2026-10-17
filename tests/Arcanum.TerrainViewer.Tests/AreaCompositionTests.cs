@@ -101,7 +101,8 @@ public sealed class AreaCompositionTests
         foreach (var slot in new[] { 8,9,10,11,18 })
             Assert.ThrowsExactly<InvalidOperationException>(()=>AreaScenePlan.Create([], [body with {
                 EffectiveFields = body.EffectiveFields.Where(field=>field.Slot!=slot).ToArray() }], [Visual(body,160,160,40,80)]));
-        foreach (var bad in new[] { Body(0,flags:0x40),Body(0,flags:0x20000),Body(0,blit:0x20),Body(0,scale:0),Body(0,scale:201) })
+        // Wading (0x20000) is drawn since ARC-RENDER-018 (AreaScenePlanTests).
+        foreach (var bad in new[] { Body(0,flags:0x40),Body(0,blit:0x20),Body(0,scale:0),Body(0,scale:201) })
             Assert.ThrowsExactly<InvalidOperationException>(()=>AreaScenePlan.Create([], [bad], [Visual(bad,160,160,40,80)]));
     }
 

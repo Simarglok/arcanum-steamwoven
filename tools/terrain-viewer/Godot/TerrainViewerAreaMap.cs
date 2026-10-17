@@ -70,6 +70,7 @@ public partial class TerrainViewerApp
             if (_worldActor.Session is AreaGridSession walked)
                 ConfigureAreaActor(new AreaMapRuntime(area.Snapshot, result.AreaStepSnapshot!, chart), walked.State.CommittedCell, walked.State.Facing);
         }
+        await RunAreaBlendSmokeAsync(area);
         RefreshAreaStatus();
         if (_nativeSmokeScreenshot is not null)
         {
