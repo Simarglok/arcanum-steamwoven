@@ -7,9 +7,18 @@ namespace Arcanum.Session;
 /// <summary>
 /// An item the host offers for a wear slot (ARC-WORLD-028): the saved kind it must match, its script attachment points and
 /// whether it carries item spells (both refuse, see <see cref="GameSessionOwner.Equip"/>), and its stored wear and combat values.
-/// The host builds it from the item's data, for an original item with <see cref="SessionEquipmentFacts.FromCombatFields"/>.
+/// The host builds it from the item's data, for an original item with <see cref="SessionEquipmentFacts.FromCombatFields"/> or, with
+/// the facts the best-item choice reads too, <see cref="SessionEquipmentFacts.Wearable"/>. <see cref="Worth"/>,
+/// <see cref="IdentifiedFlag"/>, <see cref="Throwable"/> and <see cref="Weight"/> (the item's effective weight) are read only by
+/// <see cref="GameSessionOwner.EquipBest"/> (ARC-WORLD-034).
 /// </summary>
-public sealed record SessionWearableItem(SessionItemKind Kind, IReadOnlyList<int> ScriptPoints, bool HasItemSpells, EquipmentItem Item);
+public sealed record SessionWearableItem(SessionItemKind Kind, IReadOnlyList<int> ScriptPoints, bool HasItemSpells, EquipmentItem Item)
+{
+    public int Worth { get; init; }
+    public bool IdentifiedFlag { get; init; }
+    public bool Throwable { get; init; }
+    public int Weight { get; init; }
+}
 
 /// <summary>One worn item: its slot, the PC's item entity (a kit item or an item taken from the world) and its saved values.</summary>
 public sealed record SessionWornItem(EquipmentSlot Slot, string Entity, EquipmentItem Item);
@@ -70,7 +79,27 @@ internal sealed class EquipmentDomain
 /// </summary>
 public static class SessionEquipmentFacts
 {
-    private const uint NoDropFlag = 0x20, UberFlag = 0x40000, LightShift = 9, TorchShieldFlag = 0x1;
+    private const uint NoDropFlag = 0x20, UberFlag = 0x40000, LightShift = 9, TorchShieldFlag = 0x1, IdentifiedItemFlag = 0x1, NoSpell = 10000;
+
+    /// <summary>
+    /// Everything the session reads about a held item (ARC-WORLD-034): its saved kind, its script points (as read), whether any of its five item
+    /// spells is set, the wear values of <see cref="FromCombatFields"/>, the stored worth, the identified flag (item flag 0x1), the
+    /// throwable weapon flag and the stored weight. The magic weight adjustment is not read (ARC-DATA-021 has no slot for it), so
+    /// <see cref="SessionWearableItem.Weight"/> is the stored weight; only a thrown weapon without the throwable flag reads it.
+    /// Null for an item that is not worn anywhere (not a weapon, armour or generic item) or whose values are out of bounds.
+    /// </summary>
+    public static SessionWearableItem? Wearable(SessionItemKind kind, Arcanum.Data.Combat.CombatFields fields)
+    {
+        ArgumentNullException.ThrowIfNull(fields);
+        if (FromCombatFields(fields) is not { } item || fields.Item is not { } stored) return null;
+        return new SessionWearableItem(kind, fields.Object.ScriptPoints, stored.Spells.Any(spell => spell != NoSpell), item)
+        {
+            Worth = stored.Worth,
+            IdentifiedFlag = (stored.Flags & IdentifiedItemFlag) != 0,
+            Throwable = fields.Weapon?.Flags.HasFlag(Arcanum.Data.Combat.CombatWeaponFlags.Throwable) == true,
+            Weight = stored.Weight,
+        };
+    }
 
     /// <summary>The wear values of a weapon, armour or generic item; null for other types or a field outside the rules' bounds.</summary>
     public static EquipmentItem? FromCombatFields(Arcanum.Data.Combat.CombatFields fields)
