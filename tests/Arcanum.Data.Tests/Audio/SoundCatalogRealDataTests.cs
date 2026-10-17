@@ -38,7 +38,7 @@ public sealed class SoundCatalogRealDataTests
         Assert.AreEqual(834, sfx.Count(s => s.Status == SfxStatus.Named));
         Assert.AreEqual(805, sfx.Count(s => s.Status == SfxStatus.EmptyRecord));
         Assert.AreEqual(27, sfx.Count(s => s.Status == SfxStatus.Named && !s.Playable));
-        Assert.AreEqual(ids.Length, sfx.Length, "no id held by two tables");
+        Assert.IsTrue(ids.All(id => catalog.Tables.Append(catalog.UserTable).Count(t => t.Messages.Find(id) is not null) == 1), "no id held by two tables");
 
         var schemes = catalog.SchemeIds.Select(catalog.Scheme).ToArray();
         Assert.AreEqual(60, schemes.Length);

@@ -39,19 +39,21 @@ public sealed record SoundPositionalProfile(SoundSizeParameters Small, SoundSize
     /// <summary>What the original has when <c>soundparams.mes</c> does not load.</summary>
     public static SoundPositionalProfile WithoutFile { get; } = new(new(0, 0, 0), new(0, 0, 0), new(150, 800, 100), new(0, 0, 0), 150, 400, false);
 
-    /// <summary>Builds the profile from the parsed file. Values are read like C <c>atoi</c>, as the original does; one that is
-    /// not a plain whole number (optional sign and digits, surrounding spaces allowed) is still read that way and reported,
-    /// and one outside int32 (undefined for <c>atoi</c>) is reported and its key treated as absent.</summary>
+    /// <summary>Builds the profile from the parsed file. Values are read like the executable's C <c>atoi</c> (wrapping in 32
+    /// bits); one that is not a plain whole number (optional sign and digits, surrounding ASCII spaces allowed, within int32)
+    /// is still read that way and reported.</summary>
     internal static SoundPositionalProfile FromMes(MesFile file, string key, List<SoundIssue> issues)
     {
         ArgumentNullException.ThrowIfNull(file); ArgumentNullException.ThrowIfNull(issues);
         int? Value(int number)
         {
             if (file.Find(number) is not { } message) return null;
-            var text = Encoding.Latin1.GetString(message.Bytes.Span).Trim();
-            var value = SoundSchemeParser.Atoi(text, out var overflow);
-            if (overflow || !Plain.IsMatch(text)) issues.Add(new(SoundIssueCode.PositionalParameterMalformed, key, number));
-            return overflow ? null : value;
+            var text = Encoding.Latin1.GetString(message.Bytes.Span);
+            var value = SoundSchemeParser.Atoi(text);
+            var plain = text.Trim(' ', '\t', '\n', '\v', '\f', '\r');
+            if (!Plain.IsMatch(plain) || !int.TryParse(plain, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out _))
+                issues.Add(new(SoundIssueCode.PositionalParameterMalformed, key, number));
+            return value;
         }
         SoundSizeParameters Size(int min, int max, int volume, (int, int, int) defaults) =>
             new(Value(min) ?? defaults.Item1, Value(max) ?? defaults.Item2, Value(volume) ?? defaults.Item3);

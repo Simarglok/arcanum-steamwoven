@@ -25,12 +25,13 @@ public sealed record SoundCatalogResult(SoundCatalogStatus Status, SoundCatalog?
 
 public enum SoundIssueCode
 {
-    /// <summary><c>soundparams.mes</c> is missing or unreadable: the original keeps its built-in large-size values and
-    /// leaves small, medium and extra-large at zero (silent).</summary>
+    /// <summary><c>soundparams.mes</c> did not load (<see cref="SoundIssue.Reason"/> says why): the original keeps its
+    /// built-in large-size values and leaves small, medium and extra-large at zero (silent).</summary>
     PositionalParametersMissing,
     /// <summary>A <c>soundparams.mes</c> value is not a whole number the original's <c>atoi</c> reads the same way.</summary>
     PositionalParameterMalformed,
-    /// <summary>The module's <c>snd_user.mes</c> is missing or unusable; the original then searches no user table.</summary>
+    /// <summary>The module's <c>snd_user.mes</c> did not load (<see cref="SoundIssue.Reason"/> says why); the original then
+    /// searches no user table.</summary>
     UserTableMissing,
     /// <summary>An index entry numbered 0, which the original's walk over the index skips.</summary>
     IndexEntryZeroSkipped,
@@ -38,7 +39,9 @@ public enum SoundIssueCode
 
 /// <param name="File">The virtual path the issue is about.</param>
 /// <param name="Number">The message number involved, when there is one.</param>
-public sealed record SoundIssue(SoundIssueCode Code, string File, int? Number = null);
+/// <param name="Reason">For a file that did not load: missing, unreadable or malformed.</param>
+/// <param name="Mes">For a malformed file, the MES refusal.</param>
+public sealed record SoundIssue(SoundIssueCode Code, string File, int? Number = null, SoundCatalogStatus? Reason = null, MesParseStatus? Mes = null);
 
 /// <summary>One SFX table: a MES file whose records map sound ids to file names under <c>sound/</c>.</summary>
 /// <param name="Name">The file name as the index (or, for the user table, the original) names it.</param>

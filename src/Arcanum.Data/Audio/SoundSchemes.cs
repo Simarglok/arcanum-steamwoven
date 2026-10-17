@@ -48,11 +48,12 @@ public enum SoundSchemeStatus
     /// 26th (an original bug); both rule settings refuse the scheme instead (owner rule: Original never reproduces a crash).</summary>
     TooManyEntries,
     /// <summary>The index or a list record is outside what the original reads safely: a list base that is not a positive
-    /// whole number, a number <c>atoi</c> would overflow, or a resource longer than the original's path buffer.</summary>
+    /// whole number (a project refusal: the original would treat 0 as an empty slot and scan wrapping list numbers past
+    /// int32), or a resource longer than the original's path buffer (an overflow there).</summary>
     Malformed,
 }
 
-/// <param name="Name">The index record's text up to <c>#</c>, trimmed (decoded as Windows-1252, display only).</param>
+/// <param name="Name">The index record's text up to <c>#</c>, trimmed (bytes taken as Latin-1, display only).</param>
 /// <param name="ListBase">The first SchemeList number the original scans (it scans 100 numbers, gaps allowed).</param>
 /// <param name="Detail">For <see cref="SoundSchemeStatus.Malformed"/>, which record and why.</param>
 public sealed record SoundScheme(int Id, SoundSchemeStatus Status, string? Name, int? ListBase, IReadOnlyList<SoundSchemeEntry> Entries, string? Detail = null)
@@ -109,8 +110,8 @@ public static class SoundSchemeParser
                 if (!Param(options, "/scatter:", ref scatter, ref scatterSecond, true, out failure)) return false;
                 if (scatter >= 0)
                 {
-                    volumeMax = 100; volumeMin = 100 - scatter;
-                    left = 50 - scatter / 2; right = 50 + scatter / 2;
+                    volumeMax = 100; volumeMin = unchecked(100 - scatter);
+                    left = unchecked(50 - scatter / 2); right = unchecked(50 + scatter / 2);
                 }
             }
         }
@@ -120,12 +121,12 @@ public static class SoundSchemeParser
         int? sfxId = null; SfxStatus? sfxStatus = null; SoundFile resolved;
         if (resource.StartsWith('#'))
         {
-            var id = Atoi(resource.AsSpan(1), out var overflow);
-            if (overflow) { failure = "SFX id out of range"; return false; }
+            var id = Atoi(resource.AsSpan(1));
             sfxId = id;
             var (status, found) = sfx(id);
             sfxStatus = status;
-            resolved = found ?? new SoundFile(SoundFileStatus.Missing, "sound/", null);
+            // An unknown id or an empty record gives the original an empty or bare folder path: nothing to open.
+            resolved = found ?? new SoundFile(SoundFileStatus.InvalidPath, "sound/", null);
         }
         else resolved = file(resource);
         entry = new(listNumber, kind, resource, sfxId, resolved, sfxStatus, frequency, start, end,
@@ -133,9 +134,9 @@ public static class SoundSchemeParser
         return true;
     }
 
-    /// <summary>The original's percent → raw conversion: <c>127 × v / 100</c> truncated toward zero, then clamped to 0–127
-    /// (a balance-left above 127 clamps to 127, not 0 as in CE).</summary>
-    internal static int Raw(int percent) => Math.Clamp((int)((long)RawMax * percent / 100), 0, RawMax);
+    /// <summary>The original's percent → raw conversion: <c>127 × v</c> in 32 bits (it wraps for |v| above 16,909,320),
+    /// divided by 100 truncating toward zero, then clamped to 0–127 (a balance-left above 127 clamps to 127, not 0 as in CE).</summary>
+    internal static int Raw(int percent) => Math.Clamp(unchecked(RawMax * percent) / 100, 0, RawMax);
 
     private static bool Param(string options, string key, ref int first, ref int second, bool hasSecond, out string? failure)
     {
@@ -145,36 +146,27 @@ public static class SoundSchemeParser
         var token = options[(at + key.Length)..];
         var space = token.IndexOf(' ');
         if (space >= 0) token = token[..space];
-        var value = Atoi(token, out var overflow);
-        if (overflow) { failure = $"{key} value out of range"; return false; }
+        var value = Atoi(token);
         first = value;
         if (!hasSecond) return true;
         var separator = token.IndexOf(',');
         if (separator < 0) separator = token.IndexOf('-');
         if (separator < 0) { second = value; return true; }
-        second = Atoi(token.AsSpan(separator + 1), out overflow);
-        if (overflow) { failure = $"{key} second value out of range"; return false; }
+        second = Atoi(token.AsSpan(separator + 1));
         return true;
     }
 
-    /// <summary>C <c>atoi</c> on ASCII: leading spaces/tabs, an optional sign, digits up to the first other character; 0
-    /// when there are none. A value outside int32 is reported, since <c>atoi</c> leaves it undefined.</summary>
-    internal static int Atoi(ReadOnlySpan<char> text, out bool overflow)
+    /// <summary>The executable's C <c>atoi</c>: leading ASCII white space, an optional sign, digits up to the first other
+    /// character; 0 when there are none. The value is built in 32 bits without an overflow check, so it wraps modulo 2³².</summary>
+    internal static int Atoi(ReadOnlySpan<char> text)
     {
-        overflow = false;
         var i = 0;
         while (i < text.Length && text[i] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r') i++;
         var negative = false;
         if (i < text.Length && text[i] is '+' or '-') negative = text[i++] == '-';
-        long value = 0;
-        while (i < text.Length && text[i] is >= '0' and <= '9')
-        {
-            value = value * 10 + (text[i++] - '0');
-            if (value > (long)int.MaxValue + 1) { overflow = true; return 0; }
-        }
-        if (negative) value = -value;
-        if (value is < int.MinValue or > int.MaxValue) { overflow = true; return 0; }
-        return (int)value;
+        var value = 0;
+        while (i < text.Length && text[i] is >= '0' and <= '9') value = unchecked(value * 10 + (text[i++] - '0'));
+        return negative ? unchecked(-value) : value;
     }
 
     /// <summary>The original lower-cases the record with C <c>tolower</c>: only ASCII letters change; other bytes are kept
@@ -195,8 +187,8 @@ public static class SoundSchemeParser
         var hash = text.IndexOf('#');
         var name = (hash < 0 ? text : text[..hash]).Trim();
         if (hash < 0) return new(id, SoundSchemeStatus.NoListBase, name, null, Array.Empty<SoundSchemeEntry>());
-        var listBase = Atoi(text.AsSpan(hash + 1), out var overflow);
-        if (overflow || listBase <= 0 || listBase > int.MaxValue - ListSpan)
+        var listBase = Atoi(text.AsSpan(hash + 1));
+        if (listBase <= 0 || listBase > int.MaxValue - ListSpan)
             return new(id, SoundSchemeStatus.Malformed, name, null, Array.Empty<SoundSchemeEntry>(), "list base is not a positive whole number");
         var entries = new List<SoundSchemeEntry>();
         for (var number = listBase; number < listBase + ListSpan; number++)

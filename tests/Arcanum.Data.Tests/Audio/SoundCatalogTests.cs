@@ -89,6 +89,34 @@ public sealed class SoundCatalogTests
     }
 
     [TestMethod]
+    public void Module_copies_of_init_files_are_ignored_and_an_init_file_only_in_the_module_is_missing()
+    {
+        Base();
+        Write("modules/Mod/sound/soundparams.mes", Encoding.ASCII.GetBytes("{1}{1}{2}{2}"));
+        Write("modules/Mod/sound/SchemeList.mes", Mes((100, "x.wav")));
+        using (var stack = Stack())
+        {
+            var catalog = Open(stack);
+            Assert.AreEqual(800L, catalog.Positional.Large.MaxRadius, "the base parameters (key 2 absent there) win");
+            Assert.AreEqual(SoundSchemeEntryKind.LoopSong, catalog.Scheme(1).Entries.Single().Kind, "the base SchemeList wins");
+        }
+        File.Delete(Path.Combine(_root, "data", "sound", "SchemeList.mes"));
+        using (var stack = Stack()) Assert.AreEqual((SoundCatalogStatus.MissingFile, SoundCatalog.SchemeListPath), Status(stack));
+    }
+
+    [TestMethod]
+    public void A_malformed_user_table_is_an_issue_with_its_reason()
+    {
+        Base();
+        Write("modules/Mod/sound/snd_user.mes", Encoding.ASCII.GetBytes("{1}{a}\r\n{1}{b}\r\n"));
+        using var stack = Stack();
+        var catalog = Open(stack);
+        Assert.IsNull(catalog.UserTable);
+        Assert.AreEqual(new SoundIssue(SoundIssueCode.UserTableMissing, SoundCatalog.UserTablePath, null, SoundCatalogStatus.Malformed, MesParseStatus.DuplicateNumber),
+            catalog.Issues.Single());
+    }
+
+    [TestMethod]
     public void Missing_or_malformed_init_files_refuse_the_catalogue_with_a_typed_status()
     {
         using (var stack = Stack()) Assert.AreEqual((SoundCatalogStatus.MissingFile, SoundCatalog.IndexPath), Status(stack));
@@ -154,6 +182,7 @@ public sealed class SoundCatalogTests
         Assert.AreEqual(22, p.Large.RangeTiles);
         Assert.AreEqual(1, p.Small.RangeTiles);
         Assert.AreSame(p.Medium, p[SoundSourceSize.Medium]);
+        Assert.AreEqual(new SoundIssue(SoundIssueCode.PositionalParameterMalformed, SoundCatalog.PositionalPath, 11), Open(stack).Issues.Single(i => i.Code == SoundIssueCode.PositionalParameterMalformed));
     }
 
     [TestMethod]
@@ -215,23 +244,27 @@ public sealed class SoundCatalogTests
         Assert.AreEqual((127, 127, 127, 127), (e[106].VolumeMin, e[106].VolumeMax, e[106].BalanceLeft, e[106].BalanceRight), "clamped to 127, balance-left too");
         Assert.AreEqual((-1, 1), (e[106].HourStart, e[106].HourEnd), "a leading minus doubles as the separator");
 
-        Assert.AreEqual((11, SfxStatus.EmptyRecord, SoundFileStatus.Missing, 1000), (e[107].SfxId, e[107].SfxStatus, e[107].File.Status, e[107].Frequency));
+        Assert.AreEqual((11, SfxStatus.EmptyRecord, SoundFileStatus.InvalidPath, 1000), (e[107].SfxId, e[107].SfxStatus, e[107].File.Status, e[107].Frequency));
         Assert.AreEqual((SfxStatus.Named, "sound/nofile.wav", SoundFileStatus.Missing), (e[108].SfxStatus, e[108].File.Key, e[108].File.Status));
-        Assert.AreEqual(SfxStatus.UnknownId, e[109].SfxStatus);
+        Assert.AreEqual((SfxStatus.UnknownId, SoundFileStatus.InvalidPath), (e[109].SfxStatus, e[109].File.Status));
         Assert.AreEqual((SoundSchemeEntryKind.Ambient, SoundFileStatus.InvalidPath), (e[110].Kind, e[110].File.Status), "an empty record still takes a slot");
     }
 
     [TestMethod]
-    public void Values_atoi_cannot_read_and_overlong_resources_make_the_scheme_malformed()
+    public void Values_wrap_like_the_executables_atoi_and_overlong_resources_make_the_scheme_malformed()
     {
         Base();
         Write("data/sound/SchemeIndex.mes", Mes((1, "A.Big #100"), (2, "A.Long #200")));
-        Write("data/sound/SchemeList.mes", Mes((100, "b20.wav /freq:99999999999"), (200, new string('a', 300) + ".wav")));
+        Write("data/sound/SchemeList.mes", Mes((100, "b20.wav /freq:99999999999 /vol:20000000 /time:-5,3"), (200, new string('a', 300) + ".wav")));
         using var stack = Stack();
         var catalog = Open(stack);
-        StringAssert.Contains(catalog.Scheme(1).Detail, "record 100");
-        Assert.AreEqual(SoundSchemeStatus.Malformed, catalog.Scheme(1).Status);
-        Assert.AreEqual(SoundSchemeStatus.Malformed, catalog.Scheme(2).Status);
+        var entry = catalog.Scheme(1).Entries.Single();
+        Assert.AreEqual(1215752191, entry.Frequency, "99,999,999,999 modulo 2^32");
+        Assert.AreEqual((0, 0), (entry.VolumeMin, entry.VolumeMax), "127 × 20,000,000 wraps negative in 32 bits, then clamps to 0");
+        Assert.AreEqual((-5, 3), (entry.HourStart, entry.HourEnd), "a comma wins over a leading minus");
+        var tooLong = catalog.Scheme(2);
+        Assert.AreEqual(SoundSchemeStatus.Malformed, tooLong.Status);
+        StringAssert.Contains(tooLong.Detail, "record 200");
     }
 
     [TestMethod]
@@ -254,6 +287,7 @@ public sealed class SoundCatalogTests
         Assert.AreEqual((SpeechStatus.NoVoice, 0), (none.Status, none.Candidates.Count));
 
         Assert.AreEqual(-1, SoundCatalog.SpeechIdentity(0, "17"));
+        Assert.AreEqual((42 << 16) | 17, SoundCatalog.SpeechIdentity(42, "4294967313"), "the line number wraps like atoi before the mask");
         Assert.AreEqual(-1, SoundCatalog.SpeechIdentity(42, null));
         Assert.AreEqual(0x7FFF0000 | 0xFFFF, SoundCatalog.SpeechIdentity(0xFFFF, "131071"), "script masked to 15 bits, line to 16");
         Assert.AreEqual(42 << 16, SoundCatalog.SpeechIdentity(42, "x"), "atoi of a non-number is 0");

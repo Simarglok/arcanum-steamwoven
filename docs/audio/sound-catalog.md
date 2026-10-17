@@ -33,16 +33,17 @@ duplicate number) refuses the catalogue.
   no base source), `Unreadable`, `Malformed` (with the `MesParseStatus`), `InvalidIndex` (an empty
   index, which the original refuses at start, an empty or non-ASCII table name, more tables than
   `MaxTables`).
-- `Issues` that do not refuse: `UserTableMissing` (no user table is searched),
-  `PositionalParametersMissing` (the original's fallback values below), `PositionalParameterMalformed`
-  (a value that is not a plain whole number; it is still read like `atoi`), `IndexEntryZeroSkipped`.
+- `Issues` that do not refuse: `UserTableMissing` (no user table is searched) and
+  `PositionalParametersMissing` (the original's fallback values below), each with the reason
+  (missing, unreadable, malformed and the MES refusal); `PositionalParameterMalformed` (a value that
+  is not a plain whole number within int32; it is still read like `atoi`); `IndexEntryZeroSkipped`.
 
 | Member | Behaviour (row of the [audio study](../research/audio-evidence.md)) |
 | --- | --- |
 | `Tables`, `UserTable` | Index tables in ascending index number, then the module's user table (SN1–SN2). |
 | `ResolveSfx(id)` | The first index table holding the id wins, even with an empty record (`EmptyRecord`, plays nothing); only on a miss the user table; else `UnknownId`. A named record gives a `SoundFile` (`Found`, `Missing`, `InvalidPath`); `Playable` is true only for a found file (SN1). |
-| `ResolveSoundFile(name)`, `ResolveFile(path)` | `sound/` + name, or a virtual path, as the stack winner. Paths longer than the original's 259-byte buffer, non-ASCII, rooted or with `..` are `InvalidPath`. |
-| `Scheme(id)`, `SchemeIds` | One scheme as the original loads it (SN12–SN13): `None` (0), `NotInIndex`, `NoListBase` (no `#`, such as "No Sound": a silent slot), `Loaded` with its entries, `TooManyEntries` (a 26th record, which crashes the original; both rule settings refuse), `Malformed` (a list base that is not a positive whole number, a value `atoi` would overflow, a resource longer than the path buffer). |
+| `ResolveSoundFile(name)`, `ResolveFile(path)` | `sound/` + name, or a virtual path, as the stack winner. Paths longer than 259 characters (the original's 260-byte buffer with its terminator), non-ASCII, rooted or with `..` are `InvalidPath`. |
+| `Scheme(id)`, `SchemeIds` | One scheme as the original loads it (SN12–SN13): `None` (0), `NotInIndex`, `NoListBase` (no `#`, such as "No Sound": a silent slot), `Loaded` with its entries, `TooManyEntries` (a 26th record, which crashes the original; both rule settings refuse), `Malformed` (a project refusal for a list base that is not a positive whole number below 2³¹ − 100, and a resource longer than the path buffer, which overflows it in the original). |
 | `Positional` | `SoundPositionalProfile` from `soundparams.mes` (SN3): keys 1–4 large radii and pan distances, 10–12 small, 20–22 medium, 30–32 extra-large (min radius, max radius, volume %), defaults when a key is absent; `WithoutFile` (small, medium, extra-large at 0) when the file does not load. `RangeTiles` is the max radius / 40. |
 | `ResolveSpeech(identity, gender)`, `SpeechIdentity(script, field)` | `sound/speech/NNNNN/vL_g.mp3` with the PC's gender; a female PC falls back to the male file, never the reverse; −1 is `NoVoice` (SN21–SN22). The identity is `(script & 0x7FFF) << 16 | (atoi(field) & 0xFFFF)`. |
 | `SectorSound(WorldSector)` | Flags, music and ambient of a sector's sound record (words 3–5 of the metadata-and-sound section; none before version 0xAA0003). `AppliesOnEntry` is the original's "at least one id non-zero" test (SN20). |
@@ -52,16 +53,19 @@ duplicate number) refuses the catalogue.
 
 `SoundSchemeParser` reads a SchemeList record the way the original does: the record lower-cased
 (ASCII letters only), the resource up to the first space, options found anywhere in the rest by
-substring, values like C `atoi`, a second value after the first `,` or else the first `-` (so
-`/time:-1` reads as −1 and 1, as in the original). Kinds: `TransitionSong` (`/over`, which wins
+substring, values like the executable's `atoi` (ASCII white space, a sign, digits, built in 32
+bits so a long number wraps modulo 2³²), a second value after the first `,` or else the first `-`
+(so `/time:-1` reads as −1 and 1, as in the original, and `/time:-5,3` as −5 and 3). Kinds: `TransitionSong` (`/over`, which wins
 over `/loop` and reads no `/time`), `LoopSong` (`/loop` with `/time`), `AnchorSong`, `Ambient`
 (`/freq`, `/time`, `/bal`, `/scatter`, the last overriding volume and balance). Defaults: frequency
 5, hours 0–23, volume 100/100, balance 50/50. A max below its min is raised to it; volume and
-balance become raw `127 × percent / 100`, truncated and clamped to 0–127 (balance-left too).
+balance become raw `127 × percent / 100` (the product in 32 bits, as in the original), truncated and
+clamped to 0–127 (balance-left too).
 Hour windows are kept as written: `HourWindowReversed` marks the 20 installed windows the original
 never plays; the rule setting is applied by the player (ARC-UI-041). A `#N` resource resolves
-through `ResolveSfx`; any other through `sound/` + the name. An empty record still takes a slot,
-as in the original (its file is `InvalidPath`).
+through `ResolveSfx` (an unknown id or empty record leaves the original nothing to open: the file is
+`InvalidPath`); any other through `sound/` + the name. An empty record still takes a slot, as in
+the original (its file is `InvalidPath`).
 
 ## Limits
 

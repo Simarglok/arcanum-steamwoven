@@ -35,7 +35,7 @@ public sealed class SoundCatalog
     public const string SchemeIndexPath = "sound/schemeindex.mes";
     public const string SchemeListPath = "sound/schemelist.mes";
     public const string PositionalPath = "sound/soundparams.mes";
-    /// <summary>The longest path the original builds into its 260-byte buffer.</summary>
+    /// <summary>The longest path (in characters) the original's 260-byte buffer holds with its terminator.</summary>
     public const int MaxPathBytes = 259;
     /// <summary>Combat stingers are <c>combat 1.mp3</c> … <c>combat 6.mp3</c>, one drawn when combat music starts.</summary>
     public const int CombatStingerCount = 6;
@@ -85,8 +85,8 @@ public sealed class SoundCatalog
         }
 
         SoundTable? user = null;
-        var userFile = Load(stack, UserTablePath, ContentLoadPhase.ModuleLoaded, options, out _);
-        if (userFile is null) issues.Add(new(SoundIssueCode.UserTableMissing, UserTablePath));
+        var userFile = Load(stack, UserTablePath, ContentLoadPhase.ModuleLoaded, options, out var userFailure);
+        if (userFile is null) issues.Add(new(SoundIssueCode.UserTableMissing, UserTablePath, null, userFailure!.Status, userFailure.Mes));
         else user = new("snd_user.mes", UserTablePath, userFile.Value.Candidate, userFile.Value.File, true);
 
         var schemeIndex = Load(stack, SchemeIndexPath, ContentLoadPhase.GameStart, options, out failure);
@@ -95,8 +95,8 @@ public sealed class SoundCatalog
         if (schemeList is null) return failure!;
 
         var positional = SoundPositionalProfile.WithoutFile;
-        var parameters = Load(stack, PositionalPath, ContentLoadPhase.GameStart, options, out _);
-        if (parameters is null) issues.Add(new(SoundIssueCode.PositionalParametersMissing, PositionalPath));
+        var parameters = Load(stack, PositionalPath, ContentLoadPhase.GameStart, options, out var parametersFailure);
+        if (parameters is null) issues.Add(new(SoundIssueCode.PositionalParametersMissing, PositionalPath, null, parametersFailure!.Status, parametersFailure.Mes));
         else positional = SoundPositionalProfile.FromMes(parameters.Value.File, PositionalPath, issues);
 
         return new(SoundCatalogStatus.Ready, new SoundCatalog(stack, tables.AsReadOnly(), user, schemeIndex.Value.File, schemeList.Value.File,
@@ -166,8 +166,7 @@ public sealed class SoundCatalog
     public static int SpeechIdentity(int scriptNumber, string? conditionField)
     {
         if (scriptNumber == 0 || conditionField is null) return -1;
-        var number = SoundSchemeParser.Atoi(conditionField, out var overflow);
-        if (overflow) number = 0;
+        var number = SoundSchemeParser.Atoi(conditionField);
         return ((scriptNumber & 0x7FFF) << 16) | (number & 0xFFFF);
     }
 
