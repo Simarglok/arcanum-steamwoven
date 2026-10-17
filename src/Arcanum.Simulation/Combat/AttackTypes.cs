@@ -12,7 +12,8 @@ public enum HitLocation { Torso, Head, Arm, Leg }
 /// <summary>The five damage types, in the source's order.</summary>
 public enum DamageType { Normal, Poison, Electrical, Fire, Fatigue }
 
-/// <summary>Game difficulty; only a PC's effectiveness and a PC attacker's hit-point damage depend on it.</summary>
+/// <summary>Game difficulty; a PC's effectiveness, a PC attacker's hit-point damage and the PC's experience awards
+/// (ARC-WORLD-030) depend on it.</summary>
 public enum GameDifficulty { Normal, Easy, Hard }
 
 /// <summary>What is attacked. Only a critter makes a skill roll, dodges or takes critical effects.</summary>
