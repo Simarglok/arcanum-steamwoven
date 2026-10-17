@@ -49,9 +49,9 @@ public sealed class AreaScenePlanTests
         Assert.AreEqual(200, plan.Commands.Count);
         foreach (var command in plan.Commands) Assert.AreEqual(10 + command.Identity!.Value.SourceIndex, command.Destination.Width);
         var twice = BodyVisual(bodies[0]) with { Key = BodyVisual(bodies[0]).Key with { SourceIndex = 9999 } };
-        Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], [BodyVisual(bodies[0]), twice]));
+        Assert.AreEqual("AREA_VISUAL_AMBIGUOUS", Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], [BodyVisual(bodies[0]), twice])).Message);
         // A body without a visual is still refused.
-        Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], []));
+        Assert.AreEqual("AREA_VISUAL_REQUIRED", Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [bodies[0]], [])).Message);
     }
     [TestMethod]
     public void BodyCenterSignedHotspotsAndSerializedScaleDoNotUseArtOffsets()

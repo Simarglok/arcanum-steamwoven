@@ -208,8 +208,8 @@ instead of about 3 minutes.
    each distinct object frame selection (entry, group, frame, palette) once per
    build, keeping one visual record per object; then measure K'na Tha and resolve
    its seven hidden issues. A viewer change (ARC-RENDER-019) follows only if map
-   mode's own frame and texture budgets refuse the result (they do not; the viewer's
-   scene plan is slow on 43,219 objects instead).
+   mode's own frame and texture budgets refuse the result (they did not; the viewer's
+   scene plan was slow on 43,219 objects instead, fixed by ARC-RENDER-019).
 
 ## Limits
 
