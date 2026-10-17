@@ -97,8 +97,7 @@ public sealed class AreaScriptHost : IScrHost
             case ScriptContentStatus.Read: break;
             case ScriptContentStatus.Changed: return (AreaConversationStartStatus.SourceChanged, null, read.Detail);
             case ScriptContentStatus.Invalid or ScriptContentStatus.Unreadable: return (AreaConversationStartStatus.DialogUnreadable, null, read.Detail);
-            // ARC-SCRIPT-012: the game does not open a DLG without records either.
-            case ScriptContentStatus.Empty: return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {read.Detail}");
+            // Missing, and (ARC-SCRIPT-012) Empty: the game does not open a DLG without records either.
             default: return (AreaConversationStartStatus.DialogResourceMismatch, null, $"dialog {script}: {read.Detail}");
         }
         if (!read.Document!.TryGetRecord(node, out var record) || record!.Role != DlgRecordRole.Npc)

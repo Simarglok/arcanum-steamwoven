@@ -38,15 +38,18 @@ Data API and the AREA viewer's conversation host. Godot-independent.
   with a status: `Read`, `NoName`, `NotFound` (no source holds the DLG),
   `Unreadable` (stack read limits), `Invalid` (not a script, or a DLG the reader
   refuses), `Changed` or `Empty` (ARC-SCRIPT-012: a DLG with no record the
-  original keeps, which `dialog_load` 0x412E10 refuses to open).
+  original keeps, which `dialog_load` 0x412E10 refuses to open). Read details name
+  statuses or virtual paths, never absolute paths or payload bytes; an open
+  failure's detail is the stack's (it names the failing source path), which the
+  viewer does not print.
 - **Dialogs as the game reads them (ARC-SCRIPT-012).** Dialogs are read in the
   [original read mode](../formats/dlg-reader.md#original-read-mode-arc-data-017)
   (`ScriptContent.OriginalDialogs`) unless the caller passes other reader
   options: bytes between fields are skipped, numbers read like `atoi`, and a read
   that stops early keeps the records before the stop. The strict reader stays
-  available on request, as a data-quality check. Read details name statuses or virtual paths, never absolute paths
-  or payload bytes; an open failure's detail is the stack's (it names the failing
-  source path), which the viewer does not print.
+  available on request, as a data-quality check. A caller that passes its own
+  `DlgReaderOptions` (for other limits) gets the strict mode unless it sets
+  `Mode = DlgReadMode.Original`.
 - **One version per path.** The stack indexes names once; every read goes to the
   winning copy again. The first bytes read for a path are kept as SHA-256, and a
   later read with other bytes is `Changed` and sets `ScriptContent.Changed` for
@@ -113,8 +116,8 @@ AREA smoke passes over the stack.
   fields over 4 KiB and NUL bytes are refused, not cut. Field text keeps CR LF as
   stored; a consumer that shows it must turn it into LF, as the game's text-mode
   read does.
-- Three installed DLGs lose content in the game itself (data bugs, read as the
-  game reads them): see [the analysis of the 38 strict refusals](../formats/dlg-reader.md#the-38-strict-refusals-arc-script-012).
+- In three cases (six installed DLGs) the game itself loses content (data bugs,
+  read as the game reads them): see [the analysis of the 38 strict refusals](../formats/dlg-reader.md#the-38-strict-refusals-arc-script-012).
 - Item, trap and sector scripts read through the same API, but the viewer binds
   only the dialog point of a map's speakers ([dispatcher](scr-dispatcher-runtime.md)).
 

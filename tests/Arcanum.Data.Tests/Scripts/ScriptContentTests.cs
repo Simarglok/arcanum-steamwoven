@@ -101,7 +101,9 @@ public sealed class ScriptContentTests
     public void Dialogs_are_read_as_the_original_reads_them_and_an_empty_one_is_not_opened()
     {
         Base();
-        foreach (var n in new[] { 1, 2, 3, 4 }) Loose($"scr/0000{n}s.scr", Script(1));
+        foreach (var n in new[] { 1, 2, 3, 4, 5, 6 }) Loose($"scr/0000{n}s.scr", Script(1));
+        Loose("dlg/00005s.dlg", Encoding.Latin1.GetBytes("// only a comment\r\n"));                     // no record at all
+        Loose("dlg/00006s.dlg", Encoding.Latin1.GetBytes("{1}{First stops.}{}{}{}{#}{}{2}{Never.}{}{}{}{}{}")); // the first record stops
         Loose("dlg/00001s.dlg", Encoding.Latin1.GetBytes("{1}{Hello.} {}{}{}{}{}\r\n\t{2}{Bye.}{}{1}{}{0}{}"));  // spaces and tabs between fields
         Loose("dlg/00002s.dlg", Encoding.Latin1.GetBytes("{1}{Only six fields.}{}{}{}{}"));                         // the record lacks its last field
         Loose("dlg/00003s.dlg", Encoding.Latin1.GetBytes("{1}{Kept.}{}{}{}{}{}{2}{Cut}{}{1}{}{#}{}{3}{Lost.}{}{}{}{}{}")); // stops at '#'
@@ -114,6 +116,8 @@ public sealed class ScriptContentTests
         var empty = content.Dialog(2);
         Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00002s.dlg: no record the original keeps (IncompleteRecord)"), (empty.Status, empty.Detail));
         Assert.IsNull(empty.Document);
+        Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00005s.dlg: no record the original keeps (EndOfInput)"), (content.Dialog(5).Status, content.Dialog(5).Detail));
+        Assert.AreEqual((ScriptContentStatus.Empty, "dlg/00006s.dlg: no record the original keeps (HashResponse)"), (content.Dialog(6).Status, content.Dialog(6).Detail));
         var stopped = content.Dialog(3);
         Assert.AreEqual(ScriptContentStatus.Read, stopped.Status);
         Assert.AreEqual((1, DlgStopReason.HashResponse), (stopped.Document!.Records.Count, stopped.Document.StopReason));

@@ -114,8 +114,8 @@ is a separate proposal, not part of this physical reader.
 default `Strict` mode above is unchanged. Since ARC-SCRIPT-012 the universal script
 and dialog loader ([script content](../scripting/script-content.md)) reads game data
 in this mode, as the game does, and the conversation runtime receives those
-documents; the strict mode stays a data-quality check and the reader for project
-fixtures.
+documents; the strict mode stays a data-quality check, the reader for project
+fixtures and what the research probes and the superseded NPC entry resolver use.
 
 - Fields flow: each field is found by skipping to the next `{`, whatever lies
   between (white space, line breaks, stray text); a `//` pair outside a field
@@ -166,16 +166,17 @@ counts are not asserted beyond the totals above):
 Checked in the 1.0.7.4 executable, not only in CE: `dialog_load` (0x412E10)
 fails when no record was read; `dialog_parse_field` (0x417C20) skips to the next
 `{`, honours `//` and caps a field at 999 characters; `dialog_parse_entry`
-(0x417860) reads seven fields, the id, IQ and response with `atoi`, refuses a
-non-empty IQ that reads 0 and a response starting with `#`.
+(0x417860) reads seven fields, the id, IQ and response with `atoi`, and ends the
+read (keeping the records before) at a non-empty IQ that reads 0 or a response
+starting with `#`.
 
 All 38 are the DLGs of their scripts (named after the script). 31 are not
-conversations but text for the script actions float line (23) and print line
-(24): altars, graves, stones, levers, object examination. 7 open a conversation
+conversations but text for the script actions float line (action type 23) and print line
+(action type 24): altars, graves, stones, levers, object examination. 7 open a conversation
 (dialog action 4). 31 of the 38 scripts are attached on the module's maps, most
 on the world map.
 
-Three of them lose content in the game itself (data bugs; Steamwoven reads them
+In three cases (six files) the game itself loses content (data bugs; Steamwoven reads them
 as the game does, and any fix is an owner decision under D8):
 
 - `03042`..`03045` (`*_stone_exa`, four stones on one Tulla map): the only record
