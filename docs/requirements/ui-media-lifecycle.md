@@ -124,7 +124,7 @@
 
 **Проверка по оригиналу и план:** [ARC-RES-052](../research/audio-evidence.md) сверил эти механизмы с `Arcanum.exe` 1.0.7.4 (три канала Effects/Voice/Music 0–10, голос по полу PC, шаги, звуки предметов и существ), пересчитал все звуковые данные модуля через стек контента и разбил полноценный звук на задачи ARC-DATA-040 … ARC-UI-044.
 
-**Зависимости и сценарии:** platform audio service, sound resource profile, options persistence, dialogue lifecycle, combat and item/world events. Check muted/independent channels, missing device/startup, voice cancellation on dialog close, and no simulation corruption when playback fails. **Неизвестно:** decoded file format set, actual device support, latency and cross-platform quality remain untested.
+**Зависимости и сценарии:** platform audio service, sound resource profile, options persistence, dialogue lifecycle, combat and item/world events. Check muted/independent channels, missing device/startup, voice cancellation on dialog close (в оригинале голос после закрытия доигрывает, SN22 ARC-RES-052), and no simulation corruption when playback fails. **Неизвестно:** decoded file format set, actual device support, latency and cross-platform quality remain untested.
 
 <a id="fr-media-004"></a>
 
