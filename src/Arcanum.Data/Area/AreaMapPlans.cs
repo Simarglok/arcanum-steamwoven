@@ -194,7 +194,7 @@ public static class AreaMapPlans
             if (winner is null)
             {
                 // Without a mask file the original rebuilds the masks (N3), as the owner does. Without the two roof
-                // tables no roof is read (ARC-RENDER-021), as before them.
+                // tables no roof is read (ARC-RENDER-021), as before them; their read phase is assumed, not exe-checked.
                 if (role is AreaMappingRole.MissingPolicy or AreaMappingRole.Roof or AreaMappingRole.RoofShade) continue;
                 return new(AreaMapPlanStatus.MissingSource, null, path);
             }

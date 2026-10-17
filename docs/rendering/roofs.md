@@ -54,10 +54,14 @@ implements an original function carries its address
 - `IsCovered(x, y, countFaded, indoor)`: an indoor tile under the block three
   tiles further on both axes, not filled, inside that piece's band; a faded roof
   covers only when the caller counts it (objects do, tiles do not) (RF4). The
-  caller tells whether a tile's art is indoor (type 0: tile art with bit 8 clear,
-  as in the [leaving test](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)).
+  caller tells whether a tile's art is of type 0: tile art with bit 8 clear,
+  facade art with bit 25 clear, and any other art (a missing tile included),
+  as in the [leaving test](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049).
+- `HotSpot(visual)`: a mirrored roof frame is drawn with hot spot x 0 and
+  offset x 0, unlike other mirrored art (RF7).
 - `Slot`, `Normalize`, `ScreenPosition`, `Art` (RF1), `FadeCorners` (the corner
-  alphas of a faded piece, RF2) and `Piece`.
+  alphas of a faded piece on the original's hardware path, RF2; without 3D
+  hardware the original stipples a faded roof) and `Piece`.
 
 ## Installed original
 

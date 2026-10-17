@@ -99,6 +99,9 @@ public sealed class AreaRoofGridTests
         Assert.AreEqual(((byte)200, (byte)80, (byte)200, (byte)255), AreaRoofGrid.FadeCorners(11, Shades));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => AreaRoofGrid.FadeCorners(13, Shades));
         Assert.AreEqual(12, AreaRoofGrid.Piece((10u << 28) | (3u << 14) | 1));
+        var frame = new AreaVisualRecord(Roof(64, 64, 9).Visual, 0, 0, null!, "", 0, 0, 0, 0, 0, 0, 0, true, 300, 150, -95, 7, 3, 0, 0, 0, 100, 0, 0, "", "");
+        Assert.AreEqual((0, 7, 0), AreaRoofGrid.HotSpot(frame), "a mirrored roof frame takes hot spot x 0 and offset x 0");
+        Assert.AreEqual((-95, 7, 3), AreaRoofGrid.HotSpot(frame with { Mirrored = false }));
         Assert.IsNull(new AreaRoofGrid([]).Art(1, 1));
         Assert.ThrowsExactly<ArgumentException>(() => new AreaRoofGrid([Roof(64, 64, 0), Roof(65, 64, 1)]));
     }

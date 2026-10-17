@@ -452,9 +452,9 @@ public sealed partial class AreaDataOwner
     {
         var i = 0; while (i < text.Length && text[i] is ' ' or '\t' or '\n' or '\v' or '\f' or '\r') i++;
         var negative = i < text.Length && text[i] == '-'; if (i < text.Length && text[i] is '+' or '-') i++;
-        long value = 0;
-        for (; i < text.Length && char.IsAsciiDigit(text[i]) && value <= int.MaxValue; i++) value = value * 10 + (text[i] - '0');
-        return unchecked((int)(negative ? -value : value));
+        var value = 0;
+        for (; i < text.Length && char.IsAsciiDigit(text[i]); i++) value = unchecked(value * 10 + (text[i] - '0'));
+        return unchecked(negative ? -value : value);
     }
     private bool RoofsAdmitted => _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original
         && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Roof) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.RoofShade);

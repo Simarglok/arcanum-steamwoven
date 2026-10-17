@@ -31,7 +31,7 @@ public sealed class AreaRoofGrid
     public int Count => _records.Count;
     public IEnumerable<AreaRoofRecord> Records => _records.Values;
 
-    /// <summary>The block's current fill and fade bits; false, false for a tile without a roof.</summary>
+    /// <summary>The current fill and fade bits of one of the grid's roofs (a record of another grid is refused).</summary>
     public (bool Fill, bool Fade) State(AreaRoofRecord roof)
     {
         ArgumentNullException.ThrowIfNull(roof);
@@ -83,7 +83,7 @@ public sealed class AreaRoofGrid
     [OriginalFunction(0x439EC0, OriginalFunctionScope.Full)]
     public void FillOn(long x, long y) { var (nx, ny) = Normalize(x, y); Fill(nx, ny, true, -1); }
 
-    [OriginalFunction(0x439EE0, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x439EE0, OriginalFunctionScope.Partial)]
     public void FadeOn(long x, long y) => SetBit(x, y, FadeBit, true);
 
     [OriginalFunction(0x439F20, OriginalFunctionScope.Full)]
@@ -107,8 +107,10 @@ public sealed class AreaRoofGrid
         return countFaded || (art & FadeBit) == 0;
     }
 
-    /// <summary>The four corner alphas of a faded roof piece (top left, top right, bottom right, bottom left), drawn with
-    /// alpha interpolated between them; an unfaded roof is opaque.</summary>
+    /// <summary>The four corner alphas of a faded roof piece on the original's hardware path (its default roof blit mode,
+    /// constant alpha), drawn with alpha interpolated between them; an unfaded roof is opaque. The order of the four values
+    /// is the blit's corner order (read as top left, top right, bottom right, bottom left; the blitter itself was not read).
+    /// The software path stipples a faded roof instead.</summary>
     [OriginalFunction(0x439140, OriginalFunctionScope.Partial)]
     public static (byte TopLeft, byte TopRight, byte BottomRight, byte BottomLeft) FadeCorners(int piece, AreaRoofShades shades)
     {
@@ -120,6 +122,15 @@ public sealed class AreaRoofGrid
             7 => (t, t, p, p), 8 => (o, o, o, o), 9 => (p, t, t, p), 10 => (o, p, t, p), 11 => (p, t, p, o), 12 => (o, p, p, o),
             _ => throw new ArgumentOutOfRangeException(nameof(piece)),
         };
+    }
+
+    /// <summary>The hot spot and x offset a roof frame is drawn with: a mirrored roof frame uses hot spot x 0 and offset x
+    /// 0, unlike other mirrored art (RF7).</summary>
+    [OriginalFunction(0x5031C0, OriginalFunctionScope.Partial)]
+    public static (int HotX, int HotY, int OffsetX) HotSpot(AreaVisualRecord visual)
+    {
+        ArgumentNullException.ThrowIfNull(visual);
+        return visual.Mirrored ? (0, visual.HotY, 0) : (visual.HotX, visual.HotY, visual.ArtOffsetX);
     }
 
     /// <summary>The piece of a roof art: its frame, plus 9 when mirrored.</summary>
