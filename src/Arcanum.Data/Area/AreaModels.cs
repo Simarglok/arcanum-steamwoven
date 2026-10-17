@@ -2,7 +2,10 @@ using System.Collections.ObjectModel;
 
 namespace Arcanum.Data.Area;
 
-public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype }
+/// <summary>Input roles. <see cref="Archive"/> (any other resource archive of the content stack, numbered by
+/// its search-order position) and <see cref="Loose"/> (one loose resource file) are read only by plans with a
+/// <see cref="AreaSourcePlan.ResourceOrder"/> (ARC-DATA-018).</summary>
+public enum AreaSourceRole { Module, Resource1, Resource2, NormalGameMobile, Prototype, Archive, Loose }
 public readonly record struct AreaInputKey(AreaSourceRole Role, int Number = 0);
 public sealed record AreaInputIdentity(AreaInputKey Key, long Length, string Sha256);
 public enum AreaScope { Core, Context, Outside, Unknown }
@@ -132,6 +135,12 @@ public sealed class AreaInputSet
 public enum AreaMappingRole { Tile, Facade, Scenery, Container, ItemGround, MonsterNames, UniqueNpcNames, MissingPolicy, WallStructure, WallName, Portal }
 public sealed record AreaMappingBinding(AreaMappingRole Role, AreaEntryIdentity Entry, string PayloadSha256);
 public sealed record AreaArtBinding(uint RawArt, AreaEntryIdentity Entry);
+/// <summary>One resource source in content-stack search order (ARC-DATA-018): an archive input
+/// (<see cref="AreaSourceRole.Module"/>, <see cref="AreaSourceRole.Resource1"/>,
+/// <see cref="AreaSourceRole.Resource2"/> or <see cref="AreaSourceRole.Archive"/>, no path) or one loose
+/// file (<see cref="AreaSourceRole.Loose"/>) with the normalized virtual path it holds
+/// (lower-case printable ASCII, <c>/</c> separators).</summary>
+public sealed record AreaResourceSource(AreaInputKey Key, string? Path = null);
 
 /// <summary>Version-one explicit FILE-effective source plan. Constructor plans are structural,
 /// not proof that caller inputs are authentic original data. The original validator uses its own pinned profile.</summary>
@@ -176,6 +185,30 @@ public sealed class AreaSourcePlan
     /// its only group whatever the requested rotation. Pinned profiles keep their exact
     /// per-object exceptions instead and ignore this flag.</summary>
     public bool AllowArtTrailingBytes { get; init; }
+    /// <summary>ARC-DATA-018: the resource sources in content-stack search order, first wins. When set, an ART
+    /// or name a plan resolves itself is read from the first source that holds it as a file (archive directory
+    /// and ignored records hold nothing), as the original's file system opens it; empty keeps each pinned
+    /// profile's own archive rule. Every <see cref="AreaSourceRole.Archive"/> and <see cref="AreaSourceRole.Loose"/>
+    /// input must be listed; pinned profiles take none.</summary>
+    public IReadOnlyList<AreaResourceSource> ResourceOrder
+    {
+        get => _resourceOrder;
+        init
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            var order = Array.AsReadOnly(value.ToArray());
+            if (order.Any(s => s is null) || order.Select(s => s.Key).Distinct().Count() != order.Count ||
+                order.Any(s => !Identities.Any(i => i.Key == s.Key) || (s.Key.Role == AreaSourceRole.Loose ? !LoosePath(s.Path) :
+                    s.Key.Role is not (AreaSourceRole.Module or AreaSourceRole.Resource1 or AreaSourceRole.Resource2 or AreaSourceRole.Archive) || s.Path is not null)) ||
+                order.Where(s => s.Path is not null).Select(s => s.Path).Distinct(StringComparer.Ordinal).Count() != order.Count(s => s.Path is not null))
+                throw new ArgumentException("Resource sources must be distinct plan inputs of a resource role; a loose source names one normalized path.", nameof(value));
+            _resourceOrder = order;
+        }
+    }
+    private readonly IReadOnlyList<AreaResourceSource> _resourceOrder = Array.Empty<AreaResourceSource>();
+    internal static bool LoosePath(string? path) =>
+        !string.IsNullOrEmpty(path) && path.All(c => c is >= ' ' and <= '~' and not '\\' and not (>= 'A' and <= 'Z')) &&
+        path.Split('/').All(segment => segment.Length > 0 && segment != "." && segment != "..");
     /// <summary>The pinned original profile that authored this plan; None for caller-authored structural plans.</summary>
     internal OriginalAreaMap OriginalMap { get; init; }
     internal bool Original => OriginalMap != OriginalAreaMap.None;
@@ -211,12 +244,15 @@ public sealed class AreaLoaderOptions
     /// <summary>Inputs at least this long are hashed in parallel by whole-set authentication passes
     /// when two or more of them take part (ARC-RENDER-009); 0 parallelizes every such pass.</summary>
     public long ParallelAuthenticationMinBytes { get; init; } = 1L << 20;
+    /// <summary>Most <see cref="AreaSourceRole.Archive"/> and <see cref="AreaSourceRole.Loose"/> inputs (ARC-DATA-018);
+    /// 0, the default, admits none.</summary>
+    public int MaxResourceInputs { get; init; }
     internal void Validate()
     {
         if (MaxManagedBytes <= 0 || MaxRetainedBytes <= 0 || MaxBuildPhaseBytes <= 0 || MaxFrameOperationBytes <= 0 || MaxReadBytes <= 0 ||
             MaxFrameRequests <= 0 || MaxFrameStoredBytes <= 0 || MaxFrameDecodedBytes <= 0 || MaxFrameRgbaBytes <= 0 || MaxFrameEncodedBytes <= 0 ||
             MaxSurvey <= 0 || MaxPresentSectors <= 0 || MaxAggregateRecords <= 0 || MaxAggregateBytes < 16 || MaxPrototypes <= 0 || MaxObjects <= 0 || MaxVisuals <= 0 ||
-            ParallelAuthenticationMinBytes < 0)
+            ParallelAuthenticationMinBytes < 0 || MaxResourceInputs < 0)
             throw new ArgumentOutOfRangeException(nameof(AreaLoaderOptions));
     }
 }

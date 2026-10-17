@@ -186,11 +186,13 @@ public sealed partial class AreaDataOwner
     }
     /// <summary>A pinned profile reads a resource from the archive its mapping names. A whole-map
     /// plan reads it from whichever resource archive holds it, as the original's file system does
-    /// across its mounted archives (still requiring one holder).</summary>
+    /// across its mounted archives: the first in its stack order (ARC-DATA-018), or, without one,
+    /// the one of the two base archives that holds it.</summary>
     private AreaEntryIdentity Resolve(AreaInputKey source, string path) =>
-        _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original ? ClosedUnique(path) : Unique(source, path);
+        _plan.ResourceOrder.Count > 0 || _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original ? ClosedUnique(path) : Unique(source, path);
     private AreaEntryIdentity ClosedUnique(string path)
     {
+        if (_plan.ResourceOrder.Count > 0) return StackFirst(path);
         var matches = new List<AreaEntryIdentity>();
         foreach (var role in new[] { AreaSourceRole.Resource1, AreaSourceRole.Resource2 })
         {
@@ -200,6 +202,28 @@ public sealed partial class AreaDataOwner
         }
         if (matches.Count != 1) throw Fail(matches.Count == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
         return matches[0];
+    }
+    // DAT record flags the content stack skips (ContentStack): a directory record and an ignored member hold no file.
+    private const uint DirectoryRecord = 0x400, IgnoredRecord = 0x800;
+    /// <summary>ARC-DATA-018: the first source of the plan's stack order that holds the path as a file.
+    /// An archive holding it twice is ambiguous (the content stack refuses such an index).</summary>
+    private AreaEntryIdentity StackFirst(string path)
+    {
+        var normalized = path.Replace('\\', '/').ToLowerInvariant();
+        _loose.TryGetValue(normalized, out var loose);
+        foreach (var source in _plan.ResourceOrder)
+        {
+            if (source.Key.Role == AreaSourceRole.Loose)
+            {
+                if (source.Path == normalized && source.Key == loose) return _entryIdentities[(loose, 0)];
+                continue;
+            }
+            if (!_indexes.TryGetValue(source.Key, out var index) || !index.TryGetValue(normalized, out var entries)) continue;
+            var files = entries.Where(e => (e.Flags & (DirectoryRecord | IgnoredRecord)) == 0).ToArray();
+            if (files.Length > 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
+            if (files.Length == 1) return _entryIdentities[(source.Key, files[0].Ordinal)];
+        }
+        throw Fail(AreaErrorCode.MissingSource, AreaStage.Appearance);
     }
     private static string NpcPath(uint cls, int population, int armor, int animation, int weapon, int shield, Dictionary<AreaMappingRole, SortedDictionary<int, string>> maps)
     {
