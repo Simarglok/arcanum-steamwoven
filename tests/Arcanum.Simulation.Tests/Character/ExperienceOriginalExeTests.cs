@@ -38,19 +38,19 @@ public sealed class ExperienceOriginalExeTests
     }
 
     [TestMethod, TestCategory(Category)]
-    public void ProgressMatchesTheOriginalExceptTheXp3Wrap()
+    public void ProgressMatchesTheOriginal()
     {
         var file = OracleFile.Load("4A6900", "experience-progress", TestContext);
-        int Real(OracleCase c) => ExperienceRules.Progress(c.Table!, c.Level, c.Experience);
+        int Real(OracleCase c) => ExperienceRules.Progress(c.Table!, c.Level, c.Experience, ExperienceRuleProfile.Original);
         Assert.IsTrue(file.Cases.Any(IsXp3), "the inputs must reach the XP3 range");
         Assert.IsTrue(file.Cases.Any(c => !IsXp3(c) && c.Level is >= 1 and < ExperienceRules.MaxLevel), "the inputs must reach the ordinary range");
-        // XP3 inputs are not compared with Steamwoven (until ARC-WORLD-032), but the original must give the progress with a
-        // wrapping 32-bit 1000 × remaining there (the ledger's description), from the C# remainder and step.
-        Run(file, Real, new("XP3", IsXp3, WrappedProgress),
-            new("rounded instead of truncated", c => RoundedProgress(c) ?? Real(c)),
+        // The Original mode is compared on every input; the Steamwoven mode (ARC-WORLD-033) may differ only on XP3 inputs.
+        Run(file, Real, new("steamwoven", "XP3", IsXp3, c => ExperienceRules.Progress(c.Table!, c.Level, c.Experience, ExperienceRuleProfile.Steamwoven)),
+            new Mutant("rounded instead of truncated", c => RoundedProgress(c) ?? Real(c)),
             new("fallback when the next level is just reached", c => c.Level is >= 1 and < ExperienceRules.MaxLevel
                 && ExperienceRules.ToNextLevel(c.Table!, c.Level, c.Experience) == 0 ? ExperienceRules.ProgressFallback : Real(c)),
-            new("level 0 answers 0", c => c.Level == 0 ? 0 : Real(c)));
+            new("level 0 answers 0", c => c.Level == 0 ? 0 : Real(c)),
+            new("the exact product (the Steamwoven mode)", c => ExperienceRules.Progress(c.Table!, c.Level, c.Experience, ExperienceRuleProfile.Steamwoven)));
     }
 
     [TestMethod, TestCategory(Category)]
@@ -63,19 +63,12 @@ public sealed class ExperienceOriginalExeTests
             new("the starting level counted", c => Real(c) + (c.From <= c.To ? (c.From % 5 == 0 ? 2 : 1) : 0)));
     }
 
-    /// <summary>XP3 (ledger, until ARC-WORLD-032): the original's 1000 × remaining is a 32-bit product, Steamwoven's exact.</summary>
+    /// <summary>XP3 (ledger): 1000 × remaining does not fit in 32 bits; the Original mode wraps it, the Steamwoven mode does not.</summary>
     private static bool IsXp3(OracleCase c)
     {
         if (c.Level is < 1 or >= ExperienceRules.MaxLevel) return false;
         var remaining = ExperienceRules.ToNextLevel(c.Table!, c.Level, c.Experience);
         return remaining >= 0 && 1000L * remaining > int.MaxValue;
-    }
-
-    private static int WrappedProgress(OracleCase c)
-    {
-        var remaining = ExperienceRules.ToNextLevel(c.Table!, c.Level, c.Experience);
-        var step = c.Table!.Threshold(c.Level + 1) - c.Table.Threshold(c.Level);
-        return unchecked(1000 - unchecked(1000 * remaining) / step);
     }
 
     private static int? RoundedProgress(OracleCase c)
@@ -87,38 +80,36 @@ public sealed class ExperienceOriginalExeTests
         return 1000 - (int)Math.Round(1000.0 * remaining / step, MidpointRounding.AwayFromZero);
     }
 
-    /// <summary>A recorded difference: on the inputs it <see cref="Applies"/> to, Steamwoven is not compared, and the original
-    /// must give <see cref="Original"/> (the ledger's description of its behaviour).</summary>
-    private sealed record ExpectedDifference(string Ledger, Func<OracleCase, bool> Applies, Func<OracleCase, int> Original);
+    /// <summary>The other rule mode of a function with a rule-mode switch: it may differ from the original only on the inputs
+    /// its ledger row <see cref="Applies"/> to.</summary>
+    private sealed record OtherMode(string Mode, string Ledger, Func<OracleCase, bool> Applies, Func<OracleCase, int> Compute);
 
-    /// <summary>Compares the C# side with the original on every input outside the recorded difference, checks the original
-    /// against the recorded difference's description on the others, then replays each mutant, which must differ on at least
-    /// one compared input. Writes the oracle receipt when <c>ARCANUM_ORACLE_RECEIPTS</c> names a folder, before failing.</summary>
-    private void Run(OracleFile file, Func<OracleCase, int> real, ExpectedDifference? expected, params Mutant[] mutants)
+    /// <summary>Compares the C# side (its Original mode, where there is a switch) with the original on every input, checks
+    /// that the other mode differs only on its ledger row's inputs, then replays each mutant, which must differ on at least
+    /// one input. Writes the oracle receipt when <c>ARCANUM_ORACLE_RECEIPTS</c> names a folder, before failing.</summary>
+    private void Run(OracleFile file, Func<OracleCase, int> real, OtherMode? other, params Mutant[] mutants)
     {
         Assert.IsTrue(mutants.Length >= 2, "at least two planted mutants per function");
-        bool Recorded(OracleCase c) => expected?.Applies(c) == true;
-        var unexpected = file.Cases.Where(c => !Recorded(c) && real(c) != c.Result).ToList();
-        var recorded = file.Cases.Where(Recorded).ToList();
-        var recordedDifferences = recorded.Count(c => real(c) != c.Result);
-        var unexplained = recorded.Where(c => expected!.Original(c) != c.Result).ToList();
-        var caught = mutants.Where(m => file.Cases.Any(c => !Recorded(c) && m.Compute(c) != c.Result)).Select(m => m.Name).ToList();
+        var unexpected = file.Cases.Where(c => real(c) != c.Result).ToList();
+        var caught = mutants.Where(m => file.Cases.Any(c => m.Compute(c) != c.Result)).Select(m => m.Name).ToList();
         var missed = mutants.Select(m => m.Name).Except(caught).ToList();
-        var pass = unexpected.Count == 0 && unexplained.Count == 0 && missed.Count == 0;
+        var ledgerInputs = other is null ? 0 : file.Cases.Count(other.Applies);
+        var otherDifferences = other is null ? [] : file.Cases.Where(c => other.Compute(c) != c.Result).ToList();
+        var outsideLedger = otherDifferences.Where(c => !other!.Applies(c)).ToList();
+        var pass = unexpected.Count == 0 && missed.Count == 0 && outsideLedger.Count == 0;
         var method = OriginalMethod(file.Key);
         TestContext.WriteLine($"oracle {file.Function} {file.Name} ({MethodIlHash.Name(method)}): seed {file.Seed}, {file.Cases.Count} inputs, exe {file.ExeSha256}");
-        TestContext.WriteLine($"  differences: {unexpected.Count} unexpected" + (expected is null ? "" :
-            $"; {recordedDifferences} of {recorded.Count} {expected.Ledger} inputs differ (recorded, not failed), "
-            + $"{recorded.Count - unexplained.Count}/{recorded.Count} match the recorded behaviour"));
+        TestContext.WriteLine($"  differences: {unexpected.Count}" + (other is null ? "" : $" (original mode); {other.Mode} mode: "
+            + $"{otherDifferences.Count} differences, all on {other.Ledger} inputs ({ledgerInputs}) unless {outsideLedger.Count} > 0"));
         TestContext.WriteLine($"  mutants caught: {caught.Count}/{mutants.Length}");
-        WriteReceipt(file, method, expected, recorded.Count, recordedDifferences, unexplained.Count, mutants.Length, caught.Count, unexpected.Count, pass);
+        WriteReceipt(file, method, other, ledgerInputs, otherDifferences.Count, outsideLedger.Count, mutants.Length, caught.Count, unexpected.Count, pass);
         if (unexpected.Count > 0)
         {
             var c = unexpected[0];
             Assert.Fail($"{unexpected.Count} differences from the original; first: {c.Describe()} original {c.Result}, Steamwoven {real(c)}");
         }
-        if (unexplained.Count > 0)
-            Assert.Fail($"{expected!.Ledger} input not explained by the recorded behaviour: {unexplained[0].Describe()} original {unexplained[0].Result}");
+        if (outsideLedger.Count > 0)
+            Assert.Fail($"the {other!.Mode} mode differs outside {other.Ledger}: {outsideLedger[0].Describe()} original {outsideLedger[0].Result}");
         Assert.AreEqual(0, missed.Count, "planted mutants not caught (the inputs do not cover them): " + string.Join(", ", missed));
     }
 
@@ -135,8 +126,8 @@ public sealed class ExperienceOriginalExeTests
     }
 
     /// <summary>ARC-DEV-008: the oracle receipt (docs/verification/receipts), written by <c>./arcanum oracle</c>.</summary>
-    private void WriteReceipt(OracleFile file, MethodInfo method, ExpectedDifference? expected, int recorded, int recordedDifferences,
-        int unexplained, int planted, int caught, int differences, bool pass)
+    private void WriteReceipt(OracleFile file, MethodInfo method, OtherMode? other, int ledgerInputs, int otherDifferences,
+        int outsideLedger, int planted, int caught, int differences, bool pass)
     {
         var folder = Environment.GetEnvironmentVariable("ARCANUM_ORACLE_RECEIPTS");
         if (string.IsNullOrWhiteSpace(folder)) return;
@@ -152,9 +143,10 @@ public sealed class ExperienceOriginalExeTests
             ["mutantsPlanted"] = planted,
             ["mutantsCaught"] = caught,
             ["differences"] = differences,
-            ["recordedDifference"] = expected is null ? null : new Dictionary<string, object>
+            ["otherMode"] = other is null ? null : new Dictionary<string, object>
             {
-                ["ledger"] = expected.Ledger, ["inputs"] = recorded, ["differ"] = recordedDifferences, ["unexplained"] = unexplained,
+                ["mode"] = other.Mode, ["ledger"] = other.Ledger, ["ledgerInputs"] = ledgerInputs, ["differ"] = otherDifferences,
+                ["outsideLedger"] = outsideLedger,
             },
             ["result"] = pass ? "pass" : "fail",
             ["exeSha256"] = file.ExeSha256,

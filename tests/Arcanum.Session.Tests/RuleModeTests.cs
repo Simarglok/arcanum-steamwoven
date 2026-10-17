@@ -24,6 +24,8 @@ public sealed class RuleModeTests
         Assert.AreSame(ScrRuleProfile.Original, GameRules.Original.Scripts);
         Assert.AreSame(ReactionRuleProfile.Steamwoven, GameRules.Steamwoven.Reaction);
         Assert.AreSame(ReactionRuleProfile.Original, GameRules.Original.Reaction);
+        Assert.AreSame(Arcanum.Simulation.Character.ExperienceRuleProfile.Steamwoven, GameRules.Steamwoven.Experience);
+        Assert.AreSame(Arcanum.Simulation.Character.ExperienceRuleProfile.Original, GameRules.Original.Experience);
         foreach (var rules in GameRules.All)
         {
             Assert.AreEqual(RuleModeNames.Name(rules.Mode), rules.Name);
@@ -39,6 +41,8 @@ public sealed class RuleModeTests
             Assert.AreEqual(rules.Name, rules.Data.Name);
             Assert.AreSame(rules.Data, Arcanum.Data.Fixes.DataFixProfile.FromName(rules.Name));
             Assert.AreSame(rules.Mode == RuleMode.Steamwoven ? Arcanum.Data.Fixes.DataFixProfile.Steamwoven : Arcanum.Data.Fixes.DataFixProfile.Original, rules.Data);
+            Assert.AreEqual(rules.Name, rules.Experience.Name);
+            Assert.AreSame(rules.Experience, Arcanum.Simulation.Character.ExperienceRuleProfile.FromName(rules.Name));
         }
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }

@@ -461,7 +461,8 @@ every input; progress differed on 269 inputs, all with to-next above 2,147,483, 
 C# multiplication was made 32-bit in a scratch copy. A planted mutant (every fourth level instead of every fifth) was
 caught. Steamwoven multiplies in 64 bits and `ExperienceTable.Create` admits thresholds up to 2,000,000,000, so a
 table with a step above 2,147,483 shows a different progress. Owner decision 2026-10-17: a rule-mode switch, Original
-wraps and Steamwoven keeps the exact value ([registry](../world/rule-modes.md#registry), not implemented yet).
+wraps and Steamwoven keeps the exact value ([registry](../world/rule-modes.md#registry), implemented by ARC-WORLD-033;
+the function oracle of ARC-DEV-007 finds no difference in Original mode).
 
 ## Audio (ARC-RES-052)
 

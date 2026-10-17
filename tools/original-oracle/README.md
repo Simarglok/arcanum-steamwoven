@@ -32,7 +32,7 @@ python3 -B tools/original-oracle/oracle.py list
 | Function | Name | Model | OriginalExe test |
 | --- | --- | --- | --- |
 | 0x4A68B0 | experience to next level | stat getter stub (level 17, experience 18), threshold-table pointer 0x5F5C94 | `ToNextLevelMatchesTheOriginal` |
-| 0x4A6900 | experience progress | as above, may call 0x4A68B0 | `ProgressMatchesTheOriginalExceptTheXp3Wrap` (XP3 inputs reported) |
+| 0x4A6900 | experience progress | as above, may call 0x4A68B0 | `ProgressMatchesTheOriginal` (Original mode; Steamwoven differs only on XP3 inputs) |
 | 0x4A6980 | level bonus points | two integers, no stubs | `BonusPointsMatchTheOriginal` |
 
 Adding a function: a `FunctionSpec` in `oracle_functions.py` with its model, a test with mutants that writes its receipt,
