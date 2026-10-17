@@ -81,7 +81,7 @@ public static class ExperienceRules
     /// <c>1000 − 1000 × remaining / step</c>, truncated; 0 at or above the maximum; <see cref="ProgressFallback"/> for level 0
     /// or when the next level is already reached.
     /// </summary>
-    [OriginalFunction(0x4A6900, OriginalFunctionScope.Full)]
+    [OriginalFunction(0x4A6900, OriginalFunctionScope.Partial)]
     public static int Progress(ExperienceTable table, int level, int experience)
     {
         ArgumentNullException.ThrowIfNull(table);

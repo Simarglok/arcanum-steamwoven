@@ -71,6 +71,16 @@ public sealed partial class FunctionRegistryTests
         var markedAddresses = marked.Select(m => m.Address).ToHashSet();
         foreach (var row in rows.Values.Where(r => r.Implemented))
             Assert.IsTrue(markedAddresses.Contains(row.Address), $"{row.Key} is {row.Status} but no method carries OriginalFunction(0x{row.Key})");
+        // The reflection scan covers the assemblies this project references; an attribute anywhere else in the tracked C#
+        // sources (Presentation, Input, the viewer, tools) would escape it, so the sources are read too.
+        foreach (var file in TrackedFiles(Root(), ["src", "tools", "experiments"]).Where(f => f.EndsWith(".cs", StringComparison.Ordinal)))
+        {
+            var path = Path.Combine(Root(), file);
+            if (!File.Exists(path) || file.EndsWith("OriginalFunctionAttribute.cs", StringComparison.Ordinal)) continue;
+            foreach (Match match in SourceMark().Matches(File.ReadAllText(path)))
+                Assert.IsTrue(markedAddresses.Contains(Convert.ToUInt32(match.Groups[1].Value, 16)),
+                    $"{file} marks 0x{match.Groups[1].Value} in an assembly the registry test does not load; add the assembly to {nameof(Implementations)}");
+        }
     }
 
     [TestMethod]
@@ -87,7 +97,7 @@ public sealed partial class FunctionRegistryTests
         foreach (var (profile, name) in switches)
         {
             Assert.IsTrue(registry.TryGetValue((profile, name), out var ledger), $"{profile}.{name} has no row in the rule-mode registry");
-            Assert.IsTrue(ledger.Length > 0, $"{profile}.{name} has no ledger ID in the rule-mode registry");
+            Assert.IsTrue(LedgerId().IsMatch(ledger), $"{profile}.{name} has no ledger ID in the rule-mode registry ('{ledger}')");
         }
         foreach (var key in registry.Keys)
             Assert.IsTrue(switches.Contains(key), $"the rule-mode registry lists {key.Item1}.{key.Item2}, which the code does not have");
@@ -139,12 +149,13 @@ public sealed partial class FunctionRegistryTests
             TestContext.WriteLine($"{area}: {count} lines (baseline {baseline[area]})");
         var above = counts.Where(p => p.Value > baseline[p.Key]).Select(p => $"{p.Key} {p.Value} > {baseline[p.Key]}").ToList();
         Assert.AreEqual(0, above.Count, "more lines name the reconstruction than the baseline allows (new work cites the executable): " + string.Join(", ", above));
+        // A ratchet: lines removed are not credit for later additions, so the baseline drops in the same change.
         var below = counts.Where(p => p.Value < baseline[p.Key]).Select(p => $"{p.Key} {p.Value}").ToList();
-        if (below.Count > 0) TestContext.WriteLine("below the baseline; lower docs/verification/ce-references.csv to: " + string.Join(", ", below));
+        Assert.AreEqual(0, below.Count, "fewer lines name the reconstruction than the baseline; lower docs/verification/ce-references.csv to: " + string.Join(", ", below));
     }
 
     /// <summary>Per area, the lines of tracked text files that name the reconstruction: its repository name, its pinned commit,
-    /// or the word CE.</summary>
+    /// the word CE (also as an identifier prefix such as <c>CE_</c>) or a Markdown reference label <c>[ce]</c>.</summary>
     internal static Dictionary<string, int> CountReconstructionLines(string root)
     {
         string[] areas = ["AGENTS.md", "CLAUDE.md", "docs", "src", "tests", "tools"];
@@ -152,7 +163,9 @@ public sealed partial class FunctionRegistryTests
         foreach (var file in TrackedFiles(root, areas))
         {
             if (file.EndsWith(".lock.json", StringComparison.Ordinal) || file.EndsWith(".lock", StringComparison.Ordinal)) continue;
-            var bytes = File.ReadAllBytes(Path.Combine(root, file));
+            var path = Path.Combine(root, file);
+            if (!File.Exists(path)) continue; // deleted in the working tree, not yet in the index
+            var bytes = File.ReadAllBytes(path);
             if (bytes.AsSpan(0, Math.Min(bytes.Length, 8192)).IndexOf((byte)0) >= 0) continue;
             var area = file.Contains('/') ? file[..file.IndexOf('/')] : file;
             counts[area] += Encoding.UTF8.GetString(bytes).Split('\n').Count(line => Reconstruction().IsMatch(line));
@@ -240,6 +253,13 @@ public sealed partial class FunctionRegistryTests
     [GeneratedRegex("^F[0-4]$")]
     private static partial Regex Level();
 
-    [GeneratedRegex(@"(?i:arcanum-ce)|(?i:a7ff41b)|\bCE\b")]
+    [GeneratedRegex(@"(?i:arcanum-ce)|(?i:a7ff41b)|(?<![A-Za-z0-9_])CE(?![A-Za-z0-9])|(?i:\[ce\])")]
     private static partial Regex Reconstruction();
+
+    [GeneratedRegex(@"\[\s*OriginalFunction\s*\(\s*0x([0-9A-Fa-f]+)")]
+    private static partial Regex SourceMark();
+
+    // A ledger ID names a row: letters and a number (A2, OQ2, DF1, reputation A2, X3, tile).
+    [GeneratedRegex(@"[A-Za-z]+\d")]
+    private static partial Regex LedgerId();
 }

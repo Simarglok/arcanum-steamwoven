@@ -167,6 +167,7 @@ class LauncherSyncTests(unittest.TestCase):
         sha = launch.ORIGINAL_EXE_SHA256
         self.assertEqual(sha, oracle_pe.PINNED_EXE_SHA256)
         self.assertIn(f'ExeSha256 = "{sha}";', tests)
+        self.assertIn(f'ExeSha256 = "{sha}";', (REPO / "tests/Arcanum.Session.Tests/Verification/FunctionRegistryTests.cs").read_text())
         self.assertIn(f"`{sha}`", (REPO / "docs/research/original-executable-check.md").read_text())
         project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
         for function in launch.ORACLE_FUNCTIONS:

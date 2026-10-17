@@ -162,7 +162,7 @@ public sealed class ExperienceOriginalExeTests
             ["configuration"] = MethodIlHash.Configuration(method),
         };
         var path = Path.Combine(folder, file.Key + ".json");
-        File.WriteAllText(path, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }) + "\n");
+        File.WriteAllText(path, JsonSerializer.Serialize(receipt, new JsonSerializerOptions { WriteIndented = true }).ReplaceLineEndings("\n") + "\n");
         TestContext.WriteLine($"  receipt {path}");
     }
 
