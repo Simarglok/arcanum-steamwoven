@@ -6,11 +6,13 @@ namespace Arcanum.Session;
 
 /// <summary>
 /// Stored ranges of the hero's non-stat fields, as the source's stat tables bound them (pinned CE <c>stat.c</c>
-/// <c>stat_min_values</c>/<c>stat_max_values</c>: level 0..51, alignment −1000..1000, unspent points 0..56).
+/// <c>stat_min_values</c>/<c>stat_max_values</c>: level 0..51, experience 0..2,000,000,000, alignment −1000..1000, unspent
+/// points 0..56).
 /// </summary>
 public static class SessionHeroLimits
 {
     public const int MinLevel = 0, MaxLevel = 51;
+    public const int MinExperience = 0, MaxExperience = ExperienceRules.MaxExperience;
     public const int MinAlignment = -1000, MaxAlignment = 1000;
     public const int MinUnspentPoints = 0, MaxUnspentPoints = 56;
 
@@ -37,23 +39,25 @@ public sealed record SessionHeroKitItem(SessionItemKind Kind);
 /// the stored base values in <see cref="SessionHeroLimits.StoredStats"/> order; <see cref="RaceEffect"/> and
 /// <see cref="GenderEffect"/> are the innate effects already reduced to the stats the character owner models (null: no
 /// modelled change). <see cref="Kit"/> enters the PC's list in order, before any item the PC takes from the world.
+/// <see cref="Experience"/> (ARC-WORLD-030) is the stored experience; a pre-made hero has none.
 /// </summary>
 public sealed record SessionHeroDefinition(int Prototype, CharacterRace Race, CharacterGender Gender, IReadOnlyList<int> Stats,
     int Level, int UnspentPoints, int Alignment, StatEffectDefinition? RaceEffect, StatEffectDefinition? GenderEffect, int Gold,
-    IReadOnlyList<SessionHeroKitItem> Kit);
+    IReadOnlyList<SessionHeroKitItem> Kit, int Experience = 0);
 
 /// <summary>
 /// Saved hero state: prototype, race, gender, stored stats in <see cref="SessionHeroLimits.StoredStats"/> order, level,
-/// unspent points, alignment and the applied innate effects with their modifiers (race first, then gender; an innate
+/// experience (ARC-WORLD-030), unspent points, alignment and the applied innate effects with their modifiers (race first, then gender; an innate
 /// effect without a modelled change is not listed). Gold and the kit items live in <see cref="SessionInventoryState"/>.
 /// </summary>
 public sealed class SessionHeroState
 {
     internal SessionHeroState(int prototype, CharacterRace race, CharacterGender gender, int[] stats, int level, int unspentPoints,
-        int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect)
+        int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience = 0)
     {
         Prototype = prototype; Race = race; Gender = gender; Stats = Array.AsReadOnly(stats); Level = level;
         UnspentPoints = unspentPoints; Alignment = alignment; RaceEffect = raceEffect; GenderEffect = genderEffect;
+        Experience = experience;
     }
 
     public int Prototype { get; }
@@ -61,10 +65,16 @@ public sealed class SessionHeroState
     public CharacterGender Gender { get; }
     public IReadOnlyList<int> Stats { get; }
     public int Level { get; }
+    /// <summary>The stored experience (ARC-WORLD-030).</summary>
+    public int Experience { get; }
     public int UnspentPoints { get; }
     public int Alignment { get; }
     public StatEffectDefinition? RaceEffect { get; }
     public StatEffectDefinition? GenderEffect { get; }
+
+    /// <summary>The same hero with a new level, experience and unspent points (an experience award).</summary>
+    internal SessionHeroState WithExperience(int level, int experience, int unspentPoints) =>
+        new(Prototype, Race, Gender, [.. Stats], level, unspentPoints, Alignment, RaceEffect, GenderEffect, experience);
 }
 
 /// <summary>The hero domain of one owner: its saved fields and the character owner built from them.</summary>
@@ -80,7 +90,8 @@ internal sealed class HeroDomain
         Stats = stats;
     }
 
-    internal SessionHeroState State { get; }
+    /// <summary>Replaced by an experience award (ARC-WORLD-030); every other field stays.</summary>
+    internal SessionHeroState State { get; set; }
     internal CharacterStatsOwner Stats { get; }
 
     internal static string KitEntity(int index) => KitPrefix + (index + 1).ToString(System.Globalization.CultureInfo.InvariantCulture);
@@ -91,13 +102,14 @@ internal sealed class HeroDomain
     /// holds only this hero's race and gender effects; the session never calls its race or gender setters.
     /// </summary>
     internal static HeroDomain? Build(int prototype, CharacterRace race, CharacterGender gender, IReadOnlyList<int>? stats,
-        int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect)
+        int level, int unspentPoints, int alignment, StatEffectDefinition? raceEffect, StatEffectDefinition? genderEffect, int experience)
     {
         // Checked on the copy, so a list whose count and contents disagree cannot pass.
         var values = stats?.ToArray();
         if (prototype < 1 || values is null || values.Length != SessionHeroLimits.StoredStats.Length) return null;
         if (level is < SessionHeroLimits.MinLevel or > SessionHeroLimits.MaxLevel ||
             unspentPoints is < SessionHeroLimits.MinUnspentPoints or > SessionHeroLimits.MaxUnspentPoints ||
+            experience is < SessionHeroLimits.MinExperience or > SessionHeroLimits.MaxExperience ||
             alignment is < SessionHeroLimits.MinAlignment or > SessionHeroLimits.MaxAlignment) return null;
         var races = raceEffect is null ? ImmutableDictionary<CharacterRace, StatEffectDefinition>.Empty
             : ImmutableDictionary<CharacterRace, StatEffectDefinition>.Empty.Add(race, raceEffect);
@@ -107,7 +119,7 @@ internal sealed class HeroDomain
         if (created.Owner is not { } owner) return null;
         for (var index = 0; index < values.Length; index++)
             if (owner.SetBase(SessionHeroLimits.StoredStats[index], values[index]).Disposition == CharacterStatsDisposition.Rejected) return null;
-        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect), owner);
+        return new(new(prototype, race, gender, values, level, unspentPoints, alignment, raceEffect, genderEffect, experience), owner);
     }
 
     /// <summary>The DLG reply-eligibility facts of this hero (see <see cref="GameSessionOwner.QueryHeroDialogFacts"/>).</summary>

@@ -16,8 +16,9 @@ namespace Arcanum.Session;
 /// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
 /// loot, negative dialog IN) over host-attached T0 map inventories, the hero's worn items (ARC-WORLD-028), the seeded gameplay randomness (labelled rolls) and the
 /// life of the hero and the NPCs (hit points, fatigue, poison, injuries, knockout, death) with the game event queue of
-/// their timers (ARC-WORLD-024), the NPCs' reaction memory toward the PC (ARC-WORLD-026), and the active rule mode (Steamwoven or Original, ARC-WORLD-023), which is a setting
-/// and not saved.
+/// their timers (ARC-WORLD-024), the NPCs' reaction memory toward the PC (ARC-WORLD-026), the hero's experience and the NPCs'
+/// experience worth and pool (ARC-WORLD-030), and the active rule mode (Steamwoven or Original, ARC-WORLD-023) and game
+/// difficulty, which are settings and not saved.
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
@@ -33,6 +34,7 @@ public sealed partial class GameSessionOwner : IDisposable
     private readonly InventoryDomain _inventory;
     private readonly EquipmentDomain _equipment;
     private readonly EffectDomain _effects;
+    private readonly ExperienceDomain _experience;
     private readonly HeroDomain? _hero;
     private readonly LifeDomain _life;
     private readonly ReactionDomain _reactions;
@@ -50,17 +52,20 @@ public sealed partial class GameSessionOwner : IDisposable
     private ActorPlacement _actor;
     private SessionLightingState? _lighting;
     private GameRules _rules = GameRules.Steamwoven;
+    private GameDifficulty _difficulty = GameDifficulty.Normal;
     private long _revision;
     private int _totalChanges;
     private bool _disposed;
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects, SeededRandom random, LifeDomain life,
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, EquipmentDomain equipment, EffectDomain effects,
+        ExperienceDomain experience, SeededRandom random, LifeDomain life,
         ReactionDomain reactions, CombatDomain combat, SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _effects = effects; _random = random; _life = life; _reactions = reactions;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _equipment = equipment; _effects = effects;
+        _experience = experience; _random = random; _life = life; _reactions = reactions;
         _combat = combat;
         _lighting = lighting;
         _events = events;
@@ -77,7 +82,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </summary>
     public static GameSessionCreationResult Create(GameSessionDescriptor? descriptor)
     {
-        if (descriptor?.Flags is null || !Enum.IsDefined(descriptor.Rules)) return Rejected(GameSessionFailure.InvalidDescriptor);
+        if (descriptor?.Flags is null || !Enum.IsDefined(descriptor.Rules) || !Enum.IsDefined(descriptor.Difficulty))
+            return Rejected(GameSessionFailure.InvalidDescriptor);
         if (!SessionValidation.Actor(descriptor.Actor)) return Rejected(GameSessionFailure.InvalidActor);
         var limits = descriptor.Limits ?? new GameSessionLimits();
         HeroDomain? hero = null;
@@ -85,7 +91,7 @@ public sealed partial class GameSessionOwner : IDisposable
         if (descriptor.Hero is { } definition)
         {
             hero = HeroDomain.Build(definition.Prototype, definition.Race, definition.Gender, definition.Stats, definition.Level,
-                definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect);
+                definition.UnspentPoints, definition.Alignment, definition.RaceEffect, definition.GenderEffect, definition.Experience);
             var kit = definition.Kit?.ToArray();
             if (hero is null || definition.Gold < 0 || kit is null || kit.Length > limits.MaxPcItems)
                 return Rejected(GameSessionFailure.InvalidHero);
@@ -108,7 +114,9 @@ public sealed partial class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(), new(), new(descriptor.RandomSeed), life, new(), new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
+            new(), new(), new(descriptor.Experience), new(descriptor.RandomSeed), life, new(), new(), null, sink,
+            new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits))
+        { _rules = GameRules.For(descriptor.Rules), _difficulty = descriptor.Difficulty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -119,7 +127,8 @@ public sealed partial class GameSessionOwner : IDisposable
     /// </summary>
     public static GameSessionCreationResult Restore(GameSessionSnapshot? snapshot, GameSessionRestoreOptions? options)
     {
-        if (options is null || !Enum.IsDefined(options.Rules)) return Rejected(GameSessionFailure.InvalidDescriptor);
+        if (options is null || !Enum.IsDefined(options.Rules) || !Enum.IsDefined(options.Difficulty))
+            return Rejected(GameSessionFailure.InvalidDescriptor);
         if (snapshot is null) return Rejected(GameSessionFailure.InvalidSnapshot);
         if (snapshot.SchemaVersion != GameSessionSnapshot.CurrentSchemaVersion) return Rejected(GameSessionFailure.UnsupportedSchema);
         if (snapshot.Identity.World != options.ExpectedIdentity.World) return Rejected(GameSessionFailure.WrongWorld);
@@ -144,6 +153,8 @@ public sealed partial class GameSessionOwner : IDisposable
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportEffects(snapshot.Effects, hero, life, out var effects);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportExperience(snapshot.Experience, options.Experience, limits, out var experience);
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportReactions(snapshot.Reactions, limits, out var reactions);
         if (failure != GameSessionFailure.None) return Rejected(failure);
@@ -174,8 +185,9 @@ public sealed partial class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, equipment, effects, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat, snapshot.Lighting, sink, events!)
-        { _rules = GameRules.For(options.Rules) };
+            hero, inventory, equipment, effects, experience, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, combat,
+            snapshot.Lighting, sink, events!)
+        { _rules = GameRules.For(options.Rules), _difficulty = options.Difficulty };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -399,12 +411,21 @@ public sealed partial class GameSessionOwner : IDisposable
     /// not above the current state change nothing. Otherwise a quest whose shared state is still Accepted takes
     /// the request (Completed/OtherCompleted complete it for everyone, Botched botches it); once the shared state
     /// left Accepted, the request becomes OtherCompleted (shared Completed) or Botched. Botched keeps the stored
-    /// state and marks it. The change is stamped with the current session game time. Experience, alignment and
-    /// reaction effects of the source belong to their own owners and are not applied here.
+    /// state and marks it. The change is stamped with the current session game time. A Completed request that passes these
+    /// checks first gives the hero the quest's experience (ARC-WORLD-030, as <c>quest_state_set</c> does; see
+    /// <see cref="AwardQuestExperience"/>) when the session has experience data and a hero, in the same revision. Alignment
+    /// and reaction effects of the source belong to their own owners and are not applied here.
     /// </summary>
-    public GameSessionMutationResult SetQuestState(GameSessionVersion expected, int quest, SessionQuestState requested)
+    public GameSessionMutationResult SetQuestState(GameSessionVersion expected, int quest, SessionQuestState requested) =>
+        SetQuestState(expected, quest, requested, out _);
+
+    /// <summary><see cref="SetQuestState(GameSessionVersion, int, SessionQuestState)"/>, also returning the experience the
+    /// completion gave (null when it gave none or the request changed nothing).</summary>
+    public GameSessionMutationResult SetQuestState(GameSessionVersion expected, int quest, SessionQuestState requested,
+        out SessionExperienceAward? experience)
     {
         ThrowIfDisposed();
+        experience = null;
         if (!SessionStoryLimits.IsQuest(quest)) return Reject(GameSessionFailure.InvalidQuest);
         if (!Enum.IsDefined(requested)) return Reject(GameSessionFailure.InvalidQuestState);
         if (!IsCurrent(expected)) return Reject(GameSessionFailure.StaleVersion);
@@ -425,10 +446,18 @@ public sealed partial class GameSessionOwner : IDisposable
         var next = state == SessionQuestState.Botched
             ? current with { Botched = true, TimestampMs = timestamp }
             : new SessionQuest(quest, state, false, timestamp);
+        // The source gives the experience for the request, before the shared state can turn it into OtherCompleted.
+        var award = requested == SessionQuestState.Completed && _hero is not null && _experience.Rules is { } rules
+            ? Give(rules.QuestExperience(rules.QuestLevel(quest))) : null;
 
         // All refusals precede the commit.
         _story.Quests[quest] = next;
         if (shared != SessionQuestState.Accepted) _story.GlobalQuests[quest] = shared;
+        if (award is not null)
+        {
+            _hero!.State = award.Hero;
+            experience = award.Award;
+        }
         return Changed();
     }
 
@@ -1075,7 +1104,7 @@ public sealed partial class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
+            _inventory.Capture(), _equipment.Capture(), _effects.Capture(), _experience.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), _combat.Round?.Capture(), CaptureEvents(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>
@@ -1236,7 +1265,7 @@ public sealed partial class GameSessionOwner : IDisposable
         hero = null;
         if (saved is null) return GameSessionFailure.None;
         hero = HeroDomain.Build(saved.Prototype, saved.Race, saved.Gender, saved.Stats, saved.Level, saved.UnspentPoints, saved.Alignment,
-            saved.RaceEffect, saved.GenderEffect);
+            saved.RaceEffect, saved.GenderEffect, saved.Experience);
         return hero is null ? GameSessionFailure.InvalidHero : GameSessionFailure.None;
     }
 
