@@ -150,7 +150,8 @@ public static class AreaStartingHero
         return value < OriginalGlobalFlags.Count ? value : null;
     }
 
-    private static MesFile? Table(ContentStack stack, string path, ContentLoadPhase phase, bool required, out string? detail)
+    /// <summary>One rule table from the candidate of its load phase; a table only another phase's sources hold is "NotInPhase".</summary>
+    internal static MesFile? Table(ContentStack stack, string path, ContentLoadPhase phase, bool required, out string? detail)
     {
         detail = null;
         var resolution = stack.Resolve(path);

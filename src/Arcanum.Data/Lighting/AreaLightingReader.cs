@@ -33,10 +33,19 @@ public static class AreaLightingReader
         return Read(new ArchiveFiles(module), snapshot, token);
     }
 
-    /// <summary>ARC-DATA-027: every file through <paramref name="stack"/> in the phase the original reads it.</summary>
+    /// <summary>ARC-DATA-027: every file through <paramref name="stack"/> in the phase the original reads it. The stack's
+    /// module archive must be the one the snapshot was built from: its length is checked against the snapshot's module
+    /// identity (<see cref="LightingFailure.SectorIdentityMismatch"/> otherwise), and each sector is bound by member identity
+    /// and payload digest; the rule files are the stack's.</summary>
     public static AreaLightingReadResult Read(ContentStack stack, AreaSnapshot snapshot, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(snapshot);
+        var module = stack.Plan.SearchOrder.SingleOrDefault(source => source.Role == ContentSourceRole.ModuleArchive);
+        var identity = snapshot.Inputs.Where(input => input.Key.Role == AreaSourceRole.Module).Take(2).ToArray();
+        long? length = null;
+        try { if (module is not null) length = new FileInfo(module.Path).Length; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) { return new(LightingFailure.ReadFailed, null); }
+        if (identity.Length == 1 && length != identity[0].Length) return new(LightingFailure.SectorIdentityMismatch, null);
         return Read(new StackFiles(stack), snapshot, token);
     }
 
@@ -249,12 +258,15 @@ public static class AreaLightingReader
         public LightingFailure Sector(AreaSectorRecord sector, AreaEntryIdentity identity, string mapPrefix, out byte[] bytes)
         {
             bytes = Array.Empty<byte>();
+            // Whole maps name their sectors canonically (WorldCatalog), so the sector's path is the map directory and its id.
             var winner = stack.Resolve(mapPrefix + sector.Key.Packed.ToString(CultureInfo.InvariantCulture) + ".sec").Winner;
-            // A sector the stack resolves elsewhere is one the map directory does not hold under that name.
-            if (winner is null) return LightingFailure.MapDirectoryMismatch;
-            if (winner.Source.Role != ContentSourceRole.ModuleArchive || winner.Entry is not { } entry || !Matches(entry, identity))
-                return LightingFailure.SectorIdentityMismatch;
-            return ReadCandidate(winner, out bytes);
+            if (winner?.Entry is { } entry && winner.Source.Role == ContentSourceRole.ModuleArchive && Matches(entry, identity))
+                return ReadCandidate(winner, out bytes);
+            // As the module-only read: a sector whose member is not under this map directory is a directory mismatch (the
+            // map default would come from another map); one overridden by another source, or a changed member, is not
+            // the sector the snapshot read.
+            return winner is null || (winner.Entry is { } other && LightingMes.Hash(other.RawNameBytes.ToArray()) != identity.NameSha256)
+                ? LightingFailure.MapDirectoryMismatch : LightingFailure.SectorIdentityMismatch;
         }
 
         private LightingFailure ReadCandidate(ContentCandidate candidate, out byte[] bytes)

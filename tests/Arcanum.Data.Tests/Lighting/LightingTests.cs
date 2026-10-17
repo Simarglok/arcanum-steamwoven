@@ -323,6 +323,13 @@ public sealed class LightingTests
         Assert.AreEqual(LightingFailure.SectorIdentityMismatch, ReadStack(fixture, [($"modules/Mod/maps/test-map/{CoreB}.sec", SectorBytes(5, 0xAA0003))]).Failure);
         Assert.AreEqual(LightingFailure.MapDirectoryMismatch, ReadStack(Build(new() { ["rules/maplist.mes"] = Encoding.ASCII.GetBytes("{1}{Other, 1, 2}") },
             extra: [("maps/Other/mapinfo.txt", Encoding.ASCII.GetBytes("LightScheme:5"))])).Failure);
+        // The same with the other directory holding a sector of the same id: still a directory mismatch, as the module-only read.
+        var other = Build(new() { ["rules/maplist.mes"] = Encoding.ASCII.GetBytes("{1}{Other, 1, 2}") },
+            extra: [("maps/Other/mapinfo.txt", Encoding.ASCII.GetBytes("LightScheme:5")), ($"maps/Other/{CoreA}.sec", SectorBytes(0, 0xAA0003)), ($"maps/Other/{CoreB}.sec", SectorBytes(0, 0xAA0003))]);
+        Assert.AreEqual((LightingFailure.MapDirectoryMismatch, LightingFailure.MapDirectoryMismatch), (Read(other).Failure, ReadStack(other).Failure));
+        // A file over the 1 MiB rule cap, and a stack whose module archive is not the snapshot's.
+        Assert.AreEqual(LightingFailure.LimitExceeded, ReadStack(fixture, [("modules/Mod/maps/test-map/mapinfo.txt", new byte[(1 << 20) + 1])]).Failure);
+        Assert.AreEqual(LightingFailure.SectorIdentityMismatch, ReadStack(fixture with { Module = Build(extra: [("rules/extra.mes", [1])]).Module }).Failure);
     }
 
     // Selected original module (opt-in): numeric identities from the ARC-RES-018/RES-020 research

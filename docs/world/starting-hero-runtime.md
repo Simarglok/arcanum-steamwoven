@@ -159,7 +159,7 @@ an invalid flag message) and fail the viewer's load. Each table comes from the s
 it in (ARC-DATA-027, exe-checked, [ledger](../research/original-verification-ledger.md#load-phases-arc-data-027)):
 `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes`, `mes\MainMenu.mes`, `rules\xp_level.mes` and
 `rules\xp_quest.mes` at game start, so from the first base source (a module copy is never read; a table only a module
-holds is absent); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
+holds is absent, detail `<path> NotInPhase`); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
 game-start tables, so the installed heroes read unchanged.
 
 **Pre-made hero flag** (S, and checked in the original executable): picking a hero, `mainmenu_ui_pregen_char_execute`
