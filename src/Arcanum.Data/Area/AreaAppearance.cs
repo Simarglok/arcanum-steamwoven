@@ -2,6 +2,7 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using Arcanum.Data.Objects;
+using Arcanum.Data.Terrain;
 
 namespace Arcanum.Data.Area;
 
@@ -66,6 +67,12 @@ public sealed partial class AreaDataOwner
             path = "art/item/" + Mapped(maps, AreaMappingRole.ItemGround, key); source = MappingSource(AreaMappingRole.ItemGround);
             lookup = aid & ~0x30U;
         }
+        else if (cls is 2 or 12 or 13 && OriginalArtNames)
+        {
+            // The original's critter names (N1, N2): any animation, the weapon/shield rules and
+            // the missing-art repair. Frame, rotation and palette select inside the file.
+            path = OriginalCritterPath(cls, aid, maps, token);
+        }
         else if (cls is 2 or 12 or 13)
         {
             var animation = (int)((aid >> 6) & 31); var weapon = (int)(aid & 15); var shield = (int)((aid >> 19) & 1);
@@ -129,9 +136,11 @@ public sealed partial class AreaDataOwner
             // variation digit; MakeVisual then requires a single-rotation ART for group 0.
             // Rotation and the flip/palette bits stay in the raw selector; the renderer applies them.
             // Flag bits other than the flip bit (bits 1-3) and bit 6 are not admitted.
-            if ((aid & 0x480) != 0 || (aid & 0x4E) != 0) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            // A whole map with the original's ART rules also names damaged walls (bits 0x400/0x80, N6).
+            if ((aid & 0x4E) != 0 || ((aid & 0x480) != 0 && !OriginalArtNames)) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
             var number = (int)((aid >> 20) & 255); var rotation = (int)((aid >> 11) & 7); var piece = (int)((aid >> 14) & 63); var variation = (int)((aid >> 8) & 3);
             if (piece >= WallPieces.Length) throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
+            var (damageLetter, namedPiece) = WallDamage(aid, rotation, piece);
             // Structure rows carry option words such as "/nowindows"; only the first two
             // name tokens are read, so the row is not passed through the single-name check.
             // The source indexes rows by position from key 0 up to key 1000; admit only a table
@@ -146,12 +155,22 @@ public sealed partial class AreaDataOwner
             if (side.Length < 3) throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping);
             var names = maps[AreaMappingRole.WallName].Values.Where(v => v.Length >= 3 && string.Equals(v[..3], side[..3], StringComparison.OrdinalIgnoreCase)).ToArray();
             if (names.Length != 1) throw Fail(names.Length == 0 ? AreaErrorCode.MissingSource : AreaErrorCode.AmbiguousSource, AreaStage.Mapping);
-            path = "art/wall/" + Safe(names[0][..3]) + WallPieces[piece] + "u" + (char)('0' + variation) + ".art";
+            path = "art/wall/" + Safe(names[0][..3]) + WallPieces[namedPiece] + damageLetter + (char)('0' + variation) + ".art";
             source = MappingSource(AreaMappingRole.WallStructure);
             nominal = rotation; group = 0; frame = 0; mirror = (aid & 1) != 0; lookup = aid;
         }
+        else if (cls == 0 && OriginalArtNames && _objectTiles is not null)
+        {
+            // A tile id on an object names the tile's file as a terrain cell does (N7): no
+            // rotation or frame, palette from bits 4-5.
+            lookup = aid & ~63U;
+            try { path = TerrainLoader.TilePath(_objectTiles, lookup).Path; }
+            catch (TerrainException) { throw Fail(AreaErrorCode.MissingSource, AreaStage.Mapping); }
+            source = MappingSource(AreaMappingRole.Tile);
+            nominal = 0; group = 0; frame = 0; mirror = false;
+        }
         else throw Fail(AreaErrorCode.UnsupportedArtClassOrState, AreaStage.Appearance);
-        AreaEntryIdentity entry;
+        AreaEntryIdentity entry; var badArt = false;
         var explicitBindings = _plan.ArtBindings.Where(b => b.RawArt == aid).ToArray();
         if (explicitBindings.Length > 1) throw Fail(AreaErrorCode.AmbiguousSource, AreaStage.Appearance);
         if (explicitBindings.Length == 1)
@@ -159,8 +178,10 @@ public sealed partial class AreaDataOwner
             entry = Unique(explicitBindings[0].Entry.Source, path);
             if (entry != explicitBindings[0].Entry) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
         }
-        else entry = source.HasValue ? Resolve(source.Value, path) : ClosedUnique(path);
-        return new(entry, lookup, nominal, group, frame, palette, mirror);
+        else (entry, badArt) = ResolveOrBadArt(source, path);
+        // Bad art has one rotation and one frame; only frame 0 is defined (N4).
+        if (badArt) { group = 0; frame = 0; }
+        return new(entry, lookup, nominal, group, frame, palette, mirror, badArt ? BadArtPolicy : null);
     }
     /// <summary>A pinned profile reads a resource from the archive its mapping names. A whole-map
     /// plan reads it from whichever resource archive holds it, as the original's file system does
@@ -196,7 +217,7 @@ public sealed partial class AreaDataOwner
     }
 
     private AreaVisualRecord MakeVisual(AreaVisualKey key, uint raw, uint lookup, AreaEntryIdentity entry, int nominal, int group, int frame, int palette, bool mirrored,
-        int ox, int oy, int scale, ObjectWireRecord? record, CancellationToken token)
+        int ox, int oy, int scale, ObjectWireRecord? record, CancellationToken token, string? fallbackPolicy = null)
     {
         token.ThrowIfCancellationRequested();
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
@@ -214,6 +235,7 @@ public sealed partial class AreaDataOwner
         // whatever rotation the object asks for (pinned CE tig art.c, TIG_ART_0x01).
         else if (!_plan.Original && _plan.AllowArtTrailingBytes && bytes.Length >= 4 && (BinaryPrimitives.ReadUInt32LittleEndian(bytes) & 1) == 1 && physical != 0)
             (policy, physical) = ("original-single-group-rotation-v1", 0);
+        if (fallbackPolicy is not null) policy = fallbackPolicy;
         var descriptor = InspectFrame(bytes.AsSpan(0, view), physical, frame, palette);
         _budget.Context = _budget.Context with { Callsite = AreaBudgetCallsite.Pixels };
         _budget.CompleteFrame(checked((long)descriptor.Metadata.Width * descriptor.Metadata.Height * 4), descriptor.Metadata.EncodedPayloadLength);
@@ -303,7 +325,7 @@ public sealed partial class AreaDataOwner
         }
         return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
     }
-    private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror);
+    private sealed record Request(AreaEntryIdentity Entry, uint Lookup, int Nominal, int Group, int Frame, int Palette, bool Mirror, string? Policy = null);
     /// <summary>Doors and windows are drawn only by whole-map plans that bind the portal names.</summary>
     private bool PortalsAdmitted => !_plan.Original && _plan.Selection == AreaSectorSelection.AllSectors && _plan.Mappings.Any(m => m.Role == AreaMappingRole.Portal);
     private bool WallsAdmitted => _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallStructure) && _plan.Mappings.Any(m => m.Role == AreaMappingRole.WallName);

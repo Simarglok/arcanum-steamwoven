@@ -13,6 +13,7 @@ public sealed partial class AreaDataOwner
     private AreaInspection Build(CancellationToken token, AreaOwnership output)
     {
         _budget.BeginPhase(AreaBudgetPhase.I1);
+        _missingMasks = null; _artHolders = null; _objectTiles = null; // per build, charged to it
         using var construction = new AreaOwnership(_budget);
         // Candidate array, survey nodes, BFS/ring sets and bounded diagnostics.
         // The module entry count bounds even a malformed selector population.
@@ -65,6 +66,7 @@ public sealed partial class AreaDataOwner
         {
             tiles = TerrainLoader.TileNames.Parse(mappings[AreaMappingRole.Tile], originalNames: _plan.Selection == AreaSectorSelection.AllSectors && !_plan.Original);
             facades = TerrainLoader.FacadeNames.Parse(mappings[AreaMappingRole.Facade]);
+            _objectTiles = tiles;
         }
         catch (TerrainException) { throw Fail(AreaErrorCode.MalformedRecord, AreaStage.Mapping); }
         var tileSource = MappingSource(AreaMappingRole.Tile); var facadeSource = MappingSource(AreaMappingRole.Facade);
@@ -270,7 +272,7 @@ public sealed partial class AreaDataOwner
                     AdmitVisual(visuals);
                     var request = ObjectRequest(aid, maps, token);
                     output.Allocate(2048);
-                    AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token));
+                    AddVisual(visuals, MakeVisual(vkey, aid, request.Lookup, request.Entry, request.Nominal, request.Group, request.Frame, request.Palette, request.Mirror, ox, oy, scale, record, token, request.Policy));
                 }
                 if (!hiddenOnWholeMap || (flags & 0x3) == 0)
                     foreach (var (slot, bit, size) in new[] { (5, 0x8000U, 7), (6, 0x8000U, 7), (7, 0x10000U, 4) })

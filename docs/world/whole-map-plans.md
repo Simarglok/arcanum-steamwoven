@@ -79,27 +79,51 @@ A whole-map plan also:
   don't-draw, and about a hundred other objects, mostly NPCs, are hidden too),
   so such an object needs no ART; the viewer draws no such body anyway. The
   original still draws a don't-draw object's overlays, so their admission check
-  still applies to it; a destroyed or off object is not checked.
+  still applies to it; a destroyed or off object is not checked;
+- names art as the original does (ARC-DATA-023, rules N1–N7 of the
+  [art gaps study](../research/whole-map-art-gaps.md)) when it reads ART with the
+  original's rules (`AllowArtTrailingBytes`):
+  - critter, monster and unique NPC art (classes 2, 12, 13) in any of the 25
+    animations, with the original's body rules (an elf female drawn as human; plate
+    armour male only, elf as human, halfling as dwarf), the missing-art repair from
+    `art/missing.dat` applied first (each checked animation/weapon pair whose file
+    is marked missing becomes walk, stand, attack or fall down; a stand with no
+    weapon becomes unarmed), then the weapon and shield rules (explode clears
+    armour, shield and weapon and is named `XX`; stunned is unarmed without a
+    shield; stealth walk and conceal fidget drop an unarmed weapon; run to the
+    bloody deaths drop weapon and shield; walk drops the shield). The table is used
+    when its header equals the number of critter, monster and unique NPC ART files
+    in the two resource archives and it holds all 10 + monster + unique NPC masks;
+    otherwise the masks are rebuilt by checking each pair's file, as the original
+    rebuilds a stale table. Animations above 24, critter armour above 8, weapons
+    above 14 and critter bodies above 4 stay refused;
+  - damaged walls (bits `0x400`/`0x80`, swapped at rotations 2, 3, 6, 7): `0x400`
+    names the `L` file (piece 7 as the base piece), `0x80` names `L` for pieces 1–6
+    and `R` otherwise (piece 8 as the base piece);
+  - a tile id on an object names the tile file as a terrain cell does (no rotation
+    or frame, palette from bits 4–5);
+  - a resolved name that neither resource archive holds is drawn from
+    `art/badart.art`, frame 0 and its only rotation, as the original's art cache
+    does; the visual's policy is `original-badart-v1`. A name the mapping cannot
+    build (no list entry) and an ambiguous name stay refused.
 
 ## Result on the installed original
 
 Opt-in `AreaMapPlansRealDataTests` (`DAT_ROOT`): all 80 interiors get a plan,
-open and inspect without an exception; 54 publish a complete snapshot and are
-pinned by the test (a map that starts publishing joins the list). The Crash Site
+open and inspect without an exception; 79 publish a complete snapshot and are
+pinned by the test (a map that starts publishing joins the list): all but K'na Tha
+since ARC-DATA-023 (54 before), and none of them draws bad art. The Crash Site
 cave under the generic plan reaches the pinned profile's counts (4,096 terrain
 cells, 138 statics, 39 mobiles, 194 visuals) without its per-object exceptions.
 
-What stops the other 26 is measured map by map in the
-[whole-map art gaps study](../research/whole-map-art-gaps.md) (ARC-RES-050, census at
-`1ec13f5`, not asserted by tests): 245 object bodies outside K'na Tha and the frame
-budget of K'na Tha. No eye-candy overlay is active at T0 in any interior.
-
-| Cause | Objects | Next |
-| --- | ---: | --- |
-| Concealed monsters (animation 5, art present) | 132 | the original's name rules (ARC-DATA-023) |
-| Unique NPC `dgnuw` and the `AIR` monster standing with no weapon without that file | 111 | the original's missing-art repair (ARC-DATA-023) |
-| A damaged wall; a scenery object with tile art | 2 | damaged wall names, tile-art bodies (ARC-DATA-023) |
-| K'na Tha: encoded-frame budget after 28,091 frame requests (260 distinct art ids among 43,219 objects) | 15,367 + 7 | decode each distinct frame once (ARC-DATA-024) |
+What stopped the other 26 is measured map by map in the
+[whole-map art gaps study](../research/whole-map-art-gaps.md) (ARC-RES-050): 132
+concealed monsters, 111 critters without standing art, a damaged wall and a
+tile-art scenery object, all drawn since ARC-DATA-023, and K'na Tha. K'na Tha still
+stops at the cumulative encoded-frame budget after 28,091 frame requests (15,374
+objects refused; 260 distinct art ids among its 43,219 objects); decoding each
+distinct frame once is ARC-DATA-024. No eye-candy overlay is active at T0 in any
+interior.
 
 Before doors, windows, small items and hidden objects were admitted (ARC-DATA-020)
 19 maps were complete; those added 2,568 objects of the types the owner did not
