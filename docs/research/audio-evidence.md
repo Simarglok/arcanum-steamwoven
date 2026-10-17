@@ -62,8 +62,8 @@ meaning: **Original** (CE agrees, intended or harmless), **CE slip** (CE differs
 follow the original), **Original bug** (CE agrees, unintended; switch candidate).
 
 Evidence level ([F0–F4](original-executable-check.md#evidence-levels-for-a-function-f0f4)): **F2**
-(two independent readings) for every row except SN21 (F1, read once by this task); SN32 is a
-caller list checked in the executable by the reviewer. The readers checked operand widths, signed compares and rounding where the result
+(two independent readings) for every row; SN21 was read by this task and again by the two
+reviewers of ARC-RES-052 and ARC-DATA-040, and SN32 is a caller list the first reviewer checked. The readers checked operand widths, signed compares and rounding where the result
 depends on them (SN4 64-bit signed division and the rounded single-precision distance, SN8 and
 SN13 integer truncation, SN14 the absolute tick difference).
 
@@ -101,7 +101,7 @@ SN13 integer truncation, SN14 the absolute tick difference).
 
 | ID | Function (address) | Original 1.0.7.4 | Verdict |
 | --- | --- | --- | --- |
-| SN21 | speech id (0x4189C0) | `(script number & 0x7FFF) << 16 | (number in the NPC line's condition field & 0xFFFF)`; −1 when either is missing. | Original (read once by this task) |
+| SN21 | speech id (0x4189C0) | `(script number & 0x7FFF) << 16 | (number in the NPC line's condition field & 0xFFFF)`; −1 when either is missing. | Original |
 | SN22 | `dialog_ui_speech_start` (0x5688D0), `dialog_ui_speech_stop` (0x5689B0), `dialog_ui_process_option` (0x567E30) | −1 returns before stopping, so an unvoiced line leaves the previous voice playing. Otherwise the previous voice stops, then `sound\speech\%05d\v%d_%c.mp3` with the **PC's** gender (male `m`, female `f`); a missing female file falls back to male, never the reverse; missing → silence, text unchanged. One voice at a time, not positional. Stopped when the PC picks an option and at shutdown; closing the dialog does not stop it. | Original |
 | SN23 | `sfx_item_sound` (0x4F0BF0) | Base is the item's sound field (`OBJ_F_SOUND_EFFECT`). Use +0, miss +3 (no base: 4010), hit +4 or +5 at random, critical +6, out of ammo +7. Pickup/drop: 5950/5960 + material class (heavy metal counts as light at weight ≤ 2000; gold 5958/5968). Hit without a resolvable base: `7000 + 20 × weapon class + 3 × target class + random(0, 1)`, the target's armour standing in for the target, no weapon = flesh. | Original |
 | SN24 | `sfx_critter_sound` (0x4F0ED0) | Critter sound field + type: 0 critically hit, 1 dying, 2 gruesome dying, 3 fidget, 4 attacking, 5 alerted, 6 agitated (never requested). Footsteps: plate armour art 2900 on any surface; otherwise the tile's sound class (from the tile-name rules) gives dirt 2904, sand 2912, snow 2916, stone 2920, water 2928, wood 2932, chain armour +4 on dirt, stone and wood; then +random(0, 3). Nothing plays while the **local PC** is switched off (world-map travel). | CE slip (CE tests the off flag on the sounding critter) |
@@ -136,7 +136,7 @@ payload or table text is reproduced.
   table; the rest are only reachable by an item, critter or object formula (SN23–SN25), by a
   script id, or not at all.
 - **Schemes**: 60 index entries, 58 with `#`: 26 music, 30 ambient, 2 reserved; "None" (0) and
-  "No Sound" (29) have no `#` and load nothing. 153 list entries, at most 25 in any scheme
+  "No Sound" (29) have no `#` and load nothing. 153 list entries with text (plus 2 empty records inside scheme ranges, which also take a slot), at most 25 in any scheme
   (none reaches the SN12 crash); options used: `/time` 110, `/loop` 85, `/freq` 67, `/vol` 62,
   `/scatter` 32, `/bal` 27; **no `/over` or `/anchor`** entry exists. **20 entries have a
   reversed hour window** (mostly night loops written `19-0`, also `22-0` and `24-4`); under
@@ -231,7 +231,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 
 | Order | Code | Result | Depends on | Scope and done when |
 | --- | --- | --- | --- | --- |
-| 1 | ARC-DATA-040 | Sound catalogue over the content stack | — | `Arcanum.Data.Audio`: SFX resolver (SN1–SN2), scheme catalogue with the original grammar (SN12–SN13, typed refusal past 25), positional profile (SN3), speech candidates (SN21–SN22), combat and fixed music names, sector pair accessor. Real-data test reproduces the census (834 ids, 27 missing files, 58 schemes, 153 entries, 20 reversed windows, every map and sector id a SchemeIndex entry). |
+| 1 | ARC-DATA-040 (done, [contract](../audio/sound-catalog.md)) | Sound catalogue over the content stack | — | `Arcanum.Data.Audio`: SFX resolver (SN1–SN2), scheme catalogue with the original grammar (SN12–SN13, typed refusal past 25), positional profile (SN3), speech candidates (SN21–SN22), combat and fixed music names, sector pair accessor. Real-data test reproduces the census (834 ids, 27 missing files, 58 schemes, 155 entries (153 with text), 20 reversed windows, every map and sector id a SchemeIndex entry). |
 | 2 | ARC-DATA-041 | Every installed sound opens | DATA-040 | WAV PCM and MP3 header admission for the classes of the census, bounded member reads, streamed loose music, typed refusals for anything else. Real-data test admits all 3,410 sound files. |
 | 3 | ARC-UI-040 | Sound in the viewer: backend and volumes | DATA-040, DATA-041 | Audio backend from the lab in the AREA viewer: Effects/Voice/Music buses with the SN8 volumes, preferences file outside saves (0–10, default 5), silent mode without a device; smoke plays interface ids by number. |
 | 4 | ARC-WORLD-040 | Music and ambient state in the session | DATA-040 | Session scheme owner: map default on open, local PC sector change (0/0 skipped), script request, combat start by NPC and end by PC with restore, movie lock; snapshot schema bump; SN18 switch. Headless tests over synthetic schemes. |
