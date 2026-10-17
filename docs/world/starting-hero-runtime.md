@@ -171,8 +171,10 @@ The session is created with that hero (`AreaTransitionCoordinator.CreateSession(
 unchanged (hero and flags are already saved). The conversation host takes its PC facts from the session's hero
 (`QueryHeroDialogFacts()`), also when F8 rebinds it to a loaded session; a session without a hero keeps the given
 profile's facts. The inventory window lists `QueryHeroKit()` before `QueryPcInventory()` with the description number's
-text and shows `QueryGold()`; the HUD's PC count includes the kit. Not done: the hero's own body ART (the actor keeps the
-AREA profile's fixed human body), the PC's name, wielding the kit, and the new-character path.
+text and shows `QueryGold()`; the HUD's PC count includes the kit. Since ARC-UI-007 the load also reads the experience
+tables and the session gets them (`AreaHeroLoad.Experience`; a missing or invalid table refuses the load), and `C` shows
+the hero's [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007). Not done: the hero's own body ART
+(the actor keeps the AREA profile's fixed human body), the PC's name, wielding the kit, and the new-character path.
 
 ## Not implemented
 
