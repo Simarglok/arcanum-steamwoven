@@ -9,7 +9,7 @@ using Godot;
 namespace Arcanum.TerrainViewer;
 
 // ARC-COMBAT-005: the hero's attack in the AREA view, in real time and without AI (no NPC fights back). In combat mode a left
-// click on a living NPC attacks it, as the original's click does (ledger FA1–FA3): Shift makes it the "attempt attack" goal
+// click on a living NPC attacks it, as the original's click does (ledger FA1–FA6): Shift makes it the "attempt attack" goal
 // (here the same attack), a follower of the hero is attacked only with left Alt held, a corpse is looted only with Alt, and
 // holding , . or / aims at the head, an arm or a leg. The hero walks (running, as every object approach) within its weapon's
 // reach first, then plays its bare-handed attack ART at the rate of its Speed and weapon; the frame that shows the action
@@ -22,7 +22,7 @@ public partial class TerrainViewerApp
     private AreaCombatHost? _combatHost;
     private string? _attackNotice;
     private AttackGoal? _attack;
-    // Left Alt as the key events report it (a follower is attacked only with left Alt, FA1).
+    // Left Alt as the key events report it (a follower is attacked only with left Alt, FA2).
     private bool _leftAltHeld;
     // Tests set the held aim key and Shift that a native click would read from the keyboard.
     private HitLocation? _attackAimForSelfTest;
@@ -74,9 +74,16 @@ public partial class TerrainViewerApp
     private bool TryAreaAttack(Vector2 screen, bool alt)
     {
         if (CombatTargetAt(screen) is not { } target) return false;
+        // FA6: a hero that cannot act (stoned, stunned, paralysed, unconscious, dead) does nothing with the click.
+        if (_areaSession!.QueryHeroLife() is not { Status.IsActive: true })
+        {
+            _attackNotice = "the hero cannot act";
+            RefreshAreaStatus();
+            return true;
+        }
         if (target.Dead)
         {
-            // FA2: a corpse in combat mode is looted with Alt and otherwise ignored.
+            // FA3: a corpse in combat mode is looted with Alt and otherwise ignored.
             if (alt) return false;
             _attackNotice = "a corpse in combat mode: Alt+click loots it";
             RefreshAreaStatus();

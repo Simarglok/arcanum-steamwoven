@@ -912,9 +912,24 @@ dead hero is refused with the reason. Without `--hero` R reports that combat mod
 combat mode first (the exit gate never closes here: no NPC has a combat focus yet), and the cave transfer leaves it as the
 original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
 walks, and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
-mode the original's left click attacks a living NPC; that click belongs to the attack task (top-20 item 10), so a click
-still talks and the dialog leaves combat mode. Native smoke with `--hero` (after the run stage):
+mode a left click on a living NPC attacks it (below). Native smoke with `--hero` (after the run stage):
 `ARC-COMBAT-004 native-smoke combat-mode PASS`.
+
+### Hero attack (ARC-COMBAT-005)
+
+In combat mode (R, `--hero`) a left click on a living NPC attacks it, on the exterior, in the cave and in `--area-map`
+([hero attack runtime](../world/hero-attack-runtime.md#viewer-area), ledger
+[FA1–FA10](../research/original-verification-ledger.md#hero-attack-arc-combat-005)): the hero walks (running) within its
+weapon's reach, turns to the target and plays its bare-handed attack ART at the rate of its Speed; the frame that shows the
+action frame resolves the hit through the session, and the attack repeats (auto attack) until the target dies. Shift makes
+it the attempt-attack goal (here the same attack); a follower is attacked only with left Alt held; held `,` `.` `/` aim at the
+head, an arm or a leg; a corpse is looted only with Alt, a plain click on it does nothing. The cursor over a living NPC is the
+closed hand (`attack`, `walk to attack`). The status line names the outcome, damage, the target's hit points, a knockout or
+kill and the experience paid. A killed or unconscious NPC is drawn in the last frame of its dying or fall-down animation,
+read on demand from the archive its body came from; out of combat mode a plain click loots the corpse. The stick, another
+click, a dialog or window, a map change or a hero that cannot act stop the attack. Native smoke with `--hero` (after the
+combat-mode stage, exterior and map mode): `ARC-COMBAT-005 native-smoke attack PASS`, or `NO-TARGET` on a map without a
+living NPC with combat values.
 
 ### Character sheet (ARC-UI-007)
 

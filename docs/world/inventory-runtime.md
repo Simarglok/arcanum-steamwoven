@@ -47,7 +47,7 @@ of the PC's list. `InventoryMutationResult` names the moved item and the insert 
 | Call | Source path (S) | Admitted here |
 | --- | --- | --- |
 | `PickUpItem(item)` | left click → `AG_PICKUP_ITEM` → `item_transfer` of an unparented item: item `SAP_GET`, insert check, `object_pickup`, `item_insert` (item `SAP_INSERT_ITEM`) | an item on the ground of the actor's map |
-| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, `item_remove` (item `SAP_REMOVE_ITEM`, unequip when worn), `item_insert` | an item still listed by an NPC the seed marks dead |
+| `LootItem(holder, item)` | click on a dead critter opens it as a container (target `SAP_USE` checked first); a moved item runs the parented transfer: PC `SAP_TRANSFER`, insert check, `item_remove` (item `SAP_REMOVE_ITEM`, unequip when worn), `item_insert` | an item still listed by an NPC the seed marks dead, or one the session killed (ARC-COMBAT-005, [hero attack](hero-attack-runtime.md)) |
 | `GiveItemToPc(npc, name)` | `DIALOG_ACTION_IN` with a negative value: first item in the NPC's list with that name class, else in its substitute inventory; parented transfer to the PC; dropped at the PC's location when the PC did not get it | the NPC's current list; no match and no substitute is NoChange, as in the source |
 
 Refusals, in order, after input (`InvalidItem`), version (`StaleVersion`) and seed (`InventoryUnavailable`) checks:

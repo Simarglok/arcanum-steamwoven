@@ -8,7 +8,7 @@ public enum BasicCombatSkill { Bow = 0, Dodge = 1, Melee = 2, Throwing = 3, Back
 /// <summary>
 /// The level and training of a basic combat skill (ARC-COMBAT-005; the source's <c>basic_skill_base</c>,
 /// <c>basic_skill_level</c>, <c>max_skill_for_stat_level</c> and <c>basic_skill_training_get</c>, read in CE at
-/// <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c> and checked in the original 1.0.7.4 executable, ledger rows FA4–FA6).
+/// <c>a7ff41b300ef712f0e7d088183a3d08957110cdd</c> and checked in the original 1.0.7.4 executable, ledger rows FA7–FA9).
 /// A stored skill keeps its points in bits 0..5 and its training in bits 6..7. The level is four per point, or 20 for the
 /// melee skill of a monstrous critter (mechanical, monster, animal or undead), then the skill's effect changes, clamped to
 /// 0..20 and capped by the key stat (dexterity for all five). Every function validates its inputs

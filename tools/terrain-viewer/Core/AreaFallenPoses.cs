@@ -29,7 +29,7 @@ public sealed record AreaFallenLoad(AreaFallenStatus Status, AreaFallenFrame? Po
 /// <summary>
 /// ARC-COMBAT-005: the pose a critter ends in when it dies or falls unconscious, read on demand from the archive its standing art
 /// came from. The original sets the dying animation (7 the fall for a death of at most 20 damage or a kill, 17 decapitation for a
-/// head hit, 19 severed leg for a leg hit, 18 otherwise; ledger FA7) or the fall-down animation (7) for a knockdown, plays it and
+/// head hit, 19 severed leg for a leg hit, 18 otherwise; ledger FA10) or the fall-down animation (7) for a knockdown, plays it and
 /// keeps its last frame. A critter's ART name ends in the shield, weapon and animation letters, and an animation from 6 to 19
 /// drops shield and weapon, so the pose's file is the body's name with <c>x</c>, <c>a</c> and the animation letter; a bloody death
 /// without its file falls back to the fall (the original's missing-art repair, ledger MA1). The archive entry the body was drawn
