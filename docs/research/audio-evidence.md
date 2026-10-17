@@ -136,7 +136,7 @@ payload or table text is reproduced.
   table; the rest are only reachable by an item, critter or object formula (SN23–SN25), by a
   script id, or not at all.
 - **Schemes**: 60 index entries, 58 with `#`: 26 music, 30 ambient, 2 reserved; "None" (0) and
-  "No Sound" (29) have no `#` and load nothing. 153 list entries, at most 25 in any scheme
+  "No Sound" (29) have no `#` and load nothing. 153 list entries with text (plus 2 empty records inside scheme ranges, which also take a slot), at most 25 in any scheme
   (none reaches the SN12 crash); options used: `/time` 110, `/loop` 85, `/freq` 67, `/vol` 62,
   `/scatter` 32, `/bal` 27; **no `/over` or `/anchor`** entry exists. **20 entries have a
   reversed hour window** (mostly night loops written `19-0`, also `22-0` and `24-4`); under
@@ -231,7 +231,7 @@ plus the root checks; viewer tasks follow the launcher rule (a new argument upda
 
 | Order | Code | Result | Depends on | Scope and done when |
 | --- | --- | --- | --- | --- |
-| 1 | ARC-DATA-040 | Sound catalogue over the content stack | — | `Arcanum.Data.Audio`: SFX resolver (SN1–SN2), scheme catalogue with the original grammar (SN12–SN13, typed refusal past 25), positional profile (SN3), speech candidates (SN21–SN22), combat and fixed music names, sector pair accessor. Real-data test reproduces the census (834 ids, 27 missing files, 58 schemes, 153 entries, 20 reversed windows, every map and sector id a SchemeIndex entry). |
+| 1 | ARC-DATA-040 (done, [contract](../audio/sound-catalog.md)) | Sound catalogue over the content stack | — | `Arcanum.Data.Audio`: SFX resolver (SN1–SN2), scheme catalogue with the original grammar (SN12–SN13, typed refusal past 25), positional profile (SN3), speech candidates (SN21–SN22), combat and fixed music names, sector pair accessor. Real-data test reproduces the census (834 ids, 27 missing files, 58 schemes, 155 entries (153 with text), 20 reversed windows, every map and sector id a SchemeIndex entry). |
 | 2 | ARC-DATA-041 | Every installed sound opens | DATA-040 | WAV PCM and MP3 header admission for the classes of the census, bounded member reads, streamed loose music, typed refusals for anything else. Real-data test admits all 3,410 sound files. |
 | 3 | ARC-UI-040 | Sound in the viewer: backend and volumes | DATA-040, DATA-041 | Audio backend from the lab in the AREA viewer: Effects/Voice/Music buses with the SN8 volumes, preferences file outside saves (0–10, default 5), silent mode without a device; smoke plays interface ids by number. |
 | 4 | ARC-WORLD-040 | Music and ambient state in the session | DATA-040 | Session scheme owner: map default on open, local PC sector change (0/0 skipped), script request, combat start by NPC and end by PC with restore, movie lock; snapshot schema bump; SN18 switch. Headless tests over synthetic schemes. |
