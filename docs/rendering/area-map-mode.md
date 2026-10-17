@@ -86,7 +86,10 @@ require evictions in the sweep; every per-view budget and the ownership balance
 still hold. Eviction itself is therefore shown only by the exterior sweep. The
 reload's managed-heap bound (half the CPU repository) has an 8 MiB floor in map
 mode, because a small map's repository (the cave's is 1.5 MB) is below the
-heap's ordinary noise; the retired generation must still be collected.
+heap's ordinary noise, and since ARC-RENDER-018 a second floor of 4 % of the heap
+before the reload, because a large map's heap (about 450 MB for the 64-sector
+`tarant sewers-02`) varies by about ±12 MB between runs; the retired generation
+must still be collected.
 
 ## Body blends and wading (ARC-RENDER-018)
 

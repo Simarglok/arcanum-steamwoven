@@ -116,7 +116,15 @@ public partial class TerrainViewerApp
         var reloadMilliseconds = _readyArea.ElapsedMilliseconds;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        var after = (Managed: Managed(), Resident: Resident(), Handles: Handles());
+        // ARC-RENDER-018: the post-GC heap of a large map still varies between frames, so the retained size is the least
+        // of three samples a frame apart; a real retention stays in every sample.
+        var settled = Managed();
+        for (var sample = 0; sample < 2; sample++)
+        {
+            await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+            settled = Math.Min(settled, Managed());
+        }
+        var after = (Managed: settled, Resident: Resident(), Handles: Handles());
         var retiredAlive = old.Result.IsAlive || old.Frames.IsAlive;
         GD.Print($"ARC-RENDER-007 resources reload observed generations={old.Generation}>{firstGeneration}>{secondGeneration} loadMs={old.ElapsedMilliseconds}/{reloadMilliseconds} managed={baseline.Managed}/{after.Managed} resident={baseline.Resident}/{after.Resident} handles={baseline.Handles}/{after.Handles} retiredAlive={retiredAlive}");
         Require(_cache.CreatedCount - _cache.DisposedCount == _cache.Count && _cache.AreaCount <= old.CpuFrames, "RELOAD_GPU_OWNERSHIP");
@@ -128,8 +136,11 @@ public partial class TerrainViewerApp
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         // A small whole map's repository (the cave's is 1.5 MB) is below the heap's ordinary noise, so map mode bounds the
-        // growth by at least 8 MiB; the retired generation itself is proven collected above.
-        Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2 : Math.Max(old.CpuBytes / 2, 8L << 20)), "MANAGED_RETENTION");
+        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, ~450 MB heap, ±12 MB between runs)
+        // by at least 4 % of the heap before the reload (ARC-RENDER-018); the retired generation itself is proven
+        // collected above.
+        Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2
+            : Math.Max(Math.Max(old.CpuBytes / 2, 8L << 20), baseline.Managed / 25)), "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
             MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions,
             ChunksComposed = chunkComposed, ChunkEvictions = chunkEvictions, MaxResidentChunks = maxChunks, MaxResidentChunkBytes = maxChunkBytes, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,
