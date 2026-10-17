@@ -100,6 +100,16 @@ public sealed class AreaStepSnapshot
                     // ARC-WORLD-021: a critter walker jumps a window on a cardinal step (research ARC-RES-047 W1–W3);
                     // a window portal on the same edge still decides through its own rule.
                     case AreaStepEdgeRule.WindowJump: windowJump ??= wall.Key; break;
+                    // ARC-RES-049: a locked portal that only a step leaving a building opens.
+                    case AreaStepEdgeRule.Leaving:
+                        switch (LeavingStepOpens(wall, wall.Cell == cell, request.From))
+                        {
+                            case true: break;
+                            case false when wall.Reason == AreaStepInspector.LockedLeavingOnlyReason: wallBlocker ??= wall.Key; break;
+                            case false: gaps.Add(new(wall.Reason ?? "EDGE_RULE_UNKNOWN", wall.Cell, wall.Key)); break;
+                            case null: gaps.Add(new("PORTAL_LEAVING_TILE_UNRESOLVED", wall.Cell, wall.Key)); break;
+                        }
+                        break;
                 }
             }
         }
@@ -132,6 +142,37 @@ public sealed class AreaStepSnapshot
         new(request, InputIdentity, EvidenceEpoch, coverage, disposition, reason, terrain, objects, gaps, wall, windowJump);
 
     private static AreaStepCell Neighbor(AreaStepCell cell, int direction) => new(cell.X + Deltas[direction].Dx, cell.Y + Deltas[direction].Dy);
+
+    /// <summary>ARC-RES-049, read in the original 1.0.7.4 executable (research verification ledger): a closed locked
+    /// portal opens for the walking player only when both of its open attempts on the step call it leaving a building.
+    /// Each attempt compares the portal's tile P with Q, the tile one step along the portal's raw ART rotation (not the
+    /// edge), and leaves when the first of the pair is indoor and the second is not; it exchanges P and Q when its
+    /// direction is opposite the rotation or next to opposite. The traversal attempt passes the leg's edge direction, so
+    /// it exchanges them exactly when the leg enters P from across; the door or window goal passes the direction from
+    /// the walker's tile to P, which is 5 on P itself, so a portal of raw rotation 0..2 is tested in reverse there and
+    /// the two attempts never agree. Null when a tile is outside the evidence or not tile or facade art.</summary>
+    private bool? LeavingStepOpens(AreaStepWallEdge portal, bool legStartsOnPortal, AreaStepCell walker)
+    {
+        var rotation = portal.RawRotation;
+        if (rotation is < 0 or > 7 || (rotation | 1) != portal.Edge) return null;
+        if (Indoor(Terrain(portal.Cell)) is not { } portalIndoor || Indoor(Terrain(Neighbor(portal.Cell, rotation))) is not { } otherIndoor) return null;
+        bool Leaves(int direction) =>
+            (direction + 4) % 8 == rotation || (direction + 5) % 8 == rotation || (direction + 3) % 8 == rotation
+                ? otherIndoor && !portalIndoor
+                : portalIndoor && !otherIndoor;
+        var traversal = Leaves(legStartsOnPortal ? portal.Edge : (portal.Edge + 4) % 8);
+        // The walker stands on the step's source, the portal's tile or one of its neighbours (every leg touches it).
+        var goal = Leaves(walker == portal.Cell ? 5 : Array.IndexOf(Deltas, (Math.Sign(portal.Cell.X - walker.X), Math.Sign(portal.Cell.Y - walker.Y))));
+        return traversal && goal;
+    }
+
+    /// <summary>The original's tile type: tile art is indoor when bit 8 is clear, facade art when bit 25 is clear.</summary>
+    private static bool? Indoor(AreaStepTerrainEvidence? terrain) => terrain?.RawArt is not { } raw ? null : (raw >> 28) switch
+    {
+        0 => ((raw >> 8) & 1) == 0,
+        11 => ((raw >> 25) & 1) == 0,
+        _ => null,
+    };
 
     private string? Validate(AreaStepRequest r)
     {

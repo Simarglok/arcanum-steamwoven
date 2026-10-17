@@ -231,7 +231,8 @@ public static class AreaStepInspector
                 var (rule, reason) = !wholeMap ? (AreaStepEdgeRule.Legacy, (string?)null)
                     : o.Type == 1 ? PortalEdgeRule(art, Number(o, PortalFlagsSlot), HasUnlockScript(o))
                     : WallPieceRule(piece);
-                edges.Add(new(o.Key, cell, (int)((art >> 11) & 7) | 1, o.Type == 0 && OpeningWallPieces.Contains(piece), rule, reason));
+                edges.Add(new(o.Key, cell, (int)((art >> 11) & 7) | 1, o.Type == 0 && OpeningWallPieces.Contains(piece), rule, reason,
+                    rule == AreaStepEdgeRule.Leaving ? (int)((art >> 11) & 7) : -1));
             }
         }
 
@@ -289,6 +290,7 @@ public static class AreaStepInspector
 
     internal const string WallEdgeReason = "WALL_EDGE_COMPONENT";
     internal const string PortalEdgeReason = "PORTAL_EDGE_COMPONENT";
+    internal const string LockedLeavingOnlyReason = "PORTAL_LOCKED_LEAVING_ONLY";
     private const string WholeMapProfilePrefix = "arc-data-019-";
     private const int PortalFlagsSlot = 36, ScriptsSlot = 31, UnlockScriptSap = 3;
     private static readonly int[] WindowWallPieces = [10, 13, 14, 17, 18, 19];
@@ -308,9 +310,10 @@ public static class AreaStepInspector
     /// magically held blocks; otherwise the portal is locked only when its LOCKED bit is set and it
     /// is not never-locked, and a by-day or by-night bit can unlock it by the hour (Unknown, the
     /// static evidence has no clock). A locked portal needs its key (none is held at T0) unless the
-    /// walker leaves a building, which always-locked disables: always-locked blocks, a plain lock is
-    /// Unknown (leaving is directional). Doors and windows follow the same attempt; a window's wall
-    /// piece then makes the step a jump.</summary>
+    /// walker leaves a building, which always-locked disables: always-locked blocks (or is Unknown by
+    /// the hour); otherwise the step decides (<see cref="AreaStepEdgeRule.Leaving"/>, ARC-RES-049): a
+    /// leaving step passes, any other is blocked by a plain lock and Unknown by an hour lock. Doors and
+    /// windows follow the same attempt; a window's wall piece then makes the step a jump.</summary>
     internal static (AreaStepEdgeRule Rule, string Reason) PortalEdgeRule(uint art, long? portalFlags, bool unlockScript)
     {
         var frame = (art >> 14) & 31;
@@ -321,9 +324,10 @@ public static class AreaStepInspector
         if (unlockScript) return (AreaStepEdgeRule.Unknown, "PORTAL_UNLOCK_SCRIPT");
         if ((flags & 0x6) != 0) return (AreaStepEdgeRule.Block, "PORTAL_JAMMED_OR_HELD");
         if ((flags & 0x8) != 0 || (flags & 0x1) == 0) return (AreaStepEdgeRule.Pass, "PORTAL_UNLOCKED_OPENS_ON_WALK");
-        if ((flags & 0x60) != 0) return (AreaStepEdgeRule.Unknown, "PORTAL_LOCK_DEPENDS_ON_HOUR");
-        if ((flags & 0x10) != 0) return (AreaStepEdgeRule.Block, "PORTAL_ALWAYS_LOCKED_NO_KEY");
-        return (AreaStepEdgeRule.Unknown, "PORTAL_LOCKED_LEAVING_ONLY");
+        var alwaysLocked = (flags & 0x10) != 0;
+        if ((flags & 0x60) != 0) return (alwaysLocked ? AreaStepEdgeRule.Unknown : AreaStepEdgeRule.Leaving, "PORTAL_LOCK_DEPENDS_ON_HOUR");
+        if (alwaysLocked) return (AreaStepEdgeRule.Block, "PORTAL_ALWAYS_LOCKED_NO_KEY");
+        return (AreaStepEdgeRule.Leaving, LockedLeavingOnlyReason);
     }
 
     private static AreaStepObjectEvaluation PortalEvaluation(AreaObjectRecord o, AreaStepCell cell, ReadOnlySpan<byte> record,
@@ -410,7 +414,12 @@ public static class AreaStepInspector
             if (walls.Values.SelectMany(v => v).Any(e => e.Rule != AreaStepEdgeRule.Legacy))
             {
                 w.Write("EDGE_RULES_V1");
-                foreach (var e in walls.OrderBy(p => p.Key.Y).ThenBy(p => p.Key.X).SelectMany(p => p.Value)) { w.Write((int)e.Rule); w.Write(e.Reason ?? ""); }
+                foreach (var e in walls.OrderBy(p => p.Key.Y).ThenBy(p => p.Key.X).SelectMany(p => p.Value))
+                {
+                    w.Write((int)e.Rule); w.Write(e.Reason ?? "");
+                    // ARC-RES-049: a leaving portal also states the raw rotation its test steps by.
+                    if (e.Rule == AreaStepEdgeRule.Leaving) w.Write(e.RawRotation);
+                }
             }
         }
         w.Flush();

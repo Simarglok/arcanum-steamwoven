@@ -82,16 +82,26 @@ internal static partial class Program
         };
     }
 
-    /// <summary>The jump goal's open attempt passes the direction from the walker to the
-    /// portal: 5 when the walker stands on the portal's own tile (no offset), else the
-    /// rotation back across the edge. The leaving test swaps its two tiles into one when
-    /// that direction is opposite or next to opposite the portal rotation, so it is
-    /// never leaving then.</summary>
+    /// <summary>Leaving a building through a closed locked portal, as the original 1.0.7.4 sees it
+    /// (ARC-RES-049): both open attempts on the step must say so. Each compares the portal's tile
+    /// with the tile one step along its raw rotation and leaves when the first is indoor and the
+    /// second is not; it exchanges the two (the original really swaps them; CE copies one into
+    /// both) when its direction is opposite the rotation or next to opposite. The traversal attempt
+    /// passes the step's edge direction, so it exchanges them for a walker from across; the jump or
+    /// door goal passes the direction from the walker to the portal, 5 on the portal's own tile, so
+    /// a portal of rotation 0..2 is tested in reverse there and the two never agree.
+    /// <paramref name="acrossIndoor"/> is the tile one step along the raw rotation: the tile across
+    /// the edge for an odd rotation, the diagonal tile for an even one.</summary>
     internal static bool JumpLeaves(int portalRotation, bool fromPortalTile, bool portalTileIndoor, bool acrossIndoor)
     {
-        var dir = fromPortalTile ? 5 : (portalRotation + 4) % 8;
-        var swapped = (dir + 4) % 8 == portalRotation || (dir + 5) % 8 == portalRotation || (dir + 3) % 8 == portalRotation;
-        return !swapped && portalTileIndoor && !acrossIndoor;
+        bool Leaves(int dir) =>
+            (dir + 4) % 8 == portalRotation || (dir + 5) % 8 == portalRotation || (dir + 3) % 8 == portalRotation
+                ? acrossIndoor && !portalTileIndoor
+                : portalTileIndoor && !acrossIndoor;
+        var edge = portalRotation | 1;
+        var traversal = Leaves(fromPortalTile ? edge : (edge + 4) % 8);
+        var goal = Leaves(fromPortalTile ? 5 : (edge + 4) % 8);
+        return traversal && goal;
     }
 
     internal static bool Jumps(WindowJump admission) => admission is WindowJump.NoPortal or WindowJump.Busted or WindowJump.Open or WindowJump.IndoorToOutdoor;
@@ -233,7 +243,7 @@ internal static partial class Program
                 var onEdge = portals.Where(p => (p.X == x && p.Y == y && p.Art.EdgeRotation == r) || (p.X == across.X && p.Y == across.Y && p.Art.EdgeRotation == (r + 4) % 8)).ToArray();
                 var portal = tilePortals.FirstOrDefault();
                 var hasPortal = tilePortals.Length > 0;
-                // Leaving, as the jump goal's open attempt sees it (JumpLeaves). The portal is on the
+                // Leaving, as the traversal and the jump goal both see it (JumpLeaves). The portal is on the
                 // window's tile, so the window side is the portal side.
                 bool Leaving(bool fromWindowTile)
                 {
@@ -260,6 +270,28 @@ internal static partial class Program
             }).OrderBy(r => r.distance_from_start).ThenBy(r => r.y).ThenBy(r => r.x).ToArray();
             var jumpable = rows.Where(r => r.jumpable_day).ToArray();
             var house = rows.Where(r => r.sector == BuildingSectorId).ToArray();
+
+            // ARC-RES-049: closed locked doors whose lock the leaving shortcut can skip (not busted, jammed, held,
+            // never-locked or always-locked, no unlock script), by the original's leaving test from each side, against the pinned CE
+            // reading (no leaving from across; on the portal's own tile rotation 0..2 never). The test steps by the raw
+            // rotation, so an even rotation reads the diagonal tile.
+            static (int X, int Y) Along((int X, int Y) c, int r) => r switch
+            {
+                0 => (c.X - 1, c.Y - 1), 1 => (c.X - 1, c.Y), 2 => (c.X - 1, c.Y + 1), 3 => (c.X, c.Y + 1),
+                4 => (c.X + 1, c.Y + 1), 5 => (c.X + 1, c.Y), 6 => (c.X + 1, c.Y - 1), _ => (c.X, c.Y - 1),
+            };
+            var lockedDoors = portals.Where(p => p.Art.Door && p.Art.Frame == 0 && !p.Art.Busted && !p.UnlockScript && (p.Flags & 0x1) != 0 && (p.Flags & 0x9E) == 0)
+                .Select(p => (p.Art.Rotation, Here: Indoor(p.X, p.Y), Along: Indoor(Along((p.X, p.Y), p.Art.Rotation).X, Along((p.X, p.Y), p.Art.Rotation).Y))).ToArray();
+            var resolvedDoors = lockedDoors.Where(d => d.Here is not null && d.Along is not null).Select(d => (d.Rotation, Here: d.Here!.Value, Along: d.Along!.Value)).ToArray();
+            var doors = new
+            {
+                locked = lockedDoors.Length, unresolved = lockedDoors.Length - resolvedDoors.Length,
+                by_rotation = resolvedDoors.GroupBy(d => d.Rotation).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(), g => g.Count()),
+                leaving_from_portal_tile = resolvedDoors.Count(d => JumpLeaves(d.Rotation, true, d.Here, d.Along)),
+                leaving_from_across = resolvedDoors.Count(d => JumpLeaves(d.Rotation, false, d.Here, d.Along)),
+                ce_leaving_from_portal_tile = resolvedDoors.Count(d => d.Rotation > 2 && d.Here && !d.Along),
+                portal_tile_indoor_rotation_0_to_2 = resolvedDoors.Count(d => d.Rotation <= 2 && d.Here && !d.Along),
+            };
 
             var after = archivePaths.Select(InputFingerprint.Create).ToArray();
             if (!before.SequenceEqual(after) || InputFingerprint.Create(mobilePath) != mobileBefore) throw new InvalidDataException("LOCOMOTION_INPUT_CHANGED");
@@ -288,6 +320,7 @@ internal static partial class Program
                     nearest_jumpable = jumpable.Take(5).ToArray(),
                     house_sector = new { sector = BuildingSectorId, edges = house },
                 },
+                locked_doors = doors,
             };
             var json = JsonSerializer.Serialize(report, new JsonSerializerOptions { WriteIndented = true });
             Console.WriteLine(json);
@@ -323,8 +356,11 @@ internal static partial class Program
         Check(AdmitWindowJump(false, true, 0x21, false, false, 2) == WindowJump.Open && AdmitWindowJump(false, true, 0x21, false, false, 15) == WindowJump.Locked, "locked by day");
         Check(Jumps(WindowJump.NoPortal) && Jumps(WindowJump.Open) && Jumps(WindowJump.IndoorToOutdoor) && !Jumps(WindowJump.Jammed) && !Jumps(WindowJump.ScriptUnknown) && !Jumps(WindowJump.SolidPiece), "jumps");
         Check(!JumpLeaves(1, true, true, false) && JumpLeaves(3, true, true, false) && JumpLeaves(5, true, true, false) && JumpLeaves(7, true, true, false), "leaving from the portal tile");
-        Check(!JumpLeaves(3, false, true, false) && !JumpLeaves(5, false, true, false) && !JumpLeaves(5, true, false, false) && !JumpLeaves(5, true, true, true), "leaving from across or not indoor to outdoor");
+        Check(!JumpLeaves(3, false, true, false) && !JumpLeaves(5, false, true, false) && !JumpLeaves(5, true, false, false) && !JumpLeaves(5, true, true, true), "not indoor to outdoor");
+        // ARC-RES-049: from across the original exchanges the tiles, so a walker leaving from the far side passes;
+        // on the portal's own tile rotation 1 passes the reversed goal test only, which the traversal refuses.
+        Check(JumpLeaves(1, false, false, true) && JumpLeaves(3, false, false, true) && JumpLeaves(7, false, false, true) && !JumpLeaves(1, true, false, true), "leaving from across");
         Check(CritterArtForAnim("art/critter/x/xyzb.art", 6) == "art/critter/x/xyzg.art" && CritterArtForAnim("art/critter/x/xyzb.art", 13) == "art/critter/x/xyzn.art", "anim letter");
-        Console.WriteLine("locomotion-self-test: PASS (speed frame rates, frame clamp, tile steps, cycle projection, window admission, jump leaving direction, anim letters)");
+        Console.WriteLine("locomotion-self-test: PASS (speed frame rates, frame clamp, tile steps, cycle projection, window admission, jump leaving direction (original), anim letters)");
     }
 }

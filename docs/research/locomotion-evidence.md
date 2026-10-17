@@ -67,7 +67,8 @@ resolve in exactly one archive.
 ```
 
 The report holds numbers, booleans and SHA-256 digests only; two runs gave the same
-report digest `1729a095…15b9cc`. The self-test covers the frame-rate formula at the
+report digest `1729a095…15b9cc` (with ARC-RES-049's original leaving test the window part is
+unchanged; adding the locked-door count D5 gives `bc4f8cab…94917b`, again over two runs). The self-test covers the frame-rate formula at the
 Speed boundaries (original and CE readings), the frame clamp, tile step vectors,
 the cycle projection, window admission order, the jump's leaving direction and the
 ART animation letter.
@@ -94,7 +95,7 @@ ART animation letter.
 | --- | --- | --- |
 | W1 | A window is a **wall** whose piece is 10, 13, 14, 17, 18 or 19 on the step's edge, on either the tile being left or the tile entered (facing back). In the move's window check, pieces 9, 11, 12, 15, 16, 20 on that edge stop it, and a window piece on the tile being left decides before the far tile is read; in traversal every non-opening piece blocks. (The probe counts a stop piece on either side; the start map has none.) | S [window edge][window-edge], [traversal][traversal] |
 | W2 | Only critter ART (humanoids; not unique-NPC ART) and orc monsters can jump; others treat a window piece as a wall, as does a polymorphed critter. | S [can jump][can-jump], [walker flags][walker-flags]; O `0x45F570` |
-| W3 | A diagonal step across a window piece is always blocked. An axis step is allowed and marked as a window; a window **portal** on that edge must be busted or pass the walker's open attempt, with the door rules of ARC-WORLD-018 (unlock script, jammed, magically held, leaving a building, day/night locks, key). The jump goal repeats that attempt whether or not the window is open, with the direction from the walker to the portal: rotation 5 when the walker stands on the portal's tile, so leaving never counts there for a portal of raw rotation 0, 1 or 2 (the leaving test then compares one tile with itself), and never from across. | S [traversal][traversal], [traversal far side][traversal-far], [open attempt][open-attempt], [jump check][jump-check], [direction][location-rot] |
+| W3 | A diagonal step across a window piece is always blocked. An axis step is allowed and marked as a window; a window **portal** on that edge must be busted or pass the walker's open attempt, with the door rules of ARC-WORLD-018 (unlock script, jammed, magically held, leaving a building, day/night locks, key). The jump goal repeats that attempt whether or not the window is open, with the direction from the walker to the portal: rotation 5 when the walker stands on the portal's tile. **Original (ARC-RES-049):** the step's traversal attempt passes the step's edge and the goal the walker's direction; the leaving test really exchanges its two tiles for a walker from across (CE copies one into both), and on the portal's own tile it tests a portal of raw rotation 0, 1 or 2 in reverse, so the two attempts never agree there. Leaving passes from the portal's tile for rotations 3..7 and from across when the tile across is indoor and the portal's tile is not ([ledger LV1–LV5](original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)). | S [traversal][traversal], [traversal far side][traversal-far], [open attempt][open-attempt], [jump check][jump-check], [direction][location-rot] |
 | W4 | When the walker reaches a window edge, its move pushes a **jump** goal (O: same goal table at `0x5A73D0`/`0x5A63D0`). The jump takes the first portal on the window's tile; if that portal is closed the walker first opens it, as a door. It then plays animation 13 (**vault**) facing the step, one frame per 1000/fps ms (no Speed scaling). At the action frame the location moves one tile through the window and the screen offset is shifted back by one step, so the sprite does not jump. After the last frame the walker resumes its gait (run or walk) and continues its path; at the path's end it stands. | S [jump goal][jump-goal], [attempt move][attempt-move], [begin][jump-begin], [update][jump-update], [tile shift][jump-shift], [continue][jump-continue] |
 | W5 | Human vault ART (resource1 ordinal 2677): 9 frames, 8 fps, action frame 2, so 1125 ms; frame offsets add (±30, ±15) on an axis rotation (0.75 tile). | D |
 | W6 | AP: the traced jump charges 2 AP only to an NPC in a round when the vault cannot begin; other round costs were not traced (U2). | S [AP][jump-ap] |
@@ -106,12 +107,13 @@ ART animation letter.
 | --- | --- |
 | D1 | 621 sectors, 28,064 walls, 1,588 portals (978 windows). 1,138 window pieces, each on its own edge (none faces another window piece). The exterior aggregate carries no walls or portals. |
 | D2 | 978 window edges have one portal on the window's tile, on the same edge; 160 have none (empty frames). Flag combinations of those 978 portals: jammed 748, jammed and locked 12, locked 60, locked and never-locked 88 (plus 1 also locked at night), locked and always-locked 33, locked at night 21, locked and magically held 3, busted 12 (9 of them also jammed). |
-| D3 | Jumpable by day (hour 15) from at least one side: **324** edges in 67 sectors (160 empty frames, 12 busted, the rest unlocked or leaving a building). From the window's own tile: leaving 135, unlocked 17, locked 51; from across: unlocked 110, locked 93; jammed 760 and magically held 3 either way. The 18 rotation-1 windows a door's leaving rule would open are refused by the jump (W3). The nearest jumpable window is (92824, 84706), an empty frame 2114 tiles (Chebyshev) from the start point; the next four are 2642..2690 tiles away. |
+| D3 | Jumpable by day (hour 15) from at least one side: **324** edges in 67 sectors (160 empty frames, 12 busted, the rest unlocked or leaving a building). From the window's own tile: leaving 135, unlocked 17, locked 51; from across: unlocked 110, locked 93; jammed 760 and magically held 3 either way. The 18 rotation-1 windows a door's leaving rule would open are refused (W3: the traversal calls them leaving, the jump goal does not). ARC-RES-049 recounted the census with the original's leaving test: unchanged (no locked window stands on an outdoor tile with an indoor tile across, so leaving from across adds none). The nearest jumpable window is (92824, 84706), an empty frame 2114 tiles (Chebyshev) from the start point; the next four are 2642..2690 tiles away. |
 | D4 | The [first house](first-building-evidence.md) at sector (1451, 1302) has four window edges, all jammed: not jumpable. |
+| D5 | ARC-RES-049 (report field `locked_doors`): 215 closed locked doors the leaving shortcut can apply to (no unlock script; not busted, jammed, held, never- or always-locked), all of odd rotation (1: 24, 3: 101, 5: 50, 7: 40). With the original's test 150 open when leaving from the portal's tile (the same as the CE reading), none from across, and 4 of rotation 1 on an indoor tile with outdoor beyond stay shut. |
 
 ## Anomalies
 
-**Original check (ARC-RES-048):** LA1–LA3 are confirmed, but **LA4's "Original and CE agree" and W3's "never from across" are wrong for the leaving test**: the original swaps the portal and far tiles where CE copies one into both, so a walker from across can count as leaving, and the D3 census needs recomputing. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
+**Original check (ARC-RES-048):** LA1–LA3 are confirmed, but **LA4's "Original and CE agree" and W3's "never from across" are wrong for the leaving test**: the original swaps the portal and far tiles where CE copies one into both, so a walker from across can count as leaving. ARC-RES-049 settled what that means for a step (W3) and recounted D3: the numbers do not change. The verdicts in the [verification ledger](original-verification-ledger.md#world-movement-and-data-arc-res-047-arc-res-029-arc-res-034-arc-data-021-clock) supersede the CE readings below where they differ.
 
 - **LA1** CE returns the ART's own rate at Speed 8; the original returns the middle
   value (O `0x437A5C`). For the viewer's human both are equal (17 and 20 fps), so
@@ -124,7 +126,9 @@ ART animation letter.
   (W3), so a rotation-1 window is never "leaving" from inside. Original and CE agree;
   kept. The door goal uses the same direction call, so ARC-WORLD-018's door
   admission may differ from the original on the portal's own tile: a follow-up
-  check.
+  check. *Answered by ARC-RES-049:* from inside, rotation 0..2 never leaves in either
+  reading (the traversal and the goal disagree); from across, only the original
+  leaves; the step evidence follows the original.
 
 ## Proposed implementation slices (P)
 

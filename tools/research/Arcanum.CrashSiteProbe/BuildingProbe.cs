@@ -345,13 +345,12 @@ internal static partial class Program
                 var flags = (uint)Field(p.Numeric, PortalFlagsField);
                 var across = CaveStep((p.X, p.Y), art.EdgeRotation)!.Value;
                 var unlockScript = p.Scripts.Any(s => s.sap == 3 && s.script != 0);
-                // Leaving holds only for a mover stepping out of the portal's own tile, when that
-                // tile is indoor and the tile across the edge is not. The pinned source swaps the
-                // two tiles for a mover coming from across with a self-assignment, so that side
-                // compares one tile with itself and never counts as leaving.
+                // Leaving as the original's traversal and door goal both see it (JumpLeaves, ARC-RES-049):
+                // the original swaps the two tiles for a mover from across, where the pinned CE source
+                // copies one into both and never counts that side as leaving.
                 // The source steps by the raw ART rotation; it equals the edge for odd rotations.
                 if (art.Rotation != art.EdgeRotation || Indoor(p.X, p.Y) is null || Indoor(across.X, across.Y) is null) throw new InvalidDataException("BUILDING_DOOR_EDGE_NOT_ADMITTED");
-                bool Leaving(bool fromPortalTile) => fromPortalTile && Indoor(p.X, p.Y) == true && Indoor(across.X, across.Y) != true;
+                bool Leaving(bool fromPortalTile) => JumpLeaves(art.Rotation, fromPortalTile, Indoor(p.X, p.Y) == true, Indoor(across.X, across.Y) == true);
                 return new
                 {
                     p.X, p.Y, unlock_script = unlockScript,

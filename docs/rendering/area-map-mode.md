@@ -161,9 +161,9 @@ lighting and is left to its own task.
 - Roofs are not drawn. Wall fade uses the ARC-RENDER-011 wall check; inside
   buildings an actor north of a wall can still be hidden by it (parity with the
   original not verified).
-- The door and window step rule of ARC-WORLD-018 is being recounted against the
-  original executable (its inside-to-outside exit check swaps the cells), so
-  door passability in map mode is not final.
+- Door passability follows the step evidence: a locked door the player has no key
+  for opens only for a step leaving a building, as the original executable decides
+  it (ARC-RES-049); doors are not opened or animated.
 - Map transitions (ARC-RES-035), the main world map (ARC-RES-034), door
   runtime, dialogs and companions on these maps.
 - Original-executable parity is NOT_VERIFIED.
