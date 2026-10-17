@@ -60,9 +60,9 @@ public partial class TerrainViewerApp
             // The synthetic session has no hero: C is the sheet's key, but nothing opens.
             Require(_areaSession.QueryHero() is null, "the synthetic session starts without a hero");
             InventoryKey(Key.C);
-            Require(!SheetOpen && !WorldModal && _sheetStatus == "character sheet: no hero (start with --hero)" && _worldLastReserved?.Contains("Character sheet") != true,
+            Require(!SheetOpen && !WorldModal && _sheetStatus == "no hero (start with --hero)" && _worldLastReserved?.Contains("Character sheet") != true,
                 "C without a hero: " + _sheetStatus);
-            Require(GetSelfTestSnapshot().Hud.Contains(" | C character sheet: character sheet: no hero", StringComparison.Ordinal), "HUD sheet status");
+            Require(GetSelfTestSnapshot().Hud.Contains(" | C character sheet: no hero", StringComparison.Ordinal), "HUD sheet status");
 
             // A synthetic hero session (invented values) through the production replacement path, as a quick load does.
             var levels = Arcanum.Data.Messages.MesFile.Parse(System.Text.Encoding.Latin1.GetBytes(
@@ -95,8 +95,13 @@ public partial class TerrainViewerApp
             Require(_sheetPanel.TextForSelfTest.Contains("Strength 10 (raised by effects)", StringComparison.Ordinal), "rebuilt sheet: " + _sheetPanel.TextForSelfTest);
             InventoryKey(Key.C);
             Require(!SheetOpen && !WorldModal && !_worldGate.IsOpen, "C closed the sheet and quarantined the click guards");
-            InventoryKey(Key.C); _sheetPanel.Confirm();
-            Require(!SheetOpen, "the close button (controller confirm) closed the sheet");
+            // Controller pulses through the production pulse route: confirm presses the close button, cancel closes.
+            static GamepadLab.Core.IntentFrame Pulse(bool confirm, bool cancel) =>
+                new(default, default, confirm, cancel, false, false, false, false, false, 0, 0, GamepadLab.Core.InputMethod.Gamepad, true, "ARC-UI-007 self-test");
+            InventoryKey(Key.C); HandleWorldPulse(Pulse(confirm: true, cancel: false), true);
+            Require(!SheetOpen && !PaletteOpen, "controller confirm pressed the close button");
+            InventoryKey(Key.C); HandleWorldPulse(Pulse(confirm: false, cancel: true), true);
+            Require(!SheetOpen && !PaletteOpen, "controller cancel closed the sheet without opening the palette");
             InventoryKey(Key.C); InventoryKey(Key.Escape);
             Require(!SheetOpen, "Escape closed the sheet");
 
@@ -106,8 +111,8 @@ public partial class TerrainViewerApp
             SyncAreaSheet();
             Require(!SheetOpen, "the dead hero's sheet closed");
             InventoryKey(Key.C);
-            Require(!SheetOpen && _sheetStatus == "character sheet refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
-            return "no-hero refusal, C/close/Escape, keys owned while open, rebuild on change, dead-hero close and refusal";
+            Require(!SheetOpen && _sheetStatus == "refused: the hero is dead", "C for a dead hero: " + _sheetStatus);
+            return "no-hero refusal, C/controller confirm and cancel/Escape, keys owned while open, rebuild on change, dead-hero close and refusal";
         }
         finally
         {

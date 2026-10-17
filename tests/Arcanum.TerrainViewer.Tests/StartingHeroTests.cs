@@ -97,6 +97,7 @@ public sealed class StartingHeroTests
             var load = AreaStartingHero.Load(module, premade);
             Assert.AreEqual(AreaHeroStatus.Ready, load.Status, $"{premade.Name} {load.Detail}");
             Assert.AreEqual(2350 + premade.Index, load.Flag, premade.Name);
+            Assert.IsTrue(load.Experience is { } experience && experience.Levels.Threshold(2) > 0, "ARC-UI-007: the experience data comes with the hero");
             Assert.AreEqual(premade.BasicPrototype + 20, load.Definition!.Prototype);
             Assert.AreEqual((gold[premade.Index], kit[premade.Index]), (load.Definition.Gold, load.Definition.Kit.Count), premade.Name);
             Assert.AreEqual(premade.Name.EndsWith("-female", StringComparison.Ordinal) ? CharacterGender.Female : CharacterGender.Male, load.Definition.Gender);

@@ -81,7 +81,8 @@ public sealed class AreaCharacterSheetTests
         Assert.AreEqual($"Hit points {life.HitPoints}/{life.MaxHitPoints} | fatigue {life.Fatigue}/{life.MaxFatigue}", lines[3]);
         Assert.AreEqual("Strength 8 | Constitution 8 | Dexterity 9 | Beauty 8", lines[4]);
         Assert.AreEqual("Resistances normal 0%, magick 0%, fire 0%, poison 20%, electrical 0% (worn armour and constitution only; effect changes NOT modelled)", lines[^1]);
-        Assert.AreEqual(255 / 10, Sheet(Start(Definition(alignment: 255))).Alignment);
+        using var good = Start(Definition(alignment: 255));
+        Assert.AreEqual(25, Sheet(good).Alignment);
     }
 
     [TestMethod]

@@ -27,7 +27,7 @@ public partial class TerrainViewerApp
         if (build.View is not { } view)
         {
             _sheetStatus = build.Refusal == AreaSheetRefusal.NoHero
-                ? "character sheet: no hero (start with --hero)" : "character sheet refused: the hero is dead";
+                ? "no hero (start with --hero)" : "refused: the hero is dead";
             GD.Print($"ARC-UI-007 sheet refused={build.Refusal}");
             RefreshAreaStatus();
             return;

@@ -844,13 +844,13 @@ public partial class TerrainViewerApp : Node
         PaceFrames();
         if (IsWorld)
         {
-            try { TickAreaClock(); ProcessWorld(delta); }
+            try { TickAreaClock(); ProcessWorld(delta); SyncAreaSheet(); }
             catch (Exception exception) when (exception is InvalidOperationException or GridReplayCapacityException or OverflowException)
             {
                 GD.Print($"ARC-WORLD-003 runtime FAIL {exception.GetType().Name} (no state/arrival fabrication)");
                 PublishFailure(_arguments?.Mode ?? _readyMode,new(TerrainViewerErrorCode.ActorPlan,Stage:TerrainViewerFailureStage.ActorPlan));
             }
-            SyncPassabilityOverlay(); SyncAreaInventory(); SyncAreaSheet(); UpdateAreaHover();
+            SyncPassabilityOverlay(); SyncAreaInventory(); UpdateAreaHover();
             return;
         }
         var step = (float)(CameraPolicy.PanScreenPixelsPerSecond * delta);

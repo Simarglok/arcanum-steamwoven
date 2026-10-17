@@ -68,14 +68,18 @@ public partial class TerrainViewerApp
             var revision = session.Version.Revision;
             InventoryKey(Key.C);
             Require(SheetOpen && WorldModal && _sheetPanel!.ViewForSelfTest is not null, "C opened the sheet: " + _sheetStatus);
-            var expected = AreaCharacterSheet.Build(session).View!;
+            var state = session.QueryHeroLife()!.Record.State;
+            var stats = session.QueryHeroStats(new(0, state.PoisonLevel, state.Conditions.HasFlag(Arcanum.Simulation.Combat.LifeConditions.CrippledLegsBoth)))!.Value.Snapshot!;
+            Arcanum.Simulation.Character.CharacterStat[] order = [Arcanum.Simulation.Character.CharacterStat.Strength, Arcanum.Simulation.Character.CharacterStat.Constitution,
+                Arcanum.Simulation.Character.CharacterStat.Dexterity, Arcanum.Simulation.Character.CharacterStat.Beauty, Arcanum.Simulation.Character.CharacterStat.Intelligence,
+                Arcanum.Simulation.Character.CharacterStat.Willpower, Arcanum.Simulation.Character.CharacterStat.Perception, Arcanum.Simulation.Character.CharacterStat.Charisma];
             var shown = _sheetPanel!.ViewForSelfTest!;
             var experience = session.QueryHeroExperience()!;
             var life = session.QueryHeroLife()!.Status;
             Require(shown.Name == hero.Hero.Name && shown.Level == experience.Level && shown.ToNextLevel == experience.ToNextLevel && shown.ToNextLevel is > 0
                 && shown.UnspentPoints == experience.UnspentPoints && shown.MaxHitPoints == life.MaxHitPoints && shown.MaxFatigue == life.MaxFatigue
                 && shown.Stats.Count == 8 && shown.Secondary.Count == 8 && shown.Resistances.Count == 5
-                && shown.Stats.Select(v => v.Value).SequenceEqual(expected.Stats.Select(v => v.Value)), "the sheet shows the session hero");
+                && shown.Stats.Select(v => v.Value).SequenceEqual(order.Select(stats.GetEffective)), "the sheet shows the session hero");
             Require(_sheetPanel.TextForSelfTest.Split('\n').Length == AreaCharacterSheet.Lines(shown).Count, "sheet text rows");
             InventoryKey(Key.I);
             Require(SheetOpen && !InventoryOpen, "the open sheet owns the I key");
