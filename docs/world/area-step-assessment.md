@@ -196,12 +196,31 @@ digest; the rules are appended to the digest only when present):
   open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
   magically held blocks; a portal without the LOCKED bit, or never-locked,
   passes (walking opens it); a locked one with a by-day or by-night bit is
-  Unknown because the evidence has no clock; otherwise it needs a key, none is
+  Unknown because the evidence has no clock, unless the step leaves a building
+  (below); otherwise it needs a key, none is
   held at T0, and only leaving a building passes: always-locked (which disables
-  that shortcut) blocks, a plain lock is Unknown (the shortcut is directional).
-  Doors and windows follow the same attempt; a window's wall piece then makes
-  the step a jump. Mobile portals targeted by `map.patch` are Unknown, as other
-  mobiles are.
+  that shortcut) blocks, or is Unknown when an hour bit is set. Doors and windows
+  follow the same attempt; a window's wall piece then makes the step a jump.
+  Mobile portals targeted by `map.patch` are Unknown, as other mobiles are;
+- since ARC-RES-049 the leaving shortcut is decided per step, as the original
+  1.0.7.4 executable does it
+  ([ledger LV1–LV5](../research/original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)):
+  a locked portal that is not always-locked has the edge rule `Leaving` and keeps
+  its raw ART rotation r. With P its tile and Q the tile one step along r (the tile
+  across for an odd r, the diagonal tile for an even one), a leg leaves when both
+  open attempts say so: the traversal attempt (direction of the leg) and the door
+  or window goal (direction from the step's source to P, 5 on P itself). Each
+  attempt leaves when P is indoor and Q is not, except that it tests Q indoor and
+  P not when its direction is r + 3, r + 4 or r + 5; indoor is tile art with bit 8
+  clear or facade art with bit 25 clear. So a step out of P passes for r = 3..7
+  when P is indoor and Q is not and never for r = 0..2; a step into P from across
+  passes when Q is indoor and P is not. Any other step is blocked by a plain lock
+  (`PORTAL_LOCKED_LEAVING_ONLY`) and Unknown by an hour lock
+  (`PORTAL_LOCK_DEPENDS_ON_HOUR`); a P or Q outside the evidence, or not tile or
+  facade art, is an Unknown `PORTAL_LEAVING_TILE_UNRESOLVED` gap. The goal is
+  applied to every such portal the step crosses; for a diagonal step across two
+  closed doors the original repeats it for the first door only (not modelled). A
+  leaving portal adds its raw rotation to the stated edge rules of the digest.
 
 The evidence digest identifies the inputs and stored edge rules, not how `Assess` reads them: ARC-WORLD-021 changed
 the cardinal window step from Unknown to Open without changing the digest (no step result is persisted).
@@ -212,7 +231,9 @@ evidence with no Unknown terrain; the generic Crash Site cave reaches the same
 506 tiles from its start as the pinned cave profile; at least 48 interiors are
 walkable from their start (the others list no start tile, or one a walker
 cannot leave). In a one-off run the remaining Unknown steps came from critter
-effects the rules do not model and from the lock cases above.
+effects the rules do not model and from the lock cases above. ARC-RES-049 left
+these counts (54 complete, at least 48 walkable, 22 window-jump steps in 2
+interiors) unchanged.
 
 ## Not delivered
 

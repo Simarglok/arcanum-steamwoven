@@ -204,7 +204,8 @@ public sealed class AreaConversationHost
         (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");
         if (result.Effects.Dialog is { } requested)
         {
-            loaded = AreaScriptHost.LoadDialog(_content, requested.Script, requested.Node);
+            // ARC-DATA-022: the session's current rules choose the data fixes, read at this decision.
+            loaded = AreaScriptHost.LoadDialog(_content, requested.Script, requested.Node, _session.Rules.Data);
             if (loaded.Status == AreaConversationStartStatus.SourceChanged) return new(loaded.Status, null, speaker, loaded.Detail);
         }
         token.ThrowIfCancellationRequested();

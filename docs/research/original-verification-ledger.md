@@ -1,6 +1,6 @@
 # Original verification ledger
 
-Status: **Research**, work item ARC-RES-048 (2026-10-17). One place that records, for every
+Status: **Research**, work item ARC-RES-048 (2026-10-17); later rows from the tasks named in their sections. One place that records, for every
 game-mechanics anomaly and decision input this project took from a CE reading, what the retail
 1.0.7.4 executable does at the same function. It applies the
 [original executable check](original-executable-check.md) to the decisions of the domain studies,
@@ -218,6 +218,9 @@ Source: [dispatcher](scr-event-dispatcher.md#11-anomalies-recorded-not-adopted-s
 | Random (R1–R6) | `random_rand` (0x4CEF50), `random_between` (0x4CEF00), `random_seed_generate` | LCG 1,664,525 / 1,013,904,223, output bits 8..22; modulo ranges, swapped bounds; time seed; no save or load; spawn-inventory and dialog reseeds. All as the contract says. | Original |
 | SN1 (ARC-SCRIPT-011) | `script_name_init` (0x4CEC10), `script_name_mod_load` (0x4CECE0), `script_name_build_scr_name` (0x4CEDC0), `script_name_build_dlg_name` (0x4CEE60) | As CE: the `scr\*.scr` listing maps `atoi(name)` ≥ 1000 at game start and 1..999 at module load, a later name replaces an earlier one with an error message; lookup takes ≥ 1000 from the first table and 1..999 from the second; the DLG name swaps the first and last three characters for `dlg`. | Original |
 | DL1 (ARC-SCRIPT-012) | `dialog_load` (0x412E10), `dialog_parse_field` (0x417C20), `dialog_parse_entry` (0x417860) | As CE and the DLG original read mode: a field is found by skipping to the next `{` (`//` comments skipped), capped at 999 characters; id, IQ and response read with `atoi`; a non-empty IQ that reads 0 and a response starting with `#` end the read; a file with no record is not opened. | Original |
+| DF1 (ARC-DATA-022) | `dialog_load` (0x412E10) over four stone-examination DLGs | Data defect: the only record lacks its effects field, no record is read, the file is not opened and the print line shows nothing. | Original bug (data) |
+| DF2 (ARC-DATA-022) | `dialog_parse_entry` (0x417860), NPC line 315 of `01306benjamin_gershwin.dlg` | Data defect: the line's effects are in its response field, which an NPC line never uses; they are never applied. | Original bug (data) |
+| DF3 (ARC-DATA-022) | `dialog_parse_entry` (0x417860), reply 361 of `01009mayor_blackroot.dlg` | Data defect: the final-line action is in the response field; `atoi` reads 0 and the reply ends the talk. | Original bug (data) |
 
 ## World, movement and data (ARC-RES-047, ARC-RES-029, ARC-RES-034, ARC-DATA-021, clock)
 
@@ -233,7 +236,7 @@ Source: [locomotion](locomotion-evidence.md#anomalies),
 | LA3, L2, L5 | object click near 0x54FB19, `get_always_run` (0x4304C0), `turn_on_running` (0x436AB0) | Object clicks always run; Num Lock is a toggled state seeded from the key; run needs load under 60 % and fatigue above 0. | Original |
 | W1, W2, W7 | `sub_4273B0`, `critter_can_jump_window` (0x45F570), path search `sub_41F9F0` | Window pieces, who can jump, +50 path cost, as the study says. | Original |
 | LA4 (a, b) | `location_rot` (0x4B8D50), `sub_4288A0`, door goals 0x428550–0x428800 | Same tile gives direction 5; the window jump and every door open-attempt goal pass `object_rot(walker, portal)`. | Original |
-| LA4 (c), building U4 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0) | The "opposite direction" branch really **swaps** the portal and far tiles; CE copies the far tile into both, so in CE that branch never counts as leaving. In the original a walker coming from across counts as leaving when its tile is indoor and the portal's tile is not. Side effect: on the portal's own tile (direction 5) a portal of raw rotation 0–2 is tested in reverse, so an outdoor walker there passes as "leaving". | CE slip; the direction-5 side effect is an original bug |
+| LA4 (c), building U4 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0) | The "opposite direction" branch really **swaps** the portal and far tiles; CE copies the far tile into both, so in CE that branch never counts as leaving. In the original a walker coming from across counts as leaving when its tile is indoor and the portal's tile is not. Side effect: on the portal's own tile (direction 5) a portal of raw rotation 0–2 is tested in reverse, so an outdoor walker there passes as "leaving". What this means for a walking step: [LV1–LV5](#leaving-a-building-through-a-locked-portal-arc-res-049). | CE slip; the direction-5 side effect is an original bug |
 | Wilderness A1 | `sector_light_list_load` (0x4F72C0) | Lights move with the object rule (sector × 64 + local tile). | CE slip (confirms the proposed policy) |
 | Wilderness A3, A6 | `terrain_sector_path` (0x4E84C0) | `-1.sec` path; a null name faults. | Original (A6 an original crash bug) |
 | Wilderness A2, A4, A5 | — | Editor encoder and `arcanum2.dat` folder data. | Not checked |
@@ -245,6 +248,34 @@ Source: [locomotion](locomotion-evidence.md#anomalies),
 | Clock current day/month | `datetime_current_day` (0x45AB00), `datetime_current_month` (0x45AB20) | The two getters are exchanged; the ordinary getters are right. Nothing calls them. | Original bug (dead code) |
 | Clock subtraction | `datetime_sub_milliseconds` (0x45A9E0) | The underflow branch computes the same odd expression as CE. | Original bug |
 | Clock start | `gameinit_mod_load` (0x4B9C30) | 1885 and 15:00; hour 0 stored as 1 ms. | Original |
+
+## Leaving a building through a locked portal (ARC-RES-049)
+
+Source: ledger row LA4 (c) above, [locomotion](locomotion-evidence.md#windows-s-o-d) W3 and D3,
+[first building](first-building-evidence.md#door-admission-fr-scene-014) and the whole-map step rule
+of ARC-WORLD-018. Question: when does the walking player pass a closed, locked portal it has no key
+for, by the "leaving a building" shortcut? Two readers (this task's and a fresh second reader that
+did not see these verdicts) read every row below in the executable and agree on every observation;
+only the internals of `object_locked_get`, the key check and `tile_art_id_at` were taken from CE.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| LV1 | `ai_is_indoor_to_outdoor_transition` (0x4AECA0), `tig_art_tile_id_type_get` (0x5038C0) | Compares the portal's tile P with Q, the tile one step along the portal's **raw** ART rotation r (the diagonal tile for an even r; false off the map). When the direction argument is r + 3, r + 4 or r + 5 (mod 8) it really exchanges P and Q. Leaving means the first tile is indoor and the second is not; indoor is tile art with bit 8 clear or facade art with bit 25 clear, and any other art counts as indoor. | CE slip (CE copies Q into both); confirms LA4 (c) |
+| LV2 | `ai_attempt_open_portal` (0x4AEB70) | For the player: busted passes; not a critter refuses; the unlock script may refuse; jammed, magically held refuse; unless always-locked, leaving (with the caller's direction, unchanged) passes; not locked passes; otherwise the key decides. | Original |
+| LV3 | `object_calc_traversal_cost_func` (0x43FE00) | A diagonal step is four cardinal legs, all of which must be clear. A closed portal counts on a leg's start tile when its edge (r \| 1) is the leg's direction and on the leg's destination tile when its edge + 4 is; both pass the **leg's direction** to the open attempt, so the leaving test exchanges P and Q exactly when the leg enters P from across. | Original |
+| LV4 | `sub_4272E0` (0x4272E0), `object_traversal_check_blocking_door` (0x440700), door goals 0x428550, 0x428690, 0x428750, window jump `sub_4288A0`, `object_rot` (0x441B20), `location_rot` (0x4B8D50) | Before the step the walk only finds the closed portal from the walker's tile; the open-door and jump goals then repeat the open attempt with the direction from the walker's tile to P (`location_rot`, the exact inverse of `location_in_dir` for neighbours, 5 on the same tile). | Original |
+| LV5 | the walk as a whole | A step passes only when both attempts call it leaving. Out of P: r = 3, 5, 7 when P is indoor and the tile across is not; r = 4, 6 when P is indoor and the diagonal Q is not (the tile across is never read); r = 0, 1, 2 **never** (the traversal wants P indoor and Q outdoor, the goal on P tests the reverse). Into P from across: both attempts exchange, so it passes when Q is indoor and P is not (Q is the tile across for an odd r). | Original; the direction-5 side effect of LA4 (c) never opens a walking step (the traversal refuses it first) |
+
+**Recount (start map, opt-in probes on the owner's install).** The 1,138 window edges give exactly
+the ARC-RES-047 census (locomotion report digest unchanged before the door count was added): 324
+jumpable by day, the 18 rotation-1 windows still refused, now because the two attempts disagree.
+There are 215 closed locked doors the shortcut can apply to (no unlock script; not busted, jammed,
+held, never- or always-locked), all of odd rotation: 150 open when leaving from the portal's tile, as
+before; none from across, because no such door stands on an outdoor tile with an indoor tile across; 4 of rotation 1
+stand on an indoor tile with outdoor beyond and stay shut. The [first house](first-building-evidence.md)
+door is unchanged. On the 54 complete interiors 48 stay walkable from their start with the same 22
+window-jump steps. The step evidence now decides these portals by the step (LV5) instead of leaving
+them Unknown ([area step assessment](../world/area-step-assessment.md#whole-maps-arc-world-018)).
 
 ## Rendering: body blends and wading (ARC-RENDER-018)
 
@@ -302,8 +333,10 @@ Nothing below is changed by this ledger; each needs the owner's word or its owni
    code.
 4. **Window jump and door "leaving" test** ([locomotion](locomotion-evidence.md#anomalies) LA4/W3/D3,
    [first building](first-building-evidence.md) U4, ARC-WORLD-018 door admission and the research
-   probes): the original swaps the tiles; the 324-window census and door results with an outdoor
-   portal tile need recomputing. The direction-5 side effect is an Original-setting switch candidate.
+   probes): the original swaps the tiles. **Settled by ARC-RES-049** ([rows LV1–LV5](#leaving-a-building-through-a-locked-portal-arc-res-049)):
+   the start-map counts do not change, and the step evidence decides these portals as the original
+   does. The direction-5 side effect never opens a walking step; it stays a switch candidate only
+   where a goal attempt runs without the traversal (using a door directly, not traced).
 5. **SCR S2 choices** ([census](scr-census.md#anomalies-for-s1-s)): X7 (quotient, not sum) and X8
    (masked counters) are settled by the original, so neither is an Original-setting option; X10 stays a
    switch candidate. Implemented by ARC-SCRIPT-008 ([dispatcher core](../scripting/scr-dispatcher-runtime.md)):

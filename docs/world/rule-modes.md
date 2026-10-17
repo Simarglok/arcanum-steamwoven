@@ -75,6 +75,9 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Scripts | `ScrRuleProfile` | `TileScriptChangesDiscarded` | X3, tile | a tile script's changes to its own number, flags and counters are not stored (ARC-SCRIPT-008) |
 | NPC reaction | `ReactionRuleProfile` | `FollowerHitRaisesReaction` | reputation A2 | a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction (Steamwoven lowers it as an ordinary drop, so an extraordinary-charisma leader is immune and other followers get the "check leader" mark; ARC-WORLD-026) |
 | Scripts | `ScrRuleProfile` | `CallDelayWraps` | TE1 | a call script in delay is computed in 32 bits (wraps above 536,870 s; a negative count gives weeks) (ARC-SCRIPT-010) |
+| Game data | `DataFixProfile` | `StoneExamineTextLost` | DF1 | four stone-examination DLGs lack their record's effects field, so the game opens none and examining the stones shows nothing ([data fixes](../formats/data-fixes.md), ARC-DATA-022) |
+| Game data | `DataFixProfile` | `NpcLineEffectsInResponseLost` | DF2 | an NPC line's effects written in its response field are never applied (ARC-DATA-022) |
+| Game data | `DataFixProfile` | `ReplyFinalLineInResponseLost` | DF3 | a reply's final-line action written in its response field reads as 0 and ends the talk without the final line (ARC-DATA-022) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
 until then both modes behave as the original):
@@ -102,4 +105,7 @@ The list covers every "Original bug" and "CE change" row of the ledger.
   (F8) keeps the current session's mode.
 - The SCR dispatcher (ARC-SCRIPT-008) takes `GameRules.Scripts` through its run options; no session code calls it yet.
 - The reaction domain (ARC-WORLD-026) reads `Rules.Reaction` in `GameSessionOwner.ReactToPcHit`; no host calls it yet.
-- Domains other than combat, the event queue, scripts and NPC reaction have no profile yet; their first switch adds one.
+- The game data fixes (ARC-DATA-022) are read by `ScriptContent.Dialog` with `Rules.Data`; the AREA conversation
+  passes the session's rules at each dialog read.
+- Domains other than combat, the event queue, scripts, NPC reaction and game data have no profile yet; their first
+  switch adds one.

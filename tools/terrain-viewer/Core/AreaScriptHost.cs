@@ -85,13 +85,16 @@ public sealed class AreaScriptHost : IScrHost
 
     /// <summary>
     /// The DLG a dialog action names: the script's name with the <c>dlg</c> folder and extension (as the original
-    /// derives it), read as the original reads it (ARC-SCRIPT-012), whose <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/>
+    /// derives it), read as the original reads it (ARC-SCRIPT-012) with the data fixes of <paramref name="rules"/>
+    /// (ARC-DATA-022; the caller passes the session's current rules), whose <paramref name="node"/> is an NPC record. <see cref="AreaConversationStartStatus.Started"/>
     /// with the document, or the typed reason.
     /// </summary>
-    public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(ScriptContent content, int script, int node)
+    public static (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) LoadDialog(ScriptContent content, int script, int node,
+        Arcanum.Data.Fixes.DataFixProfile rules)
     {
         ArgumentNullException.ThrowIfNull(content);
-        var read = content.Dialog(script);
+        ArgumentNullException.ThrowIfNull(rules);
+        var read = content.Dialog(script, rules);
         switch (read.Status)
         {
             case ScriptContentStatus.Read: break;

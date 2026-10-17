@@ -176,8 +176,9 @@ conversations but text for the script actions float line (action type 23) and pr
 (dialog action 4). 31 of the 38 scripts are attached on the module's maps, most
 on the world map.
 
-In three cases (six files) the game itself loses content (data bugs; Steamwoven reads them
-as the game does, and any fix is an owner decision under D8):
+In three cases (six files) the game itself loses content (data bugs). Since ARC-DATA-022 the
+Steamwoven rule mode fixes them ([data fixes](data-fixes.md), DF1..DF3); the Original mode reads
+them as the game does:
 
 - `03042`..`03045` (`*_stone_exa`, four stones on one Tulla map): the only record
   lacks its effects field, so the game opens no file and examining a stone prints
