@@ -996,6 +996,52 @@ key. Self-test `ARC-UI-007 self-test PASS` (synthetic hero session: no-hero refu
 while open, rebuild on change, dead-hero close and refusal); native smoke with `--hero` after the hero stage:
 `ARC-UI-007 native-smoke character sheet PASS`.
 
+### Logbook (ARC-UI-008)
+
+The original Logbook key `L` (logical key down; the original's in-game key handler toggles the logbook for the local PC on
+`l`/`L`, ledger [LB1](../research/original-verification-ledger.md#logbook-arc-ui-008)) toggles a read-only diagnostic
+logbook of the session's PC in crash-site-area (exterior, cave and `--area-map`), with the two tabs of the original that
+the session can fill: **rumors** and **quests**. What it lists and how each entry looks follow the original logbook
+(ledger rows LB2–LB13):
+
+- **Rumors:** every rumor the PC knows, oldest first by the game time it was learned, struck through when the rumor is
+  quelled (proven false, the dialog action `RQ`). The text is message 20 × number of `mes\game_rd_npc_m2m.mes`, or of
+  `mes\game_rd_npc_m2m_dumb.mes` for a hero of intelligence 4 or less (no fallback to the other file).
+- **Quests:** every quest whose state is not Unknown, oldest first by the time of its last change, with its state label;
+  accepted and achieved in blue, completed struck through in green, completed by someone else and botched struck through
+  in red, mentioned in black. The description is the low-intelligence one of `mes\gamequestlogdumb.mes` when it exists and
+  the hero's intelligence is 4 or less, otherwise the normal one of `mes\gamequestlog.mes`; both are read only when the
+  module has `rules\gamequest.mes`.
+- Each entry starts with the original's date line (month, day, year, 12-hour time, `January 1, 1885  3:00pm`), the
+  quest's state label right after it, and the text on the next line. Equal times are ordered by number (the original's
+  order for them is its unstable sort's).
+
+The texts come from the module's own data through the game folder's content stack at the module-load phase
+(`LogbookTexts`, loaded once per module in the background, kept over the cave, map transfers and F8); every module and
+map works the same, nothing is location-specific. A missing text shows an empty line; the header names what is missing
+(no hero: normal texts; no texts loaded; no quest table; texts not decodable as Windows-1252). Month names and state
+labels are the project's English words, not the player's `mes\logbk_ui.mes`.
+
+The logbook opens from the world only (no palette, dialog, inventory window, character sheet or UI focus), with or without
+a hero (without one the normal texts are read), and never for a dead hero (the original refuses a dead local PC). Like the
+character sheet it is modal: the actor gate closes, the clock pauses, a walk stops (the original does not pause; the
+viewer's modal windows do). While it is open it owns every key: `L`, `Escape` or a controller cancel closes it, `Tab` or a
+controller confirm switches the tab, and the tab buttons switch it with the mouse. The tab is kept across close and open
+and starts at the rumors for a new session (a quick load), as the original keeps it until a game reset. It rebuilds
+whenever the session, the tab or the loaded texts change and closes when the session ends or its hero dies. The HUD adds
+`L logbook` and the last refusal.
+
+The session holds the quelled rumors (game-wide, [story domain](../world/game-session-runtime.md#story-domain), snapshot
+schema 16) and the conversation's `RQ` action writes them (`IDialogRumorPort`).
+
+**Not implemented:** the other five tabs (reputations, blessings and curses, kills and injuries, background, keys), the
+book pages and page buttons (the viewer scrolls one list), the developer quotes page, the logbook button's highlight, the
+sounds, the PC lens, `RU`/`RQ` as reply conditions, scripts' rumor actions. Self-test `ARC-UI-008 self-test PASS`
+(synthetic texts: open without a hero, order and styles, `Tab`/controller tab switch, keys owned, tab kept and reset,
+low-intelligence texts, rebuild on change, dead-hero close and refusal); native smoke after the hero stage (exterior and
+map mode, with or without `--hero`): `ARC-UI-008 native-smoke logbook PASS` (the module's texts load; `L`, `Tab`, `Escape`
+on the live session; on a detached copy every quest and rumor that has a text is listed with it).
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
