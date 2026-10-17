@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Project launcher: one command for the ordinary diagnostic viewer modes.
+"""Project launcher: one command for the ordinary diagnostic viewer modes and the function oracle.
 
 A thin wrapper over tools/arcanum-local; every check (identities, artifact authority,
 ordinary-launch policy) stays there. Rule: when a viewer mode gains or changes an input,
@@ -8,6 +8,7 @@ update tools/local_dev/launch.py (GAME_ROLES/MODE_ROLES/ROLE_FLAGS) in the same 
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -93,6 +94,45 @@ def run(args: argparse.Namespace) -> int:
             config.save_config(conf)
 
 
+def original_exe(explicit: Path | None) -> Path:
+    """The executable for the oracle: --exe, else $ARCANUM_EXE, else the configured game folder, else the default install."""
+    if explicit:
+        return explicit
+    if os.environ.get("ARCANUM_EXE"):
+        return Path(os.environ["ARCANUM_EXE"])
+    inputs = config.load_config().get("inputs", {})
+    game_root = inputs.get("gameRoot") if isinstance(inputs, dict) else None
+    return Path(game_root if isinstance(game_root, str) else DEFAULT_GAME_ROOT) / launch.ORIGINAL_EXE_NAME
+
+
+def dotnet() -> str:
+    root = os.environ.get("DOTNET_ROOT") or str(Path.home() / ".local" / "share" / "dotnet")
+    return os.environ.get("DOTNET") or str(Path(root) / "dotnet")
+
+
+def oracle(args: argparse.Namespace) -> int:
+    """ARC-DEV-007: generate the original's outputs for the chosen functions, then run their OriginalExe tests."""
+    functions = [args.function] if args.function else list(launch.ORACLE_FUNCTIONS)
+    exe = original_exe(args.exe).resolve()
+    out = ROOT / "research-private" / "oracle"
+    generate = [sys.executable, "-B", str(ROOT / "tools" / "original-oracle" / "oracle.py"), "generate", "--exe", str(exe),
+                "--out", str(out), "--seed", str(args.seed)]
+    for function in functions:
+        generate += ["--function", function]
+    code = subprocess.call(generate)
+    if code != 0:
+        return code
+    environment = dict(os.environ, ARCANUM_EXE=str(exe), ARCANUM_ORACLE_DIR=str(out), ARCANUM_ORACLE_REQUIRED="1")
+    environment.setdefault("DOTNET_ROOT", str(Path(dotnet()).parent))
+    project = str(ROOT / launch.ORACLE_TESTS)
+    code = subprocess.call([dotnet(), "restore", project, "--locked-mode"], env=environment)
+    if code != 0:
+        return code
+    names = "|".join(f"Name={launch.ORACLE_FUNCTIONS[function]}" for function in functions)
+    return subprocess.call([dotnet(), "test", project, "--no-restore", "--filter", f"TestCategory=OriginalExe&({names})",
+                            "--logger", "console;verbosity=detailed"], env=environment)
+
+
 def status(_: argparse.Namespace) -> int:
     conf = config.load_config()
     inputs = conf.get("inputs", {}) if isinstance(conf.get("inputs"), dict) else {}
@@ -115,6 +155,8 @@ def status(_: argparse.Namespace) -> int:
     missing = [role for role in launch.MAP_ROLES + ("sourceId",) if role not in inputs]
     print(f"map: {'ready' if not missing else 'missing ' + ', '.join(missing) + ' (run ./arcanum setup)'} (needs an ARC-RENDER-008 build with map mode)")
     print("heroes (area/map --hero NAME, needs an ARC-RENDER-008 build with the hero start):", ", ".join(launch.PREMADE_HEROES))
+    exe = original_exe(None)
+    print(f"oracle: {'ready' if exe.is_file() else 'missing ' + str(exe) + ' (set ARCANUM_EXE)'} ({len(launch.ORACLE_FUNCTIONS)} functions)")
     print("selection:", conf.get("launchSelection", {}).get("terrain", "none"))
     return 0
 
@@ -137,6 +179,14 @@ def parser() -> argparse.ArgumentParser:
     command.add_argument("--hero", choices=launch.PREMADE_HEROES, help="start as this pre-made hero (default: the diagnostic PC profile)")
     command.add_argument("--dry-run", action="store_true")
     command.set_defaults(func=run, mode="map")
+    command = commands.add_parser("oracle", help="run the function oracle on the installed Arcanum.exe, then the OriginalExe tests")
+    which = command.add_mutually_exclusive_group()
+    which.add_argument("--function", choices=list(launch.ORACLE_FUNCTIONS), metavar="ADDR",
+                       help="one function: " + ", ".join(launch.ORACLE_FUNCTIONS))
+    which.add_argument("--all", action="store_true", help="every oracle function (the default)")
+    command.add_argument("--exe", type=Path, help="the installed Arcanum.exe (default: $ARCANUM_EXE or the game folder)")
+    command.add_argument("--seed", type=int, default=20261017)
+    command.set_defaults(func=oracle)
     commands.add_parser("status", help="show which modes have every input configured").set_defaults(func=status)
     return result
 

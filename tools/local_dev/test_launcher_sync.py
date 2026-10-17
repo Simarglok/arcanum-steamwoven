@@ -146,6 +146,33 @@ class LauncherSyncTests(unittest.TestCase):
             for task in tasks:
                 self.assertIn(task, allowed[mode], mode)
 
+    def test_the_oracle_launcher_matches_the_tool_and_the_tests(self):
+        # ARC-DEV-007: `./arcanum oracle` names the oracle's functions, their OriginalExe tests and the pinned executable.
+        sys.path.insert(0, str(REPO / "tools/original-oracle"))
+        try:
+            oracle_functions = __import__("oracle_functions")
+            oracle_pe = __import__("oracle_pe")
+        finally:
+            sys.path.remove(str(REPO / "tools/original-oracle"))
+        self.assertEqual(list(launch.ORACLE_FUNCTIONS), [f"0x{address:X}" for address in oracle_functions.FUNCTIONS])
+        tests = (REPO / launch.ORACLE_TEST_CLASS).read_text()
+        self.assertIn('Category = "OriginalExe";', tests)
+        for spec in oracle_functions.FUNCTIONS.values():
+            name = launch.ORACLE_FUNCTIONS[f"0x{spec.address:X}"]
+            body = re.search(rf"\[TestMethod, TestCategory\(Category\)\]\s+public void {name}\(\)\s*\{{\s*var file = OracleFile\.Load\(\"([0-9A-F]+)\", \"([a-z-]+)\"", tests)
+            self.assertIsNotNone(body, name)
+            self.assertEqual(body.groups(), (spec.key, spec.name), name)
+        self.assertTrue((REPO / launch.ORACLE_TESTS).is_file())
+        sha = launch.ORIGINAL_EXE_SHA256
+        self.assertEqual(sha, oracle_pe.PINNED_EXE_SHA256)
+        self.assertIn(f'ExeSha256 = "{sha}";', tests)
+        self.assertIn(f"`{sha}`", (REPO / "docs/research/original-executable-check.md").read_text())
+        project = runpy.run_path(str(REPO / "arcanum"), run_name="arcanum_module")
+        for function in launch.ORACLE_FUNCTIONS:
+            self.assertEqual(project["parser"]().parse_args(["oracle", "--function", function]).function, function)
+        with patch("sys.stderr"), self.assertRaises(SystemExit):
+            project["parser"]().parse_args(["oracle", "--function", "0x401000"])
+
     def test_discovery_verifies_identity_and_rejects_links(self):
         game = self.root / "game"
         fixture = {"module": b"module", "areaMobile": b"mobile"}

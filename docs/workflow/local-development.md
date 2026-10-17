@@ -11,6 +11,7 @@ every identity, artifact-authority and ordinary-launch check stays there.
     ./arcanum area [--hero NAME] [--dry-run]              # crash-site-area from the current ARC-RENDER-008 build, else ARC-WORLD-009, ARC-WORLD-007, ARC-INPUT-001, ARC-RENDER-007
     ./arcanum world [--dry-run]                           # world-diagnostic from the current ARC-WORLD-003 build
     ./arcanum map NAME [--hero NAME] [--dry-run]          # one whole interior (a maps/ folder name) in crash-site-area map mode, ARC-RENDER-008 build only
+    ./arcanum oracle [--function ADDR|--all] [--exe PATH] # function oracle on the installed Arcanum.exe, then the OriginalExe tests (ARC-DEV-007)
     ./arcanum status                                      # which modes have every input configured
 
 `area` and `world` select the build named by that task's `current.json` pointer
@@ -38,7 +39,12 @@ again. `--hero NAME` (ARC-WORLD-027, [starting hero](../rendering/terrain-viewer
 diagnostic PC profile. It needs no new input role (the viewer reads the hero from the module archive's game folder) and
 is passed as `tools/arcanum-local launch terrain --mode crash-site-area --hero NAME`, which accepts it only for an
 ARC-RENDER-008 build, like map mode: a build exported before ARC-WORLD-027 refuses the argument, so `--hero` needs a new
-export. **Rule:** a change that adds
+export. `oracle` ([function oracle](toolchain.md#function-oracle), ARC-DEV-007) runs
+`tools/original-oracle/oracle.py generate` for the chosen functions (`ORACLE_FUNCTIONS` in
+`tools/local_dev/launch.py`, default all) into `research-private/oracle/`, then their `OriginalExe` tests in
+`tests/Arcanum.Simulation.Tests` with `ARCANUM_ORACLE_REQUIRED=1`; the executable is `--exe`, `$ARCANUM_EXE` or
+`Arcanum.exe` in the configured game folder (`ORIGINAL_EXE_NAME`, SHA-256 `ORIGINAL_EXE_SHA256`). `test_launcher_sync.py`
+fails when that table, the oracle's function list, the test methods or the pinned SHA-256 drift apart. **Rule:** a change that adds
 or changes a viewer mode's arguments or original inputs updates `GAME_ROLES`,
 `MODE_ROLES` and `ROLE_FLAGS` in `tools/local_dev/launch.py`, `./arcanum` when it
 adds a mode, and this section, in the same PR. `test_launcher_sync.py` fails when
