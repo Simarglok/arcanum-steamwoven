@@ -9,8 +9,8 @@ functions in `Arcanum.Simulation.Combat.RealTimeCombatRules`; combat mode is a d
 [game session](game-session-runtime.md) (snapshot schema 15); the AREA viewer toggles it with the original R key.
 Requirements: [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001) (mode and switching),
 [FR-COMBAT-012](../requirements/combat-magic-tech.md#fr-combat-012) (the auto-attack part) and
-[FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the attack's action frame runs its hit once). The hero's attack in the viewer,
-AI and NPC fights are not part of it ([Not ready](#not-ready)).
+[FR-RUNTIME-003](../requirements/world-travel-runtime.md#fr-runtime-003) (the attack's action frame runs its hit once). The hero's attack in the viewer is
+[ARC-COMBAT-005](hero-attack-runtime.md); AI and NPC fights are not part of it ([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -82,9 +82,9 @@ incompatible version" and the next F7 overwrites it. No host kept combat mode be
 
 ## Not ready
 
-- The hero's attack: the combat-mode left click on a living NPC (the original attacks it; here a click still talks and
-  the dialog leaves combat mode), the attack cursor, the attack animation and its ART, damage, death and loot through it
-  (next slice, top-20 item 10). The playback rules are host-ready but no host plays an attack yet.
+- The hero's attack is the next slice, ARC-COMBAT-005 ([hero attack runtime](hero-attack-runtime.md)): the combat-mode
+  click on a living NPC, the attack cursor and ART, damage, death and loot, played by these rules. Ranged attacks and the
+  repeat shot have no host yet.
 - AI: NPC combat mode, combat focus and fighting (the exit gate's threats are always empty in the viewer), the attacked
   NPC's AI pass, NPC attacks.
 - The turn-based setting in the viewer (Space) and its round world; the session supports both.

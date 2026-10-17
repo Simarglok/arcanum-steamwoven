@@ -55,11 +55,14 @@ public partial class TerrainViewerApp
         if (failure != GameSessionFailure.None) { _inventoryStatus = $"inventory: unavailable (seed {failure})"; return; }
         _inventoryHost = host;
         _inventoryStatus = "inventory: left-click an item to pick it up or a dead NPC to loot; I opens the window";
+        // ARC-COMBAT-005: the combat targets are the seeds' NPCs.
+        BindAreaCombat(host);
     }
 
     private void UnbindAreaInventory()
     {
         EndInventory();
+        UnbindAreaCombat();
         _inventoryHost = null; _inventoryAfterRoute = null; _inventoryHiddenStamp = null; _inventoryHidden = null;
         _canvas?.SetAreaHidden(null);
         _inventoryStatus = "inventory: not loaded";

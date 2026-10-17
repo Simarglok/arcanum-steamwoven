@@ -130,6 +130,34 @@ public sealed class AreaScenePlan
         return new(new(left, top, checked(right - left), checked(bottom - top)), Array.AsReadOnly(ordered), coverage.AsReadOnly(), chart);
     }
 
+    /// <summary>
+    /// ARC-COMBAT-005: <paramref name="command"/> (the body of <paramref name="body"/> drawn from <paramref name="visual"/>) with
+    /// another frame of a critter art, a fallen pose: the same object, visual key, cell, order and blend, its destination placed from
+    /// the new frame's size and hotspot by the rule <see cref="Create"/> places a body with (scale and shrink of the object).
+    /// </summary>
+    public static AreaDrawCommand Repose(AreaDrawCommand command, AreaObjectRecord body, AreaVisualRecord visual, AreaFrameKey frame,
+        int width, int height, int hotX, int hotY)
+    {
+        ArgumentNullException.ThrowIfNull(command); ArgumentNullException.ThrowIfNull(body); ArgumentNullException.ThrowIfNull(visual);
+        ArgumentNullException.ThrowIfNull(frame);
+        if (command.Identity != body.Key || command.Visual != visual.Key || visual.RawArt >> 28 is 1 or 3) throw new ArgumentException("AREA_REPOSE_BODY");
+        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        var state = State(body);
+        int Scaled(int value) => checked(value * state.Scale / 100) / (state.Shrunk ? 2 : 1);
+        // The anchor (projection + object offset + 40, 20) the T0 command was placed from.
+        var anchorX = checked(command.Destination.X + visual.HotX * state.Scale / 100 / (state.Shrunk ? 2 : 1));
+        var anchorY = checked(command.Destination.Y + visual.HotY * state.Scale / 100 / (state.Shrunk ? 2 : 1));
+        var w = Scaled(width); var h = Scaled(height);
+        if (w <= 0 || h <= 0) throw new InvalidOperationException("AREA_BODY_SCALE");
+        var destination = new TerrainRect(checked(anchorX - hotX * state.Scale / 100 / (state.Shrunk ? 2 : 1)),
+            checked(anchorY - hotY * state.Scale / 100 / (state.Shrunk ? 2 : 1)), w, h);
+        return command with
+        {
+            Frame = frame, Source = new(0, 0, width, height), Destination = destination,
+            WadeRows = command.WadeRows == 0 ? 0 : command.Phase == 4 ? Math.Min(WadingRows, h) : h,
+        };
+    }
+
     /// <summary>The drawn hotspot. Walls (art class 1, ARC-WORLD-009) and portals (class 3, doors and windows of
     /// whole maps, ARC-RENDER-017): rotations 0, 1, 6 and 7 move it 40 left and 20 down, then the flip bit mirrors
     /// it as width − x − 2 (research T7 and the pinned tig art.c 1235–1253). The pinned Crash Site profiles draw no

@@ -14,14 +14,20 @@ public sealed class DiagnosticGridActor
     public DiagnosticGridSession? CardinalSession => Session as DiagnosticGridSession;
     // ARC-WORLD-020: the human with its run resource (the WORLD diagnostic never selects Run; facing tables are shared).
     public ActorDiagnosticProfile Profile => ActorDiagnosticProfile.HumanFixedArea;
-    public int CurrentFrame => _timeline.CurrentFrame;
+    public int CurrentFrame => Pose is { } pose ? pose.Frame : _timeline.CurrentFrame;
     public bool IsPlaying => _timeline.IsPlaying;
-    public DiagnosticActorState State => Session is { } session ? RenderState(session.State)
+    public DiagnosticActorState State => Session is { } session ? Render(session.State)
         : new(new(6, 1), 5, ActorDiagnosticAction.Idle);
+    /// <summary>ARC-COMBAT-005: the attack pose the host draws while the settled actor attacks in place (facing octant and
+    /// attack frame); null otherwise. A moving actor is drawn by its movement whatever the pose says.</summary>
+    public (int Octant, int Frame)? AttackPose { get; set; }
+    private (int Octant, int Frame)? Pose => AttackPose is { } pose && Session?.State.Phase == MovementPhase.Settled ? pose : null;
+    private DiagnosticActorState Render(MovementState state) => Pose is { } pose && state.Phase == MovementPhase.Settled
+        ? RenderState(state) with { Facing = pose.Octant, Action = ActorDiagnosticAction.Attack } : RenderState(state);
     public void Configure(CardinalTraversalSnapshot snapshot, SimulationTime time, StepDuration? duration = null, MovementLimits? limits = null)
     {
         var session = new DiagnosticGridSession(snapshot, time, duration, limits);
-        Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
     /// <summary>ARC-WORLD-016: the live actor overlay every AREA session this actor configures admits its steps against.</summary>
     public Func<AreaOccupancy?>? AreaOccupancy { get; set; }
@@ -33,9 +39,9 @@ public sealed class DiagnosticGridActor
         AreaChart? chart = null, CellCoord? start = null, NeighborDirection facing = NeighborDirection.XPlus)
     {
         var session = new AreaGridSession(snapshot, time, duration, limits, chart, start, facing) { Occupancy = AreaOccupancy, Timing = duration is null ? AreaGaitTiming : null, Gait = AreaGait };
-        Session = session; _timeline = Timeline(ActorDiagnosticAction.Idle);
+        Session = session; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle);
     }
-    public void DisposeSession() { Session = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
+    public void DisposeSession() { Session = null; AttackPose = null; _timeline = Timeline(ActorDiagnosticAction.Idle); }
 
     public GridAdvance Advance(SimulationTime time, ReadOnlySpan<InputBatch> batches,
         Action<ActorDiagnosticPlacementInput>? validateSelection = null)
@@ -68,7 +74,10 @@ public sealed class DiagnosticGridActor
         if (result.Movement.Status == MovementStatus.Completed) _timeline = trial;
         return result;
     }
-    public ActorDiagnosticPlacementInput Placement() => Placement(Session!, Session!.State, CurrentFrame);
+    public ActorDiagnosticPlacementInput Placement() => Session is AreaGridSession area
+        ? DiagnosticActorMotion.ToPlacement(Render(area.State), CurrentFrame, area.Chart.MinimumCell, area.Chart.MaximumCell)
+            with { CameraOriginX = AreaGridSession.LocationOriginX, CameraOriginY = AreaGridSession.LocationOriginY }
+        : Placement(Session!, Session!.State, CurrentFrame);
     /// <summary>The continuous foot point the camera follows: the projected position plus the drawn anchor offset,
     /// <c>(40,20)</c> on the AREA chart (the diamond centre, ARC-RENDER-011) and <c>(0,20)</c> in WORLD.</summary>
     public Vec2 FootAnchor => DiagnosticActorMotion.Project(State.Position)

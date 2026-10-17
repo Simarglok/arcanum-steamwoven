@@ -148,6 +148,8 @@ public enum GameSessionFailure
     ExperienceUnavailable, InvalidExperience, InvalidExperienceTarget,
     // Combat mode (ARC-COMBAT-004).
     CombatModeInactive, InvalidCombatMode,
+    // Hero attack (ARC-COMBAT-005).
+    AttackUnavailable, InvalidAttack, AttackUnsupported,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }

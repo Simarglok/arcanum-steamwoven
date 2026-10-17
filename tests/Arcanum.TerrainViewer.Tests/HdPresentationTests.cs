@@ -354,7 +354,7 @@ public sealed class HdPresentationTests
         Assert.IsNull(area.TotalBytes);
         var world = HdDomainBudget.World(ceiling);
         Assert.AreEqual(1L << 30, world.VisibleBytes); Assert.AreEqual(1L << 30, world.TotalBytes);
-        Assert.AreEqual(184 + 5, world.RetainFrames);
+        Assert.AreEqual(195 + 5, world.RetainFrames);
     }
 
     [TestMethod]

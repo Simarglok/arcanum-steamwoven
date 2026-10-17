@@ -53,8 +53,9 @@ public partial class TerrainViewerApp
                 Require(!_canvas.AreaVisibleCommands.Any(_canvas.AreaHiddenOf), "TAKEN_ITEM_DRAWN");
                 maxLive = Math.Max(maxLive, _cache.AreaCount); maxVisible = Math.Max(maxVisible, _canvas.AreaVisibleCount);
                 maxBytes = Math.Max(maxBytes, _cache.AreaRgbaBytes);
-                // GPU residency is a subset of the retained repository, never more.
-                Require(_cache.AreaCount <= old.CpuFrames && _cache.AreaRgbaBytes <= old.CpuBytes, "GPU_BUDGET");
+                // GPU residency is a subset of the retained repository, never more (ARC-COMBAT-005: with the fallen poses added to it).
+                var poses = AreaOverlayExtra();
+                Require(_cache.AreaCount <= old.CpuFrames + poses.Frames && _cache.AreaRgbaBytes <= old.CpuBytes + poses.Bytes, "GPU_BUDGET");
                 // The cache's visible set is exactly the frames this view draws per item;
                 // everything else resident stays within the retention allowance.
                 var drawn = _canvas.AreaVisibleCommands.Where(command => _canvas.AreaChunkCount == 0 || command.Identity is not null)

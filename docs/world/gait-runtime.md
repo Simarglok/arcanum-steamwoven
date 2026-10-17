@@ -73,7 +73,7 @@ keyboards have no Num Lock key; the palette option works everywhere.
   no Speed scaling), whatever the gait, and its permit says `GAIT_VAULT`; the actor
   draws the vault ART (animation 13, resource1 ordinal 2677, 8 × 9 frames, 8 fps,
   commitment `e4f5ddec…`), played once over the step. `HumanFixedArea` (renamed from
-  `HumanFixedRun`) now has 150 keys, 1,259,440 RGBA bytes. The anchor moves linearly
+  `HumanFixedRun`) now has 150 keys, 1,259,440 RGBA bytes (195 keys, 1,705,144 bytes with the ARC-COMBAT-005 attack). The anchor moves linearly
   across the step and the cell commits at its half, not at the vault's action frame
   (research W4); the next step resumes the gait; two vaults in a row each play from the
   first frame. A follower's window step takes the vault time too, but Virgil is drawn

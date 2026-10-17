@@ -29,6 +29,9 @@ public enum AreaHoverAction
     /// <summary>ARC-UI-004: a dead NPC within reach opens as a container in the inventory window.</summary>
     Loot,
     WalkToLoot,
+    /// <summary>ARC-COMBAT-005: in combat mode a living NPC within the weapon's reach is attacked.</summary>
+    Attack,
+    WalkToAttack,
 }
 
 public enum AreaNamesStatus { Ready, ModuleOutsideGameRoot, MountFailed, StackFailed, CatalogFailed }
@@ -193,6 +196,8 @@ public static class AreaHover
         AreaHoverAction.WalkToPickUp => "walk to pick up",
         AreaHoverAction.Loot => "loot",
         AreaHoverAction.WalkToLoot => "walk to loot",
+        AreaHoverAction.Attack => "attack",
+        AreaHoverAction.WalkToAttack => "walk to attack",
         _ => "none",
     };
 
