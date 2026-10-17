@@ -188,11 +188,20 @@ public sealed class SessionEventTests
         for (var i = 0; i < GameSessionLimits.PolicyMaxLifeRecords; i++)
             Damage(owner, Npc($"oid:n{i}"), new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
         Damage(owner, SessionLifeTarget.Hero, new LifeDamage { HitPoints = 1, Fatigue = 1, Poison = 10 });
-        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls, owner.QueryEvents().Count);
+        Assert.AreEqual(SessionEventKinds.MaxPending - SessionEventKinds.MaxScriptCalls - SessionEffectLimits.MaxTimedEffects, owner.QueryEvents().Count);
         // ARC-SCRIPT-010: the deferred SCR calls have their own share of the queue on top.
         for (var i = 0; i < SessionEventKinds.MaxScriptCalls; i++)
             Assert.AreEqual(GameSessionDisposition.Changed, owner.ScheduleScriptCall(owner.Version, new(i + 1, 0, null, null), 1000).Disposition);
         Assert.AreEqual(GameSessionFailure.EventBudgetExceeded, owner.ScheduleScriptCall(owner.Version, new(1, 0, null, null), 1000).Failure);
+        // ARC-WORLD-029: and so do the timed effects' ENDs (each entry removed again, so only the ENDs stay).
+        var effect = new SessionEffectDefinition(120, [new(Arcanum.Data.Characters.EffectAttributeKind.BasicSkill, 1, Arcanum.Data.Characters.EffectChangeOperator.Add, 1)]);
+        for (var i = 0; i < SessionEffectLimits.MaxTimedEffects; i++)
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.AddHeroTimedEffect(owner.Version, effect, Arcanum.Simulation.Character.EffectCause.Spell, 1, 1000).Disposition);
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.RemoveHeroEffect(owner.Version, 120).Disposition);
+        }
+        Assert.AreEqual(GameSessionFailure.EventBudgetExceeded,
+            owner.AddHeroTimedEffect(owner.Version, effect, Arcanum.Simulation.Character.EffectCause.Spell, 1, 1000).Failure);
         Assert.AreEqual(SessionEventKinds.MaxPending, owner.QueryEvents().Count);
         Assert.AreEqual(GameSessionDisposition.Changed, owner.ApplyDamage(owner.Version, Npc("oid:n0"), new LifeDamage { HitPoints = 1 }).Disposition);
         // A save of a full queue restores.

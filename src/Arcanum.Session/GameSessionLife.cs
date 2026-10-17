@@ -1,3 +1,4 @@
+using System.Collections.Immutable;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Randomness;
@@ -93,16 +94,19 @@ internal sealed class LifeDomain
     /// The hero's life facts at a state: level and effective stats from the character owner, strength without and under
     /// each poison penalty, crippled legs as a query condition. Pools are 0: every pre-made PC prototype stores no hit-point
     /// or fatigue points or adjustment, and buying them belongs to levelling. No traits; the normal resistance is the worn armour's
-    /// (ARC-WORLD-028, <see cref="GameSessionOwner"/> equipment).
+    /// (ARC-WORLD-028, <see cref="GameSessionOwner"/> equipment); the effect changes of the two maxima are the hero's durable
+    /// effects' (ARC-WORLD-029). Pools or adjustments added here must raise <see cref="EffectDomain.HeroMaximumCeiling"/> too,
+    /// or the effect bounds stop holding.
     /// </summary>
-    internal static LifeFacts HeroFacts(HeroDomain hero, LifeState state, int normalResistance)
+    internal static LifeFacts HeroFacts(CharacterStatsOwner stats, int level, LifeState state, int normalResistance,
+        ImmutableArray<EffectModifier> maxHitPoints, ImmutableArray<EffectModifier> maxFatigue)
     {
         var legs = state.Conditions.HasFlag(LifeConditions.CrippledLegsBoth);
-        CharacterStatsSnapshot At(int poison) => hero.Stats.Query(new(0, poison, legs)).Snapshot!;
+        CharacterStatsSnapshot At(int poison) => stats.Query(new(0, poison, legs)).Snapshot!;
         var plain = At(0);
         return new LifeFacts
         {
-            Level = hero.State.Level,
+            Level = level,
             Strength = plain.GetEffective(CharacterStat.Strength),
             PoisonedStrength = [At(100).GetEffective(CharacterStat.Strength), At(200).GetEffective(CharacterStat.Strength),
                 At(300).GetEffective(CharacterStat.Strength)],
@@ -111,6 +115,8 @@ internal sealed class LifeDomain
             HealRate = plain.GetEffective(CharacterStat.HealRate),
             PoisonRecovery = plain.GetEffective(CharacterStat.PoisonRecovery),
             NormalResistance = normalResistance,
+            MaxHitPointEffects = maxHitPoints,
+            MaxFatigueEffects = maxFatigue,
         };
     }
 

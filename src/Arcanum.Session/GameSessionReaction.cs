@@ -60,11 +60,13 @@ internal sealed class ReactionDomain
         !record.IsBaseline && (record.Remembered is not { } r || ReactionLimits.InRange(r)) &&
         (record.Conversation is not { } c || ReactionLimits.InRange(c));
 
-    /// <summary>The hero's side of a reaction (see <see cref="GameSessionOwner.QueryHeroReactionFacts"/>).</summary>
-    internal static ReactionPcFacts HeroFacts(HeroDomain hero)
+    /// <summary>The hero's side of a reaction (see <see cref="GameSessionOwner.QueryHeroReactionFacts"/>); the reaction, good and
+    /// bad reaction effects are the hero's durable effects' (ARC-WORLD-029).</summary>
+    internal static ReactionPcFacts HeroFacts(HeroDomain hero, EffectDomain effects)
     {
         var stats = hero.Stats.Query(new(0)).Snapshot!;
-        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, [], [], [],
+        return new(hero.State.Race, stats.GetEffective(CharacterStat.ReactionModifier), 0, effects.Special(EffectSpecial.Reaction),
+            effects.Special(EffectSpecial.GoodReaction), effects.Special(EffectSpecial.BadReaction),
             stats.GetEffective(CharacterStat.Charisma) >= CharacterStatRules.ExtraordinaryThreshold);
     }
 }
@@ -77,7 +79,7 @@ public sealed partial class GameSessionOwner
     /// and the hero's innate effects keep only the stats the character owner models. Null for a session without a hero, whose host
     /// supplies PC facts itself.
     /// </summary>
-    public ReactionPcFacts? QueryHeroReactionFacts() { ThrowIfDisposed(); return _hero is null ? null : ReactionDomain.HeroFacts(_hero); }
+    public ReactionPcFacts? QueryHeroReactionFacts() { ThrowIfDisposed(); return _hero is null ? null : ReactionDomain.HeroFacts(_hero, _effects); }
 
     /// <summary>The NPC's saved reaction record, or null while the session never changed it. An invalid entity id throws.</summary>
     public SessionReaction? QueryReactionRecord(string entity)

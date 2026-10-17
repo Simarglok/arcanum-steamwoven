@@ -24,7 +24,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 12. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 13. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -35,7 +35,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "random", "life", "reactions", "combat", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "random", "life", "reactions", "combat", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -68,6 +68,10 @@ public static class GameSessionSnapshotCodec
         "magicCritMissEffect"];
     private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
         "magicResistances", "unarmedBonus"];
+    private static readonly string[] EffectsFields = ["hero", "definitions"];
+    private static readonly string[] HeroEffectFields = ["effect", "cause"];
+    private static readonly string[] DefinitionFields = ["effect", "changes"];
+    private static readonly string[] ChangeFields = ["kind", "attribute", "operator", "value"];
     private static readonly string[] RandomFields = ["seed", "draws"];
     private static readonly string[] LifeFields = ["hero", "critters"];
     private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
@@ -264,6 +268,37 @@ public static class GameSessionSnapshotCodec
             foreach (var worn in snapshot.Equipment.Worn) WriteWorn(w, worn);
             w.WriteEndArray();
 
+            w.WriteStartObject("effects");
+            w.WriteStartArray("hero");
+            foreach (var entry in snapshot.Effects.Hero)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("effect", entry.Number);
+                w.WriteString("cause", entry.Cause.ToString());
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("definitions");
+            foreach (var definition in snapshot.Effects.Definitions)
+            {
+                w.WriteStartObject();
+                w.WriteNumber("effect", definition.Number);
+                w.WriteStartArray("changes");
+                foreach (var change in definition.Changes)
+                {
+                    w.WriteStartObject();
+                    w.WriteString("kind", change.Kind.ToString());
+                    w.WriteNumber("attribute", change.Attribute);
+                    w.WriteString("operator", change.Operator.ToString());
+                    w.WriteNumber("value", change.Value);
+                    w.WriteEndObject();
+                }
+                w.WriteEndArray();
+                w.WriteEndObject();
+            }
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             w.WriteStartObject("random");
             w.WriteString("seed", snapshot.Random.Seed.ToString("x16", CultureInfo.InvariantCulture));
             w.WriteNumber("draws", snapshot.Random.Draws);
@@ -433,7 +468,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), Events(f["events"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), Events(f["events"]), Lighting(f["lighting"]));
     }
 
     // Ranges and canonical spelling; the hero's presence, death times against the clock and budgets are Restore's.
@@ -918,6 +953,44 @@ public static class GameSessionSnapshotCodec
             worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"));
         }
         return new(worn);
+    }
+
+    // Shapes, names and ranges, definitions by strictly ascending number; causes, rules in use and the hero's presence are Restore's.
+    private static SessionEffectState Effects(JsonElement element)
+    {
+        const string p = "$.effects";
+        var f = Fields(element, p, EffectsFields);
+        var entries = Array(f["hero"], p + ".hero", SessionEffectLimits.MaxHeroEffects);
+        var hero = new SessionEffect[entries.Length];
+        for (var i = 0; i < entries.Length; i++)
+        {
+            var path = $"{p}.hero[{i}]";
+            var e = Fields(entries[i], path, HeroEffectFields);
+            hero[i] = new(Int(e["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber),
+                Named<Arcanum.Simulation.Character.EffectCause>(e["cause"], path + ".cause"));
+        }
+        var items = Array(f["definitions"], p + ".definitions", SessionEffectLimits.MaxHeroEffects);
+        var definitions = new SessionEffectDefinition[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}.definitions[{i}]";
+            var d = Fields(items[i], path, DefinitionFields);
+            var number = Int(d["effect"], path + ".effect", SessionEffectLimits.FirstNumber, SessionEffectLimits.LastNumber);
+            if (i > 0 && number <= definitions[i - 1].Number) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".effect");
+            var list = Array(d["changes"], path + ".changes", 6 * Arcanum.Data.Characters.EffectRules.MaxChangesPerCollection);
+            var changes = new Arcanum.Data.Characters.EffectChange[list.Length];
+            for (var j = 0; j < list.Length; j++)
+            {
+                var at = $"{path}.changes[{j}]";
+                var c = Fields(list[j], at, ChangeFields);
+                changes[j] = new(Named<Arcanum.Data.Characters.EffectAttributeKind>(c["kind"], at + ".kind"),
+                    Int(c["attribute"], at + ".attribute", 0, 27),
+                    Named<Arcanum.Data.Characters.EffectChangeOperator>(c["operator"], at + ".operator"),
+                    Int(c["value"], at + ".value", -SessionEffectLimits.MaxMagnitude, SessionEffectLimits.MaxMagnitude));
+            }
+            definitions[i] = new(number, ImmutableArray.Create(changes));
+        }
+        return new(hero, definitions);
     }
 
     private static EquipmentItem EquipmentItemValue(JsonElement element, string p)

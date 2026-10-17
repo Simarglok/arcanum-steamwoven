@@ -3,7 +3,7 @@
 **Status:** delivered by ARC-INPUT-001 in the Terrain Viewer WORLD modes
 (`world-diagnostic` and `crash-site-area`). Diagnostic tool, **not** original UI and
 not a game control scheme. Physical keyboard/controller verdict: owner validation
-ARC-INPUT-002 (checklist below). Requirements: [original keyboard and mouse](../requirements/original-keyboard-mouse.md)
+ARC-INPUT-002 **passed 2026-10-17** (checklist and result below). Requirements: [original keyboard and mouse](../requirements/original-keyboard-mouse.md)
 KM-01, KM-02, KM-05, KM-06, KM-07, KM-09 (variant B, chosen 2026-10-04), KM-10, KM-11.
 
 ## What changed in WORLD
@@ -137,9 +137,10 @@ Software only (synthetic Godot InputEvents and simulated controller levels):
   ARC-INPUT-001 markers. Its ordinary mode is `crash-site-area`; `./arcanum area`
   prefers the current ARC-INPUT-001 build over ARC-RENDER-007.
 
-**NOT VERIFIED:** native macOS OS delivery of Ctrl+Shift+F9, real keyboards/layouts/Fn,
-physical controller comfort — `OWNER_KEYBOARD_VALIDATION_PENDING (ARC-INPUT-002)`.
-Synthetic injection is not a physical press. No original gameplay key is implemented:
+**Owner-verified (L3, ARC-INPUT-002, 2026-10-17):** native macOS delivery of
+Ctrl+Shift+F9, a physical Mac keyboard and a physical controller (see the result below).
+**NOT VERIFIED:** other keyboard layouts and models; visibility of the HUD reserved-key hint
+(finding below); synthetic injection is not a physical press. No original gameplay key is implemented:
 click-to-move, Followers, quick slots, game screens and called shots remain future work.
 
 ## Owner checklist (ARC-INPUT-002)
@@ -156,3 +157,21 @@ controller, then record the verdict in the ARC-INPUT-002 task.
 4. **Fit/zoom:** Fit, 100% (1.00) and 200% (2.00) give the expected view.
 5. **Controller:** Start opens the palette; left stick movement, right stick camera,
    inversion and LT/RT zoom work as before.
+
+### Result (2026-10-17)
+
+The owner ran `./arcanum area` (the current `crash-site-area` build, which contains the
+ARC-INPUT-001 route) on the owner's Mac with a physical keyboard and controller (models not recorded),
+following a 7-step version of the checklist (owner step numbers in brackets). Verdict:
+**PASS**, with one unconfirmed HUD finding. The owner answered each step in one line; "works" is
+the owner's word, and nothing beyond it was reported.
+
+| Step | Owner result |
+| --- | --- |
+| Launch: `git pull`, `./arcanum status`, `./arcanum area` (owner 1) | works |
+| 1 Chord (owner 2) | works |
+| 2 Release (owner 3) | no other problem reported (no second or late action and no world reaction noticed). **Finding:** the HUD hint "last reserved key: … (original; NOT IMPLEMENTED)" was not seen. Probable cause, not confirmed: in `crash-site-area` the hint sits near the end of the long HUD detail text, in a scroll area inside a panel capped at min(35% of the viewport height, 360 px) (`TerrainDiagnosticHud.ResizeForViewport`), so it is below the fold unless the HUD is scrolled. Also possible: plain F1–F5 and F9 on a Mac top row sent as media keys without Fn (no key event, so no hint), or a focused GUI control suppressing the hint. No automated check covers the hint text |
+| 3 Text field (owner 4) | works; the typed zoom value is applied on Enter, as the numeric editor (Godot `SpinBox`) commits it on Enter or focus loss, which is the editor's purpose and not a key leak |
+| 4 Fit/zoom (owner 5) | works |
+| Mouse and arrows: wheel and +/- do not zoom, arrows pan, LMB on the ground sets the click-to-move goal (owner 6) | works; the first physical-mouse check of the LMB goal (hover cursor and route preview do not exist yet) |
+| 5 Controller (owner 7) | works |

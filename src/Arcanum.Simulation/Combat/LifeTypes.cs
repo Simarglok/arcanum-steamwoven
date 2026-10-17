@@ -1,4 +1,5 @@
 using System.Collections.Immutable;
+using Arcanum.Simulation.Character;
 
 namespace Arcanum.Simulation.Combat;
 
@@ -75,6 +76,10 @@ public static class LifeLimits
     public const int MaxAmount = 1_000_000;
     /// <summary>Bound of one resting heal (ten game years).</summary>
     public const int MaxRestHours = 24 * 365 * 10;
+    /// <summary>Bound of the effect changes of one maximum (ARC-WORLD-029): 64 effects of up to seven changes each.</summary>
+    public const int MaxMaximumEffects = 64 * 7;
+    /// <summary>Bound of the magnitude of one effect change of a maximum.</summary>
+    public const int MaxMaximumEffectMagnitude = 1_000_000;
 }
 
 /// <summary>
@@ -93,7 +98,10 @@ public readonly record struct LifeState(int HitPointDamage, int FatigueDamage, i
 /// penalty; <see cref="PoisonedStrength"/> holds the effective strength under poison penalty 1, 2 and 3 (poison level
 /// 100.., 200.., 300..) and may be left empty when it equals <c>max(1, Strength − penalty)</c> (no effects push strength
 /// against its range). The session fills all three for its hero from the character owner. <see cref="NormalResistance"/> is the effective normal
-/// resistance a poison tick meets (attacks get theirs from the attack resolver).
+/// resistance a poison tick meets (attacks get theirs from the attack resolver). <see cref="MaxHitPointEffects"/> and
+/// <see cref="MaxFatigueEffects"/> are the critter's effect changes of the two maxima (ARC-WORLD-029, the source's <c>maxhps</c> and
+/// <c>maxfatigue</c>), applied to the whole sum of points, adjustment and stat part; facts whose maxima reach
+/// <see cref="LifeLimits.DeathHitPointDamage"/> in either direction are invalid.
 /// </summary>
 public sealed record LifeFacts
 {
@@ -112,6 +120,8 @@ public sealed record LifeFacts
     public int PoisonRecovery { get; init; } = 8;
     public int NormalResistance { get; init; }
     public LifeTraits Traits { get; init; }
+    public ImmutableArray<EffectModifier> MaxHitPointEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
+    public ImmutableArray<EffectModifier> MaxFatigueEffects { get; init; } = ImmutableArray<EffectModifier>.Empty;
 }
 
 /// <summary>
