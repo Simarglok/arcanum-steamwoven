@@ -184,11 +184,20 @@ public partial class TerrainCanvas
             {
                 // Decimated chunks (zoom below 1) draw Legacy and are not candidates.
                 if (AreaChunkLevel != 0) continue;
+                // Without a usable pack or without chunk entries no chunk is composed for a question.
+                var refused = source.Pack is not { } pack ? HdFallbackReason.NoPack : pack.Review == HdReviewStatus.Rejected ? HdFallbackReason.PackRejected
+                    : pack.TerrainChunkCount == 0 ? HdFallbackReason.FrameMissing : (HdFallbackReason?)null;
+                if (refused is not null) { draws[index] = new(null, null, refused); continue; }
+                if (!HdCrop.Fits(command.Source, scale)) { draws[index] = new(null, null, HdFallbackReason.HdAxisLimit); continue; }
                 var terrain = _areaChunks!;
+                byte[]? fresh = null;
                 if (!_hdChunkQueries.TryGetValue(chunk, out var chunkQuery))
-                    _hdChunkQueries[chunk] = chunkQuery = HdFrameQueries.FromTerrainChunk(terrain, chunk, terrain.Compose(chunk, 0));
-                draws[index] = HdCrop.Fits(command.Source, scale) ? new(chunkQuery, () => terrain.Compose(chunk, 0))
-                    : new(null, null, HdFallbackReason.HdAxisLimit);
+                {
+                    fresh = terrain.Compose(chunk, 0);
+                    _hdChunkQueries[chunk] = chunkQuery = HdFrameQueries.FromTerrainChunk(terrain, chunk, fresh);
+                }
+                // The first request takes the bytes composed for the question; a later one composes again.
+                draws[index] = new(chunkQuery, () => { var bytes = fresh ?? terrain.Compose(chunk, 0); fresh = null; return bytes; });
                 continue;
             }
             if (command.Identity is null) continue; // per-command terrain stays Legacy
@@ -208,7 +217,9 @@ public partial class TerrainCanvas
         // each binds in draw order and the bindings are merged back by index.
         var isChunk = draw.Select(command => _areaChunkCommands.ContainsKey(command)).ToArray();
         var bodyBindings = HdResidency(ref _hdArea, HdDomainBudget.Area, IsFrameQuery).Submit(draws.Select((d, i) => isChunk[i] ? HdDraw.None : d).ToArray(), source);
-        var chunkBindings = isChunk.Any(chunk => chunk)
+        // The terrain residency is submitted whenever it exists (all None without chunks in view), so
+        // it keeps its textures within limits, drops its own decoded pixels and clears deferred uploads.
+        var chunkBindings = isChunk.Any(chunk => chunk) || _hdTerrain is not null
             ? HdResidency(ref _hdTerrain, HdDomainBudget.Terrain, IsChunkQuery).Submit(draws.Select((d, i) => isChunk[i] ? d : HdDraw.None).ToArray(), source)
             : new HdBinding<ImageTexture>[draw.Count];
         var bindings = bodyBindings.Select((binding, i) => isChunk[i] ? chunkBindings[i] : binding).ToArray();

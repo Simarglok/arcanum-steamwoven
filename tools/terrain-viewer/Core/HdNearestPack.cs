@@ -64,10 +64,11 @@ public static class HdNearestPack
         var recipe = Encoding.UTF8.GetBytes(Recipe(id, scale, list.Any(frame => frame.Query.Chunk is not null)));
         WriteFile(directory, "recipe.json", recipe);
         var entries = new JsonArray();
-        var seen = new HashSet<HdSpriteQuery>();
+        // Sprites are unique by key (a key twice is a DuplicateKey pack), chunks by their whole question.
+        var seen = new HashSet<object>();
         foreach (var frame in list)
         {
-            if (!seen.Add(frame.Query)) continue;
+            if (!seen.Add(frame.Query.Chunk is null ? frame.Query.Key : frame.Query)) continue;
             var legacy = frame.Query.Legacy;
             if (HdFrameQueries.Sha256(frame.Rgba) != legacy.RgbaSha256) throw new ArgumentException("Legacy RGBA does not hash to its question.", nameof(frames));
             var png = HdPng.EncodeRgba(legacy.Width * scale, legacy.Height * scale, Replicate(frame.Rgba, legacy.Width, legacy.Height, scale, tintColumn, tint, parentTint));

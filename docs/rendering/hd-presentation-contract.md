@@ -208,7 +208,7 @@ may lower each of them (amendment below).
 | AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B | same frame count, `N² · 81,853,096` B |
 | AREA retained (left the view) | 512 frames, 32 MiB | 512 frames, `N² · 32` MiB |
 | WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of `N²/4 · 256` MiB (256 MiB at 2×, 1 GiB at 4×), not shared with the Legacy 256 MiB |
-| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | since ARC-RENDER-016 one HD byte limit for visible and kept chunks of `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB), and the Legacy 1,024-chunk cap; separate from the AREA frame limits |
+| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | since ARC-RENDER-016 one HD byte limit for visible and kept chunks of `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB), and at most 1,024 kept chunks; separate from the AREA frame limits |
 
 - There is no whole-area HD CPU repository: HD pixels are decoded only for the
   visible set, the preload queue and the retained set, and released with them.
@@ -409,7 +409,7 @@ and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the detai
    per-chunk Legacy draw.
 4. **Budget.** Chunks have their own residency under the terrain ceiling of the Budgets
    table (`HdDeviceBudget.TerrainBytes`, reserved by ARC-DATA-014): one byte limit for
-   visible and kept chunks and the Legacy 1,024-chunk cap; the AREA frame limits are not
+   visible and kept chunks and at most 1,024 kept chunks (the Legacy chunk count cap); the AREA frame limits are not
    shared. Admission, retention, uploads, the toggle protocol and the release rules are
    those of frames. The two residencies share one frame source; each drops only its own
    decoded pixels.

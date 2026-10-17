@@ -712,10 +712,13 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   HD is substituted when a texture is bound to an already planned draw.
 - **Terrain chunks (ARC-RENDER-016).** A chunk item at level 0 asks for the chunk's question
   (`HdFrameQueries.FromTerrainChunk`: coordinates, composed Legacy RGBA hash, tile digest; made
-  once per chunk and map from one compose) and binds the `N·512` square HD chunk with the
+  once per chunk and map from one compose on the main thread, whose bytes also serve the first
+  request; a chunk requested again after its pixels were released is composed again there, the
+  decode stays off the main thread). Without a pack, with a rejected pack or with a pack that has
+  no chunk entries nothing is composed (`NoPack`, `PackRejected`, `FrameMissing`). It binds the `N·512` square HD chunk with the
   scaled crop to the unchanged world square, keeping its ambient channel. Chunks use their own
   residency under the device's terrain budget (`HdDomainBudget.Terrain`: `TerrainBytes` for
-  visible and kept chunks, ceiling `N²·192` MiB, and the 1,024-chunk cap), not the AREA frame
+  visible and kept chunks, ceiling `N²·192` MiB, and at most 1,024 kept chunks), not the AREA frame
   limits; the two residencies share the frame source and each drops only its own decoded
   pixels. The Legacy chunk textures stay resident under both profiles.
 - **AREA.** An HD item keeps its Legacy destination, reflection, phase and order and samples
@@ -742,12 +745,12 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   profiles, so any fallback is immediate.
 - **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
   decoded pixels are held only until their texture is uploaded, at most 64 frames or 64 MiB
-  per submission on the main thread; a frame that becomes visible later is decoded lazily and
+  per residency and submission (in AREA the frame and the terrain residency each) on the main thread; a frame that becomes visible later is decoded lazily and
   draws Legacy (`Pending`) until it is ready; a frame whose decode fails for any reason is
   `Invalid`. There is no whole-area HD CPU repository. The texture cache keeps the Legacy RGBA
   of the actor and WORLD static frames (a few MB, counted at load) in both profiles, because
   the mask check of an HD frame needs this device's Legacy alpha.
-- **Budgets.** One residency per domain, keyed by the pack question inside one pack (a new
+- **Budgets.** One residency per domain (AREA frames, AREA terrain chunks since ARC-RENDER-016, WORLD), keyed by the pack question inside one pack (a new
   pack or budget releases every HD texture). Admission is in draw order on the Legacy frame
   size: a frame whose `N²·w·h·4` bytes would exceed the visible limit is `HdBudget` before it
   is decoded; a frame already known to be refused takes no budget. AREA: visible bytes, retained frames and bytes from the device budget
@@ -793,7 +796,7 @@ the whole window to equal Legacy with no fallback:
 body frames and 55 actor frames (105 since ARC-WORLD-020 adds the run ART: 164 frames), 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
 0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
 22 MB resident at 4×, first bind 90 ms; since ARC-RENDER-016 also every level-0 chunk the four
-views can show: 53 chunks, 262 pack frames and 20 MB of PNG written in 5.7 s, no fallback in any view, up to 100 HD draws per view, 45 HD textures and 274 MB resident at 4×, first bind 0.58 s) and `ARC-RENDER-014 native-smoke WORLD HD identity
+views can show: 53 chunks, 262 pack frames and 20 MB of PNG written in 5.7 s, no fallback in any view, up to 100 HD draws per view, 45 HD textures and 274 MB resident at 4× (15 terrain chunks, 252 MB, under the terrain budget), first bind 0.6–0.8 s; the smoke also requires the HD chunk residency to be non-empty in every level-0 chunked view) and `ARC-RENDER-014 native-smoke WORLD HD identity
 PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: other GPUs and handhelds, human review (ARC-RENDER-015). A real upscaled pack
 of the Crash Site (generative characters and objects, x4plus terrain chunks and walls) was
 built and looked at locally (ARC-RES-038, ARC-RENDER-016), outside the repository; the

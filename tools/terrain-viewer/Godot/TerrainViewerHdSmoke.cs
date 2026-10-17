@@ -36,7 +36,9 @@ public partial class TerrainViewerApp
             .Distinct().Select(chunk => HdNearestPack.Chunk(terrain, chunk)).ToArray();
         var walls = area.Plan.Commands.Where(command => command.Identity is not null && command.ArtClass == 1).Select(command => command.Frame).Distinct().Count();
         await HdIdentitySmokeAsync("AREA", bodies.Concat(actor).Concat(chunks).ToArray(), views, () => _canvas!.AreaHdStats,
-            $"bodies={bodies.Length} (walls {walls}) actor={actor.Length} chunks={chunks.Length}");
+            $"bodies={bodies.Length} (walls {walls}) actor={actor.Length} chunks={chunks.Length}",
+            // Identity alone would also pass if chunks were silently not candidates: a level-0 chunked view must bind HD chunks.
+            name => _canvas!.AreaChunkCount > 0 && _canvas.AreaChunkLevel == 0 && _canvas.HdTerrainResidentCount == 0 ? "HD_SMOKE_NO_HD_CHUNKS:" + name : null);
     }
 
     private async Task RunWorldHdSmokeAsync(TerrainLoadResult result)
@@ -58,7 +60,7 @@ public partial class TerrainViewerApp
     }
 
     private async Task HdIdentitySmokeAsync(string domain, HdNearestPack.Frame[] frames, IReadOnlyList<(string Name, Vec2 Center, double Zoom)> views,
-        Func<HdSubmissionStats> stats, string census)
+        Func<HdSubmissionStats> stats, string census, Func<string, string?>? viewCheck = null)
     {
         if (DisplayServer.GetName() == "headless") throw new InvalidOperationException("HD_SMOKE_NATIVE_REQUIRED");
         var canvas = _canvas!; var hud = _hud!;
@@ -99,6 +101,7 @@ public partial class TerrainViewerApp
                 var hdPixels = hdImage.GetData();
                 var current = stats();
                 if (current.Hd == 0 || current.Fallback != 0) throw new InvalidOperationException($"HD_SMOKE_COUNTS:{name}:{current.Format()}");
+                if (viewCheck?.Invoke(name) is { } failed) throw new InvalidOperationException(failed);
                 if (!legacy.AsSpan().SequenceEqual(hdPixels))
                 {
                     var differing = 0; for (var at = 0; at < legacy.Length; at += 4) if (!legacy.AsSpan(at, 4).SequenceEqual(hdPixels.AsSpan(at, 4))) differing++;
@@ -109,6 +112,7 @@ public partial class TerrainViewerApp
             }
             GD.Print($"ARC-RENDER-014 native-smoke {domain} HD identity PASS views={views.Count} pixels={pixels} pack frames={frames.Length} ({census}) "
                 + $"png={packBytes} bytes write={write.ElapsedMilliseconds}ms first-bind={firstBindMs}ms HD textures={canvas.HdResidentCount}/{canvas.HdResidentBytes} bytes "
+                + $"(terrain chunks {canvas.HdTerrainResidentCount}/{canvas.HdTerrainResidentBytes} bytes) "
                 + $"Legacy area GPU={_cache.AreaCount}/{_cache.AreaRgbaBytes} bytes | " + string.Join(" | ", lines));
         }
         finally
