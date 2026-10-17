@@ -58,8 +58,42 @@ public sealed record HdFrameResult(HdFrameStatus Status, HdInvalidReason Invalid
 }
 
 /// <summary>A device's question for one frame: the portable key, the ART name hash and the
-/// Legacy frame as this installation decodes it.</summary>
-public sealed record HdSpriteQuery(HdSpriteKey Key, string NameSha256, HdLegacyFrame Legacy);
+/// Legacy frame as this installation decodes it. A terrain chunk question (ARC-RENDER-016)
+/// carries <see cref="Chunk"/>; it is resolved by <see cref="HdPack.ResolveTerrainChunk"/>,
+/// never by <see cref="HdPack.ResolveSprite"/>, and its <see cref="Key"/> is only a cache key
+/// (<see cref="HdChunkKey.SpriteKey"/>).</summary>
+public sealed record HdSpriteQuery(HdSpriteKey Key, string NameSha256, HdLegacyFrame Legacy)
+{
+    /// <summary>Terrain chunk questions only: the chunk and its composed tiles.</summary>
+    public HdChunkKey? Chunk { get; init; }
+
+    /// <summary>The question for one composed level-0 terrain chunk: <paramref name="legacy"/>
+    /// is the composed chunk as this installation draws it (size × size), <paramref name="chunk"/>
+    /// names the chunk and its tiles.</summary>
+    public static HdSpriteQuery ForTerrainChunk(HdChunkKey chunk, HdLegacyFrame legacy)
+    {
+        ArgumentNullException.ThrowIfNull(chunk); ArgumentNullException.ThrowIfNull(legacy);
+        return new(chunk.SpriteKey, "", legacy) { Chunk = chunk };
+    }
+}
+
+/// <summary>ARC-RENDER-016: one terrain chunk as the scene plan composes it: its chunk
+/// coordinates and the SHA-256 of its tile list (<see cref="TilesDigest"/> of the Legacy RGBA
+/// SHA-256 of every composed tile and facade frame, in plan order).</summary>
+public sealed record HdChunkKey(int X, int Y, string TilesSha256)
+{
+    /// <summary>The digest of an ordered tile hash list: SHA-256 of the lowercase hex hashes,
+    /// each followed by a line feed.</summary>
+    public static string TilesDigest(IEnumerable<string> tileRgbaSha256)
+    {
+        ArgumentNullException.ThrowIfNull(tileRgbaSha256);
+        var text = string.Concat(tileRgbaSha256.Select(hash => hash + "\n"));
+        return HdPackPath.Sha256(System.Text.Encoding.ASCII.GetBytes(text));
+    }
+
+    /// <summary>A cache key that never equals a sprite key (sprite views are at least 132).</summary>
+    public HdSpriteKey SpriteKey => new(TilesSha256, -1, 0, 0, 0);
+}
 
 public sealed record HdIntegrityProblem(int Entry, string File, HdInvalidReason Reason);
 /// <summary>Result of reading every file of a pack: present, of the declared size, with the

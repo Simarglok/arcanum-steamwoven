@@ -1,7 +1,8 @@
 # HD presentation contract (ARC-RENDER-013)
 
 Status: **contract and synthetic oracle tests, amended by ARC-DATA-014** (see
-[the amendment](#amendment-arc-data-014-2026-10-16)). The pack format, reader, import and
+[the amendment](#amendment-arc-data-014-2026-10-16)) **and ARC-RENDER-016** (terrain chunks
+and walls, [amendment](#amendment-arc-render-016-2026-10-17)). The pack format, reader, import and
 device budget exist ([HD pack format](../formats/hd-pack.md)); the AREA/WORLD path for
 characters and objects exists since ARC-RENDER-014
 ([viewer](terrain-viewer.md#hd-render-path-arc-render-014)); the setting, its persistence, the
@@ -207,7 +208,7 @@ may lower each of them (amendment below).
 | AREA visible GPU set | `AreaRepositoryPolicy.MaxFrames` 2,444 frames, `MaxCpuBytes` 81,853,096 B | same frame count, `N² · 81,853,096` B |
 | AREA retained (left the view) | 512 frames, 32 MiB | 512 frames, `N² · 32` MiB |
 | WORLD actor + static textures | key caps 184 + 5 (`MaxActorDistinctKeys`, `MaxStaticDistinctKeys`), bytes shared with terrain inside `TerrainCachePolicy.MaxRgbaBytes` 256 MiB | the same key caps; a separate HD byte limit of `N²/4 · 256` MiB (256 MiB at 2×, 1 GiB at 4×), not shared with the Legacy 256 MiB |
-| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | none until ARC-RENDER-016 (terrain stays Legacy); reserved ceiling `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB) |
+| Terrain chunks | `AreaChunkTextureCache` 192 MiB, 1,024 chunks | since ARC-RENDER-016 one HD byte limit for visible and kept chunks of `N² · 192` MiB, the same 192 chunks (4 MiB each at 2×, 16 MiB at 4×: 768 MiB / 3 GiB), and the Legacy 1,024-chunk cap; separate from the AREA frame limits |
 
 - There is no whole-area HD CPU repository: HD pixels are decoded only for the
   visible set, the preload queue and the retained set, and released with them.
@@ -371,13 +372,50 @@ rules above as follows; the [pack format](../formats/hd-pack.md) has the details
    distinct exterior frames ~400 MiB; a 4× terrain chunk is 16 MiB, so the reserved
    terrain ceiling of 192 chunks is 3 GiB, and a 16 GB handheld would typically lower it
    (48 chunks = 768 MiB). Real usage is still ARC-RENDER-014/016's to measure.
-6. **Terrain chunks** are a reserved pack entry kind (512-pixel chunk, ≥ 32 px neighbour
-   padding, keyed by chunk and the hashes of the composed tiles). They are never bound
-   until ARC-RENDER-016 amends this contract.
+6. **Terrain chunks** are a pack entry kind (512-pixel chunk, ≥ 32 px neighbour
+   padding, keyed by chunk and the hashes of the composed tiles). They were reserved here
+   and are bound since ARC-RENDER-016 ([amendment](#amendment-arc-render-016-2026-10-17)).
 7. **Method-agnostic.** The contract and the pack never assume a method: networks,
    algorithms, generative models (base model, adapters such as LoRA, seed, prompt and
    parameters are recorded) and external pipelines produce the same pack, checked by
    what it contains. One pack is active at a time.
+
+## Amendment ARC-RENDER-016 (2026-10-17)
+
+Owner request (project discussion, 2026-10-17): the ground, rocks and everything else drawn
+in the Crash Site should come from the HD pack too, not only characters and objects. This
+amendment changes the rules above as follows; the [pack format](../formats/hd-pack.md#terrain-chunk-entries)
+and the [viewer](terrain-viewer.md#hd-render-path-arc-render-014) have the details.
+
+1. **Walls bind like any object.** An AREA body of ART class 1 is an HD candidate keyed by
+   its frame key. Its wall fade already uses the Legacy column `floor((sx − N·c) / N)` over
+   the Legacy width (ARC-RENDER-014), so a faded HD wall gets exactly its Legacy alpha; the
+   wall check, picking, passability and the fade set never see HD.
+2. **Terrain binds per composed chunk.** In the AREA, tiles and facades are drawn as
+   composed 512-pixel chunks (`AreaTerrainChunks`, exact under the nearest rule). A level-0
+   chunk (zoom 1 and above, and any zoom whose transform has no decimated level) is an HD
+   candidate: its question is the chunk coordinates, the SHA-256 of its composed Legacy
+   RGBA and the digest of its ordered tile list (`HdChunkKey`); the HD chunk is exactly
+   `N·512 × N·512`, bound with the scaled crop `(0, 0, N·512, N·512)` to the unchanged
+   world square, so consequence 4 holds: a nearest `N×` chunk draws the Legacy chunk raster
+   pixel for pixel. Decimated chunks (levels 1..3, zoom below 1 with an integer origin),
+   per-command terrain (a plan that does not admit chunks) and WORLD terrain stay Legacy and
+   are not candidates.
+3. **Binding a chunk.** Entries are matched by coordinates and then by composed Legacy
+   frame and tile digest, so two maps may have entries at the same coordinates (separate
+   slices). No entry at those coordinates is `FrameMissing`; entries there that all differ
+   are `SourceMismatch`; the review mark, file, PNG, size and alpha checks are those of a
+   frame (the alpha check is against the composed chunk's binary alpha). Each refusal is a
+   per-chunk Legacy draw.
+4. **Budget.** Chunks have their own residency under the terrain ceiling of the Budgets
+   table (`HdDeviceBudget.TerrainBytes`, reserved by ARC-DATA-014): one byte limit for
+   visible and kept chunks and the Legacy 1,024-chunk cap; the AREA frame limits are not
+   shared. Admission, retention, uploads, the toggle protocol and the release rules are
+   those of frames. The two residencies share one frame source; each drops only its own
+   decoded pixels.
+5. **Unchanged.** Plans, destinations, chunk composition, light (a chunk keeps its single
+   ambient channel), wall fade, picking, routes, the wall check and Session read Legacy
+   data only; Legacy chunk textures stay resident under both profiles.
 
 ## Not ready / out of scope
 
@@ -385,8 +423,8 @@ rules above as follows; the [pack format](../formats/hd-pack.md) has the details
   persistence, the toggle key and the timed commit (ARC-UI-006) exist in the terrain viewer;
   the exported app gets them with its next export. There is no pack picker: one pack is
   chosen as above.
-- Terrain tiles, facades and terrain chunks stay Legacy until ARC-RENDER-016; walls,
-  roofs, UI and cursors until a later stage.
+- Since ARC-RENDER-016 walls and level-0 terrain chunks bind too; decimated chunks (zoom
+  below 1), per-command terrain, WORLD terrain, roofs, UI and cursors stay Legacy.
 - No shader smoothing profile, VRAM compression, mipmaps or box-filtered downsample.
 - Visual quality of any upscaler, AI determinism across GPUs and memory on real packs
   are ARC-RES-033 / ARC-RENDER-014 questions, not claims of this contract.

@@ -32,12 +32,16 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
     private readonly Action<TTexture> _dispose;
     private readonly Dictionary<HdSpriteQuery, (TTexture Texture, long Bytes, long LastUse, long Order)> _resident = new();
     private long _submission, _uploadOrder;
+    // The questions this residency owns in a shared frame source (null: all).
+    private readonly Func<HdSpriteQuery, bool>? _scope;
 
     /// <param name="create">Makes a texture from w, h and RGBA (the caller's GPU upload).</param>
     /// <param name="maxUploadsPerSubmission">Uploads per submission; the rest stay Pending
     /// and <see cref="UploadsDeferred"/> asks for another submission.</param>
+    /// <param name="scope">The questions this residency owns when it shares its frame source with
+    /// another residency (ARC-RENDER-016); decoded pixels of other questions are left alone.</param>
     public HdResidency(Func<int, int, byte[], TTexture> create, Action<TTexture> dispose, HdDomainBudget budget,
-        int maxUploadsPerSubmission = 64, long maxUploadBytesPerSubmission = 64L * 1024 * 1024)
+        int maxUploadsPerSubmission = 64, long maxUploadBytesPerSubmission = 64L * 1024 * 1024, Func<HdSpriteQuery, bool>? scope = null)
     {
         _create = create ?? throw new ArgumentNullException(nameof(create));
         _dispose = dispose ?? throw new ArgumentNullException(nameof(dispose));
@@ -45,7 +49,7 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
         if (budget.VisibleBytes < 0 || budget.RetainFrames < 0 || budget.RetainBytes < 0 || budget.TotalBytes < 0)
             throw new ArgumentOutOfRangeException(nameof(budget));
         if (maxUploadsPerSubmission <= 0 || maxUploadBytesPerSubmission <= 0) throw new ArgumentOutOfRangeException(nameof(maxUploadsPerSubmission));
-        MaxUploadsPerSubmission = maxUploadsPerSubmission; MaxUploadBytesPerSubmission = maxUploadBytesPerSubmission;
+        MaxUploadsPerSubmission = maxUploadsPerSubmission; MaxUploadBytesPerSubmission = maxUploadBytesPerSubmission; _scope = scope;
     }
 
     public HdDomainBudget Budget { get; }
@@ -137,7 +141,7 @@ public sealed class HdResidency<TTexture> : IDisposable where TTexture : class
             }
         }
         // Decoded pixels nobody draws now are dropped (decoded again if they come back).
-        source.ReleaseReadyExcept(admitted.Keys.ToHashSet());
+        source.ReleaseReadyExcept(admitted.Keys.ToHashSet(), _scope);
         for (var index = 0; index < draws.Count; index++)
             if (draws[index].Query is { } query && ready.TryGetValue(query, out var binding) && bindings[index].Reason is null) bindings[index] = binding;
         VisibleFrames = admitted.Count(pair => ready.TryGetValue(pair.Key, out var b) && b.IsHd);

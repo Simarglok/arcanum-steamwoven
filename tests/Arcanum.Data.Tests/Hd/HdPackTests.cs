@@ -368,7 +368,7 @@ public sealed class HdPackTests
     }
 
     [TestMethod]
-    public void Terrain_chunk_entries_are_a_reserved_kind_that_is_checked_but_never_bound()
+    public void Terrain_chunk_entries_are_parsed_and_integrity_checked_like_sprites()
     {
         var recipe = SyntheticHdPack.Recipe.Replace("\"kinds\":[\"critter\",\"scenery\"]}", "\"kinds\":[\"critter\",\"scenery\"]},{\"name\":\"ground\",\"map\":\"synthetic-map\",\"kinds\":[\"terrainChunk\"]}")
             .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":{\"mode\":\"legacy\"},\"terrain\":{\"chunkSize\":512,\"padding\":32}")
@@ -412,5 +412,114 @@ public sealed class HdPackTests
         var spriteInGround = NewPack("sprite-in-ground", recipe: recipe);
         spriteInGround.Add(sprite, slice: "ground");
         Assert.AreEqual(HdPackOpenStatus.InvalidField, HdPack.Open(spriteInGround.Write()).Status);
+    }
+
+    private const string ChunkRecipe = "\"kinds\":[\"critter\",\"scenery\"]},{\"name\":\"ground\",\"map\":\"synthetic-map\",\"kinds\":[\"terrainChunk\"]},{\"name\":\"cave-ground\",\"map\":\"synthetic-cave\",\"kinds\":[\"terrainChunk\"]}";
+
+    private static string TerrainRecipe(string alpha = "{\"mode\":\"legacy\"}") => SyntheticHdPack.Recipe
+        .Replace("\"kinds\":[\"critter\",\"scenery\"]}", ChunkRecipe)
+        .Replace("\"alpha\":{\"mode\":\"legacy\"}", "\"alpha\":" + alpha + ",\"terrain\":{\"chunkSize\":512,\"padding\":32}")
+        .Replace("\"tileSize\":512", "\"tileSize\":600");
+
+    // A synthetic composed level-0 chunk: a pattern with a transparent corner (map edge).
+    private static SyntheticHdPack.Frame LegacyChunk(int seed)
+    {
+        var frame = SyntheticHdPack.Legacy("chunk" + seed, 512, 512, seed);
+        var rgba = frame.Rgba.ToArray();
+        for (var y = 0; y < 512; y++) for (var x = 0; x < 512; x++)
+        {
+            var at = (y * 512 + x) * 4;
+            if (x + y < 100) { rgba[at] = rgba[at + 1] = rgba[at + 2] = rgba[at + 3] = 0; }
+            else { rgba[at + 3] = 255; rgba[at] = (byte)(x ^ seed); }
+        }
+        return frame with { Rgba = rgba };
+    }
+
+    private static JsonObject AddChunk(SyntheticHdPack pack, SyntheticHdPack.Frame legacy, int x, int y, string[] tiles, byte[]? hd = null,
+        string slice = "ground", string review = "unreviewed")
+    {
+        var png = HdPng.EncodeRgba(512 * pack.Scale, 512 * pack.Scale, hd ?? SyntheticHdPack.Hd(legacy, pack.Scale, tint: 30));
+        var file = $"chunks/{slice}_{x}_{y}.png";
+        pack.WriteFile(file, png);
+        var entry = new JsonObject
+        {
+            ["kind"] = "terrainChunk", ["file"] = file, ["sha256"] = SyntheticHdPack.Sha(png), ["bytes"] = png.Length, ["slice"] = slice,
+            ["chunk"] = new JsonObject { ["x"] = x, ["y"] = y, ["size"] = 512, ["padding"] = 32 },
+            ["tiles"] = new JsonArray(tiles.Select(t => (JsonNode)t).ToArray()),
+            ["legacy"] = new JsonObject { ["width"] = 512, ["height"] = 512, ["rgbaSha256"] = legacy.RgbaSha256 },
+            ["review"] = review,
+        };
+        pack.Entries.Add(entry);
+        return entry;
+    }
+
+    private static HdSpriteQuery ChunkQuery(SyntheticHdPack.Frame legacy, int x, int y, string[] tiles)
+        => HdSpriteQuery.ForTerrainChunk(new(x, y, HdChunkKey.TilesDigest(tiles)), new(512, 512, legacy.RgbaSha256));
+
+    [TestMethod]
+    public void A_terrain_chunk_binds_by_coordinates_composed_legacy_and_tiles_across_map_slices()
+    {
+        string[] tiles = [SyntheticHdPack.Sha("tile:a"), SyntheticHdPack.Sha("tile:b")];
+        string[] caveTiles = [SyntheticHdPack.Sha("tile:c")];
+        var exterior = LegacyChunk(1); var cave = LegacyChunk(2); var other = LegacyChunk(3);
+        var pack = NewPack(recipe: TerrainRecipe());
+        var hd = SyntheticHdPack.Hd(exterior, 2, tint: 30);
+        AddChunk(pack, exterior, 4, 1, tiles, hd);
+        AddChunk(pack, cave, 4, 1, caveTiles, slice: "cave-ground");
+        AddChunk(pack, exterior, 5, 1, tiles, review: "rejected");
+        var opened = Opened(pack.Write());
+
+        var bound = opened.ResolveTerrainChunk(ChunkQuery(exterior, 4, 1, tiles), exterior.Rgba);
+        Assert.AreEqual((HdFrameStatus.Hd, 1024, 1024), (bound.Status, bound.Width, bound.Height));
+        CollectionAssert.AreEqual(hd, bound.Rgba, "the exact HD pixels");
+        Assert.AreEqual(HdFrameStatus.Hd, opened.ResolveTerrainChunk(ChunkQuery(cave, 4, 1, caveTiles), cave.Rgba).Status, "the other map's chunk at the same coordinates");
+        Assert.AreEqual(HdFrameStatus.FrameMissing, opened.ResolveTerrainChunk(ChunkQuery(exterior, 9, 9, tiles), exterior.Rgba).Status);
+        Assert.AreEqual(HdFrameStatus.SourceMismatch, opened.ResolveTerrainChunk(ChunkQuery(other, 4, 1, tiles), other.Rgba).Status, "other composed pixels");
+        Assert.AreEqual(HdFrameStatus.SourceMismatch, opened.ResolveTerrainChunk(ChunkQuery(exterior, 4, 1, caveTiles), exterior.Rgba).Status, "other tiles");
+        Assert.AreEqual(HdFrameStatus.FrameRejected, opened.ResolveTerrainChunk(ChunkQuery(exterior, 5, 1, tiles), exterior.Rgba).Status);
+        Assert.ThrowsExactly<ArgumentException>(() => opened.ResolveSprite(ChunkQuery(exterior, 4, 1, tiles), exterior.Rgba), "a chunk is not a sprite");
+        var sprite = SyntheticHdPack.Legacy("s", 3, 3, seed: 1);
+        Assert.ThrowsExactly<ArgumentException>(() => opened.ResolveTerrainChunk(sprite.Query, sprite.Rgba), "a sprite is not a chunk");
+        Assert.ThrowsExactly<ArgumentException>(() => opened.ResolveTerrainChunk(ChunkQuery(exterior, 4, 1, tiles), cave.Rgba), "pixels that contradict the question");
+    }
+
+    [TestMethod]
+    public void A_terrain_chunk_takes_the_sprite_file_size_and_alpha_checks()
+    {
+        string[] tiles = [SyntheticHdPack.Sha("tile:a")];
+        var legacy = LegacyChunk(1);
+        var pack = NewPack(recipe: TerrainRecipe());
+        var grown = SyntheticHdPack.Hd(legacy, 2);
+        grown[198 * 4 + 3] = 255; // HD texel (198, 0): its parent (99, 0) is transparent, next to the opaque (100, 0)
+        AddChunk(pack, legacy, 0, 0, tiles, grown);
+        var small = HdPng.EncodeRgba(512, 512, legacy.Rgba);
+        pack.WriteFile("chunks/small.png", small);
+        var entry = AddChunk(pack, legacy, 1, 0, tiles);
+        entry["file"] = "chunks/small.png"; entry["sha256"] = SyntheticHdPack.Sha(small); entry["bytes"] = small.Length;
+        var opened = Opened(pack.Write());
+        var alpha = opened.ResolveTerrainChunk(ChunkQuery(legacy, 0, 0, tiles), legacy.Rgba);
+        Assert.AreEqual((HdFrameStatus.Invalid, HdInvalidReason.AlphaMismatch), (alpha.Status, alpha.Invalid));
+        var size = opened.ResolveTerrainChunk(ChunkQuery(legacy, 1, 0, tiles), legacy.Rgba);
+        Assert.AreEqual((HdFrameStatus.Invalid, HdInvalidReason.SizeMismatch), (size.Status, size.Invalid));
+
+        var soft = NewPack("soft", recipe: TerrainRecipe("{\"mode\":\"soft\",\"minIoUPermille\":950}"));
+        AddChunk(soft, legacy, 0, 0, tiles, grown);
+        var far = SyntheticHdPack.Hd(legacy, 2); far[3] = 255; // HD texel (0, 0): far from the silhouette
+        AddChunk(soft, legacy, 1, 0, tiles, far);
+        var softPack = Opened(soft.Write());
+        Assert.AreEqual(HdFrameStatus.Hd, softPack.ResolveTerrainChunk(ChunkQuery(legacy, 0, 0, tiles), legacy.Rgba).Status,
+            "soft alpha admits a texel next to the silhouette");
+        Assert.AreEqual(HdInvalidReason.AlphaMismatch, softPack.ResolveTerrainChunk(ChunkQuery(legacy, 1, 0, tiles), legacy.Rgba).Invalid,
+            "but not one farther than a Legacy texel");
+    }
+
+    [TestMethod]
+    public void The_tile_digest_is_order_sensitive_and_never_collides_with_a_sprite_key()
+    {
+        string a = SyntheticHdPack.Sha("a"), b = SyntheticHdPack.Sha("b");
+        Assert.AreNotEqual(HdChunkKey.TilesDigest([a, b]), HdChunkKey.TilesDigest([b, a]));
+        var chunk = new HdChunkKey(0, 0, HdChunkKey.TilesDigest([a]));
+        Assert.AreEqual(-1, chunk.SpriteKey.View, "sprite views are at least 132");
+        Assert.AreNotEqual(HdSpriteQuery.ForTerrainChunk(chunk, new(512, 512, a)), HdSpriteQuery.ForTerrainChunk(chunk with { X = 1 }, new(512, 512, a)));
     }
 }
