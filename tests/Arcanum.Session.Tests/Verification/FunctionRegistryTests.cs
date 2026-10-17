@@ -256,7 +256,7 @@ public sealed partial class FunctionRegistryTests
     [GeneratedRegex(@"(?i:arcanum-ce)|(?i:a7ff41b)|(?<![A-Za-z0-9_])CE(?![A-Za-z0-9])|(?i:\[ce\])")]
     private static partial Regex Reconstruction();
 
-    [GeneratedRegex(@"\[\s*OriginalFunction\s*\(\s*0x([0-9A-Fa-f]+)")]
+    [GeneratedRegex(@"OriginalFunction(?:Attribute)?\s*\(\s*(?:address\s*:\s*)?0x([0-9A-Fa-f]+)")]
     private static partial Regex SourceMark();
 
     // A ledger ID names a row: letters and a number (A2, OQ2, DF1, reputation A2, X3, tile).

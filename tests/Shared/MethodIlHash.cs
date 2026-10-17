@@ -46,13 +46,14 @@ internal static partial class MethodIlHash
             text.Append("== ").Append(i).Append('\n');
             Body(order[i], text, reached => reached.Module == method.Module ? Reach(reached) : null, ReachType);
         }
-        // Compiler-generated names carry ordinals of their containing method (<M>b__12_0, <>c__DisplayClass3_1); drop them.
+        // Compiler-generated names carry ordinals of their containing method (<M>b__12_0, <>c__DisplayClass3_1,
+        // <M>g__Local|4_0); drop them.
         return GeneratedOrdinal().Replace(text.ToString(), "$1#");
     }
 
     private static bool Generated(MemberInfo member) => member.Name.Contains('<') || (member.DeclaringType is { } d && Generated(d));
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"(__[A-Za-z]*)\d+(_\d+)*")]
+    [System.Text.RegularExpressions.GeneratedRegex(@"(__[A-Za-z]*|__[A-Za-z0-9]*\|)\d+(_\d+)*")]
     private static partial System.Text.RegularExpressions.Regex GeneratedOrdinal();
 
     public static string Configuration(MethodInfo method) =>
@@ -128,6 +129,8 @@ internal static partial class MethodIlHash
                     var member = module.ResolveMember(BitConverter.ToInt32(il, at), typeArguments, methodArguments)!;
                     reachType(member as Type ?? member.DeclaringType);
                     if (member is MethodBase target && reach(target) is { } reached) text.Append(" #").Append(reached);
+                    // A static field's value comes from its type's initializer, which is hashed with the walk.
+                    if (member is FieldInfo { IsStatic: true, DeclaringType.TypeInitializer: { } initializer }) reach(initializer);
                     text.Append(' ').Append(member is Type type ? type.FullName : $"{member.DeclaringType?.FullName}::{member}");
                     at += 4;
                     break;

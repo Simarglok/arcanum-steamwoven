@@ -43,7 +43,8 @@ recorded difference (XP3) with its counts, result, executable SHA-256, the metho
 The IL hash is a SHA-256 of the IL of the method and of every method of the same assembly it reaches (callees, accessors,
 lambdas, local functions and state machines), with every metadata token replaced by the name it refers to and the
 ordinals of compiler-generated names dropped (`tests/Shared/MethodIlHash.cs`): it changes with that code and not with
-unrelated members. Methods of other assemblies (the runtime) are named, not hashed, and a runtime or SDK change that
+unrelated members; a static field read brings in its type's initializer. Virtual and interface calls reach only the
+declaration, not the implementations behind it. Methods of other assemblies (the runtime) are named, not hashed, and a runtime or SDK change that
 renames them invalidates every receipt. The root test
 fails when an F3 row has no passing receipt or when the method's IL hash differs from its receipt: a changed function
 needs a new oracle run and its receipt committed. A receipt from another build configuration leaves the test
