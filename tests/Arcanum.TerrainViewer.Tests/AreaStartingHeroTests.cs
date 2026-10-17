@@ -118,6 +118,22 @@ public sealed class AreaStartingHeroTests
         Assert.AreEqual("[weapon: name unavailable]", AreaInventoryHost.KitName(session.QueryHeroKit()[0], null));
         Assert.AreEqual("hero: half-elf-male level 1 (5 points unspent), gold 385, kit 3", AreaStartingHero.Summary(session));
 
+        // ARC-WORLD-028 session equipment: a wielded kit item is marked worn.
+        var blade = new Arcanum.Simulation.Equipment.EquipmentItem
+        {
+            Kind = Arcanum.Simulation.Equipment.EquipmentItemKind.Weapon, HitPoints = 20, MaxHitPoints = 20,
+            Weapon = new Arcanum.Simulation.Equipment.EquipmentWeapon
+            {
+                Skill = Arcanum.Simulation.Combat.CombatSkill.Melee, Damage = Arcanum.Simulation.Combat.DamageRanges.None with { Normal = new(2, 8) },
+                SpeedFactor = 15, MinimumStrength = 6,
+            },
+        };
+        var wielded = session.Equip(session.Version, "kit:1", Arcanum.Simulation.Equipment.EquipmentSlot.Weapon,
+            new(session.QueryHeroKit()[0].Kind, [], false, blade), (_, _) => true, _ => SessionInsertVerdict.Accepted);
+        Assert.AreEqual(GameSessionFailure.None, wielded.Failure);
+        CollectionAssert.AreEqual(new[] { "Synthetic Knife (weapon) (starting kit) (worn)", "Synthetic Coat (armor) (starting kit)" },
+            host.View(session, Catalog, 1).Pc.Take(2).Select(line => line.Text).ToArray());
+
         using var plain = Start(null);
         Assert.AreEqual(0, host.View(plain, Catalog, 1).Pc.Count);
         Assert.AreEqual(0, host.View(plain, Catalog, 1).Gold);
