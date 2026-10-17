@@ -130,6 +130,8 @@ public enum GameSessionFailure
     InvalidReactionTarget, InvalidReactionFacts, InvalidReactionAmount,
     // Turn-based round (ARC-COMBAT-003).
     CombatUnavailable, InvalidCombatant, InvalidCombatFacts, InvalidCombatCost, InvalidCombatRound,
+    // Equipment domain (ARC-WORLD-028).
+    EquipmentUnavailable, ItemEffectUnsupported, WearRefused, InvalidEquipment,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -232,18 +234,19 @@ public sealed class GameSessionSnapshot
     /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 added <see cref="Random"/>
     /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 added <see cref="Events"/> (ARC-WORLD-024);
     /// schema 10 added <see cref="Reactions"/> (ARC-WORLD-026), which replaced the viewer's per-NPC <c>reaction.pc</c> map
-    /// change; schema 11 adds <see cref="Combat"/> (ARC-COMBAT-003). Schemas 1..10 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 11;
+    /// change; schema 11 added <see cref="Combat"/> (ARC-COMBAT-003); schema 12 adds <see cref="Equipment"/> (ARC-WORLD-028).
+    /// Schemas 1..11 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 12;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
-        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
+        SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionEquipmentState equipment, SessionRandomState random,
         SessionLifeState life, SessionReactionState reactions, SessionCombatRound? combat, SessionEventState events,
         SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Random = random; Life = life; Reactions = reactions; Combat = combat; Events = events; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Equipment = equipment; Random = random; Life = life; Reactions = reactions; Combat = combat; Events = events; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -258,6 +261,8 @@ public sealed class GameSessionSnapshot
     /// <summary>The player character, or null for a session started without one.</summary>
     public SessionHeroState? Hero { get; }
     public SessionInventoryState Inventory { get; }
+    /// <summary>The hero's worn items (ARC-WORLD-028).</summary>
+    public SessionEquipmentState Equipment { get; }
     /// <summary>The gameplay generator's seed and position (ARC-WORLD-019).</summary>
     public SessionRandomState Random { get; }
     /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>

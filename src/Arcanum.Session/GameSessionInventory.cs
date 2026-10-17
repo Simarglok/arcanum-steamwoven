@@ -18,6 +18,8 @@ public static class SessionScriptPoint
     public const int Use = 1;
     public const int Get = 4;
     public const int InsertItem = 21;
+    public const int WieldOn = 24;
+    public const int WieldOff = 25;
     public const int RemoveItem = 28;
     public const int Transfer = 32;
     /// <summary>The last point, <c>SAP_CRITICAL_MISS</c>; script arrays have no other keys.</summary>

@@ -7,6 +7,7 @@ using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Simulation.Character;
 using Arcanum.Simulation.Clock;
 using Arcanum.Simulation.Combat;
+using Arcanum.Simulation.Equipment;
 using Arcanum.Simulation.Events;
 using Arcanum.Simulation.Movement;
 using Arcanum.Simulation.Reaction;
@@ -23,7 +24,7 @@ public enum SnapshotDecodeFailure
 public sealed record SnapshotDecodeResult(GameSessionSnapshot? Snapshot, SnapshotDecodeFailure Failure, string? Path);
 
 /// <summary>
-/// JSON for <see cref="GameSessionSnapshot"/> schema 11. Encoding is canonical and deterministic; decoding is
+/// JSON for <see cref="GameSessionSnapshot"/> schema 12. Encoding is canonical and deterministic; decoding is
 /// strict on structure and values (exact field sets, sorted collections, bounded size and counts) and never
 /// builds an owner or throws on bad text.
 /// Semantic admission (identity, clock profile, budgets, and the order and meaning of pending events, whose queue order
@@ -34,7 +35,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "random", "life", "reactions", "combat", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "random", "life", "reactions", "combat", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -58,6 +59,15 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] InventoryFields = ["gold", "kit", "pc"];
     private static readonly string[] KitItemFields = ["entity", "type", "prototype", "name", "description"];
     private static readonly string[] PcItemFields = ["entity", "map", "type", "prototype", "name", "description"];
+    private static readonly string[] WornFields = ["slot", "entity", "item"];
+    private static readonly string[] EquipmentItemFields = ["kind", "complexity", "noDrop", "broken", "uber", "light", "usesShieldLocation",
+        "hp", "maxHp", "weapon", "armor"];
+    private static readonly string[] EquipmentWeaponFields = ["twoHanded", "handCountFixed", "ignoresResistance", "damagesArmor", "skill",
+        "damage", "magicDamage", "toHit", "magicToHit", "speed", "magicSpeed", "range", "magicRange", "minStrength", "magicMinStrength",
+        "ammoType", "ammoConsumption", "critHitChart", "critMissChart", "magicCritHitChance", "magicCritHitEffect", "magicCritMissChance",
+        "magicCritMissEffect"];
+    private static readonly string[] EquipmentArmorFields = ["coverage", "sizes", "maleOnly", "femaleOnly", "ac", "magicAc", "resistances",
+        "magicResistances", "unarmedBonus"];
     private static readonly string[] RandomFields = ["seed", "draws"];
     private static readonly string[] LifeFields = ["hero", "critters"];
     private static readonly string[] LifeRecordFields = ["hpDamage", "fatigueDamage", "poison", "conditions", "scars", "deathTimeMs"];
@@ -250,6 +260,10 @@ public static class GameSessionSnapshotCodec
             w.WriteEndArray();
             w.WriteEndObject();
 
+            w.WriteStartArray("equipment");
+            foreach (var worn in snapshot.Equipment.Worn) WriteWorn(w, worn);
+            w.WriteEndArray();
+
             w.WriteStartObject("random");
             w.WriteString("seed", snapshot.Random.Seed.ToString("x16", CultureInfo.InvariantCulture));
             w.WriteNumber("draws", snapshot.Random.Draws);
@@ -419,7 +433,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), Events(f["events"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), Events(f["events"]), Lighting(f["lighting"]));
     }
 
     // Ranges and canonical spelling; the hero's presence, death times against the clock and budgets are Restore's.
@@ -802,6 +816,203 @@ public static class GameSessionSnapshotCodec
         }
         return new(gold, kit, pc);
     }
+
+    private static void WriteWorn(Utf8JsonWriter w, SessionWornItem worn)
+    {
+        var item = worn.Item;
+        w.WriteStartObject();
+        w.WriteString("slot", worn.Slot.ToString());
+        w.WriteString("entity", worn.Entity);
+        w.WriteStartObject("item");
+        w.WriteString("kind", item.Kind.ToString());
+        w.WriteNumber("complexity", item.MagickTechComplexity);
+        w.WriteBoolean("noDrop", item.NoDrop);
+        w.WriteBoolean("broken", item.Broken);
+        w.WriteBoolean("uber", item.Uber);
+        w.WriteNumber("light", (int)item.Light);
+        w.WriteBoolean("usesShieldLocation", item.UsesShieldLocation);
+        w.WriteNumber("hp", item.HitPoints);
+        w.WriteNumber("maxHp", item.MaxHitPoints);
+        if (item.Weapon is { } weapon)
+        {
+            w.WriteStartObject("weapon");
+            w.WriteBoolean("twoHanded", weapon.TwoHanded);
+            w.WriteBoolean("handCountFixed", weapon.HandCountFixed);
+            w.WriteBoolean("ignoresResistance", weapon.IgnoresResistance);
+            w.WriteBoolean("damagesArmor", weapon.DamagesArmor);
+            w.WriteString("skill", weapon.Skill.ToString());
+            w.WriteStartArray("damage");
+            foreach (var type in Enum.GetValues<DamageType>())
+            {
+                w.WriteStartArray();
+                w.WriteNumberValue(weapon.Damage[type].Min);
+                w.WriteNumberValue(weapon.Damage[type].Max);
+                w.WriteEndArray();
+            }
+            w.WriteEndArray();
+            w.WriteStartArray("magicDamage");
+            foreach (var type in Enum.GetValues<DamageType>()) w.WriteNumberValue(weapon.MagicDamage[type]);
+            w.WriteEndArray();
+            w.WriteNumber("toHit", weapon.ToHit);
+            w.WriteNumber("magicToHit", weapon.MagicToHit);
+            w.WriteNumber("speed", weapon.SpeedFactor);
+            w.WriteNumber("magicSpeed", weapon.MagicSpeed);
+            w.WriteNumber("range", weapon.Range);
+            w.WriteNumber("magicRange", weapon.MagicRange);
+            w.WriteNumber("minStrength", weapon.MinimumStrength);
+            w.WriteNumber("magicMinStrength", weapon.MagicMinimumStrength);
+            if (weapon.AmmoType is { } ammo) w.WriteNumber("ammoType", ammo);
+            else w.WriteNull("ammoType");
+            w.WriteNumber("ammoConsumption", weapon.AmmoConsumption);
+            w.WriteString("critHitChart", weapon.CriticalHitChart.ToString());
+            w.WriteString("critMissChart", weapon.CriticalMissChart.ToString());
+            w.WriteNumber("magicCritHitChance", weapon.MagicCriticalHitChance);
+            w.WriteNumber("magicCritHitEffect", weapon.MagicCriticalHitEffect);
+            w.WriteNumber("magicCritMissChance", weapon.MagicCriticalMissChance);
+            w.WriteNumber("magicCritMissEffect", weapon.MagicCriticalMissEffect);
+            w.WriteEndObject();
+        }
+        else w.WriteNull("weapon");
+        if (item.Armor is { } armor)
+        {
+            w.WriteStartObject("armor");
+            w.WriteString("coverage", armor.Coverage.ToString());
+            w.WriteNumber("sizes", (int)armor.Sizes);
+            w.WriteBoolean("maleOnly", armor.MaleOnly);
+            w.WriteBoolean("femaleOnly", armor.FemaleOnly);
+            w.WriteNumber("ac", armor.AcAdjustment);
+            w.WriteNumber("magicAc", armor.MagicAcAdjustment);
+            WriteResistances(w, "resistances", armor.Resistances);
+            WriteResistances(w, "magicResistances", armor.MagicResistances);
+            w.WriteNumber("unarmedBonus", armor.UnarmedBonusDamage);
+            w.WriteEndObject();
+        }
+        else w.WriteNull("armor");
+        w.WriteEndObject();
+        w.WriteEndObject();
+    }
+
+    // Resistances in the source's order: normal, fire, electrical, poison, magic.
+    private static void WriteResistances(Utf8JsonWriter w, string name, EquipmentResistances r)
+    {
+        w.WriteStartArray(name);
+        foreach (var value in new[] { r.Normal, r.Fire, r.Electrical, r.Poison, r.Magic }) w.WriteNumberValue(value);
+        w.WriteEndArray();
+    }
+
+    // Shapes, names and ranges, slots strictly ascending and entities unique; that each item is held and fits its slot is Restore's.
+    private static SessionEquipmentState Equipment(JsonElement element)
+    {
+        const string p = "$.equipment";
+        var items = Array(element, p, Enum.GetValues<EquipmentSlot>().Length);
+        var worn = new SessionWornItem[items.Length];
+        var entities = new HashSet<string>(StringComparer.Ordinal);
+        for (var i = 0; i < items.Length; i++)
+        {
+            var path = $"{p}[{i}]";
+            var f = Fields(items[i], path, WornFields);
+            var slot = Named<EquipmentSlot>(f["slot"], path + ".slot");
+            if (i > 0 && slot <= worn[i - 1].Slot) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".slot");
+            var entity = Entity(f["entity"], path + ".entity");
+            if (!entities.Add(entity)) throw new DecodeException(SnapshotDecodeFailure.NotCanonical, path + ".entity");
+            worn[i] = new(slot, entity, EquipmentItemValue(f["item"], path + ".item"));
+        }
+        return new(worn);
+    }
+
+    private static EquipmentItem EquipmentItemValue(JsonElement element, string p)
+    {
+        const int m = EquipmentLimits.MaxMagnitude;
+        var f = Fields(element, p, EquipmentItemFields);
+        int Num(Dictionary<string, JsonElement> fields, string name, string path, int min = -m, int max = m) => Int(fields[name], path + "." + name, min, max);
+        var item = new EquipmentItem
+        {
+            Kind = Named<EquipmentItemKind>(f["kind"], p + ".kind"),
+            MagickTechComplexity = Num(f, "complexity", p),
+            NoDrop = Bool(f["noDrop"], p + ".noDrop"),
+            Broken = Bool(f["broken"], p + ".broken"),
+            Uber = Bool(f["uber"], p + ".uber"),
+            Light = (EquipmentLight)Num(f, "light", p, 0, 15),
+            UsesShieldLocation = Bool(f["usesShieldLocation"], p + ".usesShieldLocation"),
+            HitPoints = Num(f, "hp", p, 0, EquipmentLimits.MaxHitPoints),
+            MaxHitPoints = Num(f, "maxHp", p, 0, EquipmentLimits.MaxHitPoints),
+        };
+        if (f["weapon"].ValueKind != JsonValueKind.Null)
+        {
+            var wp = p + ".weapon";
+            var w = Fields(f["weapon"], wp, EquipmentWeaponFields);
+            var damage = Array(w["damage"], wp + ".damage", 5);
+            var magic = Array(w["magicDamage"], wp + ".magicDamage", 5);
+            if (damage.Length != 5) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, wp + ".damage");
+            if (magic.Length != 5) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, wp + ".magicDamage");
+            var ranges = new DamageRange[5];
+            for (var i = 0; i < 5; i++)
+            {
+                var pair = Array(damage[i], $"{wp}.damage[{i}]", 2);
+                if (pair.Length != 2) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, $"{wp}.damage[{i}]");
+                ranges[i] = new(Int(pair[0], $"{wp}.damage[{i}][0]", -m, m), Int(pair[1], $"{wp}.damage[{i}][1]", -m, m));
+            }
+            var magicDamage = Enumerable.Range(0, 5).Select(i => Int(magic[i], $"{wp}.magicDamage[{i}]", -m, m)).ToArray();
+            item = item with
+            {
+                Weapon = new EquipmentWeapon
+                {
+                    TwoHanded = Bool(w["twoHanded"], wp + ".twoHanded"),
+                    HandCountFixed = Bool(w["handCountFixed"], wp + ".handCountFixed"),
+                    IgnoresResistance = Bool(w["ignoresResistance"], wp + ".ignoresResistance"),
+                    DamagesArmor = Bool(w["damagesArmor"], wp + ".damagesArmor"),
+                    Skill = Named<CombatSkill>(w["skill"], wp + ".skill"),
+                    Damage = new(ranges[0], ranges[1], ranges[2], ranges[3], ranges[4]),
+                    MagicDamage = new(magicDamage[0], magicDamage[1], magicDamage[2], magicDamage[3], magicDamage[4]),
+                    ToHit = Num(w, "toHit", wp), MagicToHit = Num(w, "magicToHit", wp),
+                    SpeedFactor = Num(w, "speed", wp, -EquipmentLimits.MaxSpeed, EquipmentLimits.MaxSpeed),
+                    MagicSpeed = Num(w, "magicSpeed", wp, -EquipmentLimits.MaxSpeed, EquipmentLimits.MaxSpeed),
+                    Range = Num(w, "range", wp), MagicRange = Num(w, "magicRange", wp),
+                    MinimumStrength = Num(w, "minStrength", wp), MagicMinimumStrength = Num(w, "magicMinStrength", wp),
+                    AmmoType = w["ammoType"].ValueKind == JsonValueKind.Null ? null : Num(w, "ammoType", wp, 0),
+                    AmmoConsumption = Num(w, "ammoConsumption", wp, 0),
+                    CriticalHitChart = Named<CriticalHitChart>(w["critHitChart"], wp + ".critHitChart"),
+                    CriticalMissChart = Named<CriticalMissChart>(w["critMissChart"], wp + ".critMissChart"),
+                    MagicCriticalHitChance = Num(w, "magicCritHitChance", wp), MagicCriticalHitEffect = Num(w, "magicCritHitEffect", wp),
+                    MagicCriticalMissChance = Num(w, "magicCritMissChance", wp), MagicCriticalMissEffect = Num(w, "magicCritMissEffect", wp),
+                },
+            };
+        }
+        if (f["armor"].ValueKind != JsonValueKind.Null)
+        {
+            var ap = p + ".armor";
+            var a = Fields(f["armor"], ap, EquipmentArmorFields);
+            item = item with
+            {
+                Armor = new EquipmentArmor
+                {
+                    Coverage = Named<ArmorCoverage>(a["coverage"], ap + ".coverage"),
+                    Sizes = (ArmorSizes)Num(a, "sizes", ap, 0, 7),
+                    MaleOnly = Bool(a["maleOnly"], ap + ".maleOnly"),
+                    FemaleOnly = Bool(a["femaleOnly"], ap + ".femaleOnly"),
+                    AcAdjustment = Num(a, "ac", ap), MagicAcAdjustment = Num(a, "magicAc", ap),
+                    Resistances = ResistanceValues(a["resistances"], ap + ".resistances"),
+                    MagicResistances = ResistanceValues(a["magicResistances"], ap + ".magicResistances"),
+                    UnarmedBonusDamage = Num(a, "unarmedBonus", ap),
+                },
+            };
+        }
+        // Which blocks a kind has, and the condition order, are the item rules' (Restore refuses them as InvalidEquipment).
+        return item;
+    }
+
+    private static EquipmentResistances ResistanceValues(JsonElement element, string path)
+    {
+        const int m = EquipmentLimits.MaxMagnitude;
+        var values = Array(element, path, 5);
+        if (values.Length != 5) throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
+        int At(int i) => Int(values[i], $"{path}[{i}]", -m, m);
+        return new(At(0), At(1), At(2), At(3), At(4));
+    }
+
+    private static T Named<T>(JsonElement element, string path) where T : struct, Enum =>
+        Enum.TryParse<T>(String(element, path), false, out var value) && Enum.IsDefined(value) && value.ToString() == String(element, path)
+            ? value : throw new DecodeException(SnapshotDecodeFailure.OutOfRange, path);
 
     private static SessionItemKind Kind(Dictionary<string, JsonElement> item, string path)
     {
