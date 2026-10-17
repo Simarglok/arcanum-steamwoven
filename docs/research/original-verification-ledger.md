@@ -142,6 +142,25 @@ Source: [AI plan](npc-combat-ai-plan.md#first-pass-ce-anomalies-to-confirm-not-a
 | Wait timer (C12, O3, TE8) | `ai_npc_wait` (0x4AA7A0) | The timer is scheduled when the leader's charisma is **not** extraordinary and the NPC is not mind-controlled, and it carries the NPC's handle. Followers of an ordinary leader time out (0, 15 min, 2 h, 1 d, 7 d, 30 d by wait index); Virgil (index 6) never does. | CE slip |
 | Round order (combat O2) | `object_list_rect` (0x440B40) | Sector by sector; inside a sector the critter most recently added or moved in comes first. | Original |
 
+## Reaction runtime (ARC-WORLD-026)
+
+Source: [reaction](npc-reaction-reputation-evidence.md#findings), contract
+[NPC reaction runtime](../world/npc-reaction-runtime.md). Read for the reaction owner on 2026-10-17 by a first reader
+and, independently, a second reader that saw only the questions (method step 6); both agree on every row, and the
+second reader found R1's difference. Every direct branch stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| R1 effects | `reaction_get` core (0x4C0D00), `effect_adjust_reaction` (0x4EAA80) | Enemy list → 0; a non-PC or non-NPC → 50; stored value + the race/beauty/reputation term, then the `reaction` effects of the **PC** (the second argument), then a floor of 50 when this PC mind-controls the NPC. CE passes the NPC to the effect lookup. | CE slip (effect owner); the rest Original |
+| R1 term | `sub_4C1500` (0x4C1500), table 0x5B684C | The race term (row NPC race, column PC race, no bounds check) and the PC's reaction modifier (stat 14) are skipped for an aloof (NPC flag 0x20000) or monstrous NPC; the hostility variant floors them at −49; reputation is always added. The 88 table values equal CE's. | Original |
+| R2 | `reaction_adj` (0x4C0DE0) | No-op for 0, wrong types, an NPC this PC mind-controls, and a negative delta while the PC's charisma is extraordinary and it is the NPC's PC leader. The delta always goes through the PC's good/bad adjustment effects (CE's switch to bypass them for charm, A4, is CE's own addition) and is added to the stored value; a negative delta while the NPC's direct leader is the PC sets "check leader" and "check reaction bad". A network client returns early (not single player). | Original |
+| R3 | `sub_4C12F0`, `sub_4C1290`, `sub_4C1360` (0x4C12F0, 0x4C1290, 0x4C1360) | Reads search slots 0..9 (slot 0 only when asked) with the base as fallback; a write goes to the PC's own slot (slot 0 first), else the first empty slot 1..9, else evicts the slot closest to 50 when it is closer than the new value, else is dropped. | Original |
+| R5, R6 | `sub_4C1020` (0x4C1020), `sub_4C10A0` (0x4C10A0), `reaction_met_before` (0x4C0C40), `reaction_forget` (0x4C0F50) | Start copies the stored value into slot 0 (100 when below 100 and the fate point is spent); end clears slot 0 and writes the value to the PC's slot; met before and forget look at slots 1..9 only. | Original |
+| R4 | `reaction_translate` (0x4C0FC0) | Thresholds 0, 20, 40, 60, 80, 100; love = 0 … hatred = 6. | Original |
+| R2 effects | `effect_adjust_good_bad_reaction` (0x4EAAB0) | Negative: special effect 7 (bad), positive: 8 (good), 0 returns 0. | Original |
+| R8 hit | `ai_attack` (0x4A9650), PC hits NPC | Direct leader is the attacker: a deliberate hit adds parameter 9 (reputation A2, above), then the follow check, which may jilt it. Otherwise accidental −10; deliberate lowers it to parameter 10 when the hostility variant is above it. | Original (A2 an original bug) |
+| R8 quest | `quest_state_set_internal` (0x4C4E60) | Accepted: below 41 → adjust by 41 − effective; completed: +10. | Original |
+
 ## Scripts, event queue and randomness (ARC-RES-042, ARC-RES-045, ARC-SCRIPT-007, ARC-RES-046, ARC-WORLD-019)
 
 Source: [dispatcher](scr-event-dispatcher.md#11-anomalies-recorded-not-adopted-s),

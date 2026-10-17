@@ -1,6 +1,7 @@
 using Arcanum.Scripting.Scr;
 using Arcanum.Simulation.Combat;
 using Arcanum.Simulation.Events;
+using Arcanum.Simulation.Reaction;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using static Arcanum.Session.Tests.SessionFixtures;
 
@@ -21,6 +22,8 @@ public sealed class RuleModeTests
         Assert.AreSame(GameEventQueueProfile.Original, GameRules.Original.Events);
         Assert.AreSame(ScrRuleProfile.Steamwoven, GameRules.Steamwoven.Scripts);
         Assert.AreSame(ScrRuleProfile.Original, GameRules.Original.Scripts);
+        Assert.AreSame(ReactionRuleProfile.Steamwoven, GameRules.Steamwoven.Reaction);
+        Assert.AreSame(ReactionRuleProfile.Original, GameRules.Original.Reaction);
         foreach (var rules in GameRules.All)
         {
             Assert.AreEqual(RuleModeNames.Name(rules.Mode), rules.Name);
@@ -31,6 +34,8 @@ public sealed class RuleModeTests
             Assert.AreSame(rules.Events, GameEventQueueProfile.FromName(rules.Name));
             Assert.AreEqual(rules.Name, rules.Scripts.Name);
             Assert.AreSame(rules.Scripts, ScrRuleProfile.FromName(rules.Name));
+            Assert.AreEqual(rules.Name, rules.Reaction.Name);
+            Assert.AreSame(rules.Reaction, ReactionRuleProfile.FromName(rules.Name));
         }
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => GameRules.For((RuleMode)7));
     }

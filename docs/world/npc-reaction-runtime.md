@@ -1,0 +1,124 @@
+# NPC reaction runtime
+
+Status: **Implemented bounded component**, ARC-WORLD-026 (2026-10-17). Slices 1 and 2 of the
+[reaction research](../research/npc-reaction-reputation-evidence.md#proposed-implementation-slices-project-policy-not-accepted)
+(ARC-RES-028): the reaction rules as pure functions in `Arcanum.Simulation.Reaction`, and the NPCs' reaction memory
+toward the PC as a domain of the [game session](game-session-runtime.md) (snapshot schema 10). The AREA viewer's dialog
+reaction now lives there instead of the per-speaker `reaction.pc` map change. Requirement:
+[FR-SOCIAL-001](../requirements/story-social-ai.md#fr-social-001). Reputations (FR-SOCIAL-002), the `ME` dialog
+condition and the AI consumers are not part of it ([Not ready](#not-ready)).
+
+## Evidence
+
+- CE at the pinned commit `a7ff41b300ef712f0e7d088183a3d08957110cdd` (`reaction.c`, `effect.c`, the hit branch of
+  `ai_attack` in `ai.c`, `quest_state_set_internal` in `quest.c`), read as in ARC-RES-028.
+- The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically by two independent readers per the
+  [original executable check](../research/original-executable-check.md); verdicts in the
+  [verification ledger](../research/original-verification-ledger.md#reaction-runtime-arc-world-026). Every function below
+  behaves as CE reads it except one: the effective reaction passes the **PC**, not the NPC, to the `reaction` effect
+  lookup (`reaction_get` 0x4C0D00 → 0x4EAA80). That is a CE reconstruction slip, so both rule modes use the PC's
+  effects. CE's switch that lets charm bypass the PC's adjustment effects (A4) does not exist in the original.
+- The 88 values of the race table (0x5B684C) equal CE's `dword_5B684C`.
+- Network-only preludes in the original (`reaction_adj` and the quest setter return early on a network client) do not
+  apply to single player and are not modelled.
+
+## Rules (`Arcanum.Simulation.Reaction`)
+
+| API | Behaviour |
+| --- | --- |
+| `ReactionRules.Effective(stored, npc, pc, query)` | 0 when the PC is on the NPC's enemy list; otherwise `stored` + race term (`RaceReaction`, row NPC race, column PC race) + the PC's reaction modifier (both skipped for an aloof or monstrous NPC; in `ReactionQuery.Hostility` the two together are floored at −49) + the reputation sum, then the PC's `reaction` effects, then at least 50 when this PC mind-controls the NPC. No clamp. |
+| `ReactionRules.Category(value)` | ≤ 0 hatred, ≤ 20 dislike, ≤ 40 suspicious, ≤ 60 neutral, ≤ 80 courteous, ≤ 100 amiable, above love; enum order love … hatred as in the source. |
+| `ReactionRules.Adjust(delta, npc, pc, ledByPc)` | Skips a delta of 0, an NPC this PC mind-controls, and a negative delta while the PC has extraordinary charisma and leads the NPC (`ReactionSkip`). Otherwise the delta passes through the PC's bad (negative) or good (positive) adjustment effects; the result is added even when it is 0. `LeaderCheck` marks a negative change of a follower of this PC. |
+| `ReactionRules.DeltaTo(target, effective)` | "Set to *v*" is the delta `v − effective`, then `Adjust`. |
+| `ReactionRules.ConversationStart(stored, force)` | 100 when the stored value is below 100 and the "force good reaction" fate point is spent. |
+| `ReactionRules.PcHit(stored, npc, pc, ai, ledByPc, deliberate, profile)` | Follower of the attacker: deliberate hit ± AI parameter 9 (A2, below), accidental nothing; the follow check runs either way. Any other NPC: accidental −10; deliberate lowers it to parameter 10 when its hostility-variant reaction is above it. |
+| `ReactionRules.ApplyEffects(value, effects)` | Percent, multiply, divide, add, minimum, maximum, as the character stats owner aggregates stat effects. |
+| `ReactionRuleProfile` | Rule-mode profile: `Steamwoven`, `Original`, `All`, `FromName`; switch `FollowerHitRaisesReaction`. |
+
+Inputs are explicit records. `ReactionNpcFacts`: reaction base, race, aloof, monstrous, PC on the enemy list, mind
+controlled by the PC. `ReactionPcFacts`: race (one of the eight PC races), reaction modifier, reputation sum,
+`reaction`, good and bad adjustment effects, extraordinary charisma. `ReactionHitFacts`: AI parameters 9 and 10.
+Magnitudes are bounded to ±1,000,000 and effect lists to 64 entries (project policy); a divisor of 0 and a PC race
+outside the table (LM12) are invalid in both modes, as the original would fault or read out of bounds.
+
+## Session domain (`Arcanum.Session`)
+
+Per NPC entity, `SessionReaction(Entity, Remembered, Conversation)`: the remembered slot (present exactly when the NPC
+has met the PC) and the conversation slot (present exactly while a conversation is open). The stored value is the
+conversation slot, else the remembered slot, else the NPC's base from its facts. An NPC without a record has neither.
+Single PC: the source's ten-slot memory with eviction of the slot closest to 50 (R3) is not needed and not built.
+
+| API | Behaviour |
+| --- | --- |
+| `QueryHeroReactionFacts()` | The hero's race, effective reaction modifier and extraordinary charisma (≥ 20); reputation 0 and no effects (no reputation owner; the hero's innate effects keep only modelled stats). `null` without a hero. |
+| `QueryReaction(entity, npc, pc, query)` | `SessionReactionView`: effective value, category, stored value, met before (remembered slot only, so false during the first conversation), in conversation, recorded. |
+| `QueryReactionRecord(entity)` / `QueryReactions()` | The record or `null`; a detached copy of the domain. |
+| `AdjustReaction(version, entity, npc, pc, delta)` | `Adjust` with "led by the PC" taken from the session party (following or waiting). The new value goes to the conversation slot while one is open, else to the remembered slot. |
+| `SetReaction(version, entity, npc, pc, target)` | `DeltaTo` against the current effective value, then as `AdjustReaction`. |
+| `ReactToPcHit(version, entity, npc, pc, ai, deliberate)` | `PcHit` under `Rules.Reaction`, read at the call; `FollowCheck` asks the caller to re-run the follow check (leaving the party is its next step). |
+| `BeginReactionConversation(version, entity, npc, forceGoodReaction)` / `EndReactionConversation(version, entity, npc)` | Copy the stored value into the conversation slot; move it to the remembered slot and clear the conversation slot. As in the source, an end without a begin also remembers the PC. |
+| `ForgetReaction(version, entity)` | Clears the remembered slot; an open conversation keeps its slot. |
+
+Every mutation takes the expected version and refuses in this order: entity (`InvalidReactionTarget`), facts
+(`InvalidReactionFacts`), version (`StaleVersion`), the requested delta or target and the new stored value
+(`InvalidReactionAmount` beyond ±1,000,000), then NoChange (a skip or an unchanged record, with the `Adjustment` still
+reported), the record budget (`GameSessionLimits.MaxReactionRecords`, policy 4096, `BudgetExceeded`) and the revision
+capacity. One revision per changed record; a record back at the baseline is removed.
+
+## Rule modes
+
+| Ledger ID | Original | Steamwoven | Switch |
+| --- | --- | --- | --- |
+| Reputation A2 | A deliberate hit on a follower adds parameter 9 | lowers it by parameter 9 (owner decision 2026-10-17) | `ReactionRuleProfile.FollowerHitRaisesReaction` |
+| R1 effect owner | the PC's `reaction` effects | the same (CE slip, no switch) | none |
+| LM12 race table | unchecked index | refused in both (no out-of-bounds) | none |
+
+The state has one schema for both modes, so `SelectRules` changes only the next hit decision.
+
+## Snapshot schema 10
+
+`GameSessionSnapshot.Reactions` (`SessionReactionState`): the records in ordinal entity order. JSON, between `life` and
+`events`:
+
+```json
+"reactions":{"records":[{"entity":"oid:a","remembered":null,"conversation":-10},
+                        {"entity":"oid:b","remembered":65,"conversation":null}]}
+```
+
+The codec refuses unsorted or repeated entities and a record with both slots `null` (`NotCanonical`), a slot beyond
+±1,000,000 (`OutOfRange`) and more than 4096 records (`BudgetExceeded`); `Restore` applies the caller's budget.
+**Migration decision: none.** Schema 9 and older are refused. The viewer's `reaction.pc` map changes of schema 9 saves
+are therefore never read; a quick save of schema 9 loads as "written by an incompatible version".
+
+## AREA viewer
+
+`AreaConversationState` reads and writes the speaker's reaction through the session domain: `RE t` gates read
+`Reaction(speaker)` (the effective value), unsigned `RE v` is `SetReaction`, `RE ±d` is `AdjustReaction`, an accepted
+quest raises the reaction to at least 41 with `SetReaction` and a completed one adds 10 with `AdjustReaction`; the
+follow consent of the session party reads the same effective value. The facts are diagnostic: each speaker is a human,
+not aloof NPC whose base is the profile's initial reaction (50; Virgil's measured base 60 of ARC-RES-026 is still not
+used), and the PC is the session hero when there is one, else a human with reaction modifier 0. The viewer does not
+open or close the conversation slot, so every change lands in the remembered slot.
+
+## Tests
+
+- `Arcanum.Simulation.Tests/Reaction/ReactionRulesTests`: the race table (cells and the sum of all 88), each term of the
+  effective value varied alone, aloof and monstrous, enemy list, mind-control floor after the PC's effects, the
+  hostility floor, category boundaries, every skip of `Adjust` and the effect sign, set-to and the fate point, the hit
+  rules in both profiles, profile names, invalid facts, effect order.
+- `Arcanum.Session.Tests/ReactionStateTests`: base without a record, remembered after a change (also a change reduced to
+  0), set-to as a delta under PC effects, the conversation slot through begin, change, forget and end, the fate point,
+  the party's leader rules (following and waiting), a follower hit under both modes switched between calls, a hit on
+  another NPC, the hero's facts, typed refusals and stale versions, the record budget, canonical text and restore,
+  decode and restore refusals. `RuleModeTests` checks the profile in `GameRules`.
+- `Arcanum.TerrainViewer.Tests/AreaConversationTests`: the dialog reaction is a session reaction record, not a map change.
+
+## Not ready
+
+- Reputations (slice 4): the PC's list, `rules\gamerep.mes`, the reaction sum, faction membership, greetings. The
+  sum is an input, 0 from the hero.
+- The `ME` condition, the insult rule and conversation begin/end in the viewer (slice 3).
+- The PC's `reaction`, good and bad adjustment effects of real data (the hero keeps none), fate points, enemy lists,
+  mind control, charm (A4, decision D2 open), barter prices, gifts, hover colour, AI consumers (KOS at parameter 10, the
+  follower loyalty pass that reads the leader check and the follow check after a hit).
+- The source's ten-slot memory for several PCs.

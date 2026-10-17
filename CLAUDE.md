@@ -74,7 +74,7 @@ under `docs/research`. Details: `docs/project/status.md`.
   `Arcanum.Presentation` (animation timeline), `Arcanum.Input` (+
   `Arcanum.Input.Godot` adapter source), `Arcanum.Session` (one game-session
   owner: clock, GF, actor placement, map changes, story, party, inventory,
-  starting hero, randomness, life state, event queue with life timers, snapshot schema 9), `Arcanum.Godot` (ART viewer and HD
+  starting hero, randomness, life state, event queue with life timers, NPC reaction, snapshot schema 10), `Arcanum.Godot` (ART viewer and HD
   before/after review). Data/Simulation/Scripting/Session must stay
   Godot-independent.
 - Tools: `tools/terrain-viewer` (Core + Godot; ordinary modes `crash-site-area`

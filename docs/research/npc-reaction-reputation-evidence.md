@@ -31,7 +31,10 @@ follow consent of the [companion research](companion-follow-evidence.md).
   runtime or product decision open, or where it looks defective. Every policy
   below is a **proposal**.
 
-Original executable parity remains **NOT_VERIFIED**.
+Original executable parity remains **NOT_VERIFIED**, except the rows the
+[verification ledger](original-verification-ledger.md#reaction-runtime-arc-world-026) checked for ARC-WORLD-026
+(R1–R6, R8 hit and quest): they behave as read here, except that the original applies the **PC's** `reaction`
+effects in R1, not the NPC's.
 
 ## Answer
 
@@ -182,6 +185,10 @@ for several PCs (R3).
 
 ## What this means for the current port
 
+**Since ARC-WORLD-026** slices 1 and 2 below are implemented ([NPC reaction runtime](../world/npc-reaction-runtime.md)):
+the rules in `Arcanum.Simulation.Reaction`, the reaction memory in the session (snapshot schema 10), and the viewer's
+`RE` and quest rules over it; `reaction.pc` is gone. The notes below describe the state before it.
+
 - The conversation runtime's `reaction.pc` is a single stored value seeded with
   the diagnostic 50. Per R1 it is the **stored** value only. The
   [Virgil consent research](virgil-follow-consent.md) (ARC-RES-026) measured
@@ -225,14 +232,14 @@ for several PCs (R3).
 Each slice is a separate PR. Data/Simulation/Scripting/Session stay free of
 Godot.
 
-1. **Reaction rules (Simulation)**: a pure effective-reaction function over
+1. **Reaction rules (Simulation)** (done, ARC-WORLD-026): a pure effective-reaction function over
    explicit inputs (stored or base, NPC race, PC race, PC reaction modifier
    from the [character stats owner](../world/character-stats-runtime.md),
    reputation sum, NPC reaction effects, enemy-list and mind-control facts,
    aloof/monstrous), categories, the hostility variant, and the delta rule with
    PC good/bad effects. Synthetic tests vary one input at a time (FR-SOCIAL-001
    acceptance).
-2. **Reaction state (Session)**: per NPC instance the stored value, the
+2. **Reaction state (Session)** (done, ARC-WORLD-026): per NPC instance the stored value, the
    conversation slot and "met before", with begin/end conversation, adjust,
    set-to (as a delta), forget; a new snapshot schema replaces the
    `reaction.pc` map change. Single PC first; the 9-slot eviction (R3) stays

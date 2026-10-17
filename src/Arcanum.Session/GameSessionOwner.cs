@@ -16,12 +16,12 @@ namespace Arcanum.Session;
 /// character (stats, level, alignment) with its gold and starting kit, and the items the PC took from the world (pickup,
 /// loot, negative dialog IN) over host-attached T0 map inventories, the seeded gameplay randomness (labelled rolls) and the
 /// life of the hero and the NPCs (hit points, fatigue, poison, injuries, knockout, death) with the game event queue of
-/// their timers (ARC-WORLD-024), and the active rule mode (Steamwoven or Original, ARC-WORLD-023), which is a setting
+/// their timers (ARC-WORLD-024), the NPCs' reaction memory toward the PC (ARC-WORLD-026), and the active rule mode (Steamwoven or Original, ARC-WORLD-023), which is a setting
 /// and not saved.
 /// Caller-serialized like its components; no locks, events, files or Godot. Every call after
 /// <see cref="Dispose"/> throws <see cref="ObjectDisposedException"/>.
 /// </summary>
-public sealed class GameSessionOwner : IDisposable
+public sealed partial class GameSessionOwner : IDisposable
 {
     private readonly GameClockOwner _clock;
     private readonly GlobalFlagOwner _flags;
@@ -33,6 +33,7 @@ public sealed class GameSessionOwner : IDisposable
     private readonly InventoryDomain _inventory;
     private readonly HeroDomain? _hero;
     private readonly LifeDomain _life;
+    private readonly ReactionDomain _reactions;
     private readonly GameEventQueue _events;
     // Set only while a pass runs: the host's answers for the timers it fires and the life steps they made.
     private ISessionEventWorld? _passWorld;
@@ -51,11 +52,12 @@ public sealed class GameSessionOwner : IDisposable
 
     private GameSessionOwner(GameClockOwner clock, GlobalFlagOwner flags, GameSessionLimits limits,
         ActorPlacement actor, long revision, Dictionary<SessionMapId, Dictionary<MapChangeKey, long>> maps, Story story,
-        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, LifeDomain life, SessionLightingState? lighting,
-        SessionEventSink sink, GameEventQueue events)
+        PartyDomain party, HeroDomain? hero, InventoryDomain inventory, SeededRandom random, LifeDomain life, ReactionDomain reactions,
+        SessionLightingState? lighting, SessionEventSink sink, GameEventQueue events)
     {
         _clock = clock; _flags = flags; _flagView = new(flags); _limits = limits; _actor = actor; _revision = revision; _maps = maps;
-        _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _life = life; _lighting = lighting;
+        _story = story; _party = party; _hero = hero; _inventory = inventory; _random = random; _life = life; _reactions = reactions;
+        _lighting = lighting;
         _events = events;
         sink.Owner = this;
         _combatRolls = new(this);
@@ -101,7 +103,7 @@ public sealed class GameSessionOwner : IDisposable
         var life = new LifeDomain { Hero = hero is null ? null : new SessionLifeRecord(LifeState.Unharmed, null) };
         var sink = new SessionEventSink();
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, descriptor.Actor, 0, [], new(), new(), hero, inventory,
-            new(descriptor.RandomSeed), life, null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
+            new(descriptor.RandomSeed), life, new(), null, sink, new GameEventQueue(SessionEventKinds.Build(sink), SessionEventKinds.Limits)) { _rules = GameRules.For(descriptor.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
 
@@ -134,6 +136,8 @@ public sealed class GameSessionOwner : IDisposable
         if (failure != GameSessionFailure.None) return Rejected(failure);
         failure = ImportLife(snapshot.Life, hero is not null, snapshot.Clock.GameTimestampMs, limits, out var life);
         if (failure != GameSessionFailure.None) return Rejected(failure);
+        failure = ImportReactions(snapshot.Reactions, limits, out var reactions);
+        if (failure != GameSessionFailure.None) return Rejected(failure);
         var sink = new SessionEventSink();
         failure = ImportEvents(snapshot.Events, hero is not null, life, snapshot.Clock.GameTimestampMs, sink,
             GameRules.For(options.Rules).Events, out var events);
@@ -159,7 +163,7 @@ public sealed class GameSessionOwner : IDisposable
             return Rejected(GameSessionFailure.FlagsRejected, flagReason: flags.Reason);
         }
         var owner = new GameSessionOwner(clock.Owner, flags.Owner, limits, snapshot.Actor, snapshot.Revision, maps, story, party,
-            hero, inventory, new(snapshot.Random.Seed, snapshot.Random.Draws), life, snapshot.Lighting, sink, events!)
+            hero, inventory, new(snapshot.Random.Seed, snapshot.Random.Draws), life, reactions, snapshot.Lighting, sink, events!)
         { _rules = GameRules.For(options.Rules) };
         return new(owner, GameSessionFailure.None, ClockFailure.None, GlobalFlagReason.None);
     }
@@ -1048,7 +1052,7 @@ public sealed class GameSessionOwner : IDisposable
         return new(GameSessionSnapshot.CurrentSchemaVersion, _flags.Binding.Identity, _revision,
             new(clock.ProfileBinding, clock.GameTimestampMs, clock.PauseDisposition, clock.Revision),
             new(flags.Version.Revision, flags.Entries.ToArray()), _actor, maps, _story.Capture(), _party.Capture(), _hero?.State,
-            _inventory.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), CaptureEvents(), _lighting);
+            _inventory.Capture(), new(_random.Seed, _random.Draws), _life.Capture(), _reactions.Capture(), CaptureEvents(), _lighting);
     }
 
     /// <summary>Idempotent; disposes the clock and flag owners with the session.</summary>

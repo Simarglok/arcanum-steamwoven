@@ -58,10 +58,12 @@ public sealed class GameSessionLimits
     public const int PolicyMaxPcItems = 512;
     /// <summary>NPC life records (ARC-COMBAT-002): critters whose life the session changed.</summary>
     public const int PolicyMaxLifeRecords = 4096;
+    /// <summary>NPC reaction records (ARC-WORLD-026): NPCs whose reaction memory toward the PC the session changed.</summary>
+    public const int PolicyMaxReactionRecords = 4096;
 
     public GameSessionLimits(int maxMaps = PolicyMaxMaps, int maxChangesPerMap = PolicyMaxChangesPerMap,
         int maxTotalChanges = PolicyMaxTotalChanges, int maxCompanions = PolicyMaxCompanions, int maxPcItems = PolicyMaxPcItems,
-        int maxLifeRecords = PolicyMaxLifeRecords)
+        int maxLifeRecords = PolicyMaxLifeRecords, int maxReactionRecords = PolicyMaxReactionRecords)
     {
         if (maxMaps is < 1 or > PolicyMaxMaps) throw new ArgumentOutOfRangeException(nameof(maxMaps));
         if (maxChangesPerMap is < 1 or > PolicyMaxChangesPerMap) throw new ArgumentOutOfRangeException(nameof(maxChangesPerMap));
@@ -69,8 +71,10 @@ public sealed class GameSessionLimits
         if (maxCompanions is < 1 or > PolicyMaxCompanions) throw new ArgumentOutOfRangeException(nameof(maxCompanions));
         if (maxPcItems is < 1 or > PolicyMaxPcItems) throw new ArgumentOutOfRangeException(nameof(maxPcItems));
         if (maxLifeRecords is < 1 or > PolicyMaxLifeRecords) throw new ArgumentOutOfRangeException(nameof(maxLifeRecords));
+        if (maxReactionRecords is < 1 or > PolicyMaxReactionRecords) throw new ArgumentOutOfRangeException(nameof(maxReactionRecords));
         MaxMaps = maxMaps; MaxChangesPerMap = maxChangesPerMap; MaxTotalChanges = maxTotalChanges; MaxCompanions = maxCompanions;
         MaxPcItems = maxPcItems; MaxLifeRecords = maxLifeRecords;
+        MaxReactionRecords = maxReactionRecords;
     }
 
     public int MaxMaps { get; }
@@ -79,6 +83,7 @@ public sealed class GameSessionLimits
     public int MaxCompanions { get; }
     public int MaxPcItems { get; }
     public int MaxLifeRecords { get; }
+    public int MaxReactionRecords { get; }
 }
 
 /// <summary>
@@ -121,6 +126,8 @@ public enum GameSessionFailure
     InvalidLifeTarget, InvalidLifeFacts, InvalidLifeState, InvalidLifeAmount,
     // Event queue (ARC-WORLD-024).
     EventBudgetExceeded, EventConflict, InvalidEventPass, InvalidEvents,
+    // Reaction domain (ARC-WORLD-026).
+    InvalidReactionTarget, InvalidReactionFacts, InvalidReactionAmount,
 }
 
 public enum GameSessionDisposition { Changed, NoChange, Rejected }
@@ -221,18 +228,19 @@ public sealed class GameSessionSnapshot
     /// <summary>Schema 3 added <see cref="Story"/> (ARC-SCRIPT-006) and <see cref="Lighting"/> (ARC-WORLD-010); schema 4
     /// added <see cref="Party"/> (ARC-WORLD-013); schema 5 added <see cref="Inventory"/> (ARC-WORLD-014); schema 6 added
     /// <see cref="Hero"/>, the PC's gold and starting-kit items (ARC-WORLD-015); schema 7 added <see cref="Random"/>
-    /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 adds <see cref="Events"/> (ARC-WORLD-024).
-    /// Schemas 1..8 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 9;
+    /// (ARC-WORLD-019); schema 8 added <see cref="Life"/> (ARC-COMBAT-002); schema 9 added <see cref="Events"/> (ARC-WORLD-024);
+    /// schema 10 adds <see cref="Reactions"/> (ARC-WORLD-026), which replaces the viewer's per-NPC <c>reaction.pc</c> map change.
+    /// Schemas 1..9 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 10;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
         SessionPartyState party, SessionHeroState? hero, SessionInventoryState inventory, SessionRandomState random,
-        SessionLifeState life, SessionEventState events, SessionLightingState? lighting)
+        SessionLifeState life, SessionReactionState reactions, SessionEventState events, SessionLightingState? lighting)
     {
         SchemaVersion = schemaVersion; Identity = identity; Revision = revision;
         Clock = clock; Flags = flags; Actor = actor; Maps = Array.AsReadOnly(maps); Story = story; Party = party;
-        Hero = hero; Inventory = inventory; Random = random; Life = life; Events = events; Lighting = lighting;
+        Hero = hero; Inventory = inventory; Random = random; Life = life; Reactions = reactions; Events = events; Lighting = lighting;
     }
 
     public int SchemaVersion { get; }
@@ -251,6 +259,8 @@ public sealed class GameSessionSnapshot
     public SessionRandomState Random { get; }
     /// <summary>The hero's and the changed NPCs' life (ARC-COMBAT-002).</summary>
     public SessionLifeState Life { get; }
+    /// <summary>The changed NPCs' reaction memory toward the PC (ARC-WORLD-026).</summary>
+    public SessionReactionState Reactions { get; }
     /// <summary>The pending game events (ARC-WORLD-024).</summary>
     public SessionEventState Events { get; }
     /// <summary>Applied ambient lighting, or null when none was recorded (an unlit session).</summary>
