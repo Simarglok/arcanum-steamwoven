@@ -35,13 +35,16 @@ public static class AreaStepInspector
         ArgumentNullException.ThrowIfNull(tileNameArchive); ArgumentNullException.ThrowIfNull(effectArchive);
         if (evidenceEpoch < 0) throw new ArgumentOutOfRangeException(nameof(evidenceEpoch));
         var stage = new StageCursor();
-        return Sanitize(stage, () => Build(stage, AreaStepInputKind.Structural, area, module, tileNameArchive, effectArchive, patchArchive, mobileFile, evidenceEpoch));
+        return Sanitize(stage, () => Build(stage, AreaStepInputKind.Structural, area, module, ArchiveRules(module, tileNameArchive, effectArchive, patchArchive, null),
+            mobileFile, evidenceEpoch));
     }
 
     /// <summary>Whole-map evidence (ARC-WORLD-018) for a strictly published whole-map snapshot
-    /// (ARC-DATA-019): the module archive and the rule resources (tile names, effects, the
-    /// module's game effects, map.patch) are read from the archives that win them in the content
-    /// stack, and the mobile file from the map's aggregate. Walls and portals use the whole-map
+    /// (ARC-DATA-019): the sectors from the module archive, the rule resources through the content
+    /// stack in the phase the original reads them (ARC-DATA-027, exe-checked: tile names and effects
+    /// at game start, so from the first base source; the module's game effects at module load and
+    /// map.patch when a map opens, so the stack winners; a loose file is read like an archive member),
+    /// and the mobile file from the map's aggregate. Walls and portals use the whole-map
     /// edge rules (<see cref="WallPieceRule"/>, <see cref="PortalEdgeRule"/>).</summary>
     public static AreaStepSnapshot InspectWholeMap(AreaSnapshot area, ContentStack stack, string? aggregatePath, long evidenceEpoch)
     {
@@ -52,11 +55,14 @@ public static class AreaStepInspector
         {
             if (!area.Profile.StartsWith(WholeMapProfilePrefix, StringComparison.Ordinal)) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
             var module = stack.Plan.SearchOrder.SingleOrDefault(s => s.Role == ContentSourceRole.ModuleArchive) ?? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Selection);
-            string ArchiveOf(string path, bool required)
+            byte[]? Rule(string path, bool required)
             {
-                var winner = stack.Resolve(path).Winner;
-                if (winner is null) return required ? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules) : "";
-                return winner.Entry is not null ? winner.Source.Path : throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules);
+                var phase = path is TileNamePath or EffectPath ? ContentLoadPhase.GameStart : ContentLoadPhase.ModuleLoaded;
+                if (ContentPhase.Candidate(stack, path, phase) is not { } candidate)
+                    return required ? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules) : null;
+                if (candidate.Length > AreaStepRules.MaxMesBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
+                var read = stack.Read(candidate);
+                return read.Status == ContentReadStatus.Read ? read.Bytes! : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Rules);
             }
             var mobile = Array.Empty<byte>();
             if (aggregatePath is not null)
@@ -65,18 +71,8 @@ public static class AreaStepInspector
                 var read = stack.Read(winner);
                 mobile = read.Status == ContentReadStatus.Read ? read.Bytes! : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Selection);
             }
-            var opened = new Dictionary<string, DatArchive>(StringComparer.Ordinal);
-            try
-            {
-                DatArchive Open(string path) => opened.TryGetValue(path, out var archive) ? archive : opened[path] = DatArchive.Open(path);
-                var moduleArchive = Open(module.Path);
-                var names = Open(ArchiveOf(TileNamePath, true));
-                var effects = Open(ArchiveOf(EffectPath, true));
-                var patchPath = ArchiveOf(PatchPath, false); var gameEffectsPath = ArchiveOf(GameEffectPath, false);
-                return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, names, effects, patchPath.Length == 0 ? null : Open(patchPath), mobile, evidenceEpoch,
-                    gameEffectsPath.Length == 0 ? moduleArchive : Open(gameEffectsPath));
-            }
-            finally { foreach (var archive in opened.Values) archive.Dispose(); }
+            using var moduleArchive = DatArchive.Open(module.Path);
+            return Build(stage, AreaStepInputKind.Structural, area, moduleArchive, Rule, mobile, evidenceEpoch);
         });
     }
 
@@ -108,7 +104,7 @@ public static class AreaStepInspector
             using var names = DatArchive.Open(tileNameResourcePath);
             using var effects = DatArchive.Open(effectResourcePath);
             using var patch = DatArchive.Open(patchArchivePath);
-            var snapshot = Build(stage, AreaStepInputKind.AuthenticatedOriginal, area, module, names, effects, patch, mobile, evidenceEpoch);
+            var snapshot = Build(stage, AreaStepInputKind.AuthenticatedOriginal, area, module, ArchiveRules(module, names, effects, patch, null), mobile, evidenceEpoch);
             foreach (var (path, pin) in OriginalPayloads)
                 if (!snapshot.InputIdentity.Sources.Any(s => s.Role == path && s.Length == pin.Length && s.Sha256 == pin.Sha256))
                     throw Fail(AreaStepInvocationCode.FingerprintMismatch, AreaStepInvocationStage.Fingerprint);
@@ -116,8 +112,26 @@ public static class AreaStepInspector
         });
     }
 
-    private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module, DatArchive tileNameArchive,
-        DatArchive effectArchive, DatArchive? patchArchive, ReadOnlyMemory<byte> mobileFile, long epoch, DatArchive? gameEffectArchive = null)
+    /// <summary>The rule resources of the pinned and structural profiles: each one exactly once in its named archive (the
+    /// game effects in the module's, unless given); a missing optional resource or archive is null.</summary>
+    private static Func<string, bool, byte[]?> ArchiveRules(DatArchive module, DatArchive tileNameArchive, DatArchive effectArchive,
+        DatArchive? patchArchive, DatArchive? gameEffectArchive) => (path, required) =>
+    {
+        var archive = path switch
+        {
+            TileNamePath => tileNameArchive, EffectPath => effectArchive, GameEffectPath => gameEffectArchive ?? module, PatchPath => patchArchive,
+            _ => throw new ArgumentOutOfRangeException(nameof(path)),
+        };
+        if (archive is null) return null;
+        var hits = archive.Entries.Where(e => Name(e) == path).ToArray();
+        if (hits.Length == 0 && !required) return null;
+        if (hits.Length != 1) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules);
+        if (hits[0].DeclaredOutputSize > AreaStepRules.MaxMesBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
+        return archive.ReadEntry(hits[0]);
+    };
+
+    private static AreaStepSnapshot Build(StageCursor stage, AreaStepInputKind kind, AreaSnapshot area, DatArchive module,
+        Func<string, bool, byte[]?> readRule, ReadOnlyMemory<byte> mobileFile, long epoch)
     {
         stage.Current = AreaStepInvocationStage.Selection;
         // Only a strict-complete publication: an inspected snapshot with issues may omit unlocated objects.
@@ -136,26 +150,23 @@ public static class AreaStepInspector
         var sources = area.Inputs.Select(i => new AreaStepSourceIdentity($"area-{i.Key.Role}-{i.Key.Number}".ToLowerInvariant(), i.Length, i.Sha256)).ToList();
         sources.Add(new("mobile-file", mobileFile.Length, mobileSha));
         stage.Current = AreaStepInvocationStage.Rules;
-        byte[]? Resource(DatArchive archive, string path, bool required)
+        byte[]? Resource(string path, bool required)
         {
-            var hits = archive.Entries.Where(e => Name(e) == path).ToArray();
-            if (hits.Length == 0 && !required) return null;
-            if (hits.Length != 1) throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules);
-            if (hits[0].DeclaredOutputSize > AreaStepRules.MaxMesBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
-            var bytes = archive.ReadEntry(hits[0]);
+            var bytes = readRule(path, required);
+            if (bytes is null) return required ? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules) : null;
             sources.Add(new(path, bytes.Length, Sha(bytes)));
             return bytes;
         }
-        var tileTable = AreaStepRules.TileNameTable(AreaStepRules.ParseMes(Resource(tileNameArchive, TileNamePath, true)));
+        var tileTable = AreaStepRules.TileNameTable(AreaStepRules.ParseMes(Resource(TileNamePath, true)));
         var effects = new Dictionary<int, IReadOnlyList<AreaStepRules.EffectChange>?>();
-        foreach (var (key, value) in AreaStepRules.ParseMes(Resource(effectArchive, EffectPath, true)).Where(r => r.Key is >= 50 and < 400))
+        foreach (var (key, value) in AreaStepRules.ParseMes(Resource(EffectPath, true)).Where(r => r.Key is >= 50 and < 400))
             effects[key] = AreaStepRules.ParseEffect(value);
-        if (Resource(gameEffectArchive ?? module, GameEffectPath, false) is { } gameEffects)
+        if (Resource(GameEffectPath, false) is { } gameEffects)
             foreach (var (key, value) in AreaStepRules.ParseMes(gameEffects).Where(r => r.Key is >= 0 and < 50))
                 effects[key] = AreaStepRules.ParseEffect(value);
         IReadOnlyList<AreaStepRules.PatchTarget> patchTargets = [];
         var patchMalformed = 0;
-        if (patchArchive is not null && Resource(patchArchive, PatchPath, false) is { } patch)
+        if (Resource(PatchPath, false) is { } patch)
             patchTargets = AreaStepRules.PatchTargets(Encoding.Latin1.GetString(patch), out patchMalformed);
 
         stage.Current = AreaStepInvocationStage.Terrain;

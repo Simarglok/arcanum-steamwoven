@@ -37,7 +37,7 @@ public static class TerrainObstructionInspector
                 var sourceProvenance = new TerrainObstructionProvenance(TerrainObstructionProvenanceKind.TileNameMes, tileNameSource.SourceId, selectedMesEntry.Ordinal);
                 nameEntry = new(selectedMesEntry.Ordinal, selectedMesEntry.Flags, selectedMesEntry.DeclaredOutputSize);
                 var bytes = tileNameSource.Archive.ReadEntry(selectedMesEntry);
-                var records = TerrainLoader.ParseMes(bytes, limits, allowObservedTileInterstitialText: true);
+                var records = TerrainLoader.ParseMes(bytes, limits);
                 table = TerrainTileNameRuleTable.Create(records, sourceProvenance);
                 unavailable = TerrainObstructionSectorReport.Unknown("TILE_NAME_TABLE_UNAVAILABLE", sourceProvenance);
             }

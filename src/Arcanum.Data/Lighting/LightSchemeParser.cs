@@ -20,12 +20,8 @@ internal static class LightingMes
     {
         records = new SortedDictionary<int, string>();
         if (payload.Length > MaxPayloadBytes) return LightingFailure.LimitExceeded;
-        var parsed = MesFile.Parse(payload, Options);
-        if (parsed.Status != MesParseStatus.Parsed)
-            return parsed.Status is MesParseStatus.TooLarge or MesParseStatus.TooManyMessages or MesParseStatus.TextTooLong
-                ? LightingFailure.LimitExceeded : LightingFailure.MesGrammar;
-        foreach (var message in parsed.File!.Messages) records.Add(message.Number, Encoding.Latin1.GetString(message.Bytes.Span));
-        return LightingFailure.None;
+        var status = MesTable.Read(payload, Options, out records);
+        return status == MesParseStatus.Parsed ? LightingFailure.None : MesTable.IsLimit(status) ? LightingFailure.LimitExceeded : LightingFailure.MesGrammar;
     }
 
     internal static bool TryInteger(string value, out int result) =>

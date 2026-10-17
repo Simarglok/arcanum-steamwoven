@@ -111,6 +111,35 @@ public sealed class AreaStackOrderTests
     }
 
     [TestMethod]
+    public void Name_tables_come_from_the_base_and_step_rules_from_their_load_phase()
+    {
+        // ARC-DATA-027: name tables, tile names and effects are read at game start, so a module copy is ignored (the
+        // module's broken effect table would refuse the steps if read); the module's game effects at module load.
+        var effects = "{50}{}"u8.ToArray();
+        Install(arcanum1: Base(("art/scenery/fixture.art", Art()), ("rules/effect.mes", effects)));
+        Loose("modules/Mod/art/scenery/scenery.mes", "{0}{other.art}"u8.ToArray());
+        Loose("modules/Mod/rules/effect.mes", "{x}{y}"u8.ToArray());
+        Loose("modules/Mod/rules/gameeffect.mes", "{0}{}"u8.ToArray());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual(AreaMapPlanStatus.Ready, result.Status, result.Detail);
+            Assert.AreEqual(new AreaInputKey(AreaSourceRole.Resource1), result.Plan!.Plan.Mappings.Single(m => m.Role == AreaMappingRole.Scenery).Entry.Source);
+            using var owner = result.Plan.Open();
+            var snapshot = owner.LoadStrict();
+            Assert.AreEqual(1, snapshot.Visuals.Count(v => v.Key.Kind == AreaSourceKind.Static), "the base table names fixture.art");
+            var steps = Arcanum.Data.Traversal.AreaStepInspector.InspectWholeMap(snapshot, stack, null, 1);
+            var sources = steps.InputIdentity.Sources;
+            Assert.IsTrue(sources.Any(r => r.Role == "rules/effect.mes" && r.Length == effects.Length), "base effects");
+            Assert.IsTrue(sources.Any(r => r.Role == "rules/gameeffect.mes" && r.Length == 5), "module game effects, a loose file");
+        }
+        // A base copy shadowed by a module copy that is not an input of the plan cannot be bound.
+        Loose("data/art/scenery/scenery.mes", Scenery);
+        using (var stack = Stack())
+            Assert.AreEqual(AreaMapPlanStatus.UnsupportedSource, AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test").Status);
+    }
+
+    [TestMethod]
     public void An_archive_member_changed_after_planning_is_refused_when_the_plan_opens()
     {
         Install(arcanum1: Base(("art/scenery/fixture.art", Art())), arcanum4: Dat(("proto/007001 - test.pro", Prototype())), prototypeLoose: false);

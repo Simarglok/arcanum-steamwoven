@@ -32,8 +32,13 @@ snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
   64 MiB for the aggregate) and the owner authenticates those bytes against the
   plan. A sector or editor mobile (`.mob`) file overridden outside the module
   archive is refused, because the owner reads both from the module archive.
-- **Mappings:** the ten MES/policy files the pinned profiles bind, each the
-  stack's winner for its name. `art/missing.dat` is optional: without it the
+- **Mappings:** the ten MES/policy files the pinned profiles bind. The original
+  reads all of them in Name's init, before the module is mounted (ARC-DATA-027,
+  exe-checked), so each is the first base source's copy: a module copy is never
+  read, and a base copy that is not an input of the plan (a loose base file a
+  module copy shadows, or an archive outside the resource order) is
+  `UnsupportedSource`. The owner parses them in the original MES grammar
+  (`MesFile`). `art/missing.dat` is optional: without it the
   owner rebuilds the masks, as the original does (N3).
 - **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
   missing number (at most 200), as the original does; runtime = catalogue − 4999;
