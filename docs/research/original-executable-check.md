@@ -5,7 +5,8 @@ game and amended the same day (ARC-RES-051): the executable is the only
 reference for original behaviour, a function may be executed in an emulator as
 an [oracle](#function-emulation-oracle), and CE is being phased out of the
 process and the documents ([research](original-oracle-research.md)). Until a
-domain is migrated, CE stays its first reading (D1); the executable settles what
+domain is migrated, CE stays its first reading (D1) and new work there cites CE
+only for the function it checks; the executable settles what
 the original does. First used by ARC-COMBAT-001
 ([combat anomalies A1–A10](combat-core-evidence.md#original-executable-check-arc-combat-001)).
 
@@ -95,7 +96,7 @@ The cross-domain results of the first systematic pass (ARC-RES-048) are in the
 
 Owner decision 2026-10-17: single functions of the unchanged retail executable
 may be executed in a CPU emulator to compare their results with Steamwoven.
-This is the strongest evidence level for a function (O3 below), because it finds
+Short of observing the running game, this is the strongest evidence for a function (F3 below), because it finds
 differences a reader misses and needs no reading of the code at all.
 
 - The emulator maps the image of the file read from the install into its own
@@ -123,15 +124,15 @@ differences a reader misses and needs no reading of the code at all.
 The tool is ARC-DEV-007, not merged yet: until then the oracle is a method, not a
 check that can be run.
 
-### Evidence levels for a function
+### Evidence levels for a function (F0–F4)
 
 | Level | Evidence |
 | --- | --- |
-| O0 | Implemented from a CE reading only (NOT_VERIFIED) |
-| O1 | One reading of the whole function in the executable |
-| O2 | Two independent readings (step 6) |
-| O3 | Oracle: the function and Steamwoven compared on recorded inputs, mutants caught |
-| O4 | Observed in the running game (a scenario trace or save) |
+| F0 | Implemented from a CE reading only (NOT_VERIFIED) |
+| F1 | One reading of the whole function in the executable |
+| F2 | Two independent readings (step 6) |
+| F3 | Oracle: the function and Steamwoven compared on recorded inputs, mutants caught |
+| F4 | Observed in the running game (a scenario trace or save) |
 
 ## Rules
 

@@ -30,8 +30,8 @@ The question: how to build a complete, checkable evidence base that Steamwoven b
     have no CE address. CE addresses were used only to measure this.
   - The object field names are in the executable as a table of 338 string pointers at 0x59BEA8, from `obj_f_begin` to
     `obj_f_max`, in field order; the stat names are a table of 22 pointers at 0x5B5384 in stat order (`stat_level` is
-    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These replace CE's `obj.h` and `stat.h`.
-  - Of CE's 3,820 descriptive function names, 279 occur verbatim in the executable's own strings (animation and magic
+    17, `stat_experience_points` 18, the numbers the oracle saw in real calls). These can replace CE's `obj.h` and `stat.h`.
+  - CE gives 4,980 distinct names for its 4,981 addresses. Of its 3,820 descriptive names, 279 occur verbatim in the executable's own strings (animation and magic
     messages), and five Troika source paths appear (`GameLibX\Anim.c` and others). The other names are CE's own; 1,160
     more functions are only `sub_…` in CE too.
 - **Scale of the CE dependency** on `origin/main` (lines naming CE, its repository or its commit): `docs` 2,836 lines in
@@ -49,9 +49,9 @@ paid tiers) are not used.
 | Tool | Use | Status |
 | --- | --- | --- |
 | [Ghidra 12.1.4](https://github.com/NationalSecurityAgency/ghidra/releases) (Apache-2.0) | Headless analysis, decompiler, call graph, scripted function discovery | Trial on Linux arm64 with JDK 21; the release has no arm64 decompiler binary, which was built from the bundled sources with `make`. The macOS arm64 build is not tried yet. |
-| [Unicorn 2.1.4](https://pypi.org/project/unicorn/) | Emulating single x86-32 functions | Trial in Python. Its licence (PyPI metadata says BSD, the engine core is historically GPLv2) is checked before adoption; either way it stays in a separate tool that the C# assemblies never reference. |
+| [Unicorn 2.1.4](https://pypi.org/project/unicorn/) | Emulating single x86-32 functions | Trial in Python. Its engine core is GPLv2 (the PyPI metadata says BSD); the licence is checked before adoption; either way it stays in a separate tool that the C# assemblies never reference. |
 | Ghidra MCP servers ([pyghidra-mcp](https://github.com/clearbluejar/pyghidra-mcp), [GhidrAssistMCP](https://github.com/jtang613/GhidrAssistMCP), [GhidraMCP](https://github.com/LaurieWired/GhidraMCP)) | Agent reading through a read-only tool subset | Not tried. |
-| CrossOver 26 (owner's licence) with x32dbg or `frida-server.exe` inside the bottle | Scenario observation in the running game (level O4) | Not tried; Frida cannot inject into a Wine process from the host ([frida#3339](https://github.com/frida/frida/issues/3339)). A later bounded experiment. |
+| CrossOver 26 (the owner offered his installed copy on 2026-10-17; free alternative: Wine) with x32dbg or `frida-server.exe` inside the bottle | Scenario observation in the running game (level F4) | Not tried; Frida cannot inject into a Wine process from the host ([frida#3339](https://github.com/frida/frida/issues/3339)). A later bounded experiment. |
 
 Practice this follows: [openblack/bw1-decomp PR #413](https://github.com/openblack/bw1-decomp/pull/413) (differential
 testing of a Win32 MSVC game against its original binary in Unicorn, random states, planted mutants as controls),
@@ -66,15 +66,19 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
 2. **ARC-DEV-007**: the oracle tool and its test integration, on the owner's Mac: `tools/original-oracle` (Python,
    pinned Unicorn) with a self-test on synthetic code, the C# side of the comparison in a test category
    `OriginalExe`, the function registry, the `OriginalFunction` attribute, receipts, `./arcanum oracle`, and the
-   reference counter for CE. First functions: the three experience functions of the trial.
+   reference counter for CE, with Ghidra and Unicorn pinned in the [toolchain](../workflow/toolchain.md). First functions:
+   the three experience functions of the trial.
 3. **Experience XP3 switch**: the progress overflow as a rule-mode switch (owner decision 2026-10-17), with the oracle
    expecting the difference in Steamwoven mode only.
 4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace CE references
-   with executable addresses in the same PR; new work adds no CE reference.
+   with executable addresses in the same PR. Until its domain is migrated, new work cites CE only for the function it
+   checks.
 5. **Closure**: CE removed from `AGENTS.md`, `CLAUDE.md` and the method; the counter becomes a ban.
 
 ## Not done
 
-The game was not run; no MCP server, CrossOver or debugger was tried; no repository code or test changed. The trial ran
-in a temporary Linux VM on the owner's Mac and a cloud container with .NET SDK 8.0.131, not the pinned 8.0.425. Scratch
-scripts and outputs stay in `research-private/`.
+The game was not run; no MCP server, CrossOver or debugger was tried; no repository code or test changed. The executable
+was read and emulated only in a temporary Linux VM on the owner's Mac. The C# side ran in a cloud container with .NET
+SDK 8.0.131 (not the pinned 8.0.425) on a file of the synthetic inputs and the original's outputs; that transfer predates
+the rule that such outputs stay local, and the file is not kept there. Scratch scripts and outputs stay in
+`research-private/`.
