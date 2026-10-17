@@ -541,6 +541,7 @@ public partial class TerrainViewerApp
     private void PublishWorldAdvance(IGridSession session, GridAdvance advance)
     {
         _worldAdvanceObserverForSelfTest?.Invoke(advance);
+        ObserveCombatRunSteps(advance);
         foreach (var evidence in advance.AreaEvidence)
         {
             _worldActorDenied |= evidence.Live?.ReasonCode is AreaOccupancyRules.DestinationActor or AreaOccupancyRules.ShoulderActor;
@@ -671,7 +672,7 @@ public partial class TerrainViewerApp
                 return;
             }
             // ARC-WORLD-011: F7/F8 are quick save/load while an AREA game session exists.
-            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
+            if (!RouteQuickKey(decision) && !RouteInventoryKey(decision) && !RouteVisualKey(decision, modifiers) && !RouteNumLockKey(decision) && !RouteCombatModeKey(decision) && decision.Role == WorldKeyRole.OriginalReserved && decision.Pressed && !decision.Echo && !WorldModal && !WorldUiFocus)
                 _worldLastReserved = $"{routedKey} = {decision.OriginalAction} (original; NOT IMPLEMENTED)";
         }
         var raw = _worldAdapter.Map(input, _worldFocused);

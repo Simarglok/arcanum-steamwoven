@@ -64,6 +64,7 @@ during an event pass, which must not call back into the owner (a `PlaceActor` or
 | `QueryHeroLife` / `QueryLife` / `QueryLifeRecord` / `ApplyDamage` / `Kill` / `Heal` / `RecoverFatigue` / `RestHeal` / `PoisonDamageTick` / `PoisonRecoveryTick` / `ClearStun` | Life domain (ARC-COMBAT-002): the hero, or an NPC with the host's facts and loaded state; mutations take the expected version, refuse before any roll, add one revision per change and draw their knockout and second-arm rolls from the session generator. See [life state runtime](life-state-runtime.md). |
 | `QueryHeroReactionFacts` / `QueryReaction` / `QueryReactionRecord` / `QueryReactions` / `AdjustReaction` / `SetReaction` / `ReactToPcHit` / `BeginReactionConversation` / `EndReactionConversation` / `ForgetReaction` | Reaction domain (ARC-WORLD-026): an NPC's effective reaction to the PC under the caller's facts, and its remembered and conversation slots; mutations take the expected version, refuse before any change and add one revision per changed record. See [NPC reaction runtime](npc-reaction-runtime.md). |
 | `QueryCombatRound` / `StartCombatRound` / `EndCombatRound` / `ConsumeActionPoints` / `EndCombatTurn` / `CompleteCombatActions` / `AddCombatant` / `QueryActionPointCheck` / `QueryCombatActionGate` | Turn-based round (ARC-COMBAT-003): participants from the host's `ISessionCombatWorld` scan, action points, charges with the hero's overexertion, subturns and the end of a round one game second later; mutations take the expected version, decide the step on a copy, refuse before any effect and add one revision when the round changes. While a round is active an ordinary `AdvanceGameTime` is NoChange. See [turn-based round runtime](turn-based-round-runtime.md). |
+| `QueryCombatMode` / `QueryCombatModes` / `SetCombatMode` / `ToggleHeroCombatMode` / `LeaveHeroCombatMode` / `QueryCanExitCombatMode` / `SwitchTurnBased` / `ChargeCombatRun` | Combat mode (ARC-COMBAT-004): the hero's and NPCs' flags with the source's toggle refusals, the PC's key and exit gate, the turn-based round started or ended by the hero's change, the setting switch, and the run step's fatigue charge; a death leaves combat mode. See [real-time combat runtime](real-time-combat-runtime.md). |
 | `Rules` / `SelectRules(mode)` | Rule mode (ARC-WORLD-023, [contract](rule-modes.md)): the active `GameRules` (Steamwoven or Original) every domain reads at its decision, and an immediate switch (`Changed`, `NoChange`, `Rejected` for an undefined mode). Starts from `GameSessionDescriptor.Rules` or `GameSessionRestoreOptions.Rules` (default Steamwoven). A setting, not state: no revision, not in the snapshot. |
 | `QueryEvents` / `ProcessEvents(world, budget)` | Event queue (ARC-WORLD-024): the pending timers in queue order, and one pass at the session's game time on the actor's map with the host's `ISessionEventWorld` for NPC facts. Life steps set their timers in the same step (`EventBudgetExceeded` when they do not fit); `PlaceActor` and `ApplyChanges` to another map move the followers' timers (`EventConflict` on a collision). See [session wiring](game-event-queue-runtime.md#session-wiring-arc-world-024). |
 | `Capture()` | One detached `GameSessionSnapshot` of every component at this call boundary. |
@@ -145,7 +146,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 14
+## Snapshot schema 15
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -163,6 +164,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
 `Combat` (the active round or `null`; [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)),
+`CombatMode` (the hero's flag and the NPCs in combat mode; [real-time combat](real-time-combat-runtime.md#snapshot-schema-15)),
 `Events` (the registry version, the next sequence and the pending timers; [event queue](game-event-queue-runtime.md#snapshot-schema-9))
 and `Lighting` (applied scheme and hour, or `null`). Collections are read-only copies.
 
@@ -247,7 +249,9 @@ format was schema 3. A quick-save file of an older schema (ARC-WORLD-011) loads 
 running session kept, and the next F7 overwrites it. The only earlier host (the AREA
 viewer) had a one-flag placeholder GF domain, so a migrated session could not run any
 dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience records as schema 14 and refuses schema 13.
-Adding another domain needs schema 15 with its own explicit migration decision.
+ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
+([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)).
+Adding another domain needs schema 16 with its own explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

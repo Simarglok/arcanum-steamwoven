@@ -8,8 +8,8 @@ as a domain of the [game session](game-session-runtime.md) (snapshot schema 11).
 `Arcanum.Simulation.Combat.TurnBasedRules`; the session runs the round over a host port. Requirements:
 [FR-COMBAT-001](../requirements/combat-magic-tech.md#fr-combat-001) (the round part),
 [FR-COMBAT-002](../requirements/combat-magic-tech.md#fr-combat-002) and
-[FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003). Real-time combat, the combat mode flag, AI, the
-attack animation and the viewer are not part of it ([Not ready](#not-ready)).
+[FR-COMBAT-003](../requirements/combat-magic-tech.md#fr-combat-003). Real-time combat and the combat mode flag
+([real-time combat](real-time-combat-runtime.md), ARC-COMBAT-004), AI, the attack animation and the viewer are not part of it ([Not ready](#not-ready)).
 
 ## Evidence
 
@@ -124,9 +124,9 @@ saved required action points (reset on load) and the unused second actor handle 
 
 ## Not ready
 
-- **No host yet.** The AREA viewer starts no round; the turn-based setting, combat mode, its toggle and the exit rule
-  (C1–C3), animation interrupts and the per-participant calls of the round start are the host's. Real-time combat is
-  slice 4.
+- **No host yet.** The AREA viewer starts no round; the turn-based setting, animation interrupts and the per-participant
+  calls of the round start are the host's. Combat mode, its toggle, the exit rule and the round started or ended with it
+  (C1–C3) came with [real-time combat](real-time-combat-runtime.md) (ARC-COMBAT-004).
 - **No AI.** `SubturnStarted` and `SubturnEnded` tell the host to run the NPC's heartbeat, AI and end-of-combat scripts;
   there is no SCR heartbeat dispatch or AI yet (RES-039 I6/I7). With A9 the host runs them twice.
 - **Movement and attacks do not charge yet.** The step, attack and use costs are rules; the movement runtime and the

@@ -35,7 +35,7 @@ public static class GameSessionSnapshotCodec
     public const string Format = "arcanum-steamwoven-session";
     public const int MaxEncodedCharacters = 8 * 1024 * 1024;
 
-    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "events", "lighting"];
+    private static readonly string[] RootFields = ["format", "schemaVersion", "world", "module", "revision", "clock", "flags", "actor", "maps", "story", "party", "hero", "inventory", "equipment", "effects", "experience", "random", "life", "reactions", "combat", "combatMode", "events", "lighting"];
     private static readonly string[] ClockFields = ["schemaVersion", "policyId", "sourceRevision", "sourceDataSha256",
         "startupResourceSha256", "startYear", "startHour", "timestampMs", "paused", "pauseReason", "revision"];
     private static readonly string[] FlagsFields = ["revision", "entries"];
@@ -82,6 +82,7 @@ public static class GameSessionSnapshotCodec
     private static readonly string[] ReactionFields = ["entity", "remembered", "conversation"];
     private static readonly string[] EventsFields = ["registry", "nextSequence", "pending"];
     private static readonly string[] CombatFields = ["turn", "participants", "current", "actionPoints"];
+    private static readonly string[] CombatModeFields = ["hero", "critters"];
     private static readonly string[] PendingEventFields = ["sequence", "kind", "deadlineMs", "entities", "values"];
     private static readonly string[] EventEntityFields = ["map", "entity"];
 
@@ -371,6 +372,13 @@ public static class GameSessionSnapshotCodec
             }
             else w.WriteNull("combat");
 
+            w.WriteStartObject("combatMode");
+            w.WriteBoolean("hero", snapshot.CombatMode.Hero);
+            w.WriteStartArray("critters");
+            foreach (var entity in snapshot.CombatMode.Critters) w.WriteStringValue(entity);
+            w.WriteEndArray();
+            w.WriteEndObject();
+
             w.WriteStartObject("events");
             w.WriteNumber("registry", snapshot.Events.Registry);
             w.WriteNumber("nextSequence", snapshot.Events.NextSequence);
@@ -484,7 +492,7 @@ public static class GameSessionSnapshotCodec
         var revision = Long(f["revision"], "$.revision", 0, long.MaxValue);
         return new(GameSessionSnapshot.CurrentSchemaVersion, identity, revision,
             Clock(f["clock"]), Flags(f["flags"]), Actor(f["actor"]), Maps(f["maps"]), Story(f["story"]), Party(f["party"]),
-            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Experience(f["experience"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), Events(f["events"]), Lighting(f["lighting"]));
+            Hero(f["hero"]), Inventory(f["inventory"]), Equipment(f["equipment"]), Effects(f["effects"]), Experience(f["experience"]), Random(f["random"]), Life(f["life"]), Reactions(f["reactions"]), Combat(f["combat"]), CombatMode(f["combatMode"]), Events(f["events"]), Lighting(f["lighting"]));
     }
 
     // Shapes and ordinal order; the values' ranges and the budget are Restore's.
@@ -588,6 +596,22 @@ public static class GameSessionSnapshotCodec
         return new(Int(f["turn"], p + ".turn", 1, int.MaxValue), participants,
             Int(f["current"], p + ".current", 0, SessionCombatLimits.MaxParticipants - 1),
             Int(f["actionPoints"], p + ".actionPoints", 0, TurnBasedRules.MaxActionPoints));
+    }
+
+    // Shapes and ordinal order; the hero's presence is Restore's.
+    private static SessionCombatModeState CombatMode(JsonElement element)
+    {
+        const string p = "$.combatMode";
+        var f = Fields(element, p, CombatModeFields);
+        var items = Array(f["critters"], p + ".critters", SessionCombatModeLimits.MaxCritters);
+        var critters = new string[items.Length];
+        for (var i = 0; i < items.Length; i++)
+        {
+            critters[i] = Entity(items[i], $"{p}.critters[{i}]");
+            if (i > 0 && string.CompareOrdinal(critters[i - 1], critters[i]) >= 0)
+                throw new DecodeException(SnapshotDecodeFailure.NotCanonical, $"{p}.critters[{i}]");
+        }
+        return new(Bool(f["hero"], p + ".hero"), critters);
     }
 
     // Shapes and ranges only: kinds, sequence order, deadlines against the clock and the NPCs' records are Restore's.

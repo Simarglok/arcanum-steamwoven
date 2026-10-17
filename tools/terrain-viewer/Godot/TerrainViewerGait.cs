@@ -9,7 +9,7 @@ namespace Arcanum.TerrainViewer;
 /// (palette; saved like the original's settings value) and the Num Lock toggle decide the default gait; Ctrl on a
 /// ground click runs once, or walks once with always-run; a click on an object always runs. The gait is fixed when
 /// a route or approach starts and read by the PC's session when it admits each step (<see cref="GaitTiming"/>).
-/// Fatigue and encumbrance are not modelled, so running is never refused.
+/// Encumbrance is not modelled; a hero out of fatigue walks (ARC-COMBAT-004).
 /// </summary>
 public partial class TerrainViewerApp
 {
@@ -25,7 +25,8 @@ public partial class TerrainViewerApp
         _alwaysRunStore = new AlwaysRunSettingsStore(AutomatedVisualRun);
         _alwaysRunOption = _alwaysRunStore.Load();
         _worldActor.AreaGaitTiming = GaitTiming.HumanFixed;
-        _worldActor.AreaGait = () => _worldGait;
+        // ARC-COMBAT-004: a hero out of fatigue walks whatever the chosen gait.
+        _worldActor.AreaGait = StepGait;
     }
 
     /// <summary>Gait controls act only in the AREA game view.</summary>
@@ -47,6 +48,7 @@ public partial class TerrainViewerApp
     {
         if (_worldGait != gait || _gaitOrigin != origin) GD.Print($"ARC-WORLD-020 gait={gait} via={origin}");
         _worldGait = gait; _gaitOrigin = origin;
+        ResetCombatRunSteps();
     }
 
     /// <summary>Num Lock flips the always-run lock state on a fresh press (its original binding).</summary>

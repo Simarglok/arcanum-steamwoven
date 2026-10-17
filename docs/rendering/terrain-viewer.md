@@ -903,6 +903,19 @@ race/gender ART. Launcher: `./arcanum area --hero NAME`, `./arcanum map NAME --h
 ([local development](../workflow/local-development.md#project-launcher)). Native smoke with `--hero` (after the
 inventory stage, and in map mode after the map stages): `ARC-WORLD-027 native-smoke hero PASS`.
 
+### Combat mode (ARC-COMBAT-004)
+
+With `--hero`, the original Ready/Unready key **R** (fresh press, world focused, no palette or window) toggles the hero's
+combat mode in real time through the session ([real-time combat runtime](../world/real-time-combat-runtime.md#viewer-area)).
+The HUD shows `combat mode: ON (real time)` or `off`, the hero's fatigue and the last notice; an unconscious, stunned or
+dead hero is refused with the reason. Without `--hero` R reports that combat mode needs a hero. A dialog start leaves
+combat mode first (the exit gate never closes here: no NPC has a combat focus yet), and the cave transfer leaves it as the
+original's teleport does. Running in combat mode costs one fatigue every fifth run step of a move; a hero out of fatigue
+walks, and the viewer does not run the session's event queue, so that fatigue only returns with a quick load. In combat
+mode the original's left click attacks a living NPC; that click belongs to the attack task (top-20 item 10), so a click
+still talks and the dialog leaves combat mode. Native smoke with `--hero` (after the run stage):
+`ARC-COMBAT-004 native-smoke combat-mode PASS`.
+
 ## Verification and evidence status
 
 ### WORLD camera zoom (ARC-GPAD-004)
