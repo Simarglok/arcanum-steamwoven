@@ -24,6 +24,8 @@ public sealed class AreaCombatHost
 {
     private readonly Dictionary<int, AreaInventoryMap> _maps;
     private readonly Dictionary<(int Map, string Entity), SessionCritterCombatBuild> _builds = [];
+    // The NPC holders of one map as the session last showed them (rebuilt when the session or its revision changes).
+    private (GameSessionOwner Session, long Revision, int Map, Dictionary<string, SessionHolderInventory> Holders)? _holders;
 
     public AreaCombatHost(AreaInventoryHost inventory)
     {
@@ -38,9 +40,18 @@ public sealed class AreaCombatHost
     {
         ArgumentNullException.ThrowIfNull(session);
         if (!_maps.TryGetValue(runtimeMap, out var map) || !map.TryGetEntity(key, out var entity)
-            || session.QueryMapInventory(new(runtimeMap))?.Holders.FirstOrDefault(holder => holder.Entity == entity) is not { Kind: SessionHolderKind.Npc } holder)
+            || !Holders(session, runtimeMap).TryGetValue(entity, out var holder) || holder.Kind != SessionHolderKind.Npc)
             return null;
         return new(entity, map.Row(entity), holder.Dead, session.QueryCompanion(entity).LedByPc, Build(map, entity));
+    }
+
+    private Dictionary<string, SessionHolderInventory> Holders(GameSessionOwner session, int runtimeMap)
+    {
+        if (_holders is { } cached && ReferenceEquals(cached.Session, session) && cached.Revision == session.Version.Revision && cached.Map == runtimeMap)
+            return cached.Holders;
+        var holders = session.QueryMapInventory(new(runtimeMap))?.Holders.ToDictionary(holder => holder.Entity, StringComparer.Ordinal) ?? [];
+        _holders = (session, session.Version.Revision, runtimeMap, holders);
+        return holders;
     }
 
     /// <summary>The NPC's combat values, read once per entity and map.</summary>

@@ -124,7 +124,7 @@ public partial class TerrainViewerApp
         var stamp = (screen, AreaDrawItem.RasterTransform(GetViewport()), index, visible, open,
             _worldActor.Session is AreaGridSession session ? session.State.CommittedCell : (Arcanum.Simulation.Movement.CellCoord?)null,
             _inventoryHidden, _areaCompanions?.Companions.FirstOrDefault()?.Grid.State, _areaCompanions,
-            (HeroInCombatMode, _leftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision));
+            (HeroInCombatMode, LeftAltHeld, Godot.Input.IsKeyPressed(Key.Alt), _areaSession?.Version.Revision));
         if (Equals(stamp, _hoverStamp)) return;
         _hoverStamp = stamp;
         var key = visible ? AreaObjectAtScreen(screen) : null;
@@ -146,8 +146,10 @@ public partial class TerrainViewerApp
                 if (foe.Dead) return Godot.Input.IsKeyPressed(Key.Alt) && InventoryActive && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, hit) is { } corpse
                     ? Chebyshev(corpse.Row, (actor.X, actor.Y)) <= AreaInventoryHost.Reach ? AreaHoverAction.Loot : AreaHoverAction.WalkToLoot
                     : AreaHoverAction.None;
-                if (foe.Follower && !_leftAltHeld) return AreaHoverAction.None;
-                var reach = _areaSession!.QueryHeroAttack()?.Range ?? 1;
+                if (foe.Follower && !LeftAltHeld || IsAreaCompanion(hit) || foe.Build.Combat is null) return AreaHoverAction.None;
+                if (_areaSession!.QueryHeroAttack() is not { Supported: true } hero || _areaSession.QueryHeroLife() is not { Status.IsActive: true })
+                    return AreaHoverAction.None;
+                var reach = hero.Range;
                 return Chebyshev(foe.Row, (actor.X, actor.Y)) <= reach ? AreaHoverAction.Attack : AreaHoverAction.WalkToAttack;
             }
             if (!ConversationOpen && TalkMapActive && _conversationHost!.Speakers.FirstOrDefault(s => s.Row.Key == hit && SpeakerPresent(s)) is { } speaker)

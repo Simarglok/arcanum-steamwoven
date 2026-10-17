@@ -140,7 +140,7 @@ public partial class TerrainViewerApp
     private void AdoptLoadedSession(GameSessionOwner loaded, IReadOnlyDictionary<int, AreaMapRuntime> maps, AreaConversationHost? talk)
     {
         StopWorldRoute("QUICK_LOAD");
-        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load");
+        CancelAreaUseApproach("quick load"); CancelTalkApproach("quick load"); CancelInventoryApproach("quick load"); CancelAreaAttack("quick load");
         if (_areaTransitions?.Cancel() is { } dropped) GD.Print("ARC-WORLD-011 quick load dropped the queued transfer to=" + dropped.ToMap);
         var actor = loaded.QueryActor();
         ReplaceAreaSession(loaded, maps, actor.Map.RuntimeMap, talk);

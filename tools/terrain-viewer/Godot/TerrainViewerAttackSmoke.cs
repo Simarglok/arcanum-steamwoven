@@ -100,6 +100,11 @@ public partial class TerrainViewerApp
             Require(_attack is null && !InventoryOpen, "a corpse click without Alt does nothing");
             ToggleCombatMode();
             HoverReleaseForSelfTest();
+            // The later stages see the map as it was: the NPC is brought back (experience stays).
+            var raised = session.Heal(session.Version, target.Build.Combat!.Target, new LifeHeal { Full = true, Fatigue = 1000, Resurrect = true });
+            Require(raised.Disposition != GameSessionDisposition.Rejected && !session.QueryNpcKilled(target.Holder.Entity), "the NPC is brought back: " + raised.Failure);
+            PublishWorldSelection();
+            Require(!_fallenBodies.ContainsKey(key), "the body stands again");
             GD.Print("ARC-COMBAT-005 native-smoke attack PASS " + System.Text.Json.JsonSerializer.Serialize(new {
                 map.RuntimeMap, Target = target.Row.PrototypeNumber, MaxHitPoints = LifeRules.MaxHitPoints(target.Build.Combat!.Facts, 0),
                 Walked = walked, Frames = frames, AttackFrames = attackFrames, Attacks = maxAttacks, Hover = hover.ToString(), CorpseHover = corpseHover.ToString(),

@@ -84,14 +84,16 @@ public static class AreaFallenPoses
             var bytes = archive.ReadEntry(entry);
             var options = new ArtDecoderOptions { MaxInputBytes = 1024 * 1024, MaxFrameCount = 8 * 64 };
             var metadata = ArtDecoder.Inspect(bytes, options);
-            if (visual.PhysicalGroup >= metadata.Header.PhysicalGroupCount || metadata.Header.FramesPerGroup < 1)
+            // A pose ART with a single rotation serves every facing (the original's rotation rule for one-group art).
+            var group = metadata.Header.PhysicalGroupCount == 1 ? 0 : visual.PhysicalGroup;
+            if (group >= metadata.Header.PhysicalGroupCount || metadata.Header.FramesPerGroup < 1)
                 return Refused(AreaFallenStatus.PoseUnreadable, $"group {visual.PhysicalGroup}");
             var last = metadata.Header.FramesPerGroup - 1;
-            var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(visual.PhysicalGroup, last, visual.RequestedPalette), options);
+            var decoded = ArtDecoder.Decode(bytes, new ArtFrameSelection(group, last, visual.RequestedPalette), options);
             var rgba = decoded.Rgba.ToArray();
             var identity = new AreaEntryIdentity(visual.Entry.Source, entry.Ordinal, entry.Flags, entry.StoredSize, entry.DeclaredOutputSize, entry.Offset,
                 Digest(entry.RawNameBytes.ToArray()));
-            var key = new AreaFrameKey(identity, decoded.EffectivePaletteSlot, visual.PhysicalGroup, last, Policy, Digest(bytes), bytes.Length, Digest(rgba));
+            var key = new AreaFrameKey(identity, decoded.EffectivePaletteSlot, group, last, Policy, Digest(bytes), bytes.Length, Digest(rgba));
             return new(AreaFallenStatus.Ready, new(key, new(decoded.Width, decoded.Height, rgba), decoded.Frame.HotX, decoded.Frame.HotY, used),
                 $"{Name(entry)} frame {last}");
         }

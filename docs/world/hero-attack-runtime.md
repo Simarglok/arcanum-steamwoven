@@ -31,7 +31,7 @@ effective object fields. No NPC fights back. Requirements:
 
 | Rule | Value |
 | --- | --- |
-| Click in combat mode (FA1–FA6) | Nothing while the hero cannot act; a living NPC or PC: attack, Shift (left or right) the attempt-attack goal; a follower of the hero only with left Alt held; a corpse only with Alt (left or right), which loots it, else nothing; held `,` `.` `/` aim at the head, an arm, a leg. Out of combat mode the click talks or loots as before. |
+| Click in combat mode (FA1–FA6) | Nothing while the hero cannot act; a living NPC or PC: attack, Shift (left or right) the attempt-attack goal (here run as the same attack); a follower of the hero only with left Alt held; a corpse only with Alt (left or right), which loots it, else nothing; held `,` `.` `/` aim at the head, an arm, a leg. Out of combat mode the click talks or loots as before. |
 | Skill level (`CombatSkillRules`, FA7) | 4 per stored point (bits 0..5), or 20 for the melee of a monstrous critter, then the skill's effect changes, clamped 0..20, then capped by the dexterity table `3,3,3,3,3,7,7,7,11,11,11,15,15,15,19,19,19,20,20,20` (dexterity clamped to 1..20); all five combat skills (bow, dodge, melee, throwing, backstab) key on dexterity. |
 | Training (FA8) | Stored bits 6..7; a monstrous critter's melee takes the highest tier whose melee level and character level reach 1/10, 9/20, 18/30 in order. |
 | Monstrous (FA9) | Mechanical, monster, animal or undead critter flag. |
@@ -39,8 +39,8 @@ effective object fields. No NPC fights back. Requirements:
 | Reach | The weapon's range, 1 bare-handed; farther away the click route walks (running, as every object approach) to the nearest standable cell within reach first, the attack goal's move-near step. |
 | Animation | The hero's bare-handed attack ART (animation 20, weapon slot 1: 9 frames, 15 fps, action frame 6) played by [`RealTimeCombatRules`](real-time-combat-runtime.md#rules-realtimecombatrules) at the rate of the hero's Speed and the pause of its weapon speed; one attack sound roll (1..4) per attack start; facing the target. |
 | Hit | The update that shows the action frame runs the hit once when the target is still within reach (else the attack ends without one): `GameSessionOwner.AttackCritter`. |
-| Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, the hero leaving the map or losing the ability to act stop it. |
-| Dying pose (FA10) | A death of at most 20 hit points or a kill falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body keeps the last frame of that animation in its facing; a bloody death without its file falls (the original's missing-art repair). |
+| Repeat | Auto attack (on, the original's default) starts the attack again 5 ms after it ends while the hero is in combat mode, no round runs and the target is alive. A click elsewhere, the stick, a dialog or window, a quick load, the hero leaving the map or combat mode (refused while an animation plays: the exit gate's attempt-attack test) or losing the ability to act stop it; a refused hit ends it; the same target clicked again keeps its goal. |
+| Dying pose (FA10) | A death-flag hit or a death of at most 20 hit points falls (animation 7); otherwise a head hit decapitates (17), a leg hit severs the leg (19), anything else blows out a chunk (18); a knockout falls (7). The body keeps the last frame of that animation in its facing (group 0 for a single-rotation pose ART); a bloody death without its file falls (the original's missing-art repair). |
 
 ## Session API (`GameSessionOwner`)
 
@@ -67,7 +67,7 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   the body's art came from (`AreaLoadResult.ArtSources`), after checking that its entry is the one the published snapshot read
   (ordinal, flags, sizes, offset, name digest); the frame joins the map's frame repository (`AreaFrameOverlay`) and the body is
   drawn, lit and picked as a moved body (`AreaScenePlan.Repose`). A pose that cannot be read leaves the standing body and is
-  logged.
+  logged. Reading a pose opens that archive's index on the main thread (a few milliseconds on the installed archives).
 - Native smoke: `ARC-COMBAT-005 native-smoke attack PASS` (with `--hero`, after the combat-mode stage, on the exterior and in map
   mode): the living NPC with the fewest hit points is attacked from a few cells away until it dies; the stage checks the attack
   ART, the rolls, the death, the experience, the corpse being lootable, the fallen pose, the status line and that a corpse click
@@ -86,6 +86,11 @@ No snapshot change: deaths, damage and experience are already saved by the life 
   to its last frame), the get-up after a knockout (the viewer runs no event pump, so an unconscious NPC stays down), and HD frames
   of the fallen poses (Legacy per frame).
 - A killed NPC still blocks its cell: step evidence is T0 map data.
+- Companions (Virgil while he stands as a companion actor) are not attackable: their combat goal would need their live cell;
+  the click says so.
+- The pose ART is read from the archive the body's standing art came from, not through the whole content stack, so an override
+  of the pose in another archive is not seen; the hero's facing returns to its movement facing after an attack; the cursor's
+  attack shape is an OS cursor, not the original's.
 - The turn-based round in the viewer (an attack there costs AP and passes turns; the session supports the round but the viewer
   has no turn-based setting).
 - NPC stored effects (race, items, spells) in its effective stats; skill and resistance effects of the hero.

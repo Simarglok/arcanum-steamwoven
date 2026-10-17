@@ -40,7 +40,10 @@ public partial class TerrainViewerApp
     {
         var session = _areaSession!;
         if (session.QueryHero() is null) { _combatModeNotice = "combat mode needs a hero (start with --hero)"; RefreshAreaStatus(); return; }
-        var result = session.ToggleHeroCombatMode(session.Version, SessionCombatModeContext.RealTime, SessionCombatExit.Clear);
+        // ARC-COMBAT-005: an attack animation playing keeps the hero in combat mode (the exit gate's attempt-attack test).
+        var result = session.ToggleHeroCombatMode(session.Version, SessionCombatModeContext.RealTime,
+            AttackPlaying ? new SessionCombatExit { AttemptingAttack = true } : SessionCombatExit.Clear);
+        if (!HeroInCombatMode) CancelAreaAttack("left combat mode");
         _combatModeNotice = result switch
         {
             { Disposition: GameSessionDisposition.Changed, InCombatMode: true } => "entered combat mode (real time)",

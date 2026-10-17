@@ -66,9 +66,14 @@ public partial class TerrainViewerApp
 
     /// <summary>ARC-WORLD-017: whether a dialog NPC is in the shown map's world: a companion standing here, or (on the
     /// exterior, the speakers' map) any other speaker that is not a companion away on another map.</summary>
-    private bool SpeakerPresent(AreaSpeaker speaker) => _areaCompanions is { } group
+    private bool SpeakerPresent(AreaSpeaker speaker) => !SpeakerDead(speaker) && (_areaCompanions is { } group
         ? group.Of(speaker) is not null || (!InCave && !group.Absent.Contains(speaker.Row.Key))
-        : !InCave;
+        : !InCave);
+
+    /// <summary>ARC-COMBAT-005: a dead speaker (its map data or the session) is looted, not talked to, as the original's click on a
+    /// corpse that was not spoken with by spell.</summary>
+    private bool SpeakerDead(AreaSpeaker speaker) => InventoryActive
+        && _inventoryHost!.Target(_areaSession!, CurrentAreaMap, speaker.Row.Key) is { Kind: AreaInventoryTargetKind.DeadNpc };
 
     /// <summary>Where a speaker stands now: a companion's live cell, else its T0 cell.</summary>
     private Func<AreaSpeaker, (long X, long Y)>? SpeakerCell => _areaCompanions is { } group ? group.WorldCell : null;

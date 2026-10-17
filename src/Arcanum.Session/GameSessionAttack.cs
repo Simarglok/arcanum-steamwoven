@@ -23,6 +23,8 @@ public enum SessionCritterCombatFailure
     InvalidExperience,
     /// <summary>A worn item (inventory location 1000..1008) is not a wearable the wear rules admit, or two share a slot.</summary>
     InvalidWornItem,
+    /// <summary>A stored skill, resistance or armour class is beyond the bound the combat rules read (±1,000,000).</summary>
+    InvalidCombatValues,
 }
 
 /// <param name="Combat">The NPC's combat values, or null with the failure.</param>
@@ -95,6 +97,9 @@ public sealed class SessionCritterCombat
         var stats = critter.BaseStats;
         var raceValue = stats[RaceStat]; var genderValue = stats[GenderStat];
         if (raceValue is < 0 or > 10 || genderValue is not (0 or 1)) return Fail(SessionCritterCombatFailure.InvalidRaceOrGender);
+        static bool Bounded(int value) => Math.Abs((long)value) <= CombatSkillRules.MaxValue;
+        if (critter.BasicSkills.Count < 5 || !critter.BasicSkills.All(Bounded) || !fields.Object.Resistances.All(Bounded) || !Bounded(fields.Object.ArmorClass))
+            return Fail(SessionCritterCombatFailure.InvalidCombatValues);
         var race = (CharacterRace)raceValue;
         var gender = genderValue == 0 ? CharacterGender.Female : CharacterGender.Male;
         var created = CharacterStatsOwner.Create(new(race, gender, InnateEffectTable.Empty, CharacterStatLimits.Default));
@@ -312,7 +317,7 @@ public sealed partial class GameSessionOwner
     /// (<see cref="RecordNpcDamage"/>), and a kill pays the hero a fifth of the worth (<see cref="RecordNpcKill"/>); experience calls
     /// are skipped without experience data. Refused before any roll, in order: no hero (<see cref="GameSessionFailure.AttackUnavailable"/>),
     /// a target whose values do not hold (<see cref="GameSessionFailure.InvalidLifeTarget"/> …), an aim at the torso, a distance
-    /// below 0 or a melee target farther than 1 (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded weapon that is not melee
+    /// below 0 or beyond the weapon's reach (<see cref="GameSessionFailure.InvalidAttack"/>), a wielded weapon that is not melee
     /// (<see cref="GameSessionFailure.AttackUnsupported"/>), the version. A resolver refusal (the hero cannot act, the target is dead)
     /// is NoChange with the resolution. The resolution's draws are spent once it ran; each later step commits on its own revision.
     /// Not modelled: the target's taking-damage and dying scripts, its reaction and AI, critical-effect tables, weapon wear,
@@ -326,17 +331,20 @@ public sealed partial class GameSessionOwner
         var target = attack.Target;
         var resolved = Resolve(target.Target, out var record, out var facts, out _);
         if (resolved != GameSessionFailure.None) return RejectAttack(resolved);
-        if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || attack.Distance is < 0 or > 1)
-            return RejectAttack(GameSessionFailure.InvalidAttack);
         var hero = QueryHeroAttack()!;
+        if (attack.Aim is HitLocation.Torso || attack.Aim is { } aim && !Enum.IsDefined(aim) || attack.Distance < 0 || attack.Distance > hero.Range)
+            return RejectAttack(GameSessionFailure.InvalidAttack);
         if (!hero.Supported) return RejectAttack(GameSessionFailure.AttackUnsupported);
         if (!IsCurrent(expected)) return RejectAttack(GameSessionFailure.StaleVersion);
 
         var targetStatus = LifeRules.Evaluate(record.State, facts!);
+        Combatant defender;
+        try { defender = target.Combatant(targetStatus, record.State, _rules.Combat); }
+        catch (ArgumentException) { return RejectAttack(GameSessionFailure.InvalidAttack); }
         var request = new AttackRequest
         {
             Attacker = hero.Combatant,
-            Target = target.Combatant(targetStatus, record.State, _rules.Combat),
+            Target = defender,
             Weapon = hero.Weapon,
             Skill = hero.Skill,
             SkillLevel = hero.SkillLevel,

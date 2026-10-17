@@ -83,7 +83,7 @@ flags, declared size, normalized logical-name hash, group, frame, and requested
 palette.
 The cache preflights terrain frames against 4,096 identities, static frames
 against 5 identities (4,101 combined total), or actor frames against exactly
-184 identities (4,280 actor-mode total; 4,285 world-mode total), and the unchanged 256 MiB
+184 identities for the monster profile (the human AREA profile `HumanFixedArea` 195 since ARC-COMBAT-005; caps 195, 4,291 actor-mode total, 4,296 world-mode total; each profile's exact key count is still enforced by its load), and the unchanged 256 MiB
 of packed RGBA before retaining it. Camera actions never access archives or grow
 that cache. After successful upload, the app retains only the safe source label
 and scalar decoded-count/load-time HUD metrics: neither the completed load

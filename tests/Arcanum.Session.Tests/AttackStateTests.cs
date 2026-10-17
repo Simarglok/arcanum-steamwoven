@@ -100,6 +100,37 @@ public sealed class AttackStateTests
         Assert.AreEqual(SessionCritterCombatFailure.InvalidLife, SessionCritterCombat.From(Rat, Npc(hpDamage: -1)).Failure);
         Assert.AreEqual(SessionCritterCombatFailure.None, SessionCritterCombat.From(Rat, Npc(stats: Stats(strength: 30))).Failure,
             "a stat beyond the race's range is clamped, as a monster stores one");
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(resistances: [2_000_000, 0, 0, 0, 0])).Failure);
+        var skills = new int[12]; skills[1] = int.MinValue;
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(skills: skills)).Failure);
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidCombatValues, SessionCritterCombat.From(Rat, Npc(ac: -2_000_000)).Failure);
+        // An item in the weapon slot that is no wearable weapon.
+        var odd = new CombatFields(CombatFieldOrigin.AreaObject, new CombatObjectFields(14, 5000, 0, 0, 0, 0, 0, 10, 0, 0, 4, [0, 0, 0, 0, 0], 0),
+            new CombatItemFields(0, 1, 1, 0, 0, 0, 1004, [10000, 10000, 10000, 10000, 10000], 0, 0, 0, 0), null, null, null,
+            new CombatGenericFields(0, 0, 0), null, null);
+        Assert.AreEqual(SessionCritterCombatFailure.InvalidWornItem, SessionCritterCombat.From(Rat, Npc(), [odd]).Failure);
+        var carried = odd with { Item = odd.Item! with { InventoryLocation = 3 } };
+        Assert.AreEqual(SessionCritterCombatFailure.None, SessionCritterCombat.From(Rat, Npc(), [carried]).Failure, "only worn items count");
+    }
+
+    [TestMethod]
+    public void ACriticalSelfHitHurtsTheHeroAndPaysNothing()
+    {
+        using var owner = Owner();
+        // A tough target, so the hero meets a critical miss before it dies.
+        var tough = Combat(Npc(hpAdjustment: 5000));
+        SessionAttackResult? self = null;
+        for (var attempt = 0; attempt < 2000 && self is null; attempt++)
+        {
+            var result = owner.AttackCritter(owner.Version, new(tough));
+            Assert.AreEqual(GameSessionFailure.None, result.Failure);
+            if (result.Recipient == DamageRecipient.Attacker) self = result;
+        }
+        Assert.IsNotNull(self, "a critical self-hit within the bounded run");
+        Assert.AreEqual(AttackOutcome.CriticalMiss, self!.Resolution!.Outcome);
+        Assert.IsNull(self.HitAward);
+        Assert.IsNull(self.KillAward);
+        Assert.IsTrue(owner.QueryHeroLife()!.Record.State.HitPointDamage > 0 || self.Life!.HitPointDamage == 0, "the hero took the damage");
     }
 
     [TestMethod]

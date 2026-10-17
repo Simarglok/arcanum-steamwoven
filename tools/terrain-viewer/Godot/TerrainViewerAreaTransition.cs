@@ -181,7 +181,7 @@ public partial class TerrainViewerApp
         if (_areaTransitions is null) return false;
         if (_worldLifecycleSession is not null || _worldResetPending || _worldReloadPending)
         {
-            CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload");
+            CancelAreaUseApproach("reset/reload"); CancelTalkApproach("reset/reload"); CancelInventoryApproach("reset/reload"); CancelAreaAttack("reset/reload");
             if (_areaTransitions.Cancel() is { } dropped)
             {
                 _areaUseStatus = $"transfer to map {dropped.ToMap} cancelled by reset/reload";

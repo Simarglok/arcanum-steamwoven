@@ -15,8 +15,9 @@ namespace Arcanum.TerrainViewer;
 // reach first, then plays its bare-handed attack ART at the rate of its Speed and weapon; the frame that shows the action
 // frame runs the hit through the session (resolution, damage, experience), and with the auto-attack setting (on, the
 // original's default) the attack starts again 5 ms after it ends while the target lives. A click elsewhere, the stick, a
-// dialog, the hero leaving combat mode or losing the ability to act stop it. The status line names the outcome; a killed NPC
-// can be looted (Alt in combat mode, a plain click out of it).
+// dialog, a quick load, the hero leaving combat mode (refused while the animation plays: the exit gate's attempt-attack test)
+// or losing the ability to act stop it; a refused hit ends it. Companions are not attacked yet (they move with their own
+// actor). The status line names the outcome; a killed NPC can be looted (Alt in combat mode, a plain click out of it).
 public partial class TerrainViewerApp
 {
     private AreaCombatHost? _combatHost;
@@ -39,7 +40,13 @@ public partial class TerrainViewerApp
         public long? RepeatAtMs { get; set; }
         public int Octant { get; set; }
         public int Attacks { get; set; }
+        public int Approaches { get; set; }
+        // The last hit ended the goal (refused, or the resolver refused the attack): no repeat follows.
+        public bool Stop { get; set; }
     }
+
+    /// <summary>An attack animation is playing (the exit gate's attempt-attack test).</summary>
+    private bool AttackPlaying => _attack?.Player is { Playing: true };
 
     private bool AttackMapActive => _combatHost is not null && _areaSession is not null && _readyMode == TerrainViewerMode.CrashSiteArea
         && _combatHost.Covers(CurrentAreaMap);
@@ -55,6 +62,12 @@ public partial class TerrainViewerApp
     {
         if (key.Keycode == Key.Alt && key.Location != KeyLocation.Right) _leftAltHeld = key.Pressed;
     }
+
+    // A key-up lost to a focus change cannot leave left Alt held: Alt must still be down.
+    private bool LeftAltHeld => _leftAltHeld && Godot.Input.IsKeyPressed(Key.Alt);
+
+    /// <summary>ARC-COMBAT-005: a companion of the shown map (it moves with its own actor); attacking one is not ready.</summary>
+    private bool IsAreaCompanion(AreaObjectKey key) => _areaCompanions?.Companions.Any(c => c.Speaker.Row.Key == key) == true;
 
     private HitLocation? HeldAim()
     {
@@ -89,9 +102,15 @@ public partial class TerrainViewerApp
             RefreshAreaStatus();
             return true;
         }
-        if (target.Follower && !_leftAltHeld)
+        if (target.Follower && !LeftAltHeld)
         {
             _attackNotice = "a follower is attacked only with left Alt held";
+            RefreshAreaStatus();
+            return true;
+        }
+        if (IsAreaCompanion(target.Row.Key))
+        {
+            _attackNotice = "attacking a companion is not ready";
             RefreshAreaStatus();
             return true;
         }
@@ -103,6 +122,8 @@ public partial class TerrainViewerApp
             return true;
         }
         CancelTalkApproach("an attack replaced it"); CancelAreaUseApproach("an attack replaced it"); CancelInventoryApproach("an attack replaced it");
+        // The same target clicked again keeps its goal (the original adds no second attack goal on that target).
+        if (_attack is { } running && running.Target.Entity == target.Entity && !running.Stop) return true;
         CancelAreaAttack(null);
         _attack = new(target, combat, HeldAim());
         StartAttackGoal(_attack);
@@ -127,8 +148,11 @@ public partial class TerrainViewerApp
             if (session.State.Phase == MovementPhase.Settled) BeginAttackAnimation(goal, hero);
             return;
         }
+        // A walk that arrived and still left the target out of reach is not tried again and again.
+        if (goal.Approaches >= 3) { CancelAreaAttack($"the target stays {distance} cells away"); return; }
         if (WorldRoute(session) is { } route && ApproachCell(session, row.WorldX!.Value, row.WorldY!.Value, hero.Range) is { } approach)
         {
+            goal.Approaches++;
             StopWorldRoute("ROUTE_REPLACED_BY_ATTACK");
             route.SetTarget(approach, WorldTime);
             goal.Approaching = true;
@@ -171,6 +195,7 @@ public partial class TerrainViewerApp
         if (!AttackMapActive || _areaSession is not { } owner || _worldActor.Session is not AreaGridSession session) { CancelAreaAttack("the map changed"); return; }
         if (WorldModal || ConversationOpen) { CancelAreaAttack("a dialog or window opened"); return; }
         if (owner.QueryHeroLife() is not { Status.IsActive: true }) { CancelAreaAttack("the hero cannot act"); return; }
+        if (goal.Player is null && !HeroInCombatMode) { CancelAreaAttack("left combat mode"); return; }
         if (goal.Approaching)
         {
             if (session.State.Phase != MovementPhase.Settled || _worldRoute is not { } route || route.Status == RouteFollowStatus.Following) return;
@@ -202,8 +227,9 @@ public partial class TerrainViewerApp
         _worldActor.AttackPose = null;
         goal.Player = null;
         var target = _combatHost!.Target(owner, CurrentAreaMap, goal.Target.Row.Key);
-        var repeats = RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, RealTimeCombatRules.AutoAttackDefault, owner.QueryCombatRound() is not null,
-            target is null, target?.Dead ?? true, false, false, false, false));
+        var dead = target?.Dead != false || owner.QueryLife(goal.Combat.Target).View?.Status.IsDead != false;
+        var repeats = !goal.Stop && RealTimeCombatRules.Repeats(new(HeroInCombatMode, true, RealTimeCombatRules.AutoAttackDefault,
+            owner.QueryCombatRound() is not null, target is null, dead, false, false, false, false));
         if (repeats) goal.RepeatAtMs = now + RealTimeCombatRules.RepeatDelayMs;
         else _attack = null;
         GD.Print($"ARC-COMBAT-005 attack-end target={goal.Target.Entity} attacks={goal.Attacks} repeat={repeats}");
@@ -217,7 +243,7 @@ public partial class TerrainViewerApp
         var owner = _areaSession!;
         var cell = session.Chart.ToWorld(session.State.CommittedCell);
         var distance = Chebyshev(goal.Target.Row, (cell.X, cell.Y));
-        if (distance > 1)
+        if (distance > (owner.QueryHeroAttack()?.Range ?? 1))
         {
             goal.Player!.Abort();
             _attackNotice = "the target is out of reach";
@@ -225,6 +251,8 @@ public partial class TerrainViewerApp
         }
         var result = owner.AttackCritter(owner.Version, new(goal.Combat) { Aim = goal.Aim, Distance = (int)distance });
         goal.Attacks++;
+        // A refused attack, or one the resolver refused, ends the goal: repeating it would refuse again.
+        goal.Stop = result.Disposition == GameSessionDisposition.Rejected || result.Resolution?.Refusal is { } refusal && refusal != AttackRefusal.None;
         var life = owner.QueryLife(goal.Combat.Target).View;
         _attackNotice = AreaCombatHost.Describe(result, life?.Status.HitPoints, life?.Status.MaxHitPoints);
         GD.Print($"ARC-COMBAT-005 attack-hit target={goal.Target.Entity} disposition={result.Disposition} failure={result.Failure}"
