@@ -102,7 +102,20 @@ public partial class TerrainViewerApp
         static long Resident() { using var process = System.Diagnostics.Process.GetCurrentProcess(); process.Refresh(); return process.WorkingSet64; }
         static int Handles() => System.IO.Directory.GetFileSystemEntries("/dev/fd").Length;
         var arguments = _arguments ?? throw new InvalidOperationException("AREA_RESOURCES_ARGUMENTS_REQUIRED");
-        var baseline = (Managed: Managed(), Resident: Resident(), Handles: Handles());
+        // ARC-RENDER-018: the post-GC heap of a large map still varies between frames, so both the baseline and the retained
+        // size are the least of three post-GC samples a frame apart; a real retention stays reachable in every sample.
+        async Task<long[]> ManagedSamples()
+        {
+            var samples = new long[3];
+            for (var sample = 0; sample < samples.Length; sample++)
+            {
+                if (sample > 0) await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
+                samples[sample] = Managed();
+            }
+            return samples;
+        }
+        var baselineSamples = await ManagedSamples();
+        var baseline = (Managed: baselineSamples.Min(), Resident: Resident(), Handles: Handles());
         // Overlapped production reloads: the second cancels the first, which
         // must never publish over its successor.
         var first = StartLoadAsync(arguments, false); var firstGeneration = _generation;
@@ -116,20 +129,24 @@ public partial class TerrainViewerApp
         var reloadMilliseconds = _readyArea.ElapsedMilliseconds;
         await ToSignal(GetTree(), SceneTree.SignalName.ProcessFrame);
         await ToSignal(RenderingServer.Singleton, RenderingServer.SignalName.FramePostDraw);
-        var after = (Managed: Managed(), Resident: Resident(), Handles: Handles());
+        var afterSamples = await ManagedSamples();
+        var after = (Managed: afterSamples.Min(), Resident: Resident(), Handles: Handles());
         var retiredAlive = old.Result.IsAlive || old.Frames.IsAlive;
-        GD.Print($"ARC-RENDER-007 resources reload observed generations={old.Generation}>{firstGeneration}>{secondGeneration} loadMs={old.ElapsedMilliseconds}/{reloadMilliseconds} managed={baseline.Managed}/{after.Managed} resident={baseline.Resident}/{after.Resident} handles={baseline.Handles}/{after.Handles} retiredAlive={retiredAlive}");
+        GD.Print($"ARC-RENDER-007 resources reload observed generations={old.Generation}>{firstGeneration}>{secondGeneration} loadMs={old.ElapsedMilliseconds}/{reloadMilliseconds} managed={baseline.Managed}/{after.Managed} samples={string.Join(',', baselineSamples)}/{string.Join(',', afterSamples)} resident={baseline.Resident}/{after.Resident} handles={baseline.Handles}/{after.Handles} retiredAlive={retiredAlive}");
         Require(_cache.CreatedCount - _cache.DisposedCount == _cache.Count && _cache.AreaCount <= old.CpuFrames, "RELOAD_GPU_OWNERSHIP");
         // One full original load takes minutes, so steady state is one replaced
         // generation. The retired result and its frame repository must be
         // collectable, descriptors must not grow, and the post-GC managed heap
-        // may not grow by half a repository. Resident size is recorded only:
+        // may not grow by half a repository (map mode: see the floors below). Resident size is recorded only:
         // freed runtime/driver pages need not return to the system.
         Require(!retiredAlive, "RETIRED_GENERATION_ALIVE");
         Require(after.Handles <= baseline.Handles, "HANDLE_GROWTH");
         // A small whole map's repository (the cave's is 1.5 MB) is below the heap's ordinary noise, so map mode bounds the
-        // growth by at least 8 MiB; the retired generation itself is proven collected above.
-        Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2 : Math.Max(old.CpuBytes / 2, 8L << 20)), "MANAGED_RETENTION");
+        // growth by at least 8 MiB, and on a large map (tarant sewers-02: 64 sectors, ~450 MB heap, up to +26 MB in one sample)
+        // by at least 4 % of the heap before the reload (ARC-RENDER-018); the retired generation itself is proven
+        // collected above.
+        Require(after.Managed - baseline.Managed < (mustEvict ? old.CpuBytes / 2
+            : Math.Max(Math.Max(old.CpuBytes / 2, 8L << 20), baseline.Managed / 25)), "MANAGED_RETENTION");
         var resources = new { Outcome = "PASS", SweepSteps = steps, SweepCommands = sweptCommands, SweepTaken = taken, MaxVisible = maxVisible, MaxGpuFrames = maxLive,
             MaxGpuBytes = maxBytes, Reuploads = reuploads, Evictions = evictions,
             ChunksComposed = chunkComposed, ChunkEvictions = chunkEvictions, MaxResidentChunks = maxChunks, MaxResidentChunkBytes = maxChunkBytes, CpuFrames = old.CpuFrames, CpuBytes = old.CpuBytes,

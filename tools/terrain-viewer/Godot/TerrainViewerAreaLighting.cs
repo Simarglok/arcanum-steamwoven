@@ -169,7 +169,7 @@ public partial class TerrainViewerApp
         // uniformly black, where no tint is observable.
         var lit = area.Plan.Commands.Where(command => command.Identity is null && lighting.Channels[command.Visual] != AreaAmbientChannel.Unlit).ToArray();
         var terrain = lit.Where((_, index) => index % Math.Max(1, lit.Length / 64) == 0).Take(64).ToArray();
-        var bodies = area.Plan.Commands.Where(command => command.Identity is not null && !command.Additive
+        var bodies = area.Plan.Commands.Where(command => command.Identity is not null && !command.Blended
             && lighting.Channels[command.Visual] != AreaAmbientChannel.Unlit)
             .OrderByDescending(command => (long)command.Destination.Width * command.Destination.Height).Take(64).ToArray();
         driver.Enabled = true;

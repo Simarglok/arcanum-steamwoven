@@ -19,6 +19,23 @@ public sealed record AreaDrawCommand(AreaVisualKey Visual, AreaFrameKey Frame, A
     /// <summary>The ART class of the drawn art (raw art id &gt;&gt; 28; 1 = wall, as <see cref="AreaScenePlan.Hotspot"/>
     /// reads it). ARC-RENDER-014 binds HD for characters and objects, not walls.</summary>
     public int ArtClass { get; init; }
+
+    /// <summary>ARC-RENDER-018: multiply blend (blit <c>0x40</c>): each opaque source pixel multiplies the colour
+    /// beneath it; transparent pixels leave it unchanged.</summary>
+    public bool Multiply { get; init; }
+
+    /// <summary>ARC-RENDER-018: drawn with the base palette, without ambient or stationary light (the original drops
+    /// every colour mode of a multiply or constant-alpha body).</summary>
+    public bool Unlit { get; init; }
+
+    /// <summary>ARC-RENDER-018 wading: the bottom <see cref="WadeRows"/> destination rows are drawn at
+    /// <see cref="AreaScenePlan.WadingAlpha"/>, which replaces every other alpha of those rows; 0 = not wading.
+    /// Relative to <see cref="Destination"/>, so a moved command keeps its water line.</summary>
+    public int WadeRows { get; init; }
+
+    /// <summary>True when the drawn pixels are not the source pixels over the destination (any blend, constant alpha
+    /// or wading); pixel observations that expect source pixels skip such commands.</summary>
+    public bool Blended => Additive || Multiply || Alpha != 255 || WadeRows > 0;
 }
 
 /// <summary>One world chart and one stable immutable body policy. Body appearance
@@ -86,7 +103,12 @@ public sealed class AreaScenePlan
             var ranks = SameCellRanks(visual.ObjectOffsetX, visual.ObjectOffsetY);
             commands.Add(new(visual.Key, AreaFrameKey.From(visual), body.Key, new(0, 0, visual.Width, visual.Height),
                 destination, visual.Mirrored != state.FlipX, state.FlipY, phase, checked((int)body.WorldX.Value), checked((int)body.WorldY.Value),
-                ranks.First, ranks.Second, state.Alpha, state.Additive) { ArtClass = (int)(visual.RawArt >> 28) });
+                ranks.First, ranks.Second, state.Alpha, state.Additive)
+            {
+                ArtClass = (int)(visual.RawArt >> 28), Multiply = state.Multiply, Unlit = state.Unlit,
+                // A flat wading body is drawn whole at the wading alpha; an upright one only in its lower rows.
+                WadeRows = state.Wading ? state.Flat ? height : Math.Min(WadingRows, height) : 0,
+            });
             coverage.Add(new(body.Key, visual.Key, state.Flat ? state.UnderAll ? AreaDisposition.FlatUnderAll : AreaDisposition.FlatBody
                 : AreaDisposition.UprightBody, "DATA009ResolvedBody"));
         }
@@ -154,7 +176,13 @@ public sealed class AreaScenePlan
         return Comparer<long?>.Default.Compare(a.Identity?.Offset, b.Identity?.Offset);
     }
 
-    private sealed record BodyState(bool Suppressed, string Reason, bool Flat, bool UnderAll, int Scale, bool Shrunk, int Alpha, bool Additive, bool FlipX, bool FlipY);
+    /// <summary>The destination rows a wading upright body draws at <see cref="WadingAlpha"/> (pinned object.c 765–825).</summary>
+    public const int WadingRows = 15;
+    /// <summary>The constant alpha of the wading rows; it replaces every other alpha mode of those rows.</summary>
+    public const int WadingAlpha = 92;
+
+    private sealed record BodyState(bool Suppressed, string Reason, bool Flat, bool UnderAll, int Scale, bool Shrunk, int Alpha, bool Additive,
+        bool FlipX, bool FlipY, bool Multiply, bool Unlit, bool Wading);
     private static BodyState State(AreaObjectRecord body)
     {
         long Field(int slot) => body.EffectiveFields.SingleOrDefault(field => field.Slot == slot && field.Presence == AreaPresence.Value)?.Number
@@ -163,14 +191,25 @@ public sealed class AreaScenePlan
         var reason = (flags & 0x1000) != 0 ? "ExteriorSectorInsertionRefusedByInventory" : (flags & 0x103) != 0
             ? "BodySuppressedBySerializedState" : (flags & 0x200) != 0 ? "InvisibleNoDetectionObserver" : "Eligible";
         var suppressed = reason != "Eligible";
-        var scale = Field(11);
-        if (scale is <= 0 or > 200 || (blit & ~0x13u) != 0 || Field(9) != 0xFFFFFF || Field(10) != 255 || (flags & 0x20000) != 0)
+        var scale = Field(11); var blitAlpha = Field(10);
+        // ARC-RENDER-018, the original's blend choice (object_setup_blit, checked in the retail executable): additive
+        // (0x10) wins over multiply (0x40), which wins over constant alpha (0x100); the serialized blit alpha is read
+        // only by the constant-alpha branch. Any other blit bit (subtract, alpha modes, palettes) stays refused.
+        var additive = (blit & 0x10) != 0; var multiply = !additive && (blit & 0x40) != 0;
+        var constant = !additive && !multiply && (blit & 0x100) != 0;
+        if (scale is <= 0 or > 200 || (blit & ~0x153u) != 0 || Field(9) != 0xFFFFFF
+            || (constant ? blitAlpha is < 0 or > 255 : blitAlpha != 255))
             throw new InvalidOperationException("AREA_UNSUPPORTED_BODY_STATE");
-        // The authenticated corpus has opaque and additive (0x10) bodies only.
-        // Never silently approximate an unsupported source blend.
+        // Never silently approximate an unsupported source blend; a frozen body (OF_FROZEN) is drawn additive with a
+        // constant colour before any blit blend is considered.
         if ((flags & 0x40) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_TRANSLUCENCY");
+        if ((flags & 0x10000000) != 0) throw new InvalidOperationException("AREA_UNSUPPORTED_BODY_STATE");
+        // Wading (OF_WADING without OF_WATER_WALKING) as serialized at T0. The wading rows replace only the alpha
+        // modes, so an additive or multiply body keeps its blend over the whole frame and does not wade.
+        var wading = (flags & 0x20000) != 0 && (flags & 0x40000) == 0 && !additive && !multiply;
         return new(suppressed, reason, (flags & 0x4) != 0, body.Type == 3 && (Field(36) & 0x200) != 0,
-            (int)scale, (flags & 0x80) != 0, 255, (blit & 0x10) != 0, (blit & 1) != 0, (blit & 2) != 0);
+            (int)scale, (flags & 0x80) != 0, constant ? (int)blitAlpha : 255, additive, (blit & 1) != 0, (blit & 2) != 0,
+            multiply, multiply || constant, wading);
     }
 }
 

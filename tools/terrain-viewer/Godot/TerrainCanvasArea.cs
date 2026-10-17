@@ -131,7 +131,16 @@ public partial class TerrainCanvas
         if (_areaAbsent is { } old && absent is { } next && old.SetEquals(next)) return;
         _areaAbsent = absent; _areaView = null; QueueRedraw();
     }
-    internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && (_areaHidden?.Contains(key) == true || _areaAbsent?.Contains(key) == true);
+    /// <summary>ARC-RENDER-018 smoke seam: one body left out of the next submissions (null = none), so the native blend
+    /// observation can read the pixels beneath it.</summary>
+    internal AreaObjectKey? AreaSmokeOmitted
+    {
+        get => _areaSmokeOmitted;
+        set { if (_areaSmokeOmitted == value) return; _areaSmokeOmitted = value; _areaView = null; QueueRedraw(); }
+    }
+    private AreaObjectKey? _areaSmokeOmitted;
+    internal bool AreaHiddenOf(AreaDrawCommand command) => command.Identity is { } key && (_areaHidden?.Contains(key) == true || _areaAbsent?.Contains(key) == true
+        || key == _areaSmokeOmitted);
     internal AreaWallFade AreaWallFadeOf(AreaDrawCommand command)
         => command.Identity is { } key && _areaWallFades is { } fades && fades.TryGetValue(key, out var fade) ? fade : AreaWallFade.None;
     // One ambient multiplier per chunk item: a chunk is drawn as a chunk under lighting only
@@ -278,8 +287,9 @@ public partial class TerrainCanvas
             if (hd[index].Texture is { } hdTexture) { texture = hdTexture; item.HdScale = hdScale; } else item.HdScale = 1;
             item.FrameTexture = texture; item.Command = command; item.Actor = isActor ? _actorPlan.Current : null;
             (item.Ambient, item.AmbientRight, item.Lattice) = AreaItemLight(command, isActor);
-            // The source drops every alpha mode for an additive (or sub/mul) object, so such a wall never fades.
-            item.WallFade = isActor || command.Additive ? AreaWallFade.None : AreaWallFadeOf(command);
+            // The source drops every alpha mode for an additive (or sub/mul) object, and a constant-alpha body
+            // replaces them with its own, so such a wall never fades (ARC-RENDER-018).
+            item.WallFade = isActor || command.Additive || command.Unlit ? AreaWallFade.None : AreaWallFadeOf(command);
             item.PrepareMapping(command);
             item.Show(); item.QueueRedraw();
         }

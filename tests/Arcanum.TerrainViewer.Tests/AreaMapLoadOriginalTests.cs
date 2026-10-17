@@ -47,11 +47,22 @@ public sealed class AreaMapLoadOriginalTests
             try { _ = AreaLoadOperation.Execute(1, Arguments(root, map.Name), default); loaded.Add(map.Name); }
             catch (Exception exception) when (exception is InvalidOperationException or AreaException) { failed.Add($"{map.Name}: {exception.Message}"); }
         }
-        // Not drawn yet (follow-up ARC-RENDER-018): wading bodies in the sewers (OF_WADING), multiply-blended
-        // scenery in the void maps (blit 0x40) and one constant-alpha critter (blit 0x100, alpha 95).
-        CollectionAssert.AreEqual(new[] { "bessietoonesmine-fixed", "caladons sewers", "tarant sewers-02", "void - arronax's interior",
-            "void-kerghans castle" }.Select(m => m + ": AREA_UNSUPPORTED_BODY_STATE").ToArray(), failed, string.Join("; ", failed));
-        Assert.AreEqual(49, loaded.Count, string.Join(", ", loaded));
+        // Since ARC-RENDER-018 the wading, multiply and constant-alpha bodies are drawn, so every complete interior loads.
+        Assert.AreEqual(0, failed.Count, string.Join("; ", failed));
+        Assert.AreEqual(54, loaded.Count, string.Join(", ", loaded));
+    }
+
+    [TestMethod, TestCategory("RealData")]
+    [DataRow("caladons sewers", 20, 0, 0), DataRow("tarant sewers-02", 102, 0, 0), DataRow("void - arronax's interior", 0, 12, 0),
+        DataRow("void-kerghans castle", 0, 42, 0), DataRow("bessietoonesmine-fixed", 0, 0, 1)]
+    public void Wading_multiply_and_constant_alpha_bodies_are_drawn(string map, int wading, int multiply, int constant)
+    {
+        var plan = AreaLoadOperation.Execute(1, Arguments(Root(), map), default).Area!.Plan;
+        var bodies = plan.Commands.Where(command => command.Identity is not null).ToArray();
+        Assert.AreEqual(wading, bodies.Count(command => command.WadeRows > 0));
+        Assert.AreEqual(multiply, bodies.Count(command => command.Multiply && command.Unlit));
+        Assert.AreEqual(constant, bodies.Count(command => command.Alpha == 95 && command.Unlit && !command.Multiply));
+        Assert.IsTrue(bodies.Where(command => command.WadeRows > 0).All(command => command.WadeRows == Math.Min(AreaScenePlan.WadingRows, command.Destination.Height)));
     }
 
     private static string Root() => Environment.GetEnvironmentVariable("DAT_ROOT") is { Length: > 0 } root ? root

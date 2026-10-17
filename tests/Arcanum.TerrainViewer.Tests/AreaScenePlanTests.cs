@@ -88,6 +88,52 @@ public sealed class AreaScenePlanTests
         Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [body with { EffectiveFields = body.EffectiveFields.Where(field=>field.Slot!=18).ToArray() }], [BodyVisual(body)]));
         Assert.ThrowsExactly<InvalidOperationException>(() => AreaScenePlan.Create([], [body with { EffectiveFields = body.EffectiveFields.Select(field=>field.Slot==8?Field(8,0x20):field).ToArray() }], [BodyVisual(body)]));
     }
+    private static AreaObjectRecord With(AreaObjectRecord body, params (int Slot, long Value)[] values)
+    {
+        var fields = body.EffectiveFields.Select(field => values.Any(v => v.Slot == field.Slot) ? Field(field.Slot, values.Single(v => v.Slot == field.Slot).Value) : field).ToArray();
+        return body with { DirectFields = fields, EffectiveFields = fields };
+    }
+    private static AreaDrawCommand Drawn(AreaObjectRecord body, int height = 240)
+        => AreaScenePlan.Create([], [body], [BodyVisual(body, height: height)]).Commands.Single();
+    [TestMethod]
+    public void BlendStatesFollowTheOriginalPrecedenceAndStayUnlitExceptAdditive()
+    {
+        var body = Body(0);
+        var multiply = Drawn(With(body, (8, 0x40)));
+        Assert.IsTrue(multiply.Multiply && multiply.Unlit && !multiply.Additive && multiply.Alpha == 255 && multiply.Blended);
+        // Additive wins over multiply and constant alpha; it keeps the existing (lit) rule.
+        var additive = Drawn(With(body, (8, 0x150)));
+        Assert.IsTrue(additive.Additive && !additive.Multiply && !additive.Unlit && additive.Alpha == 255);
+        var constant = Drawn(With(body, (8, 0x101), (10, 95)));
+        Assert.IsTrue(constant.Alpha == 95 && constant.Unlit && !constant.Multiply && !constant.Additive && constant.FlipX && constant.Blended);
+        var mulOverAlpha = Drawn(With(body, (8, 0x140)));
+        Assert.IsTrue(mulOverAlpha.Multiply && mulOverAlpha.Alpha == 255);
+        var opaque = Drawn(body);
+        Assert.IsTrue(!opaque.Multiply && !opaque.Unlit && opaque.WadeRows == 0 && !opaque.Blended);
+        var plan = AreaScenePlan.Create([], [With(body, (8, 0x40))], [BodyVisual(body)]);
+        Assert.AreEqual(AreaAmbientChannel.Unlit, AreaAmbientPolicy.Channels(plan, [], [BodyVisual(body)])[multiply.Visual]);
+        Assert.AreEqual(AreaAmbientChannel.Outdoor, AreaAmbientPolicy.Channels(AreaScenePlan.Create([], [body], [BodyVisual(body)]), [], [BodyVisual(body)])[opaque.Visual]);
+        // Subtract, other alpha modes, an alpha the drawn branch never reads and an out-of-range alpha stay refused.
+        foreach (var (blit, alpha) in new[] { (0x20L, 255L), (0x200L, 255L), (0x400L, 255L), (0x40L, 95L), (0x150L, 95L), (0x140L, 95L), (0L, 95L), (0x100L, 256L), (0x100L, -1L) })
+            Assert.ThrowsExactly<InvalidOperationException>(() => Drawn(With(body, (8, blit), (10, alpha))), $"blit 0x{blit:X} alpha {alpha}");
+        // A frozen body takes the original's frozen tint before any blit blend; it is not drawn as an ordinary body.
+        Assert.ThrowsExactly<InvalidOperationException>(() => Drawn(Body(0, flags: 0x10000000)));
+    }
+    [TestMethod]
+    public void WadingBodiesDrawTheirLowerFifteenDestinationRowsOrAFlatBodyWhole()
+    {
+        Assert.AreEqual(AreaScenePlan.WadingRows, Drawn(Body(0, flags: 0x20000)).WadeRows);
+        // Destination rows, after scale: a half-size body still wades in its lowest 15 drawn rows.
+        var scaled = AreaScenePlan.Create([], [Body(0, flags: 0x20000, scale: 50)], [BodyVisual(Body(0), height: 240)]).Commands.Single();
+        Assert.AreEqual((120, 15), (scaled.Destination.Height, scaled.WadeRows));
+        Assert.AreEqual(240, Drawn(Body(0, flags: 0x20004)).WadeRows);
+        Assert.AreEqual(10, Drawn(Body(0, flags: 0x20000), height: 10).WadeRows);
+        Assert.AreEqual(0, Drawn(Body(0, flags: 0x60000)).WadeRows, "water walking");
+        Assert.AreEqual(0, Drawn(With(Body(0, flags: 0x20000), (8, 0x10))).WadeRows, "additive keeps its blend");
+        Assert.AreEqual(0, Drawn(With(Body(0, flags: 0x20000), (8, 0x40))).WadeRows, "multiply keeps its blend");
+        var ghost = Drawn(With(Body(0, flags: 0x20000), (8, 0x100), (10, 95)));
+        Assert.IsTrue(ghost.WadeRows == 15 && ghost.Alpha == 95 && ghost.Blended);
+    }
     [TestMethod]
     public void AreaModeRequiresAllRolesAndRejectsCallerActorOverrides()
     {
