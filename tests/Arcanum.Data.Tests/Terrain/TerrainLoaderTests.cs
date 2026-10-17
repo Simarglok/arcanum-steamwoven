@@ -128,6 +128,7 @@ public sealed class TerrainLoaderTests
             ("ART/TILE/AA?BSE0A.ART", Art()))), leaveOpen: true);
         var report = TerrainLoader.Inspect(module, Selector("maps\\fixture\\ascii.sec"), Source(latinResource));
         Assert.IsFalse(report.IsComplete);
+        Assert.IsTrue(report.Issues.All(issue => issue.Code == TerrainIssueCode.InvalidTileSelector), "refused as not ASCII, never folded onto the '?' entry");
     }
 
     [TestMethod]

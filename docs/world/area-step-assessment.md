@@ -179,8 +179,10 @@ the rule resources through the content stack in the phase the original reads
 them (ARC-DATA-027, exe-checked: tile names and effects at game start, so the
 first base source and never a module copy; the module's game effects at module
 load and `map.patch` when a map opens, so the stack winners; a loose file is
-read like an archive member), the mobiles from the map's aggregate. Every rule
-MES is read in the original grammar (`MesFile`). Only for such snapshots, walls
+read like an archive member), the mobiles from the map's aggregate. The rule
+MES files (tile names, effects, game effects) are read in the original grammar
+(`MesFile`; a signed or spaced key is refused); `map.patch` is not MES and is
+still read as Latin-1 lines. Only for such snapshots, walls
 and portals state their edge rule (pinned evidence keeps the earlier rule and
 digest; the rules are appended to the digest only when present):
 

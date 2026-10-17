@@ -62,6 +62,7 @@ public static class AreaStepInspector
                     return required ? throw Fail(AreaStepInvocationCode.InvalidSelection, AreaStepInvocationStage.Rules) : null;
                 if (candidate.Length > AreaStepRules.MaxMesBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
                 var read = stack.Read(candidate);
+                if (read.Status == ContentReadStatus.TooLarge || read.Bytes?.Length > AreaStepRules.MaxMesBytes) throw Fail(AreaStepInvocationCode.LimitExceeded, AreaStepInvocationStage.Rules);
                 return read.Status == ContentReadStatus.Read ? read.Bytes! : throw Fail(AreaStepInvocationCode.InputUnavailable, AreaStepInvocationStage.Rules);
             }
             var mobile = Array.Empty<byte>();

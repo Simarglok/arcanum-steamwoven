@@ -108,8 +108,13 @@ public static class TerrainLoader
         {
             try
             {
-                var rawPath = NormalizePath(Encoding.ASCII.GetBytes(TilePath(tiles, rawId).Path));
-                wasNormalizationRecovered = rawPath != normalizedPath && !index.ContainsKey(rawPath);
+                // A non-ASCII raw path names no entry and makes no recovery claim (never folded onto '?').
+                var raw = TilePath(tiles, rawId).Path;
+                if (raw.All(c => c <= 0x7f))
+                {
+                    var rawPath = NormalizePath(Encoding.ASCII.GetBytes(raw));
+                    wasNormalizationRecovered = rawPath != normalizedPath && !index.ContainsKey(rawPath);
+                }
             }
             catch (TerrainSelectionException)
             {
@@ -237,13 +242,14 @@ public static class TerrainLoader
     internal static SortedDictionary<int, string> ParseMes(byte[] bytes, TerrainLoaderOptions limits)
     {
         if (bytes.Length > limits.MaxMesDecodedEntryBytes) throw new TerrainLimitExceededException("MES input exceeds the decoded byte limit.");
-        var options = new MesReaderOptions { MaxBytes = limits.MaxMesDecodedEntryBytes, MaxMessages = limits.MaxMesEntries,
-            MaxTextBytes = Math.Min(limits.MaxMesValueBytes, MesFile.OriginalMaxTextBytes) };
+        // The reader's field limit also bounds number fields, so the value limit is checked on the values themselves.
+        var options = new MesReaderOptions { MaxBytes = limits.MaxMesDecodedEntryBytes, MaxMessages = limits.MaxMesEntries };
         var status = MesTable.Read(bytes, options, out var result);
         if (MesTable.IsLimit(status)) throw new TerrainLimitExceededException($"MES input exceeds a configured limit ({status}).");
         if (status == MesParseStatus.DuplicateNumber) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains a duplicate key.");
         if (status != MesParseStatus.Parsed) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, $"MES has unsupported syntax ({status}).");
         if (result.Count == 0) throw new TerrainFormatException(TerrainErrorCode.InvalidFraming, "MES contains no supported entries.");
+        if (result.Values.Any(value => value.Length > limits.MaxMesValueBytes)) throw new TerrainLimitExceededException("MES value exceeds the configured limit.");
         return result;
     }
 

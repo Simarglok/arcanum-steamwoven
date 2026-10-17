@@ -20,7 +20,7 @@ Every result independently includes `Supportedness` (`Supported`, `Unknown`, `Un
 
 ## Tile-name subset
 
-The optional tile source is the exact caller-selected MES resource. The parser is the original MES grammar (`MesFile`, ARC-DATA-027) with decoded-byte, record, and value caps: text outside braces is ignored, and the shapes the original truncates or stops on (a NUL, a lone CR, a 0xFF byte, a brace inside a field, a number that is not 1..10 digits, a duplicate key, an unterminated field) or an empty table fail closed with a sanitized `TerrainException`; missing or ambiguous selected MES makes only the tile-name component `Unknown`.
+The optional tile source is the exact caller-selected MES resource. The parser is the original MES grammar (`MesFile`, ARC-DATA-027) with decoded-byte, record, and value caps: text outside braces is ignored, and the shapes the original truncates or stops on (a NUL, a lone CR, a 0xFF or 0x1A byte, a brace inside a field, a number that is not 1..10 digits within int32, a duplicate key, an unterminated field, a text over 1,999 bytes) or an empty table fail closed with a sanitized `TerrainException`; missing or ambiguous selected MES makes only the tile-name component `Unknown`.
 
 For a class-0 tile, `num1 = (rawId >> 22) & 63` selects an ordinal in one of four sorted MES key ranges: outdoor/flippable `0..99`, outdoor/fixed `100..199`, indoor/flippable `200..299`, indoor/fixed `300..399`, using `(rawId >> 8) & 1` and `(rawId >> 7) & 1`. Missing category ordinal or an unresolved `num1` mapping is `Unknown`; the implementation never assumes a key is a range base plus material number.
 
