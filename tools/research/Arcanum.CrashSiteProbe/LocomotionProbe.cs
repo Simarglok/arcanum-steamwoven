@@ -92,7 +92,7 @@ internal static partial class Program
     /// a portal of rotation 0..2 is tested in reverse there and the two never agree.
     /// <paramref name="acrossIndoor"/> is the tile one step along the raw rotation: the tile across
     /// the edge for an odd rotation, the diagonal tile for an even one.</summary>
-    internal static bool JumpLeaves(int portalRotation, bool fromPortalTile, bool portalTileIndoor, bool acrossIndoor)
+    internal static bool PortalLeaves(int portalRotation, bool fromPortalTile, bool portalTileIndoor, bool acrossIndoor)
     {
         bool Leaves(int dir) =>
             (dir + 4) % 8 == portalRotation || (dir + 5) % 8 == portalRotation || (dir + 3) % 8 == portalRotation
@@ -243,7 +243,7 @@ internal static partial class Program
                 var onEdge = portals.Where(p => (p.X == x && p.Y == y && p.Art.EdgeRotation == r) || (p.X == across.X && p.Y == across.Y && p.Art.EdgeRotation == (r + 4) % 8)).ToArray();
                 var portal = tilePortals.FirstOrDefault();
                 var hasPortal = tilePortals.Length > 0;
-                // Leaving, as the traversal and the jump goal both see it (JumpLeaves). The portal is on the
+                // Leaving, as the traversal and the jump goal both see it (PortalLeaves). The portal is on the
                 // window's tile, so the window side is the portal side.
                 bool Leaving(bool fromWindowTile)
                 {
@@ -252,7 +252,7 @@ internal static partial class Program
                     var portalAcross = CaveStep((portal.X, portal.Y), portal.Art.Rotation)!.Value;
                     var here = Indoor(portal.X, portal.Y) ?? throw new InvalidDataException("LOCOMOTION_PORTAL_TILE_UNKNOWN");
                     var there = Indoor(portalAcross.X, portalAcross.Y) ?? throw new InvalidDataException("LOCOMOTION_PORTAL_TILE_UNKNOWN");
-                    return JumpLeaves(portal.Art.Rotation, fromWindowTile, here, there);
+                    return PortalLeaves(portal.Art.Rotation, fromWindowTile, here, there);
                 }
                 WindowJump Admit(bool fromWindowTile, int hour) => AdmitWindowJump(solid, hasPortal, hasPortal ? portal.Flags : 0, hasPortal && portal.UnlockScript, Leaving(fromWindowTile), hour);
                 return new
@@ -287,8 +287,8 @@ internal static partial class Program
             {
                 locked = lockedDoors.Length, unresolved = lockedDoors.Length - resolvedDoors.Length,
                 by_rotation = resolvedDoors.GroupBy(d => d.Rotation).OrderBy(g => g.Key).ToDictionary(g => g.Key.ToString(), g => g.Count()),
-                leaving_from_portal_tile = resolvedDoors.Count(d => JumpLeaves(d.Rotation, true, d.Here, d.Along)),
-                leaving_from_across = resolvedDoors.Count(d => JumpLeaves(d.Rotation, false, d.Here, d.Along)),
+                leaving_from_portal_tile = resolvedDoors.Count(d => PortalLeaves(d.Rotation, true, d.Here, d.Along)),
+                leaving_from_across = resolvedDoors.Count(d => PortalLeaves(d.Rotation, false, d.Here, d.Along)),
                 ce_leaving_from_portal_tile = resolvedDoors.Count(d => d.Rotation > 2 && d.Here && !d.Along),
                 portal_tile_indoor_rotation_0_to_2 = resolvedDoors.Count(d => d.Rotation <= 2 && d.Here && !d.Along),
             };
@@ -355,11 +355,11 @@ internal static partial class Program
         Check(AdmitWindowJump(false, true, 0x01, false, true, 15) == WindowJump.IndoorToOutdoor && AdmitWindowJump(false, true, 0x01, false, false, 15) == WindowJump.Locked, "lock and leaving");
         Check(AdmitWindowJump(false, true, 0x21, false, false, 2) == WindowJump.Open && AdmitWindowJump(false, true, 0x21, false, false, 15) == WindowJump.Locked, "locked by day");
         Check(Jumps(WindowJump.NoPortal) && Jumps(WindowJump.Open) && Jumps(WindowJump.IndoorToOutdoor) && !Jumps(WindowJump.Jammed) && !Jumps(WindowJump.ScriptUnknown) && !Jumps(WindowJump.SolidPiece), "jumps");
-        Check(!JumpLeaves(1, true, true, false) && JumpLeaves(3, true, true, false) && JumpLeaves(5, true, true, false) && JumpLeaves(7, true, true, false), "leaving from the portal tile");
-        Check(!JumpLeaves(3, false, true, false) && !JumpLeaves(5, false, true, false) && !JumpLeaves(5, true, false, false) && !JumpLeaves(5, true, true, true), "not indoor to outdoor");
+        Check(!PortalLeaves(1, true, true, false) && PortalLeaves(3, true, true, false) && PortalLeaves(5, true, true, false) && PortalLeaves(7, true, true, false), "leaving from the portal tile");
+        Check(!PortalLeaves(3, false, true, false) && !PortalLeaves(5, false, true, false) && !PortalLeaves(5, true, false, false) && !PortalLeaves(5, true, true, true), "not indoor to outdoor");
         // ARC-RES-049: from across the original exchanges the tiles, so a walker leaving from the far side passes;
         // on the portal's own tile rotation 1 passes the reversed goal test only, which the traversal refuses.
-        Check(JumpLeaves(1, false, false, true) && JumpLeaves(3, false, false, true) && JumpLeaves(7, false, false, true) && !JumpLeaves(1, true, false, true), "leaving from across");
+        Check(PortalLeaves(1, false, false, true) && PortalLeaves(3, false, false, true) && PortalLeaves(7, false, false, true) && !PortalLeaves(1, true, false, true), "leaving from across");
         Check(CritterArtForAnim("art/critter/x/xyzb.art", 6) == "art/critter/x/xyzg.art" && CritterArtForAnim("art/critter/x/xyzb.art", 13) == "art/critter/x/xyzn.art", "anim letter");
         Console.WriteLine("locomotion-self-test: PASS (speed frame rates, frame clamp, tile steps, cycle projection, window admission, jump leaving direction (original), anim letters)");
     }

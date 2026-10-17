@@ -87,6 +87,8 @@ public sealed class AreaWholeMapStepTests
         // Diagonal steps: each leg across the edge decides from its own side.
         Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), CardinalTraversalDirection.XPlusYPlus, (11, 11))));
         Assert.AreEqual("WALL_EDGE_BLOCKED", Verdict(Step((10, 10), 5, (11, 11), CardinalTraversalDirection.XMinusYMinus, (10, 10))));
+        // The goal looks from the step's source, not the leg's: diagonal direction 6 to the portal also exchanges.
+        Assert.AreEqual("Open", Verdict(Step((11, 10), 1, (10, 11), CardinalTraversalDirection.XPlusYMinus, (11, 10))));
         // A lock that depends on the hour opens for a leaving step and is Unknown otherwise.
         Assert.AreEqual("Open", Verdict(Step((10, 10), 5, (10, 10), East, (11, 10), "PORTAL_LOCK_DEPENDS_ON_HOUR")));
         Assert.AreEqual("Unknown:PORTAL_LOCK_DEPENDS_ON_HOUR", Verdict(Step((10, 10), 5, (11, 10), West, (10, 10), "PORTAL_LOCK_DEPENDS_ON_HOUR")));

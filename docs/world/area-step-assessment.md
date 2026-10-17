@@ -196,7 +196,8 @@ digest; the rules are appended to the digest only when present):
   open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
   magically held blocks; a portal without the LOCKED bit, or never-locked,
   passes (walking opens it); a locked one with a by-day or by-night bit is
-  Unknown because the evidence has no clock; otherwise it needs a key, none is
+  Unknown because the evidence has no clock, unless the step leaves a building
+  (below); otherwise it needs a key, none is
   held at T0, and only leaving a building passes: always-locked (which disables
   that shortcut) blocks, or is Unknown when an hour bit is set. Doors and windows
   follow the same attempt; a window's wall piece then makes the step a jump.

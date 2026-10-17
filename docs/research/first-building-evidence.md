@@ -197,7 +197,9 @@ as leaving (U4). The leaving check steps by the raw ART rotation, not `r|1`; for
 door both are 3. **Original (ARC-RES-049):** the executable really exchanges the two
 tiles, the step's traversal and the door goal both run the attempt, and a step passes
 the lock only when both call it leaving: out of an indoor portal tile (raw rotation
-3..7), or from an indoor tile across into an outdoor portal tile
+3..7) whose tile along the rotation is not indoor, or into an outdoor portal tile
+from across when that tile along the rotation is indoor (for an odd rotation, the
+tile the walker comes from)
 ([ledger LV1–LV5](original-verification-ledger.md#leaving-a-building-through-a-locked-portal-arc-res-049)). When a walk reaches a closed door the move goal pushes an open-door
 goal that animates it open
 ([move node 8](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c#L418),
