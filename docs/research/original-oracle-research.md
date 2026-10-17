@@ -3,7 +3,7 @@
 Status: **Research**, work item ARC-RES-051 (2026-10-17). Owner decisions of the same day are recorded in
 [architecture direction](../architecture/decisions.md) and the method is amended in the
 [original executable check](original-executable-check.md#function-emulation-oracle). No code is changed; the
-tooling is planned as ARC-DEV-007 (see [Plan](#plan)).
+tooling is ARC-DEV-007 ([`tools/original-oracle`](../../tools/original-oracle/README.md); see [Plan](#plan)).
 
 The question: how to build a complete, checkable evidence base that Steamwoven behaves like the retail 1.0.7.4
 `Arcanum.exe`, except where a recorded difference says otherwise, and how to stop depending on CE for it.
@@ -67,7 +67,8 @@ verifier and persuaded the reviewer, so the oracle must be protected). Sources o
    pinned Unicorn) with a self-test on synthetic code, the C# side of the comparison in a test category
    `OriginalExe`, the function registry, the `OriginalFunction` attribute, receipts, `./arcanum oracle`, and the
    reference counter for CE, with Ghidra and Unicorn pinned in the [toolchain](../workflow/toolchain.md). First functions:
-   the three experience functions of the trial.
+   the three experience functions of the trial. Done for the oracle tool, the `OriginalExe` category and `./arcanum oracle`;
+   the registry, attribute, receipts and CE counter follow as ARC-DEV-008.
 3. **Experience XP3 switch**: the progress overflow as a rule-mode switch (owner decision 2026-10-17), with the oracle
    expecting the difference in Steamwoven mode only.
 4. **Domain migrations**: per domain, raise the implemented functions to their target level and replace CE references

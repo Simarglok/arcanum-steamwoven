@@ -49,6 +49,19 @@ MAX_MAP_NAME = 128
 PREMADE_HEROES: tuple[str, ...] = ("halfling-male", "gnome-male", "half-elf-male", "half-ogre-male", "elf-male", "human-male",
                                    "half-orc-male", "dwarf-male", "human-female", "elf-female", "half-orc-female", "half-elf-female")
 
+# ARC-DEV-007: `./arcanum oracle` runs the function oracle (tools/original-oracle) on the installed executable, then the
+# OriginalExe tests that compare Steamwoven with its outputs. Function address -> its OriginalExe test method; keep in step
+# with tools/original-oracle/oracle_functions.py FUNCTIONS and the test class (tools/local_dev/test_launcher_sync.py).
+ORIGINAL_EXE_NAME = "Arcanum.exe"
+ORIGINAL_EXE_SHA256 = "9bd80511f8663a41a25a20a701959e394e0065e4ffc68a8dc69fe19c23678d52"
+ORACLE_TESTS = "tests/Arcanum.Simulation.Tests/Arcanum.Simulation.Tests.csproj"
+ORACLE_TEST_CLASS = "tests/Arcanum.Simulation.Tests/Character/ExperienceOriginalExeTests.cs"
+ORACLE_FUNCTIONS: dict[str, str] = {
+    "0x4A68B0": "ToNextLevelMatchesTheOriginal",
+    "0x4A6900": "ProgressMatchesTheOriginalExceptTheXp3Wrap",
+    "0x4A6980": "BonusPointsMatchTheOriginal",
+}
+
 FORBIDDEN = ("--self-test", "--native-smoke", "--smoke", "--matrix", "--capture", "--screenshot", "--headless", "--fullscreen", "--automated", "--resize", "--input")
 
 
