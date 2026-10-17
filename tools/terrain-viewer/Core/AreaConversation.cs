@@ -186,8 +186,9 @@ public sealed class AreaConversationHost
     {
         token.ThrowIfCancellationRequested();
         if (_content is null) return new(AreaConversationStartStatus.ContentUnavailable, null, speaker, _contentDetail);
-        // ARC-SCRIPT-011: one content never mixes two versions of a file; once one changed, nothing more runs from it.
-        if (_content.Changed) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
+        // ARC-SCRIPT-011: one content never mixes two versions of a file; every file read before is checked again, and once
+        // one changed nothing more runs from it.
+        if (!_content.VerifySeen()) return new(AreaConversationStartStatus.SourceChanged, null, speaker, "a script or dialog file changed since it was first read");
         State.Bind(speaker.Index, AreaScriptHost.LoadedSlot(speaker)?.LocalFlags ?? 0);
         var result = ScrDispatcher.RunObject(new(ScrPoint.Dialog, Scripts.Object(speaker), Scripts.Pc, null, line), Scripts,
             new() { Rules = _session.Rules.Scripts, Admission = AreaScriptHost.Admission });
@@ -196,6 +197,15 @@ public sealed class AreaConversationHost
         if (result.Outcome == ScrOutcome.Refused)
             return new(AreaConversationStartStatus.EntryNotAdmitted, null, speaker,
                 $"script {result.Script} SCR line {result.Refusal!.Line}: {result.Refusal.Code} type {result.Refusal.Type}");
+        // The DLG is read before any effect is applied, so a changed dialog file applies nothing; a DLG that is missing or
+        // unreadable leaves the script's effects applied, as they were before ARC-SCRIPT-011.
+        (AreaConversationStartStatus Status, DlgDocument? Document, string Detail) loaded = (AreaConversationStartStatus.DialogResourceMismatch, null, "no dialog action");
+        if (result.Effects.Dialog is { } requested)
+        {
+            loaded = AreaScriptHost.LoadDialog(_content, requested.Script, requested.Node);
+            if (loaded.Status == AreaConversationStartStatus.SourceChanged) return new(loaded.Status, null, speaker, loaded.Detail);
+        }
+        token.ThrowIfCancellationRequested();
         if (!Scripts.Apply(result.Effects))
             return new(AreaConversationStartStatus.ScriptEffectsRejected, null, speaker, $"script {result.Script} {result.Stop}: the session refused its effects");
         if (result.Effects.Dialog is not { } dialog)
@@ -204,10 +214,8 @@ public sealed class AreaConversationHost
                 : result.Outcome == ScrOutcome.RunDefault
                 ? new(AreaConversationStartStatus.GenericGreeting, null, speaker, $"script {result.Script?.ToString() ?? "none"} {result.Stop}: run default (the generic greeting is not modelled)")
                 : new(AreaConversationStartStatus.ScriptEnded, null, speaker, $"script {result.Script} {result.Stop} at SCR line {result.StopLine}: skip default");
-        token.ThrowIfCancellationRequested();
-
-        var (dialogStatus, document, dialogDetail) = AreaScriptHost.LoadDialog(_content, dialog.Script, dialog.Node);
-        if (dialogStatus != AreaConversationStartStatus.Started) return new(dialogStatus, null, speaker, dialogDetail);
+        if (loaded.Status != AreaConversationStartStatus.Started) return new(loaded.Status, null, speaker, loaded.Detail);
+        var document = loaded.Document;
 
         var participants = new DialogParticipants(new DialogId(dialog.Script), AreaConversationState.PcParticipant, AreaConversationState.Npc(speaker.Index));
         var party = PartyPort(speaker);

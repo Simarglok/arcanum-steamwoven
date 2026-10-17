@@ -40,7 +40,8 @@ public sealed class ScriptContentRealDataTests
         using var stack = ContentStack.Open(plan).Stack!;
         Assert.AreEqual(3, names.Names.Count(name => !ScriptNameIndex.IsBase(stack.Resolve(name.ScriptPath).Winner!.Source.Role)), "module copies win");
         Assert.AreEqual(47, names.Names.Count(name => stack.Resolve(name.DialogPath).Candidates.Count > 1), "patched dialogs");
-        // Eight DLG files carry a number whose script has another name: the original never opens them by number.
+        // Eight DLG files are not the dialog path of their number's script (it has another name, or there is none): the
+        // original never opens them for a script.
         var files = stack.Keys("dlg/").Where(key => key.EndsWith(".dlg", StringComparison.Ordinal) && key.Count(c => c == '/') == 1).ToArray();
         Assert.AreEqual(709, files.Length);
         Assert.AreEqual(8, files.Count(key => names.Find(ScriptNameIndex.Number(key[4..]) ?? 0)?.DialogPath != key));
@@ -62,6 +63,12 @@ public sealed class ScriptContentRealDataTests
         Assert.AreEqual("arcanum4.dat", Path.GetFileName(winner.Winner.Source.Path).ToLowerInvariant());
         Assert.AreEqual(2, winner.Candidates.Count);
         Assert.AreEqual(49, script.Program!.Count);
+        // Its first 47 lines are the shadowed copy's, unchanged; two lines are added.
+        var shadowed = stack.Read(winner.Candidates[1]).Bytes!;
+        var patched = stack.Read(winner.Winner).Bytes!;
+        Assert.AreEqual(64 + 47 * 132, shadowed.Length);
+        var same = Enumerable.Range(0, 47).TakeWhile(i => shadowed.AsSpan(64 + i * 132, 132).SequenceEqual(patched.AsSpan(64 + i * 132, 132))).Count();
+        Assert.AreEqual(47, same);
         var dialog = content.Dialog(1324);
         Assert.AreEqual(ScriptContentStatus.Read, dialog.Status, dialog.Detail);
         // His dialog has one copy, in arcanum3.dat.

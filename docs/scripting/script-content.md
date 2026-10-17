@@ -37,12 +37,16 @@ Data API and the AREA viewer's conversation host. Godot-independent.
   `ScrProgram`), `Dialog(number)` returns `DialogRead` (the `DlgDocument`), each
   with a status: `Read`, `NoName`, `NotFound` (no source holds the DLG),
   `Unreadable` (stack read limits), `Invalid` (not a script or not a strict DLG)
-  or `Changed`. Details name statuses or virtual paths, never absolute paths or
-  payload bytes.
+  or `Changed`. Read details name statuses or virtual paths, never absolute paths
+  or payload bytes; an open failure's detail is the stack's (it names the failing
+  source path), which the viewer does not print.
 - **One version per path.** The stack indexes names once; every read goes to the
   winning copy again. The first bytes read for a path are kept as SHA-256, and a
   later read with other bytes is `Changed` and sets `ScriptContent.Changed` for
-  good, so one content object never mixes two versions of a file.
+  good, so one content object never mixes two versions of a file. `VerifySeen()`
+  reads every path read so far again and compares it, so a caller catches a file
+  changed since an earlier run before it runs anything, not only when it reads
+  that file again.
 
 ## AREA viewer
 
@@ -56,10 +60,16 @@ Data API and the AREA viewer's conversation host. Godot-independent.
   instead of a script and a dialog archive. `AreaScriptHost.Script` reads the
   dispatcher's scripts through it; `LoadDialog` reads the DLG by the script's name.
   `SourceChanged` now means a script or dialog file changed after its first read:
-  checked before a run and after it, before any effect is applied.
-- The Godot viewer opens the content once per module archive at the first
-  publication (about 0.2–0.35 s on the main thread, measured on the owner's Mac)
-  and keeps it for reloads, the cave and quick loads. Map mode (`--area-map`)
+  before a run every file read before is checked again (`VerifySeen`), after the
+  run the scripts it read, and the DLG of a dialog action is read before any
+  effect is applied, so a changed file applies nothing. A DLG that is missing or
+  not readable still leaves the script's effects applied, as before.
+- The Godot viewer opens the content once per module archive (its path and the
+  area's module digest) at the first publication (about 0.2–0.35 s on the main
+  thread, measured on the owner's Mac) and keeps it for reloads, the cave and
+  quick loads; a content that saw a file change is opened again at the next
+  publication. Base archives replaced on disk while the viewer runs are seen only
+  when the module changes or a file change was caught. Map mode (`--area-map`)
   still wires no dialogs ([map mode](../rendering/area-map-mode.md)).
 
 ## Coverage on the installed original
@@ -75,10 +85,10 @@ Opt-in tests (category `RealData`, `DAT_ROOT` = the game folder, module Arcanum)
 | winning script copy from a module source | 3 |
 | dialogs read / outside the strict DLG reader / no DLG file | 663 / 38 / 1,698 |
 | script dialog paths with more than one copy (patched) | 47 |
-| DLG files in `dlg\` / never opened by number (name differs from the script's) | 709 / 8 |
+| DLG files in `dlg\` / not the dialog path of their number's script (another name, or no script) | 709 / 8 |
 
 Virgil (script 1324) now reads `Arcanum4.dat`'s copy of `scr\01324Virgil.scr`
-(49 lines, over `arcanum2.dat`'s 47; the first 25 lines are equal), and
+(49 lines: `arcanum2.dat`'s 47 lines unchanged and two added), and
 `dlg\01324Virgil.dlg` has one copy, in `arcanum3.dat`. His talk is unchanged:
 line 4 → node 1, the return resumes at line 5, following → line 6 → node 385
 (`AreaConversationTests`, `ARC_AREA_CONVERSATION_GAME_ROOT`), and the native

@@ -25,6 +25,8 @@ public sealed record ScriptRead(ScriptContentStatus Status, ScriptName? Name, Sc
 /// <summary>A dialog read: the document when <see cref="Status"/> is <see cref="ScriptContentStatus.Read"/>.</summary>
 public sealed record DialogRead(ScriptContentStatus Status, ScriptName? Name, DlgDocument? Document, string Detail);
 
+/// <summary>The opened content or why the stack could not be opened; <see cref="Detail"/> is the stack's own detail,
+/// which names the failing source path.</summary>
 public sealed record ScriptContentOpenResult(ContentStackStatus Status, ScriptContent? Content, string? Detail = null);
 
 /// <summary>
@@ -70,6 +72,24 @@ public sealed class ScriptContent : IDisposable
     {
         ArgumentNullException.ThrowIfNull(stack);
         return new(stack, false, scripts, dialogs);
+    }
+
+    /// <summary>
+    /// Reads every path read so far again and compares it with its first bytes: false (and <see cref="Changed"/> from then
+    /// on) when one differs or can no longer be read. A caller that applies effects of several files calls it first, so
+    /// a file changed since an earlier run is caught before anything runs, not only when it is read again.
+    /// </summary>
+    public bool VerifySeen()
+    {
+        string[] paths;
+        lock (_gate) paths = _seen.Keys.ToArray();
+        foreach (var path in paths)
+        {
+            if (Changed) break;
+            var (status, _, _) = ReadWinner(path);
+            if (status != ScriptContentStatus.Read) Volatile.Write(ref _changed, 1);
+        }
+        return !Changed;
     }
 
     /// <summary>The script numbered <paramref name="number"/>, framed strictly.</summary>

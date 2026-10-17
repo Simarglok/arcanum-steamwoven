@@ -28,11 +28,11 @@ public sealed class ScriptNameIndex
 
     private ScriptNameIndex(IReadOnlyDictionary<int, ScriptName> names, int listed, int replaced, int unnumbered, int moduleOnly)
     {
-        _names = names; ListedNames = listed; ReplacedNames = replaced; UnnumberedNames = unnumbered; ModuleOnlySystemNames = moduleOnly;
+        _names = names; Names = Array.AsReadOnly(names.Values.OrderBy(name => name.Number).ToArray()); ListedNames = listed; ReplacedNames = replaced; UnnumberedNames = unnumbered; ModuleOnlySystemNames = moduleOnly;
     }
 
     /// <summary>Every number with a name, in number order.</summary>
-    public IReadOnlyList<ScriptName> Names => _names.Values.OrderBy(name => name.Number).ToArray();
+    public IReadOnlyList<ScriptName> Names { get; }
     /// <summary><c>scr\*.scr</c> names in the stack's listing.</summary>
     public int ListedNames { get; }
     /// <summary>Names a later name with the same number replaced.</summary>
@@ -54,7 +54,7 @@ public sealed class ScriptNameIndex
         foreach (var key in stack.Keys(Folder))
         {
             var file = key[Folder.Length..];
-            if (file.Contains('/') || file.Length <= Extension.Length || !file.EndsWith(Extension, StringComparison.Ordinal)) continue;
+            if (file.Contains('/') || !file.EndsWith(Extension, StringComparison.Ordinal)) continue;
             listed++;
             if (Number(file) is not { } number) { unnumbered++; continue; }
             if (number >= FirstSystemNumber && !stack.Resolve(key).Candidates.Any(candidate => IsBase(candidate.Source.Role))) { moduleOnly++; continue; }

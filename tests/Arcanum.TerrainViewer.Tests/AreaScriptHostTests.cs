@@ -181,6 +181,15 @@ public sealed class AreaScriptHostTests
             Assert.AreEqual((AreaConversationStartStatus.SourceChanged, "a script or dialog file changed since it was first read"), (talk.Status, talk.Detail));
             Assert.IsNull(conversations.LastRun, "nothing ran");
             Assert.AreEqual(AreaConversationStartStatus.ContentUnavailable, new AreaConversationHost(source.Owner.LoadStrict(), null, f.Session).Begin(f.Speaker).Status);
+
+            // A file read by an earlier talk is checked again before the next one runs, without being read by it.
+            using var fresh = AreaContentRoot.OpenScripts(Path.Combine(root.FullName, "modules", "Syn.dat")).Content!;
+            Assert.AreEqual(ScrScriptStatus.Found, new AreaScriptHost(f.Session, f.Map, [f.Speaker], f.State, fresh).Script(779).Status);
+            var later = new AreaConversationHost(source.Owner.LoadStrict(), fresh, f.Session);
+            Assert.AreNotEqual(AreaConversationStartStatus.SourceChanged, later.Begin(f.Speaker).Status);
+            Write("scr/00779named.scr", ProgramBytes(flags: 2));
+            Assert.AreEqual(AreaConversationStartStatus.SourceChanged, later.Begin(f.Speaker).Status);
+            Assert.IsTrue(fresh.Changed);
         }
         finally { root.Delete(true); }
 
