@@ -21,8 +21,9 @@ checked by the opt-in real-data tests below. Retail executable parity is NOT_VER
 `PremadeHeroReader.Read(PremadeHeroSources, basicPrototype)` reads the PC prototype file `basic + 20` (v119, through
 the shared object wire reader), the race and female effects from `rules\effect.mes` and the gold and items of its
 inventory source set from `rules\InvenSource.mes` (and `rules\InvenSourceBuy.mes`), plus each listed item prototype. The
-caller supplies a prototype lookup (`DirectoryPrototypes` over the installation's loose `data/proto`, where all 13 PC
-prototypes and their kit items live, SH-02/SH-05) and the three rule tables (the tests resolve them through the
+caller supplies a prototype lookup (in play `ContentPrototypes.Read`, the base-source prototypes of the content stack the
+original reads, ARC-DATA-026; on the installed original all 13 PC prototypes and their kit items are loose in `data/proto`,
+SH-02/SH-05; `DirectoryPrototypes` over one folder is for synthetic fixtures) and the three rule tables (the tests resolve them through the
 [content stack](../research/content-precedence.md)). It creates no object and runs no script.
 
 The result is the hero **at the start of a new game** (S): `level_set(pc, 1)` keeps the prototype's race, gender,
@@ -151,7 +152,7 @@ so nothing is lost.
 names one of the twelve heroes by race and gender (main-menu order, basic prototypes 16067..16078; the list is shared
 with the launcher and checked by `test_launcher_sync.py`). During the background load it opens the module content stack
 of the game folder that holds the module archive (the description tables' rule), reads the hero with
-`PremadeHeroReader` over that folder's `data/proto` and the three rule tables, and maps it with
+`PremadeHeroReader` over the stack's prototypes (`ContentPrototypes`, ARC-DATA-026) and the three rule tables, and maps it with
 `AreaStartingHero.Definition` (the mapping above, moved out of the real-data test). Refusals are typed
 (`AreaHeroStatus`: module outside a game folder, mount or stack failure, a table absent or invalid, a reader refusal,
 an invalid flag message) and fail the viewer's load.

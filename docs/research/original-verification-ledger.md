@@ -8,7 +8,7 @@ and its verdicts decide which differences become switches of the two rule settin
 decision D8 (see [the AI plan](npc-combat-ai-plan.md#owner-decisions-2026-10-16)).
 
 The combat-core anomalies A1–A10 were checked by ARC-COMBAT-001 and are not repeated here (A11 and A12 are in
-[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030))
+[Turn-based round](#turn-based-round-arc-combat-003); the item wear rules are in [Equipment](#equipment-arc-world-028); critter art names and missing art in [Art names](#art-names-and-missing-art-arc-res-050); the effect list is in [Durable effects](#durable-effects-arc-world-029); experience and levels in [Experience and levels](#experience-and-levels-arc-world-030); the prototype load phase in [Prototype phase](#prototype-phase-arc-data-026))
 ([original check](combat-core-evidence.md#original-executable-check-arc-combat-001)). Domain
 documents keep their own tables; where a row below contradicts a domain document, this ledger is
 the newer evidence, and the domain document's "likely intent" column is superseded by the verdict.
@@ -441,6 +441,18 @@ Both readings (this task's reader and a fresh second reader) agree on every row.
 
 So a script's catalogue 4998 and a jump point's −1 both keep the current map. What a teleport
 then does to followers and the destination map (W9) is not read here.
+
+## Prototype phase (ARC-DATA-026)
+
+Source: [map catalogue prototypes](../world/map-catalog.md#prototypes) and the
+[mount sequence](content-precedence.md#mount-sequence-source-facts). Question: are prototype files read from the sources
+mounted before the module only, so that a module, its patches or its folder can never supply one? Read on 2026-10-17 by a
+first reader and, independently, a second reader that saw only the questions (method step 6); both agree on every
+behaviour below. Every direct branch of these functions stays inside `.text`.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| Prototype phase | `gamelib_init` (0x4020F0), `map_init` (0x40EA90), the map subsystem table (0x59F068), `proto_init` (0x4681B0), `gamelib_mod_load` (0x402A50), `map_mod_load` (0x40ED10) | `gamelib_init` mounts the base data (0x404A20) before its loop over the subsystem init functions; Map is one of them, and its init runs every map subsystem's init. The Proto entry of the map table has only an init (0x4681B0) and an exit: no reset, module-load or module-unload function. `proto_init` restores any missing generated prototype, then lists `proto\*.pro` and reads every listed file. `gamelib_mod_load` mounts the module (0x404C10: `.dat`, patches, folder) and only then runs the module-load functions; Map's loads `Rules\MapList.mes` and the Effect and O_Name module tables, nothing of Proto, and nothing else calls `proto_init`. So prototypes come from the base sources only and a module's copy is never read. The second reader adds that a "partial" install mounts the CD's `arcanum*.dat` (and module paths) too, which CE leaves out; those are still mounted at the same points, so the phase is unchanged. | Original (as CE) |
 
 ## Decisions to revisit
 

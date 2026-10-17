@@ -175,21 +175,19 @@ internal static partial class Program
             module_table = tables.TryGetValue("rules/gameeffect.mes", out var effectModule) ? CcEffectCensus(effectModule, 0, 49) : null,
         };
 
-        // 5. Prototypes through the catalogue (stack winners) and the combat-field reader.
+        // 5. Prototypes through the catalogue (the base files the original reads, ARC-DATA-026) and the combat-field reader.
         var catalog = WorldCatalog.Open(stack);
         var prototypeObjects = new Dictionary<int, WorldObject>();
         var prototypeFields = new Dictionary<int, CombatFields>();
-        var prototypeLayers = new CensusTally(); var prototypeShadowed = 0; var prototypeRefusals = new CensusTally();
+        var prototypeLayers = new CensusTally(); var prototypeRefusals = new CensusTally();
         PrototypeFile Lookup(int number)
         {
-            if (catalog.PrototypePath(number) is not { } path || stack.Resolve(path).Winner is not { } winner) return new(PrototypeFileStatus.Missing, null);
-            return Read(winner, "prototype") is { } bytes ? new(PrototypeFileStatus.Found, bytes) : new(PrototypeFileStatus.Unreadable, null);
+            if (catalog.Prototypes.Candidate(number) is not { } candidate) return catalog.Prototypes.Read(number);
+            return Read(candidate, "prototype") is { } bytes ? new(PrototypeFileStatus.Found, bytes) : new(PrototypeFileStatus.Unreadable, null);
         }
         foreach (var number in catalog.PrototypeNumbers.Order())
         {
-            var resolution = stack.Resolve(catalog.PrototypePath(number)!);
-            prototypeLayers.Add(CcLayer(resolution.Winner!.Source));
-            if (CcIsModule(resolution.Winner.Source.Role)) prototypeShadowed++;
+            prototypeLayers.Add(CcLayer(catalog.Prototypes.Candidate(number)!.Source));
             var read = catalog.ReadPrototype(number);
             if (read.Prototype is null) { prototypeRefusals.Add($"catalog|{read.Issue?.Code}"); continue; }
             prototypeObjects[number] = read.Prototype;
@@ -213,7 +211,7 @@ internal static partial class Program
         {
             module = stack.Plan.ModuleName,
             files,
-            prototype_layers = new { winners = prototypeLayers.Snapshot(), shadowed_by_module = prototypeShadowed },
+            prototype_layers = new { winners = prototypeLayers.Snapshot(), ignored_module_copies = catalog.Prototypes.IgnoredModuleKeys.Count },
             ai = new { base_table = baseAi, module_table = moduleAi },
             spells,
             effects,

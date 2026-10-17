@@ -85,7 +85,7 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   (ARC-SCRIPT-011): `script_name_init` 0x4CEC10 keeps numbers ≥ 1000, `script_name_mod_load`
   0x4CECE0 keeps 1..999, both replace an earlier name and report the duplicate, and
   `script_name_build_scr_name` 0x4CEDC0 looks up ≥ 1000 in the first table and 1..999 in
-  the second. The mount timing is CE's (not re-read in the executable): `gamelib_init`
+  the second. The mount timing (checked in the executable by ARC-DATA-026): `gamelib_init`
   loads the base data ([`gamelib.c` 330](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L330)) before it runs the init functions
   ([381](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L381)), and `gamelib_mod_load` mounts the module ([662–673](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L662-L673)) before
   it runs the module-load functions ([710](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c#L710)).
@@ -93,6 +93,11 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   ([`script_name.c` 185–209](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c#L185-L209)); the `dlg\*.dlg`
   listing in [`dialog.c` 2968](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2968) is a debug check only. Both
   files are then opened through the rule above ([`script.c` 3440](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L3440)).
+- Prototypes (`proto\*.pro`) are all listed and read once at game start, before the
+  module is mounted, and never at module load: only `tig.dat`, the game folder,
+  `arcanum*.dat` and `data/` count for them, and a module's copy is never read.
+  Checked in the 1.0.7.4 executable (ARC-DATA-026, ledger row "Prototype phase");
+  implemented by `ContentPrototypes` ([map catalogue](../world/map-catalog.md#prototypes)).
 
 **Derivation.** On a static installation, a folder above the topmost archive that holds
 a name is, by construction, earlier in search order than that archive; if no folder

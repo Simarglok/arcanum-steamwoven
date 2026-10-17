@@ -22,7 +22,8 @@ read-only, and it never prints or returns MES/DLG text.
 | `ReadSector(map, coordinate)` | `maps/<name>/<id>.sec` | all five sector versions: lights, 4,096 tile words, roof words, tile scripts, sector script, metadata/sound and block mask as raw words, and v119 objects of types 0..17 |
 | `ReadMobiles(map)` | the game-generated aggregate `maps/<obfuscated name>` when present, else the editor `.mob` files | objects plus the source used |
 | `ReadTerrain(map)` | the whole `terrain.tdf` | one 16-bit word per sector, raw or one zlib row per grid row |
-| `ReadPrototype(number)` | `proto/NNNNNN - *.pro` | the prototype record |
+| `ReadPrototype(number)` | `proto/NNNNNN - *.pro` from the base sources ([prototypes](#prototypes)) | the prototype record |
+| `Prototypes` | the same files | the shared `ContentPrototypes` index: numbers, the source each is read from, `Read(number)` as a `PrototypeFile` |
 
 `WorldSectorCoordinate` packs a sector as `X | Y << 26`;
 `WorldLocation.FromPacked` unpacks a tile location as `X | Y << 32`;
@@ -38,7 +39,10 @@ A failure refuses the smallest unit that can be skipped, never the catalogue:
   `WorldCatalog.Issues` with the reason (missing, too large, malformed).
 - A `proto/*.pro` file whose name is not `NNNNNN - label.pro` is listed as
   `UnrecognisedFile` (the original loads it anyway, so it must not vanish
-  silently); two files with one number are listed as `Malformed`.
+  silently); two files with one number are each listed as `Malformed`, and that
+  number reads from neither (`ReadPrototype` gives a `Malformed` issue). A copy
+  in the module archive, a module patch or the module folder is listed as
+  `IgnoredModuleCopy` ([prototypes](#prototypes)).
 - A malformed small file (`terrain.tdf` header, `startloc.txt`, `mapinfo.txt`,
   `map.jmp`) leaves its value null or empty and adds a map issue. Unknown files
   in a map folder, including any in a subfolder, are listed as `UnrecognisedFile`.
@@ -50,6 +54,27 @@ A failure refuses the smallest unit that can be skipped, never the catalogue:
 Limits are explicit in `WorldLoaderOptions` (sector, wire, aggregate, terrain,
 jump-point and small-file bounds) and default above the largest observed values;
 options that would let a derived size leave an array or Int32 offset are refused.
+
+## Prototypes
+
+ARC-DATA-026. `Arcanum.Data.Content.ContentPrototypes` is the one prototype
+source of every gameplay reader: this catalogue, [whole-map plans](whole-map-plans.md),
+the [pre-made hero](starting-hero-runtime.md) and the
+[combat fields](../formats/combat-fields.md) (`ContentPrototypes.Read` is the
+`Func<int, PrototypeFile>` lookup those readers take). The original lists and
+reads every `proto\*.pro` once while the game initialises, before it mounts the
+module, and keeps them for the process: the map subsystem's Proto entry has an
+init function and no module-load function (checked in the 1.0.7.4 executable,
+[ledger](../research/original-verification-ledger.md#prototype-phase-arc-data-026)
+row "Prototype phase"). So a prototype is read from the base sources only —
+`data/`, `arcanum*.dat`, the game folder and `tig.dat`, the first of them in
+search order — and a module's copy is never read, also not when no base copy
+exists. A file larger than 64 KiB is `TooLarge`. `PremadeHeroReader.DirectoryPrototypes`
+(one loose folder) remains for synthetic fixtures only. On the installed
+original all 1,423 prototypes are loose in `data/proto` and the module holds
+none, so every read is unchanged (opt-in `ContentPrototypesRealDataTests`
+compares every file, every combat-field read and all 13 PC prototypes with the
+one-folder lookup).
 
 ## Leniency matches the original
 
@@ -87,7 +112,9 @@ header (1.8 MB for the main map); this costs time, not correctness.
   loose-file installations covering missing and malformed map files, refused
   sectors and object records, trailing object bytes, the map and option limits,
   prototype names, the lenient small-file rules, terrain decoding, aggregate and
-  editor mobiles, prototype lookup and stack shadowing.
+  editor mobiles, prototype lookup and stack shadowing; base-source order,
+  ignored module copies, duplicates, names and sizes of prototypes
+  (`tests/Arcanum.Data.Tests/Content/ContentPrototypesTests.cs`).
 - Opt-in `RealData` tests with `DAT_ROOT`: all 81 maps of `Arcanum` (1,680
   sectors, 263,902 objects, 12,723 aggregate mobiles, 1,423 prototypes, 45 jump
   points, the 2,000 × 2,000 grid) read without refusals in about one second;

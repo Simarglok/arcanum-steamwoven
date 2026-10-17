@@ -908,8 +908,8 @@ heroes. `NAME` is the project's race-gender name in main-menu order: `halfling-m
 `half-ogre-male`, `elf-male`, `human-male`, `half-orc-male`, `dwarf-male`, `human-female`, `elf-female`,
 `half-orc-female`, `half-elf-female` (basic prototypes 16067..16078). Without it the session has no hero and dialogs use
 the diagnostic PC profile, as before. The background load reads the hero from the game folder that holds the module
-archive (`<game>/modules/<Name>.dat`, the description tables' rule; no extra argument): the loose `data/proto`
-prototype, `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes` and the hero's flag number from
+archive (`<game>/modules/<Name>.dat`, the description tables' rule; no extra argument): the hero prototype from the
+content stack's base sources (`ContentPrototypes`, ARC-DATA-026), `rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes` and the hero's flag number from
 `mes\MainMenu.mes` message 551 + index. Any refusal fails the load (`AREA_HERO_<status>`); there is no silent fallback to
 the diagnostic profile.
 
