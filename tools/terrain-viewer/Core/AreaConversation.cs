@@ -68,6 +68,7 @@ public sealed class AreaConversationHost
     private readonly string _contentDetail;
     private readonly AreaInventoryHost? _inventory;
     private readonly bool _party;
+    private readonly AreaConversationProfile _baseProfile;
 
     /// <param name="inventory">ARC-UI-004: when it covers this map, negative IN moves the item in the session inventory
     /// (<see cref="SessionDialogInventoryPort"/>); otherwise IN is only recorded in <see cref="AreaConversationState.Items"/>.</param>
@@ -84,7 +85,10 @@ public sealed class AreaConversationHost
         _session = session ?? throw new ArgumentNullException(nameof(session));
         _content = content;
         _contentDetail = contentDetail ?? throw new ArgumentNullException(nameof(contentDetail));
-        Profile = profile ?? AreaConversationProfile.Diagnostic;
+        // ARC-WORLD-027: a session with a hero talks with the hero's own gender, intelligence and race (DLG gates);
+        // the given profile keeps the names, reaction and reach. Rebind applies the same rule to the new session.
+        _baseProfile = profile ?? AreaConversationProfile.Diagnostic;
+        Profile = session.QueryHeroDialogFacts() is { } hero ? _baseProfile with { Pc = hero } : _baseProfile;
         _inventory = inventory is not null && inventory.Covers(snapshot.RuntimeMap) ? inventory : null;
         Speakers = FindSpeakers(snapshot);
         _party = party;
@@ -98,10 +102,11 @@ public sealed class AreaConversationHost
     public bool PartyWired => _party;
 
     /// <summary>
-    /// A host over another session (a quick load replaced the area session): same area, content and profile.
+    /// A host over another session (a quick load replaced the area session): same area, content and given profile; the
+    /// PC facts follow the new session's hero (ARC-WORLD-027).
     /// Throws <see cref="ArgumentException"/> when that session holds dialog values the state ports cannot read.
     /// </summary>
-    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, Profile, _inventory, _party, _contentDetail);
+    public AreaConversationHost Rebind(GameSessionOwner session) => new(_snapshot, _content, session, _baseProfile, _inventory, _party, _contentDetail);
 
     /// <summary>True when negative IN goes to the session inventory.</summary>
     public bool InventoryWired => _inventory is not null;

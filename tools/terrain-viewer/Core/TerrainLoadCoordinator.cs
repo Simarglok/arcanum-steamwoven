@@ -37,6 +37,8 @@ public sealed record TerrainLoadResult(long Generation, TerrainScenePlan Plan, I
     public AreaLoadResult? Area { get; init; }
     /// <summary>ARC-WORLD-009: the cave map loaded with the area when its object file is given.</summary>
     public AreaCaveLoad? Cave { get; init; }
+    /// <summary>ARC-WORLD-027: the pre-made hero the session starts as (ready), when <c>--hero</c> is given.</summary>
+    public AreaHeroLoad? Hero { get; init; }
 }
 
 /// <summary>The cave's strict snapshot, scene, frames and step evidence, bound to the same generation.</summary>
