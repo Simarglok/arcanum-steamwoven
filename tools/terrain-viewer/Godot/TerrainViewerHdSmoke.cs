@@ -38,7 +38,7 @@ public partial class TerrainViewerApp
         await HdIdentitySmokeAsync("AREA", bodies.Concat(actor).Concat(chunks).ToArray(), views, () => _canvas!.AreaHdStats,
             $"bodies={bodies.Length} (walls {walls}) actor={actor.Length} chunks={chunks.Length}",
             // Identity alone would also pass if chunks were silently not candidates: a level-0 chunked view must bind HD chunks.
-            name => _canvas!.AreaChunkCount > 0 && _canvas.AreaChunkLevel == 0 && _canvas.HdTerrainResidentCount == 0 ? "HD_SMOKE_NO_HD_CHUNKS:" + name : null);
+            name => _canvas!.AreaChunkCount > 0 && _canvas.AreaChunkLevel == 0 && _canvas.HdTerrainVisibleCount == 0 ? "HD_SMOKE_NO_HD_CHUNKS:" + name : null);
     }
 
     private async Task RunWorldHdSmokeAsync(TerrainLoadResult result)

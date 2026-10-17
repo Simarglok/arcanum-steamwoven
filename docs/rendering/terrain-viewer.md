@@ -796,7 +796,7 @@ the whole window to equal Legacy with no fallback:
 body frames and 55 actor frames (105 since ARC-WORLD-020 adds the run ART: 164 frames), 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
 0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
 22 MB resident at 4×, first bind 90 ms; since ARC-RENDER-016 also every level-0 chunk the four
-views can show: 53 chunks, 262 pack frames and 20 MB of PNG written in 5.7 s, no fallback in any view, up to 100 HD draws per view, 45 HD textures and 274 MB resident at 4× (15 terrain chunks, 252 MB, under the terrain budget), first bind 0.6–0.8 s; the smoke also requires the HD chunk residency to be non-empty in every level-0 chunked view) and `ARC-RENDER-014 native-smoke WORLD HD identity
+views can show: 53 chunks, 262 pack frames and 20 MB of PNG written in 5.7 s, no fallback in any view, up to 100 HD draws per view, 45 HD textures and 274 MB resident at 4× (15 terrain chunks, 252 MB, under the terrain budget), first bind 0.6–0.8 s; the smoke also requires HD chunks to be bound in every level-0 chunked view) and `ARC-RENDER-014 native-smoke WORLD HD identity
 PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: other GPUs and handhelds, human review (ARC-RENDER-015). A real upscaled pack
 of the Crash Site (generative characters and objects, x4plus terrain chunks and walls) was
 built and looked at locally (ARC-RES-038, ARC-RENDER-016), outside the repository; the

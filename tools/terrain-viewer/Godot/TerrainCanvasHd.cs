@@ -49,6 +49,8 @@ public partial class TerrainCanvas
     /// <summary>Resident HD terrain chunks and their bytes (ARC-RENDER-016).</summary>
     public int HdTerrainResidentCount => _hdTerrain?.Count ?? 0;
     public long HdTerrainResidentBytes => _hdTerrain?.Bytes ?? 0;
+    /// <summary>HD terrain chunks bound by the last AREA submission (not kept ones).</summary>
+    internal int HdTerrainVisibleCount => _hdTerrain?.VisibleFrames ?? 0;
     internal long HdCreatedCount => (_hdArea?.CreatedCount ?? 0) + (_hdTerrain?.CreatedCount ?? 0) + (_hdWorld?.CreatedCount ?? 0);
     internal long HdDisposedCount => (_hdArea?.DisposedCount ?? 0) + (_hdTerrain?.DisposedCount ?? 0) + (_hdWorld?.DisposedCount ?? 0);
     internal long HdAreaVisibleBytes => _hdArea?.VisibleBytes ?? 0;
@@ -182,7 +184,7 @@ public partial class TerrainCanvas
             var command = draw[index];
             if (_areaChunkCommands.TryGetValue(command, out var chunk))
             {
-                // Decimated chunks (zoom below 1) draw Legacy and are not candidates.
+                // Decimated chunks (zoom 2^-k with an integer origin) draw Legacy and are not candidates.
                 if (AreaChunkLevel != 0) continue;
                 // Without a usable pack or without chunk entries no chunk is composed for a question.
                 var refused = source.Pack is not { } pack ? HdFallbackReason.NoPack : pack.Review == HdReviewStatus.Rejected ? HdFallbackReason.PackRejected
