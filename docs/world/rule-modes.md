@@ -70,7 +70,7 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Event queue | `GameEventQueueProfile` | `PoisonRecoveryTwice` | TE10 | from the second recovery tick on, poison recovers twice every 120 s (ARC-WORLD-024 life timers) |
 | Scripts | `ScrRuleProfile` | `GlobalFlagWriteSpills` | X10 | a value written into a global flag is ORed, shifted, into the flag's 32-flag word (ARC-SCRIPT-008) |
 | Scripts | `ScrRuleProfile` | `TileScriptChangesDiscarded` | X3, tile | a tile script's changes to its own number, flags and counters are not stored (ARC-SCRIPT-008) |
-| NPC reaction | `ReactionRuleProfile` | `FollowerHitRaisesReaction` | reputation A2 | a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction (Steamwoven lowers it; ARC-WORLD-026) |
+| NPC reaction | `ReactionRuleProfile` | `FollowerHitRaisesReaction` | reputation A2 | a deliberate hit by the PC on its own follower adds AI parameter 9 to the follower's reaction (Steamwoven lowers it as an ordinary drop, so an extraordinary-charisma leader is immune and other followers get the "check leader" mark; ARC-WORLD-026) |
 | Scripts | `ScrRuleProfile` | `CallDelayWraps` | TE1 | a call script in delay is computed in 32 bits (wraps above 536,870 s; a negative count gives weeks) (ARC-SCRIPT-010) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;

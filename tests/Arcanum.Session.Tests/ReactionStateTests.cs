@@ -77,6 +77,12 @@ public sealed class ReactionStateTests
         Assert.AreEqual(31, View(owner, pc: gnomish).Effective);
         var same = owner.SetReaction(owner.Version, Virgil, Human60, gnomish, 31);
         Assert.AreEqual((GameSessionDisposition.NoChange, ReactionSkip.ZeroDelta), (same.Disposition, same.Adjustment!.Value.Skip));
+        // Set-to reads the standard value, not the hostility variant: a dark elf's −30 and beauty −65 are not floored to −49.
+        var ugly = Pc with { ReactionModifier = -65 };
+        var darkElf = Human60 with { Race = CharacterRace.DarkElf };
+        Changed(owner.SetReaction(owner.Version, "oid:drow", darkElf, ugly, 0), owner, 3);
+        Assert.AreEqual(0, owner.QueryReaction("oid:drow", darkElf, ugly).View!.Effective);
+        Assert.AreEqual(new SessionReaction("oid:drow", 95, null), owner.QueryReactionRecord("oid:drow"));
     }
 
     [TestMethod]
@@ -117,6 +123,10 @@ public sealed class ReactionStateTests
         Assert.AreEqual(100, View(owner).Stored);
         Assert.AreEqual(GameSessionDisposition.NoChange,
             owner.BeginReactionConversation(owner.Version, Virgil, Human60, forceGoodReaction: true).Disposition, "already 100");
+        // A second begin keeps the open conversation's value, not the remembered one or the base.
+        Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, -30), owner, 2);
+        Assert.AreEqual(GameSessionDisposition.NoChange, owner.BeginReactionConversation(owner.Version, Virgil, Human60).Disposition);
+        Assert.AreEqual(new SessionReaction(Virgil, null, 70), owner.QueryReactionRecord(Virgil));
         using var other = Create();
         Changed(other.EndReactionConversation(other.Version, Virgil, Human60), other, 1);
         Assert.AreEqual(new SessionReaction(Virgil, 60, null), other.QueryReactionRecord(Virgil), "as the source: met before");
@@ -149,7 +159,7 @@ public sealed class ReactionStateTests
         var revision = owner.Version.Revision;
         var steamwoven = Changed(owner.ReactToPcHit(owner.Version, Virgil, Human60, Pc, Row, deliberate: true), owner, revision + 1);
         Assert.IsTrue(steamwoven.FollowCheck);
-        Assert.AreEqual(-5, steamwoven.Adjustment!.Value.Delta);
+        Assert.AreEqual(new ReactionAdjustment(ReactionSkip.None, -5, true), steamwoven.Adjustment, "the fix is a drop: it checks the leader");
         Assert.AreEqual(55, View(owner).Effective);
         // The mode switch moves no revision and converts nothing; the next hit follows the original's rise.
         Assert.AreEqual(GameSessionDisposition.Changed, owner.SelectRules(RuleMode.Original));
@@ -157,10 +167,31 @@ public sealed class ReactionStateTests
         var original = Changed(owner.ReactToPcHit(owner.Version, Virgil, Human60, Pc, Row, deliberate: true), owner, revision + 2);
         Assert.AreEqual(5, original.Adjustment!.Value.Delta);
         Assert.AreEqual(60, View(owner).Effective);
+        Assert.IsFalse(original.Adjustment!.Value.LeaderCheck, "a rise never checks the leader");
         // An accidental hit only asks for the follow check.
         var accidental = owner.ReactToPcHit(owner.Version, Virgil, Human60, Pc, Row, deliberate: false);
         Assert.AreEqual((GameSessionDisposition.NoChange, true), (accidental.Disposition, accidental.FollowCheck));
         Assert.IsNull(accidental.Adjustment);
+    }
+
+    [TestMethod]
+    public void TheSteamwovenFollowerHitIsADropWithTheDropRules()
+    {
+        using var owner = Create();
+        Assert.AreEqual(GameSessionDisposition.Changed, owner.ForceJoinParty(owner.Version, Virgil).Disposition);
+        // An extraordinary-charisma leader is immune to drops, so the fix changes nothing for it; the follow check still runs.
+        var charming = owner.ReactToPcHit(owner.Version, Virgil, Human60, Pc with { ExtraordinaryCharisma = true }, Row, true);
+        Assert.AreEqual((GameSessionDisposition.NoChange, ReactionSkip.LeaderCharisma, true),
+            (charming.Disposition, charming.Adjustment!.Value.Skip, charming.FollowCheck));
+        Assert.AreEqual(60, View(owner).Effective);
+        // A refused write past the bound still reports the follow check.
+        Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, -1_000_000), owner, 2);
+        Assert.AreEqual(-999_940, View(owner).Stored);
+        Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, -60), owner, 3);
+        var bound = owner.ReactToPcHit(owner.Version, Virgil, Human60, Pc, Row, true);
+        Assert.AreEqual((GameSessionDisposition.Rejected, GameSessionFailure.InvalidReactionAmount, true),
+            (bound.Disposition, bound.Failure, bound.FollowCheck));
+        Assert.AreEqual(3, owner.Version.Revision);
     }
 
     [TestMethod]
@@ -210,6 +241,12 @@ public sealed class ReactionStateTests
         Refused(owner.BeginReactionConversation(owner.Version, Virgil, null!), owner, GameSessionFailure.InvalidReactionFacts, 0);
         Refused(owner.ForgetReaction(owner.Version, ""), owner, GameSessionFailure.InvalidReactionTarget, 0);
         Assert.ThrowsExactly<ArgumentException>(() => owner.QueryReactionRecord("bad id"));
+        // The order is entity, facts, version, amount, whatever else is wrong.
+        var old = owner.Version with { Revision = 7 };
+        Refused(owner.SetReaction(old, "bad id", Human60, Pc, 2_000_000), owner, GameSessionFailure.InvalidReactionTarget, 0);
+        Refused(owner.SetReaction(old, Virgil, Human60, Pc, 2_000_000), owner, GameSessionFailure.StaleVersion, 0);
+        Refused(owner.ReactToPcHit(old, "bad id", Human60, Pc, new(2_000_000, 0), true), owner, GameSessionFailure.InvalidReactionTarget, 0);
+        Refused(owner.ReactToPcHit(old, Virgil, Human60, Pc, new(2_000_000, 0), true), owner, GameSessionFailure.InvalidReactionFacts, 0);
         // A stored value beyond ±1,000,000 is refused, not wrapped.
         Changed(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, 999_940), owner, 1);
         Refused(owner.AdjustReaction(owner.Version, Virgil, Human60, Pc, 1), owner, GameSessionFailure.InvalidReactionAmount, 1);

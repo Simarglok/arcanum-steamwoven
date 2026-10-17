@@ -164,7 +164,8 @@ D2: the Steamwoven mode applies one tick per period, the Original mode keeps two
 
 ### Snapshot schema 9
 
-`events` is encoded between `life` and `lighting`:
+`events` is encoded between `life` and `lighting` (since schema 10 `reactions` sits between `life` and `events`,
+[NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)):
 
 ```json
 "events":{"registry":1,"nextSequence":3,"pending":[

@@ -206,5 +206,12 @@ public sealed class ReactionRulesTests
         Assert.AreEqual(90, ReactionRules.ApplyEffects(100, all), "maximum last");
         Assert.AreEqual(10, ReactionRules.ApplyEffects(-20, all), "minimum");
         Assert.AreEqual(-7, ReactionRules.ApplyEffects(-15, [new(StatModifierOperator.Divide, 2)]), "truncates toward zero");
+        // Several of a kind: percents sum, the highest minimum and the lowest maximum win.
+        Assert.AreEqual(130, ReactionRules.ApplyEffects(100, [new(StatModifierOperator.Percent, 10), new(StatModifierOperator.Percent, 20)]));
+        ReactionModifier[] bounds = [new(StatModifierOperator.Minimum, 10), new(StatModifierOperator.Minimum, 30),
+            new(StatModifierOperator.Maximum, 80), new(StatModifierOperator.Maximum, 60)];
+        Assert.AreEqual(30, ReactionRules.ApplyEffects(0, bounds));
+        Assert.AreEqual(60, ReactionRules.ApplyEffects(100, bounds));
+        Assert.AreEqual(45, ReactionRules.ApplyEffects(45, bounds));
     }
 }

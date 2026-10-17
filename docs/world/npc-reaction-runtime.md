@@ -32,7 +32,7 @@ condition and the AI consumers are not part of it ([Not ready](#not-ready)).
 | `ReactionRules.DeltaTo(target, effective)` | "Set to *v*" is the delta `v − effective`, then `Adjust`. |
 | `ReactionRules.ConversationStart(stored, force)` | 100 when the stored value is below 100 and the "force good reaction" fate point is spent. |
 | `ReactionRules.PcHit(stored, npc, pc, ai, ledByPc, deliberate, profile)` | Follower of the attacker: deliberate hit ± AI parameter 9 (A2, below), accidental nothing; the follow check runs either way. Any other NPC: accidental −10; deliberate lowers it to parameter 10 when its hostility-variant reaction is above it. |
-| `ReactionRules.ApplyEffects(value, effects)` | Percent, multiply, divide, add, minimum, maximum, as the character stats owner aggregates stat effects. |
+| `ReactionRules.ApplyEffects(value, effects)` | Percent, multiply, divide, add, minimum, maximum, as the character stats owner aggregates stat effects. The source uses −1 as "no minimum/maximum", so a written `min -1` or `max -1` is ignored there; Steamwoven applies it, like the stats owner (latent: no reaction effect of the data is known to use it). |
 | `ReactionRuleProfile` | Rule-mode profile: `Steamwoven`, `Original`, `All`, `FromName`; switch `FollowerHitRaisesReaction`. |
 
 Inputs are explicit records. `ReactionNpcFacts`: reaction base, race, aloof, monstrous, PC on the enemy list, mind
@@ -60,16 +60,22 @@ Single PC: the source's ten-slot memory with eviction of the slot closest to 50 
 | `ForgetReaction(version, entity)` | Clears the remembered slot; an open conversation keeps its slot. |
 
 Every mutation takes the expected version and refuses in this order: entity (`InvalidReactionTarget`), facts
-(`InvalidReactionFacts`), version (`StaleVersion`), the requested delta or target and the new stored value
-(`InvalidReactionAmount` beyond ±1,000,000), then NoChange (a skip or an unchanged record, with the `Adjustment` still
-reported), the record budget (`GameSessionLimits.MaxReactionRecords`, policy 4096, `BudgetExceeded`) and the revision
-capacity. One revision per changed record; a record back at the baseline is removed.
+(`InvalidReactionFacts`, also AI parameters of a hit beyond the bounds), version (`StaleVersion`), the requested delta or
+target and the new stored value (`InvalidReactionAmount` beyond ±1,000,000), then NoChange (a skip or an unchanged record,
+with the `Adjustment` still reported), the record budget (`GameSessionLimits.MaxReactionRecords`, policy 4096, `BudgetExceeded`) and the revision
+capacity. One revision per changed record; a record back at the baseline is removed. A hit's `FollowCheck` is reported
+whenever the hit was decided, also when its reaction write is then refused, because the source runs the follow check
+whatever the write does.
 
 ## Rule modes
 
 | Ledger ID | Original | Steamwoven | Switch |
 | --- | --- | --- | --- |
 | Reputation A2 | A deliberate hit on a follower adds parameter 9 | lowers it by parameter 9 (owner decision 2026-10-17) | `ReactionRuleProfile.FollowerHitRaisesReaction` |
+
+The Steamwoven drop is an ordinary negative change, so the negative rules of `Adjust` apply to it as if the original had
+subtracted: a leader with extraordinary charisma is immune (no change at all), any other follower gets the "check
+leader" mark, which the Original rise never sets; the follow check runs in both modes.
 | R1 effect owner | the PC's `reaction` effects | the same (CE slip, no switch) | none |
 | LM12 race table | unchecked index | refused in both (no out-of-bounds) | none |
 
@@ -105,12 +111,13 @@ open or close the conversation slot, so every change lands in the remembered slo
 - `Arcanum.Simulation.Tests/Reaction/ReactionRulesTests`: the race table (cells and the sum of all 88), each term of the
   effective value varied alone, aloof and monstrous, enemy list, mind-control floor after the PC's effects, the
   hostility floor, category boundaries, every skip of `Adjust` and the effect sign, set-to and the fate point, the hit
-  rules in both profiles, profile names, invalid facts, effect order.
+  rules in both profiles, profile names, invalid facts, effect order with several minimums, maximums and percents.
 - `Arcanum.Session.Tests/ReactionStateTests`: base without a record, remembered after a change (also a change reduced to
-  0), set-to as a delta under PC effects, the conversation slot through begin, change, forget and end, the fate point,
-  the party's leader rules (following and waiting), a follower hit under both modes switched between calls, a hit on
-  another NPC, the hero's facts, typed refusals and stale versions, the record budget, canonical text and restore,
-  decode and restore refusals. `RuleModeTests` checks the profile in `GameRules`.
+  0), set-to as a delta under PC effects and from the standard (not hostility) value, the conversation slot through begin,
+  a second begin, change, forget and end, the fate point, the party's leader rules (following and waiting), a follower hit
+  under both modes switched between calls, the Steamwoven drop under an extraordinary-charisma leader and at the bound
+  (follow check kept), a hit on another NPC, the hero's facts, typed refusals in their order and stale versions, the record
+  budget, canonical text and restore, decode and restore refusals. `RuleModeTests` checks the profile in `GameRules`.
 - `Arcanum.TerrainViewer.Tests/AreaConversationTests`: the dialog reaction is a session reaction record, not a map change.
 
 ## Not ready

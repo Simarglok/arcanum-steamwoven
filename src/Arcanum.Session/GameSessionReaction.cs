@@ -40,7 +40,8 @@ public sealed record SessionReactionQueryResult(GameSessionFailure Failure, Sess
 /// <summary>
 /// What a reaction change did. <see cref="Adjustment"/> is set whenever a change was decided, also for NoChange (a skipped
 /// change, or an unchanged record); <see cref="FollowCheck"/> asks the caller to re-run a hit follower's follow check
-/// (<see cref="GameSessionOwner.ReactToPcHit"/>). Both are null/false for a refusal and for the conversation and forget steps.
+/// (<see cref="GameSessionOwner.ReactToPcHit"/>), also when the reaction write is refused after the hit was decided (a new
+/// value beyond the bounds). Otherwise both are null/false for a refusal and for the conversation and forget steps.
 /// </summary>
 public sealed record SessionReactionResult(GameSessionDisposition Disposition, GameSessionFailure Failure,
     ReactionAdjustment? Adjustment, bool FollowCheck, GameSessionVersion Version);
@@ -129,9 +130,8 @@ public sealed partial class GameSessionOwner
         int target)
     {
         ThrowIfDisposed();
-        if (!ReactionLimits.InRange(target)) return RejectReaction(GameSessionFailure.InvalidReactionAmount);
         return ChangeReaction(expected, entity, npc, pc,
-            stored => ReactionRules.DeltaTo(target, ReactionRules.Effective(stored, npc, pc)));
+            stored => ReactionRules.DeltaTo(target, ReactionRules.Effective(stored, npc, pc)), validAmount: ReactionLimits.InRange(target));
     }
 
     /// <summary>
@@ -144,8 +144,7 @@ public sealed partial class GameSessionOwner
         ReactionHitFacts ai, bool deliberate)
     {
         ThrowIfDisposed();
-        if (!ReactionLimits.InRange(ai.FollowerHitAdjustment) || !ReactionLimits.InRange(ai.HostileReaction))
-            return RejectReaction(GameSessionFailure.InvalidReactionFacts);
+        var validAi = ReactionLimits.InRange(ai.FollowerHitAdjustment) && ReactionLimits.InRange(ai.HostileReaction);
         var profile = _rules.Reaction;
         var follow = false;
         return ChangeReaction(expected, entity, npc, pc, stored =>
@@ -153,7 +152,7 @@ public sealed partial class GameSessionOwner
             var hit = ReactionRules.PcHit(stored, npc, pc, ai, LedByPc(entity), deliberate, profile);
             follow = hit.FollowCheck;
             return hit.Delta;
-        }, () => follow);
+        }, () => follow, validAi);
     }
 
     /// <summary>
@@ -187,23 +186,26 @@ public sealed partial class GameSessionOwner
 
     private bool LedByPc(string entity) => _party.Get(entity).LedByPc;
 
-    // Every change: target, facts and version checks, then the delta (none: NoChange), its range, the rules, the new stored
-    // value's range, then the record budget and revision capacity.
+    // Every change: target, facts and version checks, then the requested amount, the delta (none: NoChange), its range, the
+    // rules, the new stored value's range, then the record budget and revision capacity. Once a hit is decided its follow
+    // check is reported even when the reaction write is refused, as the source runs the check whatever the write does.
     private SessionReactionResult ChangeReaction(GameSessionVersion expected, string entity, ReactionNpcFacts npc, ReactionPcFacts pc,
-        Func<int, long?> delta, Func<bool>? followCheck = null)
+        Func<int, long?> delta, Func<bool>? followCheck = null, bool validFacts = true, bool validAmount = true)
     {
         var failure = ResolveReaction(entity, npc, pc, out var record);
+        if (failure == GameSessionFailure.None && !validFacts) failure = GameSessionFailure.InvalidReactionFacts;
         if (failure != GameSessionFailure.None) return RejectReaction(failure);
         if (!IsCurrent(expected)) return RejectReaction(GameSessionFailure.StaleVersion);
+        if (!validAmount) return RejectReaction(GameSessionFailure.InvalidReactionAmount);
         var stored = record.Stored(npc.BaseReaction);
         var requested = delta(stored);
         var follow = followCheck?.Invoke() ?? false;
         if (requested is not { } value) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, null, follow, Version);
-        if (!ReactionLimits.InRange(value)) return RejectReaction(GameSessionFailure.InvalidReactionAmount);
+        if (!ReactionLimits.InRange(value)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
         var adjustment = ReactionRules.Adjust((int)value, npc, pc, LedByPc(entity));
         if (!adjustment.Applies) return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
         var next = (long)stored + adjustment.Delta;
-        if (!ReactionLimits.InRange(next)) return RejectReaction(GameSessionFailure.InvalidReactionAmount);
+        if (!ReactionLimits.InRange(next)) return RejectReaction(GameSessionFailure.InvalidReactionAmount, follow);
         var updated = record.InConversation ? record with { Conversation = (int)next } : record with { Remembered = (int)next };
         return Commit(expected, updated, adjustment, follow);
     }
@@ -222,8 +224,8 @@ public sealed partial class GameSessionOwner
         var recorded = _reactions.Records.TryGetValue(next.Entity, out var current);
         if (recorded ? current == next : next.IsBaseline)
             return new(GameSessionDisposition.NoChange, GameSessionFailure.None, adjustment, follow, Version);
-        if (!recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded);
-        if (_revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted);
+        if (!recorded && _reactions.Records.Count >= _limits.MaxReactionRecords) return RejectReaction(GameSessionFailure.BudgetExceeded, follow);
+        if (_revision == long.MaxValue) return RejectReaction(GameSessionFailure.RevisionExhausted, follow);
         if (next.IsBaseline) _reactions.Records.Remove(next.Entity);
         else _reactions.Records[next.Entity] = next;
         _revision++;
@@ -239,8 +241,8 @@ public sealed partial class GameSessionOwner
         return GameSessionFailure.None;
     }
 
-    private SessionReactionResult RejectReaction(GameSessionFailure failure) =>
-        new(GameSessionDisposition.Rejected, failure, null, false, new(_identity, _revision));
+    private SessionReactionResult RejectReaction(GameSessionFailure failure, bool follow = false) =>
+        new(GameSessionDisposition.Rejected, failure, null, follow, new(_identity, _revision));
 
     // Records are unique, in ordinal order, not at the baseline, in range and within the caller's budget.
     private static GameSessionFailure ImportReactions(SessionReactionState saved, GameSessionLimits limits, out ReactionDomain reactions)
