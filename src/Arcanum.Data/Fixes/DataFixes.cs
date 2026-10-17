@@ -41,6 +41,9 @@ public sealed record DataFixProfile
     /// <summary>The setting with this name, or null when there is none.</summary>
     public static DataFixProfile? FromName(string? name) => All.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.Ordinal));
 
+    /// <summary>The ledger rows this profile has a switch for; a catalogue refuses a fix for any other row.</summary>
+    public static IReadOnlySet<string> Rows { get; } = new HashSet<string>(StringComparer.Ordinal) { "DF1", "DF2", "DF3" };
+
     /// <summary>Whether the fixes of a ledger row apply under this profile; an unknown row never does.</summary>
     public bool Applies(string ledgerId) => ledgerId switch
     {
@@ -93,13 +96,15 @@ public sealed class DlgDataFixCatalogue
         foreach (var fix in list)
         {
             ArgumentNullException.ThrowIfNull(fix);
+            if (fix.LedgerId is null || !DataFixProfile.Rows.Contains(fix.LedgerId))
+                throw new ArgumentException($"Fix {fix.LedgerId} names no ledger row with a switch.", nameof(fixes));
+            if (fix.Path is null || fix.Sha256 is null) throw new ArgumentException($"Fix {fix.LedgerId} lacks its path or digest.", nameof(fixes));
             if (Content.ContentStack.NormalizeQuery(fix.Path) != fix.Path)
                 throw new ArgumentException($"Fix path {fix.Path} is not a normalized content-stack key.", nameof(fixes));
             if (fix.Sha256.Length != 64 || fix.Sha256.Any(c => c is not ((>= '0' and <= '9') or (>= 'a' and <= 'f'))))
                 throw new ArgumentException($"Fix {fix.LedgerId} {fix.Path}: the digest must be 64 lower-case hex digits.", nameof(fixes));
             if (!Enum.IsDefined(fix.Operation) || (fix.Operation == DlgFixOperation.MoveResponseToActions) != (fix.RecordId != 0))
                 throw new ArgumentException($"Fix {fix.LedgerId} {fix.Path}: a record is named exactly when the operation edits one.", nameof(fixes));
-            if (string.IsNullOrEmpty(fix.LedgerId)) throw new ArgumentException("A fix names its ledger row.", nameof(fixes));
         }
         if (list.Distinct().Count() != list.Length) throw new ArgumentException("A fix is listed twice.", nameof(fixes));
         Fixes = Array.AsReadOnly(list);
@@ -148,23 +153,25 @@ public sealed class DlgDataFixCatalogue
         catch (DlgException) { return null; }
     }
 
-    // The defect: no record read, the read ended inside the first record. The fix must yield exactly one record.
+    // The defect: no record read, the read ended inside the first record. The fix must yield exactly one record whose
+    // effects field is the empty one appended (an unterminated field before it would swallow the brace).
     private static byte[]? CompleteLastRecord(byte[] bytes)
     {
         if (TryRead(bytes) is not { Records.Count: 0, StopReason: DlgStopReason.IncompleteRecord }) return null;
         var edited = bytes.Concat("{}"u8.ToArray()).ToArray();
-        return TryRead(edited) is { Records.Count: 1, StopReason: DlgStopReason.EndOfInput } ? edited : null;
+        return TryRead(edited) is { Records.Count: 1, StopReason: DlgStopReason.EndOfInput } after && after.Records[0].Action.Length == 0 ? edited : null;
     }
 
-    // The defect: one record with this id, whose response field holds text that is not a plain number.
+    // The defect: one record with this id, whose response field starts (after white space) with a letter, so the game's
+    // atoi reads it as 0. A response with leading digits is a real jump and is never moved.
     private static byte[]? MoveResponseToActions(byte[] bytes, int recordId)
     {
         if (TryRead(bytes) is not { } document || document.Records.Count(r => r.Id == recordId) != 1) return null;
         var record = document.Records.Single(r => r.Id == recordId);
         var response = record.Response; var actions = record.Action;
         var text = response.Bytes.ToArray();
-        var trimmed = System.Text.Encoding.ASCII.GetString(text).Trim();
-        if (trimmed.Length == 0 || trimmed.TrimStart('-').All(char.IsAsciiDigit) || actions.PayloadOffset < response.PayloadOffset) return null;
+        var trimmed = System.Text.Encoding.Latin1.GetString(text).TrimStart(' ', '\t', '\r', '\n', '\v', '\f');
+        if (trimmed.Length == 0 || !char.IsAsciiLetter(trimmed[0])) return null;
         var separator = actions.Length > 0 ? ", "u8.ToArray() : Array.Empty<byte>();
         var actionsEnd = actions.PayloadOffset + actions.Length;
         var edited = bytes[..response.PayloadOffset].Concat(bytes[(response.PayloadOffset + response.Length)..actionsEnd])

@@ -1,4 +1,5 @@
 using Arcanum.Data.Area;
+using Arcanum.Data.Fixes;
 using Arcanum.Data.Scripts;
 using Arcanum.Scripting.GlobalFlags;
 using Arcanum.Scripting.Scr;
@@ -127,6 +128,30 @@ public sealed class AreaScriptHostTests
     }
 
     [TestMethod]
+    public void The_dialog_read_applies_the_data_fixes_of_the_rules_it_is_given()
+    {
+        var root = Directory.CreateTempSubdirectory("arc-data-022-");
+        try
+        {
+            var dlg = System.Text.Encoding.Latin1.GetBytes("{1}{Six fields.}{}{}{}{}");
+            File.WriteAllBytes(Path.Combine(root.FullName, "tig.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "modules"));
+            File.WriteAllBytes(Path.Combine(root.FullName, "modules", "Syn.dat"), AreaOwnerFixture.Dat());
+            Directory.CreateDirectory(Path.Combine(root.FullName, "scr")); Directory.CreateDirectory(Path.Combine(root.FullName, "dlg"));
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00790stone.scr"), new byte[64]);
+            File.WriteAllBytes(Path.Combine(root.FullName, "dlg", "00790stone.dlg"), dlg);
+            var sha = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(dlg)).ToLowerInvariant();
+            var catalogue = new DlgDataFixCatalogue([new("DF1", "dlg/00790stone.dlg", sha, DlgFixOperation.CompleteLastRecord)]);
+            using var content = ScriptContent.Open(Arcanum.Data.Content.ContentMountPlan.Discover(root.FullName, "Syn").Plan!, fixes: catalogue).Content!;
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Original).Status);
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 790, 1, DataFixProfile.Original).Status,
+                "the mode is read at each call");
+        }
+        finally { root.Delete(true); }
+    }
+
+    [TestMethod]
     public void Scripts_and_dialogs_come_from_the_game_content_stack_by_the_original_names()
     {
         var root = Directory.CreateTempSubdirectory("arc-script-011-");
@@ -163,24 +188,24 @@ public sealed class AreaScriptHostTests
             Assert.AreEqual(ScrScriptStatus.Missing, host.Script(780).Status);
             Assert.AreEqual(ScrScriptStatus.Missing, host.Script(0).Status);
             Assert.AreEqual(ScrScriptStatus.Missing, f.Host.Script(777).Status, "a host without content has no script");
-            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 777, 1).Status);
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 2).Status, "node 2 is a PC reply");
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 9).Status);
-            Assert.AreEqual(AreaConversationStartStatus.DialogUnreadable, AreaScriptHost.LoadDialog(content, 778, 1).Status, "00778twice.dlg, the winning name's");
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 777, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 2, DataFixProfile.Steamwoven).Status, "node 2 is a PC reply");
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 777, 9, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogUnreadable, AreaScriptHost.LoadDialog(content, 778, 1, DataFixProfile.Steamwoven).Status, "00778twice.dlg, the winning name's");
             // ARC-SCRIPT-012: the game opens no DLG without records; one with a space between fields reads.
             Assert.AreEqual((AreaConversationStartStatus.DialogResourceMismatch, "dialog 782: dlg/00782empty.dlg: no record the original keeps (IncompleteRecord)"),
-                (AreaScriptHost.LoadDialog(content, 782, 1).Status, AreaScriptHost.LoadDialog(content, 782, 1).Detail));
-            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 783, 1).Status);
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 781, 1).Status, "00781other.dlg is not script 781's name");
-            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 780, 1).Status);
+                (AreaScriptHost.LoadDialog(content, 782, 1, DataFixProfile.Steamwoven).Status, AreaScriptHost.LoadDialog(content, 782, 1, DataFixProfile.Steamwoven).Detail));
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 783, 1, DataFixProfile.Steamwoven).Status);
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 781, 1, DataFixProfile.Steamwoven).Status, "00781other.dlg is not script 781's name");
+            Assert.AreEqual(AreaConversationStartStatus.DialogResourceMismatch, AreaScriptHost.LoadDialog(content, 780, 1, DataFixProfile.Steamwoven).Status);
 
             // A file that changes after its first read is never mixed in: the script is unreadable, the dialog and every
             // later talk of a conversation host over that content report SourceChanged.
             Write("scr/00778twice.scr", ProgramBytes(flags: 1));
             Assert.AreEqual(ScrScriptStatus.Unreadable, host.Script(778).Status);
-            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 779, 1).Status, "first read");
+            Assert.AreEqual(AreaConversationStartStatus.Started, AreaScriptHost.LoadDialog(content, 779, 1, DataFixProfile.Steamwoven).Status, "first read");
             Write("dlg/00779named.dlg", System.Text.Encoding.Latin1.GetBytes("{1}{Changed.}{}{}{}{}{}"));
-            Assert.AreEqual(AreaConversationStartStatus.SourceChanged, AreaScriptHost.LoadDialog(content, 779, 1).Status);
+            Assert.AreEqual(AreaConversationStartStatus.SourceChanged, AreaScriptHost.LoadDialog(content, 779, 1, DataFixProfile.Steamwoven).Status);
             using var source = new AreaOwnerFixture(motionBodies: true);
             var conversations = new AreaConversationHost(source.Owner.LoadStrict(), content, f.Session);
             var talk = conversations.Begin(f.Speaker);

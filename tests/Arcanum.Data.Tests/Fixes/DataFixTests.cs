@@ -14,7 +14,7 @@ public sealed class DataFixTests
 {
     private static readonly byte[] SixFields = Encoding.Latin1.GetBytes("{1}{Six fields only.}{}{}{}{}\r\n");
     private static readonly byte[] EffectsInResponse = Encoding.Latin1.GetBytes(
-        "{1}{Npc line.}{}{}{}{gf 7 1}{}\r\n{2}{Reply.}{}{1}{}{fl 3}{re -10}\r\n{3}{Last.}{}{}{}{}{}\r\n{4}{Plain.}{}{1}{}{0}{}\r\n");
+        "{1}{Npc line.}{}{}{}{gf 7 1}{}\r\n{2}{Reply.}{}{1}{}{fl 3}{re -10}\r\n{3}{Last.}{}{}{}{}{}\r\n{4}{Plain.}{}{1}{}{0}{}\r\n{5}{Jump.}{}{1}{}{12 fl 3}{re 1}\r\n");
 
     private static string Sha(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
 
@@ -61,13 +61,15 @@ public sealed class DataFixTests
             new("DF3", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions, 2),
             new("DF3", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions, 4),  // a plain number: no defect
             new("DF3", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions, 9),  // no such record
+            new("DF3", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions, 5),  // leading digits: a real jump
         ]);
         var result = catalogue.Apply("dlg/00001a.dlg", EffectsInResponse, DataFixProfile.Steamwoven);
-        CollectionAssert.AreEqual(new[] { DlgFixOutcome.Applied, DlgFixOutcome.Applied, DlgFixOutcome.Refused, DlgFixOutcome.Refused },
+        CollectionAssert.AreEqual(new[] { DlgFixOutcome.Applied, DlgFixOutcome.Applied, DlgFixOutcome.Refused, DlgFixOutcome.Refused, DlgFixOutcome.Refused },
             result.Attempts.Select(a => a.Outcome).ToArray());
         var document = DlgReader.Read(result.Bytes, ScriptContent.OriginalDialogs);
         string Field(int id, DlgFieldKind kind) => Encoding.Latin1.GetString(document.Records.Single(r => r.Id == id).Fields[(int)kind].Bytes.ToArray());
-        Assert.AreEqual(4, document.Records.Count);
+        Assert.AreEqual(5, document.Records.Count);
+        Assert.AreEqual(("12 fl 3", "re 1"), (Field(5, DlgFieldKind.Response), Field(5, DlgFieldKind.Action)));
         Assert.AreEqual(("", "gf 7 1"), (Field(1, DlgFieldKind.Response), Field(1, DlgFieldKind.Action)), "an empty effects field takes the list as it is");
         Assert.AreEqual(("", "re -10, fl 3"), (Field(2, DlgFieldKind.Response), Field(2, DlgFieldKind.Action)), "a non-empty one gets it after a comma");
         Assert.AreEqual(("0", ""), (Field(4, DlgFieldKind.Response), Field(4, DlgFieldKind.Action)));
@@ -76,6 +78,19 @@ public sealed class DataFixTests
         // Only the switches the profile turns on.
         var mixed = catalogue.Apply("dlg/00001a.dlg", EffectsInResponse, DataFixProfile.Steamwoven with { Name = "mix", ReplyFinalLineInResponseLost = true });
         Assert.AreEqual("DF2", mixed.Applied.Single().LedgerId);
+    }
+
+    [TestMethod]
+    public void Completing_a_record_refuses_a_file_without_that_defect()
+    {
+        foreach (var text in new[] { "{1}{Complete.}{}{}{}{}{}", "{1}{Five.}{}{}{}", "{1}{Open seventh.}{}{}{}{}{", "" })
+        {
+            var bytes = Encoding.Latin1.GetBytes(text);
+            var catalogue = new DlgDataFixCatalogue([new("DF1", "dlg/00001a.dlg", Sha(bytes), DlgFixOperation.CompleteLastRecord)]);
+            var result = catalogue.Apply("dlg/00001a.dlg", bytes, DataFixProfile.Steamwoven);
+            Assert.AreEqual(DlgFixOutcome.Refused, result.Attempts.Single().Outcome, text);
+            Assert.AreSame(bytes, result.Bytes, text);
+        }
     }
 
     [TestMethod]
@@ -92,6 +107,9 @@ public sealed class DataFixTests
             new("DF2", "dlg/00001a.dlg", sha, DlgFixOperation.MoveResponseToActions),
             new("DF2", "dlg/00001a.dlg", sha, (DlgFixOperation)9, 1),
             new("", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord),
+            new("DF4", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord),
+            new("DF1", "dlg/00001a.dlg", null!, DlgFixOperation.CompleteLastRecord),
+            new("DF1", null!, sha, DlgFixOperation.CompleteLastRecord),
         })
             Assert.ThrowsExactly<ArgumentException>(() => new DlgDataFixCatalogue([bad]), bad.ToString());
         var fix = new DlgDataFix("DF1", "dlg/00001a.dlg", sha, DlgFixOperation.CompleteLastRecord);
@@ -111,7 +129,11 @@ public sealed class DataFixTests
             Directory.CreateDirectory(Path.Combine(root.FullName, "dlg"));
             File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00001a.scr"), new byte[64]);
             File.WriteAllBytes(Path.Combine(root.FullName, "dlg", "00001a.dlg"), SixFields);
-            var catalogue = new DlgDataFixCatalogue([new("DF1", "dlg/00001a.dlg", Sha(SixFields), DlgFixOperation.CompleteLastRecord)]);
+            var nul = Encoding.Latin1.GetBytes("{1}{nul\0}{}{}{}{}");
+            File.WriteAllBytes(Path.Combine(root.FullName, "scr", "00002b.scr"), new byte[64]);
+            File.WriteAllBytes(Path.Combine(root.FullName, "dlg", "00002b.dlg"), nul);
+            var catalogue = new DlgDataFixCatalogue([new("DF1", "dlg/00001a.dlg", Sha(SixFields), DlgFixOperation.CompleteLastRecord),
+                new("DF1", "dlg/00002b.dlg", Sha(nul), DlgFixOperation.CompleteLastRecord)]);
             using var content = ScriptContent.Open(ContentMountPlan.Discover(root.FullName, "Mod").Plan!, fixes: catalogue).Content!;
             var raw = content.Dialog(1);
             Assert.AreEqual((ScriptContentStatus.Empty, 0), (raw.Status, raw.Fixes.Count), "no rules: the retail read");
@@ -120,6 +142,9 @@ public sealed class DataFixTests
             Assert.AreEqual(ScriptContentStatus.Read, fixedRead.Status, fixedRead.Detail);
             Assert.AreEqual("DF1", fixedRead.Fixes.Single().Fix.LedgerId);
             Assert.IsTrue(content.VerifySeen(), "change detection is on the stored file");
+            // A read the reader refuses still reports the fixes that matched.
+            var refused = content.Dialog(2, DataFixProfile.Steamwoven);
+            Assert.AreEqual((ScriptContentStatus.Invalid, DlgFixOutcome.Refused), (refused.Status, refused.Fixes.Single().Outcome));
             Assert.IsFalse(content.Changed);
         }
         finally { root.Delete(true); }
