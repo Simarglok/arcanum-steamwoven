@@ -379,6 +379,31 @@ reader and the earlier LM11 and A1 readings did. Several functions begin with a 
 | XP11 | call sites of `critter_give_xp` and `quest_get_xp` | Dialog action XP (0x415BA0) and the script action that gives quest experience (0x447220) both give `quest_get_xp(value)`; quest completion (XP8); kill (XP9); pool (XP10); a cheat key gives the experience still needed. | Original |
 | XP12 | data (`DAT_ROOT`) | The winning `rules\xp_level.mes` (the `Arcanum4.dat` copy) has 51 strictly increasing entries, so XP5's re-entered call returns; `xp_quest.mes` has levels 1..50, `xp_critter.mes` 0..50, every quest level in `gamequest.mes` has quest experience, and one effect rule uses `xpgain`. | Data |
 
+## Real-time combat (ARC-COMBAT-004)
+
+Source: [combat core](combat-core-evidence.md#entering-leaving-and-switching-mode-fr-combat-001) C1–C5, contract
+[real-time combat runtime](../world/real-time-combat-runtime.md). Read on 2026-10-17 by a first reader and, independently,
+a second reader that saw only the questions (method step 6). They agree on every row they share; the second reader also
+found the registered defaults (RT6) and the inverted invisibility test (RT8), and the first reader confirmed both. Every
+direct branch stays inside `.text`; several functions begin with a network branch that CE leaves out (the toggle's
+packet and client return, turn-based refused in a network game, a per-player auto-attack flag), which a single-player
+game never takes.
+
+| ID | Function (address) | Original 1.0.7.4 | Verdict |
+| --- | --- | --- | --- |
+| RT1 | `combat_critter_toggle_combat_mode` (0x4B3F80) | A dead critter skips every check; otherwise stoned, paralysed, stunned (leaving only) and inactive (entering only) refuse, and an NPC in its concealed animation refuses. Leaving clears the flag, unlocks the AI target, puts the arms away and, for the PC with turn-based on, ends the round. Entering writes the flag first; for the PC with turn-based on a round start that fails returns at once with the flag left set. | Original (as CE) |
+| RT2 | `combat_can_exit_combat_mode` (0x4B3D90) | True out of combat mode or when not active; false in an attempt-attack goal; false when an active, fighting NPC on screen (`object_list_vicinity`) has the critter or one of its followers (recursive follower arrays) as combat focus. | Original (as CE) |
+| RT3 | `intgame_combat_mode_toggle` (0x54EBF0) | Nothing for a dead PC; leaving through RT2, refused with intgame message 24; else entering. | Original (as CE) |
+| RT4 | `sub_4B6C90` (0x4B6C90), `combat_turn_based_toggle` (0x4B6D20) | Unchanged value stores; the PC's animations that cannot be interrupted refuse; out of combat mode it stores; off ends the round; on starts it, and a failed start leaves the setting unchanged. The key turns it on only for an active PC. | Original (as CE) |
+| RT5 | `combat_auto_attack_get` (0x4B8230) | False while a round is active; else the `auto attack` setting. | Original (as CE) |
+| RT6 | `combat_init` (0x4B1D50) | Registered defaults: `turn-based` and `fast turn-based` "0", **`auto attack` and `combat taunts` "1"**; a value in the configuration file wins. | CE slip (CE registers "0") |
+| RT7 | `sub_429760` (0x429760) | The attack repeats only for a PC in combat mode with auto attack, a target neither destroyed, off, dead nor busted, the run flag 0x800 clear, no round, no non-lethal flag and no boomerang in flight; it then waits 5 ms (goal table). | Original (as CE) |
+| RT8 | `AGbeginAnimAttack` (0x432700), `sub_42EE90` (0x42EE90), `item_weapon_magic_speed` (0x465CF0) | Pause `clamp(1000 / rate(Speed), 30, 800)`, then minus `10 × (weapon speed − 10)` and clamped again; weapon speed 10 unarmed, +5 with apprentice training. A critter rolls 1..4 and plays its attacking sound on 1. Action frame below 1 marks the action at once. The invisibility clear applies to an attacker that is **not** the local PC (CE tests the opposite). | Original; the invisibility test a CE slip (not modelled yet) |
+| RT9 | `AGupdateAnimAttack` (0x432990) | Stoned, paralysed or stunned ends; the last frame ends; the frame before the action frame marks the action; in real time a critter's pistol or rifle two frames after the action frame, or bow on it, goes back three frames toward the target while it has ammunition, is a PC or an NPC not backing off and the target is valid; else the next frame. The pause is recomputed only on a speed-change flag. | Original (as CE) |
+| RT10 | `sub_437990` (0x437990) | Attack and low-attack rates per weapon slot as CE's tables (both jump tables decoded); no dwarf or halfling offset for attacks; Speed 8 gives the middle value (LA1). | Original; Speed 8 a CE slip (LA1) |
+| RT11 | goal tables `anim_goal_node_attack` (0x5A7BD0), `anim_goal_node_attempt_attack` (0x5A7DD0) | Byte for byte the CE tables: the hit runs in the update that shows the action frame, the end one pause after the last frame appears, the repeat 5 ms later. | Original (as CE) |
+| RT12 | `sub_430FC0` (0x430FC0) | A4 and TB14: every fifth run step of a move in combat mode (×4 fatigue-limiting, ÷4 draining) adds 1 fatigue damage through the plain fatigue write; a runner without fatigue walks. | Original (A4 a CE slip) |
+
 ## Character sheet (ARC-UI-007)
 
 Source: [viewer character sheet](../rendering/terrain-viewer.md#character-sheet-arc-ui-007) and

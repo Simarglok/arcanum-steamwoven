@@ -10,6 +10,8 @@ public sealed record GridStepEvidence(AdmissionKey Key, CardinalTraversalAssessm
 public sealed record AreaGridStepEvidence(AdmissionKey Key, AreaStepAssessment Assessment)
 {
     public AreaStepVerdict? Live { get; init; }
+    /// <summary>ARC-COMBAT-004: the gait the step was admitted with (a window jump vaults whatever this says).</summary>
+    public MovementGait Gait { get; init; }
 }
 public sealed record GridAdvance(MovementResult Movement, IReadOnlyList<GridStepEvidence> Evidence)
 {
@@ -176,7 +178,7 @@ public sealed class AreaGridSession : IGridSession
             var duration = vault ?? Timing?.For(gait, key.Direction) ?? Duration;
             return (GridReplay.Permit(key, live.Coverage, live.Disposition, live.ReasonCode, assessment.EvidenceSha256, duration,
                     Timing is null ? null : vault is not null ? GaitTiming.VaultProvenance : GaitTiming.Provenance(gait)),
-                new AreaGridStepEvidence(key, assessment) { Live = live.Overlaid ? live : null });
+                new AreaGridStepEvidence(key, assessment) { Live = live.Overlaid ? live : null, Gait = gait });
         }, validatePresentation);
         if (result.Movement.Status != MovementStatus.Completed) return result;
         result = new GridAdvance(result.Movement, Array.Empty<GridStepEvidence>()) { AreaEvidence = evidence };

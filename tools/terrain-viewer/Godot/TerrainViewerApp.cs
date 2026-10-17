@@ -113,7 +113,7 @@ public partial class TerrainViewerApp : Node
                 {
                     if (result.Area is not null)
                     {
-                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); }
+                        if (_readyMapName is not null) { await RunAreaMapSmokeAsync(result); await RunAreaMapVaultSmokeAsync(result); await RunAreaHeroSmokeAsync(result); await RunAreaCombatModeSmokeAsync(result); }
                         else await RunAreaSmokeAsync(result);
                         // S5 must observe the retired generation become
                         // collectable; this frame may not keep it reachable.
