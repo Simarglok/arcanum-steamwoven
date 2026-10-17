@@ -526,7 +526,9 @@ remove an identical effect that an item or background added
 - **O6** Item triggers (`mt_item.c`, FR-MAGIC-011) and the spell visual
   catalogue (`SpellEyeCandy.mes`, the missile and casting art) were not read.
 - **O7** The effect list semantics (`effect.c`) belong to the durable-effects
-  owner (top-20 item 17); this reading used only add and remove.
+  owner (top-20 item 17); this reading used only add and remove. Answered by
+  ARC-WORLD-029 ([durable effects](../world/durable-effects-runtime.md), ledger rows
+  EF1–EF10): the original matches CE.
 - **O8** Whether the anti-magic shell and reflection are meant to stop
   technology too (the code does not test the flag).
 - **O9** CE's comment says the original omits equipment magic resistance

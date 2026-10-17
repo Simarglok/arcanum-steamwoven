@@ -12,7 +12,6 @@ internal static class CharacterStatRules
     public const int MaxSectorAptitudeAdjustment = 100;
     /// <summary>The poison level stat's range in the source (0..1000).</summary>
     public const int MaxPoisonLevel = 1000;
-    private const long Saturation = 1_000_000_000;
 
     private static readonly int StatCount = Enum.GetValues<CharacterStat>().Length;
 
@@ -115,39 +114,9 @@ internal static class CharacterStatRules
     };
 
     /// <summary>
-    /// Applies every modifier for <paramref name="stat"/>. Integer division truncates toward zero; intermediates
-    /// saturate at ±1e9, so beyond that bound accumulation is order-dependent (original overflow behaviour is NOT_VERIFIED). The caller clamps the result to the range.
+    /// Applies every modifier for <paramref name="stat"/> with the source's aggregation (<see cref="EffectModifiers.Apply"/>,
+    /// ARC-WORLD-029). The caller clamps the result to the range.
     /// </summary>
-    public static int ApplyModifiers(CharacterStat stat, int value, IReadOnlyList<AppliedEffect> effects)
-    {
-        long percents = 0, adds = 0, multiply = 1, divide = 1;
-        int? minimum = null, maximum = null;
-        foreach (var effect in effects)
-        foreach (var modifier in effect.Definition.Modifiers)
-        {
-            if (modifier.Stat != stat) continue;
-            switch (modifier.Operator)
-            {
-                case StatModifierOperator.Add: adds = Saturate(adds + modifier.Value); break;
-                case StatModifierOperator.Percent: percents = Saturate(percents + modifier.Value); break;
-                case StatModifierOperator.Multiply: multiply = Saturate(multiply * modifier.Value); break;
-                case StatModifierOperator.Divide: divide = Saturate(divide * modifier.Value); break;
-                case StatModifierOperator.Minimum:
-                    minimum = minimum is { } low ? Math.Max(low, modifier.Value) : modifier.Value; break;
-                case StatModifierOperator.Maximum:
-                    maximum = maximum is { } high ? Math.Min(high, modifier.Value) : modifier.Value; break;
-            }
-        }
-
-        long result = value;
-        if (percents != 0) result = Saturate(result * (percents + 100) / 100);
-        result = Saturate(result * multiply);
-        result /= divide;
-        result = Saturate(result + adds);
-        if (minimum is { } min && result < min) result = min;
-        if (maximum is { } max && result > max) result = max;
-        return (int)result;
-    }
-
-    private static long Saturate(long value) => Math.Clamp(value, -Saturation, Saturation);
+    public static int ApplyModifiers(CharacterStat stat, int value, IReadOnlyList<AppliedEffect> effects) => EffectModifiers.Apply(value,
+        effects.SelectMany(effect => effect.Definition.Modifiers).Where(m => m.Stat == stat).Select(m => new EffectModifier(m.Operator, m.Value)).ToArray());
 }

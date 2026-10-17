@@ -107,6 +107,14 @@ a host that is only an `ISessionEventWorld` consumes a due call unrun. `SessionE
 A restore checks a saved call as a life timer (set no later than the saved clock, exactly its delay before its deadline)
 and its two roles; whether its objects still exist is decided when it fires.
 
+**Timed effects (ARC-WORLD-029).** The kind `effect.hero.end` (also added to registry version 1 without a new version) is
+the END of a hero's timed effect: global, game time, saved, any number, at most `SessionEffectLimits.MaxTimedEffects` (64)
+on top of the life timers and calls. No entities; values: the game time it was set at, the duration, the effect number and
+the count of entries it removes. When due it removes the first entries of that number, one revision, and
+`SessionEventPassResult.Effects` reports it; `EndHeroTimedEffect` runs it early and cancels it. A restore checks it as a
+call (set no later than the saved clock, exactly its duration before its deadline) and refuses one without a hero or of an
+innate number. See [durable effects](durable-effects-runtime.md).
+
 A positive write is a step that changes the stored value to a positive one, or the timer's own handler writing what it
 found positive (the source writes those back even when the heal rate is 0). **Deliberate difference:** the source's
 damage step writes hit-point damage and the poison level on every hit, even with an unchanged value, so a hit that
