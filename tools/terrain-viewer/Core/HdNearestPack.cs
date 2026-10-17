@@ -14,8 +14,16 @@ namespace Arcanum.TerrainViewer.Core;
 public static class HdNearestPack
 {
     /// <summary>One frame to replicate: its HD question and its Legacy RGBA (w × h × 4 bytes
-    /// hashing to the question).</summary>
-    public sealed record Frame(HdSpriteQuery Query, byte[] Rgba, HdReviewStatus Review = HdReviewStatus.Unreviewed);
+    /// hashing to the question). A terrain chunk question (ARC-RENDER-016) also carries its tile
+    /// list and is written as a <c>terrainChunk</c> entry of the <c>ground</c> slice.</summary>
+    public sealed record Frame(HdSpriteQuery Query, byte[] Rgba, HdReviewStatus Review = HdReviewStatus.Unreviewed, IReadOnlyList<string>? Tiles = null);
+
+    /// <summary>A terrain chunk frame: the composed level-0 chunk, its question and its tiles.</summary>
+    public static Frame Chunk(AreaTerrainChunks terrain, (int X, int Y) chunk)
+    {
+        var composed = terrain.Compose(chunk, 0);
+        return new(HdFrameQueries.FromTerrainChunk(terrain, chunk, composed), composed, Tiles: HdFrameQueries.TerrainChunkTiles(terrain, chunk));
+    }
 
     /// <summary>The nearest N× replica of a w × h RGBA frame, with an optional colour change
     /// on every opaque subtexel whose x offset is <paramref name="tintColumn"/> (a stand-in
@@ -50,19 +58,34 @@ public static class HdNearestPack
         if (!System.Text.RegularExpressions.Regex.IsMatch(id, "^[a-z0-9][a-z0-9_-]{0,63}$")) throw new ArgumentException("Not a pack id.", nameof(id));
         ArgumentNullException.ThrowIfNull(frames);
         if (File.Exists(Path.Combine(directory, HdPack.ManifestFile))) throw new IOException("The directory already holds a pack.");
+        var list = frames.ToArray();
+        if (list.Any(frame => frame.Query.Chunk is not null && frame.Tiles is not { Count: > 0 })) throw new ArgumentException("A terrain chunk frame needs its tiles.", nameof(frames));
         Directory.CreateDirectory(directory);
-        var recipe = Encoding.UTF8.GetBytes(Recipe(id, scale));
+        var recipe = Encoding.UTF8.GetBytes(Recipe(id, scale, list.Any(frame => frame.Query.Chunk is not null)));
         WriteFile(directory, "recipe.json", recipe);
         var entries = new JsonArray();
-        var seen = new HashSet<HdSpriteKey>();
-        foreach (var frame in frames)
+        // Sprites are unique by key (a key twice is a DuplicateKey pack), chunks by their whole question.
+        var seen = new HashSet<object>();
+        foreach (var frame in list)
         {
-            if (!seen.Add(frame.Query.Key)) continue;
+            if (!seen.Add(frame.Query.Chunk is null ? frame.Query.Key : frame.Query)) continue;
             var legacy = frame.Query.Legacy;
             if (HdFrameQueries.Sha256(frame.Rgba) != legacy.RgbaSha256) throw new ArgumentException("Legacy RGBA does not hash to its question.", nameof(frames));
             var png = HdPng.EncodeRgba(legacy.Width * scale, legacy.Height * scale, Replicate(frame.Rgba, legacy.Width, legacy.Height, scale, tintColumn, tint, parentTint));
             var file = $"frames/{entries.Count / 1000:D4}/{entries.Count % 1000:D3}.png";
             WriteFile(directory, file, png);
+            if (frame.Query.Chunk is { } chunk)
+            {
+                entries.Add(new JsonObject
+                {
+                    ["kind"] = "terrainChunk", ["file"] = file, ["sha256"] = HdFrameQueries.Sha256(png), ["bytes"] = png.Length, ["slice"] = "ground",
+                    ["chunk"] = new JsonObject { ["x"] = chunk.X, ["y"] = chunk.Y, ["size"] = AreaTerrainChunks.ChunkSize, ["padding"] = ChunkPadding },
+                    ["tiles"] = new JsonArray(frame.Tiles!.Select(tile => (JsonNode)tile).ToArray()),
+                    ["legacy"] = new JsonObject { ["width"] = legacy.Width, ["height"] = legacy.Height, ["rgbaSha256"] = legacy.RgbaSha256 },
+                    ["review"] = ReviewName(frame.Review),
+                });
+                continue;
+            }
             entries.Add(new JsonObject
             {
                 ["kind"] = "sprite", ["file"] = file, ["sha256"] = HdFrameQueries.Sha256(png), ["bytes"] = png.Length, ["slice"] = "bodies",
@@ -84,11 +107,14 @@ public static class HdNearestPack
         return directory;
     }
 
-    private static string Recipe(string id, int scale) => $$$"""
+    // The recorded padding of a chunk entry (the nearest replica needs no neighbour context).
+    private const int ChunkPadding = 32;
+
+    private static string Recipe(string id, int scale, bool terrain) => $$$"""
         {"schema":1,"kind":"arcanum-steamwoven-hd-recipe","id":"{{{id}}}","scale":{{{scale}}},
-         "slices":[{"name":"bodies","map":"any","kinds":["player","critter","npc","scenery","container","item","wall"]}],
+         "slices":[{"name":"bodies","map":"any","kinds":["player","critter","npc","scenery","container","item","wall"]}{{{(terrain ? ",{\"name\":\"ground\",\"map\":\"any\",\"kinds\":[\"terrainChunk\"]}" : "")}}}],
          "method":{"kind":"external","tool":"terrain-viewer-nearest","toolVersion":"1","nativeScale":{{{scale}}},"downscale":"none"},
-         "alpha":{"mode":"legacy"}}
+         "alpha":{"mode":"legacy"}{{{(terrain ? $",\"terrain\":{{\"chunkSize\":{AreaTerrainChunks.ChunkSize},\"padding\":{ChunkPadding}}}" : "")}}}}
         """;
 
     private static string ReviewName(HdReviewStatus review) => review switch

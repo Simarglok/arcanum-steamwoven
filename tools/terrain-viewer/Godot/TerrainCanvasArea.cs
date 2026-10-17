@@ -81,7 +81,7 @@ public partial class TerrainCanvas
         if (!ReferenceEquals(_area, plan) || !ReferenceEquals(_areaFrames, frames))
         {
             var chunks = AreaTerrainChunks.TryCreate(plan, frames);
-            _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear();
+            _areaView = null; _areaChunkTextures.Clear(); _areaChunks = chunks; _areaChunkChannels.Clear(); _hdChunkQueries.Clear();
             if (_area is not null) ReleaseAreaHd(); // a map change releases the previous map's HD textures
         }
         if (!ReferenceEquals(_area, plan) || _areaUpright is null) _areaUpright = new AreaUprightOrder(plan.Commands, plan.Chart);

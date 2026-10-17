@@ -168,7 +168,7 @@ public static partial class TerrainViewerSelfTest
             foreach (var source in sources) source.Dispose();
             System.IO.Directory.Delete(root, true);
         }
-        GD.Print($"ARC-RENDER-014 self-test AREA HD PASS nearest-4x identity, wall fade, tint bound at magnification 2 with Legacy alpha, fallbacks FrameMissing/NoPack/PackRejected/FrameRejected/HdBudget/Invalid"
+        GD.Print($"ARC-RENDER-014 self-test AREA HD PASS nearest-4x identity (a wall included, ARC-RENDER-016), wall fade, tint bound at magnification 2 with Legacy alpha, fallbacks FrameMissing/NoPack/PackRejected/FrameRejected/HdBudget/Invalid"
             + (native ? $" pixels={compared}" : "; pixels NOT_VERIFIED headless"));
     }
 
@@ -268,8 +268,8 @@ public static partial class TerrainViewerSelfTest
         GD.Print("ARC-RENDER-014 self-test WORLD HD PASS statics+actor 6 HD, nearest-4x identity and per-parent recoloured oracle at zoom 1/2/3, republish keeps HD" + (native ? "" : "; pixels NOT_VERIFIED headless"));
     }
 
-    // The synthetic AREA scene of the HD self-tests: five bodies over one cell (sizes, a mirrored
-    // frame, scale 75, shrunk, additive) and the actor, with their nearest-pack frames.
+    // The synthetic AREA scene of the HD self-tests: five bodies over one cell (a wall, sizes, a
+    // mirrored frame, scale 75, shrunk, additive) and the actor, with their nearest-pack frames.
     private static (int Length, List<AreaObjectRecord> Bodies, Dictionary<AreaFrameKey, DecodedAreaFrame> Frames, AreaScenePlan Plan,
         ActorDiagnosticPlacementInput Placement, ActorDiagnosticScenePlan Actor, HdNearestPack.Frame[] BodyFrames, HdNearestPack.Frame[] ActorFrames)
         HdAreaScene(SyntheticActorLoad synthetic)
@@ -290,6 +290,8 @@ public static partial class TerrainViewerSelfTest
                 PayloadSha256 = HdFrameQueries.Sha256(System.Text.Encoding.ASCII.GetBytes($"synthetic-hd-art-{i}")), ViewLength = 4096,
                 RgbaSha256 = HdFrameQueries.Sha256(rgba),
             };
+            // ARC-RENDER-016: the first body is a wall (ART class 1), an HD candidate like any object.
+            if (i == 0) visual = visual with { RawArt = 0x10000000u | (visual.RawArt & 0x0FFFFFFFu) };
             bodies.Add(body); visuals.Add(visual); frames[AreaFrameKey.From(visual)] = new(s.W, s.H, rgba);
         }
         var plan = AreaScenePlan.Create([], bodies, visuals);

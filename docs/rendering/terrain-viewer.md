@@ -704,11 +704,23 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 [`HdNearestPack`](../../tools/terrain-viewer/Core/HdNearestPack.cs); the canvas partial
 `TerrainCanvasHd` and the `AreaDrawItem` crop and fade uniforms.
 
-- **What binds.** AREA bodies other than walls (art class 1) and the controlled actor; WORLD
-  statics and the actor. Terrain tiles, facades, terrain chunks and walls stay Legacy (walls
-  are a later stage, terrain ARC-RENDER-016). The scene plan, picking, routes, passability,
-  the wall check, light and Session read Legacy data only; HD is substituted when a texture
-  is bound to an already planned draw.
+- **What binds.** AREA bodies, walls (art class 1) included since ARC-RENDER-016, the
+  controlled actor and, since ARC-RENDER-016, the composed level-0 terrain chunks (tiles and
+  facades); WORLD statics and the actor. Decimated chunks (zoom below 1 with an integer
+  origin), per-command terrain and WORLD terrain stay Legacy and are not candidates. The scene
+  plan, picking, routes, passability, the wall check, light and Session read Legacy data only;
+  HD is substituted when a texture is bound to an already planned draw.
+- **Terrain chunks (ARC-RENDER-016).** A chunk item at level 0 asks for the chunk's question
+  (`HdFrameQueries.FromTerrainChunk`: coordinates, composed Legacy RGBA hash, tile digest; made
+  once per chunk and map from one compose on the main thread, whose bytes also serve the first
+  request; a chunk requested again after its pixels were released is composed again there, the
+  decode stays off the main thread). Without a pack, with a rejected pack or with a pack that has
+  no chunk entries nothing is composed (`NoPack`, `PackRejected`, `FrameMissing`). It binds the `N·512` square HD chunk with the
+  scaled crop to the unchanged world square, keeping its ambient channel. Chunks use their own
+  residency under the device's terrain budget (`HdDomainBudget.Terrain`: `TerrainBytes` for
+  visible and kept chunks, ceiling `N²·192` MiB, and at most 1,024 kept chunks), not the AREA frame
+  limits; the two residencies share the frame source and each drops only its own decoded
+  pixels. The Legacy chunk textures stay resident under both profiles.
 - **AREA.** An HD item keeps its Legacy destination, reflection, phase and order and samples
   the crop `(N·c, N·m)` with the exact nearest rule (`AreaNearestAxis`, no new mode); the
   actor's crop is its whole Legacy frame. The wall-fade column is the Legacy column
@@ -733,12 +745,12 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   profiles, so any fallback is immediate.
 - **Decoding and uploads.** Frames are resolved off the main thread (half the processors);
   decoded pixels are held only until their texture is uploaded, at most 64 frames or 64 MiB
-  per submission on the main thread; a frame that becomes visible later is decoded lazily and
+  per residency and submission (in AREA the frame and the terrain residency each) on the main thread; a frame that becomes visible later is decoded lazily and
   draws Legacy (`Pending`) until it is ready; a frame whose decode fails for any reason is
   `Invalid`. There is no whole-area HD CPU repository. The texture cache keeps the Legacy RGBA
   of the actor and WORLD static frames (a few MB, counted at load) in both profiles, because
   the mask check of an HD frame needs this device's Legacy alpha.
-- **Budgets.** One residency per domain, keyed by the pack question inside one pack (a new
+- **Budgets.** One residency per domain (AREA frames, AREA terrain chunks since ARC-RENDER-016, WORLD), keyed by the pack question inside one pack (a new
   pack or budget releases every HD texture). Admission is in draw order on the Legacy frame
   size: a frame whose `N²·w·h·4` bytes would exceed the visible limit is `HdBudget` before it
   is decoded; a frame already known to be refused takes no budget. AREA: visible bytes, retained frames and bytes from the device budget
@@ -749,8 +761,9 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
   change or exit releases every HD texture and drops pending decodes. A WORLD actor step
   republishes the plan and keeps them.
 - **HUD.** The status line shows `visual HD pack <id> <N>x <review>: HD <n>, Legacy <m>
-  (<reason> <count>, …), HD textures <count>/<bytes> bytes, decoding <n>; terrain and walls
-  Legacy`, per submission; under Legacy `visual Legacy`, or `visual Legacy (HD pack <id>
+  (<reason> <count>, …), HD textures <count>/<bytes> bytes, decoding <n>` (chunks and walls
+  counted with the frames; `; terrain Legacy below zoom 1` while the chunks are decimated),
+  per submission; under Legacy `visual Legacy`, or `visual Legacy (HD pack <id>
   <N>x loaded)` when a pack is selected. In AREA it is refreshed with the status line.
 - **Selecting a pack and the profile.** Since ARC-UI-006 the profile is a saved setting with an
   on-the-fly toggle ([below](#visual-profile-setting-and-toggle-arc-ui-006)). A diagnostic run may
@@ -763,8 +776,12 @@ also checks that F8 brings back the PC's items. Not verified: original inventory
 Checks: `HdPresentationTests` (scaled crop and axis limit; frame questions; the nearest pack at
 2× and 4×; every per-frame reason from the frame source, reset and release; residency in draw
 order, shared textures, deterministic budget refusal before decoding, budget 0, LRU retention,
-the WORLD total limit, upload batches); the self-test `ARC-RENDER-014 self-test AREA HD PASS`
-(production AREA compositor with a synthetic nearest 4× pack: the HD raster equals Legacy at
+the WORLD total limit, upload batches; since ARC-RENDER-016 composed chunks through a nearest
+4× pack and the frame source, `FrameMissing`/`SourceMismatch` per chunk, tiles in plan order,
+and two residencies sharing a source); `HdPackTests` (chunk binding across map slices, the
+file, size and soft/legacy alpha checks on chunks, the tile digest); the self-test
+`ARC-RENDER-014 self-test AREA HD PASS` (production AREA compositor with a synthetic nearest
+4× pack, one body a wall since ARC-RENDER-016: the HD raster equals Legacy at
 zoom 1, 2, 0.5, 1.5 with a fractional origin and 4, also with wall fades; a tinted pack keeps
 Legacy alpha and changes colour at magnification 2; `FrameMissing`, `NoPack`,
 `PackRejected`, `FrameRejected`, `HdBudget` and `Invalid` each draw the Legacy raster and are
@@ -778,9 +795,12 @@ the whole window to equal Legacy with no fallback:
 `ARC-RENDER-014 native-smoke AREA HD identity PASS` (Crash Site exterior: 114 frames, 59
 body frames and 55 actor frames (105 since ARC-WORLD-020 adds the run ART: 164 frames), 0.86 MB of PNG written in 0.4 s; four views at zoom 1, 2,
 0.5 and on the widest body, 4.1 M pixels; up to 100 HD draws per view, 30 HD textures and
-22 MB resident at 4×, first bind 90 ms) and `ARC-RENDER-014 native-smoke WORLD HD identity
-PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: a real upscaled pack (ARC-RES-038/ARC-DEV-003), walls and terrain in HD,
-other GPUs and handhelds, human review (ARC-RENDER-015).
+22 MB resident at 4×, first bind 90 ms; since ARC-RENDER-016 also every level-0 chunk the four
+views can show: 53 chunks, 262 pack frames and 20 MB of PNG written in 5.7 s, no fallback in any view, up to 100 HD draws per view, 45 HD textures and 274 MB resident at 4× (15 terrain chunks, 252 MB, under the terrain budget), first bind 0.6–0.8 s; the smoke also requires HD chunks to be bound in every level-0 chunked view) and `ARC-RENDER-014 native-smoke WORLD HD identity
+PASS` (57 frames: the 2 distinct static frames of the 5 statics and 55 actor frames; zoom 1, 2 and 4 on the actor, 1.4 M pixels; 6 HD draws per view, 3.9 MB resident). Not verified: other GPUs and handhelds, human review (ARC-RENDER-015). A real upscaled pack
+of the Crash Site (generative characters and objects, x4plus terrain chunks and walls) was
+built and looked at locally (ARC-RES-038, ARC-RENDER-016), outside the repository; the
+exterior has no walls, so an HD wall is checked by the synthetic self-test only.
 
 ### Visual profile setting and toggle (ARC-UI-006)
 

@@ -11,8 +11,7 @@ namespace Arcanum.Data.Hd;
 /// <param name="AreaRetainedFrames">HD frames kept after they leave the view.</param>
 /// <param name="AreaRetainedBytes">HD bytes kept after they leave the view.</param>
 /// <param name="WorldBytes">HD bytes of WORLD actor and static textures.</param>
-/// <param name="TerrainBytes">HD terrain chunks; reserved until ARC-RENDER-016, which
-/// consumes it (terrain stays Legacy before that).</param>
+/// <param name="TerrainBytes">HD terrain chunks of the AREA, visible and kept (ARC-RENDER-016).</param>
 public sealed record HdDeviceBudget(long AreaVisibleBytes, int AreaRetainedFrames, long AreaRetainedBytes, long WorldBytes, long TerrainBytes)
 {
     /// <summary>Legacy limits the HD ceilings shadow (ARC-RENDER-013 table).</summary>
