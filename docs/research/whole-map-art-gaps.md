@@ -109,7 +109,9 @@ failures share their source indices; two of them are terrain cells (315,390 of
 77 × 4,096 = 315,392 cells are published), and the failed objects include a damaged
 wall and walls and scenery that may need the missing-art fallback. Streaming is not
 needed first: decoding each distinct selection once per map, as terrain already
-does, removes the repeated work (slice 2).
+does, removes the repeated work (slice 2). After ARC-DATA-023 and ARC-DATA-024 K'na
+Tha publishes a complete snapshot with all 315,392 cells from 477 frame decodes,
+without bad art, so none of the seven issues remains.
 
 ### Eye-candy overlays: none
 
@@ -186,7 +188,8 @@ scenery and for any other module's missing files.
 
 ## Slices
 
-Slice 1 is implemented by ARC-DATA-023 (79 of 80 interiors complete); slice 2 is open.
+Slice 1 is implemented by ARC-DATA-023 (79 of 80 interiors complete), slice 2 by
+ARC-DATA-024 (all 80; the viewer's slow K'na Tha load is ARC-RENDER-019).
 
 1. **ARC-DATA-023 — original art names on whole maps.** In whole-map plans that
    read ART as the original does (`AllSectors` with `AllowArtTrailingBytes`; in the
@@ -197,14 +200,15 @@ Slice 1 is implemented by ARC-DATA-023 (79 of 80 interiors complete); slice 2 is
    N6 damaged walls, N7 tile-art bodies, N4 `badart.art` frame 0 for a resolved
    name no archive holds, recorded on the visual as a fallback policy. Pinned
    profiles unchanged. Expected: the 25 maps other than K'na Tha publish complete
-   snapshots (79 of 80 with K'na Tha after slice 2), checked by the opt-in
+   snapshots (all 80 with K'na Tha after slice 2), checked by the opt-in
    real-data test and a viewer map-mode smoke of a concealed-monster map and a
    `dgnuw` map.
 2. **ARC-DATA-024 — shared object frames (K'na Tha).** Decode, hash and charge
    each distinct object frame selection (entry, group, frame, palette) once per
-   owner, keeping one visual record per object; then measure K'na Tha and resolve
+   build, keeping one visual record per object; then measure K'na Tha and resolve
    its seven hidden issues. A viewer change (ARC-RENDER-019) follows only if map
-   mode's own frame and texture budgets refuse the result.
+   mode's own frame and texture budgets refuse the result (they do not; the viewer's
+   scene plan is slow on 43,219 objects instead).
 
 ## Limits
 

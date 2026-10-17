@@ -7,7 +7,7 @@ namespace Arcanum.Data.Tests.Area;
 
 /// <summary>Opt-in (DAT_ROOT = the game folder): every interior gets a whole-map plan and opens;
 /// the maps listed below publish a complete snapshot (docs/world/whole-map-plans.md; every
-/// interior but K'na Tha since ARC-DATA-023). A map that starts publishing joins the list;
+/// interior but K'na Tha since ARC-DATA-023, all 80 since ARC-DATA-024). A map that starts publishing joins the list;
 /// one that stops is a regression.</summary>
 [TestClass]
 public sealed class AreaMapPlansRealDataTests
@@ -19,7 +19,7 @@ public sealed class AreaMapPlansRealDataTests
         "caladon trap disarm dungeon", "caladon-castle main floor", "caladon-mafia underground", "caladon-panarrii temple",
         "caladon-panarrii temple-basement", "caladons sewers", "castle s'nel n'fa", "cave of the bangellian scourge", "crash site cave",
         "crematorium-lev 1", "crematorium-lev 2", "crematorium-lev 3", "dernholm pits", "dernholm-castle", "drogs cave", "dungeon of the dragon pool",
-        "elven ruins", "fal'kins maze", "iron clan - music box", "iron clan hq", "mannox's hole", "pit of fires", "pschuylers lev 1-fixed",
+        "elven ruins", "fal'kins maze", "iron clan - music box", "iron clan hq", "k'na tha", "mannox's hole", "pit of fires", "pschuylers lev 1-fixed",
         "pschuylers lev 2-fixed", "pschuylers lev 3-fixed", "qintarra", "qintarra-queens chambers", "roseborough inn2", "ruins of szabo",
         "scienticians underground lev 1", "scienticians underground lev 2", "shopmap", "shrouded hills-panarii temple lev 1",
         "stillwater giants cave", "stonecutter clan", "t'sen-ang", "tarant sewers-01", "tarant sewers-02", "tarant-city hall downstairs",
@@ -56,6 +56,8 @@ public sealed class AreaMapPlansRealDataTests
             if (inspection.IsComplete) complete.Add(map.Name);
             // ARC-DATA-023: every installed name resolves; no complete interior draws bad art.
             if (inspection.IsComplete) Assert.IsFalse(inspection.Snapshot!.Visuals.Any(v => v.Policy == "original-badart-v1"), map.Name);
+            // ARC-DATA-024: K'na Tha's 43,219 objects share 260 art ids; each distinct frame is decoded once.
+            if (map.Name == "k'na tha") Assert.AreEqual(477, inspection.Usage.FrameRequests);
             if (map.Name == "crash site cave")
             {
                 // The generic plan reaches what the pinned cave profile pins, without its exceptions.

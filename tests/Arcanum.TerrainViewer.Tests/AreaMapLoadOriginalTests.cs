@@ -48,9 +48,9 @@ public sealed class AreaMapLoadOriginalTests
             catch (Exception exception) when (exception is InvalidOperationException or AreaException) { failed.Add($"{map.Name}: {exception.Message}"); }
         }
         // Since ARC-RENDER-018 the wading, multiply and constant-alpha bodies are drawn, so every complete interior loads;
-        // since ARC-DATA-023 every interior but K'na Tha is complete.
+        // since ARC-DATA-023 every interior but K'na Tha is complete, and since ARC-DATA-024 K'na Tha too.
         Assert.AreEqual(0, failed.Count, string.Join("; ", failed));
-        Assert.AreEqual(79, loaded.Count, string.Join(", ", loaded));
+        Assert.AreEqual(80, loaded.Count, string.Join(", ", loaded));
     }
 
     [TestMethod, TestCategory("RealData")]

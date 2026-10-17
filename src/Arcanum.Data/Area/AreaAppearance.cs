@@ -221,6 +221,12 @@ public sealed partial class AreaDataOwner
         int ox, int oy, int scale, ObjectWireRecord? record, CancellationToken token, string? fallbackPolicy = null)
     {
         token.ThrowIfCancellationRequested();
+        // A whole map decodes each distinct frame selection once per build (ARC-DATA-024): the
+        // selection fixes the decode, so later visuals copy its frame facts. Pinned profiles keep
+        // one admission and decode per visual.
+        var shared = _sharedFrames is not null ? (entry, group, frame, palette, raw >> 28 is 1 or 3, fallbackPolicy) : default;
+        if (_sharedFrames is not null && _sharedFrames.TryGetValue(shared, out var template))
+            return template with { Key = key, RawArt = raw, LookupArt = lookup, NominalFacing = nominal, Mirrored = mirrored, ObjectOffsetX = ox, ObjectOffsetY = oy, Scale = scale };
         _budget.Context = new(AreaBudgetCallsite.Pixels, entry.Source, entry.Ordinal, entry.Offset, key.SourceIndex);
         _budget.StartFrame(entry.StoredBytes, entry.DecodedBytes);
         var (bytes, sha) = ReadFrameEntry(entry); var policy = "strict-full-entry"; var view = bytes.Length; var physical = group;
@@ -244,9 +250,11 @@ public sealed partial class AreaDataOwner
         var decoded = DecodeFrame(bytes.AsSpan(0, view), new(physical, frame, palette));
         var rgbaSha = HashPixels(decoded);
         _budget.EndFrame();
-        return new(key, raw, lookup, entry, sha, view, nominal, group, physical, frame, palette, decoded.EffectivePaletteSlot, mirrored,
+        var visual = new AreaVisualRecord(key, raw, lookup, entry, sha, view, nominal, group, physical, frame, palette, decoded.EffectivePaletteSlot, mirrored,
             decoded.Width, decoded.Height, decoded.Frame.HotX, decoded.Frame.HotY, decoded.Frame.OffsetX, decoded.Frame.OffsetY, ox, oy, scale,
             descriptor.Metadata.EncodedPayloadLength, decoded.Rgba.Count, rgbaSha, policy);
+        if (_sharedFrames is not null) { _budget.Reserve(512); _sharedFrames.Add(shared, visual); }
+        return visual;
     }
     // A lease authenticates the whole source before and after each frame. A frame batch
     // authenticates each source before its first frame (inside that admitted frame, as a
