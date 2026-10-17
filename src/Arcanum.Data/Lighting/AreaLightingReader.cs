@@ -2,17 +2,23 @@ using System.Buffers.Binary;
 using System.Globalization;
 using System.Text;
 using Arcanum.Data.Area;
+using Arcanum.Data.Content;
 using Arcanum.Data.Terrain;
 
 namespace Arcanum.Data.Lighting;
 
 /// <summary>
-/// Reads the lighting inputs of one strict area snapshot from its module archive: the map default
-/// (maplist -> mapinfo <c>LightScheme</c>), the raw scheme word of every core sector (sector metadata
-/// +8, re-read and bound to the snapshot's entry identity and payload digest), every referenced
-/// scheme through <c>rules/lighting schemes.mes</c>, and the game-init startup year/hour.
-/// The caller supplies the same module archive the snapshot was built from and re-verifies the
-/// module file afterwards. Module only: no PATCH/loose override precedence is claimed.
+/// Reads the lighting inputs of one strict area snapshot: the map default (maplist -> mapinfo
+/// <c>LightScheme</c>), the raw scheme word of every core sector (sector metadata +8, re-read and bound
+/// to the snapshot's entry identity and payload digest), every referenced scheme through
+/// <c>rules/lighting schemes.mes</c>, and the game-init startup year/hour.
+/// <see cref="Read(ContentStack, AreaSnapshot, CancellationToken)"/> (ARC-DATA-027) reads every file as
+/// the original does, after the module is mounted: <c>rules/gameinit.mes</c>, <c>rules/maplist.mes</c> and
+/// <c>rules/lighting schemes.mes</c> at module load, <c>mapinfo.txt</c> when the map opens and each scheme
+/// file when it is set, so each is the content stack's winner (exe-checked, ledger "Load phases"); each
+/// sector is bound to the stack's module-archive candidate. <see cref="Read(DatArchive, AreaSnapshot, CancellationToken)"/>
+/// is the pinned profiles' module-only read: the caller supplies the module archive the snapshot was
+/// built from and re-verifies it afterwards. MES files are read with the original grammar (<see cref="Messages.MesFile"/>).
 /// </summary>
 public static class AreaLightingReader
 {
@@ -20,34 +26,35 @@ public static class AreaLightingReader
     public const int MaxSectors = 256;
     public const int MaxSchemes = 32;
 
+    /// <summary>The pinned profiles' read: every file from <paramref name="module"/> alone.</summary>
     public static AreaLightingReadResult Read(DatArchive module, AreaSnapshot snapshot, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(module); ArgumentNullException.ThrowIfNull(snapshot);
-        var failure = ReadCore(module, snapshot, token, out var source);
+        return Read(new ArchiveFiles(module), snapshot, token);
+    }
+
+    /// <summary>ARC-DATA-027: every file through <paramref name="stack"/> in the phase the original reads it.</summary>
+    public static AreaLightingReadResult Read(ContentStack stack, AreaSnapshot snapshot, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(stack); ArgumentNullException.ThrowIfNull(snapshot);
+        return Read(new StackFiles(stack), snapshot, token);
+    }
+
+    private static AreaLightingReadResult Read(ILightingFiles files, AreaSnapshot snapshot, CancellationToken token)
+    {
+        var failure = ReadCore(files, snapshot, token, out var source);
         return new(failure, failure == LightingFailure.None ? source : null);
     }
 
-    private static LightingFailure ReadCore(DatArchive module, AreaSnapshot snapshot, CancellationToken token, out AreaLightingSource? source)
+    private static LightingFailure ReadCore(ILightingFiles files, AreaSnapshot snapshot, CancellationToken token, out AreaLightingSource? source)
     {
         source = null;
         if (!snapshot.StrictlyPublished) return LightingFailure.SnapshotNotStrict;
         var modules = snapshot.Inputs.Where(input => input.Key.Role == AreaSourceRole.Module).Take(2).ToArray();
         if (modules.Length != 1) return LightingFailure.SectorIdentityMismatch;
         var moduleIdentity = modules[0];
-        var index = new Dictionary<string, List<DatEntry>>(StringComparer.Ordinal);
-        foreach (var entry in module.Entries)
-        {
-            var name = Name(entry); if (name is null) continue;
-            if (!index.TryGetValue(name, out var list)) index.Add(name, list = new List<DatEntry>(1));
-            list.Add(entry);
-        }
-        LightingFailure Resource(string path, out byte[] bytes)
-        {
-            bytes = Array.Empty<byte>();
-            if (!index.TryGetValue(path, out var found)) return LightingFailure.MissingResource;
-            if (found.Count != 1) return LightingFailure.AmbiguousResource;
-            return ReadEntry(module, found[0], out bytes);
-        }
+        // Every lighting file is read at module load or later (ARC-DATA-027).
+        LightingFailure Resource(string path, out byte[] bytes) => files.Read(path, ContentLoadPhase.ModuleLoaded, out bytes);
 
         token.ThrowIfCancellationRequested();
         var failure = Resource("rules/gameinit.mes", out var gameInit);
@@ -76,7 +83,7 @@ public static class AreaLightingReader
         {
             token.ThrowIfCancellationRequested();
             if (sectors.Count == MaxSectors) return LightingFailure.LimitExceeded;
-            failure = SectorScheme(module, sector, "maps/" + directory.ToLowerInvariant() + "/", out var raw);
+            failure = SectorScheme(files, sector, "maps/" + directory.ToLowerInvariant() + "/", out var raw);
             if (failure != LightingFailure.None) return failure;
             if (!sectors.TryAdd(sector.Key.Packed, raw)) return LightingFailure.SectorIdentityMismatch;
         }
@@ -124,20 +131,12 @@ public static class AreaLightingReader
         scheme = result; return LightingFailure.None;
     }
 
-    private static LightingFailure SectorScheme(DatArchive module, AreaSectorRecord sector, string mapPrefix, out int scheme)
+    private static LightingFailure SectorScheme(ILightingFiles files, AreaSectorRecord sector, string mapPrefix, out int scheme)
     {
         scheme = 0;
-        if (!sector.Present || sector.Entry is not { } identity || sector.PayloadSha256 is null ||
-            identity.Source.Role != AreaSourceRole.Module || identity.Ordinal < 0 || identity.Ordinal >= module.Entries.Count)
+        if (!sector.Present || sector.Entry is not { } identity || sector.PayloadSha256 is null || identity.Source.Role != AreaSourceRole.Module)
             return LightingFailure.SectorIdentityMismatch;
-        var entry = module.Entries[identity.Ordinal];
-        if (entry.Flags != identity.Flags || entry.StoredSize != identity.StoredBytes || entry.DeclaredOutputSize != identity.DecodedBytes ||
-            entry.Offset != identity.Offset || LightingMes.Hash(entry.RawNameBytes.ToArray()) != identity.NameSha256)
-            return LightingFailure.SectorIdentityMismatch;
-        // The map default must come from the same map directory the sectors were loaded from.
-        if (Name(entry) is not { } sectorName || !sectorName.StartsWith(mapPrefix, StringComparison.Ordinal))
-            return LightingFailure.MapDirectoryMismatch;
-        var failure = ReadEntry(module, entry, out var bytes);
+        var failure = files.Sector(sector, identity, mapPrefix, out var bytes);
         if (failure != LightingFailure.None) return failure;
         if (LightingMes.Hash(bytes) != sector.PayloadSha256) return LightingFailure.SectorIdentityMismatch;
         TerrainByteRange metadata;
@@ -148,6 +147,11 @@ public static class AreaLightingReader
         scheme = BinaryPrimitives.ReadInt32LittleEndian(bytes.AsSpan(metadata.Offset + 8));
         return scheme < 0 ? LightingFailure.SectorSchemeNegative : LightingFailure.None;
     }
+
+    /// <summary>True when <paramref name="entry"/> is the member <paramref name="identity"/> names.</summary>
+    internal static bool Matches(DatEntry entry, AreaEntryIdentity identity) =>
+        entry.Ordinal == identity.Ordinal && entry.Flags == identity.Flags && entry.StoredSize == identity.StoredBytes &&
+        entry.DeclaredOutputSize == identity.DecodedBytes && entry.Offset == identity.Offset && LightingMes.Hash(entry.RawNameBytes.ToArray()) == identity.NameSha256;
 
     internal static LightingFailure ReadEntry(DatArchive module, DatEntry entry, out byte[] bytes)
     {
@@ -180,5 +184,88 @@ public static class AreaLightingReader
             token.Any(c => c < 32 || c >= 127 || c is '/' or '\\' or ':' or '<' or '>' or '*' or '?' or '"' or '|'))
             return null;
         return token;
+    }
+
+    /// <summary>Where the lighting readers take their files from.</summary>
+    internal interface ILightingFiles
+    {
+        /// <summary>One rule or resource file by virtual path, as read in <paramref name="phase"/>.</summary>
+        LightingFailure Read(string path, ContentLoadPhase phase, out byte[] bytes);
+
+        /// <summary>The bytes of the module-archive member <paramref name="identity"/> names, which must lie under
+        /// <paramref name="mapPrefix"/> (the map directory of the default scheme).</summary>
+        LightingFailure Sector(AreaSectorRecord sector, AreaEntryIdentity identity, string mapPrefix, out byte[] bytes);
+    }
+
+    /// <summary>The pinned profiles' source: one archive, a name it holds twice is ambiguous; the phase is not modelled.</summary>
+    internal sealed class ArchiveFiles : ILightingFiles
+    {
+        private readonly DatArchive _archive;
+        private readonly Dictionary<string, List<DatEntry>> _index = new(StringComparer.Ordinal);
+
+        internal ArchiveFiles(DatArchive archive, string? prefix = null)
+        {
+            _archive = archive;
+            foreach (var entry in archive.Entries)
+            {
+                var name = Name(entry);
+                if (name is null || (prefix is not null && !name.StartsWith(prefix, StringComparison.Ordinal))) continue;
+                if (!_index.TryGetValue(name, out var list)) _index.Add(name, list = new List<DatEntry>(1));
+                list.Add(entry);
+            }
+        }
+
+        public LightingFailure Read(string path, ContentLoadPhase phase, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            if (!_index.TryGetValue(path, out var found)) return LightingFailure.MissingResource;
+            if (found.Count != 1) return LightingFailure.AmbiguousResource;
+            return ReadEntry(_archive, found[0], out bytes);
+        }
+
+        public LightingFailure Sector(AreaSectorRecord sector, AreaEntryIdentity identity, string mapPrefix, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            if (identity.Ordinal < 0 || identity.Ordinal >= _archive.Entries.Count) return LightingFailure.SectorIdentityMismatch;
+            var entry = _archive.Entries[identity.Ordinal];
+            if (!Matches(entry, identity)) return LightingFailure.SectorIdentityMismatch;
+            // The map default must come from the same map directory the sectors were loaded from.
+            if (Name(entry) is not { } sectorName || !sectorName.StartsWith(mapPrefix, StringComparison.Ordinal))
+                return LightingFailure.MapDirectoryMismatch;
+            return ReadEntry(_archive, entry, out bytes);
+        }
+    }
+
+    /// <summary>ARC-DATA-027: the content stack. A file is the candidate of its load phase; a sector is the stack's
+    /// winner of its path in the map directory, which must be the module-archive member the snapshot read.</summary>
+    internal sealed class StackFiles(ContentStack stack) : ILightingFiles
+    {
+        public LightingFailure Read(string path, ContentLoadPhase phase, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            return ContentPhase.Candidate(stack, path, phase) is { } candidate ? ReadCandidate(candidate, out bytes) : LightingFailure.MissingResource;
+        }
+
+        public LightingFailure Sector(AreaSectorRecord sector, AreaEntryIdentity identity, string mapPrefix, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            var winner = stack.Resolve(mapPrefix + sector.Key.Packed.ToString(CultureInfo.InvariantCulture) + ".sec").Winner;
+            // A sector the stack resolves elsewhere is one the map directory does not hold under that name.
+            if (winner is null) return LightingFailure.MapDirectoryMismatch;
+            if (winner.Source.Role != ContentSourceRole.ModuleArchive || winner.Entry is not { } entry || !Matches(entry, identity))
+                return LightingFailure.SectorIdentityMismatch;
+            return ReadCandidate(winner, out bytes);
+        }
+
+        private LightingFailure ReadCandidate(ContentCandidate candidate, out byte[] bytes)
+        {
+            bytes = Array.Empty<byte>();
+            if (candidate.Length > LightingMes.MaxPayloadBytes) return LightingFailure.LimitExceeded;
+            var read = stack.Read(candidate);
+            if (read.Status == ContentReadStatus.TooLarge) return LightingFailure.LimitExceeded;
+            if (read.Status != ContentReadStatus.Read) return LightingFailure.ReadFailed;
+            bytes = read.Bytes!;
+            return bytes.Length > LightingMes.MaxPayloadBytes ? LightingFailure.LimitExceeded : LightingFailure.None;
+        }
     }
 }

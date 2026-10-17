@@ -155,7 +155,12 @@ of the game folder that holds the module archive (the description tables' rule),
 `PremadeHeroReader` over the stack's prototypes (`ContentPrototypes`, ARC-DATA-026) and the three rule tables, and maps it with
 `AreaStartingHero.Definition` (the mapping above, moved out of the real-data test). Refusals are typed
 (`AreaHeroStatus`: module outside a game folder, mount or stack failure, a table absent or invalid, a reader refusal,
-an invalid flag message) and fail the viewer's load.
+an invalid flag message) and fail the viewer's load. Each table comes from the sources of the phase the original reads
+it in (ARC-DATA-027, exe-checked, [ledger](../research/original-verification-ledger.md#load-phases-arc-data-027)):
+`rules\effect.mes`, `rules\InvenSource.mes`, `rules\InvenSourceBuy.mes`, `mes\MainMenu.mes`, `rules\xp_level.mes` and
+`rules\xp_quest.mes` at game start, so from the first base source (a module copy is never read; a table only a module
+holds is absent); `rules\gamequest.mes` at module load, so the stack winner. The installed module holds none of the
+game-start tables, so the installed heroes read unchanged.
 
 **Pre-made hero flag** (S, and checked in the original executable): picking a hero, `mainmenu_ui_pregen_char_execute`
 (0x545B60) reads `MainMenu.mes` messages 551 + i for each hero index i, turns each into a flag number with `atoi` and

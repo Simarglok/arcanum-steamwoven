@@ -58,6 +58,24 @@ public sealed class ContentPrototypesTests
     }
 
     [TestMethod]
+    public void A_load_phase_picks_the_first_base_source_or_the_stack_winner()
+    {
+        // ARC-DATA-027: a file read at game start never sees a module source; one read later sees every source.
+        File.WriteAllBytes(Path.Combine(_root, "arcanum1.dat"), Dat(("rules/a.mes", [1]), ("rules/b.mes", [1])));
+        Write("data/rules/a.mes", [2]);
+        Write("modules/Mod/rules/a.mes", [3]);
+        Write("modules/Mod/rules/c.mes", [3]);
+        using var stack = Stack();
+        Assert.AreEqual(ContentSourceRole.DataDirectory, ContentPhase.Candidate(stack, "rules/a.mes", ContentLoadPhase.GameStart)!.Source.Role);
+        Assert.AreEqual(ContentSourceRole.ModuleDirectory, ContentPhase.Candidate(stack, "RULES\\A.MES", ContentLoadPhase.ModuleLoaded)!.Source.Role);
+        Assert.AreEqual(ContentSourceRole.BaseArchive, ContentPhase.Candidate(stack, "rules/b.mes", ContentLoadPhase.GameStart)!.Source.Role);
+        Assert.IsNull(ContentPhase.Candidate(stack, "rules/c.mes", ContentLoadPhase.GameStart), "module only");
+        Assert.IsNotNull(ContentPhase.Candidate(stack, "rules/c.mes", ContentLoadPhase.ModuleLoaded));
+        Assert.IsNull(ContentPhase.Candidate(stack, "../x", ContentLoadPhase.ModuleLoaded), "not a virtual path");
+        Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => ContentPhase.Candidate(stack, "rules/a.mes", (ContentLoadPhase)9));
+    }
+
+    [TestMethod]
     public void Names_duplicates_size_and_range_are_reported()
     {
         Write("data/proto/007001 - a.pro", P(7001, 1));

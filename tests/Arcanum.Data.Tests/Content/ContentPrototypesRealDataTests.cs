@@ -50,4 +50,25 @@ public sealed class ContentPrototypesRealDataTests
             CollectionAssert.AreEqual(b.Hero.Items.ToArray(), a.Hero.Items.ToArray(), $"{basic}");
         }
     }
+
+    /// <summary>ARC-DATA-027: the game-start tables the universal readers take from the base sources have no module copy on
+    /// the installed game, so reading them by phase changes nothing there; the module-load tables are the module's own.</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Game_start_tables_have_no_module_copy_on_the_installed_game()
+    {
+        var root = Environment.GetEnvironmentVariable("DAT_ROOT");
+        if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("DAT_ROOT is required.");
+        var discovery = ContentMountPlan.Discover(root);
+        Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+        using var stack = ContentStack.Open(discovery.Plan!).Stack!;
+        foreach (var path in new[] { "rules/effect.mes", "rules/invensource.mes", "rules/invensourcebuy.mes", "mes/mainmenu.mes", "rules/xp_level.mes",
+            "rules/xp_quest.mes", "art/light/light.mes" })
+        {
+            var resolution = stack.Resolve(path);
+            Assert.IsNotNull(ContentPhase.Candidate(resolution, ContentLoadPhase.GameStart), path);
+            Assert.AreSame(resolution.Winner, ContentPhase.Candidate(resolution, ContentLoadPhase.GameStart), path);
+        }
+        foreach (var path in new[] { "rules/gameinit.mes", "rules/maplist.mes", "rules/lighting schemes.mes", "rules/gamequest.mes" })
+            Assert.IsTrue(ContentPhase.IsModule(stack.Resolve(path).Winner!.Source.Role), path);
+    }
 }

@@ -101,15 +101,10 @@ public sealed class ContentPrototypes
     }
 
     /// <summary>The first candidate the original reads at game start: the first base source in search order.</summary>
-    public static ContentCandidate? BaseCandidate(ContentResolution resolution)
-    {
-        ArgumentNullException.ThrowIfNull(resolution);
-        return resolution.Candidates.FirstOrDefault(candidate => !IsModule(candidate.Source.Role));
-    }
+    public static ContentCandidate? BaseCandidate(ContentResolution resolution) => ContentPhase.Candidate(resolution, ContentLoadPhase.GameStart);
 
     /// <summary>The module archive, a module patch or the module folder: sources mounted after game start.</summary>
-    public static bool IsModule(ContentSourceRole role) =>
-        role is ContentSourceRole.ModuleArchive or ContentSourceRole.ModulePatch or ContentSourceRole.ModuleDirectory;
+    public static bool IsModule(ContentSourceRole role) => ContentPhase.IsModule(role);
 
     /// <summary><c>NNNNNN - label.pro</c>: six decimal digits, <c>" - "</c>, a label and the extension.</summary>
     internal static bool TryNumber(string fileName, out int number)

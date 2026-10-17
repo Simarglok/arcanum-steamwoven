@@ -18,7 +18,7 @@ tests and logs use counts, scheme ids and SHA-256 digests only.
 
 | Requirement | Implemented subset | Not implemented / NOT_VERIFIED |
 | --- | --- | --- |
-| FR-LIGHT-003 hourly scheme | `LightSchemeParser` reads a scheme MES: 24 hour keys, six integers 0..255 per row in **outdoor RGB, indoor RGB** order, scheme id → `rules/<name>.mes` through `rules/lighting schemes.mes`. | Universal MES grammar; DAT/PATCH/loose precedence (module archive only). |
+| FR-LIGHT-003 hourly scheme | `LightSchemeParser` reads a scheme MES: 24 hour keys, six integers 0..255 per row in **outdoor RGB, indoor RGB** order, scheme id → `rules/<name>.mes` through `rules/lighting schemes.mes`. Every lighting MES file is read with the original grammar (`MesFile`, ARC-DATA-027): text outside braces is ignored. | The pinned Crash Site profiles still read the module archive only; the whole-map viewer reads through the content stack ([sources](#sources-and-load-phases-arc-data-027)). |
 | FR-LIGHT-004 empty hours | Strict project policy from RES-018: all 24 keys present, hours 0 and 23 explicit (the shipped default scheme file states the same rule), each interior empty run filled per channel as `left + distance * trunc((right-left)/span)` from its own bracketing anchors. Missing key, edge gap, wrong channel count or range fail with a typed `LightingFailure`. | CE's mutable running-colour behaviour for several separated gaps and reload is deliberately not reproduced. |
 | FR-LIGHT-005 hourly application | `AmbientLightingState.Apply(hour, sector)` selects the pair for the whole game hour; the selection and its revision change only when the hour or the resolved scheme changes. The viewer re-applies after every clock change, so a resumed/jumped clock shows the current hour at once. | No relative 3,600,000 ms callback scheduler; no minute blending (none exists in the source either). |
 | FR-LIGHT-006 indoor/outdoor surfaces | Per drawn ART type, following the CE palette callback: tile/facade take **indoor** when their type bit is 0 (tile bit 8, facade bit 25) and **outdoor** otherwise; wall, critter, portal, scenery, container, roof, monster and unique NPC take outdoor; items only in ground disposition; interface, misc, light and eye-candy are unlit. The controlled actor is a critter (outdoor). The shader multiplies each item by its channel colour / 255. | Roof/roof-fade modes (no roofs in this core), local light blending, TIG palette/BPP rounding parity. |
@@ -61,7 +61,7 @@ Namespace `Arcanum.Data.Lighting` (Godot-free):
 
 - `AmbientColor`, `AmbientPair(Outdoor, Indoor)`, `LightSchemeTable` (24 detached read-only hours, explicit-hour flags, payload digest).
 - `LightSchemeParser.TryParse(id, payload, out table)` → `LightingFailure`.
-- `AreaLightingReader.Read(module, snapshot)` → `AreaLightingReadResult(Failure, Source)`. Only a strictly published snapshot is accepted, and every core sector entry must live under the map directory whose `mapinfo.txt` supplies the default. Caps: 1 MiB per rule payload, 8,192 MES records, 256 core sectors (a whole interior map, ARC-RENDER-017; was 64), 32 schemes. The caller passes the module archive the snapshot was built from and re-verifies the module file afterwards (the viewer does).
+- `AreaLightingReader.Read(stack, snapshot)` (ARC-DATA-027) reads every file through the content stack ([sources](#sources-and-load-phases-arc-data-027)); `AreaLightingReader.Read(module, snapshot)` is the pinned profiles' module-only read. Both → `AreaLightingReadResult(Failure, Source)`. Only a strictly published snapshot is accepted, and every core sector entry must live under the map directory whose `mapinfo.txt` supplies the default. Caps: 1 MiB per rule payload, 8,192 MES records, 256 core sectors (a whole interior map, ARC-RENDER-017; was 64), 32 schemes. The caller passes the module archive the snapshot was built from and re-verifies the module file afterwards (the viewer does).
 - `AreaLightingSource`: module digest, map default, raw core sector words, referenced schemes, startup declaration; validating public constructor for synthetic inputs; `TryResolveScheme(sector)`.
 - `AmbientLightingState.Apply(hour, sector, out changed)`.
 
@@ -69,6 +69,32 @@ Viewer Core (`tools/terrain-viewer/Core/AreaAmbient.cs`): `AreaAmbientPolicy`
 (channel per ART id and per plan command), `AreaLightingPlan` (attached to
 `AreaLoadResult.Lighting`), and `AreaAmbientDriver` (clock owner + state; `AdvanceHours`,
 `Apply(sector)`, `Enabled`). Structural fixtures without lighting draw unlit.
+
+## Sources and load phases (ARC-DATA-027)
+
+The universal readers take each file from the sources the original reads it from, which
+depends on when it reads it (`ContentLoadPhase`, checked in the 1.0.7.4 executable,
+[ledger "Load phases"](../research/original-verification-ledger.md#load-phases-arc-data-027)):
+
+| File | Read by the original | Sources |
+| --- | --- | --- |
+| `rules/gameinit.mes` | at module load (`gameinit_mod_load`) | stack winner |
+| `rules/maplist.mes` | at module load (`map_list_info_load`) | stack winner |
+| `rules/lighting schemes.mes` | at module load (`light_scheme_mod_load`) | stack winner |
+| `rules/<scheme>.mes` | when the scheme is set (`light_scheme_set`) | stack winner |
+| `maps/<dir>/mapinfo.txt` | when the map opens (`map_load_extension`) | stack winner |
+| core sector files | with the map | the stack's winner of `maps/<dir>/<id>.sec`, which must be the module-archive member the snapshot read (`SectorIdentityMismatch` otherwise) |
+| `art/light/light.mes` | at game start (`a_name_light_init`, from Name's init) | first base source: a module copy is never read |
+| `art/light/<name>.art` | when the light is drawn | stack winner |
+
+The map viewer ([map mode](area-map-mode.md)) uses these readers; the pinned Crash Site
+exterior and cave keep the module-archive and `arcanum2.dat` reads. On the installed
+original both give the same result on all 80 interiors (opt-in
+`LightingStackRealDataTests`): 74 lit with stationary lights, 2 not in the map list
+(`MapNotCatalogued`), 2 with sectors older than the metadata section
+(`SectorMetadataAbsent`), one with an animated light ART and one with an unsupported
+light flag. Largest values against the caps: 79/256 core sectors, 3/32 schemes,
+207/256 stationary lights, 9/16 light frames.
 
 ## Viewer controls
 
@@ -159,7 +185,7 @@ No colour values or pixels are committed.
 
 API: `Arcanum.Data.Lighting.StationaryLight`, `StationaryLightFrame`,
 `AreaStationaryLightSource` (`Create` for synthetic fixtures),
-`StationaryLightReader` (`Read`, `TryDecode`; caps 256 lights, 16 frames, 1024 px
+`StationaryLightReader` (`Read(stack, snapshot)` through the content stack, `Read(artResource, snapshot)` for the pinned profiles, `TryDecode`; caps 256 lights, 16 frames, 1024 px
 frame side, ±16384 offset), `StationaryLightField` (`Point`, `Lattice`,
 `TerrainPixel` reference, `Compose`); viewer Core `AreaLocalLighting` (tile
 channels, body/wall/actor colours, `View`) attached as `AreaLightingPlan.Local`;

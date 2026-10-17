@@ -98,6 +98,14 @@ module folder › `patch9` … `patch0` › module `.dat` › `data/` › last-n
   `arcanum*.dat` and `data/` count for them, and a module's copy is never read.
   Checked in the 1.0.7.4 executable (ARC-DATA-026, ledger row "Prototype phase");
   implemented by `ContentPrototypes` ([map catalogue](../world/map-catalog.md#prototypes)).
+- The same holds for every file an init function reads and keeps: the original reads it from
+  the first base source, and a module copy is never read; a file read at module load or later
+  is the stack's winner. `ContentPhase`/`ContentLoadPhase` (ARC-DATA-027) applies this; the
+  files checked so far are in the ledger's
+  [load phases](original-verification-ledger.md#load-phases-arc-data-027) (effect, level and
+  quest experience, inventory sources, main-menu and light/tile name tables at game start;
+  game-init, map list, lighting schemes and the module quest table at module load; scheme
+  files and `mapinfo.txt` while the game runs).
 
 **Derivation.** On a static installation, a folder above the topmost archive that holds
 a name is, by construction, earlier in search order than that archive; if no folder

@@ -222,6 +222,53 @@ public sealed class StationaryLightTests
         Assert.AreEqual(LightingFailure.LimitExceeded, Read(Snapshot(Enumerable.Repeat<IReadOnlyList<int>>(Wire(), 257).ToArray()), names, ("art/light/disk5x5.art", Art())).Failure);
     }
 
+    /// <summary>ARC-DATA-027: a synthetic installation (tig.dat, an empty module archive, the given base archive and loose
+    /// files relative to the game folder) read through its content stack.</summary>
+    private static StationaryLightReadResult ReadStack(AreaSnapshot snapshot, (string Name, byte[] Bytes)[] arcanum1, params (string Path, byte[] Bytes)[] loose)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "arc-lights-stack-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(Path.Combine(root, "modules"));
+            File.WriteAllBytes(Path.Combine(root, "tig.dat"), Dat());
+            File.WriteAllBytes(Path.Combine(root, "modules", "Mod.dat"), Dat());
+            File.WriteAllBytes(Path.Combine(root, "arcanum1.dat"), Dat(arcanum1));
+            foreach (var (relative, bytes) in loose)
+            {
+                var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, bytes);
+            }
+            var discovery = Arcanum.Data.Content.ContentMountPlan.Discover(root, "Mod");
+            var opened = Arcanum.Data.Content.ContentStack.Open(discovery.Plan!);
+            Assert.AreEqual(Arcanum.Data.Content.ContentStackStatus.Ready, opened.Status, opened.Status + " " + opened.Detail);
+            using var stack = opened.Stack!;
+            return StationaryLightReader.Read(stack, snapshot);
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [TestMethod]
+    public void Stack_reader_takes_the_name_table_from_the_base_and_the_art_from_the_winner()
+    {
+        var snapshot = Snapshot([Wire()]);
+        var base1 = new[] { ("art/light/disk5x5.art", Art()), ("art/light/light.mes", Names) };
+        var result = ReadStack(snapshot, base1);
+        Assert.AreEqual(LightingFailure.None, result.Failure);
+        Assert.AreEqual(Convert.ToHexString(SHA256.HashData(Names)).ToLowerInvariant(), result.Source!.NamesSha256);
+
+        // The name table is read at game start, so a module copy is never read; the ART is read when drawn, so a
+        // module-folder copy wins.
+        var moduleNames = Encoding.ASCII.GetBytes("{5}{Other}\n");
+        var animated = Art(framesPerGroup: 2);
+        var overridden = ReadStack(snapshot, base1, ("modules/Mod/art/light/light.mes", moduleNames));
+        Assert.AreEqual(result.Source.NamesSha256, overridden.Source!.NamesSha256);
+        Assert.AreEqual(LightingFailure.LightArtUnsupported, ReadStack(snapshot, base1, ("modules/Mod/art/light/disk5x5.art", animated)).Failure);
+        // A loose data/ copy is a base source above the archives: number 5 now names other.art, which nothing holds.
+        Assert.AreEqual(LightingFailure.MissingResource, ReadStack(snapshot, base1, ("data/art/light/light.mes", moduleNames)).Failure);
+        Assert.AreEqual(LightingFailure.MissingResource, ReadStack(snapshot, [("art/light/disk5x5.art", Art())], ("modules/Mod/art/light/light.mes", Names)).Failure);
+    }
+
     // Opt-in original data: the four cave records and their two frames.
     [TestMethod, TestCategory("RealData")]
     public void Original_cave_has_four_stationary_lights_with_two_static_frames()
