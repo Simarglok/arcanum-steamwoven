@@ -15,7 +15,8 @@ Start with [current status](project/status.md), [vision](project/vision.md), [de
 - [Toolchain and verification entry points](workflow/toolchain.md)
 - [Private local diagnostic launch and build retention](workflow/local-development.md)
 - [Task workflow](workflow/tasks.md) and [task naming](workflow/task-naming.md)
-- [Original executable check](research/original-executable-check.md): how to tell a CE reconstruction slip from a bug of the original game
+- [Original executable check](research/original-executable-check.md): how to tell a CE reconstruction slip from a bug of the original game, and the function oracle (emulating single functions of the executable)
+- [Original oracle and CE exclusion (ARC-RES-051)](research/original-oracle-research.md): trial results, tools and plan for checking Steamwoven against the executable and phasing out CE
 - [Arcanum.Data](Arcanum.Data.md)
 - [Arcanum.Godot viewer](Arcanum.Godot.md)
 

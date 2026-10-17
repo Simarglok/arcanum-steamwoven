@@ -28,6 +28,26 @@ public static class HdFrameQueries
             new(frame.Width, frame.Height, key.RgbaSha256));
     }
 
+    /// <summary>ARC-RENDER-016: the question for one composed level-0 terrain chunk.
+    /// <paramref name="composed"/> is <see cref="AreaTerrainChunks.Compose"/> at level 0 (the
+    /// Legacy chunk this installation draws, hashed here); the tile list comes from the plan.</summary>
+    public static HdSpriteQuery FromTerrainChunk(AreaTerrainChunks terrain, (int X, int Y) chunk, ReadOnlySpan<byte> composed)
+    {
+        ArgumentNullException.ThrowIfNull(terrain);
+        var side = AreaTerrainChunks.Side(0);
+        if (composed.Length != (long)side * side * 4) throw new ArgumentException("A composed level-0 chunk is size × size × 4 bytes.", nameof(composed));
+        return HdSpriteQuery.ForTerrainChunk(new(chunk.X, chunk.Y, HdChunkKey.TilesDigest(TerrainChunkTiles(terrain, chunk))),
+            new(side, side, Sha256(composed)));
+    }
+
+    /// <summary>The Legacy RGBA SHA-256 of every tile and facade frame composed into a chunk, in
+    /// plan order (the pack's <c>tiles</c> list; the frame keys already carry the hashes).</summary>
+    public static IReadOnlyList<string> TerrainChunkTiles(AreaTerrainChunks terrain, (int X, int Y) chunk)
+    {
+        ArgumentNullException.ThrowIfNull(terrain);
+        return terrain.CommandsIn(chunk).Select(command => command.Frame.RgbaSha256).ToArray();
+    }
+
     /// <summary>A frame decoded outside the AREA owner (the controlled actor, WORLD statics):
     /// the SHA-256 of the whole ART entry, the bytes it was decoded from, the SHA-256 of the
     /// raw entry name, the physical group, frame and effective palette slot, and the decoded
@@ -111,6 +131,16 @@ public sealed record HdDomainBudget(long VisibleBytes, int RetainFrames, long Re
         ArgumentNullException.ThrowIfNull(device);
         return new(device.AreaVisibleBytes, device.AreaRetainedFrames, device.AreaRetainedBytes);
     }
+    /// <summary>ARC-RENDER-016 AREA terrain chunks: one HD byte limit for visible and kept chunks
+    /// (the reserved terrain ceiling, N² × the Legacy 192 MiB chunk cache, i.e. the same 192 chunks)
+    /// and the Legacy chunk count cap (1,024) as the frame count.</summary>
+    public static HdDomainBudget Terrain(HdDeviceBudget device)
+    {
+        ArgumentNullException.ThrowIfNull(device);
+        return new(device.TerrainBytes, TerrainChunkCap, device.TerrainBytes, device.TerrainBytes);
+    }
+    /// <summary>The Legacy <c>AreaChunkTextureCache</c> chunk count cap.</summary>
+    public const int TerrainChunkCap = 1024;
     /// <summary>WORLD: one HD byte limit for the actor and static textures, visible or kept, and
     /// the Legacy key caps (195 actor + 5 static) as the frame count.</summary>
     public static HdDomainBudget World(HdDeviceBudget device)

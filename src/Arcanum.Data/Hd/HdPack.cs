@@ -16,6 +16,9 @@ public sealed class HdPack
     private readonly Dictionary<HdSpriteKey, HdPackEntry> _sprites;
     // ART name hash -> the ART payload hashes the pack was built from under that name.
     private readonly Dictionary<string, HashSet<string>> _spriteArts;
+    // ARC-RENDER-016: terrain chunk entries by chunk coordinates (one per slice that has it).
+    private readonly Dictionary<(int X, int Y), HdPackEntry[]> _chunks;
+    private readonly Dictionary<int, string> _chunkTiles; // entry index -> tile list digest
     private readonly HdPackOptions _options;
 
     private HdPack(string directory, HdPackIdentity identity, HdReviewStatus review, string recipeFile, string recipeSha256, HdRecipe recipe,
@@ -26,6 +29,9 @@ public sealed class HdPack
         _sprites = entries.Where(e => e.Kind == HdEntryKind.Sprite).ToDictionary(e => e.Key!.Value);
         _spriteArts = entries.Where(e => e.Kind == HdEntryKind.Sprite).GroupBy(e => e.NameSha256!, StringComparer.Ordinal)
             .ToDictionary(g => g.Key, g => g.Select(e => e.Key!.Value.ArtSha256).ToHashSet(StringComparer.Ordinal), StringComparer.Ordinal);
+        var chunks = entries.Where(e => e.Kind == HdEntryKind.TerrainChunk).ToArray();
+        _chunks = chunks.GroupBy(e => (e.ChunkX!.Value, e.ChunkY!.Value)).ToDictionary(g => g.Key, g => g.ToArray());
+        _chunkTiles = chunks.ToDictionary(e => e.Index, e => HdChunkKey.TilesDigest(e.TileRgbaSha256!));
     }
 
     /// <summary>The full local directory the pack was opened from (runtime only; never
@@ -42,8 +48,7 @@ public sealed class HdPack
     public IReadOnlyList<HdPackEntry> Entries { get; }
     internal HdPackOptions Options => _options;
     public int SpriteCount => _sprites.Count;
-    /// <summary>Terrain chunk entries are a reserved kind: parsed and integrity-checked, never
-    /// bound until ARC-RENDER-016 amends the contract.</summary>
+    /// <summary>Terrain chunk entries, bound by <see cref="ResolveTerrainChunk"/> (ARC-RENDER-016).</summary>
     public int TerrainChunkCount => Entries.Count - _sprites.Count;
     /// <summary>Decoded HD RGBA bytes of all sprite entries (scale² · w · h · 4 each).</summary>
     public long SpriteRgbaBytes => _sprites.Values.Sum(e => (long)Scale * Scale * e.Legacy.Width * e.Legacy.Height * 4);
@@ -116,7 +121,42 @@ public sealed class HdPack
     /// <see cref="HdLegacyFrame.RgbaSha256"/>); its alpha is the reference of the mask check.
     /// Never throws for pack content; throws only for a query that contradicts its own
     /// pixels (a caller error).</summary>
-    public HdFrameResult ResolveSprite(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba) => Resolve(query, legacyRgba, review: false, out _);
+    public HdFrameResult ResolveSprite(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Chunk is not null) throw new ArgumentException("A terrain chunk question is resolved by ResolveTerrainChunk.", nameof(query));
+        return Resolve(query, legacyRgba, review: false, out _);
+    }
+
+    /// <summary>ARC-RENDER-016: binds one composed level-0 terrain chunk to its HD chunk, or
+    /// says why it draws Legacy. A chunk entry matches when its coordinates, its composed Legacy
+    /// frame (size and RGBA SHA-256) and its tile list all equal the question; entries of other
+    /// slices at the same coordinates (another map) are skipped. No entry at those coordinates is
+    /// <see cref="HdFrameStatus.FrameMissing"/>; entries there that all differ are
+    /// <see cref="HdFrameStatus.SourceMismatch"/> (other tiles: a mod or another version). The
+    /// file, PNG, size and mask checks are those of a sprite. <paramref name="legacyRgba"/> is
+    /// the composed chunk this installation draws.</summary>
+    public HdFrameResult ResolveTerrainChunk(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba)
+    {
+        ArgumentNullException.ThrowIfNull(query);
+        if (query.Chunk is not { } chunk) throw new ArgumentException("Not a terrain chunk question.", nameof(query));
+        CheckLegacy(query, legacyRgba);
+        if (Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
+        if (!_chunks.TryGetValue((chunk.X, chunk.Y), out var candidates)) return HdFrameResult.Refused(HdFrameStatus.FrameMissing, Scale);
+        var entry = candidates.FirstOrDefault(e => e.Legacy == query.Legacy && _chunkTiles[e.Index] == chunk.TilesSha256);
+        if (entry is null) return HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale);
+        if (entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
+        return Bind(entry, legacyRgba, review: false, out _);
+    }
+
+    private static void CheckLegacy(HdSpriteQuery query, ReadOnlySpan<byte> legacyRgba)
+    {
+        ArgumentNullException.ThrowIfNull(query.Legacy);
+        if (query.Legacy.Width <= 0 || query.Legacy.Height <= 0 || legacyRgba.Length != (long)query.Legacy.Width * query.Legacy.Height * 4)
+            throw new ArgumentException("Legacy RGBA must be exactly width × height × 4 bytes.", nameof(legacyRgba));
+        if (HdPackPath.Sha256(legacyRgba) != query.Legacy.RgbaSha256)
+            throw new ArgumentException("Legacy RGBA does not hash to the query's RgbaSha256.", nameof(legacyRgba));
+    }
 
     /// <summary>The before/after review's binding (ARC-RENDER-015): as
     /// <see cref="ResolveSprite"/>, but review marks do not refuse a frame (a rejected frame
@@ -130,11 +170,7 @@ public sealed class HdPack
     {
         alphaMatches = false;
         ArgumentNullException.ThrowIfNull(query);
-        ArgumentNullException.ThrowIfNull(query.Legacy);
-        if (query.Legacy.Width <= 0 || query.Legacy.Height <= 0 || legacyRgba.Length != (long)query.Legacy.Width * query.Legacy.Height * 4)
-            throw new ArgumentException("Legacy RGBA must be exactly width × height × 4 bytes.", nameof(legacyRgba));
-        if (HdPackPath.Sha256(legacyRgba) != query.Legacy.RgbaSha256)
-            throw new ArgumentException("Legacy RGBA does not hash to the query's RgbaSha256.", nameof(legacyRgba));
+        CheckLegacy(query, legacyRgba);
 
         if (!review && Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.PackRejected, Scale);
         if (!_sprites.TryGetValue(query.Key, out var entry))
@@ -146,7 +182,13 @@ public sealed class HdPack
         }
         if (entry.Legacy != query.Legacy) return HdFrameResult.Refused(HdFrameStatus.SourceMismatch, Scale);
         if (!review && entry.Review == HdReviewStatus.Rejected) return HdFrameResult.Refused(HdFrameStatus.FrameRejected, Scale);
+        return Bind(entry, legacyRgba, review, out alphaMatches);
+    }
 
+    // The file, PNG, size and mask checks shared by sprites and terrain chunks.
+    private HdFrameResult Bind(HdPackEntry entry, ReadOnlySpan<byte> legacyRgba, bool review, out bool alphaMatches)
+    {
+        alphaMatches = false;
         var (hdWidth, hdHeight) = ((long)Scale * entry.Legacy.Width, (long)Scale * entry.Legacy.Height);
         if (hdWidth * hdHeight > _options.MaxHdFramePixels) return Invalid(HdInvalidReason.TooLarge);
         var bytes = ReadFrameFile(entry, out var fileProblem);

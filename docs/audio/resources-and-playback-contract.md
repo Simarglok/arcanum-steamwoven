@@ -7,6 +7,15 @@ The accepted task uses local-only / `CI_NOT_REQUIRED`; mandatory local checks
 still apply. No hardware, audible playback, graphical or export gate is required
 for this research. None is claimed to have passed.
 
+**Superseded points (ARC-RES-052, 2026-10-17).** The [audio study](../research/audio-evidence.md)
+checked these claims in the retail executable and counted the whole installed data. Where they
+differ, the study wins: audio resolves through the content stack, not one selected source;
+soundparams key 12 is the small size's volume and the per-size volume is applied; a balance-left
+above 127 clamps to 127 and `/over` wins over `/loop`; one ambient fires per slot per tick;
+combat stinger and loop start together; voice gender is the PC's; overnight hour windows exist in
+the data (20 entries) and are a rule-setting choice, not an unsupported case. Its task plan
+replaces the proposed profile below.
+
 ## Evidence, lineage and scope
 
 Labels used throughout:

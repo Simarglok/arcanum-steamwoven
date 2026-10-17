@@ -142,7 +142,9 @@ unconditional and a conditional path counts as unconditional for the pair.
 The 151 unconditional cross-map paths are use clicks on scenery (144), tiles (5)
 and portals (2). Two unconditional paths work once: their script removes or
 replaces itself or is auto-removing (`one_shot`; scripts 2766 on 5000, same
-map, and 2302, 5009 → 5011). The Crash Site cave (5000 ↔ 5078,
+map, and 2302, 5009 → 5011). Both are use clicks; a tile script's own change would
+not hold in the original, which stores its unchanged record back
+([ledger X3, TR5](original-verification-ledger.md#map-transitions-arc-data-025)). The Crash Site cave (5000 ↔ 5078,
 scripts 2793 and 1532) is one of them, as the
 [cave research](cave-transition-evidence.md) found.
 

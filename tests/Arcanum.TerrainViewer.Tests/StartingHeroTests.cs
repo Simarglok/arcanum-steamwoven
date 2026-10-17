@@ -116,6 +116,44 @@ public sealed class StartingHeroTests
 
     /// <summary>A new session at the area spawn with the pre-made hero <paramref name="basic"/> (fresh identities, the
     /// viewer's synthetic clock, the original 3,200 new-game flags).</summary>
+    /// <summary>ARC-DATA-027: a game-start table never comes from a module source; a module-load table is the stack winner.</summary>
+    [TestMethod]
+    public void Rule_tables_come_from_the_sources_of_their_load_phase()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "arc-hero-phase-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            void Write(string relative, string text)
+            {
+                var path = Path.Combine(root, relative.Replace('/', Path.DirectorySeparatorChar));
+                Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+                File.WriteAllBytes(path, Encoding.ASCII.GetBytes(text));
+            }
+            Directory.CreateDirectory(Path.Combine(root, "modules", "Arcanum"));
+            File.WriteAllBytes(Path.Combine(root, "tig.dat"), AreaOwnerFixture.Dat());
+            Write("data/rules/effect.mes", "{50}{base}");
+            Write("modules/Arcanum/rules/effect.mes", "{50}{module}");
+            Write("modules/Arcanum/rules/xp_quest.mes", "{1}{module}");
+            Write("data/rules/gamequest.mes", "{1000}{base}");
+            Write("modules/Arcanum/rules/gamequest.mes", "{1000}{module}");
+            var discovery = ContentMountPlan.Discover(root);
+            Assert.AreEqual(ContentMountStatus.Ready, discovery.Status, discovery.Detail);
+            using var stack = ContentStack.Open(discovery.Plan!).Stack!;
+            string Text(MesFile? file, int number) => Encoding.ASCII.GetString(file!.Find(number)!.Bytes.Span);
+
+            Assert.AreEqual("base", Text(AreaStartingHero.Table(stack, AreaStartingHero.EffectsPath, ContentLoadPhase.GameStart, true, out var detail), 50));
+            Assert.IsNull(detail);
+            Assert.IsNull(AreaStartingHero.Table(stack, AreaStartingHero.QuestExperiencePath, ContentLoadPhase.GameStart, true, out detail));
+            Assert.AreEqual("rules/xp_quest.mes NotInPhase", detail);
+            Assert.IsNull(AreaStartingHero.Table(stack, AreaStartingHero.LevelsPath, ContentLoadPhase.GameStart, true, out detail));
+            Assert.AreEqual("rules/xp_level.mes NotFound", detail);
+            Assert.IsNull(AreaStartingHero.Table(stack, AreaStartingHero.SourcesBuyPath, ContentLoadPhase.GameStart, false, out detail));
+            Assert.IsNull(detail, "an optional table may be absent");
+            Assert.AreEqual("module", Text(AreaStartingHero.Table(stack, AreaStartingHero.QuestLevelsPath, ContentLoadPhase.ModuleLoaded, true, out detail), 1000));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
     private static GameSessionOwner Start(PremadeHeroSources sources, int basic, int runtimeMap, out int dropped)
     {
         var read = PremadeHeroReader.Read(sources, basic);

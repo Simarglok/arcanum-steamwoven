@@ -80,7 +80,11 @@ Run from repository root:
 "$DOTNET" build Arcanum.Steamwoven.sln --no-restore
 "$DOTNET" test Arcanum.Steamwoven.sln --no-build --filter "TestCategory!=RealData"
 python3 -B tools/research/dat_probe.py --self-test
+python3 -B tools/original-oracle/oracle.py --self-test
 ```
+
+The `OriginalExe` tests are part of the solution run and stay inconclusive without
+`ARCANUM_EXE` and the oracle's files ([function oracle](#function-oracle)).
 
 The root solution includes Data, Presentation, Scripting, [headless Simulation movement](../world/grid-movement-runtime.md), [Session state](../world/game-session-runtime.md), the ART viewer and terrain-inspect. It does **not** include the standalone terrain viewer/tests, research C# probes, or display/gamepad labs. Use their specific commands: [ART viewer](../Arcanum.Godot.md), [terrain viewer](../rendering/terrain-viewer.md), [display lab](../../experiments/display-ui-lab/README.md), [gamepad lab](../../experiments/gamepad-lab/README.md). Launch Godot projects with Godot; `dotnet run` applies to executable CLIs/harnesses, not the Godot adapter projects.
 
@@ -104,6 +108,30 @@ child MSBuild witnesses; SOURCE/EXPORT authority, writer and registration retain
 the complete candidate-map guard. Missing, altered or cross-project pins reject.
 No tracked lock is excluded or restored after a build/export.
 
+## Function oracle
+
+ARC-DEV-007, [`tools/original-oracle`](../../tools/original-oracle/README.md), method in the
+[original executable check](../research/original-executable-check.md#function-emulation-oracle).
+
+| Tool | Version | Use |
+| --- | --- | --- |
+| [Unicorn](https://pypi.org/project/unicorn/) | 2.1.4, pinned with wheel hashes in `tools/original-oracle/requirements.lock` | Emulates single x86-32 functions; installed by `oracle.py` into `local/original-oracle/venv` (or `ARCANUM_ORACLE_VENV`) on first use. Bindings BSD, engine GPLv2; never vendored or referenced by a C# assembly. |
+| [Ghidra](https://github.com/NationalSecurityAgency/ghidra/releases) | 12.1.4 (Apache-2.0), with JDK 21 | Optional headless reading and function discovery; its project stays in `research-private/`. Not needed by the oracle. |
+
+```sh
+python3 -B tools/original-oracle/oracle.py --self-test   # root check: synthetic code, no game file
+ARCANUM_EXE=/path/to/Arcanum.exe ./arcanum oracle         # every function: generate, then the OriginalExe tests
+./arcanum oracle --function 0x4A6900                      # one function
+```
+
+`ARCANUM_EXE` is the installed retail executable (SHA-256 `9bd80511…3678d52`, the
+[pinned 1.0.7.4 file](../research/original-executable-check.md#inputs)); `./arcanum oracle` also takes `--exe` or
+finds `Arcanum.exe` in the configured game folder. Generated files go to `research-private/oracle/` of the
+checkout (`oracle.py generate` also takes `--out` or `ARCANUM_ORACLE_DIR`; the tests read `ARCANUM_ORACLE_DIR`) and
+never into git. `./arcanum oracle` sets `ARCANUM_ORACLE_REQUIRED=1`, so a missing file fails
+the tests instead of leaving them inconclusive, and `ARCANUM_ORACLE_RECEIPTS=docs/verification/receipts`, where each
+test writes its [receipt](../verification/README.md#oracle-receipts) to commit.
+
 ## Opt-in original data
 
 Original inputs remain read-only and local. Set only the inputs needed for the selected check; never commit actual paths or content. Missing required inputs fail or make an invocation inconclusive, not verified. Use `--no-build` only after building the corresponding project/configuration.
@@ -119,6 +147,7 @@ Original inputs remain read-only and local. Set only the inputs needed for the s
 | Complete exterior area | `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`, `ARC_AREA_MOBILE`, `ARC_AREA_PROTOTYPES`, `ARC_AREA_ORACLE` | Data project, `FullyQualifiedName~AreaOriginalTests&TestCategory=RealData`; [profile, independent oracle and measurements](../world/crash-site-area-loader.md) |
 | Crash Site cave | `ARC_AREA_MODULE`, `ARC_AREA_RESOURCE1`, `ARC_AREA_RESOURCE2`, `ARC_AREA_PROTOTYPES`, `ARC_CAVE_MOBILE` (the cave's game-generated object file next to `areaMobile`) | Data project, `FullyQualifiedName~AreaCaveOriginalTests&TestCategory=RealData`; [cave profile](../world/crash-site-area-loader.md#crash-site-cave-profile) |
 | Whole-core step assessment | The Area variables except the oracle, plus `ARC_AREA_EFFECTS`, `ARC_AREA_PATCH` | Data project, `FullyQualifiedName~AreaStepOriginalDataTests&TestCategory=RealData`; [API and observations](../world/area-step-assessment.md) |
+| Function oracle | `ARCANUM_EXE` (the installed `Arcanum.exe`) and the oracle's files from `./arcanum oracle` (`ARCANUM_ORACLE_DIR`, default `research-private/oracle/`) | Simulation project, `TestCategory=OriginalExe`; [function oracle](#function-oracle) |
 | Click route on the whole core | `ARC_AREA_ORIGINAL=1` and the area coordinator roles (module, resource1/2, mobile, prototypes, effects, patch) | Terrain Viewer tests, `FullyQualifiedName~AreaRouteOriginalTests&TestCategory=RealData`; [route core](../world/click-route-runtime.md) |
 
 Example, with `DAT_ROOT` already set locally:

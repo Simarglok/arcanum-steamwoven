@@ -57,7 +57,7 @@ public static class CombatFieldReader
     public static int SkillTraining(int stored) => (stored >> 6) & 0x3;
 
     /// <summary>The prototype file <paramref name="prototype"/> (its six-digit number, the basic prototype number + 20).
-    /// The lookup is the one the pre-made hero reader takes, e.g. <see cref="PremadeHeroReader.DirectoryPrototypes"/>.</summary>
+    /// The lookup is the one the pre-made hero reader takes: in play <see cref="Content.ContentPrototypes.Read"/> (ARC-DATA-026).</summary>
     public static CombatFieldRead ReadPrototype(Func<int, PrototypeFile> lookup, int prototype)
     {
         ArgumentNullException.ThrowIfNull(lookup);

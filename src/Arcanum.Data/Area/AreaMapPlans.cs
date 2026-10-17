@@ -1,9 +1,6 @@
-using System.Globalization;
 using System.Security.Cryptography;
-using System.Text;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
-using Arcanum.Data.Messages;
 
 namespace Arcanum.Data.Area;
 
@@ -64,8 +61,9 @@ public sealed record AreaMapPlanResult(AreaMapPlanStatus Status, AreaMapPlan? Pl
 /// reads them. ARC-DATA-018: resources resolve in content-stack order: every stack source that
 /// wins a name under <c>art/</c> is an input of the plan's <see cref="AreaSourcePlan.ResourceOrder"/>
 /// (an archive, or each loose file such a folder wins), the name tables are the stack's winners, and
-/// prototypes and the mobile aggregate are read from whichever source wins them. Sector and editor
-/// mobile files must be the module archive's own.</summary>
+/// the mobile aggregate is read from whichever source wins it. ARC-DATA-026: prototypes are the
+/// base-source files the original reads at game start (<see cref="ContentPrototypes"/>). Sector and
+/// editor mobile files must be the module archive's own.</summary>
 public static class AreaMapPlans
 {
     /// <summary>Largest map a whole-map plan loads at once (the largest interior has 79 sector
@@ -174,11 +172,12 @@ public static class AreaMapPlans
             if (Member(stack, new(AreaSourceRole.NormalGameMobile), winner, files, identities, MaxMemberBytes, "the mobile aggregate") is { } failure) return failure;
             aggregateBytes = winner.Length;
         }
+        // Prototypes are the files the original reads at game start, from the base sources only (ARC-DATA-026).
         foreach (var number in prototypes)
         {
-            var path = catalog.PrototypePath(number);
-            var winner = path is null ? null : stack.Resolve(path).Winner;
-            if (winner is null) return new(AreaMapPlanStatus.MissingSource, null, $"prototype {number}");
+            var winner = catalog.Prototypes.Candidate(number);
+            if (winner is null)
+                return new(AreaMapPlanStatus.MissingSource, null, catalog.Prototypes.IsAmbiguous(number) ? $"prototype {number} is held by two files" : $"prototype {number}");
             if (Member(stack, new(AreaSourceRole.Prototype, number), winner, files, identities, 1048576, $"prototype {number}") is { } failure) return failure;
         }
 
@@ -287,27 +286,8 @@ public static class AreaMapPlans
 
     /// <summary>The map list entry: catalogue and runtime numbers and the start tile (the entry's
     /// second and third values read like C strtoll; null when the entry has fewer values).</summary>
-    internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName)
-    {
-        var winner = stack.Resolve("rules/maplist.mes").Winner;
-        if (winner is null) return (0, 0, null);
-        var read = stack.Read(winner);
-        if (read.Status != ContentReadStatus.Read) return (0, 0, null);
-        var parsed = MesFile.Parse(read.Bytes!);
-        if (parsed.Status != MesParseStatus.Parsed) return (0, 0, null);
-        for (var number = 5000; number < 5200; number++)
-        {
-            if (parsed.File!.Find(number) is not { } message) break;
-            var values = Encoding.Latin1.GetString(message.Bytes.Span).Split(',');
-            if (!string.Equals(values[0].Trim(), mapName, StringComparison.OrdinalIgnoreCase)) continue;
-            // Read like C strtoll (leading digits, else 0), as the original's value parser does; a
-            // negative coordinate is not a tile, so it is treated as absent.
-            WorldLocation? start = null;
-            if (values.Length >= 3 && WorldCatalog.StrToLong(values[1]) is var x and >= 0 && WorldCatalog.StrToLong(values[2]) is var y and >= 0) start = new(x, y);
-            return (number, number - 4999, start);
-        }
-        return (0, 0, null);
-    }
+    internal static (int Catalogue, int Runtime, WorldLocation? Start) CatalogueEntry(ContentStack stack, string mapName) =>
+        MapList.Read(stack).Find(mapName) is { } entry ? (entry.Catalogue, entry.Runtime, entry.Start) : (0, 0, null);
 
     private static AreaInputIdentity Identity(AreaInputKey key, string path)
     {

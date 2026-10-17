@@ -23,8 +23,10 @@ profiles and every exterior smoke stay as they were.
   ordinally, no case folding or symlink resolution; refused with
   `AREA_MAP_SOURCES_MISMATCH` otherwise). The `--expect-*-sha256` pins are
   checked against the snapshot's identities, and the three archives, which the
-  actor, lighting and stationary lights read outside the data owner, are
-  re-verified against them before publication, as on the exterior.
+  actor reads outside the data owner, are re-verified against them before
+  publication, as on the exterior. Lighting and stationary lights are read
+  through the content stack in the phase the original reads each file
+  (ARC-DATA-027, [sources](area-lighting.md#sources-and-load-phases-arc-data-027)).
   Prototypes come from the stack, so `--prototypes` is refused, as are the Crash
   Site inputs (`--area-mobile`, `--area-effects`, `--area-patch`,
   `--area-cave-mobile`). A plan the data layer refuses stops the load with

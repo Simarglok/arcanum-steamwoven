@@ -16,10 +16,12 @@ Code: [`src/Arcanum.Data/Combat`](../../src/Arcanum.Data/Combat); tests:
 
 ## API
 
-- `CombatFieldReader.ReadPrototype(lookup, prototype)` reads one loose
-  prototype file by its six-digit number (basic prototype + 20) through the
-  lookup the pre-made hero reader takes (`PremadeHeroReader.DirectoryPrototypes`
-  over the installation's `data/proto`). Origin `Prototype`.
+- `CombatFieldReader.ReadPrototype(lookup, prototype)` reads one prototype
+  file by its six-digit number (basic prototype + 20) through the lookup the
+  pre-made hero reader takes: in play `ContentPrototypes.Read` over the content
+  stack (ARC-DATA-026, [map catalogue](../world/map-catalog.md#prototypes)), so a
+  prototype in a base archive is read like a loose one; a module copy is never
+  read, as in the original. Origin `Prototype`.
 - `CombatFieldReader.Read(AreaObjectRecord)` reads one Area object by its
   effective fields: an instance field replaces the prototype's whole field
   (an array is never merged key by key), as the source's lazy inheritance does.
@@ -96,8 +98,7 @@ NOT READY: portals, containers, walls and scenery (types 0..4) and traps (17)
 are refused as `TypeUnsupported`, although portals and containers can be
 attacked; critter ammunition pools (four object handles) and inventory gear
 (use the [Area inventory view](../world/area-inventory-view.md) and
-`InventoryLocation` 1004 wielded, 1006 worn); prototypes inside archives
-(loose `data/proto` only, like the pre-made hero reader); the spell, AI
+`InventoryLocation` 1004 wielded, 1006 worn); the spell, AI
 parameter and critical tables the stored numbers point to; generated
 prototypes for missing files.
 
