@@ -176,7 +176,8 @@ public static class AreaMapPlans
         foreach (var number in prototypes)
         {
             var winner = catalog.Prototypes.Candidate(number);
-            if (winner is null) return new(AreaMapPlanStatus.MissingSource, null, $"prototype {number}");
+            if (winner is null)
+                return new(AreaMapPlanStatus.MissingSource, null, catalog.Prototypes.IsAmbiguous(number) ? $"prototype {number} is held by two files" : $"prototype {number}");
             if (Member(stack, new(AreaSourceRole.Prototype, number), winner, files, identities, 1048576, $"prototype {number}") is { } failure) return failure;
         }
 

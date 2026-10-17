@@ -211,7 +211,7 @@ internal static partial class Program
         {
             module = stack.Plan.ModuleName,
             files,
-            prototype_layers = new { winners = prototypeLayers.Snapshot(), ignored_module_copies = catalog.Prototypes.IgnoredModuleKeys.Count },
+            prototype_layers = new { read_from = prototypeLayers.Snapshot(), ignored_module_copies = catalog.Prototypes.IgnoredModuleKeys.Count },
             ai = new { base_table = baseAi, module_table = moduleAi },
             spells,
             effects,

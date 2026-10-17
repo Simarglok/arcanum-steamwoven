@@ -207,7 +207,7 @@ public sealed class WorldCatalog
     /// <see cref="WorldIssueCode.Malformed"/>, a number without a base file <see cref="WorldIssueCode.Missing"/>.</summary>
     public WorldPrototypeResult ReadPrototype(int number)
     {
-        if (Prototypes.AmbiguousNumbers.Contains(number)) return new(null, new(WorldIssueCode.Malformed, $"proto/{number:D6}", null, "duplicate prototype number"));
+        if (Prototypes.IsAmbiguous(number)) return new(null, new(WorldIssueCode.Malformed, $"proto/{number:D6}", null, "duplicate prototype number"));
         if (Prototypes.Path(number) is not { } path || Prototypes.Candidate(number) is not { } candidate) return new(null, new(WorldIssueCode.Missing, $"proto/{number:D6}"));
         var bytes = new Reader(_stack, _options).Bytes(path, candidate, _options.Wire.MaxPrototypeBytes, out var issue);
         if (bytes is null) return new(null, issue);

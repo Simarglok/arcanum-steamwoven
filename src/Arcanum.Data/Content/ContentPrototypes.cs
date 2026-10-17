@@ -6,7 +6,8 @@ namespace Arcanum.Data.Content;
 
 /// <summary>
 /// ARC-DATA-026: the prototype files the original reads, over a <see cref="ContentStack"/>; the one prototype source of
-/// every gameplay reader (map catalogue and plans, pre-made hero, combat fields). The original lists and reads every
+/// the universal readers (map catalogue, whole-map plans, map transitions, pre-made hero, combat fields). The pinned Crash
+/// Site exterior and cave profiles still take their own prototype folder (a later task). The original lists and reads every
 /// <c>proto\*.pro</c> once, while the game initialises and before it mounts a module, and keeps them for the process: the
 /// map subsystem's Proto entry has an init function and no module-load function (checked in the 1.0.7.4 executable,
 /// docs/research/original-verification-ledger.md "Prototype phase"). So a prototype comes from the base sources only —
@@ -71,6 +72,9 @@ public sealed class ContentPrototypes
         var ambiguousKeys = ambiguous.SelectMany(number => keysByNumber[number]).Order(StringComparer.Ordinal).ToArray();
         return new(stack, files, ambiguous, Array.AsReadOnly(ambiguousKeys), unrecognised.AsReadOnly(), ignored.AsReadOnly());
     }
+
+    /// <summary>True when two or more base files hold <paramref name="number"/>, so none of them is read.</summary>
+    public bool IsAmbiguous(int number) => _ambiguous.Contains(number);
 
     /// <summary>The virtual path of the file read for <paramref name="number"/>, or null when it has none or is ambiguous.</summary>
     public string? Path(int number) => _files.TryGetValue(number, out var file) ? file.Key : null;

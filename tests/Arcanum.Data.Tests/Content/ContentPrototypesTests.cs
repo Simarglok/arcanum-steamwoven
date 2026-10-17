@@ -75,6 +75,8 @@ public sealed class ContentPrototypesTests
         CollectionAssert.AreEqual(new[] { "proto/007001 - a.pro", "proto/007001 - b.pro" }, prototypes.AmbiguousKeys.ToArray());
         CollectionAssert.AreEqual(new[] { "proto/7002.pro" }, prototypes.UnrecognisedKeys.ToArray());
         Assert.AreEqual(PrototypeFileStatus.Ambiguous, prototypes.Read(7001).Status);
+        Assert.IsTrue(prototypes.IsAmbiguous(7001));
+        Assert.IsFalse(prototypes.IsAmbiguous(7005));
         Assert.IsNull(prototypes.Candidate(7001));
         Assert.AreEqual(PrototypeFileStatus.Missing, prototypes.Read(7002).Status);
         Assert.AreEqual(PrototypeFileStatus.Missing, prototypes.Read(7003).Status, "only files directly under proto/");

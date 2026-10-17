@@ -101,6 +101,13 @@ public sealed class AreaStackOrderTests
             var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
             Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001"), (result.Status, result.Detail));
         }
+        Loose("data/proto/007001 - a.pro", Prototype());
+        Loose("data/proto/007001 - b.pro", Prototype());
+        using (var stack = Stack())
+        {
+            var result = AreaMapPlans.Create(stack, WorldCatalog.Open(stack), "test");
+            Assert.AreEqual((AreaMapPlanStatus.MissingSource, "prototype 7001 is held by two files"), (result.Status, result.Detail));
+        }
     }
 
     [TestMethod]

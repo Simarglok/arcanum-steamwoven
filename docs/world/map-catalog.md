@@ -58,10 +58,14 @@ options that would let a derived size leave an array or Int32 offset are refused
 ## Prototypes
 
 ARC-DATA-026. `Arcanum.Data.Content.ContentPrototypes` is the one prototype
-source of every gameplay reader: this catalogue, [whole-map plans](whole-map-plans.md),
+source of the universal readers: this catalogue (and the
+[map transitions](map-transitions.md) read through it), [whole-map plans](whole-map-plans.md),
 the [pre-made hero](starting-hero-runtime.md) and the
 [combat fields](../formats/combat-fields.md) (`ContentPrototypes.Read` is the
-`Func<int, PrototypeFile>` lookup those readers take). The original lists and
+`Func<int, PrototypeFile>` lookup those readers take). The pinned Crash Site
+exterior and cave profiles (`AreaOriginalValidator`, `StaticObjectLoader`, the
+viewer's `--prototype` folder) still read one loose folder; moving them is a
+later task. The original lists and
 reads every `proto\*.pro` once while the game initialises, before it mounts the
 module, and keeps them for the process: the map subsystem's Proto entry has an
 init function and no module-load function (checked in the 1.0.7.4 executable,
