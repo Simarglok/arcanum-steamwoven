@@ -87,6 +87,8 @@ public sealed class StartingHeroTests
         var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
         if (string.IsNullOrWhiteSpace(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
         var module = Path.Combine(root, "modules", "Arcanum.dat");
+        var names = AreaHover.LoadNames(module);
+        Assert.AreEqual(AreaNamesStatus.Ready, names.Status, names.Detail);
         // ARC-RES-027 table: gold and kit size per hero; CC-07: MainMenu.mes 551..562 are flags 2350..2361 in order.
         int[] gold = [385, 385, 385, 385, 385, 370, 385, 385, 300, 370, 385, 385];
         int[] kit = [4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3];
@@ -98,6 +100,9 @@ public sealed class StartingHeroTests
             Assert.AreEqual(premade.BasicPrototype + 20, load.Definition!.Prototype);
             Assert.AreEqual((gold[premade.Index], kit[premade.Index]), (load.Definition.Gold, load.Definition.Kit.Count), premade.Name);
             Assert.AreEqual(premade.Name.EndsWith("-female", StringComparison.Ordinal) ? CharacterGender.Female : CharacterGender.Male, load.Definition.Gender);
+            // The inventory window names every kit item from its description number (no bracketed fallback label).
+            Assert.IsTrue(load.Definition.Kit.Select((item, index) => AreaInventoryHost.KitName(new($"kit:{index + 1}", item.Kind), names.Catalog))
+                .All(name => !name.StartsWith('[')), premade.Name);
         }
         var halfOgre = AreaStartingHero.Load(module, AreaStartingHero.Find("half-ogre-male")!);
         using var session = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),

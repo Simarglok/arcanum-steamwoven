@@ -11,7 +11,7 @@ public partial class TerrainViewerApp
 {
     private (Arcanum.Session.GameSessionOwner Session, long Revision, string Text)? _heroStatus;
 
-    private string AreaHeroStatus()
+    private string HeroStatusText()
     {
         if (_areaSession is not { } session) return "";
         if (_heroStatus is not { } cached || !ReferenceEquals(cached.Session, session) || cached.Revision != session.Version.Revision)
