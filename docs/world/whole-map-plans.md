@@ -20,13 +20,19 @@ the owner; the owner authenticates every input against the plan as before. The
 snapshot's `Profile` is `arc-data-019-whole-map-original-rules-v1` (or
 `arc-data-019-whole-map-v1` without the ART rules).
 
-- **Inputs:** the module archive, `arcanum1.dat`, `arcanum2.dat`, the map's
-  mobile aggregate and every prototype the map's objects name (from the
-  catalogue's own reads), each hashed when the plan is made. No hash is pinned.
-  A sector file overridden outside the module archive is refused, because the
-  owner reads sectors from the module archive.
-- **Mappings:** the ten MES/policy files the pinned profiles bind, located by
-  name in the two base archives.
+- **Inputs:** the module archive, every resource source of the content stack
+  (see [stack order](#resources-in-content-stack-order) below), the map's mobile
+  aggregate and every prototype the map's objects name (from the catalogue's own
+  reads), each hashed when the plan is made. No hash is pinned. The aggregate and
+  a prototype are read from whichever stack source wins them: a loose file is
+  opened as itself, an archive member is read into memory when the plan opens
+  (`AreaMapPlanInput.Member` is its entry ordinal; at most 1 MiB for a prototype,
+  64 MiB for the aggregate) and the owner authenticates those bytes against the
+  plan. A sector or editor mobile (`.mob`) file overridden outside the module
+  archive is refused, because the owner reads both from the module archive.
+- **Mappings:** the ten MES/policy files the pinned profiles bind, each the
+  stack's winner for its name. `art/missing.dat` is optional: without it the
+  owner rebuilds the masks, as the original does (N3).
 - **Map numbers:** from `rules/maplist.mes`, read from 5000 up to the first
   missing number (at most 200), as the original does; runtime = catalogue − 4999;
   0/0 for an unlisted map or a list that does not parse.
@@ -62,8 +68,8 @@ A whole-map plan also:
 - reads tile names as the original does: a name ends at `/`, otherwise it is the
   first three characters of the value and the rest is a sound number (pinned CE
   `a_name.c` `load_tile_names`); `TileNames.Parse(…, originalNames: true)`;
-- looks a resource up in whichever of the two base archives holds it (one
-  holder required), not only in the archive of its mapping;
+- looks a resource up in content-stack order (ARC-DATA-018, below), not only
+  in the archive of its mapping;
 - keeps a sector's roof list in its record (`RoofDiscriminator`) without
   failing the map: roofs are not drawn yet;
 - draws doors and windows (ARC-DATA-020): with the `Portal` mapping
@@ -93,7 +99,7 @@ A whole-map plan also:
     shield; stealth walk and conceal fidget drop an unarmed weapon; run to the
     bloody deaths drop weapon and shield; walk drops the shield). The table is used
     when its header equals the number of critter, monster and unique NPC ART files
-    in the two resource archives and it holds all 10 + monster + unique NPC masks;
+    the content stack holds and it holds all 10 + monster + unique NPC masks;
     otherwise the masks are rebuilt by checking each pair's file, as the original
     rebuilds a stale table. Animations above 24, critter armour above 8, weapons
     above 14 and critter bodies above 4 stay refused (no installed object has them;
@@ -103,7 +109,7 @@ A whole-map plan also:
     and `R` otherwise (piece 8 as the base piece);
   - a tile id on an object names the tile file as a terrain cell does (no rotation
     or frame, palette from bits 4–5, mirrored when flippable with flag bit 0);
-  - an object's resolved name that neither resource archive holds is drawn from
+  - an object's resolved name that no resource source holds is drawn from
     `art/badart.art`, frame 0 and its only rotation, as the original's art cache
     does; the visual's policy is `original-badart-v1`. A name the mapping cannot
     build (no list entry) and an ambiguous name stay refused. Terrain and facade
@@ -117,6 +123,45 @@ A whole-map plan also:
   Budget admissions and decodes are therefore per distinct selection, as terrain
   selections already were; pinned profiles keep one admission and decode per
   visual.
+
+## Resources in content-stack order
+
+ARC-DATA-018. A whole-map plan reads every resource as the original's file
+system opens it: from the first source in [search order](../research/content-precedence.md)
+that holds the name (module folder, module patches, module archive, `data/`,
+`Arcanum4.dat`, `arcanum3.dat`, `arcanum2.dat`, `arcanum1.dat`, game folder,
+`tig.dat`), so an override in a later archive, a patch or a loose folder is
+seen, and a name two base archives hold is no longer ambiguous.
+
+- `AreaSourcePlan.ResourceOrder` lists the resource sources top first
+  (`AreaResourceSource`: an input key, plus the virtual path for a loose file).
+  The plan lists each archive that wins at least one name under `art/` and each
+  loose file a folder wins there; every name's winner is then a listed source,
+  so the first listed holder is the stack's winner and the count of critter ART
+  files (the `art/missing.dat` header check) is the stack's count.
+- Input keys: the module archive stays `Module` and the two base archives keep
+  `Resource1` (`arcanum1.dat`) and `Resource2` (`arcanum2.dat`), which the viewer
+  also reads outside the owner; any other archive is `Archive` numbered by its
+  search-order position, and each loose file is `Loose` numbered from 1. A
+  source that wins nothing under `art/` is no input. The key names an input;
+  resolution follows the order alone.
+- Within an archive, a directory record (`0x400`) or an ignored member
+  (`0x800`) holds no file, as in the content stack; an archive holding a name
+  twice is refused as ambiguous (the content stack refuses such an index).
+- A loose input is read whole and authenticated like every other input. Its
+  entry identity has ordinal, flags and offset 0, its length as stored and
+  decoded size, and the SHA-256 of its virtual path as the name digest. At most
+  1,024 loose files under `art/` (`AreaMapPlans.MaxLooseResources`), each at most
+  16 MiB, else the plan is `TooLarge`; `AreaLoaderOptions.MaxResourceInputs`
+  bounds the `Archive` and `Loose` inputs an owner admits (0 by default, so no
+  caller plan gains inputs it did not size).
+- The owner refuses a plan whose order omits an `Archive` or `Loose` input, and
+  the order on a pinned profile, which keeps its own archive rule. A plan without
+  an order keeps the earlier rule (one holder among the two base archives).
+- On the installed game the order is `Arcanum4.dat`, `arcanum2.dat`,
+  `arcanum1.dat`, `tig.dat` (the others hold nothing under `art/`; no loose
+  file is there), and all 80 interiors publish the same visuals, objects and
+  counts as before.
 
 ## Result on the installed original
 
@@ -148,8 +193,7 @@ maps and places a door or window on the wall hot-spot rule (mirror and rotation
 shift, see the portal facts); five complete maps still stop at blend states the
 scene plan does not draw yet.
 
-Resources resolve only in `arcanum1.dat` and `arcanum2.dat` (their overrides in
-`arcanum3/4.dat`, patches and loose folders are not seen), and the aggregate and
-prototypes must be loose files; ARC-DATA-018 moves resolution to stack order.
-The main map is not covered (its sectors are generated from the terrain grid,
+Sector and editor mobile files must be the module archive's own (an override
+elsewhere is refused, not read), and the viewer still reads its actor and light
+ART from `arcanum1.dat` and `arcanum2.dat` outside the owner. The main map is not covered (its sectors are generated from the terrain grid,
 ARC-RES-034). Original-executable parity is NOT_VERIFIED.
