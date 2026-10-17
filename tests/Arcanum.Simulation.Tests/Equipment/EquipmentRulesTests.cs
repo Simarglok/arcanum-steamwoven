@@ -247,6 +247,8 @@ public sealed class EquipmentRulesTests
         Assert.AreEqual(DamageByType.Zero with { Fire = 3 }, weapon.MagicDamageAdjustment, "4 × 40/50");
         Assert.AreEqual((5, 8), (weapon.ToHitBonus, weapon.MagicToHitAdjustment));
         Assert.AreEqual(2, weapon.Range, "1 + 2 × 40/50 = 1 + 1");
+        var short_ = new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = Sword() with { Weapon = Sword().Weapon! with { MagicRange = -5 } } };
+        Assert.AreEqual(0, EquipmentRules.Weapon(short_, 0).Range, "1 − 5 reaches nothing: 0");
         Assert.AreEqual(6, weapon.MinimumStrength, "7 + (−2 × 40/50 = −1), one-handed with a shield");
         Assert.AreEqual((6, -3, 4, 1), (weapon.MagicCriticalHitChance, weapon.MagicCriticalMissChance, weapon.MagicCriticalEffectChance,
             weapon.MagicCriticalMissEffectChance));
@@ -276,6 +278,11 @@ public sealed class EquipmentRulesTests
         Assert.IsFalse(EquipmentRules.IsValid(Sword() with { Weapon = Sword().Weapon! with { SpeedFactor = 496 } }));
         Assert.IsFalse(EquipmentRules.IsValid(Sword() with { Weapon = Sword().Weapon! with { AmmoType = -1 } }));
         Assert.IsFalse(EquipmentRules.IsValid(Armor() with { Armor = Armor().Armor! with { Sizes = (ArmorSizes)8 } }));
+        // The attack resolver's bounds: no negative damage or unarmed bonus, a condition up to 100 000.
+        Assert.IsFalse(EquipmentRules.IsValid(Sword() with { Weapon = Sword().Weapon! with { Damage = DamageRanges.None with { Fire = new(-1, 2) } } }));
+        Assert.IsFalse(EquipmentRules.IsValid(Armor() with { Armor = Armor().Armor! with { UnarmedBonusDamage = -1 } }));
+        Assert.IsTrue(EquipmentRules.IsValid(Sword() with { HitPoints = 100_000, MaxHitPoints = 100_000 }));
+        Assert.IsFalse(EquipmentRules.IsValid(Sword() with { MaxHitPoints = 100_001 }));
         Assert.ThrowsExactly<ArgumentException>(() => EquipmentRules.Evaluate(
             new Dictionary<EquipmentSlot, EquipmentItem> { [EquipmentSlot.Weapon] = Sword() with { Weapon = null } }, 0, SkillTraining.None));
         Assert.ThrowsExactly<ArgumentOutOfRangeException>(() => EquipmentRules.Evaluate(Nothing, 101, SkillTraining.None));

@@ -178,7 +178,10 @@ public sealed partial class GameSessionOwner
     /// with the hero's race, gender, aptitude and crippled arms and then the host's <paramref name="artCheck"/>
     /// (<see cref="GameSessionFailure.WearRefused"/>); the item's and the current occupant's no-drop flag (WearRefused,
     /// <see cref="EquipmentRefusal.NotDroppable"/>); last the insert check of the occupant going back to the inventory
-    /// (<see cref="GameSessionFailure.InsertRefused"/>). An item worn in another slot (a ring) leaves it. One revision.
+    /// (<see cref="GameSessionFailure.InsertRefused"/>). The host answers that check as the source asks it: with both the item and
+    /// the occupant already out of the grid (the room the item leaves counts, the occupant's weight once). The facts it gets are the
+    /// occupant's saved kind only; weight and grid size are the host's to look up. An item worn in another slot (a ring) leaves it.
+    /// One revision.
     /// </summary>
     public EquipmentMutationResult Equip(GameSessionVersion expected, string entity, EquipmentSlot slot, SessionWearableItem item,
         SessionWearArtCheck artCheck, SessionInsertCheck insertCheck)
@@ -228,7 +231,8 @@ public sealed partial class GameSessionOwner
     /// <summary>
     /// Takes the item in <paramref name="slot"/> off into the hero's inventory (the source's <c>sub_464C80</c>): NoChange for an
     /// empty slot; refused for an item with the no-drop flag (<see cref="GameSessionFailure.WearRefused"/>,
-    /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>). One revision.
+    /// <see cref="EquipmentRefusal.NotDroppable"/>), then by the insert check (<see cref="GameSessionFailure.InsertRefused"/>), which
+    /// the source asks with the item still worn (its weight counts twice near the carry limit). One revision.
     /// </summary>
     public EquipmentMutationResult Unequip(GameSessionVersion expected, EquipmentSlot slot, SessionInsertCheck insertCheck)
     {

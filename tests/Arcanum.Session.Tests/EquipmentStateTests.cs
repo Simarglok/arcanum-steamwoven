@@ -181,6 +181,48 @@ public sealed class EquipmentStateTests
     }
 
     [TestMethod]
+    public void AFixedTwoHandedWeaponAndAShieldExcludeEachOther()
+    {
+        using var owner = Owner();
+        var great = Blade with { Weapon = Blade.Weapon! with { TwoHanded = true, HandCountFixed = true } };
+        var shield = new EquipmentItem { Kind = EquipmentItemKind.Armor, Armor = new EquipmentArmor { Coverage = ArmorCoverage.Shield } };
+        Ok(owner.Equip(owner.Version, "kit:2", EquipmentSlot.Shield, Wearable(2, shield), Drawn, Accept), owner, 1);
+        Refused(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, great), Drawn, Accept), owner,
+            GameSessionFailure.WearRefused, EquipmentRefusal.NoFreeHand, 1);
+
+        // A save that pairs them is refused.
+        Ok(owner.Unequip(owner.Version, EquipmentSlot.Shield, Accept), owner, 2);
+        Ok(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, great), Drawn, Accept), owner, 3);
+        var text = GameSessionSnapshotCodec.Encode(owner.Capture());
+        var shieldJson = ",{\"slot\":\"Shield\",\"entity\":\"kit:2\",\"item\":{\"kind\":\"Armor\",\"complexity\":0,\"noDrop\":false," +
+            "\"broken\":false,\"uber\":false,\"light\":0,\"usesShieldLocation\":false,\"hp\":0,\"maxHp\":0,\"weapon\":null," +
+            "\"armor\":{\"coverage\":\"Shield\",\"sizes\":0,\"maleOnly\":false,\"femaleOnly\":false,\"ac\":0,\"magicAc\":0," +
+            "\"resistances\":[0,0,0,0,0],\"magicResistances\":[0,0,0,0,0],\"unarmedBonus\":0}}}";
+        var paired = text.Replace("],\"random\":", shieldJson + "],\"random\":", StringComparison.Ordinal);
+        Assert.AreEqual(GameSessionFailure.InvalidEquipment, GameSessionOwner.Restore(Decode(paired), RestoreOptions()).Failure);
+        Assert.AreEqual(GameSessionFailure.None, GameSessionOwner.Restore(Decode(paired.Replace("\"handCountFixed\":true", "\"handCountFixed\":false",
+            StringComparison.Ordinal)), RestoreOptions()).Failure, "without the fixed hand count they share the hands");
+    }
+
+    [TestMethod]
+    public void AHostCallbackThatChangesTheSessionMakesTheStepStale()
+    {
+        using var owner = Owner();
+        bool Meddle(EquipmentSlot slot, SessionWearableItem item)
+        {
+            Assert.AreEqual(GameSessionDisposition.Changed, owner.Equip(owner.Version, "kit:3", EquipmentSlot.Ring1, Wearable(3, Ring(1)), Drawn, Accept).Disposition);
+            return true;
+        }
+        Refused(owner.Equip(owner.Version, "kit:1", EquipmentSlot.Weapon, Wearable(1, Blade), Meddle, Accept), owner, GameSessionFailure.StaleVersion, revision: 1);
+        Assert.AreEqual(EquipmentSlot.Ring1, owner.QueryEquipment().Worn.Single().Slot, "only the callback's own change");
+
+        SessionInsertCheck Unwear = _ => { owner.Unequip(owner.Version, EquipmentSlot.Ring1, Accept); return SessionInsertVerdict.Accepted; };
+        Ok(owner.Equip(owner.Version, "kit:2", EquipmentSlot.Ring2, Wearable(2, Ring(2)), Drawn, Accept), owner, 2);
+        Refused(owner.Unequip(owner.Version, EquipmentSlot.Ring2, Unwear), owner, GameSessionFailure.StaleVersion, revision: 3);
+        Assert.AreEqual(EquipmentSlot.Ring2, owner.QueryEquipment().Worn.Single().Slot);
+    }
+
+    [TestMethod]
     public void ARingMovesBetweenTheRingSlots()
     {
         using var owner = Owner();

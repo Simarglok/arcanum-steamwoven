@@ -10,8 +10,8 @@ public static class EquipmentLimits
     public const int MaxMagnitude = 1000;
     /// <summary>Speed factor and magic speed adjustment each lie within ±this, so a weapon speed stays a valid stat.</summary>
     public const int MaxSpeed = 495;
-    /// <summary>An item's condition (hit points) lies within 0..this; indestructible items store 10 000.</summary>
-    public const int MaxHitPoints = 1_000_000;
+    /// <summary>An item's condition (hit points) lies within 0..this, the attack resolver's bound; indestructible items store 10 000.</summary>
+    public const int MaxHitPoints = 100_000;
     public const int MinAptitude = -100, MaxAptitude = 100;
 }
 
@@ -236,7 +236,7 @@ public static class EquipmentRules
     /// <summary>
     /// What a wearer strikes with: bare hands with the worn gauntlets' unarmed bonus (read for melee only, as the source does), or
     /// the wielded weapon with its stored damage, to-hit and charts and its magic adjustments, range and minimum strength for this
-    /// wielder (<see cref="MinimumStrength"/>). A thrown attack's range is the throwing distance, which the caller sets; a
+    /// wielder (<see cref="MinimumStrength"/>; a range below 0 becomes 0). A thrown attack's range is the throwing distance, which the caller sets; a
     /// monstrous critter attacks with its own table (<see cref="CombatWeapon.Natural"/>).
     /// </summary>
     public static CombatWeapon Weapon(IReadOnlyDictionary<EquipmentSlot, EquipmentItem> worn, int aptitude)
@@ -251,7 +251,8 @@ public static class EquipmentRules
         {
             Kind = WeaponKind.Weapon,
             Damage = w.Damage,
-            Range = w.Range + Magic(w.MagicRange),
+            // A negative range (a large negative magic range adjustment) reaches nothing, like 0; the resolver takes 0..100 000.
+            Range = Math.Max(0, w.Range + Magic(w.MagicRange)),
             ToHitBonus = w.ToHit,
             MinimumStrength = MinimumStrength(item, aptitude, worn.ContainsKey(EquipmentSlot.Shield)),
             MagickTechComplexity = item.MagickTechComplexity,
@@ -290,7 +291,8 @@ public static class EquipmentRules
     /// Whether an item is well formed: a defined kind with exactly its block (weapon block for a weapon, armour block for armour,
     /// neither for a generic item, the shield-location flag only on a generic item), defined enumerations, light flags of the four
     /// sizes, every number within <see cref="EquipmentLimits.MaxMagnitude"/> (speeds within <see cref="EquipmentLimits.MaxSpeed"/>),
-    /// a condition 0 ≤ hit points ≤ maximum ≤ <see cref="EquipmentLimits.MaxHitPoints"/> and a non-negative ammunition type and consumption.
+    /// a condition 0 ≤ hit points ≤ maximum ≤ <see cref="EquipmentLimits.MaxHitPoints"/>, non-negative weapon damage bounds and
+    /// unarmed bonus (the attack resolver's bounds) and a non-negative ammunition type and consumption.
     /// </summary>
     public static bool IsValid(EquipmentItem? item)
     {
@@ -303,6 +305,7 @@ public static class EquipmentRules
         {
             if (!Enum.IsDefined(w.Skill) || !Enum.IsDefined(w.CriticalHitChart) || !Enum.IsDefined(w.CriticalMissChart)) return false;
             if (!Ranges(w.Damage) || !Amounts(w.MagicDamage)) return false;
+            if (new[] { w.Damage.Normal, w.Damage.Poison, w.Damage.Electrical, w.Damage.Fire, w.Damage.Fatigue }.Any(r => r.Min < 0 || r.Max < 0)) return false;
             if (w.SpeedFactor is < -EquipmentLimits.MaxSpeed or > EquipmentLimits.MaxSpeed ||
                 w.MagicSpeed is < -EquipmentLimits.MaxSpeed or > EquipmentLimits.MaxSpeed) return false;
             if (!All(w.ToHit, w.MagicToHit, w.Range, w.MagicRange, w.MinimumStrength, w.MagicMinimumStrength, w.AmmoConsumption,
@@ -314,6 +317,7 @@ public static class EquipmentRules
             if (!Enum.IsDefined(a.Coverage) || ((int)a.Sizes & ~7) != 0) return false;
             if (!All(a.AcAdjustment, a.MagicAcAdjustment, a.UnarmedBonusDamage) || !Resistances(a.Resistances) || !Resistances(a.MagicResistances))
                 return false;
+            if (a.UnarmedBonusDamage < 0) return false;
         }
         return true;
 

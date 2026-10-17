@@ -36,12 +36,13 @@ of [FR-ITEM-007](../requirements/items-economy.md#fr-item-007). Not wired into t
 | Worn armour class | each worn armour item's AC adjustment + its magic AC adjustment; the caller adds base AC, effects and the AcAdjustment stat (`AttackRules.ArmorClass`) |
 | Worn resistances | per type the adjustment + the magic adjustment of each worn armour item; the caller adds the base, the poison bonus of CN, effects and the 0..95 clamp |
 | Light | each worn item's light sizes shrink by 1, 2 or 3 at an effective power ratio ≤ 75, 50, 25 %; the largest remaining size |
-| Weapon | bare hands: `CombatWeapon.Unarmed(gauntlet unarmed bonus)`; else the stored damage, to-hit, charts, flags and condition, with range, minimum strength and every magic adjustment for the wielder |
+| Weapon | bare hands: `CombatWeapon.Unarmed(gauntlet unarmed bonus)`; else the stored damage, to-hit, charts, flags and condition, with range (never below 0), minimum strength and every magic adjustment for the wielder |
 | Minimum strength | stored + magic adjustment; unless the hand count is fixed, two-handed +4 next to a shield, one-handed −2 without one |
 | Weapon speed | speed factor + magic speed adjustment + 5 with apprentice training, 10 bare-handed; attack cost from `TurnBasedRules.AttackCost` |
 
 `EquipmentRules.Evaluate(worn, aptitude, weaponTraining)` returns all of it as `EquipmentCombat`. `IsValid` bounds an
-item (numbers within ±1000, speeds within ±495, condition 0..1 000 000, the blocks of its kind).
+item to what the attack resolver accepts (numbers within ±1000, speeds within ±495, condition 0..100 000, weapon damage
+and unarmed bonus not negative, the blocks of its kind).
 
 ## Session domain (`Arcanum.Session`)
 
@@ -56,6 +57,9 @@ item (numbers within ±1000, speeds within ±495, condition 0..1 000 000, the bl
 `EquipmentItem` values. `SessionEquipmentFacts.FromCombatFields` builds the values from the stored combat fields
 ([ARC-DATA-021](../formats/combat-fields.md), which now also reads the current art, inventory art and use-art fragment).
 The host's callbacks must not call back into the owner: a call that moves the revision makes the step `StaleVersion`.
+The insert check is asked as the source asks it: on a swap with both the new item and the occupant already out of the grid
+(the room the new item leaves counts); on unequipping with the item still worn (the source counts its weight twice near
+the carry limit). The facts it gets carry only the saved kind; weight and grid size are the host's to look up.
 
 **Combat effects.** The hero's life facts take the worn armour's normal resistance (clamped 0..95; a pre-made PC's base
 resistance and resistance effects are not session state), so a worn item now reduces the round's overexertion fatigue
@@ -88,7 +92,7 @@ of schema 11 loads as "written by an incompatible version" and the next F7 overw
   worn AC and resistances, light tiers, minimum strength, weapon speed and cost, bare hands with gauntlets, a wielded
   weapon's values, validation.
 - `Arcanum.Session.Tests/EquipmentStateTests`: wielding a kit weapon, armour against overexertion, every refusal in order,
-  the art check's place, the occupant's insert check and swap, rings between slots, unequipping, no-drop, crippled arms
+  the art check's place, a callback that changes the session (stale), the occupant's insert check and swap, a fixed two-handed weapon against a shield (also on restore), rings between slots, unequipping, no-drop, crippled arms
   from the life domain, race and gender, a taken item, the canonical text and restore, restore and decode refusals, the
   bridge from stored fields.
 - `Arcanum.Data.Tests/Combat/CombatFieldReaderTests`: the art fields and their bits.
@@ -104,6 +108,8 @@ of schema 11 loads as "written by an incompatible version" and the next F7 overw
   `item_wield_best_all`, which needs skill effectiveness, LM1/LM2).
 - **NPC equipment.** NPC slots stay the host's (seed inventory locations); `EquipmentRules.Evaluate` serves them too, and
   looting a worn item is still `WornItemUnsupported`.
+- **Not tied to the round.** `Equip` and `Unequip` neither charge action points nor refuse during a turn-based round; the
+  whether the original charges for changing equipment in a round is not researched here.
 - **Not modelled:** item spells on wear and unwear (such items are refused), scripts on wield (refused), art and
   appearance changes, the animation speed recalculation (EQ5), the paperdoll UI's own path (`inven_ui.c`), identification
   (combat reads every magic adjustment), weapon wear, hexed items, ammunition pools, drop, barter, weight effects,
