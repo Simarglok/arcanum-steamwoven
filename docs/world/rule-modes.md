@@ -77,8 +77,8 @@ Implemented switches (the Original value is `true`; Steamwoven `false`):
 | Scripts | `ScrRuleProfile` | `CallDelayWraps` | TE1 | a call script in delay is computed in 32 bits (wraps above 536,870 s; a negative count gives weeks) (ARC-SCRIPT-010) |
 | Game data | `DataFixProfile` | `StoneExamineTextLost` | DF1 | four stone-examination DLGs lack their record's effects field, so the game opens none and examining the stones shows nothing ([data fixes](../formats/data-fixes.md), ARC-DATA-022) |
 | Game data | `DataFixProfile` | `NpcLineEffectsInResponseLost` | DF2 | an NPC line's effects written in its response field are never applied (ARC-DATA-022) |
-| Experience | `ExperienceRuleProfile` | `ProgressProductWraps` | XP3 | the progress toward the next level multiplies `1000 × to-next` in 32 bits and wraps above 2,147,483 to-next (found by the function oracle of ARC-RES-051; ARC-WORLD-033, checked by the oracle in both modes) |
 | Game data | `DataFixProfile` | `ReplyFinalLineInResponseLost` | DF3 | a reply's final-line action written in its response field reads as 0 and ends the talk without the final line (ARC-DATA-022) |
+| Experience | `ExperienceRuleProfile` | `ProgressProductWraps` | XP3 | the progress toward the next level multiplies `1000 × to-next` in 32 bits and wraps above 2,147,483 to-next (found by the function oracle of ARC-RES-051; ARC-WORLD-033, checked by the oracle in both modes) |
 
 Reserved and candidate differences, added by the slice that implements the rule (the slice records the D2 decision;
 until then both modes behave as the original):

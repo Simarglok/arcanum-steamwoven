@@ -100,13 +100,13 @@ public sealed class ExperienceOriginalExeTests
         var method = OriginalMethod(file.Key);
         TestContext.WriteLine($"oracle {file.Function} {file.Name} ({MethodIlHash.Name(method)}): seed {file.Seed}, {file.Cases.Count} inputs, exe {file.ExeSha256}");
         TestContext.WriteLine($"  differences: {unexpected.Count}" + (other is null ? "" : $" (original mode); {other.Mode} mode: "
-            + $"{otherDifferences.Count} differences, all on {other.Ledger} inputs ({ledgerInputs}) unless {outsideLedger.Count} > 0"));
+            + $"{otherDifferences.Count} differences among the {ledgerInputs} {other.Ledger} inputs, {outsideLedger.Count} outside them"));
         TestContext.WriteLine($"  mutants caught: {caught.Count}/{mutants.Length}");
         WriteReceipt(file, method, other, ledgerInputs, otherDifferences.Count, outsideLedger.Count, mutants.Length, caught.Count, unexpected.Count, pass);
         if (unexpected.Count > 0)
         {
             var c = unexpected[0];
-            Assert.Fail($"{unexpected.Count} differences from the original; first: {c.Describe()} original {c.Result}, Steamwoven {real(c)}");
+            Assert.Fail($"{unexpected.Count} differences from the original; first: {c.Describe()} original {c.Result}, Steamwoven{(other is null ? "" : " (original mode)")} {real(c)}");
         }
         if (outsideLedger.Count > 0)
             Assert.Fail($"the {other!.Mode} mode differs outside {other.Ledger}: {outsideLedger[0].Describe()} original {outsideLedger[0].Result}");
