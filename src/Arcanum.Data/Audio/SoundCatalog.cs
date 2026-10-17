@@ -137,6 +137,26 @@ public sealed class SoundCatalog
         return new(winner is null ? SoundFileStatus.Missing : SoundFileStatus.Found, key, winner);
     }
 
+    /// <summary>ARC-DATA-041: reads a found sound file and admits its payload for playback
+    /// (<see cref="SoundPayloadReader"/>). Archive members and loose files are read whole within
+    /// <see cref="SoundPayloadOptions.MaxBytes"/>; nothing is extracted to disk.</summary>
+    public SoundPayload OpenPayload(SoundFile file, SoundPayloadOptions? options = null)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        options ??= new();
+        options.Validate();
+        if (file.Status == SoundFileStatus.InvalidPath) return SoundPayloadReader.Refuse(SoundPayloadStatus.InvalidPath, file.Key, null, "not a supported virtual path");
+        if (file.Status != SoundFileStatus.Found || file.Candidate is null) return SoundPayloadReader.Refuse(SoundPayloadStatus.Missing, file.Key, null, "no source holds the file");
+        if (file.Candidate.Length > options.MaxBytes) return SoundPayloadReader.Refuse(SoundPayloadStatus.TooLarge, file.Key, null, "over the payload limit");
+        var read = _stack.Read(file.Candidate);
+        return read.Status switch
+        {
+            ContentReadStatus.Read => SoundPayloadReader.Inspect(file.Key, read.Bytes, options),
+            ContentReadStatus.TooLarge => SoundPayloadReader.Refuse(SoundPayloadStatus.TooLarge, file.Key, null, "over the stack's limit"),
+            _ => SoundPayloadReader.Refuse(SoundPayloadStatus.Unreadable, file.Key, null, "the source could not be read"),
+        };
+    }
+
     /// <summary>One scheme as the original's load reads it (SN12–SN13).</summary>
     public SoundScheme Scheme(int id) => SoundSchemeParser.Load(id, _schemeIndex, _schemeList, SchemeSfx, ResolveSoundFile);
 

@@ -4,8 +4,8 @@ Status: **Implemented**, `Arcanum.Data.Audio` (Godot-free). The first task of th
 [audio plan](../research/audio-evidence.md#task-plan): the original's sound tables, schemes,
 positional parameters, voice paths and fixed music names over the
 [content stack](../research/content-precedence.md), for any map of any module. It reads and
-resolves; it does not decode, play or schedule sound (ARC-DATA-041 opens payloads, ARC-UI-040 and
-later play them).
+resolves, and since ARC-DATA-041 admits payloads; it does not decode, play or schedule sound
+(ARC-UI-040 and later play them).
 
 ## Sources and load phases
 
@@ -66,6 +66,35 @@ never plays; the rule setting is applied by the player (ARC-UI-041). A `#N` reso
 through `ResolveSfx` (an unknown id or empty record leaves the original nothing to open: the file is
 `InvalidPath`); any other through `sound/` + the name. An empty record still takes a slot, as in
 the original (its file is `InvalidPath`).
+
+## Payloads (ARC-DATA-041)
+
+`SoundCatalog.OpenPayload(SoundFile, SoundPayloadOptions?)` reads a found file through the stack
+(archive member or loose file, whole, within `MaxBytes`; nothing is extracted to disk) and
+`SoundPayloadReader.Inspect` admits it by content, not by extension:
+
+| Class | Admitted when | Result |
+| --- | --- | --- |
+| WAV | `RIFF`/`WAVE`, exactly one `fmt ` and one `data` chunk, PCM (tag 1), 1 or 2 channels, 8 or 16 bits, 8, 11.025, 16, 22.05, 32, 44.1 or 48 kHz, block align and byte rate consistent; `smpl` loops inside the samples (at most 16) | `WavFormat`: channels, rate, bits, data offset and length, whole frames, loops, ignored tail bytes |
+| MP3 | an optional ID3v2 tag (versions 2–4, synchsafe size inside the file), then within 64 KiB two consecutive valid frame headers of the same version, layer and rate, Layer III | `Mp3Format`: MPEG version, rate, stereo, first frame offset and bit rate |
+
+Statuses: `Admitted`, `Missing`, `InvalidPath`, `TooLarge`, `Unreadable`, `UnknownContainer`
+(neither class), `Unsupported` (a well-formed file of another class: compressed or float WAV,
+other rates or sample sizes, more channels, MPEG layer I or II; its bytes are handed back for
+reporting), `Malformed` (truncated or overlapping chunks, a missing or repeated fmt/data chunk,
+inconsistent alignment, a loop outside the samples, a damaged ID3 tag, no two consecutive frames).
+One installed effect carries unrelated bytes after its samples: a chunk header that runs past the
+end **after** both fmt and data were found ends the walk and is reported as `IgnoredTailBytes`,
+never read as audio; the same damage before them is `Malformed`. Zero padding after the last
+chunk is accepted.
+
+Limits (`SoundPayloadOptions`): `MaxBytes` 32 MiB (the largest installed file, a music track, is
+under 3 MiB), `MaxWavChunks` 128, `MaxWavLoops` 16, `MaxMp3SyncSearchBytes` 64 KiB.
+
+Checks: `SoundPayloadTests` (literal synthetic WAV and MP3 bytes for every admitted class and
+refusal) and, with `DAT_ROOT`, `SoundPayloadRealDataTests`: all 3,410 installed sound files are
+admitted (706 WAV, one with an ignored tail and one `smpl` loop; 2,704 MP3, all MPEG-1 Layer III
+44.1 kHz).
 
 ## Limits
 
