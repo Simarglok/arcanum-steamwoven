@@ -49,6 +49,9 @@ its Close button. Contents:
 - **Always Run on/off** (ARC-WORLD-020): the original's Always Run option, saved; the line under
   it shows the option, the Num Lock state, what the next ground click does and the current gait
   ([walking and running](../world/gait-runtime.md)).
+- **Sound test: next interface sound** (ARC-UI-040): plays the next of the original's fixed interface
+  sounds by id from the area module's sound catalogue; the line under it shows the output device,
+  the three channel settings, the catalogue and the last result ([viewer audio](../audio/viewer-audio.md)).
 - **Show passability (read-only)**: the [passability overlay](../rendering/passability-overlay.md)
   checkbox (ARC-RENDER-008), OFF at launch, navigable while a movement session exists;
   without one it reads "unavailable" and is not navigable. The host binds it through

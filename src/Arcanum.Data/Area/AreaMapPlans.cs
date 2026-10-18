@@ -1,6 +1,9 @@
+using System.Buffers.Binary;
+using System.Collections.ObjectModel;
 using System.Security.Cryptography;
 using Arcanum.Data.Content;
 using Arcanum.Data.Maps;
+using Arcanum.Data.Scripts;
 
 namespace Arcanum.Data.Area;
 
@@ -185,6 +188,20 @@ public static class AreaMapPlans
         }
 
         var mappings = new List<AreaMappingBinding>();
+        // ARC-DATA-028: map.patch, read each time a map opens (so the stack winner), and the headers of the scripts it attaches.
+        AreaMapPatchBinding? patchBinding = null;
+        if (ContentPhase.Candidate(stack, MapPatchPath, ContentLoadPhase.ModuleLoaded) is { } patchWinner)
+        {
+            if (patchWinner.Length > MapPatchFile.MaxBytes) return new(AreaMapPlanStatus.TooLarge, null, MapPatchPath);
+            var read = stack.Read(patchWinner);
+            if (read.Status != ContentReadStatus.Read) return new(AreaMapPlanStatus.Unreadable, null, MapPatchPath);
+            var patch = MapPatchFile.Parse(read.Bytes!);
+            if (Member(stack, new(AreaSourceRole.MapPatch), patchWinner, files, identities, MapPatchFile.MaxBytes, MapPatchPath) is { } failure) return failure;
+            var names = ScriptNameIndex.Build(stack);
+            patchBinding = new(new ReadOnlyDictionary<int, MapPatchScriptHeader?>(patch.ScriptNumbers().ToDictionary(n => n, n => ScriptHeader(stack, names, n))),
+                patch.HasUnmodelledLines);
+        }
+
         // ARC-DATA-027: the name tables and the mask file are read by the original's Name init, before the module is
         // mounted (exe-checked), so each comes from the first base source. Its source must be one of the plan's inputs:
         // an archive of the resource order, or the loose file the order lists for that name.
@@ -215,10 +232,22 @@ public static class AreaMapPlans
             ? WorldSectorCoordinate.Containing(tile) : map.SectorFiles[0];
         var plan = new AreaSourcePlan(catalogueMap, runtimeMap, new(start.X, start.Y), 0, map.Folder, identities, mappings)
         {
-            Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order,
+            Selection = AreaSectorSelection.AllSectors, AllowArtTrailingBytes = true, ResourceOrder = order, MapPatch = patchBinding,
         };
         var resources = identities.Count(i => i.Key.Role is AreaSourceRole.Archive or AreaSourceRole.Loose);
         return new(AreaMapPlanStatus.Ready, new(map, plan, files.AsReadOnly(), Limits(map.SectorFiles.Count, objects, mobiles.Objects.Count, aggregateBytes, prototypes.Count, resources), startTile));
+    }
+
+    private const string MapPatchPath = "rules/map.patch";
+
+    /// <summary>The 8-byte header the original copies from a script file when it attaches the script (flags, counters),
+    /// or null when it cannot open the script by number (then it attaches nothing).</summary>
+    private static MapPatchScriptHeader? ScriptHeader(ContentStack stack, ScriptNameIndex names, int number)
+    {
+        if (names.Find(number) is not { } name || stack.Resolve(name.ScriptPath).Winner is not { } winner) return null;
+        var read = stack.Read(winner);
+        if (read.Status != ContentReadStatus.Read || read.Bytes!.Length < 8) return null;
+        return new(BinaryPrimitives.ReadUInt32LittleEndian(read.Bytes), BinaryPrimitives.ReadUInt32LittleEndian(read.Bytes.AsSpan(4)));
     }
 
     /// <summary>The input key of a resource archive: the two base archives keep their historical

@@ -91,9 +91,12 @@ public partial class TerrainViewerApp
 
     /// <summary>The frontmost pickable object with an opaque drawn pixel under the screen point. A wall drawn faded
     /// (ARC-RENDER-011) is see-through for the pick, as the original skips walls with OWAF_TRANS_LEFT/RIGHT.</summary>
-    private AreaObjectKey? AreaObjectAtScreen(Vector2 screen)
+    /// <param name="roofs">False only for the roof smoke, to find a body under a roof.</param>
+    private AreaObjectKey? AreaObjectAtScreen(Vector2 screen, bool roofs = true)
     {
         if (_readyArea is not { } area || HoverIndex() is not { } index) return null;
+        // ARC-RENDER-022: a drawn roof pixel picks nothing (RF10's hit test); the pick does not test the roof cover.
+        if (roofs && AreaRoofHit(screen)) return null;
         var transform = AreaDrawItem.RasterTransform(GetViewport());
         var sx = (int)Math.Floor(screen.X); var sy = (int)Math.Floor(screen.Y);
         // ARC-UI-004: an item the PC took is no longer in the world.

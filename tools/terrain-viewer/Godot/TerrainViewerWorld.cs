@@ -141,6 +141,7 @@ public partial class TerrainViewerApp
         _worldPanel.LightingToggleRequested += PaletteLightingToggle;
         _worldPanel.VisualToggleRequested += PaletteVisualToggle;
         _worldPanel.AlwaysRunToggleRequested += PaletteAlwaysRunToggle;
+        _worldPanel.SoundTestRequested += PaletteSoundTest;
         _worldPanel.OverlayToggled += SetPassabilityOverlay; _overlayPanelState = null;
         _hud!.SettingsRequested += ToggleWorldSettings;
         Input.JoyConnectionChanged += WorldConnectionChanged;
@@ -244,7 +245,7 @@ public partial class TerrainViewerApp
         if (_worldPanel is null || !GodotObject.IsInstanceValid(_worldPanel)) return;
         var runtime = _worldActor.Session?.State;
         _worldPanel.SetSummary($"{(_worldActor.Session is AreaGridSession ? "Whole Crash Site core at T0" : "Bounded WORLD test area")}; cell {runtime?.CommittedCell} {runtime?.Phase}; camera {_camera?.FollowState.Mode}; last assessment: {_worldGridDiagnostic}");
-        BindVisualPalette(); BindGaitPalette();
+        BindVisualPalette(); BindGaitPalette(); BindAudioPalette();
     }
     private void BindWorldZoom()
     {
@@ -445,7 +446,7 @@ public partial class TerrainViewerApp
         if (_readyArea is not null)
         {
             _readyActorInput = input; _readyActorPlan = actor; _readyActor = actor.Current;
-            FollowAreaAmbient(); FollowAreaWalls();
+            FollowAreaAmbient(); FollowAreaWalls(); FollowAreaRoofs();
             // ARC-COMBAT-005: fallen bodies move like companions, from the frame repository with their poses.
             SyncAreaCombatBodies();
             _canvas!.SetAreaMovingBodies(AreaMovingCommands()); _canvas.SetAreaAbsent(_areaCompanions?.Absent);
@@ -519,7 +520,7 @@ public partial class TerrainViewerApp
             {
                 if (_worldReloadPending) throw new InvalidOperationException("GRID_RELOAD_ARGUMENTS_REQUIRED");
                 RetireWorldLifecycle();
-                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); }
+                if (session is AreaGridSession area) { _worldActor.Configure(area.Snapshot, time, chart: area.Chart); BindAreaCompanions(); ResetAreaRoofs(); }
                 else _worldActor.Configure(((DiagnosticGridSession)session).Snapshot, time);
                 _worldGridInput = new(); _worldGate.Close();
                 PublishWorldSelection(); _camera?.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
@@ -852,6 +853,7 @@ public partial class TerrainViewerApp
                     panel.ResetSceneRequested -= PaletteResetScene; panel.ReloadRequested -= PaletteReload; panel.OverlayToggled -= SetPassabilityOverlay;
                     panel.VisualToggleRequested -= PaletteVisualToggle;
                     panel.AlwaysRunToggleRequested -= PaletteAlwaysRunToggle;
+                    panel.SoundTestRequested -= PaletteSoundTest;
                     panel.Hide(); RemoveChild(panel); panel.QueueFree();
                 }
             }

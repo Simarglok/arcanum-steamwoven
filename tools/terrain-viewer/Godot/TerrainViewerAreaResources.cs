@@ -58,8 +58,9 @@ public partial class TerrainViewerApp
                 Require(_cache.AreaCount <= old.CpuFrames + poses.Frames && _cache.AreaRgbaBytes <= old.CpuBytes + poses.Bytes, "GPU_BUDGET");
                 // The cache's visible set is exactly the frames this view draws per item;
                 // everything else resident stays within the retention allowance.
+                // ARC-RENDER-022: the roofs and covered-tile masks of the view are drawn per item too.
                 var drawn = _canvas.AreaVisibleCommands.Where(command => _canvas.AreaChunkCount == 0 || command.Identity is not null)
-                    .Select(command => command.Frame).Distinct().Count();
+                    .Select(command => command.Frame).Concat(_canvas.AreaVisibleRoofFrames).Distinct().Count();
                 var retainedFrames = _cache.AreaCount - _cache.AreaVisibleFrames; var retainedBytes = _cache.AreaRgbaBytes - _cache.AreaVisibleBytes;
                 maxRetained = Math.Max(maxRetained, retainedFrames);
                 Require(_cache.AreaVisibleFrames == drawn && retainedFrames >= 0 && retainedBytes >= 0

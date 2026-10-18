@@ -27,6 +27,27 @@ public sealed class AreaScenePlanTests
         => Visual(new(body.Key.Kind, new(Digest, 5051, body.Key.Sector!.Value), body.Key.SourceIndex, Digest, Object: body.Key), width, height, hotX, hotY, ox, oy, scale);
 
     [TestMethod]
+    public void A_roof_block_is_drawn_from_its_normalized_tile_less_120_200_and_its_hot_spot_after_the_plan_commands()
+    {
+        // ARC-RENDER-022 (ledger RF1, RF7): the block at the chart origin, normalized to (+2, +2): projected (0, 80).
+        var tile = TerrainKey(100, 0);
+        var sector = new AreaSectorKey(Digest, 5051, 100);
+        AreaVisualKey RoofKey(int slot) => new(AreaSourceKind.Terrain, sector, 4096 + slot, "", AreaLayerKind.Roof);
+        var plain = Visual(RoofKey(0), 300, 150, -95, 7) with { RawArt = 10u << 28 };
+        var mirrored = Visual(RoofKey(1), 300, 150, -95, 7) with { RawArt = (10u << 28) | 1, Mirrored = true };
+        AreaRoofRecord Roof(int slot, long x, int piece) => new(sector, slot, x, 82560, 10u << 28, piece, false, false, RoofKey(slot));
+        var plan = AreaScenePlan.Create([new AreaTerrainRecord(tile, 0, 0, 92928, 82560, 0, 0, AreaScope.Core, tile)], [], [Visual(tile), plain, mirrored],
+            null, [Roof(0, 92928, 0), Roof(1, 92932, 9)]);
+        Assert.AreEqual(1, plan.Commands.Count, "roofs stay out of the terrain and body commands");
+        Assert.AreEqual(2, plan.Roofs.Count);
+        Assert.AreEqual(new TerrainRect(0 - 120 + 95, 80 - 200 - 7, 300, 150), plan.Roofs[0].Command.Destination);
+        // Four tiles further on x: projected (-160, 160); a mirrored roof frame takes hot spot x 0.
+        Assert.AreEqual(new TerrainRect(-160 - 120, 160 - 200 - 7, 300, 150), plan.Roofs[1].Command.Destination);
+        Assert.IsTrue(plan.Roofs[1].Command.FlipX);
+        CollectionAssert.IsSubsetOf(new[] { plan.Roofs[0].Command.Frame }, plan.Frames.ToArray());
+    }
+
+    [TestMethod]
     public void AdjacentSeamsRetainOccurrenceKeysAndGlobalChart()
     {
         var a = TerrainKey(100, 63); var b = TerrainKey(101, 0); var c = TerrainKey(102, 0);
