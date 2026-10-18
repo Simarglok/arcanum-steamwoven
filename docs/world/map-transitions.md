@@ -19,8 +19,8 @@ this in ARC-WORLD-031.
 `Arcanum.Data.Maps`:
 
 - `MapList.Read(stack)`: the rows of `rules/maplist.mes` (the stack's winner),
-  numbered from 5000 up to the first missing number, at most 200 (pinned CE
-  `map_list_info_load`). Each `MapListEntry` has the catalogue number, the folder
+  numbered from 5000 up to the first missing number, at most 200 (the map list
+  load, 0x4125C0, ledger LC1). Each `MapListEntry` has the catalogue number, the folder
   name as the row spells it (trimmed), the start tile (the second and third
   values read like C `strtoll`; null when missing or negative) and the runtime
   number (catalogue − 4999). `Find(name)` compares without case and returns the

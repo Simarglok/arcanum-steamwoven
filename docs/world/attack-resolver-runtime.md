@@ -19,13 +19,11 @@ AttackResolution AttackResolver.Resolve(
 
 It reads only its arguments, changes nothing, and returns the outcome, the
 difficulty parts, both skill checks, the fate used, the damage packet and every
-roll it made. Numbers are the CE reading at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` (the research's C15–C21 and the
-"Hit, dodge and critical" steps), re-read for this task in `combat.c`,
-`skill.c`, `item.c`, `object.c` and `random.c`; no CE code or structure was
-copied. Original executable parity is **NOT_VERIFIED**, except for the
-anomaly switches below, which were checked against the original 1.0.7.4
-executable.
+roll it made. Numbers are a reading of the original's combat, skill, item,
+object and random functions (the research's C15–C21 and the "Hit, dodge and
+critical" steps), re-read for this task. Original executable parity is
+**NOT_VERIFIED** (evidence level F0), except for the anomaly switches below,
+which were checked against the original 1.0.7.4 executable.
 
 ## Inputs
 
@@ -73,11 +71,12 @@ location table.
 ## Resolution order
 
 The combat rolls are made at the same points and in the same order as in the
-source, except where a D2 fix removes one; a damage range with equal bounds
-draws nothing, like the source's `random_between`. CE draws from the same
-generator outside these rolls (the AI's reaction to the attack, weapon sounds,
-the effect tables' stat checks), so a seeded run matches a CE run only once
-those draws are modelled as well.
+original, except where a D2 fix removes one; a damage range with equal bounds
+draws nothing, like the original's random-range function (0x4CEF00). The
+original also draws from the same generator outside these rolls (the AI's
+reaction to the attack, weapon sounds, the effect tables' stat checks; not
+checked in the executable, F0), so a seeded run matches an original run only
+once those draws are modelled as well.
 
 1. **Refusal** without rolls: an inactive attacker (dead, unconscious,
    paralysed, stunned, stoned) or a dead target critter.
@@ -97,7 +96,7 @@ those draws are modelled as well.
    trained true backstab), range (out of range or blocked = +1 000 000,
    5 per cell beyond PE/2 unless master), cover, light, injury.
 7. **Dodge** of a hit critter: `2 × level` capped at 95 (unreachable: at most 75; the original's
-   formula; CE's `5 × level` is a reconstruction slip, see the
+   formula, ledger row Dodge (SKX1) in the
    [verification ledger](../research/original-verification-ledger.md)), difficulty from
    blindness and crippled legs, auto-fail when it cannot move; a critical
    dodge becomes a critical miss with 0/10/50/100 % by dodge training.
@@ -135,7 +134,7 @@ behaviour with its bugs, and **Steamwoven**, the original with the D2 fixes
 [original check](../research/combat-core-evidence.md#original-executable-check-arc-combat-001)
 found in the retail executable; the full decision table is in the
 [NPC combat AI plan](../research/npc-combat-ai-plan.md#anomaly-decisions).
-CE-only reconstruction slips get no switch: A8 (the critical effect chance with
+Rows that only correct an earlier reading get no switch: A8 (the critical effect chance with
 cancelled weapon magic is 0) behaves as the original in both settings.
 
 | Anomaly | Steamwoven (fixed) | Original (switch on) |
@@ -145,7 +144,7 @@ cancelled weapon magic is 0) behaves as the original in both settings.
 | A7 | A critical self-hit rolls the critical-hit procedure once, at damage time. | `CriticalSelfHitRolledTwice`: also in the critical-miss branch; flags add up. |
 | A10 | The backstab bonus is not added to a critical self-hit. | `BackstabDamageOnSelfHit`: added. |
 
-A10 was found by this task's re-reading: `combat_calc_dmg` keeps the backstab
+A10 was found by this task's re-reading: the damage calculation (0x4B6680) keeps the backstab
 flags after a critical miss retargets the attack to the attacker.
 
 ## Not ready

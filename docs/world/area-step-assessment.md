@@ -200,8 +200,8 @@ digest; the rules are appended to the digest only when present):
   result but a blocking wall, so a host overlay that opens the step keeps it a jump);
   every other piece blocks;
 - a portal sits on edge `rotation | 1` like a wall and decides for the player
-  at T0 as the original's open attempt does (pinned CE `ai_attempt_open_portal`,
-  `object_locked_get`;
+  at T0 as the original's open attempt does (the AI portal open attempt 0x4AEB70
+  and the lock state getter 0x441D40;
   [door rules](../research/first-building-evidence.md#portals-doors-and-windows-fr-scene-008)):
   open or busted passes; an unlock script (SAP 3) is Unknown; jammed or
   magically held blocks; a portal without the LOCKED bit, or never-locked,

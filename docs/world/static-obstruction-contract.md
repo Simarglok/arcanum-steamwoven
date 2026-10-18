@@ -11,7 +11,7 @@ controller, renderer rule, or claim of original-runtime parity.
 The only supported profile is the immutable 64x64 Crash Site base sector with
 the recorded module/resource/prototype identities. Context is normal,
 non-editor traversal by one ordinary ground critter taking one adjacent
-cardinal step on CE's non-recursive odd-rotation path with traversal flags
+cardinal step on the original's non-recursive odd-rotation path with traversal flags
 exactly zero. The component reads a destination-cell object contribution; it
 does not decide the step, source cell, edge, or a combined cell result.
 
@@ -23,7 +23,7 @@ Every result retains these independent dimensions:
 Supportedness = Supported | Unknown | Unsupported
 Applicability = Applicable | NotApplicable | Unknown
 Disposition   = Blocker | NoBlock | null
-Provenance    = [archived-report | pinned-ce-source |
+Provenance    = [archived-report | source-reading |
                  observed-serialized-instance | prototype-default |
                  synthetic-check | identity-bound-original-data-aggregate]
 ```
@@ -34,7 +34,7 @@ Unknown never means NoBlock.
 
 A result includes stable reason codes and its applicable provenance entries.
 For example, a normal direct slot-18 result can carry
-`OBSERVED_SERIALIZED_INSTANCE` and `PINNED_CE_SOURCE`; an inherited result also
+`OBSERVED_SERIALIZED_INSTANCE` and `SOURCE_READING`; an inherited result also
 carries `PROTOTYPE_DEFAULT`. The WorldEd report is corroborating archived
 report provenance, not original-runtime provenance.
 

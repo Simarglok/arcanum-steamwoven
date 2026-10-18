@@ -122,8 +122,8 @@ changes neither still sets a missing resting or poison timer; the session sets t
 only for a critter that already has damage or poison but no pending timer: an NPC whose map data loads it wounded or
 poisoned, or a follower whose resting timer ended while it had a PC leader and who then left the party. The next
 change of the value sets the timer. The hero gets no resting timer: the source schedules one but its handler heals
-only NPCs. Sources: [fatigue][cr-fatigue], [resting][cr-rest], [poison][st-poison],
-[poison schedule][st-poison-sched], [hit-point write][hp-set], [poison write][stat-set].
+only NPCs. Sources: fatigue (0x45E610), resting (0x45E910, 0x45EA00, 0x45EA80, 0x45EAB0), poison (0x4B1170),
+poison schedule (0x4B1350), hit-point write (0x43D530), poison write (0x4B0980).
 
 Rules of the wiring:
 
@@ -163,12 +163,12 @@ Rules of the wiring:
   in the Original mode a timer with 2 applies the tick twice, the second only while poison remains. The value does not
   depend on the mode, so switching modes converts nothing.
 
-Anomaly **TE10** (new, recorded in the [research note](../research/game-event-queue.md#7-ce-anomalies-recorded-not-adopted)
-and the [verification ledger](../research/original-verification-ledger.md)): the source's poison recovery handler
+Anomaly **TE10** (new, recorded in the [research note](../research/game-event-queue.md)
+and the [verification ledger](../research/original-verification-ledger.md)): the poison recovery handler
 writes the new level, which schedules a recovery event because none is pending (the firing one already left the list),
 and then adds another one itself, so after the first tick two recovery events run every 120 s and the level falls
-twice as fast. The retail 1.0.7.4 executable does the same (read at `stat_poison_timeevent_process` 0x4B1170,
-`stat_base_set` 0x4B0980 and `poison_timeevent_schedule` 0x4B1350): a bug of the original. Decision of this task under
+twice as fast. This was read in the retail 1.0.7.4 executable (the poison event handler 0x4B1170,
+the base stat setter 0x4B0980 and the poison event scheduler 0x4B1350, ledger TE10): a bug of the original. Decision of this task under
 D2: the Steamwoven mode applies one tick per period, the Original mode keeps two (rule switch `PoisonRecoveryTwice`).
 
 ### Snapshot schema 9
@@ -212,9 +212,3 @@ it to another map, a map transfer step that carries followers' timers but not a 
 world port that cannot move the PC, the TE10 switch in both modes, the canonical `events` text, restore under both
 modes and the same firing afterwards, decode and restore refusals.
 
-[cr-fatigue]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1304-L1371
-[cr-rest]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L1421-L1526
-[st-poison]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1007-L1082
-[st-poison-sched]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L1092-L1135
-[hp-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L1608-L1628
-[stat-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c#L774-L783

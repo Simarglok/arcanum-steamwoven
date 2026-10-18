@@ -23,26 +23,24 @@ remains Unsupported there, and the complete Virgil trace is not implemented.
 
 Labels used throughout:
 
-- **S — Source-confirmed:** inspected CE source at the exact revision below;
-  not proof of the original executable's behavior.
+- **S — Source-confirmed:** a reading of the original's functions at the cited
+  addresses, evidence level F0 (not checked in the executable) unless the
+  [verification ledger](../research/original-verification-ledger.md) lists them;
+  not proof of the original executable's runtime behavior.
 - **D — Data-observed:** hash-gated selected original fields/identifiers only;
   not a reconstruction of live new-game world state.
 - **P — PROPOSAL:** independently authored project safety/contract recommendation.
   Document review or merge does **not** accept it as a gameplay rule or API.
 - **U — Unknown / NOT_VERIFIED:** concrete verification routes are listed below.
 
-Prior art: `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`,
-[Sustainable Use License 1.0][license], **not MIT**. No CE code is copied or
-mechanically translated; this is not a clean-room claim. Source-backed algebra,
-field observations and synthetic worksheets are distinguished from production
-execution. Original display/text/operands remain private and opaque; all literal
+Source-backed algebra, field observations and synthetic worksheets are
+distinguished from production execution. Original display/text/operands remain private and opaque; all literal
 operands and participant names in the conformance matrix are invented.
 
 ## Evidence index and selected identity
 
-Each CE link below is immutable. Range anchors name the actual caller or callee,
-not just an adjacent declaration. Local project seams are bound to merged
+Each address below names the actual caller or callee, not just an adjacent
+function. Local project seams are bound to merged
 baseline `207d55f14958313c60a3f126eb303a449e91fc87`; SCRIPT-002's reviewed head
 `a9fb4401c8ac2455a0517d0e722c8ff99fb01eaf` and owner merge
 `2a859d5711af2af91d512b492c41e8d5edbedc76` are ancestors of that baseline.
@@ -50,17 +48,17 @@ SCRIPT-001's original changes (`fedaf90`, `251ed12`, `adccc48`) explain the
 current LF/QU/RU grammar and structural cap; their source, not card completion,
 is the implementation frontier.
 
-| Key | Pinned source / selected observation | Evidence scope |
+| Key | Functions read (address) / selected observation | Evidence scope |
 | --- | --- | --- |
 | E1 | [Selected NPC chain](../research/crash-site-npc-dialog-evidence.md), NDE-01..06 | Base map5000; unique instance ObjectID SHA256 `bd0cff305f47b07e845a120966b402c5c44073aba7ffd1407b626f93733bf601`; prototype17102; description31073; instance SAP_DIALOG event9/script1324 whole-array override. No save/patch precedence claim. |
 | E2 | Same evidence, conditional caller/entry; [entry production source](../../src/Arcanum.Scripting/NpcDialog/NpcDialogEntryResolver.cs) | PC triggerer, NPC attachee, extra absent, caller SCR line0. Following false, two attachment-local flags false, jilted false reach SCR line4 → DLG NPC1. Those booleans are diagnostic assumptions, not observed world state. |
-| E3 | [NPC entry before enumeration][entry], [selected Player action before transition][select], [Direct dispatch][direct] | Fresh-entry effects occur before eligibility; selected action occurs before target entry. Regeneration (`randomize=true`) skips entry effects in source, not a retry recipe for failed commands. |
-| E4 | [GF query][gf-query], [GF action][gf-action], [global flag owner][global] | Two operands, bit identity and comparison/write value; world-global, not PC or attachment-local. |
-| E5 | [IN query][in-query], [IN action][in-action], [lookup][lookup], [substitute][substitute], [transfer wrapper/unparented GET][transfer-get], [parented transfer][transfer], [placement][placement] | Sign/direction, first name match, conditional substitute/followers, transfer then parent check and fallback; conditional SAP_GET/SAP_TRANSFER and existing/new junk-pile insertion. No count argument. |
-| E6 | [RE query][re-query], [RE action][re-action], [reaction service][reaction] | Signed threshold vs lexically signed delta vs unsigned target adjustment; effective query and mutable reaction storage are not identical quantities. |
-| E7 | [QU action][qu], [RU action][ru], [LF query][lf-query], [LF action][lf-action], [attachment flags][local] | PC quest with NPC context; PC rumor; effective NPC SAP_DIALOG attachment flags, not DLG asset bits. |
-| E8 | [Numeric sort][sort], [comparison][compare], [gender/IQ/condition/cap][filter], [role/gender parse][role] | Numeric source grouping, five eligible candidates; gender → adjusted IQ → condition; Player alternate is selector, NPC Condition is media metadata. |
-| E9 | [Second operand scan][second], [action integer scan][action-scan] | CE uses permissive `atoi` plus a digit/whitespace scan, not a safe general expression grammar. Strict byte admission remains project policy. |
+| E3 | NPC entry before enumeration (0x4167C0, 0x416840), selected Player action before transition (0x413130), Direct dispatch (0x414810) | Fresh-entry effects occur before eligibility; selected action occurs before target entry. Regeneration (`randomize=true`) skips entry effects in source, not a retry recipe for failed commands. |
+| E4 | GF query (0x4150D0), GF action (0x415BA0), global flag owner (0x444CF0, 0x444D20) | Two operands, bit identity and comparison/write value; world-global, not PC or attachment-local. |
+| E5 | IN query (0x4150D0), IN action (0x415BA0), lookup (0x462480), substitute (0x45F650), transfer wrapper/unparented GET (0x4617F0, 0x461810), parented transfer (0x461CA0), placement (0x466E50, 0x466EF0) | Sign/direction, first name match, conditional substitute/followers, transfer then parent check and fallback; conditional SAP_GET/SAP_TRANSFER and existing/new junk-pile insertion. No count argument. |
+| E6 | RE query (0x4150D0), RE action (0x415BA0), reaction service (0x4C0CC0, 0x4C0CE0, 0x4C0D00, 0x4C0DE0) | Signed threshold vs lexically signed delta vs unsigned target adjustment; effective query and mutable reaction storage are not identical quantities. |
+| E7 | QU action (0x415BA0), RU action (0x415BA0), LF query (0x4150D0), LF action (0x415BA0), attachment flags (0x444F10, 0x444F60) | PC quest with NPC context; PC rumor; effective NPC SAP_DIALOG attachment flags, not DLG asset bits. |
+| E8 | Numeric sort (0x417720), comparison (0x417E00), gender/IQ/condition/cap (0x414E60, 0x414F50), role/gender parse (0x417860) | Numeric source grouping, five eligible candidates; gender → adjusted IQ → condition; Player alternate is selector, NPC Condition is media metadata. |
+| E9 | Second operand scan (0x4167C0), action integer scan (0x415BA0) | The original's operand scans use permissive `atoi` plus a digit/whitespace scan (F0), not a safe general expression grammar. Strict byte admission remains project policy. |
 | E10 | [Current parser](../../src/Arcanum.Scripting/Dialog/DialogOperationParser.cs), [session](../../src/Arcanum.Scripting/Dialog/DialogSession.cs), [ports](../../src/Arcanum.Scripting/Dialog/DialogPorts.cs), [limits/types](../../src/Arcanum.Scripting/Dialog/DialogRuntimeTypes.cs) | Only LF conditions, LF/QU/RU actions; serialized structural cap5; generation tokens; partial-effect accounting. Ports are not actual state services. |
 | E11 | [Read-only worksheet](../../tools/research/dialog_state_probe.py), original mode | Independently reads bounded selected SCR/DLG via existing DAT probe; verifies hashes/arity/shapes, replies2..7 →9, seven effects and unsigned Player RE. It does not reimplement the whole NPC loader or SCR VM. |
 
@@ -86,7 +84,7 @@ direction once numerically zero, but RE `-0` is a lexically relative action.
 P shared version rule V: a query returns an explicit value or Unknown/Unavailable/
 Failed/Stale plus exact participant/request identity and owner epoch/revision.
 A command consumes expected versions and returns affected owner versions and a
-receipt. Source CE has no such typed version contract. Invalid arity, overflow,
+receipt. The original has no such typed version contract. Invalid arity, overflow,
 unbound owner, non-ASCII or unsupported form fails admission before ANY query or
 mutation; runtime refusal stops at the applied prefix, never a replacement no-op.
 
@@ -121,7 +119,7 @@ target domain. Do not invent a universal0..100 reaction clamp (E6 permits values
 outside it). QU/RU/LF retain E10's narrow domains until an accepted owner decision
 changes them. Parentheses/colon, comparisons/combinators, additional arguments,
 overflow, unknown forms or missing owner domain are frontiers. This strict P
-grammar is not CE's permissive parser and not the helper's general production API.
+grammar is not the original's permissive parser and not the helper's general production API.
 
 ### IN identity, quantity, transfer and refusal
 
@@ -148,9 +146,9 @@ quantity1 is a proposed capability profile, not an observed original quantity or
 accepted gameplay rule. The selected original instance/type/quantity/live-parent
 joins remain NOT_VERIFIED; no production inventory adapter is introduced.
 
-S [negative direction][in-action] attempts transfer to PC, ignores its boolean result and
+S negative direction (0x415BA0) attempts transfer to PC, ignores its boolean result and
 checks parent identity. If parent is not PC, removes the item and calls placement
-at PC location. [Placement][placement] may insert into/create a junk pile, drop to ground and
+at PC location. Placement (0x466E50, 0x466EF0) may insert into/create a junk pile, drop to ground and
 schedule decay; it is not always a bare world drop. Positive direction on parent
 mismatch places at NPC location if NPC has a PC leader, otherwise destroys the
 item. These positive/destroy forms are **not** in the recommended initial subset.
@@ -159,11 +157,11 @@ P a negative-IN service returns Transferred(instance,newParent),
 Placed(instance,location,container-or-ground), Rejected(no effect), or
 Indeterminate(partial outcome + authoritative recovery reference). Proven missing
 item is an explicit `MissingItem` rejection in the initial safety profile, a
-**deliberate divergence** from CE continuation requiring owner acceptance. Refused
+**deliberate divergence** from the original's continuation (F0) requiring owner acceptance. Refused
 transfer with a successful verified fallback is Applied/Placed, not automatically
 failure; fallback refusal after removal is Indeterminate, not Rejected. A source
-transfer wrapper dispatches to [parented SAP_TRANSFER][transfer] or
-[unparented SAP_GET][transfer-get] depending on the item's current parent:
+transfer wrapper dispatches to parented SAP_TRANSFER (0x461CA0) or
+unparented SAP_GET (0x4617F0, 0x461810) depending on the item's current parent:
 no callbacks/full VM are claimed here.
 No inventory object/name/order/quantity is reconstructed from dialogue display.
 
@@ -204,7 +202,7 @@ rollback is inferred from the source.
 
 ## Reply grouping and recommended bounded policy (PROPOSAL)
 
-S CE loads records then numerically sorts IDs, finds the NPC by ID, scans following
+S the original loads records then numerically sorts IDs, finds the NPC by ID, scans following
 Player records until the next IQ0 NPC, and short-circuits at **five eligible**
 rows. Gender is checked first, IQ next (dumb PC with IQ>LOW_INTELLIGENCE uses1),
 then conditions. Generated option building can further remove a candidate and
@@ -247,7 +245,7 @@ P recommend ONE initial policy `selected-equivalent-group-v1`:
 Rationale E3/E8/E10/E11: selected order equivalence and at-most-two worksheet
 eligibles allow a meaningful bounded extension, keep source's visible cap5,
 avoid silent loss and preserve full command order. Evaluating past fifth eligible
-and rejecting overflow intentionally **differs** from CE's short-circuit-first5;
+and rejecting overflow intentionally **differs** from the original's short-circuit-first5 (F0);
 there is no original-runtime parity claim. Owner must later accept structural32,
 equivalence restriction, overflow/empty failure, missing-item failure,
 version/token/profile policy and exact admitted operand domains. They remain
@@ -306,7 +304,7 @@ owners4 (NPC, substitute, PC, placement container); exceeding those initial
 negative-IN limits is a frontier. Host supplies bounded synchronous ports and
 cooperative cancellation checks before/after calls; no wall-clock interruption
 of a blocked callback is promised. Pending command cancellation is Indeterminate
-unless no-effect refusal is proven. Proposed values are budgets, not CE constants.
+unless no-effect refusal is proven. Proposed values are budgets, not original constants.
 
 Callbacks/return-to-SCR/writeback, Exit, Special/generated options, automatic first
 speech, full conversations, save/patch resource precedence, original text/media,
@@ -337,7 +335,7 @@ once, including equal-value writes; transfer advances N and C inventory revision
 once each. Successful T2 entry's vector is `(G4,N1,C1,R0,Q1,U1,A0,Location0,Stats0)`;
 after selected201 and target entry it is `(G5,N1,C1,R1,Q1,U1,A0,Location0,Stats0)`.
 All epochs/source generation remain fixed. Production adapters return actual
-owner revisions rather than pretending these test increments are a CE rule.
+owner revisions rather than pretending these test increments are an original rule.
 
 | Reply | Gender selector | IQ signed gate | RE signed threshold |
 | --- | ---: | ---: | ---: |
@@ -388,23 +386,23 @@ production services or an independent original-runtime oracle.
 | --- | --- | --- | --- |
 | L1 Exact identities and conditional entry | E1/E2 D/S; current source E10 | E11 current hash/terminal check; inherited object evidence E1 | Entry-to-state context binding; verified bounded identity, no live-state claim |
 | L2 GF arity/owner/read/write | E4/E9 S, E11 D selected shapes | C01,C02,C15,C16 | Global story service + strict parser; missing production |
-| L3 IN signed direction/lookup/instance/fallback | E5 S ([transfer wrapper/GET][transfer-get], [parented TRANSFER][transfer], [existing/new pile placement][placement]), E11 D negative selected form | C03..C07,C21; U3 for quantity/callbacks | Inventory service/receipt; negative-only proposal, positive/stack frontier |
+| L3 IN signed direction/lookup/instance/fallback | E5 S (transfer wrapper/GET (0x4617F0, 0x461810), parented TRANSFER (0x461CA0), existing/new pile placement (0x466E50, 0x466EF0)), E11 D negative selected form | C03..C07,C21; U3 for quantity/callbacks | Inventory service/receipt; negative-only proposal, positive/stack frontier |
 | L4 RE threshold vs target vs relative | E6 S, E11 D unsigned selected action | C08,C09,C10,C15; U1/U2 | Effective reaction query and explicit target/delta adapter; missing production |
 | L5 Seven effects, post-effects gates, Player-before-target | E3/E7 S, E11 D | T1/C09/C16/C17 | Source/selection/target staging and independent ordered receipt test |
 | L6 QU/RU/LF ownership, not working services | E7 S/E10 project source | C09,C17,C18 | Quest/rumor/attachment adapters with dependency versions; missing |
 | L7 Serialized/numeric equivalence and filtered cap | E8 S/E10 current code/E11 D worksheet | C11..C13,C20,C22; U4 | Owner acceptance of selected-equivalent-group-v1, independent group/filter/budget tests |
-| L8 Typed context/version/query/command/token contracts | E10 existing narrow policy and entry version seams; new P not CE guarantee | C14,C19,C20,C21 | Versioned snapshot/receipt/token integration; proposed only |
+| L8 Typed context/version/query/command/token contracts | E10 existing narrow policy and entry version seams; new P not an original guarantee | C14,C19,C20,C21 | Versioned snapshot/receipt/token integration; proposed only |
 | L9 Validation/applied-prefix/stop/recovery | E10 current project semantics, E5 source non-atomic sequence; P extension | C15..C17,C21 | No-effect rejection versus indeterminate compound command, terminal recovery; proposed |
 | L10 Bounds and excluded callback/Exit/Special/full traversal | E10 current limits/frontiers; new P budgets | C20,C22; U3/U5 | Bounded plan/host budget tests; production excluded |
-| L11 Evidence/licensing/privacy and unknown parity | E1 license/method, immutable links, E11 read-only fingerprints | Source-link/pin/privacy checks; U1..U6 | No payload export, no code translation, no original execution claim |
+| L11 Evidence/licensing/privacy and unknown parity | E1 method, cited addresses, E11 read-only fingerprints | Address/privacy checks; U1..U6 | No payload export, no code translation, no original execution claim |
 
 ## Unknowns and bounded verification routes
 
 | ID | Not established | Concrete next verification (not a blocker for this document) |
 | --- | --- | --- |
 | U1 | Original parser grammar, `>`/`<` intention, all GF/IN/RE forms/domains | Inspect version-matched editor documentation and additional bounded field shapes; trace original parser with synthetic author-created dialogue in a separately authorized executable study. Do not fix `atoi` semantics by intuition. |
-| U2 | Original effective/stored reaction, modifiers/AI side effects and target outcome | Trace reaction service with named race/effects/leadership profiles and effective+base before/after values; use independent literal adapter tests. Exact vanilla compatibility needs original executable evidence; CE contains a reaction fix. |
-| U3 | Original quantity/type/prototype/live-parent joins, live substitute inventory and actual stack/equipment/placement/decay/callback outcomes | [ARC-RES-021](negative-inventory-transfer-contract.md) refines the source-only insertion/remove/stack/SAP_TRANSFER/placement trace and gives bounded next checks plus a proposed typed matrix. Static/editor data and CE trace do not prove live ownership or execution; refuse unsupported dependencies. Quantity1/MissingItem remain owner-decision proposals before any adapter. |
+| U2 | Original effective/stored reaction, modifiers/AI side effects and target outcome | Trace reaction service with named race/effects/leadership profiles and effective+base before/after values; use independent literal adapter tests. Exact vanilla compatibility needs original executable evidence; ledger rows R1–R8 record the reaction functions checked so far. |
+| U3 | Original quantity/type/prototype/live-parent joins, live substitute inventory and actual stack/equipment/placement/decay/callback outcomes | [ARC-RES-021](negative-inventory-transfer-contract.md) refines the source-only insertion/remove/stack/SAP_TRANSFER/placement trace and gives bounded next checks plus a proposed typed matrix. Static/editor data and the F0 function trace do not prove live ownership or execution; refuse unsupported dependencies. Quantity1/MissingItem remain owner-decision proposals before any adapter. |
 | U4 | Original visible reply parity, generic/generated fallback, max5 short circuit under state changes | Run authorized original sessions with named PC gender/IQ/dumb and reaction profile, record identifier-only offered sets/order before/after. Current integer worksheet is not a GUI observation. |
 | U5 | Session concurrency/persistence, callback/Exit/Special closure, full traversal, rollback | Separate dependency-ledger design and failure injection on real services; original callback/return study; no transaction guarantee inferred. |
 | U6 | Exact owner acceptance of safety subset/domains/caps/divergences | Owner decision on the explicit P recommendations before implementation; retain Unknown/proposal if declined or undecided. No production cards are created by this research. |
@@ -451,38 +449,10 @@ Wrong hash/missing input/unknown shape/failed worksheet is FAIL, never parity PA
 Private run evidence carries task/run/session/workspace/base/head/UTC/commands/
 results/digests; logs and work diaries do not belong in this public document.
 
-Document acceptance checks pinned links against actual source ranges, selected
+Document acceptance checks cited addresses against the functions read, selected
 identities/shapes/order, table/form consistency, synthetic literal expectations,
 helper tests and diff/privacy; it does not accept the proposed gameplay policy.
 Independent exact-head review must recheck the **whole** contract including these
 frontiers, not just spelling or helper exit status. Later private PR publication
 is separate from review; NO_MERGE remains in force for this task's delivery.
 
-[license]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md
-[entry]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2245-L2277
-[select]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L510-L543
-[direct]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1156-L1167
-[gf-query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1479-L1483
-[gf-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1973-L1975
-[global]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L415-L426
-[in-query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1519-L1547
-[in-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2004-L2056
-[lookup]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1067-L1101
-[substitute]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2055-L2084
-[transfer-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L604-L688
-[transfer]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L773-L839
-[placement]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3906-L3981
-[re-query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1489-L1499
-[re-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1933-L1956
-[reaction]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c#L192-L299
-[qu]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1958-L1960
-[ru]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2075-L2077
-[lf-query]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1559-L1563
-[lf-action]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2058-L2060
-[local]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c#L473-L498
-[sort]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2596-L2638
-[compare]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2840-L2853
-[filter]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1273-L1358
-[role]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2662-L2702
-[second]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2245-L2257
-[action-scan]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1879-L1902

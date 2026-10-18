@@ -8,10 +8,8 @@ payload, toolkit, codec, middleware, input preferences or other lab is needed.
 ## Provenance and boundaries
 
 Implementation and square-wave recipe are independently authored, under the
-repository MIT license. CE/TIG are one research lineage, not two independent
-confirmations: [CE pin a7ff41b](https://github.com/alexbatalov/arcanum-ce/tree/a7ff41b300ef712f0e7d088183a3d08957110cdd)
-is attributed research context governed by its Sustainable Use License. No CE
-code, mechanical translation or runtime dependency is used. The proposal/source
+repository MIT license. No runtime dependency on any other implementation is
+used. The proposal/source
 boundary in [FR-MEDIA-003/004](../requirements/ui-media-lifecycle.md#fr-media-003)
 remains: schemes, positional attenuation, footsteps, combat transitions, dialogue
 callers and resource resolution need separate integration files/tasks. This lab

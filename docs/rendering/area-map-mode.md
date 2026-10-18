@@ -56,7 +56,7 @@ profiles and every exterior smoke stay as they were.
   as on the exterior.
 - **Portals drawn on the wall rule.** Doors and windows (art class 3) take the
   wall hot spot: rotations 0, 1, 6 and 7 shift it 40 left and 20 down, then
-  the flip bit mirrors it (pinned `tig art.c` 1235–1253). The pinned Crash
+  the flip bit mirrors it (the original's ART hot-spot code, source reading, F0). The pinned Crash
   Site profiles draw no portal, so their plans are unchanged.
 - **Lighting and session.** The map's own ambient scheme and stationary lights
   when its sources admit them (the lighting reader now reads up to 256 core
@@ -121,8 +121,8 @@ cache or a retention) is not yet known and is left to its own investigation.
 
 ## Body blends and wading (ARC-RENDER-018)
 
-The scene plan draws three more serialized body states, by rules read in CE and
-checked in the retail executable
+The scene plan draws three more serialized body states, by rules checked in the
+retail executable
 ([ledger BL1–BL5](../research/original-verification-ledger.md#rendering-body-blends-and-wading-arc-render-018)).
 They are general rules of every body, not of these maps.
 
@@ -148,9 +148,9 @@ They are general rules of every body, not of these maps.
   drawn whole at alpha 92 (`WadeRows`, relative to the destination, so a moved
   command keeps its water line). Light still applies. An additive or multiply
   body keeps its blend over the whole frame: the wading pass leaves those modes
-  set beside the wading alpha, and CE's blitter (`tig art.c`) tests additive and
-  multiply before constant alpha. That dispatch is a CE reading, not checked in
-  the executable, and no installed body has the combination.
+  set beside the wading alpha, and the original's ART blitter tests additive and
+  multiply before constant alpha. That dispatch is a source reading, not checked in
+  the executable (F0), and no installed body has the combination.
 
 On the installed original (opt-in test): 20 wading bodies in `caladons sewers`
 and 102 in `tarant sewers-02` (rats, lake scenery, a container), 12 and 42
@@ -170,9 +170,10 @@ during the map smoke. Observed on all
 five maps (multiply on both void maps, alpha 95 in the mine, wading in both
 sewers).
 
-Not covered: wading is the T0 flag only (CE recomputes it from the tile when
-an object moves, not checked in the executable; the walking actor never wades);
-shadows (CE also darkens a wading body's shadow); frozen, stoned, `OF_DONTLIGHT` and
+Not covered: wading is the T0 flag only (the original recomputes it from the tile when
+an object moves, a source reading not checked in the executable, F0; the walking
+actor never wades); shadows (the original also darkens a wading body's shadow,
+source reading, F0); frozen, stoned, `OF_DONTLIGHT` and
 animated-dead tints. Additive bodies keep the earlier lit rule, although the
 original draws them unlit too (BL2); changing it touches the pinned Crash Site
 lighting and is left to its own task.

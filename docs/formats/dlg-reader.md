@@ -99,18 +99,16 @@ DAT_ROOT=/path/to/Arcanum dotnet test \
 It reads only the selected members and never extracts or writes original
 resources. Original dialogue bytes/text/expressions are kept local: logs and
 review evidence use only approved identifiers, hashes, sizes, counts, and
-status aggregates. Physical grammar evidence is attributed to [bounded DLG
-format research](dlg.md), the [dialogue evidence
-record](../research/dialog-evidence.md), and CE revision
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`; this implementation is
-independently authored and does not copy or execute that source or the research
-probe. The [minimal dialog contract](../scripting/dialog-minimal-contract.md)
+status aggregates. Physical grammar evidence is in [bounded DLG
+format research](dlg.md) and the [dialogue evidence
+record](../research/dialog-evidence.md); this implementation is
+independently authored and does not execute the research probe. The [minimal dialog contract](../scripting/dialog-minimal-contract.md)
 is a separate proposal, not part of this physical reader.
 
 ## Original read mode (ARC-DATA-017)
 
-`DlgReaderOptions.Mode = DlgReadMode.Original` reads a file the way the pinned CE
-`dialog_load_internal` → `dialog_parse_entry` → `dialog_parse_field` does; the
+`DlgReaderOptions.Mode = DlgReadMode.Original` reads a file the way the original's
+internal dialog load (0x417720) → entry parse (0x417860) → field parse (0x417C20) does; the
 default `Strict` mode above is unchanged. Since ARC-SCRIPT-012 the universal script
 and dialog loader ([script content](../scripting/script-content.md)) reads game data
 in this mode, as the game does, and the conversation runtime receives those
@@ -163,9 +161,9 @@ counts are not asserted beyond the totals above):
 | a number field that is not a plain number | 2 | reads it like `atoi` |
 | one record that lacks its 7th field | 4 | keeps no record and does not open the file |
 
-Checked in the 1.0.7.4 executable, not only in CE: `dialog_load` (0x412E10)
-fails when no record was read; `dialog_parse_field` (0x417C20) skips to the next
-`{`, honours `//` and caps a field at 999 characters; `dialog_parse_entry`
+Checked in the 1.0.7.4 executable: the dialog load (0x412E10)
+fails when no record was read; the field parse (0x417C20) skips to the next
+`{`, honours `//` and caps a field at 999 characters; the entry parse
 (0x417860) reads seven fields, the id, IQ and response with `atoi`, and ends the
 read (keeping the records before) at a non-empty IQ that reads 0 or a response
 starting with `#`.

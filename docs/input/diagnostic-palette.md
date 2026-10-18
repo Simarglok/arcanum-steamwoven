@@ -92,7 +92,7 @@ WORLD host (`TerrainViewerWorld.cs`).
 2. **World route (palette closed).** Arrows: camera pan, fixed direction (the
    false/false image sign). Original keys from M/Q and KM-02 are **reserved, not
    implemented**: Escape, F1–F5, F7, F8, F12, NumLock, Enter, Space, Home, 1–0, A, C, F,
-   I, L, O, R, S, T, V, W, and the CE-source-only F6, F10, E, K, M, plus held `,` `.` `/`.
+   I, L, O, R, S, T, V, W, and F6, F10, E, K, M (not checked in the executable, F0), plus held `,` `.` `/`.
    A reserved key has no debug action and is not redirected; the HUD names the last
    one ("F1 = Followers: go to point (original; NOT IMPLEMENTED)"). Exception: while
    `crash-site-area` has a game session, F7/F8 are the original quick save/load on key

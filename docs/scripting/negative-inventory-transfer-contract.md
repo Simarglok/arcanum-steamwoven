@@ -11,39 +11,37 @@ equipment/crafting implementations and a full SCR VM remain outside admission.
 
 Categories:
 
-- **Source (S):** inspected immutable CE branches, not original executable parity.
+- **Source (S):** a reading of the original's functions at the cited addresses,
+  evidence level F0 (not checked in the executable) unless the
+  [verification ledger](../research/original-verification-ledger.md) lists them;
+  not original executable parity.
 - **Data-observed (D):** authenticated inherited selected static evidence only;
   no claim of normal-game live ownership, quantity or callback execution.
 - **Proposal (P):** independently authored safety/API/test recommendations.
   Research review or merge does not accept them as gameplay policy.
 - **Unknown (U / NOT_VERIFIED):** a named gap with a bounded next verification.
 
-Source lineage is `alexbatalov/arcanum-ce` at
-`a7ff41b300ef712f0e7d088183a3d08957110cdd`, under
-[Sustainable Use License 1.0][license], not MIT. CE/TIG-derived references are
-one lineage, not independent confirmation. No CE code, mechanical translation
-or CE runtime dependency is introduced. The prose and invented scenarios are
-independently authored project material; this is not a clean-room claim.
+The prose and invented scenarios are independently authored project material.
 Original content, selected identifiers, fingerprints, aggregate shapes, operands,
 private paths and local work diaries are not reproduced here. The inherited
 RES-019 evidence remains in its existing document; no new data ledger is published.
 
 ## Source index: exact branch, not inferred association
 
-All links use the pin above. Ranges include the relevant caller/callee body.
+Addresses name the relevant caller/callee.
 
-| Key | Exact source range | Claim boundary |
+| Key | Functions read (address) | Claim boundary |
 | --- | --- | --- |
-| E01 | [Action scan][scan], [negative IN][negative] | Permissive `atoi` scan, negative branch, primary/substitute lookup, transfer, parent check, removal and PC-location placement; absence continues. |
-| E02 | [Name lookup][lookup] | Container/critter list index order and first `OBJ_F_NAME` match; wrong type/null and exhausted list all return null in CE. |
-| E03 | [Substitute gate][substitute], [distance caller][distance], [distance metric][metric] | NPC only, no leader, non-null substitute, distance <=20; maximum absolute coordinate difference, not Euclidean/metre radius. |
-| E04 | [Parent query][parent], [wrapper and GET][get], [parented TRANSFER][transfer] | Inventory flag/type-sensitive parent query; default slot -1; different script participants; boolean is not verified ownership. |
-| E05 | [Insertion check][check], [free slot][free-slot] | Weight/background/key-ring/stack/room branches; default transfer chooses insertion location, not an explicit wear slot. |
-| E06 | [Stack field classifier][stack-kind], [prototype match][prototype], [insertion][insert], [key special cases][keys] | Gold/ammo quantity fields; first matching prototype excluding self and generic-item exception; merge can destroy incoming object; nonstack insertion appends; keys/rings are additional destruction/aggregation branches. |
-| E07 | [Remove wrapper][remove], [forced removal][force-remove], [equip][equip], [unequip][unequip] | List compaction, slot/stack/encumbrance/AI/magic-tech effects and ignored callback results; removal is not a no-effect validation. |
-| E08 | [Placement][place], [ground drop][drop] | Existing/new junk pile or ground; gathering other items; no typed success receipt, destroyed-object drop early return. |
-| E09 | [Decay eligibility, scheduling and cancellation][decay] | Conditional schedule with delay172800000 at transfer/placement callers, not guaranteed destruction or successful scheduler write. |
-| E10 | [Script dispatch/writeback][dispatch] | Triggerer/attachee/extra, editor bypass, absent attachment success, execution and attachment writeback; return false need not mean no effects. |
+| E01 | Action scan (0x415BA0), negative IN (0x415BA0) | Permissive `atoi` scan, negative branch, primary/substitute lookup, transfer, parent check, removal and PC-location placement; absence continues. |
+| E02 | Name lookup (0x462480) | Container/critter list index order and first `OBJ_F_NAME` match; wrong type/null and exhausted list all return null (F0). |
+| E03 | Substitute gate (0x45F650), distance caller (0x441AE0), distance metric (0x4B96F0) | NPC only, no leader, non-null substitute, distance <=20; maximum absolute coordinate difference, not Euclidean/metre radius. |
+| E04 | Parent query (0x4612A0), wrapper and GET (0x4617F0, 0x461810), parented TRANSFER (0x461CA0) | Inventory flag/type-sensitive parent query; default slot -1; different script participants; boolean is not verified ownership. |
+| E05 | Insertion check (0x466510), free slot (0x4664C0) | Weight/background/key-ring/stack/room branches; default transfer chooses insertion location, not an explicit wear slot. |
+| E06 | Stack field classifier (0x462410), prototype match (0x462930), insertion (0x466640), key special cases (0x466A00, 0x466A50, 0x466AA0) | Gold/ammo quantity fields; first matching prototype excluding self and generic-item exception; merge can destroy incoming object; nonstack insertion appends; keys/rings are additional destruction/aggregation branches. |
+| E07 | Remove wrapper (0x466E00), forced removal (0x467860), equip (0x4677B0), unequip (0x467CB0) | List compaction, slot/stack/encumbrance/AI/magic-tech effects and ignored callback results; removal is not a no-effect validation. |
+| E08 | Placement (0x466E50, 0x466EF0), ground drop (0x4415C0) | Existing/new junk pile or ground; gathering other items; no typed success receipt, destroyed-object drop early return. |
+| E09 | Decay eligibility, scheduling and cancellation (0x467FC0, 0x468010, 0x468090, 0x468110, 0x468150) | Conditional schedule with delay172800000 at transfer/placement callers, not guaranteed destruction or successful scheduler write. |
+| E10 | Script dispatch/writeback (0x441980) | Triggerer/attachee/extra, editor bypass, absent attachment success, execution and attachment writeback; return false need not mean no effects. |
 | E11 | [RES-019 E5 / IN trace](dialog-state-contract.md#in-identity-quantity-transfer-and-refusal), [existing worksheet](../../tools/research/dialog_state_probe.py) | Reuse selected static negative-form evidence; quantity and live inventory are not inferred from that operand or display. |
 
 ## Literal source trace and identity/quantity distinctions
@@ -51,22 +49,23 @@ All links use the pin above. Ranges include the relevant caller/callee body.
 ### 1. Lookup priority and substitute gate (S: E01..E03)
 
 The negative branch negates the numeric value and looks up that **item name** in
-the NPC's primary inventory first. `item_find_by_name` chooses count/list fields
+the NPC's primary inventory first. The name lookup (0x462480) chooses count/list fields
 by owner type, scans indices0 through count-1 and returns the first name match.
 It does not sort IDs, choose by quantity/prototype/slot, aggregate all matches,
 create an item, or assert current-parent consistency. Even a worn item can be
 selected: this lookup has no slot filter.
 
-Only after primary null does the action call `critter_substitute_inventory_get`.
+Only after primary null does the action call the substitute lookup (0x45F650).
 Its gates are: non-null NPC, type NPC, no leader (any leader, not merely a PC),
-non-null substitute handle, `object_dist(NPC, substitute) <= 20`. `object_dist`
-uses locations; `location_dist` returns max(abs(dx),abs(dy)). Thus a synthetic
+non-null substitute handle, object distance (0x441AE0) from NPC to substitute
+<= 20. The object distance uses locations; the location distance (0x4B96F0)
+returns max(abs(dx),abs(dy)). Thus a synthetic
 coordinate delta(20,20) qualifies, (21,0) does not. Exact equality20 qualifies.
 The substitute is a separate source owner, not triggerer/extra or automatically
 a follower. Its type and list still have to be suitable for the lookup.
 If primary and every applicable substitute lookup return null, no transfer or
-fallback is called; CE continues the action sequence. CE null also conflates
-unsupported owner type with absence; a proposed typed service must not do so.
+fallback is called; the action sequence continues (F0). The null result also
+conflates unsupported owner type with absence; a proposed typed service must not do so.
 
 A primary hit short-circuits substitute resolution entirely. Do not query an
 unneeded substitute then fail a valid primary hit on its unavailable state.
@@ -101,21 +100,22 @@ addition. Keys/key rings also have special aggregation/destruction paths.
 U the selected original name-to-instance/prototype/type/stack/quantity join,
 live list order, substitute existence and live parent are **NOT_VERIFIED**.
 No actual original item is asserted to be nonstacking or quantity1. P's initial
-`nonstacking-unit-v1` is a proposed capability restriction only, not a CE-derived
+`nonstacking-unit-v1` is a proposed capability restriction only, not a source-derived
 quantity rule and not accepted owner policy. It requires a positively evidenced
 unit/type profile, excludes keys/rings, merge/destruction, wear/hotkey slots and
 unknown magic-tech/callback dependencies; it is not satisfied by missing data.
 
 ### 3. Wrapper, callbacks and removal/insertion (S: E04..E07/E10)
 
-`item_transfer` calls `item_transfer_ex` with inventory location -1. On the
-local/host branch, an item considered parented dispatches to `sub_461CA0`:
+The transfer wrapper (0x4617F0) calls the extended transfer (0x461810) with
+inventory location -1. On the local/host branch, an item considered parented
+dispatches to the parented transfer (0x461CA0):
 
 - SAP_TRANSFER: triggerer=current parent, attachee=recipient PC, extra=item,
   line0. This is the **recipient's** effective attachment, not the item's.
 - If it returns false, the helper returns false before its own removal. But
   the callback may already have changed owners or attachment state.
-- After insertion checks, `item_remove` precedes insertion into the chosen slot.
+- After insertion checks, the remove wrapper (0x466E00) precedes insertion into the chosen slot.
   It then calls decay cancellation and conditional decay scheduling.
 
 If the item is considered unparented, the other branch runs SAP_GET with
@@ -126,7 +126,7 @@ resolution must be reconciled, not silently declared the happy path. The wrapper
 also has a network non-host branch that sends a packet and returns true: that is
 not a local completed transfer. P excludes networking/remote mutation.
 
-`object_script_execute` returns true in editor mode or for an absent attachment;
+Script dispatch (0x441980) returns true in editor mode or for an absent attachment;
 normal execution can write back script number/flags/counters. Neither editor
 success nor false callback return proves a normal-game no-effect receipt.
 Substep callbacks have different roles:
@@ -144,14 +144,14 @@ for critters it clears the classified stack handle, compacts the list left,
 decrements count, usually sets item inventory location to -1, unequips or clears
 PC hotkey state, notifies AI/magic-tech, recalculates encumbrance, may request NPC
 wield checking and invokes removal script. It can warn/return after effects.
-The negative-IN fallback calls `item_remove` directly, not `item_drop_ex`'s
-SAP_DROP/no-drop/equipment validation. Do not claim those drop checks guard it.
+The negative-IN fallback calls the remove wrapper (0x466E00) directly, not the
+drop function's (0x461AB0) SAP_DROP/no-drop/equipment validation. Do not claim those drop checks guard it.
 
 Normal insertion appends the object, writes slot and parent, notifies pickup,
 possibly equips, recalculates encumbrance, sets NPC wield-check flag, updates
 inventory/UI/AI and invokes insertion script. Keys/rings and stack merges differ.
 The raw parent field and OF_INVENTORY flag are not uniformly cleared by forced
-removal itself; ground `object_drop` clears the inventory flag and writes location.
+removal itself; ground drop (0x4415C0) clears the inventory flag and writes location.
 A future service must verify authoritative membership, existence, parent and
 slot, not synthesize an unparented fact merely from a removal call.
 
@@ -165,13 +165,13 @@ Indeterminate if effects have already begun.
 
 The action ignores the transfer boolean, queries the **same selected handle**'s
 parent, and compares it to PC. It does not verify quantity, surviving identity,
-owner lists, callback outcomes or boolean success. `item_parent` first checks
+owner lists, callback outcomes or boolean success. The parent query (0x4612A0) first checks
 item type and OF_INVENTORY; invalid/non-item can return before initializing its
 output. A stack merge/destruction can invalidate the selected handle: neither
 successful parent verification nor safe fallback on a destroyed handle is proven.
-This is a source limitation, not a reason to repair CE behavior in the trace.
+This is a limitation of the original (F0), not a reason to repair its behavior in the trace.
 
-If queried parent differs from PC, CE calls removal again, then placement at the
+If queried parent differs from PC, the action calls removal again, then placement at the
 PC's current location. It does not check a typed removal/placement result and does
 not roll back. Placement tries junk piles in location enumeration order with a
 free insertion slot. If none works, it enumerates ground items and may create a
@@ -182,7 +182,7 @@ created container are additional owners/effects, not an isolated two-owner move.
 Fallback is therefore **container-or-ground placement**, not always a bare drop
 and not a guaranteed successful transfer or preservation of all quantities.
 
-Placement calls `item_decay(obj, 172800000)`; parented transfer also attempts that
+Placement schedules the item's decay (0x468090) after 172,800,000 ms; parented transfer also attempts that
 delay after cancellation, whereas GET only cancels. Eligibility excludes null,
 editor mode, no-decay items and ordinary parented objects; ground or junk-pile
 items can qualify. Scheduling returns a boolean ignored by these callers; actual
@@ -212,7 +212,7 @@ recheck dynamic versions under the host lease before effects.
 P strict decimal magnitude1..2147483647 with an explicit minus sign; Int32 minimum
 negation, numeric zero including `-0`, positive/unsigned, extra operands and
 non-ASCII are rejected/frontiers with **zero port calls**. This is deliberately
-stricter than CE's scan. No supported IN condition follows from action support.
+stricter than the original's scan. No supported IN condition follows from action support.
 
 `LookupReply` echoes request identity, exact owner/version and either:
 
@@ -248,7 +248,7 @@ fallback remove/place, verification, decay/cancel. Each substep reports
 NotCalled / VerifiedNoEffect / Applied / Failed / Unknown, its dependency effects
 and version changes. Unobserved after versions stay Unknown rather than copying
 expected versions; Indeterminate retains last-known versions and reconciliation
-reference. The synthetic test version increments below are not CE rules.
+reference. The synthetic test version increments below are not original rules.
 
 Static unsupported profile → capability frontier before any port calls. Dynamically
 revealed unsupported selected item → lookup-only Rejected if all reads are proven
@@ -288,9 +288,9 @@ production implementation. No additional implementation tasks are dispatched her
 
 These are invented, literal future-test vectors and independently hand-traced
 expected results, **not executed inventory tests**. No new worksheet/model is
-shipped. Static scenario review checks them against the pinned trace and P
+shipped. Static scenario review checks them against the source trace and P
 invariants; existing RES-019 worksheet only authenticates its own narrower algebra.
-Neither that worksheet nor this table is an independent executable CE oracle.
+Neither that worksheet nor this table is an independent executable oracle of the original.
 
 Common binding B: N=NPC, C=PC, S=optional substitute, location L=(0,0), name801,
 instance I1 of prototype P1, alive nonstacking unit with q1, primary list[I1],
@@ -328,7 +328,7 @@ adapters, not computed by sharing their helpers/constants.
 | N21 | N list[I1 unsupported stack,I2 supported unit] both name801 | select I1 first; StackCapability frontier; never skip to I2; no transfer | E02/E06; first-match capability handling |
 | N22 | I1 worn or hotkey slot; independent key/key-ring and magic-tech dependency variants | P Equipment/Key/Dependency frontier before effects; no pretend ordinary slot move; future source profile must record unequip/wield/remove/insert dependencies | E06/E07; actual side-effect adapter |
 | N23 | Relevant callback attachment Unknown or nonempty unsupported | CallbackCapability frontier before effects; never treat unknown as absent/editor success; no simulated successful callback | E10; bounded attachment capability |
-| N24 | Transfer true, parent fieldC but C list does not contain I1 / quantity Unknown | Indeterminate, not Transferred; field comparison alone insufficient; owner recovery required | E01/E04; verification stronger than CE check |
+| N24 | Transfer true, parent fieldC but C list does not contain I1 / quantity Unknown | Indeterminate, not Transferred; field comparison alone insufficient; owner recovery required | E01/E04; verification stronger than the original's check |
 | N25 | N candidate count4097, OR unknown placement may touch fifth owner | Budget/PlacementCapability frontier, no truncated lookup success or KnownAbsent; no effects under pure admission | P bounds/dependencies |
 | N26 | Post-placement decay report NotEligible vs Failed vs Unknown, separate sessions | Preserve each scheduler status; do not say Scheduled. Verified placement plus unresolved required dependency becomes Indeterminate; optional NotEligible can be Placed only under accepted profile | E09; placement/decay owner-policy boundary |
 | N27 | Transfer callback changed parent to C but booleanfalse; complete supported receipts/membership/q1 verified | Transferred if all facts verified; no fallback merely because booleanfalse; callback effects included | E01/E04; outcome not boolean |
@@ -355,10 +355,10 @@ from P admission instead of claiming every scenario is supported.
 | L08 / AC2,AC3 | E01 boolean ignored, parent check then removal/placement | Verified Transferred/Placed, not boolean | N11/N12/N15/N27; continuation/fallback audit; Source confirmed |
 | L09 / AC2 | E08 other ground items/new pile/ground; E09 conditional scheduler | Placement/location/container/decay owners | N11/N12/N25/N26; branch/eligibility audit; original placement/decay Unknown |
 | L10 / AC3,AC6 | E01 absent continues; P MissingItem deliberately differs | Explicit owner decision, typed absence | N04/N06..N09/N28; divergence/status audit; recommendation only, decision open |
-| L11 / AC3,AC6 | CE no versioned typed transaction contract | Expected/result vector, substep receipts, partial recovery | N13..N18/N24/N29/N30; no-effect/partial audit; proposal only |
+| L11 / AC3,AC6 | Original has no versioned typed transaction contract | Expected/result vector, substep receipts, partial recovery | N13..N18/N24/N29/N30; no-effect/partial audit; proposal only |
 | L12 / AC3,AC4 | Independent invented complete matrix, no implementation-derived expected constants | Future production tests above | N01..N30 static scenario audit only; no new worksheet, inventory runtime NOT_IMPLEMENTED |
 | L13 / AC5 | Existing E11 static evidence authenticated, cannot establish live list/parent/quantity | Bounded selected-data join then separately evidenced live state | U01..U03 next routes below; allowed specific NOT_VERIFIED, no original executable launch |
-| L14 / AC4,AC6 | Pin/license/privacy/diff; no C# inputs changed | No new production dependencies | Required link/pin/semantic/scenario/privacy/diff checks; explicit C# rebuild skip; local-only CI_NOT_REQUIRED |
+| L14 / AC4,AC6 | Address/privacy/diff; no C# inputs changed | No new production dependencies | Required link/address/semantic/scenario/privacy/diff checks; explicit C# rebuild skip; local-only CI_NOT_REQUIRED |
 | L15 / AC7 | Developer candidate, not independent PASS/PR/merge receipt | Native exact-head dev-reviewer then existing delivery stages | Full ledger review required; publication and separate Reviewer merge/receipt OPEN |
 
 ## Unknowns and reproducible bounded next checks
@@ -368,7 +368,7 @@ from P admission instead of claiming every scenario is supported.
 | U01 | Selected original ItemNameId → actual definition/type/prototype/instance/quantity join | Privately resolve only the inherited selected negative operand; hash before/after its selected archive. In a bounded original aggregate read, locate only the previously authenticated NPC instance and its effective primary/substitute inventory references; reconcile instance/prototype overrides and object-ID list order. Follow only referenced item definitions/instances, never search by display/name alone. Fingerprint all selected inputs before/after; retain selectors and shapes locally. If a list is runtime-generated/unresolved, record Unknown, not absent or quantity1. |
 | U02 | Authentic normal-game source/PC lists, leadership/substitute/distance, current parents and quantities | Static aggregate/prototype and editor inventory do not establish live state. A later separately authorized live-state observation must bind a versioned normal-game snapshot, selected command, exact instance/source/parent/quantity before/after and all affected owners. No game/Windows/legacy executable launch is authorized or required in this research; absence of that evidence is permitted NOT_VERIFIED. |
 | U03 | Concrete callbacks, removal/insertion/fallback/decay effects for original selected item | First reconcile only selected effective attachments and referenced SCR identities privately; absent attachment must be proven. Then independently failure-inject actual headless owner adapters with N11..N29 literal oracles. Unknown/unsupported scripts, magic-tech, placement gathering or scheduler dependencies remain capability frontiers; editor bypass is not callback validation. |
-| U04 | Original executable parity, safe destroyed-handle behavior, network/concurrency/transaction semantics | Separate explicitly authorized executable/adapter study with source version and full side-effect ledger; CE/TIG source is not independent runtime confirmation. No rollback/atomic multiowner/concurrent exactly-once claim here. |
+| U04 | Original executable parity, safe destroyed-handle behavior, network/concurrency/transaction semantics | Separate explicitly authorized executable/adapter study with source version and full side-effect ledger; source/TIG source is not independent runtime confirmation. No rollback/atomic multiowner/concurrent exactly-once claim here. |
 | U05 | Accepted quantity/profile, MissingItem continuation/rejection, placement/decay and budgets | Owner decision on explicit alternatives above before implementing any service/adapter. Research FULL PASS does not resolve this policy choice. |
 
 For AC5 this candidate uses the **specific NOT_VERIFIED alternative** for the
@@ -394,7 +394,7 @@ git diff --check
 
 The original-mode output is **local only**, not attached, committed or pasted
 into a PR. No new worksheet production CLI/self-test applies: none is added.
-Required document checks are exact immutable source pin/body/range and license,
+Required document checks are cited function addresses,
 relative links, semantic branch/callback/quantity/status consistency, complete
 literal scenario audit and privacy/scope diff. Static checks and the inherited
 worksheet do not execute N01..N30 against an inventory implementation. The C# root
@@ -412,27 +412,3 @@ Publication follows native exact-head full independent research PASS. One privat
 PR and a separate policy-authorized Reviewer acceptance/merge with fetched ancestry
 receipt remain later delivery obligations; document preparation is not whole delivery.
 
-[license]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/LICENSE.md
-[scan]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L1879-L1902
-[negative]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c#L2004-L2028
-[lookup]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1067-L1101
-[substitute]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c#L2055-L2084
-[distance]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3912-L3920
-[metric]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/location.c#L535-L556
-[parent]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L319-L339
-[get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L604-L688
-[transfer]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L773-L839
-[check]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3639-L3677
-[free-slot]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3630-L3636
-[stack-kind]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1037-L1065
-[prototype]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L1291-L1324
-[insert]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3680-L3777
-[keys]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3780-L3843
-[remove]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3893-L3903
-[force-remove]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4278-L4385
-[equip]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4251-L4275
-[unequip]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4388-L4412
-[place]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3906-L3981
-[drop]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3802-L3832
-[decay]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L4487-L4561
-[dispatch]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c#L3866-L3908

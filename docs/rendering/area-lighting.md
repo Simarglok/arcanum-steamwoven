@@ -9,9 +9,8 @@ an ambient channel stay unlit), driven by the
 scheduler, save system or original visual-parity claim.
 
 Source analysis follows the [RES-018 contract](../world/time-lighting-contract.md)
-(CE/TIG at `a7ff41b300ef712f0e7d088183a3d08957110cdd`, Sustainable Use License,
-one prior-art lineage). The code is independently written; no CE code was copied
-or translated. No original colour values, rule text or pixels are committed;
+(a source reading of the original's lighting and TIG functions, evidence level F0
+unless the verification ledger lists them). The code is independently written. No original colour values, rule text or pixels are committed;
 tests and logs use counts, scheme ids and SHA-256 digests only.
 
 ## What it does
@@ -19,9 +18,9 @@ tests and logs use counts, scheme ids and SHA-256 digests only.
 | Requirement | Implemented subset | Not implemented / NOT_VERIFIED |
 | --- | --- | --- |
 | FR-LIGHT-003 hourly scheme | `LightSchemeParser` reads a scheme MES: 24 hour keys, six integers 0..255 per row in **outdoor RGB, indoor RGB** order, scheme id → `rules/<name>.mes` through `rules/lighting schemes.mes`. Every lighting MES file is read with the original grammar (`MesFile`, ARC-DATA-027): text outside braces is ignored (also a `//` comment, so a brace inside one starts a field), while a lone CR, a text over 1,999 bytes, a brace inside a field and a duplicate number are refused (`MesGrammar` / `LimitExceeded`; before, a lone CR counted as white space and texts up to 4,096 bytes were read). | The pinned Crash Site profiles still read the module archive only; the whole-map viewer reads through the content stack ([sources](#sources-and-load-phases-arc-data-027)). |
-| FR-LIGHT-004 empty hours | Strict project policy from RES-018: all 24 keys present, hours 0 and 23 explicit (the shipped default scheme file states the same rule), each interior empty run filled per channel as `left + distance * trunc((right-left)/span)` from its own bracketing anchors. Missing key, edge gap, wrong channel count or range fail with a typed `LightingFailure`. | CE's mutable running-colour behaviour for several separated gaps and reload is deliberately not reproduced. |
+| FR-LIGHT-004 empty hours | Strict project policy from RES-018: all 24 keys present, hours 0 and 23 explicit (the shipped default scheme file states the same rule), each interior empty run filled per channel as `left + distance * trunc((right-left)/span)` from its own bracketing anchors. Missing key, edge gap, wrong channel count or range fail with a typed `LightingFailure`. | the source-read (F0) mutable running-colour behaviour for several separated gaps and reload is deliberately not reproduced. |
 | FR-LIGHT-005 hourly application | `AmbientLightingState.Apply(hour, sector)` selects the pair for the whole game hour; the selection and its revision change only when the hour or the resolved scheme changes. The viewer re-applies after every clock change, so a resumed/jumped clock shows the current hour at once. | No relative 3,600,000 ms callback scheduler; no minute blending (none exists in the source either). |
-| FR-LIGHT-006 indoor/outdoor surfaces | Per drawn ART type, following the CE palette callback: tile/facade take **indoor** when their type bit is 0 (tile bit 8, facade bit 25) and **outdoor** otherwise; wall, critter, portal, scenery, container, roof, monster and unique NPC take outdoor; items only in ground disposition; interface, misc, light and eye-candy are unlit. The controlled actor is a critter (outdoor). The shader multiplies each item by its channel colour / 255. | Roof/roof-fade modes (no roofs in this core), local light blending, TIG palette/BPP rounding parity. |
+| FR-LIGHT-006 indoor/outdoor surfaces | Per drawn ART type, following the original's palette callback (source reading, F0): tile/facade take **indoor** when their type bit is 0 (tile bit 8, facade bit 25) and **outdoor** otherwise; wall, critter, portal, scenery, container, roof, monster and unique NPC take outdoor; items only in ground disposition; interface, misc, light and eye-candy are unlit. The controlled actor is a critter (outdoor). The shader multiplies each item by its channel colour / 255. | Roof/roof-fade modes (no roofs in this core), local light blending, TIG palette/BPP rounding parity. |
 | FR-LIGHT-007 map default and sector scheme | Map default from `maps/<dir>/mapinfo.txt` `LightScheme` (one positive value, no guessed fallback) via `rules/maplist.mes`; each **core** sector's scheme word at metadata +8, re-read from the module and bound to the snapshot's entry identity and payload SHA-256. Word 0 is the map-default sentinel. The active sector is the one holding the actor's committed cell; a change re-selects at the same hour. | All nine original core sectors use the sentinel, so a visible sector switch is proven synthetically only. Context sectors, other maps and map transitions are out of scope. |
 
 Clock (ARC-WORLD-010): the driver reads and advances the clock of the viewer's one
@@ -46,7 +45,7 @@ the same tick with literal host times. The F7/F8 quick-save slot
 ([ARC-WORLD-011](terrain-viewer.md#quick-save-and-quick-load-arc-world-011)) saves and
 loads this clock and the applied scheme; on a quick load the driver rebinds to the
 loaded session. Sleep/rest UI, turn-based combat, a scheduler and a save list are not
-implemented; the 8× rate is a CE source observation, NOT_VERIFIED.
+implemented; the 8× rate is a source reading not checked in the executable (F0), NOT_VERIFIED.
 
 On the selected original module (opt-in real-data test): map 5000, map default
 scheme 1, all nine core sector words 0, scheme 1 payload SHA-256
@@ -78,13 +77,13 @@ depends on when it reads it (`ContentLoadPhase`, checked in the 1.0.7.4 executab
 
 | File | Read by the original | Sources |
 | --- | --- | --- |
-| `rules/gameinit.mes` | at module load (`gameinit_mod_load`) | stack winner |
-| `rules/maplist.mes` | at module load (`map_list_info_load`) | stack winner |
-| `rules/lighting schemes.mes` | at module load (`light_scheme_mod_load`) | stack winner |
-| `rules/<scheme>.mes` | when the scheme is set (`light_scheme_set`) | stack winner |
-| `maps/<dir>/mapinfo.txt` | when the map opens (`map_load_extension`) | stack winner |
+| `rules/gameinit.mes` | at module load (module init, 0x4B9C30) | stack winner |
+| `rules/maplist.mes` | at module load (map list load, 0x4125C0) | stack winner |
+| `rules/lighting schemes.mes` | at module load (light scheme module load, 0x4A7C90) | stack winner |
+| `rules/<scheme>.mes` | when the scheme is set (light scheme set, 0x4A7DD0) | stack winner |
+| `maps/<dir>/mapinfo.txt` | when the map opens (map extension load, 0x4115D0) | stack winner |
 | core sector files | with the map | the stack's winner of `maps/<dir>/<id>.sec`, which must be the module-archive member the snapshot read: none, or a member of another name, is `MapDirectoryMismatch` (as the module-only read), an override from another source or a changed member `SectorIdentityMismatch` |
-| `art/light/light.mes` | at game start (`a_name_light_init`, from Name's init) | first base source: a module copy is never read |
+| `art/light/light.mes` | at game start (light name init 0x4ED1E0, from Name's init) | first base source: a module copy is never read |
 | `art/light/<name>.art` | when the light is drawn | stack winner |
 
 The stack read requires the stack's module archive to be the snapshot's: its length is checked against the
@@ -158,10 +157,11 @@ now carries its own ambient source and its stationary sector lights, so the cave
 no longer drawn unlit. It covers the stationary part of FR-LIGHT-008, the
 surface rule of FR-LIGHT-006 for lit bodies and walls, and the time behaviour of
 stationary lights in FR-LIGHT-010. Source analysis follows the same RES-018
-lineage (CE/TIG `a7ff41b`: `light.c` `light_read`, `light_get_rect_internal`,
-`light_render_internal`, `sub_4D89E0`, `sub_4DA360`, `sub_4DC210`,
-`sub_4DE390`; `sector_light_list.c`; `tile.c` `tile_draw_iso`; TIG `color.h`,
-`art.c`); independently written, nothing copied or translated.
+lineage (a source reading, F0 unless the ledger lists it, of the light read
+(0x4DDD20), light rectangle (0x4DE290, 0x4DE390), light render (0x4DE900) and
+light helpers (0x4D89E0, 0x4DA360, 0x4DC210), the sector light list load
+(0x4F72C0, ledger Wilderness A1), the isometric tile draw and the TIG colour and
+ART code); independently written.
 
 | Requirement | Implemented subset | Not implemented / NOT_VERIFIED |
 | --- | --- | --- |

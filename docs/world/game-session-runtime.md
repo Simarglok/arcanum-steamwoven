@@ -119,7 +119,7 @@ allowed at capacity; a new key or map over capacity is `BudgetExceeded`.
 ### Story domain
 
 ARC-SCRIPT-006 adds the state the original keeps for quests and rumors, with the source
-rules ([quest state set][quest-set], [quest reset][quest-reset], [rumor known][rumor]):
+rules (quest state set (0x4C4CB0, 0x4C4D20, 0x4C4E60), quest reset (0x4C45C0, 0x4C4620), rumor known (0x4C57E0, 0x4C58A0, 0x4C58D0)):
 
 - **Quests** are numbered 1000..1999. `SessionQuestState` follows the source order
   `Unknown, Mentioned, Accepted, Achieved, Completed, OtherCompleted, Botched`. A PC record
@@ -156,9 +156,6 @@ clock (`InvalidSnapshot`), a PC record `Completed`/`OtherCompleted` without shar
 state that left `Accepted` (`InvalidQuestState`). A shared state without a PC record is kept,
 as the source's shared state is not owned by one PC.
 
-[quest-set]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L337-L470
-[quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
-[rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
 ## Snapshot schema 20
 

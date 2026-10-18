@@ -34,12 +34,12 @@ Disposition = Open | Blocked | null
 Every result carries machine-readable reason and provenance codes, not an implied boolean. Suggested codes include:
 
 ```text
-BASE_BLOCK_MASK_SET                 CE_SERIALIZED_BASE
-FACADE_WALKABILITY_BIT              CE_SERIALIZED_BASE
-TILE_NAME_RULE_UNAVAILABLE          CE_ART_MES_NAME
-STATIC_SPATIAL_CONTRIBUTION_UNKNOWN CE_RUNTIME_CONTEXT
-ACTOR_CAPABILITY_UNAVAILABLE        CE_RUNTIME_CONTEXT
-DIAGONAL_RULE_UNPROVED              CE_SOURCE_GAP
+BASE_BLOCK_MASK_SET                 SOURCE_SERIALIZED_BASE
+FACADE_WALKABILITY_BIT              SOURCE_SERIALIZED_BASE
+TILE_NAME_RULE_UNAVAILABLE          SOURCE_ART_MES_NAME
+STATIC_SPATIAL_CONTRIBUTION_UNKNOWN SOURCE_RUNTIME_CONTEXT
+ACTOR_CAPABILITY_UNAVAILABLE        SOURCE_RUNTIME_CONTEXT
+DIAGONAL_RULE_UNPROVED              SOURCE_GAP
 CROSS_SECTOR_DATA_ABSENT            PROJECT_POLICY
 PROFILE_OR_PRECEDENCE_UNSUPPORTED   PROJECT_POLICY
 ```
@@ -61,7 +61,7 @@ CellOccupancyAssessment
   combined: coverage + disposition + reason/provenance codes
 ```
 
-For this candidate, a set serialized block bit may report `Supported + Blocked` for that component because the CE trace tests it before later tile branches. A clear bit does **not** report Open. Facade bit 0 is a raw-word component only; tile-class records additionally require an ART/MES/name rule. The named ordinary static-scenery destination-cell component is now separately evidenced by [ARC-RES-012](static-obstruction-contract.md): it can report its own supportedness/applicability/nullable Blocker-or-NoBlock result in the fixed context. It does not establish a general static-object component: dynamic objects, other states/types, visual geometry, source-cell/edge effects, and all unadmitted contributors remain unknown. `otherStaticAndDynamicObjects` therefore remains `Unknown + null`.
+For this candidate, a set serialized block bit may report `Supported + Blocked` for that component because the original's traversal path tests it before later tile branches (source reading, F0). A clear bit does **not** report Open. Facade bit 0 is a raw-word component only; tile-class records additionally require an ART/MES/name rule. The named ordinary static-scenery destination-cell component is now separately evidenced by [ARC-RES-012](static-obstruction-contract.md): it can report its own supportedness/applicability/nullable Blocker-or-NoBlock result in the fixed context. It does not establish a general static-object component: dynamic objects, other states/types, visual geometry, source-cell/edge effects, and all unadmitted contributors remain unknown. `otherStaticAndDynamicObjects` therefore remains `Unknown + null`.
 
 The combined cell assessment is therefore `Unknown + null` in the present candidate, even when a component contains a useful blocking fact. Component visibility prevents a future consumer from silently treating a clear/unknown component as Open.
 
@@ -78,17 +78,17 @@ StepTraversalAssessment
   combined: coverage + disposition + reason/provenance codes
 ```
 
-Same-cell and non-adjacent requests are `Unsupported + null`; they are not route-search requests. A cardinal step remains `Unknown + null` until its source/destination terrain components, other relevant object contributors, actor capability/context, and source-proven edge semantics are admitted. The ARC-RES-012 ordinary-static component is destination-cell-only and must not be promoted into source/edge semantics. Diagonal steps are `Unknown + null` in-profile because the CE source has recursive shoulder/object behavior but this contract has not established all required corner/cross-cell semantics. It must not invent a diagonal corner policy.
+Same-cell and non-adjacent requests are `Unsupported + null`; they are not route-search requests. A cardinal step remains `Unknown + null` until its source/destination terrain components, other relevant object contributors, actor capability/context, and source-proven edge semantics are admitted. The ARC-RES-012 ordinary-static component is destination-cell-only and must not be promoted into source/edge semantics. Diagonal steps are `Unknown + null` in-profile because the original has recursive shoulder/object behavior (source reading, F0) but this contract has not established all required corner/cross-cell semantics. It must not invent a diagonal corner policy.
 
 A step that leaves the 64×64 sector is `Unsupported + null` with `CROSS_SECTOR_DATA_ABSENT`. The proposal deliberately does not load or infer a neighbor. Other sector IDs, source versions, profiles, `.dif`/PATCH/loose precedence, generalized dynamic objects, and unsupported actor/state categories are likewise `Unsupported + null`.
 
-`PATH_FLAG_0x1000` is an unavailable source branch, not a fallback: the pinned CE implementation is explicitly incomplete. A future consumer must reject/mark unknown that context rather than select a default behavior.
+`PATH_FLAG_0x1000` is an unavailable source branch, not a fallback: the source implementation is explicitly incomplete. A future consumer must reject/mark unknown that context rather than select a default behavior.
 
 ## Composition rule
 
 The future implementation must evaluate every admitted component and retain all component results. It may short-circuit the **combined** result to `Supported + Blocked` only if a blocker is source-proven unconditional under the entire declared context. It may return `Supported + Open` only if all terrain, facade/name, static-object, edge/diagonal, actor, and state dependencies are admitted and nonblocking. Otherwise, in-profile uncertainty remains `Unknown + null`.
 
-This policy deliberately does not translate a source-level traversal cost into an occupancy boolean. The attributed CE object routine distinguishes source/destination lists, wall/portal orientation, object flags/state, actor portal/window capability, traps/fire, and directed rotation. Those are contract inputs or declared unknowns, not convenience defaults.
+This policy deliberately does not translate a source-level traversal cost into an occupancy boolean. The original's object traversal routine (0x43FD70, 0x43FE00) distinguishes source/destination lists, wall/portal orientation, object flags/state, actor portal/window capability, traps/fire, and directed rotation. Those are contract inputs or declared unknowns, not convenience defaults.
 
 ## Static-subset readiness gate
 

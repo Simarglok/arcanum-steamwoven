@@ -16,11 +16,10 @@ archive winner, or runtime entry node. Those claims remain **unknown**.
 
 ## Observed grammar and bounded policy
 
-Pinned `arcanum-ce` source revision
-`a7ff41b300ef712f0e7d088183a3d08957110cdd` describes a brace-delimited entry
-with seven fields: numeric record ID, text, alternate/gender field, IQ
-field, condition field, response value, and action field
-(`src/game/dialog.c:150-161,2641-2802`). The probe independently implements only the observed physical brace/comment
+A reading of the original's dialog entry and field parse (0x417860, 0x417C20)
+describes a brace-delimited entry with seven fields: numeric record ID, text,
+alternate/gender field, IQ field, condition field, response value, and action
+field. The probe independently implements only the observed physical brace/comment
 boundary. It treats fields 1 and 2 as opaque bounded bytes and applies ASCII
 checks only to numeric fields (0, 3, and 5) and operational fields (4 and 6).
 It emits no original text or field content.
@@ -51,10 +50,10 @@ Synthetic non-game examples use the form
 
 ## References and traversal
 
-Source `dialog_check` treats a positive player response as a target record and
-reports a missing target or a target with the wrong structural role
-(`src/game/dialog.c:2968-2991`). Source `sub_417590` distinguishes positive,
-zero, and negative response values (`src/game/dialog.c:2537-2549`). The probe
+The original's dialog check (0x418030) treats a positive player response as a
+target record and reports a missing target or a target with the wrong structural
+role; its response classification (0x417590) distinguishes positive, zero, and
+negative response values (source reading, not checked in the executable, F0). The probe
 therefore classifies references as `direct`, `exit`, `special`, `dangling`,
 `ambiguous`, or `unresolved`; it never silently converts a missing or
 unsupported edge into a direct branch.

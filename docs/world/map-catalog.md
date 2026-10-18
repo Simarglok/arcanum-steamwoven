@@ -86,7 +86,7 @@ one-folder lookup).
 ## Leniency matches the original
 
 Where the original reader is lenient, the catalogue is too, so a file the game
-accepts is not refused here (pinned CE `map.c`, `terrain.c`):
+accepts is not refused here (the original's map and terrain readers):
 
 - `startloc.txt`: the first two lines, blank ones included, read like `strtoll`
   (leading digits, else 0); only a missing line is an issue.
@@ -101,8 +101,8 @@ header (1.8 MB for the main map); this costs time, not correctness.
 
 ## Choices
 
-- **Mobiles.** In a normal game the original reads only the aggregate (pinned CE
-  `map_load_mobile`); the editor reads the `.mob` files. The catalogue prefers the
+- **Mobiles.** In a normal game the original reads only the aggregate (the mobile
+  load, 0x410D10, not checked in the executable, F0); the editor reads the `.mob` files. The catalogue prefers the
   aggregate and falls back to the editor files, reporting `WorldMobileSource`,
   because a module may ship a map without an aggregate (the `Vormantown` shop
   map does).

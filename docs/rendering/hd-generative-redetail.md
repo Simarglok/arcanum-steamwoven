@@ -427,5 +427,4 @@ Hugging Face blob ids of the files used.
   in the owner's ignored `local/hd-gen/`.
 
 Provenance: frames from this repository's own decoder and Area code on the owner's
-installation; models and tools used as external programs and libraries; no CE code
-or structure is used.
+installation; models and tools used as external programs and libraries.

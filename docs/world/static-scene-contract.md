@@ -39,7 +39,7 @@ rather than inventing fallbacks.
 | --- | --- | --- |
 | Module archive | caller-supplied read-only file matching the recorded size/SHA-256 | supports one exact sector entry |
 | Start selector | sole module `START_MAP` record | `Arcanum1-024-fixed`, `(92958, 82592)` |
-| Sector | packed ID `86570436012` under the CE-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
+| Sector | packed ID `86570436012` under the source-derived shift/packing rule | ordinal 463, compressed, 47,291 decoded bytes |
 | Tile prefix | 4,096 words after bounded light section | tile/facade-only resolver and one-source ART/frame evidence for all 4,096 selected frames |
 | Intermediate sections | roof then placeholder-controlled script, metadata/sound, and block sections | selected roof `empty=1`, placeholder `0xAA0004`; checked framing only |
 | Object window / suffix | `17140..47287`, terminal count `317` | bounded v119 delimiter reaches the terminal count; ARC-RES-007 establishes a selected type-3/static predicate and current-ART/prototype chain, while ARC-RES-008 limits diagnostic placement to five direct-offset/hotspot chains; neither establishes original scene order |
@@ -53,8 +53,8 @@ loose files.
 For this sector with zero light records, the fixed tile table ends at byte
 16,388, but that following word is the roof `empty` discriminator. The enabled
 intermediate sections end at `17140`; the terminal count starts at `47287`,
-leaving a 30,147-byte framed window for 317 serialized objects. Pinned CE's
-object-list reader uses the terminal count to walk that window as versioned
+leaving a 30,147-byte framed window for 317 serialized objects. The original's
+object-list reader (0x4F1350) uses the terminal count to walk that window as versioned
 records. This establishes a **minimum boundary** only, not permission for a
 general object parser:
 
@@ -71,7 +71,7 @@ reject the selected subset if it cannot satisfy this envelope, rather than
 choosing plausible offsets.
 
 Terrain has a bounded but incomplete result. The real table contains the two
-CE-attributed tile/facade classes; their type-specific decomposition, MES
+source-read tile/facade classes; their type-specific decomposition, MES
 callback lookup, exact one-source ART candidate, and selected physical frame
 are documented for representative records. The future loader must still reject
 all unsupported classes, missing/duplicate candidates, and invalid frame
@@ -92,7 +92,7 @@ FrozenSlice
 TerrainResolution
   localX, localY, rawId, kind, lookupStatus
   sourceIdentity, artEntry, group, frame, palette, frameMetadata
-  projectedAnchor, diagnosticPlacement // CE-derived footprint/crop/flip only
+  projectedAnchor, diagnosticPlacement // source-derived footprint/crop/flip only
 
 ProjectedPoint
   localX, localY, relativeScreenX, relativeScreenY
@@ -106,7 +106,7 @@ contract. It must not reinterpret unresolved words as resource paths or
 
 ## Coordinates and projection
 
-The pinned CE `location_xy` is a source-derived isometric relationship:
+The original's location-to-screen function (0x4B8680) gives a source-derived isometric relationship:
 
 ```text
 screenX = originX + 40 * (worldY - worldX - 1)
@@ -125,10 +125,10 @@ The probe's synthetic checks cover these numerical examples:
 
 | Local position | Relative point | Evidence |
 | --- | --- | --- |
-| `(0, 0)` | `(0, 0)` | CE-derived formula; synthetic checked |
-| `(1, 0)` | `(-40, 20)` | CE-derived formula; synthetic checked |
-| `(0, 1)` | `(40, 20)` | CE-derived formula; synthetic checked |
-| start offset `(30, 32)` | `(80, 1240)` | CE-derived formula; synthetic checked |
+| `(0, 0)` | `(0, 0)` | source-derived formula; synthetic checked |
+| `(1, 0)` | `(-40, 20)` | source-derived formula; synthetic checked |
+| `(0, 1)` | `(40, 20)` | source-derived formula; synthetic checked |
+| start offset `(30, 32)` | `(80, 1240)` | source-derived formula; synthetic checked |
 
 A static scene must choose `originX`, `originY`, camera anchoring, rounding,
 and asset baseline policy explicitly. ARC-RES-008 has a separate five-record
@@ -209,8 +209,9 @@ unverified scene-parity claim.
 
 ## Source lineage
 
-The coordinate relationship and sector boundary are derived from pinned
-`arcanum-ce` `a7ff41b300ef712f0e7d088183a3d08957110cdd`, notably
-`src/game/location.c`, `src/game/sector.c`, and its sector list modules. CE is
-one lineage rather than independent confirmation. This contract is independently
-written and does not copy CE code or grant a license conclusion.
+The coordinate relationship and sector boundary are derived from a reading of
+the original's location, sector and sector object list functions, evidence level
+F0 (not checked in the executable) unless the
+[verification ledger](../research/original-verification-ledger.md) lists them.
+That is one reading rather than independent confirmation. This contract is
+independently written.

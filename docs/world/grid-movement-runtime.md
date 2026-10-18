@@ -15,7 +15,7 @@ default cardinal-only Data profile and original-executable limitations remain.
 
 `Arcanum.Simulation` is an independently authored, package-free `net8.0` library.
 Its `Arcanum.Simulation.Movement` API implements the bounded project policies
-[P1–P8](grid-movement-contract.md), not the CE evaluator or original executable.
+[P1–P8](grid-movement-contract.md), not the original's step evaluator.
 The [source evidence](../research/grid-movement-evidence.md) remains research
 context. No source code or worksheet evaluator was copied or mechanically
 translated. Synthetic Open records below are policy fixtures, not real terrain

@@ -24,14 +24,14 @@ Code: [`src/Arcanum.Data/Combat`](../../src/Arcanum.Data/Combat); tests:
   read, as in the original. Origin `Prototype`.
 - `CombatFieldReader.Read(AreaObjectRecord)` reads one Area object by its
   effective fields: an instance field replaces the prototype's whole field
-  (an array is never merged key by key), as the source's lazy inheritance does.
+  (an array is never merged key by key), as the original's lazy inheritance does (ledger "Field inheritance").
   Origin `AreaObject`.
 - `CombatFieldReader.ReadArea(AreaSnapshot)` reads every mobile item and
   critter of a strictly published snapshot in source-index order; the first
   refusal stops it. An item or critter from a sector file instead of the mobile
   aggregate is refused (`StaticObjectUnsupported`), as the inventory view does.
 - `CombatFieldReader.WeaponSkill(flags, complexity, range, ammoType)` is the
-  source's `item_weapon_skill` over stored fields; `SkillPoints` and
+  original's item weapon skill (0x465D80) over stored fields; `SkillPoints` and
   `SkillTraining` split a stored skill value.
 
 Every result is a `CombatFieldRead` or `CombatAreaRead`: `Failure` `None` with
@@ -46,7 +46,7 @@ No exception crosses the boundary except for null arguments and cancellation.
 always, `Item` for types 5..14 with `Weapon` (5), `Ammo` (6), `Armor` (7) or `Generic` (14),
 `Critter` for PCs and NPCs (15, 16) with `Npc` for NPCs. Slots are the v119
 layout of the StaticObjects loader, in the source's field order
-([`obj.h`][obj-h]).
+(the executable's field-name table, 0x59BEA8).
 
 | Block | Slots | Fields |
 | --- | --- | --- |
@@ -61,25 +61,25 @@ layout of the StaticObjects loader, in the source's field order
 
 Index orders differ and are kept as stored: damage arrays by
 `CombatDamageIndex` (normal, poison, electrical, fire, fatigue), resistance
-arrays by `CombatResistanceIndex` (normal, fire, electrical, poison, magic)
-([damage][damage-h], [resistance][resistance-h]). NPC monster damage stores the
-minimum at 2 × type and the maximum at 2 × type + 1 ([generator][proto-damage]).
+arrays by `CombatResistanceIndex` (normal, fire, electrical, poison, magic).
+NPC monster damage stores the
+minimum at 2 × type and the maximum at 2 × type + 1 (generator (0x49B5A0)).
 A weapon without ammunition stores 10000 (`NoAmmo`); ammunition types are
-arrow 0, bullet 1, power cell 2, fuel 3 ([ammo][item-ammo]).
+arrow 0, bullet 1, power cell 2, fuel 3.
 
-Sparse arrays read like the source ([`sa_get`][sa-get]): a missing key, a null
-or an empty array is 0. A key outside the array's range, which the source would
+Sparse arrays read like the original's sparse-array get (0x4E76C0): a missing key, a null
+or an empty array is 0. A key outside the array's range, which the original would
 simply never ask for, is refused as a deliberate fail-closed choice; it and an
 element that is not one 32-bit word are `ArrayMalformed`; unsigned words are reinterpreted as
 signed, so the stored "no mastery college" is −1. A scalar that is absent, null
 or not a number is `FieldUnresolved`.
 
-The weapon skill follows [`item_weapon_skill`][weapon-skill]: a boomerang
+The weapon skill follows the item weapon skill function (0x465D80): a boomerang
 throws; a technological weapon (complexity below 0) with range at least 3 and
 bullets, power cells or fuel is a firearm; an arrow weapon is a bow; anything
 else is melee.
 
-**Item art (ARC-WORLD-028).** `CombatItemArt` decodes the three art ids the wear rules need, as the source's tig art
+**Item art (ARC-WORLD-028).** `CombatItemArt` decodes the three art ids the wear rules need, as the original's art id
 helpers do (checked in the retail executable, ledger EQ1 and EQ6): only an item art id (type 6 in bits 28..31) has item
 bits; the inventory art's bits 14..16 are the armour coverage (torso, shield, helmet, gauntlets, boots, ring, medallion),
 the use-art fragment's bits 6..9 the art subtype a wearer's art takes, and bit 10 of the current art marks a destroyed
@@ -128,10 +128,3 @@ These are reader acceptance checks, not the combat census: per-field
 distributions, AI rows, flags and first-fight candidates are in the
 [combat-domain data census](../research/combat-data-census.md) (ARC-RES-041).
 
-[obj-h]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h#L11-L324
-[damage-h]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/damage_type.h#L6-L13
-[resistance-h]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/resistance.h#L4-L11
-[proto-damage]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c#L16269-L16288
-[item-ammo]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L64-L77
-[sa-get]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c#L190-L207
-[weapon-skill]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c#L3308-L3340

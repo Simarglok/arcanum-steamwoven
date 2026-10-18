@@ -13,8 +13,8 @@ AREA viewer runs them with `--hero` ([Viewer](#viewer-host)).
 - The retail 1.0.7.4 `Arcanum.exe` (SHA-256 `9bd80511…78d52`), read statically per the
   [original executable check](../research/original-executable-check.md) by two independent readers; rows AL1–AL14 in the
   [verification ledger](../research/original-verification-ledger.md#auto-level-schemes-arc-world-036). One difference from
-  the reconstruction read before (ARC-RES-032), a **reconstruction slip** that needs no rule-mode switch: a stat purchase
-  continues from the stat's base value and pays from the base unspent points (AL4). Two **bugs of the original**, a college
+  the reading before (ARC-RES-032), which needs no rule-mode switch: in the original a stat purchase continues from the
+  stat's base value and pays from the base unspent points (AL4). Two **bugs of the original**, a college
   target above 5 and a degree target above 7 (AL7, AL8), are reached by no installed rule; both modes refuse such a rule
   when the data is read, so no switch exists ([rule modes](rule-modes.md)).
 - Installed original (opt-in, below): all 58 rules parse; every pre-made hero's scheme spends its five starting points;

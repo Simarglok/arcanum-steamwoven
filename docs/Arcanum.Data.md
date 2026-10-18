@@ -52,6 +52,6 @@ valid structure exceeding one of these policies remain distinct failure modes.
 
 The supported structure and evidence boundary are in [formats/dat.md](formats/dat.md). Local real data are opt-in only and are never committed. The R1 evidence covers eight user-owned candidates but does not establish canonical bytes, other variants, flag semantics beyond the admitted exact values, filename semantics, or archive precedence.
 
-ART layout and decoder boundary are in [formats/art.md](formats/art.md). The CE-source-derived rules used for the ART API are separately attributed in [research/art-ce-spec.md](research/art-ce-spec.md); they are not a CE dependency or a claim of pixel parity.
+ART layout and decoder boundary are in [formats/art.md](formats/art.md). The source-derived rules used for the ART API are recorded in [the ART specification record](research/art-ce-spec.md) as readings of the original's functions at evidence level F0; they are not a claim of pixel parity.
 
 The DAT-specific opt-in check first and last verifies the documented size/SHA-256 manifest without writing inputs. It compares the parsed footer and all index metadata (including raw name and opaque fields) in memory with the existing Python R1 probe through a length-prefixed test adapter, then reads the five documented bounded payload ordinals. It publishes no source names, payload bytes, payload hashes, or local paths; a missing `DAT_ROOT` is an explicit failing/inconclusive invocation, not a pass.

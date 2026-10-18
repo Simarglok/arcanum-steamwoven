@@ -90,8 +90,9 @@ claim about original runtime failure handling.
 
 ## Source-derived phase order
 
-For a future proven slice, the phase order is proposed from the pinned CE
-source path, not runtime observation:
+For a future proven slice, the phase order is proposed from a reading of the
+original's dialog functions at the cited addresses (F0, not checked in the
+executable), not runtime observation:
 
 1. resolve an evidenced entry;
 2. read the current NPC record;
@@ -103,17 +104,17 @@ source path, not runtime observation:
 8. apply its selected response action(s); and
 9. resolve a direct, special, exit, or SCR-bridge transition.
 
-CE source sorts entries by numeric ID and scans subsequent player records with
-a five-option bound (`src/game/dialog.c:1291-1357,2632-2637`); it uses the
-serialized response value to distinguish direct, exit, and negative/special
-forms (`2537-2549`). This is a **source fact** about that source revision, not
-proof of original runtime ordering or a license to copy source code.
+The dialog load (0x417720) sorts entries by numeric ID, and the reply
+enumeration (0x414E60, 0x414F50) scans subsequent player records with a
+five-option bound; the option builder (0x417590) uses the serialized response
+value to distinguish direct, exit, and negative/special forms. This is a
+**reading fact** (F0), not proof of original runtime ordering.
 
 ## Ordered synthetic-state walkthroughs
 
 The following examples use invented IDs, flags, and operation tags only; they
 contain no game dialogue or extracted operation text. They specify the proposed
-contract above. The phase ordering is source-derived from the cited CE revision;
+contract above. The phase ordering is read from the cited functions (F0);
 the stated fail-closed outcomes and the direct-candidate ordering are also
 structurally tested by synthetic `DialogProbe` fixtures. Neither kind of
 evidence is a claim that the original game runtime performed these transitions.
