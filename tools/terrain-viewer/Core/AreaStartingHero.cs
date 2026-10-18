@@ -1,4 +1,5 @@
 using Arcanum.Data.Characters;
+using Arcanum.Data.Combat;
 using Arcanum.Data.Content;
 using Arcanum.Data.Messages;
 using Arcanum.Scripting.GlobalFlags;
@@ -8,7 +9,7 @@ using Arcanum.Simulation.Character;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>One of the twelve pre-made heroes the original main menu offers: the project's own name (race and gender,
-/// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, table of CE's built-in PC prototypes).
+/// unique among the twelve) and its basic prototype 16067..16078 (ARC-RES-025, the table of built-in PC prototypes).
 /// <see cref="Index"/> is the main menu's hero index minus one, which picks its global flag.</summary>
 public sealed record AreaPremadeHero(string Name, int BasicPrototype)
 {
@@ -34,6 +35,9 @@ public enum AreaHeroStatus
     /// <summary>ARC-WORLD-036: a scheme rule the grammar refuses, or a spell willpower that is not a number
     /// (<see cref="AreaHeroLoad.Detail"/> names it).</summary>
     AutoLevelInvalid,
+    /// <summary>ARC-WORLD-034: a kit item's prototype does not read as combat fields, or a weapon, armour or generic kit item has
+    /// values outside the wear rules' bounds (<see cref="AreaHeroLoad.Detail"/> names the prototype).</summary>
+    KitUnreadable,
 }
 
 /// <param name="Definition">The session's hero, or null unless <see cref="AreaHeroStatus.Ready"/>.</param>
@@ -45,9 +49,11 @@ public enum AreaHeroStatus
 /// <c>rules\spelllist.mes</c>), or null unless ready.</param>
 /// <param name="Effects">ARC-WORLD-036: the effect rule of a number (<c>rules\effect.mes</c> 50..399, the module's
 /// <c>rules\gameeffect.mes</c> 0..49), for the followers' effects; null unless ready.</param>
+/// <param name="KitWear">ARC-WORLD-034: the wear facts of each kit item in kit order (null for an item that is worn nowhere), which
+/// <see cref="AreaTransitionCoordinator.CreateSession"/> gives the session's best-items call; null unless ready.</param>
 public sealed record AreaHeroLoad(AreaHeroStatus Status, AreaPremadeHero Hero, SessionHeroDefinition? Definition, int? Flag,
     int DroppedChanges, PremadeHeroRead? Read, string Detail, SessionExperienceRules? Experience = null,
-    SessionAutoLevelRules? AutoLevel = null, Func<int, EffectRule?>? Effects = null);
+    SessionAutoLevelRules? AutoLevel = null, Func<int, EffectRule?>? Effects = null, IReadOnlyList<SessionWearableItem?>? KitWear = null);
 
 /// <summary>
 /// ARC-WORLD-027: the AREA viewer's start as an original pre-made hero (<c>--hero</c>). Reads the hero with
@@ -62,7 +68,7 @@ public static class AreaStartingHero
 {
     public const int FirstPremadePrototype = 16067;
     /// <summary>Main-menu message of the first hero's global flag; hero <c>i</c> reads message <c>551 + i</c> (the original
-    /// <c>mainmenu_ui_pregen_char_execute</c>, 0x545B60, checked in the executable).</summary>
+    /// 0x545B60, checked in the executable).</summary>
     public const int FirstFlagMessage = 551;
     public const string EffectsPath = "rules/effect.mes", SourcesPath = "rules/InvenSource.mes", SourcesBuyPath = "rules/InvenSourceBuy.mes",
         MainMenuPath = "mes/MainMenu.mes", LevelsPath = "rules/xp_level.mes", QuestExperiencePath = "rules/xp_quest.mes",
@@ -119,11 +125,45 @@ public static class AreaStartingHero
             return new(number, true, changes);
         }
         // ARC-DATA-026: prototypes from the content stack's base sources, as the original reads them.
-        var read = PremadeHeroReader.Read(new(ContentPrototypes.Open(stack).Read, effects, sources, buy), hero.BasicPrototype);
+        var prototypes = ContentPrototypes.Open(stack);
+        var read = PremadeHeroReader.Read(new(prototypes.Read, effects, sources, buy), hero.BasicPrototype);
         if (read.Failure != PremadeHeroFailure.None || read.Hero is null)
             return new(AreaHeroStatus.HeroRefused, hero, null, null, 0, read, $"{read.Failure} {read.Detail}");
         if (Flag(menu, hero) is not { } flag) return new(AreaHeroStatus.FlagInvalid, hero, null, null, 0, read, $"message {FirstFlagMessage + hero.Index}");
-        return new(AreaHeroStatus.Ready, hero, Definition(read.Hero, out var dropped), flag, dropped, read, "hero ready", experience, autoLevel, Effect);
+        var definition = Definition(read.Hero, out var dropped);
+        if (KitWear(prototypes.Read, definition, out detail) is not { } wear) return new(AreaHeroStatus.KitUnreadable, hero, null, null, 0, read, detail!);
+        return new(AreaHeroStatus.Ready, hero, definition, flag, dropped, read, "hero ready", experience, autoLevel, Effect, wear);
+    }
+
+    /// <summary>
+    /// ARC-WORLD-034: the wear facts of each kit item, from its prototype's combat fields (ARC-DATA-021) through
+    /// <see cref="SessionEquipmentFacts.Wearable"/>; null for food, scrolls and the like. A prototype that does not read, or a weapon,
+    /// armour or generic item whose values the wear rules refuse, is null with the reason.
+    /// </summary>
+    public static IReadOnlyList<SessionWearableItem?>? KitWear(Func<int, PrototypeFile> prototypes, SessionHeroDefinition definition, out string? detail)
+    {
+        ArgumentNullException.ThrowIfNull(prototypes);
+        ArgumentNullException.ThrowIfNull(definition);
+        detail = null;
+        var wear = new List<SessionWearableItem?>();
+        foreach (var item in definition.Kit)
+        {
+            var read = CombatFieldReader.ReadPrototype(prototypes, item.Kind.Prototype);
+            if (read.Failure != CombatFieldFailure.None || read.Fields is not { } fields)
+            {
+                detail = $"kit prototype {item.Kind.Prototype} {read.Failure} {read.Detail}";
+                return null;
+            }
+            var wearable = item.Kind.Type is SessionItemType.Weapon or SessionItemType.Armor or SessionItemType.Generic
+                ? SessionEquipmentFacts.Wearable(item.Kind, fields) : null;
+            if (wearable is null && item.Kind.Type is SessionItemType.Weapon or SessionItemType.Armor or SessionItemType.Generic)
+            {
+                detail = $"kit prototype {item.Kind.Prototype} wear values out of bounds";
+                return null;
+            }
+            wear.Add(wearable);
+        }
+        return wear.AsReadOnly();
     }
 
     /// <summary>The session's experience data from the three tables (ARC-WORLD-030 readers), or null with the reason.</summary>
@@ -154,8 +194,8 @@ public static class AreaStartingHero
         return flags with { Bootstrap = Array.AsReadOnly(flags.Bootstrap.Select(value => value.Flag.Value == chosen ? value with { Value = true } : value).ToArray()) };
     }
 
-    // The original reads the message with atoi and writes any result that is not negative (flag 0 included; CE's `> 0`
-    // is a reconstruction slip). Project admission: one to five ASCII digits, optionally space-padded, inside the
+    // The original reads the message with atoi and writes any result that is not negative (flag 0 included, checked in
+    // the executable at 0x545B60, docs/world/starting-hero-runtime.md). Project admission: one to five ASCII digits, optionally space-padded, inside the
     // new-game domain; an absent or other message is refused instead of atoi's partial or zero value.
     private static int? Flag(MesFile menu, AreaPremadeHero hero)
     {
@@ -231,7 +271,9 @@ public static class AreaStartingHero
                 modifiers.Add(new(stat, change.Operator switch
                 {
                     EffectChangeOperator.Add => StatModifierOperator.Add, EffectChangeOperator.Percent => StatModifierOperator.Percent,
-                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, _ => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Minimum => StatModifierOperator.Minimum, EffectChangeOperator.Maximum => StatModifierOperator.Maximum,
+                    EffectChangeOperator.Multiply => StatModifierOperator.Multiply, EffectChangeOperator.Divide => StatModifierOperator.Divide,
+                    _ => throw new ArgumentOutOfRangeException(nameof(rule)),
                 }, change.Value));
             }
             return modifiers.Count == 0 ? null : new(rule.Number, [.. modifiers]);
@@ -251,7 +293,7 @@ public static class AreaStartingHero
     {
         ArgumentNullException.ThrowIfNull(session);
         if (session.QueryHero() is not { } hero) return "hero: none (diagnostic PC profile)";
-        return $"hero: {Name(hero)} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}";
+        return $"hero: {Name(hero)} level {hero.Level} ({hero.UnspentPoints} points unspent), gold {session.QueryGold()}, kit {session.QueryHeroKit().Count}, worn {session.QueryEquipment().Worn.Count}";
     }
 
     /// <summary>The project's name of a session hero (the pre-made hero whose prototype it has), else its prototype number.

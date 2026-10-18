@@ -140,7 +140,7 @@ public sealed record AreaInventoryView(IReadOnlyList<AreaInventoryLine> Pc, stri
 public sealed class AreaInventoryHost
 {
     /// <summary>Chebyshev reach of a pickup or loot click. Source (S): opening a container, PC or NPC moves within
-    /// range 1 (CE <c>sub_428930</c> in <c>anim.c</c>); the pickup goal's own move-near range is not pinned, so pickup
+    /// range 1 (the source's 0x428930); the pickup goal's own move-near range is not pinned, so pickup
     /// uses the same reach (project choice).</summary>
     public const int Reach = 1;
 

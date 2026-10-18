@@ -4,7 +4,7 @@ Status: **Implemented bounded component**, ARC-WORLD-036 (2026-10-17), the follo
 [experience and levels](experience-runtime.md) (top-20 item 16). The source's auto-level schemes, which spend a critter's
 unspent points by a rule of steps, run for the hero at its creation and at each level it reaches, and for the hero's
 followers after their level update (Virgil among them). The hero's purchasable fields and the levelled NPCs' sheets are
-saved (snapshot schema 17). Requirements: [FR-CHAR-021](../requirements/characters-skills.md#fr-char-021) (auto-level
+saved (snapshot schema 18). Requirements: [FR-CHAR-021](../requirements/characters-skills.md#fr-char-021) (auto-level
 schemes), the follower part of [FR-CHAR-014](../requirements/characters-skills.md#fr-char-014) (points for a level). The
 AREA viewer runs them with `--hero` ([Viewer](#viewer-host)).
 
@@ -68,12 +68,12 @@ after each level written and returns the unspent points left.
 | `LevelFollower(expected, loaded, modifiers, step)` | For one follower or waiting follower after an award's `Followers` step: its level and points ([experience](experience-runtime.md), XP7), then its scheme and rule 70 (AL1). `loaded` is the NPC's map data, read only while the session has no record of it. A level that does not rise is `NoChange`. Refused, in order: no scheme data (`AdvancementUnavailable`), an invalid entity, sheet, scheme, modifiers or step (`InvalidAdvancement`), the version, a new record over `GameSessionLimits.MaxAdvancementRecords` (256, `BudgetExceeded`), the revision. One revision. |
 | `QueryNpcAdvancement(entity)`, `AutoLevel` | The NPC's saved record (null until levelled) and the session's scheme data. |
 
-## Snapshot (schema 17)
+## Snapshot (schema 18)
 
 The hero gains `"advancement":{"basicSkills","techSkills","colleges","techDegrees","hitPointPoints","fatiguePoints","scheme"}`
 after `"alignment"`; the root gains `"advancement":{"npcs":[...]}` after `"experience"`, each record with its entity, race,
 monstrous flag, stats, magick and tech points, level, unspent points, skills, colleges, degrees, pools, adjustments and
-scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..16 are refused, not
+scheme, in ordinal entity order. Restore checks every range, the order and the budget. Schemas 1..17 are refused, not
 migrated.
 
 ## Viewer host

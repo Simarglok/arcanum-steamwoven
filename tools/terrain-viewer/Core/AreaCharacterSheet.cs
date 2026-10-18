@@ -5,7 +5,7 @@ using Arcanum.Simulation.Combat;
 namespace Arcanum.TerrainViewer.Core;
 
 /// <summary>Why the sheet does not open: no hero in the session (the diagnostic PC profile), or a dead hero (the original
-/// refuses the sheet for a dead PC, <c>charedit_open</c> 0x5597C0).</summary>
+/// refuses the sheet for a dead PC, 0x5597C0).</summary>
 public enum AreaSheetRefusal { None, NoHero, Dead }
 
 /// <summary>How a primary stat is drawn in the original sheet: raised (green) or lowered (red) when its base value adjusted by
@@ -36,14 +36,14 @@ public sealed record AreaCharacterSheetBuild(AreaSheetRefusal Refusal, AreaChara
 /// ARC-UI-007: the character sheet of the session's hero, Godot-free. Every value is a session query; the sheet changes
 /// nothing. The rules of what the sheet shows were checked in the original executable (ledger section "Character sheet"):
 /// the effective value of each primary stat with its effect mark, the derived stats at their effective value, each
-/// resistance as <c>object_get_resistance</c> computes it for display, hit points and fatigue against their maxima, level,
+/// resistance as 0x43D6D0 computes it for display, hit points and fatigue against their maxima, level,
 /// experience to the next level (<see cref="ExperienceRules.ToNextLevel"/>), the unspent points, alignment and aptitude.
 /// Resistances are partial: the session models only worn armour and the constitution bonus to poison (no base resistance
 /// field, effect changes of resistances are inert in the session, every worn item counts as identified).
 /// </summary>
 public static class AreaCharacterSheet
 {
-    /// <summary>The resistance clamp of <c>object_get_resistance</c> for a PC.</summary>
+    /// <summary>The resistance clamp of 0x43D6D0 for a PC.</summary>
     public const int MaxResistance = 95;
 
     private static readonly CharacterStat[] PrimaryOrder =
@@ -95,8 +95,8 @@ public static class AreaCharacterSheet
             life.Status.HitPoints, life.Status.MaxHitPoints, life.Status.Fatigue, life.Status.MaxFatigue, primary, secondary, resistances));
     }
 
-    /// <summary>The original's colour rule (<c>charedit_refresh_stat</c> 0x55B2A0): the base value adjusted by the effects that
-    /// are not innate (<c>effect_adjust_stat_level_no_innate</c>, the aggregation of ledger EF6 without race, background, class
+    /// <summary>The original's colour rule (0x55B2A0): the base value adjusted by the effects that
+    /// are not innate (0x4EA930, the aggregation of ledger EF6 without race, background, class
     /// and gender effects) compared with the base value.</summary>
     internal static AreaSheetMark Mark(CharacterStatsSnapshot stats, CharacterStat stat)
     {

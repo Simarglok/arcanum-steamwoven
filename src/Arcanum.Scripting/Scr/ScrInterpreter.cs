@@ -140,8 +140,8 @@ internal sealed class ScrInterpreter
             case ScrCatalogue.Action.Multiply: Set(a, unchecked(Get(a, 1) * Get(a, 2)), line); return (Step.Next, 0);
             case ScrCatalogue.Action.Divide:
             {
-                // X7: the original stores the signed quotient and nothing for a divisor of 0 (CE adds instead, a CE
-                // slip). int.MinValue / −1 faults the original's idiv; both modes store the wrapped quotient instead.
+                // X7: the original stores the signed quotient and nothing for a divisor of 0 (ledger
+                // X7). int.MinValue / −1 faults the original's idiv; both modes store the wrapped quotient instead.
                 var dividend = Get(a, 1); var divisor = Get(a, 2);
                 if (divisor != 0) Set(a, divisor == -1 && dividend == int.MinValue ? int.MinValue : dividend / divisor, line);
                 return (Step.Next, 0);
@@ -180,7 +180,7 @@ internal sealed class ScrInterpreter
         switch ((ScrValueKind)c.Kind(0))
         {
             case ScrValueKind.Counter:
-                // X8: the original masks a counter write to its byte (CE spills into the next counter, a CE slip).
+                // X8: the original masks a counter write to its byte (ledger X8).
                 _counters = (_counters & ~(0xFFu << (8 * index))) | (((uint)value & 0xFF) << (8 * index));
                 break;
             case ScrValueKind.LocalVariable: _locals[index] = value; break;

@@ -308,7 +308,7 @@ public static class TerrainLoader
         public int OutdoorIndex(string value) { var index = Array.FindIndex(outdoorFlip, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); if (index >= 0) return index; index = Array.FindIndex(outdoorFixed, x => string.Equals(x, value, StringComparison.OrdinalIgnoreCase)); return index < 0 ? -1 : outdoorFlip.Length + index; }
         private static string[] Read(SortedDictionary<int, string> entries, int first, int last, bool originalNames) =>
             entries.Where(x => x.Key >= first && x.Key <= last).Select(x => originalNames ? TileToken(x.Value) : MesPathToken(x.Value)).ToArray();
-        // Pinned CE a_name.c load_tile_names: a name ends at '/' (flags follow); without one the
+        // The source's tile name loader (docs/world/whole-map-plans.md): a name ends at '/' (flags follow); without one the
         // name is the first three characters and the rest is a sound number ("Dn1 3").
         private static string TileToken(string value)
         {

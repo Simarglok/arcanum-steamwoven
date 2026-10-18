@@ -5,7 +5,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 
 namespace Arcanum.Data.Tests;
 
-/// <summary>DlgReadMode.Original against the pinned CE dialog_parse_field/dialog_parse_entry rules
+/// <summary>DlgReadMode.Original against the original's DLG field and entry parser rules (0x417C20, 0x417860)
 /// (ARC-DATA-017). Synthetic records only.</summary>
 [TestClass]
 public sealed class DlgOriginalModeTests

@@ -59,6 +59,7 @@ during an event pass, which must not call back into the owner (a `PlaceActor` or
 | `AttachMapInventory` / `QueryMapInventory` / `QueryPcInventory` / `PickUpItem` / `LootItem` / `GiveItemToPc` | Inventory domain (ARC-WORLD-014): a host-attached T0 seed per map (not state, no revision) and the PC's taken items; transfers take the expected version, refuse before any effect and add one revision each. See [inventory runtime](inventory-runtime.md). |
 | `QueryEquipment` / `QueryHeroEquipmentCombat` / `Equip` / `Unequip` | Equipment domain (ARC-WORLD-028): the hero's worn items, their part of its combat values (armour class and resistance adjustments, light, the attack it strikes with, weapon speed and attack cost), wielding or wearing an item it holds under the wear check with the host's art and insert checks, and taking it off; one revision per change. The worn normal resistance enters the hero's life facts. See [equipment runtime](equipment-runtime.md). |
 | `QueryHeroEffects` / `AddHeroEffect` / `AddHeroTimedEffect` / `RemoveHeroEffect` / `RemoveAllHeroEffects` / `RemoveHeroEffectsCausedBy` / `EndHeroTimedEffect` | Durable effects (ARC-WORLD-029): the hero's effect list after its innate entries, adding and the source's four removals (the first entry of a number whatever its cause), timed effects whose END is a saved event, and an END run early; one revision per change. A change of a maximum moves the hero's damage as the source does; the stats, maxima and reaction effects reach the character owner, the life facts and the reaction facts. See [durable effects runtime](durable-effects-runtime.md). |
+| `QueryHeroBlessings` / `AddHeroBlessing` / `RemoveHeroBlessing` | Blessings and curses (ARC-WORLD-035): the hero's two lists with the game time each was received, the add (0x4C42F0, 0x4C3E40: held once, the effect added with the bless or curse cause) and the removal (0x4C4450, 0x4C3FA0: the first effect entry of its number removed); one revision per change. See [durable effects runtime](durable-effects-runtime.md#blessings-and-curses-arc-world-035). |
 | `QueryHero` / `QueryHeroStats` / `QueryHeroDialogFacts` / `QueryGold` | Player character (ARC-WORLD-015), read-only: saved fields, the character owner's stats under a context, the DLG reply facts, the PC's gold; `null` (gold 0) for a session without a hero. See [starting hero runtime](starting-hero-runtime.md). |
 | `Roll` / `QueryRandom` / `CombatRolls` | Session randomness (ARC-WORLD-019): one labelled uniform roll in an inclusive range, the generator's seed and position, and the generator as the attack resolver's roll source. A roll takes no expected version and does not move the revision. See [session randomness](session-random-runtime.md). |
 | `QueryHeroLife` / `QueryLife` / `QueryLifeRecord` / `ApplyDamage` / `Kill` / `Heal` / `RecoverFatigue` / `RestHeal` / `PoisonDamageTick` / `PoisonRecoveryTick` / `ClearStun` | Life domain (ARC-COMBAT-002): the hero, or an NPC with the host's facts and loaded state; mutations take the expected version, refuse before any roll, add one revision per change and draw their knockout and second-arm rolls from the session generator. See [life state runtime](life-state-runtime.md). |
@@ -147,7 +148,7 @@ as the source's shared state is not owned by one PC.
 [quest-reset]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c#L95-L110
 [rumor]: https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c#L259-L310
 
-## Snapshot schema 17
+## Snapshot schema 18
 
 `GameSessionSnapshot` (only from `Capture` or `TryDecode`) carries `SchemaVersion`,
 `Identity` (GF world/module), session `Revision`, `Clock` (`ProfileBinding`, timestamp,
@@ -161,7 +162,7 @@ changes in canonical order: scope, sector, entity, property, ordinal), `Story`
 `Equipment` (the hero's worn items in slot order; [equipment](equipment-runtime.md#snapshot-schema-12)),
 `Effects` (the hero's durable entries in list order and the rule of each number; [durable effects](durable-effects-runtime.md#snapshot-schema-13)),
 `Experience` (the changed NPCs' experience worth and pool in ordinal order; the hero's experience is in `Hero`; [experience](experience-runtime.md#snapshot-schema-14)),
-`Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-17)),
+`Advancement` (the levelled NPCs' sheets and schemes in ordinal order; the hero's fields are in `Hero`; [auto-level schemes](advancement-runtime.md#snapshot-schema-18)),
 `Random` (the generator's seed and draws made; [session randomness](session-random-runtime.md#snapshot-schema-7)),
 `Life` (the hero's life record and the changed NPCs' in ordinal order; [life state](life-state-runtime.md#snapshot-schema-8)),
 `Reactions` (the changed NPCs' reaction slots in ordinal order; [NPC reaction](npc-reaction-runtime.md#snapshot-schema-10)),
@@ -173,7 +174,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
 `GameSessionSnapshotCodec.Encode` writes one canonical compact JSON text:
 
 ```json
-{"format":"arcanum-steamwoven-session","schemaVersion":17,
+{"format":"arcanum-steamwoven-session","schemaVersion":18,
  "world":"<guid D>","module":"<guid D>","revision":2,
  "clock":{"schemaVersion":1,"policyId":"…","sourceRevision":"…","sourceDataSha256":"…",
           "startupResourceSha256":"…","startYear":1885,"startHour":15,
@@ -190,7 +191,7 @@ and `Lighting` (applied scheme and hour, or `null`). Collections are read-only c
  "hero":null,
  "inventory":{"gold":0,"kit":[],"pc":[{"entity":"oid:…","map":79,"type":"Armor","prototype":3804,"name":2804,"description":32804}]},
  "equipment":[],
- "effects":{"hero":[],"definitions":[]},
+ "effects":{"hero":[],"definitions":[],"blessings":[],"curses":[]},
  "experience":{"npcs":[]},
  "advancement":{"npcs":[]},
  "random":{"seed":"0000000000000000","draws":0},
@@ -228,8 +229,14 @@ hour differs from the saved clock's hour. A restored clock keeps its saved pause
 snapshot captured while a dialog or the palette held a `Menu` pause restores paused,
 and the host releases or re-applies its modal pause from what is actually open.
 
-**Migration decision: none.** Schema 17 is the only accepted version. ARC-WORLD-029 added the required
-`effects` section; schema 12 is refused like the earlier ones (see [durable effects](durable-effects-runtime.md#snapshot-schema-13)).
+**Migration decision: none.** Schema 18 is the only accepted version. ARC-WORLD-036 added the hero's `advancement` fields
+and the root `advancement` section; schema 17 is refused like the earlier ones (see
+[auto-level schemes](advancement-runtime.md#snapshot-schema-18)). ARC-WORLD-035 had added the required `blessings` and
+`curses` lists to `effects` and refused schema 16 (see
+[durable effects](durable-effects-runtime.md#blessings-and-curses-arc-world-035)). ARC-DEV-009 had bound the clock profile
+to the retail executable (schema 16), ARC-COMBAT-004 added `combatMode` (schema 15) and ARC-WORLD-030 the hero's experience
+and `experience` (schema 14).
+ARC-WORLD-029 had added the required `effects` section and refused schema 12 (see [durable effects](durable-effects-runtime.md#snapshot-schema-13)).
 ARC-WORLD-028 had added the required `equipment` list and refused schema 11 (see [equipment](equipment-runtime.md#snapshot-schema-12)).
 ARC-COMBAT-003 had added the required, nullable `combat` section and refused schema 10 (see
 [turn-based round](turn-based-round-runtime.md#snapshot-schema-11)). ARC-WORLD-026 had added the
@@ -256,9 +263,10 @@ dialog. ARC-WORLD-030 added the hero's experience and the NPCs' experience recor
 ARC-COMBAT-004 added the combat-mode flags as schema 15 and refuses schema 14
 ([real-time combat](real-time-combat-runtime.md#snapshot-schema-15)). ARC-DEV-009 binds the clock profile to the retail
 executable (`sourceRevision` is its SHA-256, [clock policy](game-clock-policy.md)) as schema 16, with no structural change, and
-refuses schema 15. ARC-WORLD-036 added the hero's advancement fields and the levelled NPCs' sheets as schema 17 and refuses
-schema 16 ([auto-level schemes](advancement-runtime.md#snapshot-schema-17)). Adding another domain needs schema 18 with its
-own explicit migration decision.
+refuses schema 15. ARC-WORLD-035 added the hero's blessings and curses as schema 17 and refuses schema 16. ARC-WORLD-036
+added the hero's advancement fields and the levelled NPCs' sheets as schema 18 and refuses schema 17
+([auto-level schemes](advancement-runtime.md#snapshot-schema-18)). Adding another domain needs schema 19 with its own
+explicit migration decision.
 
 ## Save slot (ARC-WORLD-011)
 

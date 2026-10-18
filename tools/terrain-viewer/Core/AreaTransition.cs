@@ -181,7 +181,21 @@ public sealed class AreaTransitionCoordinator
             throw new ArgumentException("AREA_HERO_NOT_READY", nameof(hero));
         var identity = new GlobalFlagIdentity(new WorldId(world), new ModuleId(module));
         var flags = AreaStartingHero.NewGameFlags(identity, new OwnerEpoch(Guid.NewGuid()), hero?.Flag);
-        return GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
+        var created = GameSessionOwner.Create(new(clock, flags, new(new(runtimeMap), new(checked((int)actor.X), checked((int)actor.Y)), NeighborDirection.XPlus),
             Hero: hero?.Definition, Experience: hero?.Experience, AutoLevel: hero?.AutoLevel));
+        if (hero?.KitWear is not { } wear || created.Owner is not { } owner) return created;
+        // ARC-WORLD-034: the pre-made start wields the hero's best items before the game begins (the original's best-items call,
+        // 0x4654F0, from the pre-made menu step 0x545B60). The viewer has one diagnostic body art and no inventory grid, so it answers
+        // the art lookup and the insert check with yes; a refused call fails the start, typed.
+        var worn = owner.EquipBest(owner.Version, entity => KitIndex(entity) is { } index && index < wear.Count ? wear[index] : null,
+            (_, _) => true, _ => SessionInsertVerdict.Accepted);
+        if (worn.Disposition != GameSessionDisposition.Rejected) return created;
+        owner.Dispose();
+        return new(null, worn.Failure, ClockFailure.None, GlobalFlagReason.None);
     }
+
+    // kit:1 is the first kit item.
+    private static int? KitIndex(string entity) =>
+        entity.StartsWith("kit:", StringComparison.Ordinal) && int.TryParse(entity.AsSpan(4), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var number) && number >= 1 ? number - 1 : null;
 }

@@ -50,7 +50,7 @@ Both factories admit only profile `BASE_SECTOR_1452_1290`, logical base sector
 `86570436012`, origin `(92928,82560)`, 64×64. Query endpoints must BOTH be in
 local rectangle **x=4..8, y=0..3**. Reading the full census grants no admission
 elsewhere. No neighbor, `.dif`, PATCH or loose-file precedence is inferred.
-Explicit selected `art\\tile\\tilename.mes` uses `CeNonWindowsMacOs`, and must
+Explicit selected `art\\tile\\tilename.mes` uses `NonWindowsMacOs`, and must
 come from the same caller resource archive. Missing source/selection stays Unknown;
 there is no suppression option for required destination name evidence.
 
@@ -196,7 +196,7 @@ SelectedEvidenceSha256 field order:
 1. String `CARDINAL_EVIDENCE_V1`; input-kind byte (Structural0,AuthenticatedOriginal1);
    module/resource/prototype source-ID strings.
 2. Sector X,Y,packedId,originX,Y,width,height,entryOrdinal,flags,decodedSize;
-   path-profile byte0 (CeNonWindowsMacOs).
+   path-profile byte0 (NonWindowsMacOs).
 3. Nullable selected-name-entry TUPLE (ordinal,flags,decodedSize).
 4. Nullable original-identity TUPLE: module length/SHA string; resource length/SHA;
    ascending prototype list (A-ID,length,SHA); loader aggregate SHA string.

@@ -107,6 +107,17 @@ public sealed class CombatFieldReaderTests
     }
 
     [TestMethod]
+    public void ObjectsReadTheirScriptPoints()
+    {
+        // ARC-WORLD-034: the attachment points with a script (number ≠ 0), ascending; no script array reads none.
+        Assert.AreEqual(0, Read(8104, Armor, Item(extra: new() { [59] = 0x2 })).Object.ScriptPoints.Count);
+        var scripted = Read(8104, Armor, Item(extra: new() { [59] = 0x2, [31] = new Dictionary<int, int> { [25] = 30001, [24] = 30002, [4] = 0, [0] = 7 } }));
+        CollectionAssert.AreEqual(new[] { 0, 24, 25 }, scripted.Object.ScriptPoints.ToArray());
+        var outside = CombatFieldReader.ReadPrototype(Files((8104, Armor, Item(extra: new() { [59] = 0x2, [31] = new Dictionary<int, int> { [36] = 1 } }))), 8104);
+        Assert.AreEqual((CombatFieldFailure.ArrayMalformed, (int?)31), (outside.Failure, outside.Detail), "a point outside 0..35");
+    }
+
+    [TestMethod]
     public void ItemsReadTheArtTheWearRulesDecode()
     {
         // ARC-WORLD-028: current art (destroyed bit 10), inventory art (coverage bits 14..16), use-art fragment (subtype bits 6..9).

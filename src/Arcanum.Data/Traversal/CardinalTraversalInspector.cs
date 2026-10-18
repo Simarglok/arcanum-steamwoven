@@ -50,7 +50,7 @@ public static class CardinalTraversalInspector
                     86570436012, 92928, 82560, 64, 64, new(463, 2, 47291));
                 var entry = TerrainLoader.SelectModule(source.ModuleArchive, selector);
                 var terrain = TerrainObstructionInspector.InspectSector(source.ModuleArchive, "CRASH_SITE_MODULE", selector,
-                    new(source.ResourceArchive, "CRASH_SITE_RESOURCE", NamePath, TerrainPathProfile.CeNonWindowsMacOs), terrainLimits);
+                    new(source.ResourceArchive, "CRASH_SITE_RESOURCE", NamePath, TerrainPathProfile.NonWindowsMacOs), terrainLimits);
                 var identity = new StaticObstructionInputIdentity(validation);
                 var ordinary = StaticObstructionInspector.Create(validation.Inspection, entry.Ordinal, "CRASH_SITE_MODULE", "CRASH_SITE_PROTOTYPES", identity);
                 // Full terrain/MES/census/static projection and digest happen INSIDE the loader's final hash guard.
@@ -64,7 +64,7 @@ public static class CardinalTraversalInspector
         if (source.ModuleEntryPath != SectorPath || selector.ModuleEntryPath != SectorPath || selector.SectorX != 1452 || selector.SectorY != 1290 ||
             selector.PackedSectorId != 86570436012 || selector.OriginX != 92928 || selector.OriginY != 82560 || selector.Width != 64 || selector.Height != 64 ||
             (names is not null && (!ReferenceEquals(names.Archive, source.ResourceArchive) || names.SourceId != resourceId ||
-                names.MesEntryPath.Replace('/', '\\').ToLowerInvariant() != NamePath.ToLowerInvariant() || names.PathProfile != TerrainPathProfile.CeNonWindowsMacOs)))
+                names.MesEntryPath.Replace('/', '\\').ToLowerInvariant() != NamePath.ToLowerInvariant() || names.PathProfile != TerrainPathProfile.NonWindowsMacOs)))
             throw new CardinalTraversalInvocationException(CardinalTraversalInvocationCode.InvalidSelection, CardinalTraversalInvocationStage.Selection);
     }
 

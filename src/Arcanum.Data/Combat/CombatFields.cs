@@ -11,7 +11,7 @@ public enum CombatResistanceIndex { Normal, Fire, Electrical, Poison, Magic }
 /// <summary>Ammunition types of a weapon or an ammunition item. A weapon that uses none stores <see cref="CombatFieldReader.NoAmmo"/>.</summary>
 public enum CombatAmmoType { Arrow = 0, Bullet = 1, PowerCell = 2, Fuel = 3 }
 
-/// <summary>The weapon skill the source derives from an item's stored fields (<c>item_weapon_skill</c>).</summary>
+/// <summary>The weapon skill the source derives from an item's stored fields (0x465D80).</summary>
 public enum CombatWeaponSkill { Melee, Bow, Throwing, Firearms }
 
 /// <summary>Weapon flags (<c>OBJ_F_WEAPON_FLAGS</c>); undefined stored bits are kept as they are.</summary>
@@ -37,7 +37,11 @@ public readonly record struct CombatDamageRange(int Minimum, int Maximum);
 /// <see cref="Name"/> is the numeric name class (<c>OBJ_F_NAME</c>), not display text. <see cref="CurrentArt"/> is the stored
 /// current art id (<c>OBJ_F_CURRENT_AID</c>); for an item its "destroyed" bit marks a broken item (see <see cref="CombatItemArt"/>).</summary>
 public sealed record CombatObjectFields(int Type, int Prototype, uint Flags, uint SpellFlags, int Name, int Description, int ArmorClass,
-    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances, uint CurrentArt);
+    int HitPoints, int HitPointAdjustment, int HitPointDamage, int Material, IReadOnlyList<int> Resistances, uint CurrentArt)
+{
+    /// <summary>The attachment points (0..35) that carry a script, ascending (ARC-WORLD-034: the wear moves refuse items with move scripts).</summary>
+    public IReadOnlyList<int> ScriptPoints { get; init; } = [];
+}
 
 /// <summary>Fields every item carries. <see cref="MagickTechComplexity"/> is positive for magickal, negative for
 /// technological items; <see cref="Spells"/> holds the five item spells (10000 is none); <see cref="InventoryLocation"/>
@@ -48,8 +52,8 @@ public sealed record CombatItemFields(uint Flags, int Weight, int Worth, int Man
     int InventoryLocation, IReadOnlyList<int> Spells, int SpellManaStore, int AiAction, uint InventoryArt, uint UseArtFragment);
 
 /// <summary>
-/// The item art id bits the wear rules read (pinned CE <c>first_party/tig/src/art.c</c>; the retail 1.0.7.4 executable decodes the
-/// same bits, ARC-WORLD-028): an art id's type is bits 28..31, and only an item art id (type 6) has the item fields; anything else
+/// The item art id bits the wear rules read (the bits the retail 1.0.7.4 executable decodes,
+/// ARC-WORLD-028): an art id's type is bits 28..31, and only an item art id (type 6) has the item fields; anything else
 /// reads 0. Coverage is bits 14..16 of the inventory art, the subtype bits 6..9 of the use-art fragment, and bit 10 of the current
 /// art marks a destroyed (broken) item.
 /// </summary>

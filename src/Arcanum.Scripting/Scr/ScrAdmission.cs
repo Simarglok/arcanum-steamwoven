@@ -31,7 +31,7 @@ public enum ScrRefusalCode
     ComputedGoto,
     /// <summary>A literal script number for change this script outside 0..99999 (the original stores it as is).</summary>
     ScriptNumberOutOfRange,
-    /// <summary>A literal goto below line 0 (CE reads −1..−4 as control codes, anomaly X6).</summary>
+    /// <summary>A literal goto below line 0 (a source reading takes −1..−4 as control codes, anomaly X6).</summary>
     NegativeGoto,
     /// <summary>A literal goto past the line after the last one.</summary>
     GotoBeyondEnd,

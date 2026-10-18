@@ -47,7 +47,7 @@ public sealed class TerrainObstructionInspectorTests
         {
             [0] = "abc/b", [101] = "def/f", [202] = "ghi/s 12", [303] = "jkl"
         })));
-        var tileSource = new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+        var tileSource = new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs);
         var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\rules.sec"), tileSource);
 
         Assert.AreEqual(TerrainObstructionDisposition.NoBlock, report.GetCell(0, 0).FacadeWalkabilityBit.Disposition);
@@ -73,7 +73,7 @@ public sealed class TerrainObstructionInspectorTests
         using (var resource = Open(("art\\tile\\tilename.mes", TileMes(new Dictionary<int, string> { [0] = "abc/b" }))))
         {
             report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\life.sec"),
-                new TerrainTileNameSource(resource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+                new TerrainTileNameSource(resource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
             words[0] = 0; // caller fixture mutation cannot change the copied report.
         }
         Assert.AreEqual(TerrainObstructionDisposition.Blocked, report.GetCell(0, 0).TileNameRule.Disposition);
@@ -82,7 +82,7 @@ public sealed class TerrainObstructionInspectorTests
         using var missingModule = Open(("maps\\fixture\\missing.sec", Sector(new uint[4096], 0xAA0004, new uint[128])));
         using var empty = Open(("other.mes", Ascii("{0}{abc}")));
         var missing = TerrainObstructionInspector.InspectSector(missingModule, "fixture-module", Selector("maps\\fixture\\missing.sec"),
-            new TerrainTileNameSource(empty, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainTileNameSource(empty, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
         Assert.AreEqual("TILE_NAME_ENTRY_MISSING", missing.GetCell(0, 0).TileNameRule.ReasonCode);
         Assert.AreEqual(TerrainObstructionDisposition.NoBlock, missing.GetCell(0, 0).SerializedBlockMask.Disposition);
     }
@@ -95,7 +95,7 @@ public sealed class TerrainObstructionInspectorTests
         using var module = Open(("maps\\fixture\\bad.sec", Sector(words, 0xAA0004, new uint[128])));
         using var resource = Open(("art\\tile\\tilename.mes", TileMes(new Dictionary<int, string> { [0] = "abc/q" })));
         var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\bad.sec"),
-            new TerrainTileNameSource(resource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainTileNameSource(resource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
         var tile = report.GetCell(0, 0).TileNameRule;
         Assert.AreEqual(TerrainObstructionSupportedness.Unknown, tile.Supportedness);
         Assert.IsNull(tile.Disposition);
@@ -137,7 +137,7 @@ public sealed class TerrainObstructionInspectorTests
             ("harmless-before.mes", Ascii("{0}{abc}")),
             ("private\\names.mes", TileMes(new Dictionary<int, string> { [0] = "abc/b" })));
         var report = TerrainObstructionInspector.InspectSector(module, "module-source", Selector("private\\sector.sec"),
-            new TerrainTileNameSource(source, "name-source", "private\\names.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainTileNameSource(source, "name-source", "private\\names.mes", TerrainPathProfile.NonWindowsMacOs));
 
         Assert.IsNull(typeof(TerrainObstructionSectorReport).GetProperty("Selector"));
         Assert.AreEqual(0, report.Sector.EntryOrdinal);
@@ -160,7 +160,7 @@ public sealed class TerrainObstructionInspectorTests
             using var module = Open(("maps\\fixture\\flags.sec", Sector(words, 0xAA0004, new uint[128])));
             using var source = Open(("art\\tile\\tilename.mes", TileMes(new Dictionary<int, string> { [0] = value })));
             var tile = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\flags.sec"),
-                new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0).TileNameRule;
+                new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(0, 0).TileNameRule;
             Assert.AreEqual(expected, tile.Disposition, value);
         }
         foreach (var malformed in new[] { "abc/q", "abc/b//", "abc/b 1x", "abc/  +" })
@@ -169,7 +169,7 @@ public sealed class TerrainObstructionInspectorTests
             using var module = Open(("maps\\fixture\\strict.sec", Sector(words, 0xAA0004, new uint[128])));
             using var source = Open(("art\\tile\\tilename.mes", TileMes(new Dictionary<int, string> { [0] = malformed })));
             var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\strict.sec"),
-                new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+                new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
             Assert.AreEqual(TerrainObstructionSupportedness.Unknown, report.GetCell(0, 0).TileNameRule.Supportedness, malformed);
             Assert.AreEqual(TerrainObstructionDisposition.NoBlock, report.GetCell(0, 0).SerializedBlockMask.Disposition);
         }
@@ -182,14 +182,14 @@ public sealed class TerrainObstructionInspectorTests
         using var module = Open(("maps\\fixture\\source.sec", Sector(words, 0xAA0004, new uint[128])));
         using var missingSource = Open(("elsewhere.mes", Ascii("{0}{abc}")));
         var missing = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\source.sec"),
-            new TerrainTileNameSource(missingSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0);
+            new TerrainTileNameSource(missingSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(0, 0);
         Assert.AreEqual("TILE_NAME_ENTRY_MISSING", missing.TileNameRule.ReasonCode);
         Assert.IsNull(missing.TileNameRule.Provenance.EntryOrdinal);
         Assert.AreEqual(TerrainObstructionDisposition.NoBlock, missing.SerializedBlockMask.Disposition);
 
         using var ambiguousSource = Open(("art\\tile\\tilename.mes", TileMes(new Dictionary<int, string>())), ("ART/TILE/TILENAME.MES", TileMes(new Dictionary<int, string>())));
         var ambiguous = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\source.sec"),
-            new TerrainTileNameSource(ambiguousSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0);
+            new TerrainTileNameSource(ambiguousSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(0, 0);
         Assert.AreEqual("TILE_NAME_ENTRY_AMBIGUOUS", ambiguous.TileNameRule.ReasonCode);
         Assert.IsNull(ambiguous.TileNameRule.Provenance.EntryOrdinal);
     }
@@ -275,7 +275,7 @@ public sealed class TerrainObstructionInspectorTests
         using var module = Open(("maps\\fixture\\mapping.sec", Sector(words, 0xAA0004, new uint[128])));
         using var source = Open(("art\\tile\\tilename.mes", SparseMes(records)));
         var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\mapping.sec"),
-            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
         foreach (var item in cases) Assert.AreEqual(item.Item5, report.GetCell(item.Item1, 0).TileNameRule.Disposition);
 
         using var limitedSource = Open(("art\\tile\\tilename.mes", SparseMes(new Dictionary<int, string> { [0] = "aaa" })));
@@ -284,7 +284,7 @@ public sealed class TerrainObstructionInspectorTests
             words[10] = missing;
             using var unresolvedModule = Open(("maps\\fixture\\unresolved.sec", Sector(words, 0xAA0004, new uint[128])));
             var unresolved = TerrainObstructionInspector.InspectSector(unresolvedModule, "fixture-module", Selector("maps\\fixture\\unresolved.sec"),
-                new TerrainTileNameSource(limitedSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(10, 0).TileNameRule;
+                new TerrainTileNameSource(limitedSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(10, 0).TileNameRule;
             Assert.AreEqual("TILE_NAME_MAPPING_UNRESOLVED", unresolved.ReasonCode);
             Assert.IsNull(unresolved.Disposition);
         }
@@ -335,7 +335,7 @@ public sealed class TerrainObstructionInspectorTests
         using var module = DatArchive.Open(moduleStream, leaveOpen: true);
         using var source = DatArchive.Open(mesStream, leaveOpen: true);
         var report = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\owned.sec"),
-            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs));
         var selectedModuleEntry = module.Entries[0];
         var serializedMaskOffset = checked((int)selectedModuleEntry.Offset
             + module.ReadEntry(selectedModuleEntry).Length - TerrainSerializedBlockMask.ByteLength - sizeof(int));
@@ -362,7 +362,7 @@ public sealed class TerrainObstructionInspectorTests
         using var tileModule = Open(("maps\\fixture\\tile-composition.sec", Sector(tileWords, 0xAA0004, new uint[128])));
         using var tileSource = Open(("art\\tile\\tilename.mes", SparseMes(new Dictionary<int, string> { [0] = "abc" })));
         var tileCell = TerrainObstructionInspector.InspectSector(tileModule, "fixture-module", Selector("maps\\fixture\\tile-composition.sec"),
-            new TerrainTileNameSource(tileSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0);
+            new TerrainTileNameSource(tileSource, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(0, 0);
         Assert.AreEqual(TerrainObstructionDisposition.NoBlock, tileCell.SerializedBlockMask.Disposition);
         Assert.AreEqual(TerrainObstructionDisposition.NoBlock, tileCell.TileNameRule.Disposition);
         Assert.AreEqual(TerrainObstructionApplicability.NotApplicable, tileCell.FacadeWalkabilityBit.Applicability);
@@ -401,7 +401,7 @@ public sealed class TerrainObstructionInspectorTests
         using var archive = Open(("private\\names.mes", Ascii("{0}{abc}")));
         foreach (var sourceId in new[] { "bad/path", "bad\\path", "bad\nname", "bad\0name", "é" })
         {
-            AssertThrows<ArgumentException>(() => _ = new TerrainTileNameSource(archive, sourceId, "private\\names.mes", TerrainPathProfile.CeNonWindowsMacOs));
+            AssertThrows<ArgumentException>(() => _ = new TerrainTileNameSource(archive, sourceId, "private\\names.mes", TerrainPathProfile.NonWindowsMacOs));
             using var module = Open(("private\\sector.sec", Sector(new uint[4096], 0xAA0004, new uint[128])));
             AssertThrows<ArgumentException>(() => TerrainObstructionInspector.InspectSector(module, sourceId, Selector("private\\sector.sec"), null));
         }
@@ -415,7 +415,7 @@ public sealed class TerrainObstructionInspectorTests
         using var module = Open(("maps\\fixture\\value.sec", Sector(words, 0xAA0004, new uint[128])));
         using var source = Open(("art\\tile\\tilename.mes", SparseMes(new Dictionary<int, string> { [0] = value })));
         return TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\value.sec"),
-            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs)).GetCell(0, 0).TileNameRule;
+            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs)).GetCell(0, 0).TileNameRule;
     }
 
     private static void InspectRawMes(string text, TerrainLoaderOptions? options = null)
@@ -427,7 +427,7 @@ public sealed class TerrainObstructionInspectorTests
         using var module = Open(("maps\\fixture\\malformed.sec", Sector(words, 0xAA0004, new uint[128])));
         using var source = Open(("art\\tile\\tilename.mes", bytes));
         _ = TerrainObstructionInspector.InspectSector(module, "fixture-module", Selector("maps\\fixture\\malformed.sec"),
-            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.CeNonWindowsMacOs), options);
+            new TerrainTileNameSource(source, "fixture-resource", "art\\tile\\tilename.mes", TerrainPathProfile.NonWindowsMacOs), options);
     }
 
     private static uint[] MaskWords(int ordinal)

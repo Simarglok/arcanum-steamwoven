@@ -8,7 +8,7 @@ namespace Arcanum.TerrainViewer;
 
 // ARC-UI-005: in crash-site-area the pointer names the object under it and the cursor shows what a left click would
 // do there. One pick serves the tooltip, the talk click and the cave-use click: the frontmost drawn body with an opaque
-// pixel under the pointer, skipping OF_CLICK_THROUGH bodies (CE target pick). The action mirrors WorldRouteClick's
+// pixel under the pointer, skipping OF_CLICK_THROUGH bodies (the source's target pick 0x43D9F0). The action mirrors WorldRouteClick's
 // guards and order (talk, use, ground) without running any of them. Everything is recomputed only when the pointer,
 // the raster transform, the map, the actor cell or the guard state changes, so an idle frame costs one comparison.
 // The original's main-mode cursor does not change per target; the action cursor is project policy.

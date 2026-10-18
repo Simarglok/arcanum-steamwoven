@@ -198,7 +198,7 @@ public sealed class CardinalTraversalInspectorTests
             new("other.sec", "BASE", 1452, 1290, 86570436012, 92928, 82560, 64, 64) })
             Assert.AreEqual(CardinalTraversalInvocationCode.InvalidSelection, Throws<CardinalTraversalInvocationException>(() =>
                 CardinalTraversalInspector.InspectSector(f.Source, f.Prototypes, "MODULE", "RESOURCE", "PROTOTYPES", selector, null, 7)).Code);
-        foreach (var names in new[] { new TerrainTileNameSource(f.Resource, "OTHER", NamePath, TerrainPathProfile.CeNonWindowsMacOs), new(f.Resource, "RESOURCE", "other.mes", TerrainPathProfile.CeNonWindowsMacOs), new(f.Module, "RESOURCE", NamePath, TerrainPathProfile.CeNonWindowsMacOs) })
+        foreach (var names in new[] { new TerrainTileNameSource(f.Resource, "OTHER", NamePath, TerrainPathProfile.NonWindowsMacOs), new(f.Resource, "RESOURCE", "other.mes", TerrainPathProfile.NonWindowsMacOs), new(f.Module, "RESOURCE", NamePath, TerrainPathProfile.NonWindowsMacOs) })
             Assert.AreEqual(CardinalTraversalInvocationCode.InvalidSelection, Throws<CardinalTraversalInvocationException>(() => CardinalTraversalInspector.InspectSector(f.Source, f.Prototypes, "MODULE", "RESOURCE", "PROTOTYPES", f.Selector, names, 7)).Code);
         var s = f.Inspect();
         Throws<ArgumentNullException>(() => new CardinalTraversalRequest("BASE", null!, 7, 1452, 1290, new(6, 1), new(5, 1), CardinalTraversalDirection.XMinus, s.DeclaredContext));

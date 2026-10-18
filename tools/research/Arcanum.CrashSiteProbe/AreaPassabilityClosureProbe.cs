@@ -285,7 +285,7 @@ internal static partial class Program
 
             // Terrain under the selected destination rule, against the production conservative components.
             var module = archives["--module"];
-            var nameSource = new TerrainTileNameSource(archives["--resource2"], "R2", "art/tile/tilename.mes", TerrainPathProfile.CeNonWindowsMacOs);
+            var nameSource = new TerrainTileNameSource(archives["--resource2"], "R2", "art/tile/tilename.mes", TerrainPathProfile.NonWindowsMacOs);
             var terrain = new Dictionary<(long, long), ClosureTerrain>(); var sectorRows = new List<object>(); var conservativeUnknownTotal = 0;
             foreach (var s in snapshot.Sectors.Where(s => s.Present).OrderBy(s => s.Coordinate.Y).ThenBy(s => s.Coordinate.X))
             {

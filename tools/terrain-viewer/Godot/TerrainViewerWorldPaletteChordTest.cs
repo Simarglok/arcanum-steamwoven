@@ -21,7 +21,7 @@ public partial class TerrainViewerApp
             => _Input(new InputEventKey { Keycode = key, Pressed = down, Echo = echo, CtrlPressed = ctrl, ShiftPressed = shift, AltPressed = alt, MetaPressed = meta, Location = location });
         // A leak is any echo/release of a consumed F9 press that was not itself
         // consumed (it would reach native UI or a later original sink), or any F9
-        // decision naming an original action (F9 has none in M/Q/CE).
+        // decision naming an original action (F9 has none in the manual, the quick reference or the source).
         int Leaks()
         {
             var leaks = 0; var owned = false;

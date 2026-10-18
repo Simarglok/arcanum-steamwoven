@@ -21,7 +21,7 @@ public sealed record AreaLocalLightView(StationaryLightLattice? Lattice, IReadOn
 
 /// <summary>
 /// ARC-RENDER-012 local lighting of one map chart: its stationary sector lights (FR-LIGHT-008) and the
-/// tile channel under each core cell (FR-LIGHT-006). Bodies follow the pinned CE object colour
+/// tile channel under each core cell (FR-LIGHT-006). Bodies follow the source's object colour
 /// (light.c sub_4DC210 / sub_4D89E0): the ambient of the tile class under the body's cell plus the lights
 /// at its anchor (tile + offset + (40, 20)). Walls sample their base line at the sprite's two ends, from
 /// lights on their front side only, with the tile class for rotations 0/6 and outdoor for 2/4. Bodies

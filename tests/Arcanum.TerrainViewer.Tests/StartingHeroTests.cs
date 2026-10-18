@@ -114,6 +114,44 @@ public sealed class StartingHeroTests
         Assert.AreEqual(AreaHeroStatus.ModuleOutsideGameRoot, AreaStartingHero.Load(Path.Combine(root, "arcanum1.dat"), halfOgre.Hero).Status);
     }
 
+    /// <summary>ARC-WORLD-034: every pre-made hero starts with its best kit items worn (prints slot and prototype per hero; no
+    /// original text).</summary>
+    [TestMethod, TestCategory("RealData")]
+    public void Every_premade_hero_starts_wearing_its_best_kit_items()
+    {
+        var root = Environment.GetEnvironmentVariable("ARC_AREA_CONVERSATION_GAME_ROOT");
+        if (string.IsNullOrEmpty(root)) Assert.Inconclusive("ARC_AREA_CONVERSATION_GAME_ROOT is required.");
+        var module = Path.Combine(root, "modules", "Arcanum.dat");
+        var worn = new List<string>();
+        foreach (var premade in AreaStartingHero.Premade)
+        {
+            var load = AreaStartingHero.Load(module, premade);
+            Assert.AreEqual(AreaHeroStatus.Ready, load.Status, $"{premade.Name} {load.Detail}");
+            Assert.AreEqual(load.Definition!.Kit.Count, load.KitWear!.Count);
+            var created = AreaTransitionCoordinator.CreateSession(ConversationSessionFixture.Clock, Guid.NewGuid(), Guid.NewGuid(),
+                AreaGridSession.Cell(AreaGridSession.Spawn), 1, load);
+            Assert.AreEqual(GameSessionFailure.None, created.Failure, premade.Name + " " + created.Failure + " " + string.Join(",", load.KitWear!.Select(w => w is null ? "-" : $"{w.Kind.Prototype}:{w.Item.Kind}:spells={w.HasItemSpells}:scripts={string.Join("+", w.ScriptPoints)}")));
+            using var session = created.Owner!;
+            var kinds = session.QueryHeroKit().ToDictionary(item => item.Entity, item => item.Kind.Prototype);
+            worn.Add(premade.Name + ": " + string.Join(" ", session.QueryEquipment().Worn.Select(w => $"{w.Slot}={kinds[w.Entity]}")));
+        }
+        Console.WriteLine(string.Join(Environment.NewLine, worn));
+        // First observation 2026-10-18. The human woman's body armour 8220 carries wield-on and wield-off scripts, which the session
+        // does not run, so she starts without it (the original would wear it and run them).
+        CollectionAssert.AreEqual(new[]
+        {
+            "halfling-male: Weapon=6049 Armor=8085 Boots=8188", "gnome-male: Weapon=6049 Armor=8085 Boots=8188",
+            "half-elf-male: Weapon=6049 Armor=8069 Boots=8188", "half-ogre-male: Weapon=6049 Armor=8089 Boots=8188",
+            "elf-male: Weapon=6049 Armor=8069 Boots=8188", "human-male: Weapon=6131 Armor=8114 Boots=8190",
+            "half-orc-male: Weapon=6049 Armor=8069 Boots=8188", "dwarf-male: Weapon=6049 Armor=8085 Boots=8188",
+            "human-female: Weapon=6071 Boots=8191", "elf-female: Weapon=6131 Armor=8114 Boots=8190",
+            "half-orc-female: Weapon=6049 Armor=8162 Boots=8188", "half-elf-female: Weapon=6049 Armor=8162 Boots=8188",
+        }, worn.ToArray());
+        var woman = AreaStartingHero.Load(module, AreaStartingHero.Find("human-female")!);
+        var dress = woman.KitWear!.Single(item => item?.Kind.Prototype == 8220)!;
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.WieldOn, SessionScriptPoint.WieldOff }, dress.ScriptPoints.ToArray());
+    }
+
     /// <summary>A new session at the area spawn with the pre-made hero <paramref name="basic"/> (fresh identities, the
     /// viewer's synthetic clock, the original 3,200 new-game flags).</summary>
     /// <summary>ARC-DATA-027: a game-start table never comes from a module source; a module-load table is the stack winner.</summary>

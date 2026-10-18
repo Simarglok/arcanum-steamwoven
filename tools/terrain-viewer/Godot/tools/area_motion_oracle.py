@@ -70,7 +70,7 @@ def actor(view):
     mx, my = math.floor(x), math.floor(y)
     rx, ry = project(x - mx, y - my)
     offset = (round_even(rx), round_even(ry))
-    # AREA foot projection (ARC-RENDER-011): CE location_xy from the chart's
+    # AREA foot projection (ARC-RENDER-011): the source's location-to-screen rule (0x4B8680) from the chart's
     # location origin (+40,0), plus the object (+40,+20): anchor = P(map) +
     # residual + (40,20), the drawn diamond centre like every body.
     px, py = project(mx, my)

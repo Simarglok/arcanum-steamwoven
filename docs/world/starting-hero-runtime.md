@@ -51,8 +51,9 @@ effect N is message N of `rules\effect.mes` (50..399; an absent message is an em
 zero-initialised table). Tokens split on spaces and commas only, as in the source, so any byte outside printable ASCII
 (a tab or line feed included, which would glue two tokens) is `InvalidText`; an attribute keyword (ASCII case-insensitive) from the six
 collections in source order (28 stats, 12 basic skills, 4 tech skills, 5 resistances, 8 tech disciplines, 10 special
-values), then `+n`/`-n` (add), the same with `%` (percent), `min n` or `max n`. Project admission policy: `*n` and
-`/n` are `UnsupportedOperator` (CE stores factor 0, original NOT_VERIFIED, SH-07); an unknown token, a missing operand,
+values), then `+n`/`-n` (add), the same with `%` (percent), `min n`, `max n`, `*n` (multiply) or `/n` (divide): the
+factor is the number after the sign, as the original reads it (SH-07, LM9; decision 7, ARC-WORLD-035), and `/0`, which would
+divide by zero when the effect applies, is `ZeroDivisor` in both rule modes. Project admission policy: an unknown token, a missing operand,
 a malformed number (sign rules, 1..9 digits), more than seven changes in one collection or a byte outside printable
 ASCII are typed refusals instead of the source's partial effect.
 
@@ -187,6 +188,7 @@ the hero's [character sheet](../rendering/terrain-viewer.md#character-sheet-arc-
 The auto-level scheme replay (the hero keeps its 5 points unspent, so its sheet is **not** the original level-1 sheet;
 ARC-RES-027 open question), the new-character path (prototype 16066 with the block-0 background, clothes and skill
 kits), backgrounds and their context effects, skills, spells, tech, hit-point and fatigue pools (the hero's life state is
-[ARC-COMBAT-002](life-state-runtime.md), with pools 0 as every pre-made prototype stores them), item wielding
-(`item_wield_best_all`: the kit is carried, not worn), the PC object and name, and the hero's body ART in the viewer.
+[ARC-COMBAT-002](life-state-runtime.md), with pools 0 as every pre-made prototype stores them), the PC object and name, and
+the hero's body ART in the viewer. Since ARC-WORLD-034 the viewer's start wields the kit's best items
+([equipment](equipment-runtime.md#best-items-arc-world-034)); a kit item with wield scripts or item spells stays carried.
 The viewer's insert check accepts everything (ARC-UI-004), so the kit's weight is not checked there either.

@@ -205,7 +205,15 @@ public sealed class EffectStateTests
         Invalid(new(125, [Change(EffectAttributeKind.Stat, 28, 1)]));
         Invalid(new(125, [Change(EffectAttributeKind.Special, 10, 1)]));
         Invalid(new(125, [Change((EffectAttributeKind)6, 0, 1)]));
-        Invalid(new(125, [Change(EffectAttributeKind.Stat, 0, 1, (EffectChangeOperator)4)]));
+        Invalid(new(125, [Change(EffectAttributeKind.Stat, 0, 1, (EffectChangeOperator)6)]));
+        // Decision 7: a factor reads as the original reads it, but a divisor of 0 and a factor on a maximum are refused.
+        Invalid(new(125, [Change(EffectAttributeKind.Stat, 0, 0, EffectChangeOperator.Divide)]));
+        Invalid(new(125, [Change(EffectAttributeKind.Special, 0, 2, EffectChangeOperator.Multiply)]));
+        Invalid(new(125, [Change(EffectAttributeKind.Special, 1, 2, EffectChangeOperator.Divide)]));
+        Ok(owner.AddHeroEffect(owner.Version, new(126, [Change(EffectAttributeKind.Stat, 0, 2, EffectChangeOperator.Multiply),
+            Change(EffectAttributeKind.Special, 8, 2, EffectChangeOperator.Multiply)]), EffectCause.Spell), owner, 1);
+        Assert.AreEqual(16, Strength(owner));
+        Ok(owner.RemoveHeroEffect(owner.Version, 126), owner, 1);
         // A modelled change above 1000 (strength, a maximum), or any change above nine digits; at most seven per collection.
         Invalid(new(125, [Change(EffectAttributeKind.Stat, 0, 1001)]));
         Invalid(new(125, [Change(EffectAttributeKind.Special, 0, -1001)]));
@@ -307,7 +315,7 @@ public sealed class EffectStateTests
         ",\"effects\":{\"hero\":[{\"effect\":120,\"cause\":\"Item\"},{\"effect\":122,\"cause\":\"Spell\"},{\"effect\":120,\"cause\":\"Spell\"}]," +
         "\"definitions\":[{\"effect\":120,\"changes\":[{\"kind\":\"Stat\",\"attribute\":0,\"operator\":\"Add\",\"value\":2}]}," +
         "{\"effect\":122,\"changes\":[{\"kind\":\"Special\",\"attribute\":0,\"operator\":\"Add\",\"value\":10}," +
-        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}]}";
+        "{\"kind\":\"Special\",\"attribute\":1,\"operator\":\"Percent\",\"value\":-50}]}],\"blessings\":[],\"curses\":[]}";
 
     private static GameSessionOwner Saved()
     {
@@ -353,7 +361,7 @@ public sealed class EffectStateTests
         Fails("{\"effect\":120,\"cause\":\"Item\"}", "{\"effect\":400,\"cause\":\"Item\"}", SnapshotDecodeFailure.OutOfRange, "$.effects.hero[0].effect");
         Fails("\"definitions\":[", "\"definitions\":[],\"x\":[", SnapshotDecodeFailure.UnknownField, "$.effects.x");
         Fails("\"kind\":\"Stat\"", "\"kind\":\"Stats\"", SnapshotDecodeFailure.OutOfRange, "$.effects.definitions[0].changes[0].kind");
-        Fails("\"operator\":\"Percent\"", "\"operator\":\"Multiply\"", SnapshotDecodeFailure.OutOfRange, "$.effects.definitions[1].changes[1].operator");
+        Fails("\"operator\":\"Percent\"", "\"operator\":\"Times\"", SnapshotDecodeFailure.OutOfRange, "$.effects.definitions[1].changes[1].operator");
         Fails("\"attribute\":0,\"operator\":\"Add\",\"value\":2", "\"attribute\":28,\"operator\":\"Add\",\"value\":2", SnapshotDecodeFailure.OutOfRange,
             "$.effects.definitions[0].changes[0].attribute");
         Fails("{\"effect\":122,\"changes\"", "{\"effect\":120,\"changes\"", SnapshotDecodeFailure.NotCanonical, "$.effects.definitions[1].effect");
@@ -367,7 +375,7 @@ public sealed class EffectStateTests
         Refused("{\"effect\":120,\"changes\"", "{\"effect\":67,\"changes\"", GameSessionFailure.InvalidEffect);
         var heroless = GameSessionSnapshotCodec.Encode(Owner(hero: false).Capture());
         Assert.AreEqual(GameSessionFailure.InvalidSnapshot, GameSessionOwner.Restore(Decode(heroless.Replace(
-            ",\"effects\":{\"hero\":[],\"definitions\":[]}", EffectsJson, StringComparison.Ordinal)), RestoreOptions()).Failure);
+            NoEffects, EffectsJson, StringComparison.Ordinal)), RestoreOptions()).Failure);
         // An END without a hero, of an innate number, or one whose deadline is not its duration after its start.
         var endJson = $"{{\"sequence\":1,\"kind\":\"effect.hero.end\",\"deadlineMs\":{T0 + 8000},\"entities\":[],\"values\":[{T0},8000,120,1]}}";
         Assert.AreEqual(GameSessionFailure.InvalidEvents, GameSessionOwner.Restore(Decode(heroless.Replace(

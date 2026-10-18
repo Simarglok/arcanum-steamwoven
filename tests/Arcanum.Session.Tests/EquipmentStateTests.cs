@@ -406,4 +406,23 @@ public sealed class EquipmentStateTests
             EquipmentRules.WearSlot(torch)));
         Assert.IsNull(SessionEquipmentFacts.FromCombatFields(Stored(9)), "food is not worn");
     }
+
+    [TestMethod]
+    public void WearableFactsCarryWhatTheBestItemChoiceReads()
+    {
+        // ARC-WORLD-034: worth, the identified bit 0x1, the throwable weapon flag 0x10, any item spell, the stored weight and scripts.
+        var weapon = new CombatWeaponFields(CombatWeaponFlags.Throwable, CombatWeaponSkill.Throwing, 0, 0,
+            [new(1, 4), new(0, 0), new(0, 0), new(0, 0), new(0, 0)], [0, 0, 0, 0, 0], 10, 0, 6, 0, 3, 0, CombatFieldReader.NoAmmo, 0, 1, 0, 0, 1, 0, 0);
+        var fields = Stored(5, 0x1, weapon: weapon);
+        fields = fields with { Object = fields.Object with { ScriptPoints = [SessionScriptPoint.Examine, SessionScriptPoint.WieldOn] } };
+        var kind = new SessionItemKind(SessionItemType.Weapon, 6000, 1, 2);
+        var facts = SessionEquipmentFacts.Wearable(kind, fields)!;
+        Assert.AreEqual((kind, 50, true, true, 10, false), (facts.Kind, facts.Worth, facts.IdentifiedFlag, facts.Throwable, facts.Weight, facts.HasItemSpells));
+        CollectionAssert.AreEqual(new[] { SessionScriptPoint.Examine, SessionScriptPoint.WieldOn }, facts.ScriptPoints.ToArray());
+        var spelled = fields with { Item = fields.Item! with { Spells = [10000, 12, 10000, 10000, 10000] } };
+        Assert.IsTrue(SessionEquipmentFacts.Wearable(kind, spelled)!.HasItemSpells);
+        var plain = SessionEquipmentFacts.Wearable(kind, Stored(5, weapon: weapon with { Flags = CombatWeaponFlags.None }))!;
+        Assert.AreEqual((false, false), (plain.IdentifiedFlag, plain.Throwable));
+        Assert.IsNull(SessionEquipmentFacts.Wearable(new(SessionItemType.Food, 4600, 1, 2), Stored(9)), "food is worn nowhere");
+    }
 }

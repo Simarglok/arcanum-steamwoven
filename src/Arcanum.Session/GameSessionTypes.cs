@@ -267,8 +267,9 @@ public sealed class GameSessionSnapshot
     /// schema 13 added <see cref="Effects"/> (ARC-WORLD-029); schema 14 added the hero's experience and
     /// <see cref="Experience"/> (ARC-WORLD-030); schema 15 added <see cref="CombatMode"/> (ARC-COMBAT-004); schema 16 binds the clock profile
     /// to the retail executable (<see cref="Arcanum.Simulation.Clock.GameClockOwner.RetailExecutableSha256"/>, ARC-DEV-009); schema 17
-    /// adds the hero's advancement fields and <see cref="Advancement"/> (ARC-WORLD-036). Schemas 1..16 are refused, not migrated.</summary>
-    public const int CurrentSchemaVersion = 17;
+    /// adds the hero's blessings and curses to <see cref="Effects"/> (ARC-WORLD-035); schema 18 adds the hero's advancement fields
+    /// and <see cref="Advancement"/> (ARC-WORLD-036). Schemas 1..17 are refused, not migrated.</summary>
+    public const int CurrentSchemaVersion = 18;
 
     internal GameSessionSnapshot(int schemaVersion, GlobalFlagIdentity identity, long revision,
         SessionClockState clock, SessionFlagState flags, ActorPlacement actor, SessionMapState[] maps, SessionStoryState story,
