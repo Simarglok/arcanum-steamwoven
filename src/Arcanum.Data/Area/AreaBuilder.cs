@@ -241,7 +241,11 @@ public sealed partial class AreaDataOwner
         if (_plan.OriginalMap == OriginalAreaMap.CrashSiteExterior) OriginalProfile.Check(reconciliation, sectors, objects, visuals);
         else if (_plan.OriginalMap == OriginalAreaMap.CrashSiteCave) CaveProfile.Check(reconciliation, sectors, objects, visuals);
         // The plan's endpoints, each a present static core object with its own id, prototype and use script.
-        if (!AreaEndpoints.Check(_plan.Endpoints, objects)) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
+        if (_plan.Endpoints.Count > 0)
+        {
+            construction.Allocate(checked(4096 + 64L * objects.Count)); // the check's index of the core statics
+            if (!AreaEndpoints.Check(_plan.Endpoints, objects)) throw Fail(AreaErrorCode.InputIdentityMismatch, AreaStage.Appearance);
+        }
         // Only the actual new immutable collection copies/sort/endpoints remain
         // here; object/visual graphs were admitted before their construction.
         output.Allocate(checked(8192 + 32L * sectors.Count + 8L * (_plan.Identities.Count + terrain.Count + objects.Count + visuals.Count)));

@@ -42,9 +42,20 @@ public sealed class AreaResourceBoundaryTests
         }
         // ARC-DATA-036: bytes after the last frame are no part of the ART; the frame is read from the ART's own extent.
         var trailing = Art().Concat(new byte[] { 0 }).ToArray();
-        using var tailed = Make(0x40000000, art: trailing);
-        var visual = tailed.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
-        Assert.AreEqual(("original-art-extent-v1", Art().Length), (visual.Policy, visual.ViewLength));
+        using (var tailed = Make(0x40000000, art: trailing))
+        {
+            var snapshot = tailed.Owner.LoadStrict();
+            var visual = snapshot.Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
+            Assert.AreEqual(("original-art-extent-v1", Art().Length), (visual.Policy, visual.ViewLength));
+            // A lease reads the frame again from the same extent and gives the same pixels.
+            using var lease = tailed.Owner.AcquireSelectedFrame(snapshot, visual.Key);
+            CollectionAssert.AreEqual(new byte[] { 1,2,3,255,4,5,6,255 }, lease.CopyRgba());
+        }
+        // Both rules on one selection: rotation 1 of the tailed single-rotation ART reads group 0 from the ART's extent
+        // (the policy names the group rule; the view shows the trim).
+        using var both = Make(0x40000800, art: trailing);
+        var aliased = both.Owner.LoadStrict().Visuals.Single(v => v.Key.Kind == AreaSourceKind.Static);
+        Assert.AreEqual(("original-single-group-rotation-v1", Art().Length, 1, 0), (aliased.Policy, aliased.ViewLength, aliased.SourceGroup, aliased.PhysicalGroup));
     }
 
     [TestMethod]

@@ -195,17 +195,20 @@ there is no scan-to-next-version recovery or unchecked native handle restoration
 
 Appearance resolution covers the admitted tile/facade and class4/7 scenery/container,
 class6 ground-item, class2/12/13 NPC and, where a plan binds both wall tables, class1
-wall source rules (see the cave profile). Object types 2, 3, 5–9, 13, 14 and 16 are
-admitted bodies, plus type 0 under the same wall condition; ammo (type 6) was added
-with the cave, which carries two. Since ARC-DATA-036 the profile has no exceptions of
+wall source rules (see the cave profile). Object types 2, 3, 5–14 and 16 are
+admitted bodies, plus type 0 under the same wall condition and type 1 where a plan binds
+the portal names (types 10–12 and portals since ARC-DATA-036, as on whole maps); ammo
+(type 6) was added with the cave, which carries two. Since ARC-DATA-036 the profile has no exceptions of
 its own: it is built by the rules of every plan ([one rule set](whole-map-plans.md#one-rule-set-arc-data-036)).
 Four item records whose ART entry (1,419 bytes) ends with one NUL after its last frame
 are read from the ART's 1,418-byte extent (`original-art-extent-v1`), and one unique NPC
 asking its single-rotation ART for facing 5 is drawn from group 0
 (`original-single-group-rotation-v1`), as before under pinned per-object policies; the
 independent oracle still matches every entry, view and pixel. Raw selectors, full
-payload identity, view length and policy remain in descriptors. Missing/ambiguous
-sources and unsupported state/physical selection remain failures. Palette fallback is the existing decoder's explicit present-slot
+payload identity, view length and policy remain in descriptors. Ambiguous sources,
+names the mapping cannot build and unsupported state/physical selection remain failures;
+a resolved name no resource holds is drawn from `art/badart.art` when the resources hold
+it (`original-badart-v1`), else it fails. Palette fallback is the existing decoder's explicit present-slot
 policy, exposed as requested and effective palette, not arbitrary asset fallback.
 
 `AreaVisualRecord` retains group/frame/palette, mirroring, signed hotspot/ART/object
@@ -270,7 +273,8 @@ ownership. Limits are per owner lifetime; replacing a snapshot does not refund
 reads, decoding, allocation reservations or frame requests.
 
 Fixed boundary policies include 512 MiB/archive, 64 MiB/index/total names,
-131,072 entries/archive, 4,096 bytes/name, 1 MiB stored/decompressed DAT payload,
+131,072 entries/archive, 4,096 bytes/name, 16 MiB stored/decompressed DAT payload
+(1 MiB before ARC-DATA-036 for the pinned profiles),
 prototype and record/string bounds, 128 fields, 262,144 sparse elements, 8,192 MES
 keys, checked section/count/range framing and the shared bounded ART decoder
 (4,096 frames/dimension, 256 KiB frame table, 4 Mi pixels, 16 MiB RGBA).

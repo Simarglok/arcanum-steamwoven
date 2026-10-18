@@ -28,7 +28,7 @@ public sealed partial class AreaDataOwner
     private uint[]? _missingMasks;
     private HashSet<string>? _artHolders;
     private TerrainLoader.TileNames? _objectTiles;
-    // ARC-DATA-024: frame facts of each distinct selection decoded by this build (whole maps only).
+    // ARC-DATA-024: frame facts of each distinct selection decoded by this build (every plan since ARC-DATA-036).
     private Dictionary<(AreaEntryIdentity Entry, int Group, int Frame, int Palette, bool SingleRotationClass, string? Policy), AreaVisualRecord>? _sharedFrames;
     private static readonly string[] CritterRoots = ["art/critter/", "art/monster/", "art/unique_npc/"];
 

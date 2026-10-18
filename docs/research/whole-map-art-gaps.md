@@ -197,8 +197,8 @@ instead of about 3 minutes.
    code `_plan.Original` meant the pinned profiles instead; since ARC-DATA-036 every plan
    follows these rules and the flag is gone): the full N1 normalization for classes 2, 12 and 13 (every
    animation, the weapon/shield rules), N2 from `art/missing.dat` with N3's header
-   check (the pinned profiles already read it, as a fixed 332-byte file with header
-   4,601 that refuses bit 8; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),
+   check (the pinned profiles then read it, as a fixed 332-byte file with header
+   4,601 that refuses bit 8, until ARC-DATA-036; whole-map plans already bind the mapping) (masks rebuilt from the content index when the header does not match),
    N6 damaged walls, N7 tile-art bodies, N4 `badart.art` frame 0 for a resolved
    name no archive holds, recorded on the visual as a fallback policy. Pinned
    profiles unchanged. Expected: the 25 maps other than K'na Tha publish complete

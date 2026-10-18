@@ -82,7 +82,9 @@ Every plan:
   drawn from its only group whatever rotation the object asks for (the original's
   TIG ART reader, ART header flag `0x01`; policy `original-single-group-rotation-v1`).
   Before ARC-DATA-036 a whole map read such an ART whole (`ViewLength` the full
-  entry); the pixels are the same;
+  entry); the pixels are the same, but an HD pack built from map-mode frames before
+  it is keyed by the old view and misses those few frames, which draw Legacy
+  ([HD pack key](../formats/hd-pack.md#sprite-entries-the-portable-frame-key));
 
 - reads tile names as the original does: a name ends at `/`, otherwise it is the
   first three characters of the value and the rest is a sound number (the tile name
@@ -178,9 +180,9 @@ the two base archives that holds it and refuses a name both hold.
   16 MiB, else the plan is `TooLarge`; `AreaLoaderOptions.MaxResourceInputs`
   bounds the `Archive` and `Loose` inputs an owner admits (0 by default, so no
   caller plan gains inputs it did not size).
-- The owner refuses a plan whose order omits an `Archive` or `Loose` input, and
-  the order on a pinned profile, which keeps its own archive rule. A plan without
-  an order keeps the earlier rule (one holder among the two base archives).
+- The owner refuses a plan whose order omits an `Archive` or `Loose` input. Since
+  ARC-DATA-036 a pinned profile has an order too (its two base archives). A plan
+  without an order keeps the earlier rule (one holder among the two base archives).
 - Each extra archive adds its index to the owner's retained budget, which
   `Limits` does not scale for it; an installation with large patch archives can
   fail with a typed `BudgetExceeded`. The snapshot's `Profile` is the same with
