@@ -72,8 +72,9 @@ Notes on the policy caps:
   repository (58,892,780 bytes) 1.39 times, and the visible set is a part of it. It is an HD
   device ceiling, an exceeded frame draws Legacy (no failure), and changing it is an HD budget
   decision, so it is left as it is and reported.
-- **Not sized by the census.** `PolicyMaxCompanions` (64) and `PolicyMaxPcItems` (512) bound
-  what the party and the PC hold at once, not anything that grows with the maps; they are
+- **Not sized by the census.** `PolicyMaxCompanions` (64), `PolicyMaxPcItems` (512) and
+  `PolicyMaxAdvancementRecords` (256, followers whose level the session updated, ARC-WORLD-036)
+  bound what the party and the PC hold, not anything that grows with the maps; they are
   unchanged.
 
 The pinned Crash Site profiles keep `AreaRepositoryPolicy.MaxFrames` (2,444) and `MaxCpuBytes`

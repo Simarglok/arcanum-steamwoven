@@ -55,6 +55,7 @@ public partial class TerrainViewerApp
             _areaUseStatus = mapMode ? $"map {arguments.AreaMapName}: drawn unlit ({area.UnlitReason}), no session clock; " + _areaUseStatus : "cave: not loaded (no session clock)";
             return;
         }
+        _areaEffectRules = result.Hero?.Effects;
         if (carried is not null) _areaSession = carried;
         else
         {
@@ -66,6 +67,8 @@ public partial class TerrainViewerApp
             _areaSession = created.Owner ?? throw new InvalidOperationException("AREA_SESSION_" + created.Failure);
         }
         BindAreaInventory(result);
+        // ARC-UI-041: the map opens: its default music and ambient pair plays.
+        EnterAreaMapSound(area.Snapshot.CatalogueMap);
         if (mapMode)
         {
             StartMapTransfers(arguments, result);
@@ -86,12 +89,14 @@ public partial class TerrainViewerApp
     private void StopAreaTransitions()
     {
         EndSheet(); _sheetStatus = null;
+        EndLogbook(); _logbookStatus = null;
         UnbindAreaInventory();
         UnbindAreaCompanions();
         // A session a map transfer carries outlives the scene it leaves (ARC-WORLD-031).
         if (!ReferenceEquals(_areaSession, _mapHandoff?.Session)) _areaSession?.Dispose();
         _areaTransitions = null; _areaSession = null; _areaUseAfterRoute = null; _mapTransfers = null; _mapEntered.Clear();
         _exteriorArea = null; _exteriorSteps = null; _caveLoad = null; _areaUseStatus = "cave: not loaded"; _companionTemplates = [];
+        _audio?.StopAll(); _schemePlayer = null; _schemeVoices.Clear(); _combatStinger = _combatLoop = null; _soundSector = null;
     }
 
     /// <summary>A guarded left press (see <c>WorldRouteClick</c>) on a trigger sprite: one use request.
@@ -243,6 +248,7 @@ public partial class TerrainViewerApp
         ConfigureAreaActor(target, transition.ArrivalChartCell, session.State.Facing);
         _camera!.SetAreaPlan(area.Plan, WorldViewport);
         RebindAreaMapAmbient();
+        EnterAreaMapSound(area.Snapshot.CatalogueMap);
         // The camera centres on the arrival first, then the scene is published at that view.
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();

@@ -99,8 +99,9 @@ WORLD host (`TerrainViewerWorld.cs`).
    release ([ARC-WORLD-011](../rendering/terrain-viewer.md#quick-save-and-quick-load-arc-world-011)),
    and while its session inventory exists I toggles the inventory window on key down
    ([ARC-UI-004](../rendering/terrain-viewer.md#inventory-window-pickup-and-loot-arc-ui-004)); while it has a game
-   session C toggles the character sheet on key down
-   ([ARC-UI-007](../rendering/terrain-viewer.md#character-sheet-arc-ui-007)).
+   session C toggles the character sheet and L the logbook on key down
+   ([ARC-UI-007](../rendering/terrain-viewer.md#character-sheet-arc-ui-007),
+   [ARC-UI-008](../rendering/terrain-viewer.md#logbook-arc-ui-008)).
    `H` without modifiers (not an original key) switches the visual profile Legacy/HD on a fresh press
    while the world owns input ([ARC-UI-006](../rendering/terrain-viewer.md#visual-profile-setting-and-toggle-arc-ui-006));
    the palette holds the same action. In `crash-site-area` Num Lock flips the original always-run lock and

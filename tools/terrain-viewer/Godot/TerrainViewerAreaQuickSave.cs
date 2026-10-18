@@ -95,7 +95,7 @@ public partial class TerrainViewerApp
         var busy = QuickBusyReason();
         if (busy is QuickBusy.NoActor or QuickBusy.Lifecycle) { SetQuickStatus("F8 quick load refused: " + Describe(busy)); return; }
         var maps = AreaRuntimes();
-        var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, placement => PlacementRefusal(maps, placement));
+        var result = AreaQuickSave.Load(QuickSaveSlot, _areaSession!, placement => PlacementRefusal(maps, placement), MapSoundDefault);
         GD.Print("ARC-WORLD-011 quick-load " + System.Text.Json.JsonSerializer.Serialize(new {
             Loaded = result.Owner is not null, Read = result.Read?.Failure.ToString(), Decode = result.Read?.DecodeFailure.ToString(),
             result.Read?.DecodePath, Restore = result.RestoreFailure.ToString() }));
@@ -150,6 +150,7 @@ public partial class TerrainViewerApp
         _camera!.SetAreaPlan(_readyArea!.Plan, WorldViewport);
         StopAreaWalls(); // a loaded game starts the wall check afresh (ARC-RENDER-011)
         RebindAreaMapAmbient();
+        RebindAreaSound();
         _worldFitView = false; _camera.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
         PublishWorldSelection();
         if (_areaTransitions is not null)

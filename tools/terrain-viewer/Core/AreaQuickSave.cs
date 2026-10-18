@@ -39,7 +39,10 @@ public static class AreaQuickSave
 
     /// <param name="placementRefusal">The host's reason it cannot stand the actor at the saved placement
     /// (map not loaded, cell not admitted), or null when it can.</param>
-    public static AreaQuickLoadResult Load(GameSessionSaveSlot slot, GameSessionOwner current, Func<ActorPlacement, string?> placementRefusal)
+    /// <param name="mapSound">The default music and ambient pair of the saved actor's map (ARC-WORLD-040: the original opens
+    /// the map before it loads the sound state), or null when the host has no sound catalogue.</param>
+    public static AreaQuickLoadResult Load(GameSessionSaveSlot slot, GameSessionOwner current, Func<ActorPlacement, string?> placementRefusal,
+        Func<ActorPlacement, SessionMapSound?>? mapSound = null)
     {
         ArgumentNullException.ThrowIfNull(slot);
         ArgumentNullException.ThrowIfNull(current);
@@ -51,7 +54,7 @@ public static class AreaQuickSave
                 $"quick load REFUSED: saved actor on map {snapshot.Actor.Map.RuntimeMap} cell ({snapshot.Actor.Cell.X},{snapshot.Actor.Cell.Y}): {refusal}");
         var options = new GameSessionRestoreOptions(new(snapshot.Identity.World, current.Flags.Binding.Identity.Module),
             current.QueryClockSnapshot().ProfileBinding, new(Guid.NewGuid()), current.Limits, current.Rules.Mode,
-            current.Experience, current.Difficulty);
+            current.Experience, current.Difficulty, current.AutoLevel, mapSound?.Invoke(snapshot.Actor));
         var restored = GameSessionOwner.Restore(snapshot, options);
         if (restored.Owner is null)
             return new(null, read, restored.Failure, "quick load REFUSED: " + Describe(restored.Failure));

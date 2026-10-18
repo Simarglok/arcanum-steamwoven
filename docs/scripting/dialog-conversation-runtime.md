@@ -50,7 +50,9 @@ blocks (`UnsupportedOperation`) a reply whose own action needs it. The optional
 answers `WA`, `JO` and `UW`; when present it admits `WA`/`UW` and takes `JO` instead of the
 world port, and without it the grammar is unchanged. The optional `IDialogInventoryPort`
 (ARC-WORLD-014, [inventory runtime](../world/inventory-runtime.md#dialog-seam)), when present, takes negative `IN`
-instead of the world port; `IN` then needs only one of the two.
+instead of the world port; `IN` then needs only one of the two. The optional `IDialogRumorPort` (ARC-UI-008,
+[logbook](../rendering/terrain-viewer.md#logbook-arc-ui-008)) takes `RQ`; without it an `RQ` is a static
+`CapabilityUnavailable` frontier.
 
 ## Flow and source semantics
 
@@ -105,7 +107,7 @@ op        = LETTER LETTER space* int (space+ int)?          int = ('-' | '+')? D
 | Field | Admitted operations (domains) |
 | --- | --- |
 | Player condition | `LF b v` (b 0..31, v 0/1, attachment flag equals v; Missing is false), `GF f v` (f ≥ 0, v 0/1; Known only), `RE t` (t ≥ 0: reaction ≥ t; t < 0: reaction ≤ −t), `RA n` (n > 0: PC race index n−1; n ≤ 0: race ≠ −n−1); with a party port `WA v` (v 1: the NPC waits for the PC, 0: it does not). |
-| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
+| NPC / Player action | `LF b v`, `GF f v`, `QU q s` (q > 0, s 0..6), `RU r` (r ≥ 1000), `RQ r` (r ≥ 1000: quell the rumor, rumor port), `RE`/`AL` unsigned = target, `+n`/`-n` = adjust, negative `IN -n` (NPC gives item name n), `MM a` (a ≥ 0). |
 | Player action tail | one `JO 0 node` or `FL node` (with a party port also `UW 0 node`) as the last operation (NPC node checked statically). |
 
 Unknown opcodes, `$`, combinators, `RE`/`AL` with `>`/`<`, non-negative `IN`, `JO`/`UW` with a non-zero
@@ -169,6 +171,7 @@ capture/encode/decode/restore of the session, and they change the next conversat
 | GF conditions and writes | The session's flags: original new-game domain 0..3199, all known false ([source: 100 words of flags zeroed on init and reset][gf]); flags ≥3200 are not admitted and fail the dialog. |
 | QU | Session quest rules ([story domain](../world/game-session-runtime.md#story-domain)); a QU that leaves a quest Accepted lifts the NPC's effective reaction to at least 41 (a delta through the reaction domain), Completed adds 10 (source rule, checked in the original executable); such a QU takes two session revisions (quest, then reaction). A quest outside 1000..1999 is refused and fails the dialog. |
 | RU | Session rumors with their game time; outside 1000..2999 is refused. |
+| RQ | ARC-UI-008: the session's game-wide quelled rumors (no participant, as the original's dialog action); quelling a quelled rumor is no change; outside 1000..2999 is refused and fails the dialog. |
 | RE | The session reaction domain ([NPC reaction runtime](../world/npc-reaction-runtime.md), ARC-WORLD-026): `RE t` reads the speaker's effective reaction, unsigned `RE v` sets it as a delta to the effective value, `RE ±d` adjusts it through the PC's adjustment effects. Facts are diagnostic (human NPC with the initial reaction as base; the session hero or a human PC). |
 | LF, JO | Per speaker, map-local entity changes on the speaker's map: entity `oid:<object id SHA-256>`, properties `dialog.lf` (attachment flags), `follow.pc`. A value equal to the loaded baseline (attachment flags, not following) clears the key. A session holding values these ports cannot read (LF outside 32 bits, follow other than 1) is refused when the state is built. |
 | AL, IN, MM | Still in memory on the state object and lost with it; PC alignment, items and known areas wait for their own owners. |

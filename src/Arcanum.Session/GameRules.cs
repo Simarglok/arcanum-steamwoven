@@ -65,7 +65,8 @@ public sealed class GameRules
     /// <summary>Experience and levels (ARC-WORLD-033): XP3, the progress product wraps in 32 bits.</summary>
     public ExperienceRuleProfile Experience { get; }
 
-    /// <summary>Music and ambient (ARC-WORLD-040): SN18, a save made during combat music loses the pre-combat schemes.</summary>
+    /// <summary>Music and ambient (ARC-WORLD-040, ARC-UI-041): SN18, a save made during combat music loses the pre-combat schemes;
+    /// SN14, reversed hour windows never play.</summary>
     public SoundRuleProfile Sound { get; }
 
     /// <summary>The default mode: the original with every recorded fix.</summary>

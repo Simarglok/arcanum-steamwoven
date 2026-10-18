@@ -172,9 +172,9 @@ internal sealed class EffectDomain
         return true;
     }
 
-    /// <summary>The largest maximum hit points or fatigue a hero has before effects: no pools, every stat and the level at
-    /// their life limits (<c>WP + 2 × (ST + level) + 4</c>, <c>2 × (level + CN) + WP + 4</c>).</summary>
-    internal const long HeroMaximumCeiling = 3 * LifeLimits.MaxStat + 2 * LifeLimits.MaxLevel + 4;
+    /// <summary>The largest maximum hit points or fatigue a hero has before effects: every stat, the level and the bought points
+    /// (ARC-WORLD-036) at their limits (<c>4 × points + WP + 2 × (ST + level) + 4</c>, <c>4 × points + 2 × (level + CN) + WP + 4</c>).</summary>
+    internal const long HeroMaximumCeiling = 3 * LifeLimits.MaxStat + 2 * LifeLimits.MaxLevel + 4 + 4L * SessionAdvancementLimits.MaxHeroPoolPoints;
 
     /// <summary>The stat changes of a rule the character owner models, or null when it has none.</summary>
     internal static StatEffectDefinition? Stats(SessionEffectDefinition definition)
@@ -228,7 +228,7 @@ internal sealed class EffectDomain
         _ => null,
     };
 
-    private static StatModifierOperator Operator(EffectChangeOperator op) => op switch
+    internal static StatModifierOperator Operator(EffectChangeOperator op) => op switch
     {
         EffectChangeOperator.Add => StatModifierOperator.Add,
         EffectChangeOperator.Percent => StatModifierOperator.Percent,
@@ -466,7 +466,8 @@ public sealed partial class GameSessionOwner
     {
         var hero = _hero!;
         var trial = HeroDomain.Build(hero.State.Prototype, hero.State.Race, hero.State.Gender, hero.State.Stats, hero.State.Level,
-            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience)!;
+            hero.State.UnspentPoints, hero.State.Alignment, hero.State.RaceEffect, hero.State.GenderEffect, hero.State.Experience,
+            hero.State.Advancement)!;
         var definitions = new Dictionary<int, SessionEffectDefinition>(_effects.Definitions);
         if (added is not null) definitions[added.Number] = added;
         var entries = new List<SessionEffect>(_effects.Entries);
@@ -555,7 +556,7 @@ public sealed partial class GameSessionOwner
     private LifeFacts? TrialFacts(HeroDomain trial, IReadOnlyList<SessionEffect> entries, IReadOnlyDictionary<int, SessionEffectDefinition> definitions,
         LifeState state)
     {
-        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State.Level, state, HeroNormalResistance(),
+        var facts = LifeDomain.HeroFacts(trial.Stats, trial.State, state, HeroNormalResistance(),
             EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxHitPoints), EffectDomain.Modifiers(entries, definitions, EffectSpecial.MaxFatigue));
         return LifeRules.IsValid(facts) ? facts : null;
     }
@@ -569,7 +570,7 @@ public sealed partial class GameSessionOwner
     }
 
     /// <summary>The hero's life facts at a state, with its worn armour and durable effects.</summary>
-    private LifeFacts HeroLifeFacts(LifeState state) => LifeDomain.HeroFacts(_hero!.Stats, _hero.State.Level, state, HeroNormalResistance(),
+    private LifeFacts HeroLifeFacts(LifeState state) => LifeDomain.HeroFacts(_hero!.Stats, _hero.State, state, HeroNormalResistance(),
         _effects.Maximum(EffectSpecial.MaxHitPoints), _effects.Maximum(EffectSpecial.MaxFatigue));
 
     private SessionEffectResult RejectEffect(GameSessionFailure failure) =>
@@ -616,7 +617,7 @@ public sealed partial class GameSessionOwner
         var used = effects.Entries.Select(e => e.Number).ToHashSet();
         if (effects.Definitions.Keys.Any(number => !used.Contains(number))) return GameSessionFailure.InvalidEffect;
         // The stats and maxima under every saved entry: the life rules must admit the hero's facts at its saved state.
-        var facts = LifeDomain.HeroFacts(hero.Stats, hero.State.Level, life.Hero!.Value.State, 0,
+        var facts = LifeDomain.HeroFacts(hero.Stats, hero.State, life.Hero!.Value.State, 0,
             effects.Maximum(EffectSpecial.MaxHitPoints), effects.Maximum(EffectSpecial.MaxFatigue));
         return LifeRules.IsValid(facts) ? GameSessionFailure.None : GameSessionFailure.InvalidEffect;
     }
