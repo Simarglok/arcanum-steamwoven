@@ -1,195 +1,179 @@
-# Инвентарь исходников и границы исследования
+# Перепись групп функций оригинала и границы исследования
 
-**Обновление implementation coverage 2026-10-09:** [аудит PR/main и доски](README.md#база-и-происхождение) пересверяет Steamwoven, а не все 140 CE-модулей. Census и counts range-ссылок ниже относятся к исходному source-аудиту 2026-10-02/03; новый полный CE census здесь не заявлен. Последующие source/data исследования связаны из соответствующих FR и [каталога компонентов](../project/status.md).
+**Обновление implementation coverage 2026-10-09:** [аудит PR/main и доски](README.md#база-и-происхождение) пересверяет Steamwoven, а не все группы функций. Перепись и счётчики привязок ниже относятся к исходному аудиту 2026-10-02/03; новая полная перепись здесь не заявлена. Последующие исследования функций и данных связаны из соответствующих FR и [каталога компонентов](../project/status.md).
 
-**Срез: CE `a7ff41b300ef712f0e7d088183a3d08957110cdd`; исследование начато 2026-10-02.** Все 140 `.c` в `src/game` и `src/ui` включены в census ниже. Это инвентаризация модулей, а не заявление о построчном аудите всей игры.
+**Предмет: функции `Arcanum.exe` 1.0.7.4; исследование начато 2026-10-02.** Функции разбиты на 140 групп по диапазонам адресов (некоторые диапазоны перекрываются); у четырёх групп функций в exe нет. Группы — навигационное средство для поиска привязок в доменных отчётах, а не устройство оригинала и не заявление о построчном аудите всей игры. Каждое утверждение о функции имеет уровень F0 (прочитано, в exe не проверено; [уровни](../research/original-executable-check.md#evidence-levels-for-a-function-f0f4)), если функция не указана в [журнале сверки](../research/original-verification-ledger.md).
 
-## Как читать инвентарь
+## Как читать перепись
 
-- «Есть диапазоны» означает, что доменный отчёт содержит привязки к строкам данного модуля. Это не означает проверки всего модуля или всех callers.
-- Прочитанные тела/участки и найденные только поиском пути различаются в source inventory каждого доменного отчёта. Наличие ссылки само по себе не доказывает семантику требования.
-- «Без range-ссылки» сохраняет явный пробел трассировки. Файл мог быть найден поиском или частично просмотрен; это не закрывает исследование его поведения.
-- Оригинальный executable и игровые payloads не исследовались в этой задаче. CE TODO/stub не позволяет исключить соответствующую функцию оригинальной игры.
-- Заголовки и first-party платформенные пути указаны отдельным разделом по фактическим привязкам. Сторонние библиотеки не объявляются полностью исследованными.
+- «Есть диапазоны» означает, что доменный отчёт содержит привязки к адресам функций этой группы. Это не означает проверки всей группы или всех вызывающих функций.
+- Прочитанные тела/участки и найденные только поиском пути различаются в перечне источников каждого доменного отчёта. Наличие ссылки само по себе не доказывает семантику требования.
+- «Без range-ссылки» сохраняет явный пробел трассировки. Функции группы могли быть найдены поиском или частично просмотрены; это не закрывает исследование их поведения.
+- Исходный аудит не проверял поведение в exe и игровые payloads. Пустая или незавершённая функция в прочитанном источнике не позволяет исключить соответствующую функцию оригинальной игры.
+- Описание группы выведено из её функций и доменных отчётов; оно указывает тему, а не полный список того, что делают функции.
 
-## Все игровые и UI-модули
+## Все группы функций
 
-| Модуль | Диапазоны в реестре | Доменные ссылки |
+| Группа: адреса, число функций, тема | Диапазоны в реестре | Доменные ссылки |
 | --- | --- | --- |
-| [`src/game/a_name.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/a_name.c) | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
-| [`src/game/ai.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ai.c) | Есть диапазоны: 16 | [story-social-ai](story-social-ai.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/anim.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim.c) | Есть диапазоны: 23 | [combat-magic-tech](combat-magic-tech.md), [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/anim_private.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/anim_private.c) | Есть диапазоны: 3 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/animfx.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/animfx.c) | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/antiteleport.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/antiteleport.c) | Есть диапазоны: 2 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/area.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/area.c) | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/background.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/background.c) | Есть диапазоны: 5 | [characters-skills](characters-skills.md) |
-| [`src/game/bless.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/bless.c) | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
-| [`src/game/brightness.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/brightness.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/broadcast.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/broadcast.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/ci.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ci.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/combat.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/combat.c) | Есть диапазоны: 23 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/critter.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/critter.c) | Есть диапазоны: 13 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md), [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md) |
-| [`src/game/curse.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/curse.c) | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
-| [`src/game/description.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/description.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/dialog.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/dialog.c) | Есть диапазоны: 9 | [story-social-ai](story-social-ai.md) |
-| [`src/game/effect.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/effect.c) | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
-| [`src/game/facade.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/facade.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/fate.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/fate.c) | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
-| [`src/game/gameinit.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gameinit.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
-| [`src/game/gamelib.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gamelib.c) | Есть диапазоны: 19 | [content-product](content-product.md), [lighting-time](lighting-time.md), [scene](scene.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/gfade.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gfade.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/gmovie.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gmovie.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/gsound.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/gsound.c) | Есть диапазоны: 6 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/highres_config.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/highres_config.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/hrp.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/hrp.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/invensource.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/invensource.c) | Есть диапазоны: 3 | [items-economy](items-economy.md) |
-| [`src/game/item.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item.c) | Есть диапазоны: 36 | [characters-skills](characters-skills.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/item_effect.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/item_effect.c) | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
-| [`src/game/jumppoint.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/jumppoint.c) | Есть диапазоны: 1 | [world](world.md) |
-| [`src/game/level.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/level.c) | Есть диапазоны: 7 | [characters-skills](characters-skills.md) |
-| [`src/game/li.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/li.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/light.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light.c) | Есть диапазоны: 7 | [lighting-time](lighting-time.md) |
-| [`src/game/light_scheme.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/light_scheme.c) | Есть диапазоны: 7 | [lighting-time](lighting-time.md) |
-| [`src/game/location.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/location.c) | Есть диапазоны: 1 | [world](world.md) |
-| [`src/game/logbook.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/logbook.c) | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/magictech.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.c) | Есть диапазоны: 19 | [combat-magic-tech](combat-magic-tech.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/map.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/map.c) | Есть диапазоны: 17 | [lighting-time](lighting-time.md), [world](world.md) |
-| [`src/game/mes.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mes.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
-| [`src/game/monstergen.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/monstergen.c) | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
-| [`src/game/mp_utils.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mp_utils.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/mt_ai.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_ai.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/mt_item.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_item.c) | Есть диапазоны: 6 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
-| [`src/game/mt_obj_node.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_obj_node.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/multiplayer.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/multiplayer.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/name.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/name.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/newspaper.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/newspaper.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/obj.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
-| [`src/game/obj_file.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_file.c) | Есть диапазоны: 1 | [content-product](content-product.md) |
-| [`src/game/obj_find.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_find.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/obj_flags.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/obj_id.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_id.c) | Есть диапазоны: 1 | [content-product](content-product.md) |
-| [`src/game/obj_pool.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_pool.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/obj_private.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/object.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object.c) | Есть диапазоны: 30 | [items-economy](items-economy.md), [lighting-time](lighting-time.md), [scene](scene.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world](world.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/object_node.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object_node.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/oname.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/oname.c) | Есть диапазоны: 1 | [items-economy](items-economy.md) |
-| [`src/game/party.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/party.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/path.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/path.c) | Есть диапазоны: 8 | [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/player.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/player.c) | Есть диапазоны: 2 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/portal.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/portal.c) | Есть диапазоны: 2 | [scene](scene.md) |
-| [`src/game/portrait.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/portrait.c) | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
-| [`src/game/proto.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/proto.c) | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/quest.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/quest.c) | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
-| [`src/game/random.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/random.c) | Есть диапазоны: 1 | [content-product](content-product.md) |
-| [`src/game/reaction.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reaction.c) | Есть диапазоны: 6 | [story-social-ai](story-social-ai.md) |
-| [`src/game/reputation.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/reputation.c) | Есть диапазоны: 5 | [story-social-ai](story-social-ai.md) |
-| [`src/game/resistance.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/resistance.c) | Есть диапазоны: 2 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/roof.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/roof.c) | Есть диапазоны: 5 | [lighting-time](lighting-time.md), [scene](scene.md) |
-| [`src/game/rumor.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/rumor.c) | Есть диапазоны: 4 | [story-social-ai](story-social-ai.md) |
-| [`src/game/sa.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/script.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.c) | Есть диапазоны: 8 | [story-social-ai](story-social-ai.md) |
-| [`src/game/script_name.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script_name.c) | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
-| [`src/game/scroll.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/scroll.c) | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/sector.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.c) | Есть диапазоны: 14 | [lighting-time](lighting-time.md), [scene](scene.md), [world](world.md) |
-| [`src/game/sector_block_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_block_list.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/sector_light_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_light_list.c) | Есть диапазоны: 2 | [lighting-time](lighting-time.md) |
-| [`src/game/sector_object_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_object_list.c) | Есть диапазоны: 3 | [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/sector_roof_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_roof_list.c) | Есть диапазоны: 1 | [scene](scene.md) |
-| [`src/game/sector_script.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_script.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/sector_script_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_script_list.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/sector_sound_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_sound_list.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/sector_tile_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector_tile_list.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/settings.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/settings.c) | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/sfx.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sfx.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/skill.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/skill.c) | Есть диапазоны: 20 | [characters-skills](characters-skills.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/spell.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/spell.c) | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/stat.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/stat.c) | Есть диапазоны: 13 | [characters-skills](characters-skills.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/target.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/target.c) | Есть диапазоны: 3 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/tb.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tb.c) | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/tc.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tc.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/tech.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tech.c) | Есть диапазоны: 3 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
-| [`src/game/teleport.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/teleport.c) | Есть диапазоны: 11 | [world](world.md) |
-| [`src/game/terrain.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/terrain.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/text_filter.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/text_filter.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/tf.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tf.c) | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/tile.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile.c) | Есть диапазоны: 3 | [lighting-time](lighting-time.md), [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/tile_block.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_block.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/tile_script.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script.c) | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
-| [`src/game/tile_script_list.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/tile_script_list.c) | Есть диапазоны: 1 | [story-social-ai](story-social-ai.md) |
-| [`src/game/timeevent.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/timeevent.c) | Есть диапазоны: 7 | [lighting-time](lighting-time.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/townmap.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/townmap.c) | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/trap.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/trap.c) | Есть диапазоны: 5 | [items-economy](items-economy.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/game/ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/ui.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/walkmask.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/walkmask.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/game/wall.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wall.c) | Есть диапазоны: 3 | [scene](scene.md) |
-| [`src/game/wallcheck.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wallcheck.c) | Есть диапазоны: 2 | [scene](scene.md) |
-| [`src/game/wp.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/wp.c) | Есть диапазоны: 2 | [content-product](content-product.md) |
-| [`src/ui/anim_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/anim_ui.c) | Есть диапазоны: 1 | [lighting-time](lighting-time.md) |
-| [`src/ui/broadcast_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/broadcast_ui.c) | Есть диапазоны: 1 | [story-social-ai](story-social-ai.md) |
-| [`src/ui/charedit_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/charedit_ui.c) | Есть диапазоны: 10 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/combat_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/combat_ui.c) | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/ui/compact_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/compact_ui.c) | Есть диапазоны: 3 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/cyclic_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/cyclic_ui.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/ui/dialog_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/dialog_ui.c) | Есть диапазоны: 7 | [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/fate_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/fate_ui.c) | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
-| [`src/ui/follower_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/follower_ui.c) | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/gameuilib.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/gameuilib.c) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/hotkey_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/hotkey_ui.c) | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/intgame.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/intgame.c) | Есть диапазоны: 9 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/inven_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/inven_ui.c) | Есть диапазоны: 12 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/iso.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/iso.c) | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/item_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/item_ui.c) | Есть диапазоны: 2 | [items-economy](items-economy.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/logbook_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/logbook_ui.c) | Есть диапазоны: 7 | [combat-magic-tech](combat-magic-tech.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/mainmenu_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/mainmenu_ui.c) | Есть диапазоны: 19 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/options_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/options_ui.c) | Есть диапазоны: 4 | [combat-magic-tech](combat-magic-tech.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/roller_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/roller_ui.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/ui/schematic_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/schematic_ui.c) | Есть диапазоны: 5 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/scrollbar_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/scrollbar_ui.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/ui/skill_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/skill_ui.c) | Есть диапазоны: 4 | [characters-skills](characters-skills.md) |
-| [`src/ui/sleep_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/sleep_ui.c) | Есть диапазоны: 5 | [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/slide_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/slide_ui.c) | Есть диапазоны: 4 | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/spell_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/spell_ui.c) | Есть диапазоны: 5 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/ui/tb_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/tb_ui.c) | Есть диапазоны: 3 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/ui/tech_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/tech_ui.c) | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/ui/textedit_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/textedit_ui.c) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
-| [`src/ui/wmap_rnd.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_rnd.c) | Есть диапазоны: 4 | [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/wmap_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/wmap_ui.c) | Есть диапазоны: 8 | [ui-media-lifecycle](ui-media-lifecycle.md), [world](world.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/ui/written_ui.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/ui/written_ui.c) | Есть диапазоны: 3 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4020F0–0x405070 (56 функций) — библиотека игры: таблица подсистем, init/reset/загрузка/сохранение, подключение модуля и патчей | Есть диапазоны: 19 | [content-product](content-product.md), [lighting-time](lighting-time.md), [scene](scene.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x405110–0x40D670 (144 функции) — хранилище объектов: поля, прототипы, чтение и запись | Есть диапазоны: 2 | [content-product](content-product.md) |
+| 0x40D6C0–0x40DB70 (14 функций) — персонаж игрока: создание и привязка вида | Есть диапазоны: 2 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x40DE20–0x40DEE0 (4 функции) — запуск видеороликов | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x40DF50–0x40EA50 (18 функций) — прокрутка вида | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x40EA90–0x412C90 (50 функций) — карта: открытие, загрузка, сохранение, патч карты | Есть диапазоны: 17 | [lighting-time](lighting-time.md), [world](world.md) |
+| 0x412D40–0x41A8C0 (107 функций) — диалоги: загрузка DLG, разбор записей, условия и действия | Есть диапазоны: 9 | [story-social-ai](story-social-ai.md) |
+| 0x41A940–0x41C9D0 (54 функции) — звук игры: музыка, эмбиент по часам, звуки объектов | Есть диапазоны: 6 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x41CA40–0x41F240 (15 функций) — нормализация имён ART и отсутствующие изображения | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x41F3C0–0x421AE0 (17 функций) — поиск пути | Есть диапазоны: 8 | [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x421B00–0x437D00 (327 функций) — цели анимации: ходьба, бег, атака, использование, следование, шаги | Есть диапазоны: 23 | [combat-magic-tech](combat-magic-tech.md), [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x437D90–0x438A50 (15 функций) — затухание стен перед актёром | Есть диапазоны: 2 | [scene](scene.md) |
+| 0x438AE0–0x438EF0 (13 функций) — настройки: регистрация, чтение и запись значений | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x438F90–0x43A1A0 (25 функций) — крыши: отрисовка, затухание, проверка попадания | Есть диапазоны: 5 | [lighting-time](lighting-time.md), [scene](scene.md) |
+| 0x43A330–0x444690 (140 функций) — объекты мира: создание, перемещение, отрисовка, осмотр, хиты, выбор под курсором | Есть диапазоны: 30 | [items-economy](items-economy.md), [lighting-time](lighting-time.md), [scene](scene.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world](world.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4446E0–0x44C820 (55 функций) — скрипты SCR: выполнение условий и действий | Есть диапазоны: 8 | [story-social-ai](story-social-ai.md) |
+| 0x44C840–0x44EEE0 (49 функций) — внутренние узлы целей анимации, их сохранение и загрузка | Есть диапазоны: 3 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x44EF50–0x45A760 (181 функция) — магия и технология: заклинания, компоненты, поддержание, сопротивление | Есть диапазоны: 19 | [combat-magic-tech](combat-magic-tech.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x45A7C0–0x45CC10 (80 функций) — очередь событий времени и дата-время | Есть диапазоны: 7 | [lighting-time](lighting-time.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x45CF30–0x45FC70 (85 функций) — существа: фракция, усталость, сон, смерть, опыт, состояния | Есть диапазоны: 13 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md), [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md) |
+| 0x45FD40–0x460DE0 (87 функций) — обратные вызовы игры в интерфейс: инвентарь, полосы здоровья и усталости | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x460E70–0x4681A0 (140 функций) — предметы: ношение, вес, вычисляемые свойства, вставка и снятие, свет, использование | Есть диапазоны: 36 | [characters-skills](characters-skills.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4681B0–0x49C610 (27 функций) — прототипы объектов | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x49C670–0x4A6560 (102 функции) — многопользовательская игра | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4A6620–0x4A7B90 (21 функция) — уровни: пороги опыта, повышение уровня, схемы автоуровня | Есть диапазоны: 7 | [characters-skills](characters-skills.md) |
+| 0x4A7C60–0x4A8060 (15 функций) — схемы освещения по часам | Есть диапазоны: 7 | [lighting-time](lighting-time.md) |
+| 0x4A8320–0x4AFC70 (119 функций) — ИИ NPC: решения, атака, бегство, следование, лечение, использование навыков | Есть диапазоны: 16 | [story-social-ai](story-social-ai.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4AFCD0–0x4B0320 (17 функций) — технологические дисциплины: степени и требования | Есть диапазоны: 3 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
+| 0x4B0340–0x4B1350 (18 функций) — характеристики: базовые и эффективные значения, пределы, стоимость | Есть диапазоны: 13 | [characters-skills](characters-skills.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4B1440–0x4B1CF0 (29 функций) — таблица заклинаний: имена, стоимость, требования | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x4B1D50–0x4B83E0 (90 функций) — бой: атака, урон, режим боя, пошаговый раунд, очки действия | Есть диапазоны: 23 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x4B8440–0x4B99C0 (23 функции) — координаты: экранные преобразования, направление, расстояние | Есть диапазоны: 1 | [world](world.md) |
+| 0x4B9B90–0x4B9DB0 (5 функций) — параметры модуля: стартовые дата и время, сброс новой игры | Есть диапазоны: 2 | [content-product](content-product.md) |
+| 0x4B9E10–0x4BA320 (14 функций) — отряд: состав и обновление | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4BA380–0x4BABF0 (18 функций) — генераторы монстров | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
+| 0x4BAC10–0x4BAF50 (12 функций) — пул узлов магии и технологии, их сохранение | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4BAFF0–0x4BB590 (11 функций) — ручная блокировка тайлов и её отрисовка | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4BB720–0x4BB980 (8 функций) — служебный индикатор поверх вида: инициализация и перерисовка | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4BB9A0–0x4BBCE0 (9 функций) — служебный индикатор поверх вида: размер, обновление, перерисовка | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4BBD00–0x4BD950 (21 функция) — ловушки: обнаружение, срабатывание, обезвреживание | Есть диапазоны: 5 | [items-economy](items-economy.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4BD980–0x4BDD30 (10 функций) — запреты телепортации между картами и областями | Есть диапазоны: 2 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x4BDE70–0x4BE050 (5 функций) — затемнение и проявление экрана | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4BE0B0–0x4BE0F0 (3 функции) — яркость (гамма) | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4BE1B0–0x4BEFB0 (22 функции) — карты городов | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x4BF060–0x4BF330 (11 функций) — газеты: выпуски и порядок | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4BF390–0x4BFCA0 (7 функций) — источники инвентаря (`InvenSource.mes`) и генерация наборов | Есть диапазоны: 3 | [items-economy](items-economy.md) |
+| 0x4BFCE0–0x4C0370 (12 функций) — отрисовка маркеров маршрутных точек NPC | Есть диапазоны: 2 | [content-product](content-product.md) |
+| 0x4C0410–0x4C0490 (5 функций) — скрипт сектора | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4C0530–0x4C0A40 (14 функций) — скрипты тайлов: установка, выполнение, отрисовка | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4C0BD0–0x4C15A0 (22 функции) — реакция NPC | Есть диапазоны: 6 | [story-social-ai](story-social-ai.md) |
+| 0x4C15D0–0x4C21E0 (14 функций) — репутация | Есть диапазоны: 5 | [story-social-ai](story-social-ai.md) |
+| 0x4C2270–0x4C2B50 (19 функций) — предыстории: выбор, допустимость, эффекты, стартовые предметы | Есть диапазоны: 5 | [characters-skills](characters-skills.md) |
+| 0x4C2C10–0x4C3BE0 (9 функций) — приказы спутникам, выкрикнутые игроком | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4C3C60–0x4C3FA0 (10 функций) — проклятия: добавление, снятие, эффект | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
+| 0x4C4110–0x4C4450 (10 функций) — благословения: добавление, снятие, эффект | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
+| 0x4C45C0–0x4C5400 (20 функций) — задания: состояния, опыт за задание, список журнала | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
+| 0x4C5500–0x4C5B10 (19 функций) — слухи: знание, гашение, список журнала | Есть диапазоны: 4 | [story-social-ai](story-social-ai.md) |
+| 0x4C5BD0–0x4C91F0 (58 функций) — навыки: уровни, обучение, применение | Есть диапазоны: 20 | [characters-skills](characters-skills.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4C9280–0x4C9BE0 (12 функций) — окно вариантов ответа в диалоге | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4C9DA0–0x4CA7C0 (10 функций) — фасады (крупные изображения поверх карты): отрисовка | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4CA940–0x4CB6A0 (21 функция) — области карты мира: открытие и поиск известных областей | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x4CB720–0x4CC160 (22 функции) — магические предметы: эффекты и триггеры | Есть диапазоны: 6 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
+| 0x4CC1F0–0x4CCC40 (30 функций) — выбор заклинаний и предметов для ИИ | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4CCCF0–0x4CE300 (20 функций) — визуальные эффекты, прикреплённые к актёру или месту | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x4CE350–0x4CEB80 (13 функций) — портреты: каталог и выбор | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
+| 0x4CEC10–0x4CEE60 (6 функций) — имена файлов скриптов | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md) |
+| 0x4CEEB0–0x4CEF50 (7 функций) — генератор случайных чисел | Есть диапазоны: 1 | [content-product](content-product.md) |
+| 0x4CEF70–0x4D31C0 (66 функций) — секторы: загрузка, кэш, вытеснение | Есть диапазоны: 14 | [lighting-time](lighting-time.md), [scene](scene.md), [world](world.md) |
+| 0x4D32D0–0x4D3F30 (17 функций) — телепортация: очередь, перенос объектов, смена карты | Есть диапазоны: 11 | [world](world.md) |
+| 0x4D3F60–0x4D4080 (5 функций) — тексты эффектов предметов | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md) |
+| 0x4D40D0–0x4D4260 (6 функций) — описания объектов и ключей из MES | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4D4290–0x4D4DD0 (22 функции) — чтение MES-файлов | Есть диапазоны: 2 | [content-product](content-product.md) |
+| 0x4D4E20–0x4D5DC0 (29 функций) — плавающий текст над объектами | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4D5B80–0x4D67F0 (18 функций) — текстовые пузыри над объектами | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4D6840–0x4D7E90 (26 функций) — тайлы: отрисовка, свойства (блокировка, звук, вода) | Есть диапазоны: 3 | [lighting-time](lighting-time.md), [scene](scene.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x4D7F30–0x4DF310 (79 функций) — свет: источники, цвета, тени, отрисовка | Есть диапазоны: 7 | [lighting-time](lighting-time.md) |
+| 0x4DF390–0x4E2C50 (13 функций) — стены: отрисовка и удаление | Есть диапазоны: 3 | [scene](scene.md) |
+| 0x4E2FB0–0x4E3890 (21 функция) — точки перехода между картами | Есть диапазоны: 1 | [world](world.md) |
+| 0x4E3900–0x4E3F40 (16 функций) — индекс объектов по местоположению | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E3F80–0x4E6240 (39 функций) — внутреннее хранение и сериализация полей объектов | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E4CD0–0x4E59A0 (26 функций) — пул объектов и постоянные идентификаторы | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E62A0–0x4E6B00 (13 функций) — идентификаторы объектов (GUID, постоянная identity) | Есть диапазоны: 1 | [content-product](content-product.md) |
+| 0x4E6B60–0x4E71B0 (8 функций) — файлы объектов: чтение одиночного объекта | Есть диапазоны: 1 | [content-product](content-product.md) |
+| 0x4E72B0–0x4E7400 (6 функций) — внутренние имена объектов | Есть диапазоны: 1 | [items-economy](items-economy.md) |
+| 0x4E7430–0x4E7AB0 (22 функции) — разреженные массивы полей и их сериализация | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E7B00–0x4E9680 (39 функций) — рельеф карты мира: шаблоны секторов, заполнение | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E9920–0x4E99C0 (6 функций) — пул узлов списков объектов | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4E99F0–0x4EABF0 (28 функций) — длительные эффекты: разбор, добавление, снятие, поправки характеристик | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
+| 0x4EAC80–0x4ED440 (66 функций) — имена ART-ресурсов: пути к файлам изображений, флаги тайлов | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
+| 0x4ED6C0–0x4F0690 (33 функции) — сетевые варианты действий для многопользовательской игры | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4F06E0–0x4F0A90 (6 функций) — двери и окна: состояние и переключение | Есть диапазоны: 2 | [scene](scene.md) |
+| 0x4F0BF0–0x4F1050 (5 функций) — звуки предметов, существ, контейнеров и дверей | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4F1150–0x4F2330 (20 функций) — списки объектов сектора | Есть диапазоны: 3 | [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x4F24F0–0x4F4E40 (22 функции) — выбор цели под курсором | Есть диапазоны: 3 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x4F5090–0x4F5320 (6 функций) — очки судьбы: активация и применение | Есть диапазоны: 1 | [characters-skills](characters-skills.md) |
+| 0x4F5330–0x4F57C0 (5 функций) — учёт убийств и травм для журнала | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x4F6170–0x4F62E0 (11 функций) — списки скриптов сектора | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4F6310–0x4F6750 (17 функций) — списки скриптов тайлов | Есть диапазоны: 1 | [story-social-ai](story-social-ai.md) |
+| 0x4F67D0–0x4F6BB0 (9 функций) — фильтры текста | Есть диапазоны: 2 | [story-social-ai](story-social-ai.md) |
+| 0x4F6CF0–0x4F7020 (6 функций) — файлы маски проходимости | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4F7110–0x4F7B50 (14 функций) — списки источников света сектора | Есть диапазоны: 2 | [lighting-time](lighting-time.md) |
+| 0x4F7BA0–0x4F7DF0 (12 функций) — списки тайлов сектора | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4F7F20–0x4F8090 (11 функций) — списки крыш сектора | Есть диапазоны: 1 | [scene](scene.md) |
+| 0x4F80E0–0x4F81D0 (9 функций) — списки звуков сектора | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x4F81E0–0x4F83D0 (13 функций) — списки блокированных тайлов сектора | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x53E600–0x53EB00 (11 функций) — библиотека интерфейса: init/reset/сохранение, переход в главное меню | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x53EB10–0x5407F0 (27 функций) — окно журнала: вкладки и записи | Есть диапазоны: 7 | [combat-magic-tech](combat-magic-tech.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x540930–0x549A80 (138 функций) — главное меню: новая игра, выбор героя, загрузка и сохранение | Есть диапазоны: 19 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x549B70–0x557CF0 (160 функций) — игровой интерфейс: кнопки, панели, обработка ввода в мире | Есть диапазоны: 9 | [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md), [lighting-time](lighting-time.md), [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x557DF0–0x5581A0 (9 функций) — изометрический вид: перерисовка и инвалидация | Есть диапазоны: 1 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x5581B0–0x559640 (32 функции) — случайные встречи на карте мира | Есть диапазоны: 4 | [world-travel-runtime](world-travel-runtime.md) |
+| 0x559690–0x55F340 (52 функции) — лист персонажа: характеристики, навыки, распределение очков | Есть диапазоны: 10 | [characters-skills](characters-skills.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x55F8D0–0x566D10 (113 функций) — карта мира и карта города: путь, заметки, перемещение | Есть диапазоны: 8 | [ui-media-lifecycle](ui-media-lifecycle.md), [world](world.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x566E20–0x567320 (11 функций) — поле ввода текста | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x567330–0x5689B0 (22 функции) — окно диалога | Есть диапазоны: 7 | [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x5689D0–0x5695A0 (19 функций) — компактная панель: окно сообщений, полосы здоровья и усталости | Есть диапазоны: 3 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x5695B0–0x569AA0 (11 функций) — показ слайдов и титров | Есть диапазоны: 4 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x56A020–0x56A300 (3 функции) — отрисовка числового счётчика | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x56A4A0–0x56B970 (21 функция) — панель спутников и меню приказов | Есть диапазоны: 3 | [story-social-ai](story-social-ai.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x56BAA0–0x56CCA0 (17 функций) — книги, записки и газеты: разбор и отрисовка | Есть диапазоны: 3 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x56CD60–0x56EA30 (20 функций) — окно схем (технологические рецепты) | Есть диапазоны: 5 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x56EA90–0x56F9B0 (16 функций) — интерфейс боя: очки действия, кнопки режима | Есть диапазоны: 2 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x56FAE0–0x56FF40 (9 функций) — окно очков судьбы | Есть диапазоны: 3 | [characters-skills](characters-skills.md) |
+| 0x5717F0–0x571990 (7 функций) — ввод выкрика (приказа спутникам) | Есть диапазоны: 1 | [story-social-ai](story-social-ai.md) |
+| 0x5719D0–0x571CB0 (6 функций) — применение предмета на цель | Есть диапазоны: 2 | [items-economy](items-economy.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x572060–0x579E30 (65 функций) — окно инвентаря, обмена и добычи | Есть диапазоны: 12 | [items-economy](items-economy.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x579E80–0x57AEB0 (31 функция) — применение и обучение навыков из интерфейса | Есть диапазоны: 4 | [characters-skills](characters-skills.md) |
+| 0x57B080–0x57BAC0 (13 функций) — окно сна и ожидания | Есть диапазоны: 5 | [lighting-time](lighting-time.md), [world-travel-runtime](world-travel-runtime.md) |
+| 0x57BB30–0x57C670 (22 функции) — интерфейс заклинаний | Есть диапазоны: 5 | [combat-magic-tech](combat-magic-tech.md) |
+| 0x57C6E0–0x57D150 (27 функций) — интерфейс пошагового режима | Есть диапазоны: 3 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x57D240–0x57D6C0 (15 функций) — отложенные события интерфейса и почасовое обновление эмбиентного света | Есть диапазоны: 1 | [lighting-time](lighting-time.md) |
+| 0x57D700–0x57F3C0 (35 функций) — горячие клавиши и быстрые слоты | Есть диапазоны: 2 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x57F4D0–0x5803D0 (24 функции) — циклические элементы управления (выбор из списка стрелками) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x580410–0x5816F0 (29 функций) — полосы прокрутки | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| 0x589280–0x589A00 (35 функций) — окно настроек | Есть диапазоны: 4 | [combat-magic-tech](combat-magic-tech.md), [ui-media-lifecycle](ui-media-lifecycle.md) |
+| 0x589A20–0x589B90 (3 функции) — повышение и понижение технологических степеней | Есть диапазоны: 1 | [combat-magic-tech](combat-magic-tech.md) |
+| без адресов (0 функций) — настройки высокого разрешения; в оригинале их нет | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| без адресов (0 функций) — поддержка высокого разрешения; в оригинале её нет | Есть диапазоны: 1 | [ui-media-lifecycle](ui-media-lifecycle.md) |
+| без адресов (0 функций) — таблица имён флагов и полей объектов (только данные) | Без range-ссылки | Открытый пробел; см. оговорку выше. |
+| без адресов (0 функций) — таблицы сопротивлений (только данные) | Есть диапазоны: 2 | [characters-skills](characters-skills.md), [combat-magic-tech](combat-magic-tech.md) |
 
-В доменных документах есть range-привязки для **113 из 140** модулей; для **27** таких привязок нет. Это показатели трассировки источников, не полноты поведения.
+В доменных документах есть range-привязки для **113 из 140** групп; для **27** таких привязок нет. Это показатели трассировки источников, не полноты поведения.
 
-## Дополнительные привязки вне census
+## Вне переписи
 
-| Источник | Доменные ссылки |
-| --- | --- |
-| [`first_party/bink_compat/src/bink_compat.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/bink_compat/src/bink_compat.c) | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`first_party/mss_compat/src/mss_compat.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/mss_compat/src/mss_compat.c) | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`first_party/tig/src/database.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/database.c) | [content-product](content-product.md) |
-| [`first_party/tig/src/file.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/file.c) | [content-product](content-product.md) |
-| [`first_party/tig/src/movie.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/movie.c) | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`first_party/tig/src/sound.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/first_party/tig/src/sound.c) | [ui-media-lifecycle](ui-media-lifecycle.md) |
-| [`src/game/criticals.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/criticals.h) | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/jumppoint.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/jumppoint.h) | [world](world.md) |
-| [`src/game/magictech.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/magictech.h) | [combat-magic-tech](combat-magic-tech.md) |
-| [`src/game/obj.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj.h) | [items-economy](items-economy.md) |
-| [`src/game/script.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/script.h) | [story-social-ai](story-social-ai.md) |
-| [`src/game/sector.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sector.h) | [lighting-time](lighting-time.md) |
-| [`src/game/teleport.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/teleport.h) | [world](world.md) |
-| [`src/main.c`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/main.c) | [ui-media-lifecycle](ui-media-lifecycle.md), [world-travel-runtime](world-travel-runtime.md) |
-| [`src/net_compat.h`](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/net_compat.h) | [ui-media-lifecycle](ui-media-lifecycle.md) |
+Перепись не охватывает функции библиотеки движка (файлы и архивы DAT, графика, звук, видео, сеть), платформенные пути и таблицы данных без собственных функций. Привязки к ним в [content-product](content-product.md), [ui-media-lifecycle](ui-media-lifecycle.md), [combat-magic-tech](combat-magic-tech.md), [items-economy](items-economy.md), [story-social-ai](story-social-ai.md), [lighting-time](lighting-time.md) и [world](world.md) не означают их исследования. Главный цикл с прокруткой мышью и клавиатурой (0x401000–0x402010, 4 функции) тоже вне 140 групп; на него ссылаются [ui-media-lifecycle](ui-media-lifecycle.md) и [world-travel-runtime](world-travel-runtime.md).
 
 ## Инфраструктура объектов
 
-Следующие исследованные участки относятся к identity, lifetime и сериализации. Они не задают отдельные действия игрока или обязательство воспроизвести устройство памяти C-кода:
+Следующие исследованные участки относятся к identity, lifetime и сериализации. Они не задают отдельные действия игрока или обязательство воспроизвести устройство памяти оригинала:
 
-- [object-node pool, создание и освобождение](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/object_node.c#L20-L105).
-- [magic/tech node pool и начальные поля](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/mt_obj_node.c#L23-L100).
-- [object handle allocation](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_pool.c#L383-L430): различаются runtime handle и постоянная identity. Полный lookup/restore/invalidation path не исследован.
-- [сериализация SizeableArray](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/sa.c#L110-L137) и [сброс типизированных object fields](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_private.c#L218-L260): структуры хранения, не самостоятельная механика инвентаря/квестов.
-- [таблица имён групп флагов и полей](https://github.com/alexbatalov/arcanum-ce/blob/a7ff41b300ef712f0e7d088183a3d08957110cdd/src/game/obj_flags.c#L5-L52): registry metadata, не доказательство исполнения всех значений флагов.
+- пул узлов списков объектов, создание и освобождение (0x4E9920, 0x4E9930, 0x4E9940, 0x4E9970, 0x4E9990, 0x4E99C0).
+- пул узлов магии и технологии и начальные поля (0x4BAC10, 0x4BAC20, 0x4BAC30, 0x4BAC80, 0x4BACA0).
+- object handle allocation (0x4E4E60): различаются runtime handle и постоянная identity. Полный lookup/restore/invalidation path не исследован.
+- сериализация разреженных массивов полей (0x4E7590, 0x4E75E0) и сброс типизированных object fields (0x4E3FA0): структуры хранения, не самостоятельная механика инвентаря/квестов.
+- таблица имён групп флагов и полей: registry metadata, не доказательство исполнения всех значений флагов.
 
-Эти источники описывают инфраструктуру CE и сами по себе не подтверждают покрытие Steamwoven. Таблица выше считает привязки в тематических документах; выбранные инфраструктурные диапазоны приведены здесь отдельно.
+Эти функции описывают инфраструктуру хранения объектов оригинала и сами по себе не подтверждают покрытие Steamwoven. Таблица выше считает привязки в тематических документах; выбранные инфраструктурные диапазоны приведены здесь отдельно.
 
 ## Следующие исследования и непроверенный объём
 
