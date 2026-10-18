@@ -1052,12 +1052,19 @@ on the live session; on a detached copy every quest and rumor that has a text is
 
 The viewer plays the original's sounds through the module's [sound catalogue](../audio/sound-catalog.md)
 on the original's three channels (effects, voice, music) at the original's volumes
-([contract](../audio/viewer-audio.md)). Nothing plays by itself yet. The palette action **Sound test: next
+([contract](../audio/viewer-audio.md)); music and ambient play since ARC-UI-041 (below). The palette action **Sound test: next
 interface sound** plays the next fixed interface sound by id and reports the outcome; the palette's sound
 line shows the output device (or "no output device" in a headless run), the three settings (0–10, default
 5, `user://audio_volumes_v1.json`; automated runs use no file unless `AUDIO_VOLUMES_TEST_PATH` is set),
 the catalogue and the last result. Self-test marker `ARC-UI-040 self-test audio PASS`; native smoke
 marker `ARC-UI-040 native-smoke audio PASS` (exterior AREA and `--area-map`).
+
+### Music and ambient (ARC-UI-041)
+
+The session's music and ambient schemes play in crash-site-area (exterior, cave, `--area-map`) as in the original:
+the map's default pair when a map opens, a sector's pair when the PC enters it, songs by their hour windows, ambient
+sounds by chance every 250 ms, combat music when an NPC enters combat mode ([contract](../audio/scheme-player.md)). The
+status line shows the slots and voices. Native smoke marker `ARC-UI-041 native-smoke schemes PASS` (map mode).
 
 ## Verification and evidence status
 
