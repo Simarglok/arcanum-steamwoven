@@ -178,6 +178,8 @@ public partial class TerrainViewerApp
                 }
             }
             _areaRoofDeparture = session.Chart.ToWorld(session.State.CommittedCell);
+            // ARC-WORLD-032: a walk to talk does not survive the move (the actor stands in a new grid session).
+            CancelTalkApproach("a transfer moved the actor");
             ConfigureAreaActor(map, map.Chart.ToChart(transfer.Arrival), session.State.Facing);
             _mapEntered.Clear();
             _worldFitView = false; _camera!.ResetWorld(WorldAnchor, WorldViewport, _worldPreferredZoom);
